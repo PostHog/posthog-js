@@ -84,82 +84,99 @@ export class PostHogExceptions implements Extension {
             return
         }
 
-        if (!isString(message) || message.trim().length === 0) {
-            logger.warn('Ignoring exception step because message must be a non-empty string')
-            return
+        try {
+            if (!isString(message) || message.trim().length === 0) {
+                logger.warn('Ignoring exception step because message must be a non-empty string')
+                return
+            }
+
+            const userProperties = this._coerceExceptionStepProperties(properties)
+            const type = this._readNonEmptyString(userProperties['type'])
+            const level = this._readNonEmptyString(userProperties['level'])
+
+            const { sanitizedProperties, droppedKeys } = ErrorTracking.stripReservedExceptionStepFields(userProperties)
+
+            if (droppedKeys.length > 0) {
+                logger.warn('Ignoring reserved exception step fields', { droppedKeys })
+            }
+
+            delete sanitizedProperties['type']
+            delete sanitizedProperties['level']
+
+            this._exceptionStepsBuffer.add({
+                [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: message,
+                [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
+                ...(type ? { [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: type } : {}),
+                ...(level ? { [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]: level } : {}),
+                ...sanitizedProperties,
+            })
+        } catch (error) {
+            logger.warn('Failed to add exception step. Ignoring breadcrumb.', error)
         }
-
-        const userProperties = this._coerceExceptionStepProperties(properties)
-        const type = this._readNonEmptyString(userProperties['type'])
-        const level = this._readNonEmptyString(userProperties['level'])
-
-        const { sanitizedProperties, droppedKeys } = ErrorTracking.stripReservedExceptionStepFields(userProperties)
-
-        if (droppedKeys.length > 0) {
-            logger.warn('Ignoring reserved exception step fields', { droppedKeys })
-        }
-
-        delete sanitizedProperties['type']
-        delete sanitizedProperties['level']
-
-        this._exceptionStepsBuffer.add({
-            [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: message,
-            [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
-            ...(type ? { [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: type } : {}),
-            ...(level ? { [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]: level } : {}),
-            ...sanitizedProperties,
-        })
     }
 
     sendExceptionEvent(properties: Properties): CaptureResult | undefined {
-        const exceptionList = properties.$exception_list
-
-        if (this._isExceptionList(exceptionList)) {
-            if (this._matchesSuppressionRule(exceptionList)) {
-                logger.info('Skipping exception capture because a suppression rule matched')
-                return
-            }
-
-            if (!this._captureExtensionExceptions && this._isExtensionException(exceptionList)) {
-                logger.info('Skipping exception capture because it was thrown by an extension')
-                return
-            }
-
-            if (
-                !this._instance.config.error_tracking.__capturePostHogExceptions &&
-                this._isPostHogException(exceptionList)
-            ) {
-                logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
-                return
-            }
-        }
-
-        const propertiesForExceptionCapture =
-            this._exceptionStepsConfig.enabled && isNullish(properties.$exception_steps)
-                ? this._addBufferedExceptionSteps(properties, this._exceptionStepsConfig.max_bytes)
-                : properties
-
         try {
-            return this._instance.capture('$exception', propertiesForExceptionCapture, {
-                _noTruncate: true,
-                _batchKey: 'exceptionEvent',
-                _originatedFromCaptureException: true,
-            })
-        } finally {
-            this._exceptionStepsBuffer.clear()
+            const exceptionList = properties.$exception_list
+
+            if (this._isExceptionList(exceptionList)) {
+                if (this._matchesSuppressionRule(exceptionList)) {
+                    logger.info('Skipping exception capture because a suppression rule matched')
+                    return
+                }
+
+                if (!this._captureExtensionExceptions && this._isExtensionException(exceptionList)) {
+                    logger.info('Skipping exception capture because it was thrown by an extension')
+                    return
+                }
+
+                if (
+                    !this._instance.config.error_tracking.__capturePostHogExceptions &&
+                    this._isPostHogException(exceptionList)
+                ) {
+                    logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
+                    return
+                }
+            }
+
+            const propertiesForExceptionCapture =
+                this._exceptionStepsConfig.enabled && isNullish(properties.$exception_steps)
+                    ? this._addBufferedExceptionSteps(properties, this._exceptionStepsConfig.max_bytes)
+                    : properties
+
+            try {
+                return this._instance.capture('$exception', propertiesForExceptionCapture, {
+                    _noTruncate: true,
+                    _batchKey: 'exceptionEvent',
+                    _originatedFromCaptureException: true,
+                })
+            } catch (error) {
+                logger.warn('Failed to capture exception event. Dropping this exception.', error)
+                return
+            } finally {
+                this._exceptionStepsBuffer.clear()
+            }
+        } catch (error) {
+            logger.warn('Failed to process exception event. Ignoring this exception.', error)
+            return
         }
     }
 
     private _addBufferedExceptionSteps(properties: Properties, maxBytes: number): Properties {
-        const exceptionSteps = this._exceptionStepsBuffer.getAttachable(maxBytes)
+        try {
+            const exceptionSteps = this._exceptionStepsBuffer.getAttachable(maxBytes)
 
-        if (exceptionSteps.length === 0) {
+            if (exceptionSteps.length === 0) {
+                return properties
+            }
+
+            return {
+                ...properties,
+                $exception_steps: exceptionSteps,
+            }
+        } catch (error) {
+            logger.warn('Failed to read buffered exception steps. Capturing exception without steps.', error)
             return properties
-        }
-
-        return {
-            ...properties,
-            $exception_steps: exceptionSteps,
         }
     }
 

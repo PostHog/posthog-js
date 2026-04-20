@@ -114,6 +114,14 @@ describe('PostHogExceptions', () => {
             expect(captureMock).toBeCalledWith('$exception', { custom_property: true }, expect.anything())
         })
 
+        it('fails gracefully with a warning when capture throws', () => {
+            captureMock.mockImplementationOnce(() => {
+                throw new Error('capture failed')
+            })
+
+            expect(() => exceptions.sendExceptionEvent({ custom_property: true })).not.toThrow()
+        })
+
         test.each([
             ['TypeError', 'This is a type error'],
             ['GenericError', 'This is a message that contains a ReactMinified error'],
@@ -226,6 +234,28 @@ describe('PostHogExceptions', () => {
                 ],
             })
             expect(captureMock.mock.calls[1][1]).toEqual({ custom_property: true })
+        })
+
+        it('fails gracefully with a warning when buffering a step throws', () => {
+            exceptions['_exceptionStepsBuffer'] = {
+                add: () => {
+                    throw new Error('buffer add failed')
+                },
+            } as any
+
+            expect(() => exceptions.addExceptionStep('step one')).not.toThrow()
+        })
+
+        it('captures without steps when reading buffered steps throws', () => {
+            exceptions['_exceptionStepsBuffer'] = {
+                getAttachable: () => {
+                    throw new Error('buffer read failed')
+                },
+                clear: jest.fn(),
+            } as any
+
+            expect(() => exceptions.sendExceptionEvent({ custom_property: true })).not.toThrow()
+            expect(captureMock).toHaveBeenCalledWith('$exception', { custom_property: true }, expect.anything())
         })
 
         it('lets manually provided $exception_steps override buffered steps', () => {
