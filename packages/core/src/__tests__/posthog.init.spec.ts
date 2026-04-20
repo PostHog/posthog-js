@@ -56,10 +56,17 @@ describe('PostHog Core', () => {
       expect((posthog as any).flushAt).toEqual(1)
     })
 
-    it('should remove trailing slashes from `host`', () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { host: 'http://my-posthog.com///' })
+    it('should trim whitespace from the api key and host', () => {
+      ;[posthog, mocks] = createTestClient('  TEST_API_KEY\n', { host: '  http://my-posthog.com///\t ' })
 
+      expect((posthog as any).apiKey).toEqual('TEST_API_KEY')
       expect((posthog as any).host).toEqual('http://my-posthog.com')
+    })
+
+    it('should default a blank host after trimming whitespace', () => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { host: ' \n\t ' })
+
+      expect((posthog as any).host).toEqual('https://us.i.posthog.com')
     })
 
     it('should use bootstrapped distinct ID when present', async () => {

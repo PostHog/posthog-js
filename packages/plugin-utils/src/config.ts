@@ -48,7 +48,9 @@ export interface ResolveConfigOptions {
 
 export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveConfigOptions): ResolvedPluginConfig {
     const projectId = options.projectId ?? options.envId
-    const host = options.host ?? 'https://us.i.posthog.com'
+    const personalApiKey = options.personalApiKey.trim()
+    const normalizedHost = options.host?.trim()
+    const host = normalizedHost || 'https://us.i.posthog.com'
     const logLevel = options.logLevel ?? 'info'
     const cwd = resolveOptions?.cwd ?? process.cwd()
     const cliBinaryPath =
@@ -66,13 +68,13 @@ export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveCon
         if (!projectId) {
             throw new Error('projectId is required when sourcemaps are enabled (envId is deprecated)')
         }
-        if (!options.personalApiKey) {
+        if (!personalApiKey) {
             throw new Error('personalApiKey is required when sourcemaps are enabled')
         }
     }
 
     return {
-        personalApiKey: options.personalApiKey,
+        personalApiKey,
         projectId,
         host,
         logLevel,
