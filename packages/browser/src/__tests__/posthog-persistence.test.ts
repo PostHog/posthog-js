@@ -289,6 +289,27 @@ describe('persistence', () => {
             }
             expect(library.properties()).toEqual({})
         })
+
+        it('warns once in debug mode for likely SDK-owned persistence keys without a policy entry', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+            const lib = new PostHogPersistence({
+                ...makePostHogConfig('debug-policy', persistenceMode),
+                debug: true,
+            })
+            lib.clear()
+
+            lib.register({ $posthog_unclassified_test_key: true })
+            lib.register({ $posthog_unclassified_test_key: false })
+
+            expect(warnSpy).toHaveBeenCalledTimes(1)
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[PostHog.js] [PersistencePolicy]',
+                expect.stringContaining('$posthog_unclassified_test_key')
+            )
+
+            warnSpy.mockRestore()
+            lib.clear()
+        })
     })
 
     describe('localStorage+cookie', () => {

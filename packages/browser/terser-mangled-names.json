@@ -106,6 +106,7 @@
         "_deferred",
         "_delayedFlushTimer",
         "_delegate",
+        "_deleteProp",
         "_determineInitialView",
         "_diagLogger",
         "_disabled",
@@ -260,6 +261,7 @@
         "_isInteractiveEvent",
         "_isItemPermanentlyIneligible",
         "_isLoaded",
+        "_isLikelySdkPersistenceKey",
         "_isLogRecordReadonly",
         "_isLogsEnabled",
         "_isPaused",
@@ -499,6 +501,7 @@
         "_setActivatedItems",
         "_setDelegate",
         "_setFlushTimeout",
+        "_setProp",
         "_setProperty",
         "_setSessionId",
         "_setStepIndex",
@@ -595,6 +598,8 @@
         "_windowId",
         "_windowIdGenerator",
         "_window_id_storage_key",
+        "_warnIfUnclassifiedSdkPersistenceKey",
+        "_warnedUnclassifiedSdkPersistenceKeys",
         "_write"
     ]
 }
