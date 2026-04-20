@@ -4,6 +4,11 @@ import { PostHog } from '../../posthog-core'
 import '../../entrypoints/external-scripts-loader'
 
 describe('external-scripts-loader', () => {
+    afterEach(() => {
+        jest.useRealTimers()
+        document!.getElementsByTagName('html')![0].innerHTML = ''
+    })
+
     describe('loadScript', () => {
         const mockPostHog = {
             config: {
@@ -17,7 +22,7 @@ describe('external-scripts-loader', () => {
         const callback = jest.fn()
         beforeEach(() => {
             callback.mockClear()
-            document!.getElementsByTagName('html')![0].innerHTML = ''
+            delete mockPostHog.config.__preview_external_dependency_versioned_paths
         })
 
         it('appends scripts to body by default', () => {
@@ -82,12 +87,64 @@ describe('external-scripts-loader', () => {
             expect(callback).toHaveBeenCalledWith('uh-oh')
         })
 
-        it('adds timestamp to toolbar loader', () => {
+        it('keeps the legacy toolbar cache-busting path by default', () => {
             jest.useFakeTimers()
             jest.setSystemTime(1726067100000)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             expect(document!.getElementsByTagName('script')[0].src).toBe(
                 'https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=1726067100000'
+            )
+        })
+
+        it.each([
+            [
+                'uses versioned asset paths on the normal asset host when the preview flag is enabled as a boolean',
+                'https://us.posthog.com',
+                true,
+                'https://us-assets.i.posthog.com/static/1.0.0/recorder.js',
+            ],
+            [
+                'uses a configured asset host override for versioned asset paths',
+                'https://us.posthog.com',
+                'https://cdn-preview.example.com/',
+                'https://cdn-preview.example.com/static/1.0.0/recorder.js',
+            ],
+            [
+                'uses the custom asset host from endpointFor when the preview flag is enabled',
+                'https://my-proxy.example.com',
+                true,
+                'https://my-proxy.example.com/static/1.0.0/recorder.js',
+            ],
+        ])('%s', (_, apiHost, previewFlag, expectedSrc) => {
+            const posthog = {
+                config: {
+                    api_host: apiHost,
+                    external_scripts_inject_target: 'body',
+                    __preview_external_dependency_versioned_paths: previewFlag,
+                },
+                version: '1.0.0',
+            } as PostHog
+            posthog.requestRouter = new RequestRouter(posthog)
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(posthog, 'recorder', callback)
+
+            expect(document!.getElementsByTagName('script')[0].src).toBe(expectedSrc)
+        })
+
+        it('uses eu-assets on the EU region', () => {
+            const euPostHog = {
+                config: {
+                    api_host: 'https://eu.i.posthog.com',
+                    external_scripts_inject_target: 'body',
+                },
+                version: '1.0.0',
+            } as PostHog
+            euPostHog.requestRouter = new RequestRouter(euPostHog)
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(euPostHog, 'recorder', callback)
+
+            expect(document!.getElementsByTagName('script')[0].src).toBe(
+                'https://eu-assets.i.posthog.com/static/recorder.js?v=1.0.0'
             )
         })
 
@@ -111,6 +168,31 @@ describe('external-scripts-loader', () => {
             expect(callback).toHaveBeenCalledWith('prepare_external_dependency_script returned null')
 
             delete mockPostHog.config.prepare_external_dependency_script
+        })
+    })
+
+    describe('remote-config loading', () => {
+        const posthog = {
+            config: {
+                api_host: 'https://us.posthog.com',
+                token: 'test-token',
+                external_scripts_inject_target: 'body',
+            },
+            version: '1.0.0',
+        } as PostHog
+        posthog.requestRouter = new RequestRouter(posthog)
+
+        const callback = jest.fn()
+        beforeEach(() => {
+            callback.mockClear()
+        })
+
+        it('loads remote-config from the token-specific path', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(posthog, 'remote-config', callback)
+
+            const scripts = document!.getElementsByTagName('script')
+            expect(scripts.length).toBe(1)
+            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/array/test-token/config.js')
         })
     })
 })

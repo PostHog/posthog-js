@@ -2956,6 +2956,87 @@ describe('parseFlagsResponse', () => {
             $feature_flag_request_id: 'test-request-id-123',
         })
     })
+
+    describe('partialResponse option', () => {
+        const surveyFlagDetail = {
+            key: 'survey-flag',
+            enabled: true,
+            variant: undefined,
+            reason: { code: 'condition_match', condition_index: 0, description: undefined },
+            metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+        }
+
+        const bootstrapDetail = {
+            key: 'bootstrapped-flag',
+            enabled: true,
+            variant: undefined,
+            reason: { code: 'condition_match', condition_index: 0, description: undefined },
+            metadata: { id: 10, version: 1, payload: 'bootstrap-payload', description: undefined },
+        }
+
+        it.each([
+            {
+                name: 'merges partial response with existing flags',
+                existingFlags: { 'bootstrapped-flag': true, 'session-recording': true },
+                existingPayloads: { 'bootstrapped-flag': 'bootstrap-payload' },
+                existingDetails: { 'bootstrapped-flag': bootstrapDetail },
+                options: { partialResponse: true },
+                expectedFlags: { 'bootstrapped-flag': true, 'session-recording': true, 'survey-flag': true },
+                expectedPayloads: { 'bootstrapped-flag': 'bootstrap-payload' },
+                expectedDetails: { 'bootstrapped-flag': bootstrapDetail, 'survey-flag': surveyFlagDetail },
+            },
+            {
+                name: 'partial response overwrites values for overlapping flag keys',
+                existingFlags: { 'survey-flag': false, 'other-flag': true },
+                existingPayloads: {},
+                existingDetails: {},
+                options: { partialResponse: true },
+                expectedFlags: { 'survey-flag': true, 'other-flag': true },
+                expectedPayloads: {},
+                expectedDetails: { 'survey-flag': surveyFlagDetail },
+            },
+            {
+                name: 'without partialResponse, response overwrites existing flags entirely',
+                existingFlags: { 'bootstrapped-flag': true, 'session-recording': true },
+                existingPayloads: {},
+                existingDetails: {},
+                options: undefined,
+                expectedFlags: { 'survey-flag': true },
+                expectedPayloads: {},
+                expectedDetails: { 'survey-flag': surveyFlagDetail },
+            },
+        ])(
+            '$name',
+            ({
+                existingFlags,
+                existingPayloads,
+                existingDetails,
+                options,
+                expectedFlags,
+                expectedPayloads,
+                expectedDetails,
+            }) => {
+                const flagsResponse = { flags: { 'survey-flag': surveyFlagDetail } }
+
+                parseFlagsResponse(
+                    flagsResponse,
+                    persistence,
+                    existingFlags,
+                    existingPayloads,
+                    existingDetails,
+                    options
+                )
+
+                expect(persistence.register).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        $enabled_feature_flags: expectedFlags,
+                        $feature_flag_payloads: expectedPayloads,
+                        $feature_flag_details: expectedDetails,
+                    })
+                )
+            }
+        )
+    })
 })
 
 describe('filterActiveFeatureFlags', () => {

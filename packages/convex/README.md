@@ -237,16 +237,9 @@ All feature flag methods accept optional `groups`, `personProperties`, `groupPro
 
 See the [example app](../../examples/example-convex/) for a working demo.
 
-## 🛠️ Development
-
-```sh
-pnpm i
-pnpm dev
-```
-
 ## 🤝 Contributing
 
-PRs welcome. See [PostHog's contributing guide](https://posthog.com/docs/contribute) for general guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for package-specific development instructions.
 
 ## 📄 License
 

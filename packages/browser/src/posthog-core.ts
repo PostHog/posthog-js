@@ -44,6 +44,7 @@ import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
 import { localStore } from './storage'
 import {
+    CaptureLogOptions,
     CaptureOptions,
     CaptureResult,
     Compression,
@@ -212,6 +213,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
+    __preview_external_dependency_versioned_paths: false,
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -647,6 +649,16 @@ export class PostHog implements PostHogInterface {
             })
         }
 
+        // When identity_distinct_id is provided at init time, use it as the
+        // bootstrap distinct ID so the Person record is created from the first event.
+        if (this.config.identity_distinct_id && !config.bootstrap?.distinctID) {
+            config.bootstrap = {
+                ...config.bootstrap,
+                distinctID: this.config.identity_distinct_id,
+                isIdentifiedID: true,
+            }
+        }
+
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
@@ -991,6 +1003,7 @@ export class PostHog implements PostHogInterface {
             this.capture(EVENT_PAGELEAVE)
         }
 
+        this.logs?.flushLogs('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
     }
@@ -2739,6 +2752,7 @@ export class PostHog implements PostHogInterface {
         // the debouncer, so if the order were reversed a pending refresh could fire after reset.
         this._remoteConfigLoader?.stop()
         this.featureFlags?.reset()
+        this.conversations?.reset()
         this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
@@ -2768,9 +2782,55 @@ export class PostHog implements PostHogInterface {
             1
         )
 
+        // Clear HMAC identity verification fields
+        delete this.config.identity_distinct_id
+        delete this.config.identity_hash
+
         // Reload feature flags for the new anonymous user, just like identify()
         // does when the distinct_id changes.
         this.reloadFeatureFlags()
+    }
+
+    /**
+     * Set HMAC-based identity verification.
+     *
+     * @remarks
+     * When set, products like conversations use server-verified identity
+     * (distinct_id + HMAC hash) instead of anonymous session identifiers.
+     * The hash should be computed server-side as HMAC-SHA256 of the
+     * distinct_id using the project's API secret.
+     *
+     * @param distinctId - The verified user distinct_id
+     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     *
+     * @example
+     * ```js
+     * posthog.setIdentity('user_123', 'a1b2c3d4e5f6...')
+     * ```
+     *
+     * @public
+     */
+    setIdentity(distinctId: string, hash: string): void {
+        this.config.identity_distinct_id = distinctId
+        this.config.identity_hash = hash
+        this.alias(distinctId)
+        this.conversations?._onIdentityChanged()
+    }
+
+    /**
+     * Clear HMAC-based identity verification, reverting to anonymous mode.
+     *
+     * @example
+     * ```js
+     * posthog.clearIdentity()
+     * ```
+     *
+     * @public
+     */
+    clearIdentity(): void {
+        delete this.config.identity_distinct_id
+        delete this.config.identity_hash
+        this.conversations?._onIdentityCleared()
     }
 
     /**
@@ -3153,6 +3213,46 @@ export class PostHog implements PostHogInterface {
             ...errorToProperties,
             ...additionalProperties,
         })
+    }
+
+    /**
+     * Capture a log entry and send it to the PostHog logs endpoint.
+     *
+     * {@label Logs}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * posthog.captureLog({
+     *   body: 'checkout completed',
+     *   level: 'info',
+     *   attributes: { order_id: 'ord_789', amount_cents: 4999 },
+     * })
+     * ```
+     *
+     * @param {CaptureLogOptions} options The log entry options
+     */
+    captureLog(options: CaptureLogOptions): void {
+        this.logs?.captureLog(options)
+    }
+
+    private static _noopLogger = (() => {
+        const noop = () => {}
+        return { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop }
+    })()
+
+    /**
+     * Logger with convenience methods for each severity level.
+     *
+     * @example
+     * ```js
+     * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+     * posthog.logger.error('payment failed', { error_code: 'E001' })
+     * ```
+     */
+    get logger() {
+        return this.logs?.logger ?? PostHog._noopLogger
     }
 
     /**

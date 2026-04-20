@@ -93,6 +93,22 @@ export type {
 // Toolbar types
 export type { ToolbarUserIntent, ToolbarSource, ToolbarVersion, ToolbarParams } from '@posthog/types'
 
+// Log capture types
+export type {
+    LogSeverityLevel,
+    OtlpSeverityText,
+    OtlpSeverityEntry,
+    LogAttributeValue,
+    LogAttributes,
+    CaptureLogOptions,
+    Logger,
+    OtlpAnyValue,
+    OtlpKeyValue,
+    OtlpLogRecord,
+    OtlpLogsPayload,
+    LogSdkContext,
+} from '@posthog/types'
+
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
 export type { KnownUnsafeEditableEvent } from '@posthog/core'
 
@@ -246,6 +262,16 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
      * which nobody wanted, now the default is all
      */
     triggerMatchType?: 'any' | 'all'
+    /**
+     * Config version - defaults to 1 (legacy)
+     * When version is 2, triggerGroups is used instead of individual trigger fields
+     */
+    version?: 1 | 2
+    /**
+     * V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates
+     * Only used when version === 2
+     */
+    triggerGroups?: SessionRecordingTriggerGroup[]
 }
 
 /**
@@ -486,6 +512,39 @@ export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debu
 export interface SessionRecordingUrlTrigger {
     url: string
     matching: 'regex'
+}
+
+/**
+ * V2 event trigger - always an object with name, optionally with property filters.
+ * The server normalizes bare event name strings to this shape before sending.
+ */
+export interface SessionRecordingEventTrigger {
+    name: string
+    properties?: SessionRecordingTriggerPropertyFilter[]
+}
+
+export interface SessionRecordingTriggerPropertyFilter {
+    key: string
+    type: 'event' | 'person'
+    operator?: 'exact' | 'is_not' | 'icontains' | 'not_icontains' | 'regex' | 'not_regex' | 'gt' | 'lt'
+    value?: string | number | boolean | string[]
+}
+
+/**
+ * V2 Trigger Group - represents a single trigger group with its own conditions and sample rate
+ */
+export interface SessionRecordingTriggerGroup {
+    id: string
+    name: string
+    sampleRate: number
+    minDurationMs?: number
+    conditions: {
+        matchType: 'any' | 'all'
+        events?: SessionRecordingEventTrigger[]
+        urls?: SessionRecordingUrlTrigger[]
+        flag?: string | FlagVariant
+        properties?: SessionRecordingTriggerPropertyFilter[]
+    }
 }
 
 export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'

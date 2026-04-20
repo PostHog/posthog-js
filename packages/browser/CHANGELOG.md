@@ -1,5 +1,127 @@
 # posthog-js
 
+## 1.369.3
+
+### Patch Changes
+
+- [#3419](https://github.com/PostHog/posthog-js/pull/3419) [`ea08727`](https://github.com/PostHog/posthog-js/commit/ea087272bbe210e5610c9271aa1194776e927353) Thanks [@haacked](https://github.com/haacked)! - Reinstate `$feature_flag_payloads` and `$surveys_activated` in captured event properties.
+  (2026-04-18)
+
+- [#3416](https://github.com/PostHog/posthog-js/pull/3416) [`3d8b2e2`](https://github.com/PostHog/posthog-js/commit/3d8b2e282927d0c09670b3f112c7dc159cebf059) Thanks [@feliperalmeida](https://github.com/feliperalmeida)! - Updated dependencies: - protobufjs@7.5.5
+  (2026-04-18)
+- Updated dependencies []:
+    - @posthog/types@1.369.3
+
+## 1.369.2
+
+### Patch Changes
+
+- [#3386](https://github.com/PostHog/posthog-js/pull/3386) [`4a65604`](https://github.com/PostHog/posthog-js/commit/4a65604775fe87c47e5fbdb5f03673f2481c26ea) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add a preview flag for versioned browser lazy bundle asset paths.
+  (2026-04-16)
+- Updated dependencies [[`4a65604`](https://github.com/PostHog/posthog-js/commit/4a65604775fe87c47e5fbdb5f03673f2481c26ea)]:
+    - @posthog/types@1.369.2
+
+## 1.369.1
+
+### Patch Changes
+
+- [#3393](https://github.com/PostHog/posthog-js/pull/3393) [`85ae4d9`](https://github.com/PostHog/posthog-js/commit/85ae4d9e2bb4e3f487c9b27fc581ed38c1a82c99) Thanks [@haacked](https://github.com/haacked)! - Exclude active feature flag payloads from event properties
+  (2026-04-16)
+
+- [#3392](https://github.com/PostHog/posthog-js/pull/3392) [`00cd1ce`](https://github.com/PostHog/posthog-js/commit/00cd1cef1d2d8a02339997bd3156aa1e395bea40) Thanks [@haacked](https://github.com/haacked)! - Fix unnecessary persisted config and activation properties (including product tours, surveys, and session recording config) added to captured events
+  (2026-04-16)
+- Updated dependencies []:
+    - @posthog/types@1.369.1
+
+## 1.369.0
+
+### Minor Changes
+
+- [#3342](https://github.com/PostHog/posthog-js/pull/3342) [`eea5260`](https://github.com/PostHog/posthog-js/commit/eea5260bbd58fb8b2d7f0550bb03d741aaab376a) Thanks [@ksvat](https://github.com/ksvat)! - Account for property filters on events in recording triggers for v2 triggers
+  (2026-04-14)
+
+- [#3281](https://github.com/PostHog/posthog-js/pull/3281) [`b1fd228`](https://github.com/PostHog/posthog-js/commit/b1fd228eab45dc688b769378afa96a0f74167fab) Thanks [@ksvat](https://github.com/ksvat)! - Add session replay trigger groups handling (V2)
+  (2026-04-14)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.369.0
+
+## 1.368.2
+
+### Patch Changes
+
+- [#3378](https://github.com/PostHog/posthog-js/pull/3378) [`f1bea33`](https://github.com/PostHog/posthog-js/commit/f1bea33f64800c187f09a0989426ea0e73f43128) Thanks [@marandaneto](https://github.com/marandaneto)! - Disable native gzip compression after a NotReadableError in the browser SDK
+  (2026-04-14)
+- Updated dependencies []:
+    - @posthog/types@1.368.2
+
+## 1.368.1
+
+### Patch Changes
+
+- [#3379](https://github.com/PostHog/posthog-js/pull/3379) [`d7c71b1`](https://github.com/PostHog/posthog-js/commit/d7c71b1316720d972e41b63987ef57512d615ea7) Thanks [@dmarticus](https://github.com/dmarticus)! - Fix bootstrapped feature flags being overwritten by partial /flags response when `advanced_only_evaluate_survey_feature_flags` is enabled
+  (2026-04-14)
+- Updated dependencies []:
+    - @posthog/types@1.368.1
+
+## 1.368.0
+
+### Minor Changes
+
+- [#3345](https://github.com/PostHog/posthog-js/pull/3345) [`3fcf5c4`](https://github.com/PostHog/posthog-js/commit/3fcf5c449b3fe10ce187d40ea03425de9f94e85f) Thanks [@jonmcwest](https://github.com/jonmcwest)! - Add posthog.captureLog() API for sending structured log entries to PostHog logs
+  (2026-04-13)
+
+### Patch Changes
+
+- [#3373](https://github.com/PostHog/posthog-js/pull/3373) [`f5fe0a8`](https://github.com/PostHog/posthog-js/commit/f5fe0a8b11457a33c02029162a43e4eb2d3cb2d9) Thanks [@ksvat](https://github.com/ksvat)! - bump rrweb version
+  (2026-04-13)
+- Updated dependencies [[`3fcf5c4`](https://github.com/PostHog/posthog-js/commit/3fcf5c449b3fe10ce187d40ea03425de9f94e85f)]:
+    - @posthog/types@1.368.0
+
+## 1.367.0
+
+### Minor Changes
+
+- [#3242](https://github.com/PostHog/posthog-js/pull/3242) [`353be9a`](https://github.com/PostHog/posthog-js/commit/353be9a878fe209a032f2d70376ece78ee67303c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat: Add support for pre-loaded remote-config
+  (2026-04-09)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.367.0
+
+## 1.366.2
+
+### Patch Changes
+
+- [#3364](https://github.com/PostHog/posthog-js/pull/3364) [`575e354`](https://github.com/PostHog/posthog-js/commit/575e354d0040bd83ac698495a4f0a07dece83eb3) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add a hover state to numeric survey rating options so they provide clearer pointer feedback before selection.
+  (2026-04-09)
+- Updated dependencies []:
+    - @posthog/types@1.366.2
+
+## 1.366.1
+
+### Patch Changes
+
+- [#3360](https://github.com/PostHog/posthog-js/pull/3360) [`802bf39`](https://github.com/PostHog/posthog-js/commit/802bf3919304f66694788bf0cb93e457326ab44b) Thanks [@jabahamondes](https://github.com/jabahamondes)! - Re-evaluate consent persistent store when config changes to support cross-subdomain consent sharing
+  (2026-04-09)
+- Updated dependencies []:
+    - @posthog/types@1.366.1
+
+## 1.366.0
+
+### Minor Changes
+
+- [#3305](https://github.com/PostHog/posthog-js/pull/3305) [`b599672`](https://github.com/PostHog/posthog-js/commit/b5996729b1d30fb99429c509e6a85ef8d7aca955) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Add customer side identification
+  (2026-04-09)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.366.0
+
 ## 1.365.5
 
 ### Patch Changes

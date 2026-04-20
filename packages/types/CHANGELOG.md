@@ -1,5 +1,37 @@
 # @posthog/types
 
+## 1.369.3
+
+## 1.369.2
+
+### Patch Changes
+
+- [#3386](https://github.com/PostHog/posthog-js/pull/3386) [`4a65604`](https://github.com/PostHog/posthog-js/commit/4a65604775fe87c47e5fbdb5f03673f2481c26ea) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add a preview flag for versioned browser lazy bundle asset paths.
+  (2026-04-16)
+
+## 1.369.1
+
+## 1.369.0
+
+## 1.368.2
+
+## 1.368.1
+
+## 1.368.0
+
+### Minor Changes
+
+- [#3345](https://github.com/PostHog/posthog-js/pull/3345) [`3fcf5c4`](https://github.com/PostHog/posthog-js/commit/3fcf5c449b3fe10ce187d40ea03425de9f94e85f) Thanks [@jonmcwest](https://github.com/jonmcwest)! - Add posthog.captureLog() API for sending structured log entries to PostHog logs
+  (2026-04-13)
+
+## 1.367.0
+
+## 1.366.2
+
+## 1.366.1
+
+## 1.366.0
+
 ## 1.365.5
 
 ## 1.365.4

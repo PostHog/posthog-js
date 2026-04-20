@@ -1,5 +1,26 @@
 # posthog-react-native
 
+## 4.42.1
+
+### Patch Changes
+
+- [#3402](https://github.com/PostHog/posthog-js/pull/3402) [`f2758ef`](https://github.com/PostHog/posthog-js/commit/f2758ef4dae345d131c25281a75c3da764c1a109) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: bump plugin dependency to 1.5.4
+  (2026-04-17)
+
+## 4.42.0
+
+### Minor Changes
+
+- [#3399](https://github.com/PostHog/posthog-js/pull/3399) [`1d7e298`](https://github.com/PostHog/posthog-js/commit/1d7e298648a6c47880e2130f6d68d755342cbdd1) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add version and project to expo react native symbols
+  (2026-04-16)
+
+## 4.41.2
+
+### Patch Changes
+
+- [#3388](https://github.com/PostHog/posthog-js/pull/3388) [`6d0aae3`](https://github.com/PostHog/posthog-js/commit/6d0aae3795da50ba803ab99c65cc8e843254ed64) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - "exp" flag is no longer needed in tooling to upload or clone with hermes when using posthog-cli >= 0.7.4
+  (2026-04-14)
+
 ## 4.41.1
 
 ### Patch Changes

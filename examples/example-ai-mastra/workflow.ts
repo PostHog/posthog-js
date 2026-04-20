@@ -1,14 +1,11 @@
-/** Mastra agent with manual PostHog instrumentation. */
+/** Mastra agent with PostHog tracking via the official @mastra/posthog exporter. */
 
-import { PostHog } from 'posthog-node'
+import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
 import { createTool } from '@mastra/core/tools'
+import { Observability } from '@mastra/observability'
+import { PosthogExporter } from '@mastra/posthog'
 import { z } from 'zod'
-import { randomUUID } from 'crypto'
-
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-})
 
 const weatherTool = createTool({
     id: 'get_weather',
@@ -27,40 +24,45 @@ const weatherTool = createTool({
     },
 })
 
-const agent = new Agent({
+const weatherAgent = new Agent({
+    id: 'weather-agent',
     name: 'Weather Agent',
     instructions: 'You are a helpful assistant with access to weather data.',
     model: { id: 'openai/gpt-5-mini' },
     tools: { get_weather: weatherTool },
 })
 
+const mastra = new Mastra({
+    agents: { weatherAgent },
+    observability: new Observability({
+        configs: {
+            posthog: {
+                serviceName: 'example-mastra-app',
+                exporters: [
+                    new PosthogExporter({
+                        apiKey: process.env.POSTHOG_API_KEY!,
+                        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+                        defaultDistinctId: 'example-user',
+                    }),
+                ],
+            },
+        },
+    }),
+})
+
 async function main() {
-    const traceId = randomUUID()
-    const startTime = Date.now()
-
-    const result = await agent.generate("What's the weather like in Dublin, Ireland?")
-
-    const endTime = Date.now()
-    const latency = (endTime - startTime) / 1000
-
-    // Manual PostHog instrumentation for frameworks without native support.
-    phClient.capture({
-        distinctId: 'example-user',
-        event: '$ai_generation',
-        properties: {
-            $ai_trace_id: traceId,
-            $ai_model: 'gpt-5-mini',
-            $ai_provider: 'openai',
-            $ai_input_tokens: result.usage?.promptTokens,
-            $ai_output_tokens: result.usage?.completionTokens,
-            $ai_latency: latency,
-            $ai_input: "What's the weather like in Dublin, Ireland?",
-            $ai_output: result.text,
+    const agent = mastra.getAgent('weatherAgent')
+    const result = await agent.generate("What's the weather like in Dublin, Ireland?", {
+        tracingOptions: {
+            metadata: {
+                userId: 'example-user',
+                sessionId: 'session-abc-123',
+                foo: 'bar',
+                conversation_id: 'abc-123',
+            },
         },
     })
-
     console.log(result.text)
-    await phClient.shutdown()
 }
 
 main()

@@ -1,4 +1,4 @@
-import { isGzipSupported, gzipCompress } from '@/gzip'
+import { isGzipSupported, gzipCompress, isNativeAsyncGzipReadError } from '@/gzip'
 import { gzip } from 'node:zlib'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
@@ -41,7 +41,25 @@ describe('gzip', () => {
       ;(globalThis as any).CompressionStream = CompressionStream
     })
   })
+  describe('isNativeAsyncGzipReadError', () => {
+    it('returns true for NotReadableError', () => {
+      expect(isNativeAsyncGzipReadError({ name: 'NotReadableError' })).toBe(true)
+    })
+
+    it('returns false for other errors', () => {
+      expect(isNativeAsyncGzipReadError({ name: 'TypeError' })).toBe(false)
+      expect(isNativeAsyncGzipReadError(null)).toBe(false)
+    })
+  })
   describe('gzipCompress', () => {
+    it('rethrows errors when requested', async () => {
+      const CompressionStream = globalThis.CompressionStream
+      delete (globalThis as any).CompressionStream
+
+      await expect(gzipCompress(RANDOM_TEST_INPUT, false, { rethrow: true })).rejects.toThrow()
+      ;(globalThis as any).CompressionStream = CompressionStream
+    })
+
     it('compressed random data should match node', async () => {
       const compressed = await gzipCompress(RANDOM_TEST_INPUT)
       expect(compressed).not.toBe(null)

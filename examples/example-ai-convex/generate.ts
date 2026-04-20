@@ -1,26 +1,30 @@
 /**
  * Convex-style OpenTelemetry integration with PostHog.
  *
- * This example shows how to use the PostHog OTEL trace exporter with the
+ * This example shows how to use the PostHog OTEL span processor with the
  * Vercel AI SDK, which is the pattern used in Convex actions.
  * In a real Convex app, this code runs inside a "use node" action.
  */
 
 import { NodeSDK } from '@opentelemetry/sdk-node'
-import { Resource } from '@opentelemetry/resources'
-import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 
 const sdk = new NodeSDK({
-    resource: new Resource({
+    resource: resourceFromAttributes({
         'service.name': 'example-convex-app',
-        'user.id': 'example-user',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
     }),
-    traceExporter: new PostHogTraceExporter({
-        apiKey: process.env.POSTHOG_API_KEY!,
-        host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
-    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
 })
 sdk.start()
 
@@ -38,7 +42,6 @@ async function main() {
     })
 
     console.log(result.text)
-    await sdk.shutdown()
 }
 
-main()
+main().finally(() => sdk.shutdown())

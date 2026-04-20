@@ -1,5 +1,12 @@
 # @posthog/plugin-utils
 
+## 1.1.0
+
+### Minor Changes
+
+- [#3418](https://github.com/PostHog/posthog-js/pull/3418) [`04d276c`](https://github.com/PostHog/posthog-js/commit/04d276c340d97ee557d62d5df3ad1335fefda652) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `build` to sourcemaps config, forwarded to posthog-cli as `--build`. Lets consumers of the bundler plugins (webpack, rollup, nextjs-config, nuxt) attach a build number as release metadata. Requires posthog-cli >= 0.7.8.
+  (2026-04-19)
+
 ## 1.0.1
 
 ### Patch Changes

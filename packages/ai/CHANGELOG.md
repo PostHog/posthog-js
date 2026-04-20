@@ -1,5 +1,32 @@
 # posthog-ai
 
+## 7.16.0
+
+### Minor Changes
+
+- [#3387](https://github.com/PostHog/posthog-js/pull/3387) [`7ea6e26`](https://github.com/PostHog/posthog-js/commit/7ea6e26e7f89ea0a0eaf061a279541449219ca61) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - `Prompts.get()` now accepts `{ withMetadata: true }` and returns a `PromptResult` object containing `source` (`api`, `cache`, `stale_cache`, or `code_fallback`), `name`, and `version` alongside the prompt text. The previous plain-string return is deprecated and will be removed in a future major version.
+  (2026-04-15)
+
+## 7.15.0
+
+### Minor Changes
+
+- [#3358](https://github.com/PostHog/posthog-js/pull/3358) [`85d3bd1`](https://github.com/PostHog/posthog-js/commit/85d3bd134dce1ae7b9287b73f2311c938bb42761) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Add `PostHogSpanProcessor` as a self-contained OpenTelemetry `SpanProcessor` that handles batching and export internally. Both `PostHogSpanProcessor` and `PostHogTraceExporter` now automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`).
+  (2026-04-14)
+
+- [#3377](https://github.com/PostHog/posthog-js/pull/3377) [`b90b54e`](https://github.com/PostHog/posthog-js/commit/b90b54e222ea27e7ba8113e617c5f1a924a2fc7a) Thanks [@andrewm4894](https://github.com/andrewm4894)! - Add OpenAI Agents SDK tracing support via `@posthog/ai/openai-agents`. Implements `PostHogTracingProcessor` that captures agent traces, spans, and LLM generations as PostHog LLM analytics events. Supports all span types including generation, response, function/tool, agent, handoff, guardrail, custom, audio, and MCP.
+  (2026-04-14)
+
+## 7.14.0
+
+### Minor Changes
+
+- [#3368](https://github.com/PostHog/posthog-js/pull/3368) [`c1f2c32`](https://github.com/PostHog/posthog-js/commit/c1f2c32218dabefde1b3c9ea2e272dbe9b117e28) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add `$ai_stop_reason` property capturing the LLM's reason for stopping generation across all providers
+  (2026-04-10)
+
+- [#3369](https://github.com/PostHog/posthog-js/pull/3369) [`cf69f96`](https://github.com/PostHog/posthog-js/commit/cf69f96a75ce3831a948cd5cc7173830085c5e45) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add Gemini `embedContent` tracking support
+  (2026-04-10)
+
 ## 7.13.2
 
 ### Patch Changes

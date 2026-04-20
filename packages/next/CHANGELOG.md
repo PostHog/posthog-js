@@ -1,5 +1,89 @@
 # @posthog/next
 
+## 0.4.17
+
+### Patch Changes
+
+- Updated dependencies [[`ea08727`](https://github.com/PostHog/posthog-js/commit/ea087272bbe210e5610c9271aa1194776e927353), [`3d8b2e2`](https://github.com/PostHog/posthog-js/commit/3d8b2e282927d0c09670b3f112c7dc159cebf059)]:
+    - posthog-js@1.369.3
+
+## 0.4.16
+
+### Patch Changes
+
+- Updated dependencies [[`4a65604`](https://github.com/PostHog/posthog-js/commit/4a65604775fe87c47e5fbdb5f03673f2481c26ea)]:
+    - posthog-js@1.369.2
+
+## 0.4.15
+
+### Patch Changes
+
+- Updated dependencies [[`85ae4d9`](https://github.com/PostHog/posthog-js/commit/85ae4d9e2bb4e3f487c9b27fc581ed38c1a82c99), [`00cd1ce`](https://github.com/PostHog/posthog-js/commit/00cd1cef1d2d8a02339997bd3156aa1e395bea40)]:
+    - posthog-js@1.369.1
+
+## 0.4.14
+
+### Patch Changes
+
+- [#3376](https://github.com/PostHog/posthog-js/pull/3376) [`e8548a5`](https://github.com/PostHog/posthog-js/commit/e8548a58dd4f574d825c5750624b074f51eeae27) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix: pass bootstrap flags via React context so feature flag hooks return correct values during SSR
+  (2026-04-15)
+
+## 0.4.13
+
+### Patch Changes
+
+- Updated dependencies [[`eea5260`](https://github.com/PostHog/posthog-js/commit/eea5260bbd58fb8b2d7f0550bb03d741aaab376a), [`b1fd228`](https://github.com/PostHog/posthog-js/commit/b1fd228eab45dc688b769378afa96a0f74167fab)]:
+    - posthog-js@1.369.0
+
+## 0.4.12
+
+### Patch Changes
+
+- Updated dependencies [[`f1bea33`](https://github.com/PostHog/posthog-js/commit/f1bea33f64800c187f09a0989426ea0e73f43128)]:
+    - posthog-js@1.368.2
+
+## 0.4.11
+
+### Patch Changes
+
+- Updated dependencies [[`d7c71b1`](https://github.com/PostHog/posthog-js/commit/d7c71b1316720d972e41b63987ef57512d615ea7)]:
+    - posthog-js@1.368.1
+
+## 0.4.10
+
+### Patch Changes
+
+- Updated dependencies [[`3fcf5c4`](https://github.com/PostHog/posthog-js/commit/3fcf5c449b3fe10ce187d40ea03425de9f94e85f), [`f5fe0a8`](https://github.com/PostHog/posthog-js/commit/f5fe0a8b11457a33c02029162a43e4eb2d3cb2d9)]:
+    - posthog-js@1.368.0
+
+## 0.4.9
+
+### Patch Changes
+
+- Updated dependencies [[`353be9a`](https://github.com/PostHog/posthog-js/commit/353be9a878fe209a032f2d70376ece78ee67303c)]:
+    - posthog-js@1.367.0
+
+## 0.4.8
+
+### Patch Changes
+
+- Updated dependencies [[`575e354`](https://github.com/PostHog/posthog-js/commit/575e354d0040bd83ac698495a4f0a07dece83eb3)]:
+    - posthog-js@1.366.2
+
+## 0.4.7
+
+### Patch Changes
+
+- Updated dependencies [[`802bf39`](https://github.com/PostHog/posthog-js/commit/802bf3919304f66694788bf0cb93e457326ab44b)]:
+    - posthog-js@1.366.1
+
+## 0.4.6
+
+### Patch Changes
+
+- Updated dependencies [[`b599672`](https://github.com/PostHog/posthog-js/commit/b5996729b1d30fb99429c509e6a85ef8d7aca955)]:
+    - posthog-js@1.366.0
+
 ## 0.4.5
 
 ### Patch Changes

@@ -29,6 +29,7 @@ interface WidgetProps {
     initialState?: ConversationsWidgetState
     initialUserTraits?: UserProvidedTraits | null
     isUserIdentified?: boolean
+    isIdentityMode?: boolean
     initialView?: WidgetView
     initialTickets?: Ticket[]
     hasMultipleTickets?: boolean
@@ -57,6 +58,7 @@ interface WidgetState {
     userTraits: UserProvidedTraits | null
     unreadCount: number
     hasMultipleTickets: boolean
+    isIdentityMode: boolean
     restoreEmail: string
     restoreEmailError: string | null
     restoreRequestLoading: boolean
@@ -70,9 +72,16 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     constructor(props: WidgetProps) {
         super(props)
 
+        const isIdentityMode = props.isIdentityMode || false
+
         // Determine if we need to show the identification form
         const userTraits = props.initialUserTraits || null
-        const needsIdentification = this._needsIdentification(props.config, userTraits, props.isUserIdentified)
+        const needsIdentification = this._needsIdentification(
+            props.config,
+            userTraits,
+            props.isUserIdentified,
+            isIdentityMode
+        )
 
         // If identification is needed, start with that view; otherwise use the provided initial view
         const initialView = needsIdentification ? 'identification' : props.initialView || 'messages'
@@ -92,6 +101,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             userTraits,
             unreadCount: 0,
             hasMultipleTickets: props.hasMultipleTickets || false,
+            isIdentityMode,
             restoreEmail: userTraits?.email || '',
             restoreEmailError: null,
             restoreRequestLoading: false,
@@ -105,8 +115,14 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     private _needsIdentification(
         config: ConversationsRemoteConfig,
         traits: UserProvidedTraits | null,
-        isUserIdentified?: boolean
+        isUserIdentified?: boolean,
+        isIdentityMode?: boolean
     ): boolean {
+        // Server-verified identity mode -- identity is already established
+        if (isIdentityMode) {
+            return false
+        }
+
         // If user is already identified via PostHog, no form needed
         // They've called posthog.identify() so we have their identity
         if (isUserIdentified) {
@@ -478,6 +494,32 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     }
 
     /**
+     * Update identity mode state (called by manager on setIdentity/clearIdentity)
+     */
+    setIdentityMode(isIdentityMode: boolean): void {
+        let nextView: WidgetView | undefined
+        this.setState(
+            (prevState) => {
+                const update: Partial<WidgetState> = { isIdentityMode }
+                const viewNeedsReset =
+                    prevState.view === 'identification' ||
+                    prevState.view === 'restore_request' ||
+                    prevState.view === 'messages'
+                if (viewNeedsReset) {
+                    nextView = prevState.hasMultipleTickets ? 'tickets' : 'messages'
+                    update.view = nextView
+                }
+                return update as WidgetState
+            },
+            () => {
+                if (nextView && this.props.onViewChange) {
+                    this.props.onViewChange(nextView)
+                }
+            }
+        )
+    }
+
+    /**
      * Clear messages (used when switching tickets or starting new conversation)
      * @param addGreeting - If true, adds the greeting message after clearing
      */
@@ -633,8 +675,8 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         // Show back button in message view when there are multiple tickets or in restore request view
         const showBackButton = (view === 'messages' && this.state.hasMultipleTickets) || view === 'restore_request'
 
-        // Show recover footer only in tickets and messages views
-        const showRecoverFooter = view === 'tickets' || view === 'messages'
+        // Show recover footer only in tickets and messages views, and not in identity mode
+        const showRecoverFooter = !this.state.isIdentityMode && (view === 'tickets' || view === 'messages')
 
         return (
             <div style={styles.widget}>

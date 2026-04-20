@@ -1,31 +1,27 @@
-/** Anthropic chat with tool calling, tracked by PostHog. */
+/** Anthropic chat with tool calling, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { Anthropic } from '@posthog/ai/anthropic'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
+import { AnthropicInstrumentation } from '@traceloop/instrumentation-anthropic'
+import Anthropic from '@anthropic-ai/sdk'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-anthropic-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
+    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
+    instrumentations: [new AnthropicInstrumentation()],
 })
-const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY!,
-    posthog: phClient,
-})
-
-const tools: Anthropic.Messages.Tool[] = [
-    {
-        name: 'get_weather',
-        description: 'Get current weather for a location',
-        input_schema: {
-            type: 'object' as const,
-            properties: {
-                latitude: { type: 'number' },
-                longitude: { type: 'number' },
-                location_name: { type: 'string' },
-            },
-            required: ['latitude', 'longitude', 'location_name'],
-        },
-    },
-]
+sdk.start()
 
 async function getWeather(latitude: number, longitude: number, locationName: string): Promise<string> {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`
@@ -36,10 +32,29 @@ async function getWeather(latitude: number, longitude: number, locationName: str
 }
 
 async function main() {
+    const client = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY!,
+    })
+
+    const tools: Anthropic.Messages.Tool[] = [
+        {
+            name: 'get_weather',
+            description: 'Get current weather for a location',
+            input_schema: {
+                type: 'object' as const,
+                properties: {
+                    latitude: { type: 'number' },
+                    longitude: { type: 'number' },
+                    location_name: { type: 'string' },
+                },
+                required: ['latitude', 'longitude', 'location_name'],
+            },
+        },
+    ]
+
     const response = await client.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 1024,
-        posthogDistinctId: 'example-user',
         tools,
         messages: [{ role: 'user', content: "What's the weather like in Dublin, Ireland?" }],
     })
@@ -54,8 +69,6 @@ async function main() {
             console.log(result)
         }
     }
-
-    await phClient.shutdown()
 }
 
-main()
+main().finally(() => sdk.shutdown())

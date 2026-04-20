@@ -8,6 +8,7 @@
 import type { PostHogConfig } from './posthog-config'
 import type { Properties, JsonType } from './common'
 import type { CaptureResult, CaptureOptions } from './capture'
+import type { CaptureLogOptions, Logger } from './capture-log'
 import type {
     FeatureFlagsCallback,
     EarlyAccessFeatureCallback,
@@ -100,6 +101,24 @@ export interface PostHog {
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined
 
+    /**
+     * Capture a log entry and send it to the PostHog logs endpoint.
+     *
+     * @param options - The log entry options (body, level, attributes, etc.)
+     */
+    captureLog(options: CaptureLogOptions): void
+
+    /**
+     * Logger with convenience methods for each severity level.
+     *
+     * @example
+     * ```js
+     * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+     * posthog.logger.error('payment failed', { error_code: 'E001' })
+     * ```
+     */
+    logger: Logger
+
     // ============================================================================
     // User Identification
     // ============================================================================
@@ -112,6 +131,19 @@ export interface PostHog {
      * @param userPropertiesToSetOnce - Properties to set once on the user (using $set_once)
      */
     identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
+
+    /**
+     * Set HMAC-based identity verification.
+     *
+     * @param distinctId - The verified user distinct_id
+     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     */
+    setIdentity(distinctId: string, hash: string): void
+
+    /**
+     * Clear HMAC-based identity verification, reverting to anonymous mode.
+     */
+    clearIdentity(): void
 
     /**
      * Set properties on the current user.

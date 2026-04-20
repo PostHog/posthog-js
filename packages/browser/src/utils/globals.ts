@@ -208,6 +208,10 @@ export interface LazyLoadedConversationsInterface {
     // Lifecycle
     reset: () => void
 
+    // Identity verification
+    setIdentity: () => void
+    clearIdentity: () => void
+
     // API methods
     sendMessage: (message: string, userTraits?: UserProvidedTraits, newTicket?: boolean) => Promise<SendMessageResponse>
     getMessages: (ticketId?: string, after?: string) => Promise<GetMessagesResponse>
