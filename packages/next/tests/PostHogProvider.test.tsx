@@ -11,7 +11,7 @@ jest.mock('../src/client/ClientPostHogProvider', () => ({
 }))
 
 // Mock next/headers
-jest.mock('next/headers', () => ({
+jest.mock('next/headers.js', () => ({
     cookies: jest.fn(),
 }))
 
@@ -136,7 +136,7 @@ describe('PostHogProvider', () => {
     })
 
     it('does not call cookies() when bootstrapFlags is off (static-safe)', async () => {
-        const { cookies } = require('next/headers')
+        const { cookies } = require('next/headers.js')
 
         const element = await PostHogProvider({
             apiKey: 'phc_test123',
@@ -253,7 +253,7 @@ describe('PostHogProvider', () => {
         const anonymousCookieValue = JSON.stringify({ distinct_id: 'device_xyz', $device_id: 'device_xyz' })
 
         function setupCookieMock(cookieValue: string) {
-            const { cookies } = require('next/headers')
+            const { cookies } = require('next/headers.js')
             cookies.mockResolvedValue({
                 get: jest.fn((name: string) => {
                     if (name === 'ph_phc_test123_posthog') {
@@ -396,7 +396,7 @@ describe('PostHogProvider', () => {
         })
 
         function setupCookiesWithConsent(cookies: Record<string, string>) {
-            const { cookies: cookiesFn } = require('next/headers')
+            const { cookies: cookiesFn } = require('next/headers.js')
             cookiesFn.mockResolvedValue({
                 get: jest.fn((name: string) => {
                     const value = cookies[name]

@@ -56,6 +56,7 @@
     },
     "dependencies": {
         "@posthog/core": "workspace:*",
+        "@posthog/react": "workspace:*",
         "posthog-js": "workspace:*",
         "posthog-node": "workspace:*",
         "server-only": "^0.0.1"

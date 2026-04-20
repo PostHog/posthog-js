@@ -1,9 +1,9 @@
 import type { GetServerSidePropsContext } from 'next'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
-import { getOrCreateNodeClient } from '../server/nodeClientCache'
-import { cookieStoreFromHeader, readPostHogCookie, isOptedOut } from '../shared/cookie'
-import { resolveApiKey, resolveHostOrDefault } from '../shared/config'
-import { readTracingHeaders, buildContextData } from '../shared/tracing-headers'
+import { getOrCreateNodeClient } from '../server/nodeClientCache.js'
+import { cookieStoreFromHeader, readPostHogCookie, isOptedOut } from '../shared/cookie.js'
+import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.js'
 
 /**
  * Creates a PostHog server client scoped to the current request.

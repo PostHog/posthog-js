@@ -5,4 +5,4 @@ export {
     useFeatureFlagResult as useFeatureFlag,
     useActiveFeatureFlags,
     PostHogFeature,
-} from 'posthog-js/react'
+} from '@posthog/react'

@@ -45,7 +45,7 @@ const mockNextResponseRewrite = jest.fn((url: URL) => ({
     _rewriteUrl: url,
 }))
 
-jest.mock('next/server', () => ({
+jest.mock('next/server.js', () => ({
     NextResponse: {
         next: (...args: any[]) => mockNextResponseNext(...args),
         rewrite: (url: URL) => mockNextResponseRewrite(url),

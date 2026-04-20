@@ -1,12 +1,12 @@
 import React from 'react'
 import type { PostHogConfig } from 'posthog-js'
-import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
-import type { BootstrapConfig } from '../client/ClientPostHogProvider'
-import { cookies } from 'next/headers'
+import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
+import type { BootstrapConfig } from '../client/ClientPostHogProvider.js'
+import { cookies } from 'next/headers.js'
 import type { PostHogOptions } from 'posthog-node'
-import { getOrCreateNodeClient } from '../server/nodeClientCache'
-import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config'
-import { readPostHogCookie, isOptedOut } from '../shared/cookie'
+import { getOrCreateNodeClient } from '../server/nodeClientCache.js'
+import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
 
 type AllFlagsOptions = {
     groups?: Record<string, string>

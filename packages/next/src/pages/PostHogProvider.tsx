@@ -1,7 +1,7 @@
 import React from 'react'
 import type { PostHogConfig, BootstrapConfig } from 'posthog-js'
-import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
-import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config'
+import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
+import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
 
 export interface PagesPostHogProviderProps {
     /**

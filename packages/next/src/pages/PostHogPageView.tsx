@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { useRouter } from 'next/router'
-import { usePostHog } from 'posthog-js/react'
+import { useRouter } from 'next/router.js'
+import { usePostHog } from '@posthog/react'
 
 /**
  * Tracks pageviews on route change in Next.js Pages Router.

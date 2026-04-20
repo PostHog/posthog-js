@@ -1,5 +1,5 @@
 import { uuidv7, isNoLike, isArray } from '@posthog/core'
-import { COOKIE_PREFIX, COOKIE_SUFFIX } from './constants'
+import { COOKIE_PREFIX, COOKIE_SUFFIX } from './constants.js'
 
 /**
  * Minimal cookie-reading interface compatible with Next.js `cookies()`,

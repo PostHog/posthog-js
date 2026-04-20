@@ -568,6 +568,9 @@ importers:
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
+      '@posthog/react':
+        specifier: workspace:*
+        version: link:../react
       posthog-js:
         specifier: workspace:*
         version: link:../browser

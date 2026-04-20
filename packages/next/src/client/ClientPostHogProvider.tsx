@@ -2,7 +2,7 @@
 
 import React from 'react'
 import posthogJs from 'posthog-js'
-import { PostHogContext } from 'posthog-js/react'
+import { PostHogContext } from '@posthog/react'
 import type { BootstrapConfig, PostHogConfig } from 'posthog-js'
 
 export type { BootstrapConfig }
