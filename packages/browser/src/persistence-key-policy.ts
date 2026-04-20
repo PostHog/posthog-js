@@ -171,7 +171,3 @@ export const getPersistenceKeyPolicy = (key: string): PersistenceKeyPolicyEntry 
 
     return undefined
 }
-
-export const PERSISTENCE_RESERVED_PROPERTIES = Object.keys(PERSISTENCE_KEY_POLICY).filter(
-    (key) => PERSISTENCE_KEY_POLICY[key].exposure !== 'event'
-)

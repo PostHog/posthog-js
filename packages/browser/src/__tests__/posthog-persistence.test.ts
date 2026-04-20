@@ -13,7 +13,7 @@ import {
     SURVEYS_ACTIVATED,
     USER_STATE,
 } from '../constants'
-import { PERSISTENCE_RESERVED_PROPERTIES } from '../persistence-key-policy'
+import { PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -24,6 +24,10 @@ import Mock = jest.Mock
 
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
+
+const PERSISTENCE_RESERVED_PROPERTIES = Object.keys(PERSISTENCE_KEY_POLICY).filter(
+    (key) => PERSISTENCE_KEY_POLICY[key].exposure !== 'event'
+)
 
 function makePostHogConfig(name: string, persistenceMode: string): PostHogConfig {
     return <PostHogConfig>{
