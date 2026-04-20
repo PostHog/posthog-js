@@ -2,11 +2,8 @@ import type { Properties } from './types'
 
 import { isObject } from '@posthog/core'
 
-export const transformEnabledFeatureFlagsToEventProperties = (
-    value: Properties | undefined,
-    context: { isFeatureFlagCacheStale: () => boolean }
-): Properties => {
-    if (!isObject(value) || context.isFeatureFlagCacheStale()) {
+export const transformEnabledFeatureFlagsToEventProperties = (value: Properties | undefined): Properties => {
+    if (!isObject(value)) {
         return {}
     }
 

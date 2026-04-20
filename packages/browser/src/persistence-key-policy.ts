@@ -72,13 +72,9 @@ import type { Properties, Property } from './types'
 
 export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
 
-interface DerivedPersistenceKeyPolicyContext {
-    isFeatureFlagCacheStale: () => boolean
-}
-
 interface PersistenceKeyPolicyEntry {
     exposure: PersistenceKeyExposure
-    transformToEventProperties?: (value: Property, context: DerivedPersistenceKeyPolicyContext) => Properties
+    transformToEventProperties?: (value: Property) => Properties
 }
 
 export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> = {
