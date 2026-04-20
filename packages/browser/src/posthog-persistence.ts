@@ -168,7 +168,9 @@ export class PostHogPersistence {
                     return
                 }
 
-                extend(p, policy.transformToEventProperties?.(v) || {})
+                if (policy.transformToEventProperties) {
+                    extend(p, policy.transformToEventProperties(v))
+                }
             } else if (!policy || policy.exposure === 'event') {
                 // Unknown keys are treated as user-defined super properties and remain event-visible.
                 p[k] = v
