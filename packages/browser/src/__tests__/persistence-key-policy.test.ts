@@ -9,7 +9,7 @@ const PERSISTENCE_OBJECT_METHODS = new Set(['register', 'register_once'])
 const PERSISTENCE_SINGLE_KEY_METHODS = new Set(['set_property', 'unregister'])
 const SESSION_OBJECT_METHODS = new Set(['register_for_session'])
 const SESSION_SINGLE_KEY_METHODS = new Set(['unregister_for_session'])
-const INTERNAL_SINGLE_KEY_METHODS = new Set(['_register_single'])
+const INTERNAL_SINGLE_KEY_METHODS = new Set(['_register_single', '_setProp', '_deleteProp'])
 
 const isUpperSnakeCase = (value: string): boolean => /^[A-Z0-9_]+$/.test(value)
 
@@ -182,7 +182,7 @@ const collectPersistenceKeyIdentifiers = (): ScanResult => {
         const variableInitializers = collectVariableInitializers(sourceFile)
 
         const recordResolution = (expression: ts.Expression | undefined, node: ts.Node, context: string) => {
-            if (expression && ts.isIdentifier(expression) && expression.text === 'property') {
+            if (expression && ts.isIdentifier(expression) && ['property', 'prop'].includes(expression.text)) {
                 return
             }
 
@@ -302,7 +302,102 @@ const collectPersistenceKeyIdentifiers = (): ScanResult => {
     return { identifiers, issues }
 }
 
+const getEnclosingClassMethodName = (node: ts.Node): string | undefined => {
+    let current: ts.Node | undefined = node
+
+    while (current) {
+        if (
+            (ts.isMethodDeclaration(current) ||
+                ts.isGetAccessorDeclaration(current) ||
+                ts.isSetAccessorDeclaration(current)) &&
+            current.name &&
+            ts.isIdentifier(current.name)
+        ) {
+            return current.name.text
+        }
+        current = current.parent
+    }
+
+    return undefined
+}
+
+const isThisPropsElementAccess = (expression: ts.Expression): boolean => {
+    return (
+        ts.isElementAccessExpression(expression) &&
+        ts.isPropertyAccessExpression(expression.expression) &&
+        ts.isThis(expression.expression.expression) &&
+        expression.expression.name.text === 'props'
+    )
+}
+
+const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
+    const issues: string[] = []
+    const filePath = path.resolve(__dirname, '../posthog-persistence.ts')
+    const sourceText = fs.readFileSync(filePath, 'utf8')
+    const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true)
+    const allowedDirectMutationMethods = new Set(['_setProp', '_deleteProp'])
+    const allowedSinkCallerMethods = new Set([
+        '_setProp',
+        '_deleteProp',
+        'register',
+        'register_once',
+        'unregister',
+        'set_event_timer',
+        'remove_event_timer',
+        'set_property',
+    ])
+
+    const visit = (node: ts.Node) => {
+        if (
+            ts.isBinaryExpression(node) &&
+            node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            isThisPropsElementAccess(node.left)
+        ) {
+            const enclosingMethodName = getEnclosingClassMethodName(node)
+            if (!enclosingMethodName || !allowedDirectMutationMethods.has(enclosingMethodName)) {
+                issues.push(
+                    `posthog-persistence.ts:${getLine(sourceFile, node)} direct this.props assignment must be contained in _setProp`
+                )
+            }
+        }
+
+        if (ts.isDeleteExpression(node) && isThisPropsElementAccess(node.expression)) {
+            const enclosingMethodName = getEnclosingClassMethodName(node)
+            if (!enclosingMethodName || !allowedDirectMutationMethods.has(enclosingMethodName)) {
+                issues.push(
+                    `posthog-persistence.ts:${getLine(sourceFile, node)} direct this.props deletion must be contained in _deleteProp`
+                )
+            }
+        }
+
+        if (
+            ts.isCallExpression(node) &&
+            isPropertyAccessLike(node.expression) &&
+            ts.isThis(node.expression.expression)
+        ) {
+            const methodName = node.expression.name.text
+            if (methodName === '_setProp' || methodName === '_deleteProp') {
+                const enclosingMethodName = getEnclosingClassMethodName(node)
+                if (!enclosingMethodName || !allowedSinkCallerMethods.has(enclosingMethodName)) {
+                    issues.push(
+                        `posthog-persistence.ts:${getLine(sourceFile, node)} ${methodName}() is called from unexpected method ${enclosingMethodName ?? '<unknown>'}`
+                    )
+                }
+            }
+        }
+
+        ts.forEachChild(node, visit)
+    }
+
+    visit(sourceFile)
+    return issues
+}
+
 describe('persistence key policy', () => {
+    it('keeps direct persistence mutations behind the PostHogPersistence sink helpers', () => {
+        expect(collectPostHogPersistenceMutationBoundaryIssues()).toEqual([])
+    })
+
     it('classifies SDK-owned persistence keys and forbids raw literal keys at persistence write sites', () => {
         const exactPolicyKeys = new Set(Object.keys(PERSISTENCE_KEY_POLICY))
         const prefixPolicyKeys = new Set(PERSISTENCE_KEY_PREFIX_POLICY.map(([prefix]) => prefix))
