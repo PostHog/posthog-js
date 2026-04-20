@@ -67,9 +67,8 @@ import {
     WEB_VITALS_ALLOWED_METRICS,
     WEB_VITALS_ENABLED_SERVER_SIDE,
 } from './constants'
+import { transformEnabledFeatureFlagsToEventProperties } from './persistence-key-transforms'
 import type { Properties, Property } from './types'
-
-import { isObject } from '@posthog/core'
 
 export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
 
@@ -106,18 +105,7 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: { exposure: 'hidden' },
     [ENABLED_FEATURE_FLAGS]: {
         exposure: 'derived',
-        transformToEventProperties: (value, context) => {
-            if (!isObject(value) || context.isFeatureFlagCacheStale()) {
-                return {}
-            }
-
-            const eventProperties: Properties = {}
-            const keys = Object.keys(value)
-            for (let i = 0; i < keys.length; i++) {
-                eventProperties[`$feature/${keys[i]}`] = value[keys[i]]
-            }
-            return eventProperties
-        },
+        transformToEventProperties: transformEnabledFeatureFlagsToEventProperties,
     },
     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: { exposure: 'hidden' },
     [PERSISTENCE_EARLY_ACCESS_FEATURES]: { exposure: 'hidden' },
