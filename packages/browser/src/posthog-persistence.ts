@@ -21,7 +21,7 @@ import {
     getReferrerInfo,
     getSearchInfo,
 } from './utils/event-utils'
-import { createLogger, logger } from './utils/logger'
+import { logger } from './utils/logger'
 import { stripLeadingDollar, isEmptyObject, isObject } from '@posthog/core'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
@@ -31,36 +31,6 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
     'sessionstorage',
     'memory',
 ]
-
-const INTERNAL_SDK_PERSISTENCE_KEY_PREFIXES = [
-    '__',
-    'ph_',
-    '$active_',
-    '$autocapture_',
-    '$capture_',
-    '$client_',
-    '$conversations_',
-    '$dead_clicks_',
-    '$debug_',
-    '$early_',
-    '$enabled_',
-    '$error_tracking_',
-    '$exception_',
-    '$feature_',
-    '$flag_',
-    '$initial_',
-    '$posthog_',
-    '$product_tours',
-    '$replay_',
-    '$sdk_',
-    '$session_',
-    '$stored_',
-    '$surveys',
-    '$user_state',
-    '$web_vitals_',
-] as const
-
-const persistencePolicyLogger = createLogger('[PersistencePolicy]', { debugEnabled: true })
 
 const parseName = (config: PostHogConfig): string => {
     let token = ''
@@ -100,7 +70,6 @@ export class PostHogPersistence {
     private _expire_days: number | undefined
     private _default_expiry: number | undefined
     private _cross_subdomain: boolean | undefined
-    private _warnedUnclassifiedSdkPersistenceKeys: Record<string, boolean>
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -111,7 +80,6 @@ export class PostHogPersistence {
         this.props = {}
         this._campaign_params_saved = false
         this._name = parseName(config)
-        this._warnedUnclassifiedSdkPersistenceKeys = {}
         this._storage = this._buildStorage(config)
         this.load()
         if (config.debug) {
@@ -273,7 +241,7 @@ export class PostHogPersistence {
 
             each(props, (val, prop) => {
                 if (!this.props.hasOwnProperty(prop) || this.props[prop] === default_value) {
-                    this._setProp(prop, val)
+                    this.props[prop] = val
                     hasChanges = true
                 }
             })
@@ -299,7 +267,7 @@ export class PostHogPersistence {
 
             each(props, (val, prop) => {
                 if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
-                    this._setProp(prop, val)
+                    this.props[prop] = val
                     hasChanges = true
                 }
             })
@@ -314,7 +282,7 @@ export class PostHogPersistence {
 
     unregister(prop: string): void {
         if (prop in this.props) {
-            this._deleteProp(prop)
+            delete this.props[prop]
             this.save()
         }
     }
@@ -446,7 +414,7 @@ export class PostHogPersistence {
     set_event_timer(event_name: string, timestamp: number): void {
         const timers = this.props[EVENT_TIMERS_KEY] || {}
         timers[event_name] = timestamp
-        this._setProp(EVENT_TIMERS_KEY, timers)
+        this.props[EVENT_TIMERS_KEY] = timers
         this.save()
     }
 
@@ -454,8 +422,7 @@ export class PostHogPersistence {
         const timers = this.props[EVENT_TIMERS_KEY] || {}
         const timestamp = timers[event_name]
         if (!isUndefined(timestamp)) {
-            delete timers[event_name]
-            this._setProp(EVENT_TIMERS_KEY, timers)
+            delete this.props[EVENT_TIMERS_KEY][event_name]
             this.save()
         }
         return timestamp
@@ -466,43 +433,7 @@ export class PostHogPersistence {
     }
 
     set_property(prop: string, to: any): void {
-        this._setProp(prop, to)
-        this.save()
-    }
-
-    private _setProp(prop: string, to: any): void {
-        this._warnIfUnclassifiedSdkPersistenceKey(prop)
         this.props[prop] = to
-    }
-
-    private _deleteProp(prop: string): void {
-        this._warnIfUnclassifiedSdkPersistenceKey(prop)
-        delete this.props[prop]
-    }
-
-    private _warnIfUnclassifiedSdkPersistenceKey(prop: string): void {
-        if (
-            !this._config.debug ||
-            this._warnedUnclassifiedSdkPersistenceKeys[prop] ||
-            getPersistenceKeyPolicy(prop) ||
-            !this._isLikelySdkPersistenceKey(prop)
-        ) {
-            return
-        }
-
-        this._warnedUnclassifiedSdkPersistenceKeys[prop] = true
-        persistencePolicyLogger.warn(
-            `SDK persistence key "${prop}" has no policy entry. Add one to persistence-key-policy.ts if this is SDK-owned state.`
-        )
-    }
-
-    private _isLikelySdkPersistenceKey(prop: string): boolean {
-        for (const prefix of INTERNAL_SDK_PERSISTENCE_KEY_PREFIXES) {
-            if (prop.startsWith(prefix)) {
-                return true
-            }
-        }
-
-        return false
+        this.save()
     }
 }
