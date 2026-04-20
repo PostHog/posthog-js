@@ -4,7 +4,6 @@ import { each, extend, stripEmptyProperties } from './utils'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
-    ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
@@ -163,14 +162,13 @@ export class PostHogPersistence {
         each(this.props, (v, k) => {
             const policy = getPersistenceKeyPolicy(k)
 
-            if (policy?.exposure === 'derived' && k === ENABLED_FEATURE_FLAGS && isObject(v)) {
-                // Skip $feature/ properties if cache is stale
-                if (!this._isFeatureFlagCacheStale()) {
-                    const keys = Object.keys(v)
-                    for (let i = 0; i < keys.length; i++) {
-                        p[`$feature/${keys[i]}`] = v[keys[i]]
-                    }
-                }
+            if (policy?.exposure === 'derived') {
+                extend(
+                    p,
+                    policy.transformToEventProperties?.(v, {
+                        isFeatureFlagCacheStale: this._isFeatureFlagCacheStale.bind(this),
+                    }) || {}
+                )
             } else if (!policy || policy.exposure === 'event') {
                 // Unknown keys are treated as user-defined super properties and remain event-visible.
                 p[k] = v
