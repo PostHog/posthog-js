@@ -3,14 +3,17 @@ import { PostHogPersistence } from '../posthog-persistence'
 import {
     DEVICE_ID,
     INITIAL_PERSON_INFO,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
-    PERSISTENCE_RESERVED_PROPERTIES,
     PRODUCT_TOURS,
     PRODUCT_TOURS_ACTIVATED,
     SESSION_ID,
     SESSION_RECORDING_REMOTE_CONFIG,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+    SURVEYS_ACTIVATED,
     USER_STATE,
 } from '../constants'
+import { PERSISTENCE_RESERVED_PROPERTIES } from '../persistence-key-policy'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -264,6 +267,19 @@ describe('persistence', () => {
         ])('should not include reserved property %s in event properties', (key, value) => {
             library.register({ [key]: value })
             expect(library.props[key]).toEqual(value)
+            expect(library.properties()).toEqual({})
+        })
+
+        it.each([
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS, { 'flag-a': '{"key":"value"}' }],
+            [SURVEYS_ACTIVATED, ['survey-1']],
+        ])('should include explicitly event-visible SDK property %s in event properties', (key, value) => {
+            library.register({ [key]: value })
+            expect(library.properties()).toEqual({ [key]: value })
+        })
+
+        it('should hide SDK persistence keys matched by prefix policy', () => {
+            library.register({ [`${SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX}abc123`]: 'session-id' })
             expect(library.properties()).toEqual({})
         })
 

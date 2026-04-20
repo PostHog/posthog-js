@@ -9,9 +9,9 @@ import {
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
-    PERSISTENCE_RESERVED_PROPERTIES,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
 } from './constants'
+import { getPersistenceKeyPolicy } from './persistence-key-policy'
 
 import { isUndefined } from '@posthog/core'
 import {
@@ -160,9 +160,10 @@ export class PostHogPersistence {
     properties(): Properties {
         const p: Properties = {}
 
-        // Filter out reserved properties
         each(this.props, (v, k) => {
-            if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
+            const policy = getPersistenceKeyPolicy(k)
+
+            if (policy?.exposure === 'derived' && k === ENABLED_FEATURE_FLAGS && isObject(v)) {
                 // Skip $feature/ properties if cache is stale
                 if (!this._isFeatureFlagCacheStale()) {
                     const keys = Object.keys(v)
@@ -170,7 +171,8 @@ export class PostHogPersistence {
                         p[`$feature/${keys[i]}`] = v[keys[i]]
                     }
                 }
-            } else if (PERSISTENCE_RESERVED_PROPERTIES.indexOf(k) === -1) {
+            } else if (!policy || policy.exposure === 'event') {
+                // Unknown keys are treated as user-defined super properties and remain event-visible.
                 p[k] = v
             }
         })

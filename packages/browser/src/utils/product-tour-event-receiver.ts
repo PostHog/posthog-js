@@ -33,6 +33,10 @@ export class ProductTourEventReceiver extends EventReceiver<ProductTour> {
         return logger
     }
 
+    protected _setActivatedItems(eligibleItems: string[]): void {
+        this._instance?.persistence?.register({ [PRODUCT_TOURS_ACTIVATED]: eligibleItems })
+    }
+
     protected _isItemPermanentlyIneligible(itemId?: string): boolean {
         if (!itemId) return true
         const completedKey = `${TOUR_COMPLETED_KEY_PREFIX}${itemId}`

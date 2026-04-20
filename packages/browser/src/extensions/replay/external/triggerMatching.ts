@@ -1,4 +1,7 @@
 import {
+    SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
@@ -268,7 +271,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
         const result = eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
         this._instance.register_for_session({
-            $sdk_debug_replay_url_trigger_status: result,
+            [SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS]: result,
         })
         return result
     }
@@ -367,7 +370,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
             result = TRIGGER_ACTIVATED
         }
         this._instance.register_for_session({
-            $sdk_debug_replay_linked_flag_trigger_status: result,
+            [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: result,
         })
         return result
     }
@@ -471,7 +474,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
                   ? TRIGGER_PENDING
                   : TRIGGER_DISABLED
         this._instance.register_for_session({
-            $sdk_debug_replay_event_trigger_status: result,
+            [SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS]: result,
         })
         return result
     }

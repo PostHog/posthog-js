@@ -52,9 +52,12 @@ export const SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX = '$posthog_sr_group_
 export const SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX = '$posthog_sr_group_sampling_'
 export const SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP = '$debug_first_full_snapshot_timestamp'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
+export const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
 export const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
 export const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+export const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
+export const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 export const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
@@ -63,6 +66,10 @@ export const SURVEYS_ACTIVATED = '$surveys_activated'
 export const PRODUCT_TOURS = 'ph_product_tours'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
 export const CONVERSATIONS = '$conversations'
+export const CONVERSATIONS_LEGACY_WIDGET_SESSION_ID = '$conversations_widget_session_id'
+export const CONVERSATIONS_LEGACY_TICKET_ID = '$conversations_ticket_id'
+export const CONVERSATIONS_LEGACY_WIDGET_STATE = '$conversations_widget_state'
+export const CONVERSATIONS_LEGACY_USER_TRAITS = '$conversations_user_traits'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const FLAG_CALL_REPORTED_SESSION_ID = '$flag_call_reported_session_id'
 export const PERSISTENCE_FEATURE_FLAG_ERRORS = '$feature_flag_errors'
@@ -89,39 +96,16 @@ export const COOKIELESS_MODE_FLAG_PROPERTY = '$cookieless_mode'
 
 export const WEB_EXPERIMENTS = '$web_experiments'
 
-// These are properties that are reserved and will not be automatically included in events
-export const PERSISTENCE_RESERVED_PROPERTIES = [
-    PEOPLE_DISTINCT_ID_KEY,
-    ALIAS_ID_KEY,
-    CAMPAIGN_IDS_KEY,
-    EVENT_TIMERS_KEY,
-    SESSION_RECORDING_ENABLED_SERVER_SIDE,
-    HEATMAPS_ENABLED_SERVER_SIDE,
-    SESSION_ID,
-    ENABLED_FEATURE_FLAGS,
-    ERROR_TRACKING_SUPPRESSION_RULES,
-    USER_STATE,
-    PERSISTENCE_EARLY_ACCESS_FEATURES,
-    PERSISTENCE_FEATURE_FLAG_DETAILS,
-    STORED_GROUP_PROPERTIES_KEY,
-    STORED_PERSON_PROPERTIES_KEY,
-    SURVEYS,
-    FLAG_CALL_REPORTED,
-    FLAG_CALL_REPORTED_SESSION_ID,
-    PERSISTENCE_FEATURE_FLAG_ERRORS,
-    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
-    CLIENT_SESSION_PROPS,
-    CAPTURE_RATE_LIMIT,
-    INITIAL_CAMPAIGN_PARAMS,
-    INITIAL_REFERRER_INFO,
-    ENABLE_PERSON_PROCESSING,
-    INITIAL_PERSON_INFO,
-    PRODUCT_TOURS,
-    PRODUCT_TOURS_ACTIVATED,
-    PRODUCT_TOURS_ENABLED_SERVER_SIDE,
-    SESSION_RECORDING_REMOTE_CONFIG,
-    PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
-]
+export const SDK_DEBUG_EXTENSIONS_INIT_METHOD = '$sdk_debug_extensions_init_method'
+export const SDK_DEBUG_EXTENSIONS_INIT_TIME_MS = '$sdk_debug_extensions_init_time_ms'
+export const SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_script_not_loaded'
+export const SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS = '$sdk_debug_replay_event_trigger_status'
+export const SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS = '$sdk_debug_replay_linked_flag_trigger_status'
+export const SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS = '$sdk_debug_replay_matched_recording_trigger_groups'
+export const SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG = '$sdk_debug_replay_remote_trigger_matching_config'
+export const SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT = '$sdk_debug_replay_trigger_groups_count'
+export const SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS = '$sdk_debug_replay_url_trigger_status'
+export const SESSION_RECORDING_START_REASON = '$session_recording_start_reason'
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
 export const LOAD_EXT_NOT_FOUND = 'PostHog loadExternalDependency extension not found.'
