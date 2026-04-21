@@ -13,7 +13,17 @@ import type {
 } from './types'
 
 const DEFAULT_CACHE_TTL_SECONDS = 300 // 5 minutes
+const DEFAULT_PROMPTS_HOST = 'https://us.posthog.com'
 type PromptVersionCache = Map<number | undefined, CachedPrompt>
+
+function normalizeApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeHost(value?: unknown): string {
+  const normalizedHost = typeof value === 'string' ? value.trim() : ''
+  return (normalizedHost || DEFAULT_PROMPTS_HOST).replace(/\/+$/, '')
+}
 
 function isPromptApiResponse(data: unknown): data is PromptApiResponse {
   if (typeof data !== 'object' || data === null) {
@@ -80,13 +90,13 @@ export class Prompts {
 
     if (isPromptsWithPostHog(options)) {
       this.personalApiKey = options.posthog.options.personalApiKey ?? ''
-      this.projectApiKey = options.posthog.apiKey ?? ''
+      this.projectApiKey = options.posthog.apiKey
       this.host = options.posthog.host
     } else {
       // Direct options
-      this.personalApiKey = options.personalApiKey
-      this.projectApiKey = options.projectApiKey
-      this.host = options.host ?? 'https://us.posthog.com'
+      this.personalApiKey = normalizeApiKey(options.personalApiKey)
+      this.projectApiKey = normalizeApiKey(options.projectApiKey)
+      this.host = normalizeHost(options.host)
     }
   }
 

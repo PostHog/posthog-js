@@ -105,6 +105,15 @@ describe('postHogMiddleware', () => {
             expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
         })
 
+        it('trims apiKey before seeding cookies', async () => {
+            const middleware = postHogMiddleware({ apiKey: '  phc_test123\n' })
+            const req = new MockNextRequest('https://example.com/')
+
+            await middleware(req as any)
+
+            expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
+        })
+
         it('throws when neither config nor env var provides apiKey', () => {
             delete process.env.NEXT_PUBLIC_POSTHOG_KEY
             expect(() => postHogMiddleware({})).toThrow('[PostHog Next.js] apiKey is required')
@@ -326,6 +335,20 @@ describe('postHogMiddleware', () => {
             const middleware = postHogMiddleware({
                 apiKey: 'phc_test123',
                 proxy: { host: 'https://eu.i.posthog.com' },
+            })
+            const req = new MockNextRequest('https://example.com/ingest/e/')
+
+            await middleware(req as any)
+
+            const rewriteUrl: URL = mockNextResponseRewrite.mock.calls[0][0]
+            expect(rewriteUrl.origin).toBe('https://eu.i.posthog.com')
+            expect(rewriteUrl.pathname).toBe('/e/')
+        })
+
+        it('trims custom proxy host before rewriting', async () => {
+            const middleware = postHogMiddleware({
+                apiKey: 'phc_test123',
+                proxy: { host: '  https://eu.i.posthog.com/\t ' },
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
 

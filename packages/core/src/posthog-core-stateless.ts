@@ -145,10 +145,13 @@ export abstract class PostHogCoreStateless {
   abstract setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
 
   constructor(apiKey: string, options: PostHogCoreOptions = {}) {
-    assert(apiKey, "You must pass your PostHog project's api key.")
+    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
+    const normalizedHost = typeof options.host === 'string' ? options.host.trim() : ''
 
-    this.apiKey = apiKey
-    this.host = removeTrailingSlash(options.host || 'https://us.i.posthog.com')
+    assert(normalizedApiKey, "You must pass your PostHog project's api key.")
+
+    this.apiKey = normalizedApiKey
+    this.host = removeTrailingSlash(normalizedHost || 'https://us.i.posthog.com')
     this.flushAt = options.flushAt ? Math.max(options.flushAt, 1) : 20
     this.maxBatchSize = Math.max(this.flushAt, options.maxBatchSize ?? 100)
     this.maxQueueSize = Math.max(this.flushAt, options.maxQueueSize ?? 1000)

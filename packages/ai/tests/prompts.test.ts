@@ -68,6 +68,33 @@ describe('Prompts', () => {
       )
     })
 
+    it('should trim whitespace-sensitive credentials and host before fetching', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockPromptResponse),
+      })
+
+      const prompts = new Prompts({
+        personalApiKey: '  phx_test_key\n',
+        projectApiKey: '  phc_test_key\t ',
+        host: '  https://us.posthog.com/\t ',
+      })
+
+      const result = await prompts.get('test-prompt')
+
+      expect(result).toBe(mockPromptResponse.prompt)
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/?token=phc_test_key',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer phx_test_key',
+          },
+        }
+      )
+    })
+
     it('should fetch a specific prompt version when requested', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

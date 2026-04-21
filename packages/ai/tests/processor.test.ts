@@ -41,31 +41,42 @@ describe('PostHogSpanProcessor', () => {
       apiKey: 'phc_test123',
       host: undefined,
       expectedUrl: 'https://us.i.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test123',
     },
     {
       name: 'custom host',
       apiKey: 'phc_test456',
       host: 'https://eu.i.posthog.com',
       expectedUrl: 'https://eu.i.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test456',
     },
     {
       name: 'trailing slash',
       apiKey: 'phc_test789',
       host: 'https://custom.posthog.com/',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test789',
     },
-  ])('configures the OTLP exporter correctly with $name', ({ apiKey, host, expectedUrl }) => {
+    {
+      name: 'trimmed whitespace-sensitive values',
+      apiKey: '  phc_test999\t ',
+      host: '  https://custom.posthog.com/\n',
+      expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test999',
+    },
+  ])('configures the OTLP exporter correctly with $name', ({ apiKey, host, expectedUrl, expectedApiKey }) => {
     new PostHogSpanProcessor({ apiKey, host })
 
     expect(OTLPTraceExporter).toHaveBeenCalledWith({
       url: expectedUrl,
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${expectedApiKey}` },
     })
     expect(BatchSpanProcessor).toHaveBeenCalledWith(expect.any(Object))
   })
 
   it('throws when apiKey is missing', () => {
     expect(() => new PostHogSpanProcessor({ apiKey: '' })).toThrow('PostHogSpanProcessor requires an apiKey')
+    expect(() => new PostHogSpanProcessor({ apiKey: '  \n\t ' })).toThrow('PostHogSpanProcessor requires an apiKey')
   })
 
   it('delegates onStart to the inner processor', () => {
