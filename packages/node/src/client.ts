@@ -48,6 +48,20 @@ const MAX_CACHE_SIZE = 50 * 1000
 
 const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
+const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
+
+function normalizeApiKey(value: string): string {
+  return value.trim()
+}
+
+function normalizePersonalApiKey(value?: string): string | undefined {
+  const normalizedValue = value?.trim()
+  return normalizedValue || undefined
+}
+
+function normalizeHost(value?: string): string {
+  return value?.trim() || DEFAULT_NODE_HOST
+}
 
 // The actual exported Nodejs API.
 export abstract class PostHogBackendClient extends PostHogCoreStateless implements IPostHog {
@@ -102,41 +116,48 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param options - Configuration options for the client
    */
   constructor(apiKey: string, options: PostHogOptions = {}) {
-    super(apiKey, options)
+    const normalizedApiKey = normalizeApiKey(apiKey)
+    const normalizedOptions = {
+      ...options,
+      host: normalizeHost(options.host),
+      personalApiKey: normalizePersonalApiKey(options.personalApiKey),
+    }
 
-    this.options = options
+    super(normalizedApiKey, normalizedOptions)
+
+    this.options = normalizedOptions
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
-      typeof options.featureFlagsPollingInterval === 'number'
-        ? Math.max(options.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
+      typeof normalizedOptions.featureFlagsPollingInterval === 'number'
+        ? Math.max(normalizedOptions.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
         : THIRTY_SECONDS
 
-    if (typeof options.waitUntilDebounceMs === 'number') {
-      this.options.waitUntilDebounceMs = Math.max(options.waitUntilDebounceMs, 0)
+    if (typeof normalizedOptions.waitUntilDebounceMs === 'number') {
+      this.options.waitUntilDebounceMs = Math.max(normalizedOptions.waitUntilDebounceMs, 0)
     }
-    if (typeof options.waitUntilMaxWaitMs === 'number') {
-      this.options.waitUntilMaxWaitMs = Math.max(options.waitUntilMaxWaitMs, 0)
+    if (typeof normalizedOptions.waitUntilMaxWaitMs === 'number') {
+      this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
     }
 
-    if (options.personalApiKey) {
-      if (options.personalApiKey.includes('phc_')) {
+    if (normalizedOptions.personalApiKey) {
+      if (normalizedOptions.personalApiKey.includes('phc_')) {
         throw new Error(
           'Your Personal API key is invalid. These keys are prefixed with "phx_" and can be created in PostHog project settings.'
         )
       }
 
       // Only start the poller if local evaluation is enabled (defaults to true for backward compatibility)
-      const shouldEnableLocalEvaluation = options.enableLocalEvaluation !== false
+      const shouldEnableLocalEvaluation = normalizedOptions.enableLocalEvaluation !== false
 
       if (shouldEnableLocalEvaluation) {
         this.featureFlagsPoller = new FeatureFlagsPoller({
           pollingInterval: this.options.featureFlagsPollingInterval,
-          personalApiKey: options.personalApiKey,
-          projectApiKey: apiKey,
-          timeout: options.requestTimeout ?? 10000, // 10 seconds
+          personalApiKey: normalizedOptions.personalApiKey,
+          projectApiKey: normalizedApiKey,
+          timeout: normalizedOptions.requestTimeout ?? 10000, // 10 seconds
           host: this.host,
-          fetch: options.fetch,
+          fetch: normalizedOptions.fetch,
           onError: (err: Error) => {
             this._events.emit('error', err)
           },
@@ -144,15 +165,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             this._events.emit('localEvaluationFlagsLoaded', count)
           },
           customHeaders: this.getCustomHeaders(),
-          cacheProvider: options.flagDefinitionCacheProvider,
-          strictLocalEvaluation: options.strictLocalEvaluation,
+          cacheProvider: normalizedOptions.flagDefinitionCacheProvider,
+          strictLocalEvaluation: normalizedOptions.strictLocalEvaluation,
         })
       }
     }
 
-    this.errorTracking = new ErrorTracking(this, options, this._logger)
+    this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
     this.distinctIdHasSentFlagCalls = {}
-    this.maxCacheSize = options.maxCacheSize || MAX_CACHE_SIZE
+    this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
   }
 
   protected override enqueue(type: string, message: any, options?: PostHogCaptureOptions): void {

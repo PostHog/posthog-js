@@ -1,5 +1,16 @@
 import { resolveBinaryPath } from './utils'
 
+const DEFAULT_PLUGIN_HOST = 'https://us.i.posthog.com'
+
+function normalizeApiKey(value: string): string {
+    return value.trim()
+}
+
+function normalizeHost(value?: string): string {
+    const normalizedHost = value?.trim()
+    return normalizedHost || DEFAULT_PLUGIN_HOST
+}
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 
 export interface PluginConfig {
@@ -48,9 +59,8 @@ export interface ResolveConfigOptions {
 
 export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveConfigOptions): ResolvedPluginConfig {
     const projectId = options.projectId ?? options.envId
-    const personalApiKey = options.personalApiKey.trim()
-    const normalizedHost = options.host?.trim()
-    const host = normalizedHost || 'https://us.i.posthog.com'
+    const personalApiKey = normalizeApiKey(options.personalApiKey)
+    const host = normalizeHost(options.host)
     const logLevel = options.logLevel ?? 'info'
     const cwd = resolveOptions?.cwd ?? process.cwd()
     const cliBinaryPath =

@@ -15,6 +15,16 @@ type FeatureFlagOptions = {
   disableGeoip?: boolean
 }
 
+const DEFAULT_HOST = 'https://us.i.posthog.com'
+
+function normalizeApiKey(value?: string): string {
+  return value?.trim() ?? ''
+}
+
+function normalizeHost(value?: string): string {
+  return value?.trim() || DEFAULT_HOST
+}
+
 export type FeatureFlagResult = {
   key: string
   enabled: boolean
@@ -78,8 +88,8 @@ export class PostHog {
       identify?: IdentifyFn
     }
   ) {
-    this.apiKey = options?.apiKey ?? process.env.POSTHOG_API_KEY ?? ''
-    this.host = options?.host ?? process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com'
+    this.apiKey = normalizeApiKey(options?.apiKey ?? process.env.POSTHOG_API_KEY)
+    this.host = normalizeHost(options?.host ?? process.env.POSTHOG_HOST)
     this.beforeSend = options?.beforeSend
     this.identifyFn = options?.identify
   }

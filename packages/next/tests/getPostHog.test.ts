@@ -175,6 +175,14 @@ describe('getPostHog', () => {
         })
     })
 
+    it('trims apiKey and host before creating the node client', async () => {
+        await getPostHog('  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })
+
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://custom.posthog.com/',
+        })
+    })
+
     it('reads host from NEXT_PUBLIC_POSTHOG_HOST env var when not in options', async () => {
         process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://env-host.posthog.com'
 

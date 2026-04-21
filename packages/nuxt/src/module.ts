@@ -8,6 +8,19 @@ import { dirname } from 'node:path'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
+const DEFAULT_NUXT_HOST = 'https://us.i.posthog.com'
+
+function normalizeApiKey(value: string): string {
+  return value.trim()
+}
+
+function normalizePersonalApiKey(value: string): string {
+  return value.trim()
+}
+
+function normalizeHost(value: string): string {
+  return value.trim() || DEFAULT_NUXT_HOST
+}
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -65,14 +78,16 @@ export default defineNuxtModule<ModuleOptions>({
 
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
+    const normalizedPublicKey = normalizeApiKey(options.publicKey)
+    const normalizedHost = normalizeHost(options.host)
     addPlugin(resolver.resolve('./runtime/vue-plugin'))
     addServerPlugin(resolver.resolve('./runtime/nitro-plugin'))
     addImportsDir(resolver.resolve('./runtime/composables'))
 
     Object.assign(nuxt.options.runtimeConfig.public, {
       posthog: {
-        publicKey: options.publicKey,
-        host: options.host,
+        publicKey: normalizedPublicKey,
+        host: normalizedHost,
         debug: options.debug,
       },
       posthogClientConfig: options.clientConfig,
@@ -128,9 +143,9 @@ export default defineNuxtModule<ModuleOptions>({
       const cliEnv = {
         ...process.env,
         RUST_LOG: `posthog_cli=${logLevel}`,
-        POSTHOG_CLI_HOST: options.host,
+        POSTHOG_CLI_HOST: normalizedHost,
         POSTHOG_CLI_PROJECT_ID: projectId,
-        POSTHOG_CLI_API_KEY: sourcemapsConfig.personalApiKey,
+        POSTHOG_CLI_API_KEY: normalizePersonalApiKey(sourcemapsConfig.personalApiKey),
       }
       return (args: string[]) => {
         return spawnLocal(cliBinaryPath, args, {

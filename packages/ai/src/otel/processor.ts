@@ -4,6 +4,16 @@ import { BatchSpanProcessor, type SpanProcessor, type ReadableSpan, type Span } 
 
 import { isAISpan } from './spans'
 
+const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
+
+function normalizeApiKey(value: string): string {
+  return value.trim()
+}
+
+function normalizeHost(value?: string): string {
+  return value?.trim() || DEFAULT_OTEL_HOST
+}
+
 export interface PostHogSpanProcessorOptions {
   /**
    * Your PostHog project API key.
@@ -48,18 +58,19 @@ export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
 
   constructor(options: PostHogSpanProcessorOptions) {
-    if (!options.apiKey) {
+    const apiKey = normalizeApiKey(options.apiKey)
+    if (!apiKey) {
       throw new Error('PostHogSpanProcessor requires an apiKey')
     }
 
     if (options._spanProcessor) {
       this.inner = options._spanProcessor
     } else {
-      const host = new URL(options.host || 'https://us.i.posthog.com').origin
+      const host = new URL(normalizeHost(options.host)).origin
       const exporter = new OTLPTraceExporter({
         url: `${host}/i/v0/ai/otel`,
         headers: {
-          Authorization: `Bearer ${options.apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
       })
       this.inner = new BatchSpanProcessor(exporter)

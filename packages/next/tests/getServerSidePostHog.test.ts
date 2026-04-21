@@ -12,10 +12,7 @@ jest.mock('posthog-node', () => ({
     })),
 }))
 
-function createMockContext(
-    cookies: Record<string, string> = {},
-    extraHeaders: Record<string, string> = {}
-) {
+function createMockContext(cookies: Record<string, string> = {}, extraHeaders: Record<string, string> = {}) {
     return {
         req: {
             headers: {
@@ -85,6 +82,17 @@ describe('getServerSidePostHog', () => {
     it('throws when no apiKey provided and env not set', async () => {
         const ctx = createMockContext({})
         await expect(getServerSidePostHog(ctx)).rejects.toThrow('apiKey is required')
+    })
+
+    it('trims apiKey and host before creating the node client', async () => {
+        const { PostHog } = require('posthog-node')
+        const ctx = createMockContext({})
+
+        await getServerSidePostHog(ctx, '  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })
+
+        expect(PostHog).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://custom.posthog.com/',
+        })
     })
 
     describe('tracing headers', () => {

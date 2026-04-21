@@ -2,7 +2,7 @@ import type { GetServerSidePropsContext } from 'next'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/nodeClientCache'
 import { cookieStoreFromHeader, readPostHogCookie, isOptedOut } from '../shared/cookie'
-import { resolveApiKey } from '../shared/config'
+import { resolveApiKey, resolveHost } from '../shared/config'
 import { readTracingHeaders, buildContextData } from '../shared/tracing-headers'
 
 /**
@@ -34,7 +34,7 @@ export async function getServerSidePostHog(
     options?: Partial<PostHogOptions>
 ): Promise<IPostHog> {
     const resolvedApiKey = resolveApiKey(apiKey)
-    const host = options?.host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const host = resolveHost(options?.host)
     const resolvedOptions = host ? { ...options, host } : options
     const client = await getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
 
