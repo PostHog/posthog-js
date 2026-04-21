@@ -31,7 +31,7 @@ function createSuppressionRule(
 }
 
 describe('PostHogExceptions', () => {
-    const captureMock = jest.fn()
+    const captureMock = jest.fn().mockReturnValue({ uuid: 'test-uuid', event: '$exception', properties: {} })
     let posthog: PostHog
     let exceptions: PostHogExceptions
     let config: PostHogConfig

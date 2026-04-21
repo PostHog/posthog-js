@@ -141,16 +141,21 @@ export class PostHogExceptions implements Extension {
                     : properties
 
             try {
-                return this._instance.capture('$exception', propertiesForExceptionCapture, {
+                const result = this._instance.capture('$exception', propertiesForExceptionCapture, {
                     _noTruncate: true,
                     _batchKey: 'exceptionEvent',
                     _originatedFromCaptureException: true,
                 })
+
+                if (result) {
+                    this._exceptionStepsBuffer.clear()
+                }
+
+                return result
             } catch (error) {
                 logger.error('Failed to capture exception event. Dropping this exception.', error)
-                return
-            } finally {
                 this._exceptionStepsBuffer.clear()
+                return
             }
         } catch (error) {
             logger.error('Failed to process exception event. Ignoring this exception.', error)
