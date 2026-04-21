@@ -4,8 +4,8 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getPostHogCookieName, readPostHogCookie, serializePostHogCookie, isOptedOut } from '../shared/cookie'
 import { generateAnonymousId } from '../shared/identity'
-import { resolveApiKey } from '../shared/config'
-import { COOKIE_MAX_AGE_SECONDS, DEFAULT_API_HOST, DEFAULT_INGEST_PATH } from '../shared/constants'
+import { resolveApiKey, resolveHostOrDefault } from '../shared/config'
+import { COOKIE_MAX_AGE_SECONDS, DEFAULT_INGEST_PATH } from '../shared/constants'
 
 export interface PostHogProxyOptions {
     /** Path prefix to intercept. Default: '/ingest'. */
@@ -94,7 +94,7 @@ function resolveProxyConfig(proxy: boolean | PostHogProxyOptions | undefined): R
     const prefix = options.pathPrefix ?? DEFAULT_INGEST_PATH
     return {
         pathPrefix: prefix.startsWith('/') ? prefix : `/${prefix}`,
-        host: options.host ?? DEFAULT_API_HOST,
+        host: resolveHostOrDefault(options.host),
     }
 }
 
