@@ -35,6 +35,7 @@ describe('getServerSidePostHog', () => {
     })
 
     it('returns a posthog client', async () => {
+        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -44,6 +45,9 @@ describe('getServerSidePostHog', () => {
 
         const posthog = await getServerSidePostHog(ctx, 'phc_test123')
         expect(posthog).toBeDefined()
+        expect(PostHog).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://us.i.posthog.com',
+        })
     })
 
     it('calls enterContext with distinctId and properties', async () => {
@@ -92,6 +96,17 @@ describe('getServerSidePostHog', () => {
 
         expect(PostHog).toHaveBeenCalledWith('phc_test123', {
             host: 'https://custom.posthog.com/',
+        })
+    })
+
+    it('defaults host when it is omitted', async () => {
+        const { PostHog } = require('posthog-node')
+        const ctx = createMockContext({})
+
+        await getServerSidePostHog(ctx, 'phc_default_host_test')
+
+        expect(PostHog).toHaveBeenCalledWith('phc_default_host_test', {
+            host: 'https://us.i.posthog.com',
         })
     })
 

@@ -1,5 +1,6 @@
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
+import { DEFAULT_API_HOST } from './constants'
 
 /**
  * Configuration for the client-side PostHog provider.
@@ -36,6 +37,10 @@ export function resolveApiKey(apiKey?: string): string {
 
 export function resolveHost(host?: string): string | undefined {
     return normalizeConfigValue(host) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_HOST)
+}
+
+export function resolveHostOrDefault(host?: string): string {
+    return resolveHost(host) ?? DEFAULT_API_HOST
 }
 
 /**

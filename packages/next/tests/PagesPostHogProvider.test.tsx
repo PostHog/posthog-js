@@ -35,7 +35,10 @@ describe('Pages PostHogProvider', () => {
 
     it('trims apiKey and api_host before passing them to ClientPostHogProvider', () => {
         render(
-            <PostHogProvider apiKey={'  phc_test123\n'} clientOptions={{ api_host: '  https://custom.posthog.com/\t ' }}>
+            <PostHogProvider
+                apiKey={'  phc_test123\n'}
+                clientOptions={{ api_host: '  https://custom.posthog.com/\t ' }}
+            >
                 <div>Child</div>
             </PostHogProvider>
         )
@@ -56,6 +59,7 @@ describe('Pages PostHogProvider', () => {
         expect(mockClientPostHogProvider).toHaveBeenCalledWith(
             expect.objectContaining({
                 options: expect.objectContaining({
+                    api_host: 'https://us.i.posthog.com',
                     persistence: 'localStorage+cookie',
                     opt_out_capturing_persistence_type: 'cookie',
                     opt_out_persistence_by_default: true,
