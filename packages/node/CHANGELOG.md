@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.29.4
+
+### Patch Changes
+
+- [#3407](https://github.com/PostHog/posthog-js/pull/3407) [`b26c57c`](https://github.com/PostHog/posthog-js/commit/b26c57c31574c6e2fddcf6a98551421fe90b559d) Thanks [@patricio-posthog](https://github.com/patricio-posthog)! - fix(flags): switch local evaluation polling from `/api/feature_flag/local_evaluation` to `/flags/definitions`
+  (2026-04-21)
+
 ## 5.29.3
 
 ### Patch Changes
