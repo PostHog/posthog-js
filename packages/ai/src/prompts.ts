@@ -16,12 +16,12 @@ const DEFAULT_CACHE_TTL_SECONDS = 300 // 5 minutes
 const DEFAULT_PROMPTS_HOST = 'https://us.posthog.com'
 type PromptVersionCache = Map<number | undefined, CachedPrompt>
 
-function normalizeApiKey(value?: string | null): string {
-  return value?.trim() ?? ''
+function normalizeApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizeHost(value?: string | null): string {
-  const normalizedHost = value?.trim()
+function normalizeHost(value?: unknown): string {
+  const normalizedHost = typeof value === 'string' ? value.trim() : ''
   return (normalizedHost || DEFAULT_PROMPTS_HOST).replace(/\/+$/, '')
 }
 

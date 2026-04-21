@@ -20,8 +20,8 @@ export type PostHogServerConfig = PostHogOptions
  *
  * Throws if neither is available.
  */
-export function normalizeConfigValue(value?: string): string | undefined {
-    const normalizedValue = value?.trim()
+export function normalizeConfigValue(value?: unknown): string | undefined {
+    const normalizedValue = typeof value === 'string' ? value.trim() : ''
     return normalizedValue || undefined
 }
 

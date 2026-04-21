@@ -10,16 +10,17 @@ const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
 const DEFAULT_NUXT_HOST = 'https://us.i.posthog.com'
 
-function normalizeApiKey(value: string): string {
-  return value.trim()
+function normalizeApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizePersonalApiKey(value: string): string {
-  return value.trim()
+function normalizePersonalApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizeHost(value: string): string {
-  return value.trim() || DEFAULT_NUXT_HOST
+function normalizeHost(value?: unknown): string {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
+  return normalizedValue || DEFAULT_NUXT_HOST
 }
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'

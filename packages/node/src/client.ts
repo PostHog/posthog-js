@@ -50,17 +50,18 @@ const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
 const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
 
-function normalizeApiKey(value: string): string {
-  return value.trim()
+function normalizeApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizePersonalApiKey(value?: string): string | undefined {
-  const normalizedValue = value?.trim()
+function normalizePersonalApiKey(value?: unknown): string | undefined {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || undefined
 }
 
-function normalizeHost(value?: string): string {
-  return value?.trim() || DEFAULT_NODE_HOST
+function normalizeHost(value?: unknown): string {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
+  return normalizedValue || DEFAULT_NODE_HOST
 }
 
 // The actual exported Nodejs API.
