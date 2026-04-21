@@ -4,7 +4,7 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
-import { isString, isArray, ErrorTracking, isNullish } from '@posthog/core'
+import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
 
 const logger = createLogger('[Error tracking]')
 
@@ -181,7 +181,7 @@ export class PostHogExceptions implements Extension {
     }
 
     private _coerceExceptionStepProperties(properties?: Properties): Record<string, unknown> {
-        if (!properties || typeof properties !== 'object' || isArray(properties)) {
+        if (!isObject(properties)) {
             return {}
         }
 

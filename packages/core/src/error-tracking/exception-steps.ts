@@ -1,3 +1,5 @@
+import { isArray, isNumber, isObject, isString } from '@/utils'
+
 export const EXCEPTION_STEP_INTERNAL_FIELDS = {
   MESSAGE: '$message',
   TIMESTAMP: '$timestamp',
@@ -35,7 +37,7 @@ export type ResolvedExceptionStepsConfig = {
 export const DEFAULT_EXCEPTION_STEPS_CONFIG: ResolvedExceptionStepsConfig = {
   enabled: true,
   max_queue_size: 20,
-  max_bytes: 32768,
+  max_bytes: 32768, // ~32KB
 }
 
 export function resolveExceptionStepsConfig(config?: ExceptionStepsConfig | null): ResolvedExceptionStepsConfig {
@@ -140,7 +142,7 @@ export class ExceptionStepsBuffer {
 }
 
 function normalizePositiveInteger(input: number | undefined, fallback: number): number {
-  if (typeof input !== 'number' || !isFiniteNumber(input)) {
+  if (!isNumber(input) || input === Infinity || input === -Infinity) {
     return fallback
   }
 
@@ -152,10 +154,6 @@ function normalizePositiveInteger(input: number | undefined, fallback: number): 
   return normalized
 }
 
-function isFiniteNumber(value: number): boolean {
-  return value === value && value !== Infinity && value !== -Infinity
-}
-
 function normalizeAndSerializeStep(step: ExceptionStep): { step: ExceptionStep; json: string } | undefined {
   const json = safeStringify(step)
   if (!json) {
@@ -164,7 +162,7 @@ function normalizeAndSerializeStep(step: ExceptionStep): { step: ExceptionStep; 
 
   try {
     const parsed = JSON.parse(json)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    if (!isObject(parsed)) {
       return undefined
     }
 
@@ -172,21 +170,21 @@ function normalizeAndSerializeStep(step: ExceptionStep): { step: ExceptionStep; 
     const message = parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]
     const timestamp = parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]
 
-    if (typeof message !== 'string' || message.trim().length === 0) {
+    if (!isString(message) || message.trim().length === 0) {
       return undefined
     }
 
-    if (typeof timestamp !== 'string' && typeof timestamp !== 'number') {
+    if (!isString(timestamp) && !isNumber(timestamp)) {
       return undefined
     }
 
     const type = parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]
-    if (type != null && typeof type !== 'string') {
+    if (type != null && !isString(type)) {
       delete parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]
     }
 
     const level = parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]
-    if (level != null && typeof level !== 'string') {
+    if (level != null && !isString(level)) {
       delete parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]
     }
 
