@@ -374,10 +374,12 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ])
     })
 
-    it.each([
-      ['string input (per spec)', '{"message":"hello world"}'],
-      ['object input (defensive)', { message: 'hello world' }],
-    ])('should handle non-streaming tool calls with %s (AI SDK v6)', async (_label, input) => {
+    it.each<[string, { input?: unknown; args?: unknown; arguments?: unknown }]>([
+      ['input as string (AI SDK v6 spec)', { input: '{"message":"hello world"}' }],
+      ['input as object (defensive)', { input: { message: 'hello world' } }],
+      ['args fallback (legacy SDK)', { args: '{"message":"hello world"}' }],
+      ['arguments fallback (legacy SDK)', { arguments: { message: 'hello world' } }],
+    ])('should handle non-streaming tool calls with %s', async (_label, extraFields) => {
       const baseModel: LanguageModelV3 = {
         specificationVersion: 'v3' as const,
         provider: 'openai',
@@ -389,7 +391,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
               type: 'tool-call',
               toolCallId: 'call_123',
               toolName: 'myTool',
-              input,
+              ...extraFields,
             },
           ],
           usage: v3TokenUsage(10, 5),
@@ -406,9 +408,10 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         posthogTraceId: 'test-v3-tool-input',
       })
 
-      await model.doGenerate({
+      const callOptions: LanguageModelV3CallOptions = {
         prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Call myTool' }] }],
-      } as any)
+      }
+      await model.doGenerate(callOptions)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls

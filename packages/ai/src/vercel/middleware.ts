@@ -200,7 +200,8 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
       return { type: 'text', text: truncate(item.text) }
     }
     if (item.type === 'tool-call') {
-      const rawArgs = (item as any).input ?? (item as any).args ?? (item as any).arguments ?? {}
+      const toolCall = item as { input?: unknown; args?: unknown; arguments?: unknown }
+      const rawArgs = toolCall.input ?? toolCall.args ?? toolCall.arguments ?? {}
       return {
         type: 'tool-call',
         id: item.toolCallId,
