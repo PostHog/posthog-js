@@ -22,6 +22,7 @@ export type ExceptionStep = {
   [key: string]: unknown
 }
 
+/** NOTE: This type is also defined in `@posthog/types` (posthog-config.ts). Keep both in sync. */
 export type ExceptionStepsConfig = {
   enabled?: boolean
   max_queue_size?: number

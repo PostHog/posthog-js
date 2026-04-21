@@ -306,7 +306,7 @@ describe('PostHogExceptions', () => {
         })
 
         it('respects max_queue_size and keeps the newest steps', () => {
-            config.capture_exceptions = {
+            config.error_tracking = {
                 exception_steps: {
                     max_queue_size: 2,
                 },
@@ -329,7 +329,7 @@ describe('PostHogExceptions', () => {
         })
 
         it('respects max_bytes by keeping the most recent steps', () => {
-            config.capture_exceptions = {
+            config.error_tracking = {
                 exception_steps: {
                     max_bytes: 200,
                 },
@@ -349,7 +349,7 @@ describe('PostHogExceptions', () => {
         })
 
         it('disables add and attach when exception_steps.enabled is false', () => {
-            config.capture_exceptions = {
+            config.error_tracking = {
                 exception_steps: {
                     enabled: false,
                 },

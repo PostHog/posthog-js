@@ -209,16 +209,7 @@ export class PostHogExceptions implements Extension {
     }
 
     private _getExceptionStepsConfig(): ErrorTracking.ExceptionStepsConfig {
-        const captureExceptionsConfig = this._instance.config.capture_exceptions
-        if (
-            !captureExceptionsConfig ||
-            typeof captureExceptionsConfig !== 'object' ||
-            isArray(captureExceptionsConfig)
-        ) {
-            return {}
-        }
-
-        return captureExceptionsConfig.exception_steps ?? {}
+        return this._instance.config.error_tracking?.exception_steps ?? {}
     }
 
     private _matchesSuppressionRule(exceptionList: ErrorTracking.ExceptionList): boolean {

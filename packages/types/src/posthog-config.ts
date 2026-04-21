@@ -211,6 +211,11 @@ export interface DeadClickCandidate {
     absoluteDelayMs?: number
 }
 
+/**
+ * Controls buffering and payload limits for exception steps added via `addExceptionStep`.
+ *
+ * NOTE: This type is also defined in `@posthog/core` (exception-steps.ts). Keep both in sync.
+ */
 export type ExceptionStepsConfig = {
     /**
      * Determines whether PostHog should collect exception steps and attach them to the next captured exception.
@@ -229,7 +234,7 @@ export type ExceptionStepsConfig = {
     /**
      * The maximum UTF-8 byte budget used when attaching `$exception_steps` to an exception event.
      *
-     * @default 32768
+     * @default 32768 (~32KB)
      */
     max_bytes?: number
 }
@@ -255,11 +260,6 @@ export type ExceptionAutoCaptureConfig = {
      * @default false
      */
     capture_console_errors?: boolean
-
-    /**
-     * Controls buffering and payload limits for exception steps added via `addExceptionStep`.
-     */
-    exception_steps?: ExceptionStepsConfig
 }
 
 export type DeadClicksAutoCaptureConfig = {
@@ -351,6 +351,11 @@ export interface ErrorTrackingOptions {
      * @default 10
      */
     __exceptionRateLimiterBucketSize?: number
+
+    /**
+     * Controls buffering and payload limits for exception steps added via `addExceptionStep`.
+     */
+    exception_steps?: ExceptionStepsConfig
 }
 
 /**
