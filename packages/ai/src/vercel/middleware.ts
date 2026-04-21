@@ -301,41 +301,6 @@ const extractWebSearchCount = (providerMetadata: unknown, usage: any): number =>
   })
 }
 
-// Extract additional token values from provider metadata
-const extractAdditionalTokenValues = (providerMetadata: unknown): Record<string, any> => {
-  if (
-    providerMetadata &&
-    typeof providerMetadata === 'object' &&
-    'anthropic' in providerMetadata &&
-    providerMetadata.anthropic &&
-    typeof providerMetadata.anthropic === 'object' &&
-    'cacheCreationInputTokens' in providerMetadata.anthropic
-  ) {
-    return {
-      cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
-    }
-  }
-  return {}
-}
-
-// For Anthropic providers in V3, inputTokens.total is the sum of all tokens (uncached + cache read + cache write).
-// Our cost calculation expects inputTokens to be only the uncached portion for Anthropic.
-// This helper subtracts cache tokens from inputTokens for Anthropic V3 models.
-const adjustAnthropicV3CacheTokens = (
-  model: LanguageModel,
-  provider: string,
-  usage: { inputTokens?: number; cacheReadInputTokens?: unknown; cacheCreationInputTokens?: unknown }
-): void => {
-  if (isV3Model(model) && provider.toLowerCase().includes('anthropic')) {
-    const cacheReadTokens = (usage.cacheReadInputTokens as number) || 0
-    const cacheWriteTokens = (usage.cacheCreationInputTokens as number) || 0
-    const cacheTokens = cacheReadTokens + cacheWriteTokens
-    if (usage.inputTokens && cacheTokens > 0) {
-      usage.inputTokens = Math.max(usage.inputTokens - cacheTokens, 0)
-    }
-  }
-}
-
 // Helper to extract numeric token value from V2 (number) or V3 (object with .total) usage formats
 const extractTokenCount = (value: unknown): number | undefined => {
   if (typeof value === 'number') {
@@ -388,6 +353,75 @@ const extractCacheReadTokens = (usage: Record<string, unknown>): unknown => {
   return undefined
 }
 
+// Helper to extract cache write tokens from V3 (usage.inputTokens.cacheWrite). Providers like
+// Amazon Bedrock populate this standardized field instead of providerMetadata.anthropic.
+const extractCacheWriteTokens = (usage: Record<string, unknown>): unknown => {
+  if (
+    'inputTokens' in usage &&
+    usage.inputTokens &&
+    typeof usage.inputTokens === 'object' &&
+    'cacheWrite' in usage.inputTokens
+  ) {
+    return (usage.inputTokens as { cacheWrite: unknown }).cacheWrite
+  }
+  return undefined
+}
+
+// Extract additional token values from provider metadata, with a V3 standardized fallback
+// (e.g. Amazon Bedrock exposes cache write tokens via usage.inputTokens.cacheWrite rather
+// than providerMetadata.anthropic.cacheCreationInputTokens).
+const extractAdditionalTokenValues = (providerMetadata: unknown, usage?: unknown): Record<string, any> => {
+  if (
+    providerMetadata &&
+    typeof providerMetadata === 'object' &&
+    'anthropic' in providerMetadata &&
+    providerMetadata.anthropic &&
+    typeof providerMetadata.anthropic === 'object' &&
+    'cacheCreationInputTokens' in providerMetadata.anthropic
+  ) {
+    return {
+      cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
+    }
+  }
+  if (usage && typeof usage === 'object') {
+    const cacheWrite = extractCacheWriteTokens(usage as Record<string, unknown>)
+    if (cacheWrite !== undefined) {
+      return { cacheCreationInputTokens: cacheWrite }
+    }
+  }
+  return {}
+}
+
+// Detects Anthropic Claude regardless of host (direct Anthropic, Amazon Bedrock, Google Vertex, etc.).
+// The server applies exclusive cache token accounting based on the model name, so any Claude model
+// needs its V3 input tokens adjusted to exclude cache tokens — not just those routed through a
+// provider whose name contains "anthropic".
+const isAnthropicClaudeModel = (model: LanguageModel, provider: string): boolean => {
+  if (provider.toLowerCase().includes('anthropic')) {
+    return true
+  }
+  const modelId = (model.modelId ?? '').toLowerCase()
+  return /claude|anthropic/.test(modelId)
+}
+
+// For Anthropic providers in V3, inputTokens.total is the sum of all tokens (uncached + cache read + cache write).
+// Our cost calculation expects inputTokens to be only the uncached portion for Anthropic.
+// This helper subtracts cache tokens from inputTokens for Anthropic V3 models.
+const adjustAnthropicV3CacheTokens = (
+  model: LanguageModel,
+  provider: string,
+  usage: { inputTokens?: number; cacheReadInputTokens?: unknown; cacheCreationInputTokens?: unknown }
+): void => {
+  if (isV3Model(model) && isAnthropicClaudeModel(model, provider)) {
+    const cacheReadTokens = (usage.cacheReadInputTokens as number) || 0
+    const cacheWriteTokens = (usage.cacheCreationInputTokens as number) || 0
+    const cacheTokens = cacheReadTokens + cacheWriteTokens
+    if (usage.inputTokens && cacheTokens > 0) {
+      usage.inputTokens = Math.max(usage.inputTokens - cacheTokens, 0)
+    }
+  }
+}
+
 /**
  * Wraps a Vercel AI SDK language model (V2 or V3) with PostHog tracing.
  * Automatically detects the model version and applies appropriate instrumentation.
@@ -431,7 +465,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[])
           const latency = (Date.now() - startTime) / 1000
           const providerMetadata = result.providerMetadata
-          const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
+          const additionalTokenValues = extractAdditionalTokenValues(providerMetadata, result.usage)
 
           const webSearchCount = extractWebSearchCount(providerMetadata, result.usage)
 
@@ -612,8 +646,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
               if (chunk.type === 'finish') {
                 providerMetadata = chunk.providerMetadata
-                const additionalTokenValues = extractAdditionalTokenValues(providerMetadata)
                 const chunkUsage = (chunk.usage as Record<string, unknown>) || {}
+                const additionalTokenValues = extractAdditionalTokenValues(providerMetadata, chunkUsage)
                 usage = {
                   inputTokens: extractTokenCount(chunk.usage?.inputTokens),
                   outputTokens: extractTokenCount(chunk.usage?.outputTokens),

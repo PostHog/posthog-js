@@ -797,6 +797,153 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(1000)
       expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(20)
     })
+
+    it('should adjust cache tokens and read cacheWrite from V3 usage for Bedrock Claude', async () => {
+      // Simulates @ai-sdk/amazon-bedrock hosting Claude: provider is "amazon-bedrock",
+      // no providerMetadata.anthropic is set, and cacheWrite is exposed via usage.inputTokens.cacheWrite.
+      // Previously this path was skipped, causing cacheRead/cacheWrite tokens to be double-counted
+      // by the server's exclusive cache accounting (triggered by the "claude" model name).
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'amazon-bedrock',
+        modelId: 'global.anthropic.claude-opus-4-6-v1',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockImplementation(async () => ({
+          text: 'Cached response',
+          usage: {
+            inputTokens: { total: 22145, noCache: 740, cacheRead: 21405, cacheWrite: 0 },
+            outputTokens: { total: 50, text: 50, reasoning: undefined },
+          },
+          content: [{ type: 'text', text: 'Cached response' }],
+          response: { modelId: 'global.anthropic.claude-opus-4-6-v1' },
+          providerMetadata: {},
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        })),
+        doStream: jest.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-bedrock-claude-cache-read',
+      })
+
+      await simulateGenerateText({
+        model: model,
+        prompt: 'Test Bedrock Claude cache read',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // 22145 - 21405 - 0 = 740
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(740)
+      expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(21405)
+    })
+
+    it('should extract cacheCreationInputTokens from V3 usage.inputTokens.cacheWrite when providerMetadata is absent', async () => {
+      // Bedrock doesn't populate providerMetadata.anthropic.cacheCreationInputTokens,
+      // so we must fall back to the V3 standardized usage.inputTokens.cacheWrite field.
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'amazon-bedrock',
+        modelId: 'anthropic.claude-sonnet-4-5-v1',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockImplementation(async () => ({
+          text: 'Cached response',
+          usage: {
+            inputTokens: { total: 21561, noCache: 5, cacheRead: 17399, cacheWrite: 4157 },
+            outputTokens: { total: 139, text: 139, reasoning: undefined },
+          },
+          content: [{ type: 'text', text: 'Cached response' }],
+          response: { modelId: 'anthropic.claude-sonnet-4-5-v1' },
+          providerMetadata: {},
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        })),
+        doStream: jest.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-bedrock-claude-cache-write',
+      })
+
+      await simulateGenerateText({
+        model: model,
+        prompt: 'Test Bedrock Claude cache write',
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // 21561 - 17399 - 4157 = 5
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(5)
+      expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(17399)
+      expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(4157)
+      expect(captureCall[0].properties['$ai_output_tokens']).toBe(139)
+    })
+
+    it('should handle Bedrock Claude V3 streaming with cache tokens', async () => {
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Cached streaming response' },
+        {
+          type: 'finish',
+          usage: {
+            inputTokens: { total: 1120, noCache: 100, cacheRead: 1000, cacheWrite: 20 },
+            outputTokens: { total: 50, text: 50, reasoning: undefined },
+          },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          providerMetadata: {},
+        },
+      ]
+
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'amazon-bedrock',
+        modelId: 'global.anthropic.claude-opus-4-6-v1',
+        supportedUrls: {},
+        doGenerate: jest.fn(),
+        doStream: jest.fn().mockImplementation(async () => {
+          const stream = new ReadableStream({
+            async start(controller) {
+              for (const part of streamParts) {
+                controller.enqueue(part)
+              }
+              controller.close()
+            },
+          })
+          return {
+            stream,
+            response: { modelId: 'global.anthropic.claude-opus-4-6-v1' },
+          }
+        }),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-bedrock-claude-v3-stream-cache',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Cached?' }] }],
+      })
+
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // 1120 - 1000 - 20 = 100
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
+      expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(1000)
+      expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(20)
+    })
   })
 
   describe('Mixed reasoning and text content', () => {
