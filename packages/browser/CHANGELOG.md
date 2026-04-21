@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.369.4
+
+### Patch Changes
+
+- [#3362](https://github.com/PostHog/posthog-js/pull/3362) [`d61bce1`](https://github.com/PostHog/posthog-js/commit/d61bce11b4bd3abe95bcc76960bde585945a7edc) Thanks [@sampennington](https://github.com/sampennington)! - fix(cookieless): start in cookieless mode when opt_out_capturing_by_default is set
+  (2026-04-21)
+- Updated dependencies []:
+    - @posthog/types@1.369.4
+
 ## 1.369.3
 
 ### Patch Changes
