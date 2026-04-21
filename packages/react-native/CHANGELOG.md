@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.42.2
+
+### Patch Changes
+
+- [#3429](https://github.com/PostHog/posthog-js/pull/3429) [`2f1390a`](https://github.com/PostHog/posthog-js/commit/2f1390a7fd949b5634b4e6886f61825df782b7a7) Thanks [@ioannisj](https://github.com/ioannisj)! - fix: `PostHogMaskView` not being detected on iOS
+  (2026-04-21)
+
 ## 4.42.1
 
 ### Patch Changes
