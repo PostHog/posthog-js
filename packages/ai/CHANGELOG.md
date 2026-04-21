@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.16.2
+
+### Patch Changes
+
+- [#3431](https://github.com/PostHog/posthog-js/pull/3431) [`ea2cc33`](https://github.com/PostHog/posthog-js/commit/ea2cc33ec7d39406302e6c0334e530637b258cbd) Thanks [@richardsolomou](https://github.com/richardsolomou)! - fix(ai): read tool-call input field in vercel non-streaming output
+  (2026-04-21)
+
 ## 7.16.1
 
 ### Patch Changes
