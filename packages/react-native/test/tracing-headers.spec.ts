@@ -25,24 +25,26 @@ describe('patchFetchForTracingHeaders', () => {
     globalAny.fetch = originalFetch
   })
 
-  it('adds tracing headers for a matching hostname', async () => {
+  it.each([
+    { label: 'adds headers for a matching hostname', url: 'https://api.example.com/thing', expectHeaders: true },
+    {
+      label: 'does not add headers for a non-matching hostname',
+      url: 'https://other.example.com/thing',
+      expectHeaders: false,
+    },
+  ])('$label', async ({ url, expectHeaders }) => {
     restore = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
 
-    await globalAny.fetch('https://api.example.com/thing')
+    await globalAny.fetch(url)
 
     const [, init] = mockFetch.mock.calls[0]
-    const headers = init.headers as Headers
-    expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBe('d-1')
-    expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('s-1')
-  })
-
-  it('does not add tracing headers for non-matching hostnames', async () => {
-    restore = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
-
-    await globalAny.fetch('https://other.example.com/thing')
-
-    const [, init] = mockFetch.mock.calls[0]
-    expect(init).toBeUndefined()
+    if (expectHeaders) {
+      const headers = init.headers as Headers
+      expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBe('d-1')
+      expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('s-1')
+    } else {
+      expect(init).toBeUndefined()
+    }
   })
 
   it('preserves caller-provided headers and init fields', async () => {
@@ -128,5 +130,27 @@ describe('patchFetchForTracingHeaders', () => {
     const noop = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
     expect(globalAny.fetch).toBeUndefined()
     noop()
+  })
+
+  it('does not stack patches when re-initialised (idempotent)', async () => {
+    // Simulate two PostHog instances being created back-to-back (e.g. HMR, tests).
+    // The second patch should replace the first, not layer on top of it.
+    const firstRestore = patchFetchForTracingHeaders(makeInstance('d-old', 's-old'), ['api.example.com'])
+    restore = patchFetchForTracingHeaders(makeInstance('d-new', 's-new'), ['api.example.com'])
+
+    await globalAny.fetch('https://api.example.com/thing')
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    const headers = mockFetch.mock.calls[0][1].headers as Headers
+    expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBe('d-new')
+    expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('s-new')
+
+    // The latest restore should fully unwind back to the original fetch.
+    restore()
+    expect(globalAny.fetch).toBe(mockFetch)
+
+    // The earlier restore is now a no-op (its wrapped fetch is no longer installed).
+    firstRestore()
+    expect(globalAny.fetch).toBe(mockFetch)
   })
 })
