@@ -47,34 +47,34 @@ describe('exception steps', () => {
       [EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: '2026-01-01T00:00:00.000Z',
     })
 
-    it('evicts oldest steps when queue size is exceeded', () => {
-      const buffer = new ExceptionStepsBuffer({ max_queue_size: 2 })
-      buffer.add(makeStep('one'))
-      buffer.add(makeStep('two'))
-      buffer.add(makeStep('three'))
-
-      const attachable = buffer.getAttachable(10000)
-      expect(attachable.map((s) => s.$message)).toEqual(['two', 'three'])
-    })
-
-    it('keeps the most recent steps when max bytes are constrained', () => {
-      const buffer = new ExceptionStepsBuffer({ max_queue_size: 10 })
-      const one = makeStep('one')
-      const two = makeStep('two')
-
-      buffer.add(one)
-      buffer.add(two)
-
-      const oneSize = getUtf8ByteLength(JSON.stringify(one))
-      expect(buffer.getAttachable(oneSize).map((s) => s.$message)).toEqual(['two'])
-    })
-
-    it('skips malformed steps that cannot be normalized', () => {
-      const buffer = new ExceptionStepsBuffer({ max_queue_size: 10 })
-      buffer.add({ $message: '', $timestamp: '2026-01-01T00:00:00.000Z' })
-      buffer.add(makeStep('valid'))
-
-      expect(buffer.getAttachable(10000).map((s) => s.$message)).toEqual(['valid'])
+    it.each([
+      {
+        desc: 'evicts oldest steps when queue size is exceeded',
+        config: { max_queue_size: 2 },
+        steps: [makeStep('one'), makeStep('two'), makeStep('three')],
+        maxBytes: 10000,
+        expected: ['two', 'three'],
+      },
+      {
+        desc: 'keeps the most recent steps when max bytes are constrained',
+        config: { max_queue_size: 10 },
+        steps: [makeStep('one'), makeStep('two')],
+        maxBytes: getUtf8ByteLength(JSON.stringify(makeStep('one'))),
+        expected: ['two'],
+      },
+      {
+        desc: 'skips malformed steps that cannot be normalized',
+        config: { max_queue_size: 10 },
+        steps: [{ $message: '', $timestamp: '2026-01-01T00:00:00.000Z' } as ExceptionStep, makeStep('valid')],
+        maxBytes: 10000,
+        expected: ['valid'],
+      },
+    ])('$desc', ({ config, steps, maxBytes, expected }) => {
+      const buffer = new ExceptionStepsBuffer(config)
+      for (const step of steps) {
+        buffer.add(step)
+      }
+      expect(buffer.getAttachable(maxBytes).map((s) => s.$message)).toEqual(expected)
     })
 
     it('clears all steps', () => {
