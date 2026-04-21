@@ -111,7 +111,7 @@ export class PostHogExceptions implements Extension {
                 ...sanitizedProperties,
             })
         } catch (error) {
-            logger.warn('Failed to add exception step. Ignoring breadcrumb.', error)
+            logger.error('Failed to add exception step. Ignoring breadcrumb.', error)
         }
     }
 
@@ -121,11 +121,13 @@ export class PostHogExceptions implements Extension {
 
             if (this._isExceptionList(exceptionList)) {
                 if (this._matchesSuppressionRule(exceptionList)) {
+                    this._addDroppedExceptionStep('Exception dropped: matched a suppression rule')
                     logger.info('Skipping exception capture because a suppression rule matched')
                     return
                 }
 
                 if (!this._captureExtensionExceptions && this._isExtensionException(exceptionList)) {
+                    this._addDroppedExceptionStep('Exception dropped: thrown by a browser extension')
                     logger.info('Skipping exception capture because it was thrown by an extension')
                     return
                 }
@@ -134,6 +136,7 @@ export class PostHogExceptions implements Extension {
                     !this._instance.config.error_tracking.__capturePostHogExceptions &&
                     this._isPostHogException(exceptionList)
                 ) {
+                    this._addDroppedExceptionStep('Exception dropped: thrown by the PostHog SDK')
                     logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
                     return
                 }
@@ -151,13 +154,13 @@ export class PostHogExceptions implements Extension {
                     _originatedFromCaptureException: true,
                 })
             } catch (error) {
-                logger.warn('Failed to capture exception event. Dropping this exception.', error)
+                logger.error('Failed to capture exception event. Dropping this exception.', error)
                 return
             } finally {
                 this._exceptionStepsBuffer.clear()
             }
         } catch (error) {
-            logger.warn('Failed to process exception event. Ignoring this exception.', error)
+            logger.error('Failed to process exception event. Ignoring this exception.', error)
             return
         }
     }
@@ -175,8 +178,18 @@ export class PostHogExceptions implements Extension {
                 $exception_steps: exceptionSteps,
             }
         } catch (error) {
-            logger.warn('Failed to read buffered exception steps. Capturing exception without steps.', error)
+            logger.error('Failed to read buffered exception steps. Capturing exception without steps.', error)
             return properties
+        }
+    }
+
+    private _addDroppedExceptionStep(message: string): void {
+        if (this._exceptionStepsConfig.enabled) {
+            this._exceptionStepsBuffer.add({
+                [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: message,
+                [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
+                [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: 'dropped_exception',
+            })
         }
     }
 

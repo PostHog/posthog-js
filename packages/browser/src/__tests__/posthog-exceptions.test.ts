@@ -294,6 +294,11 @@ describe('PostHogExceptions', () => {
                             $message: 'kept step',
                             $timestamp: expect.any(String),
                         },
+                        {
+                            $message: 'Exception dropped: matched a suppression rule',
+                            $timestamp: expect.any(String),
+                            $type: 'dropped_exception',
+                        },
                     ],
                 },
                 expect.anything()
