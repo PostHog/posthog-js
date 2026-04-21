@@ -3,22 +3,16 @@ import { isArray, isNumber, isObject, isString } from '@/utils'
 export const EXCEPTION_STEP_INTERNAL_FIELDS = {
   MESSAGE: '$message',
   TIMESTAMP: '$timestamp',
-  TYPE: '$type',
-  LEVEL: '$level',
 } as const
 
 const RESERVED_EXCEPTION_STEP_KEYS = new Set<string>([
   EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE,
   EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP,
-  EXCEPTION_STEP_INTERNAL_FIELDS.TYPE,
-  EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL,
 ])
 
 export type ExceptionStep = {
   [EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: string
   [EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: string | number
-  [EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]?: string
-  [EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]?: string
   [key: string]: unknown
 }
 
@@ -177,16 +171,6 @@ function normalizeAndSerializeStep(step: ExceptionStep): { step: ExceptionStep; 
 
     if (!isString(timestamp) && !isNumber(timestamp)) {
       return undefined
-    }
-
-    const type = parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]
-    if (type != null && !isString(type)) {
-      delete parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]
-    }
-
-    const level = parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]
-    if (level != null && !isString(level)) {
-      delete parsedStep[EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]
     }
 
     return {

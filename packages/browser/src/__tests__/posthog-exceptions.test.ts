@@ -297,7 +297,6 @@ describe('PostHogExceptions', () => {
                         {
                             $message: 'Exception dropped: matched a suppression rule',
                             $timestamp: expect.any(String),
-                            $type: 'dropped_exception',
                         },
                     ],
                 },
@@ -364,8 +363,6 @@ describe('PostHogExceptions', () => {
 
         it('drops reserved keys from addExceptionStep properties', () => {
             exceptions.addExceptionStep('from-message-arg', {
-                type: 'legacy.type',
-                level: 'warning',
                 $message: 'ignored',
                 $timestamp: 'ignored',
                 custom_property: true,
@@ -378,8 +375,6 @@ describe('PostHogExceptions', () => {
                 $exception_steps: [
                     {
                         $message: 'from-message-arg',
-                        $type: 'legacy.type',
-                        $level: 'warning',
                         custom_property: true,
                         $timestamp: expect.any(String),
                     },

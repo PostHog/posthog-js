@@ -91,8 +91,6 @@ export class PostHogExceptions implements Extension {
             }
 
             const userProperties = this._coerceExceptionStepProperties(properties)
-            const type = this._readNonEmptyString(userProperties['type'])
-            const level = this._readNonEmptyString(userProperties['level'])
 
             const { sanitizedProperties, droppedKeys } = ErrorTracking.stripReservedExceptionStepFields(userProperties)
 
@@ -100,14 +98,9 @@ export class PostHogExceptions implements Extension {
                 logger.warn('Ignoring reserved exception step fields', { droppedKeys })
             }
 
-            delete sanitizedProperties['type']
-            delete sanitizedProperties['level']
-
             this._exceptionStepsBuffer.add({
                 [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: message,
                 [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
-                ...(type ? { [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: type } : {}),
-                ...(level ? { [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]: level } : {}),
                 ...sanitizedProperties,
             })
         } catch (error) {
@@ -188,7 +181,6 @@ export class PostHogExceptions implements Extension {
             this._exceptionStepsBuffer.add({
                 [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: message,
                 [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
-                [ErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: 'dropped_exception',
             })
         }
     }
@@ -199,13 +191,6 @@ export class PostHogExceptions implements Extension {
         }
 
         return { ...(properties as Record<string, unknown>) }
-    }
-
-    private _readNonEmptyString(value: unknown): string | undefined {
-        if (!isString(value)) {
-            return undefined
-        }
-        return value.trim().length > 0 ? value : undefined
     }
 
     private _getExceptionStepsConfig(): ErrorTracking.ExceptionStepsConfig {

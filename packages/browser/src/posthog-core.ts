@@ -3226,8 +3226,6 @@ export class PostHog implements PostHogInterface {
      * @example
      * ```js
      * posthog.addExceptionStep('Checkout button clicked', {
-     *   type: 'ui.interaction',
-     *   level: 'info',
      *   checkout_id: 'ch_123',
      * })
      * ```
