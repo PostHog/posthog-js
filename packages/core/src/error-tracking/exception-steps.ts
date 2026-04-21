@@ -19,19 +19,16 @@ export type ExceptionStep = {
 /** NOTE: This type is also defined in `@posthog/types` (posthog-config.ts). Keep both in sync. */
 export type ExceptionStepsConfig = {
   enabled?: boolean
-  max_queue_size?: number
   max_bytes?: number
 }
 
 export type ResolvedExceptionStepsConfig = {
   enabled: boolean
-  max_queue_size: number
   max_bytes: number
 }
 
 export const DEFAULT_EXCEPTION_STEPS_CONFIG: ResolvedExceptionStepsConfig = {
   enabled: true,
-  max_queue_size: 20,
   max_bytes: 32768, // ~32KB
 }
 
@@ -42,7 +39,6 @@ export function resolveExceptionStepsConfig(config?: ExceptionStepsConfig | null
 
   return {
     enabled: config.enabled ?? DEFAULT_EXCEPTION_STEPS_CONFIG.enabled,
-    max_queue_size: normalizePositiveInteger(config.max_queue_size, DEFAULT_EXCEPTION_STEPS_CONFIG.max_queue_size),
     max_bytes: normalizePositiveInteger(config.max_bytes, DEFAULT_EXCEPTION_STEPS_CONFIG.max_bytes),
   }
 }
@@ -72,7 +68,8 @@ export function stripReservedExceptionStepFields(properties?: Record<string, unk
 }
 
 export class ExceptionStepsBuffer {
-  private _steps: ExceptionStep[] = []
+  private _entries: { step: ExceptionStep; bytes: number }[] = []
+  private _totalBytes: number = 0
   private _config: ResolvedExceptionStepsConfig
 
   constructor(config?: ExceptionStepsConfig | null) {
@@ -81,57 +78,44 @@ export class ExceptionStepsBuffer {
 
   public setConfig(config?: ExceptionStepsConfig | null): void {
     this._config = resolveExceptionStepsConfig(config)
-    this._trimToQueueSize()
+    this._trimToMaxBytes()
   }
 
   public add(step: ExceptionStep): void {
-    this._steps.push(step)
-    this._trimToQueueSize()
-  }
-
-  public getAttachable(maxBytes: number = this._config.max_bytes): ExceptionStep[] {
-    if (maxBytes <= 0) {
-      return []
-    }
-
-    const attachableSteps: ExceptionStep[] = []
-    let totalBytes = 0
-
-    for (let i = this._steps.length - 1; i >= 0; i--) {
-      const step = this._steps[i]
-      const serializedStep = normalizeAndSerializeStep(step)
-      if (!serializedStep) {
-        continue
-      }
-
-      const bytes = getUtf8ByteLength(serializedStep.json)
-      if (totalBytes + bytes > maxBytes) {
-        break
-      }
-
-      attachableSteps.push(serializedStep.step)
-      totalBytes += bytes
-    }
-
-    return attachableSteps.reverse()
-  }
-
-  public clear(): void {
-    this._steps = []
-  }
-
-  public size(): number {
-    return this._steps.length
-  }
-
-  private _trimToQueueSize(): void {
-    if (this._config.max_queue_size <= 0) {
-      this._steps = []
+    const serialized = normalizeAndSerializeStep(step)
+    if (!serialized) {
       return
     }
 
-    while (this._steps.length > this._config.max_queue_size) {
-      this._steps.shift()
+    const bytes = getUtf8ByteLength(serialized.json)
+    if (bytes > this._config.max_bytes) {
+      return
+    }
+
+    this._entries.push({ step: serialized.step, bytes })
+    this._totalBytes += bytes
+    this._trimToMaxBytes()
+  }
+
+  public getAttachable(): ExceptionStep[] {
+    return this._entries.map((e) => e.step)
+  }
+
+  public clear(): void {
+    this._entries = []
+    this._totalBytes = 0
+  }
+
+  public size(): number {
+    return this._entries.length
+  }
+
+  private _trimToMaxBytes(): void {
+    while (this._totalBytes > this._config.max_bytes && this._entries.length > 0) {
+      const evicted = this._entries.shift()
+      if (evicted) {
+        this._totalBytes -= evicted.bytes
+      }
     }
   }
 }

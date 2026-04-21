@@ -137,7 +137,7 @@ export class PostHogExceptions implements Extension {
 
             const propertiesForExceptionCapture =
                 this._exceptionStepsConfig.enabled && isNullish(properties.$exception_steps)
-                    ? this._addBufferedExceptionSteps(properties, this._exceptionStepsConfig.max_bytes)
+                    ? this._addBufferedExceptionSteps(properties)
                     : properties
 
             try {
@@ -158,9 +158,9 @@ export class PostHogExceptions implements Extension {
         }
     }
 
-    private _addBufferedExceptionSteps(properties: Properties, maxBytes: number): Properties {
+    private _addBufferedExceptionSteps(properties: Properties): Properties {
         try {
-            const exceptionSteps = this._exceptionStepsBuffer.getAttachable(maxBytes)
+            const exceptionSteps = this._exceptionStepsBuffer.getAttachable()
 
             if (exceptionSteps.length === 0) {
                 return properties

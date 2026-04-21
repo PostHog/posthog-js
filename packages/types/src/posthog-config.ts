@@ -225,14 +225,8 @@ export type ExceptionStepsConfig = {
     enabled?: boolean
 
     /**
-     * The maximum number of exception steps to buffer in memory.
-     *
-     * @default 20
-     */
-    max_queue_size?: number
-
-    /**
-     * The maximum UTF-8 byte budget used when attaching `$exception_steps` to an exception event.
+     * The maximum UTF-8 byte budget for exception steps buffered in memory.
+     * Oldest steps are evicted when the budget is exceeded.
      *
      * @default 32768 (~32KB)
      */

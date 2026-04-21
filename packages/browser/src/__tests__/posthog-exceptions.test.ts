@@ -304,29 +304,6 @@ describe('PostHogExceptions', () => {
             )
         })
 
-        it('respects max_queue_size and keeps the newest steps', () => {
-            config.error_tracking = {
-                exception_steps: {
-                    max_queue_size: 2,
-                },
-            }
-            exceptions = new PostHogExceptions(posthog)
-
-            exceptions.addExceptionStep('one')
-            exceptions.addExceptionStep('two')
-            exceptions.addExceptionStep('three')
-
-            exceptions.sendExceptionEvent({ custom_property: true })
-
-            expect(captureMock.mock.calls[0][1]).toMatchObject({
-                custom_property: true,
-                $exception_steps: [
-                    { $message: 'two', $timestamp: expect.any(String) },
-                    { $message: 'three', $timestamp: expect.any(String) },
-                ],
-            })
-        })
-
         it('respects max_bytes by keeping the most recent steps', () => {
             config.error_tracking = {
                 exception_steps: {
