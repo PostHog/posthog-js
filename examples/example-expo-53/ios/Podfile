@@ -60,5 +60,24 @@ target 'exampleexpo53' do
         end
       end
     end
+
+    # Xcode 26.4+ Clang rejects fmt's FMT_STRING consteval. fmt's base.h redefines
+    # FMT_USE_CONSTEVAL based on compiler detection, so a -D flag is not enough —
+    # patch the header directly to force it off.
+    # Upstream:
+    #   https://github.com/fmtlib/fmt/issues/4740
+    #   https://github.com/facebook/react-native/issues/55601
+    #   https://github.com/expo/expo/issues/44229
+    # Remove once RN/Expo pull in a fmt release that builds cleanly on Apple clang 21.
+    fmt_base_h = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base_h)
+      contents = File.read(fmt_base_h)
+      patched = contents.gsub(/^(#\s*define FMT_USE_CONSTEVAL )1$/, '\10')
+      if patched != contents
+        File.chmod(0644, fmt_base_h)
+        File.write(fmt_base_h, patched)
+        Pod::UI.puts "Patched #{fmt_base_h} to disable FMT_USE_CONSTEVAL (Xcode 26.4 fix)"
+      end
+    end
   end
 end
