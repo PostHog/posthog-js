@@ -19,6 +19,8 @@ export interface PostHogMaskViewProps extends ViewProps {
  * - Setting `accessibilityLabel` to `"ph-no-capture"` to hide the content from session recordings
  * - Setting `importantForAccessibility` to `"no"` to prevent the wrapper View from hiding
  *   accessible content on Android (since `accessibilityLabel` would otherwise interfere)
+ * - Setting `collapsable={false}` so React Native keeps this wrapper in the native iOS view hierarchy
+ *   (otherwise layout-only view flattening can remove it and masking is not detected)
  *
  * @example
  * ```jsx
@@ -37,7 +39,7 @@ export interface PostHogMaskViewProps extends ViewProps {
  * @public
  */
 export const PostHogMaskView = ({ children, ...viewProps }: PostHogMaskViewProps): JSX.Element => (
-  <View {...viewProps} accessibilityLabel="ph-no-capture" importantForAccessibility="no">
+  <View {...viewProps} accessibilityLabel="ph-no-capture" importantForAccessibility="no" collapsable={false}>
     {children}
   </View>
 )
