@@ -373,6 +373,62 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         },
       ])
     })
+
+    it.each<[string, { input?: unknown; args?: unknown; arguments?: unknown }]>([
+      ['input as string (AI SDK v6 spec)', { input: '{"message":"hello world"}' }],
+      ['input as object (defensive)', { input: { message: 'hello world' } }],
+      ['args fallback (legacy SDK)', { args: '{"message":"hello world"}' }],
+      ['arguments fallback (legacy SDK)', { arguments: { message: 'hello world' } }],
+    ])('should handle non-streaming tool calls with %s', async (_label, extraFields) => {
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockResolvedValue({
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call_123',
+              toolName: 'myTool',
+              ...extraFields,
+            },
+          ],
+          usage: v3TokenUsage(10, 5),
+          response: { modelId: 'gpt-4o' },
+          providerMetadata: {},
+          finishReason: { unified: 'tool-calls' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-v3-tool-input',
+      })
+
+      const callOptions: LanguageModelV3CallOptions = {
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Call myTool' }] }],
+      }
+      await model.doGenerate(callOptions)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      expect(captureCall[0].properties.$ai_output_choices).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              id: 'call_123',
+              function: { name: 'myTool', arguments: '{"message":"hello world"}' },
+            },
+          ],
+        },
+      ])
+    })
   })
 
   describe('V2 Model (AI SDK 5)', () => {
