@@ -191,6 +191,19 @@ export type PostHogCoreOptions = {
    * If a function returns null, the event will be dropped.
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
+
+  /**
+   * A list of hostnames for which to inject PostHog tracing headers
+   * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests.
+   *
+   * Use this to link requests made from your app to session replays and LLM traces
+   * in PostHog. When set, the global `fetch` is patched on initialization and the
+   * headers are added to requests whose hostname matches one of the entries.
+   *
+   * Requires the SDK to wire up `patchFetchForTracingHeaders` against this option
+   * (currently supported in posthog-react-native).
+   */
+  addTracingHeaders?: string[]
 }
 
 export enum PostHogPersistedProperty {

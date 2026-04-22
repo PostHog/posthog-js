@@ -106,25 +106,6 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * @default true
    */
   setDefaultPersonProperties?: boolean
-
-  /**
-   * A list of hostnames for which to inject PostHog tracing headers
-   * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests.
-   *
-   * Use this to link requests made from your app to session replays and traces in PostHog
-   * (for example, when viewing LLM traces in LLM Analytics).
-   *
-   * When set, the global `fetch` is patched on initialization and the headers are added
-   * to requests whose hostname matches one of the entries in the list.
-   *
-   * @example
-   * ```ts
-   * new PostHog('<key>', {
-   *   addTracingHeaders: ['api.example.com'],
-   * })
-   * ```
-   */
-  addTracingHeaders?: string[]
 }
 
 export class PostHog extends PostHogCore {
