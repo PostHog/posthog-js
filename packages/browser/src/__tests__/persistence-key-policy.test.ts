@@ -427,13 +427,28 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
 }
 
 describe('persistence key policy', () => {
-    it('does not newly hide SDK persistence keys that were event-visible before the policy migration', () => {
-        const newlyHiddenKeys = Object.entries(PERSISTENCE_KEY_POLICY)
-            .filter(([key, policy]) => policy.exposure === 'hidden' && !LEGACY_RESERVED_PERSISTENCE_KEYS.has(key))
-            .map(([key]) => key)
-            .sort()
+    it('matches legacy exact-key event visibility from before the policy migration', () => {
+        const compatibilitySnapshot = Object.entries(PERSISTENCE_KEY_POLICY)
+            .map(([key, policy]) => [
+                key,
+                key === constants.ENABLED_FEATURE_FLAGS
+                    ? 'derived'
+                    : LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
+                      ? 'hidden'
+                      : 'event',
+                policy.exposure,
+            ])
+            .filter(([, expectedExposure, actualExposure]) => expectedExposure !== actualExposure)
 
-        expect(newlyHiddenKeys).toEqual([])
+        expect(compatibilitySnapshot).toEqual([])
+    })
+
+    it('keeps prefix-key visibility compatible with the legacy reserved-list behavior', () => {
+        expect(PERSISTENCE_KEY_PREFIX_POLICY.map(([prefix, policy]) => [prefix, policy.exposure])).toEqual([
+            [constants.SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX, 'event'],
+            [constants.SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX, 'event'],
+            [constants.SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX, 'event'],
+        ])
     })
 
     it('keeps direct persistence mutations behind the PostHogPersistence sink helpers', () => {

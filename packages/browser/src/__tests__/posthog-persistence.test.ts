@@ -63,6 +63,10 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$override_feature_flag_payloads',
 ])
 
+const LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS = [...LEGACY_RESERVED_PERSISTENCE_KEYS].filter(
+    (key) => key !== ENABLED_FEATURE_FLAGS
+)
+
 const LEGACY_EVENT_VISIBLE_SDK_PERSISTENCE_KEYS = Object.keys(PERSISTENCE_KEY_POLICY).filter(
     (key) => key !== ENABLED_FEATURE_FLAGS && !LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
 )
@@ -325,6 +329,14 @@ describe('persistence', () => {
             (key) => {
                 library.register({ [key]: 'test-value' })
                 expect(library.properties()).toEqual({ [key]: 'test-value' })
+            }
+        )
+
+        it.each(LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS)(
+            'keeps legacy hidden SDK persistence property %s excluded from event properties',
+            (key) => {
+                library.register({ [key]: 'test-value' })
+                expect(library.properties()).toEqual({})
             }
         )
 
