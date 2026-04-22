@@ -13,18 +13,29 @@ describe('PostHog Core', () => {
       expect(posthog.optedOut).toEqual(false)
     })
 
-    it('should throw if missing api key', () => {
-      expect(() => createTestClient(undefined as unknown as string)).toThrowError(
-        "You must pass your PostHog project's api key."
-      )
-    })
+    it.each([
+      ['missing', undefined as unknown as string],
+      ['empty', '   '],
+      ['non string', {} as string],
+    ])('should disable and log if %s api key', (_case, apiKey) => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
-    it('should throw if empty api key', () => {
-      expect(() => createTestClient('   ')).toThrowError("You must pass your PostHog project's api key.")
-    })
+      try {
+        const [client, clientMocks] = createTestClient(apiKey)
 
-    it('should throw if non string api key', () => {
-      expect(() => createTestClient({} as string)).toThrowError("You must pass your PostHog project's api key.")
+        expect(client.isDisabled).toEqual(true)
+        expect((client as any).apiKey).toEqual('')
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[PostHog]',
+          "You must pass your PostHog project's api key. The client will be disabled."
+        )
+
+        client.capture('test')
+
+        expect(clientMocks.fetch).not.toHaveBeenCalled()
+      } finally {
+        consoleErrorSpy.mockRestore()
+      }
     })
 
     it('should initialise default options', () => {

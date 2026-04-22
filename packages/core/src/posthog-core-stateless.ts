@@ -24,7 +24,6 @@ import {
 } from './types'
 import {
   allSettled,
-  assert,
   currentISOTime,
   PromiseQueue,
   removeTrailingSlash,
@@ -147,8 +146,12 @@ export abstract class PostHogCoreStateless {
   constructor(apiKey: string, options: PostHogCoreOptions = {}) {
     const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
     const normalizedHost = typeof options.host === 'string' ? options.host.trim() : ''
+    const missingApiKey = !normalizedApiKey
 
-    assert(normalizedApiKey, "You must pass your PostHog project's api key.")
+    this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
+    if (missingApiKey) {
+      this._logger.error("You must pass your PostHog project's api key. The client will be disabled.")
+    }
 
     this.apiKey = normalizedApiKey
     this.host = removeTrailingSlash(normalizedHost || 'https://us.i.posthog.com')
@@ -170,12 +173,11 @@ export abstract class PostHogCoreStateless {
     this.featureFlagsRequestTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 3000 // 3 seconds
     this.remoteConfigRequestTimeoutMs = options.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
     this.disableGeoip = options.disableGeoip ?? true
-    this.disabled = options.disabled ?? false
+    this.disabled = (options.disabled ?? false) || missingApiKey
     this.historicalMigration = options?.historicalMigration ?? false
     // Init promise allows the derived class to block calls until it is ready
     this._initPromise = Promise.resolve()
     this._isInitialized = true
-    this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
     // Support both evaluationContexts (new) and evaluationEnvironments (deprecated)
     this.evaluationContexts = options?.evaluationContexts ?? options?.evaluationEnvironments
     if (options?.evaluationEnvironments && !options?.evaluationContexts) {
