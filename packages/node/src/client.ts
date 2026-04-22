@@ -7,6 +7,7 @@ import {
   JsonType,
   PostHogCaptureOptions,
   PostHogCoreStateless,
+  PostHogFeatureFlagDetails,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
@@ -1751,9 +1752,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
-    let remoteDetails: Awaited<ReturnType<PostHogBackendClient['_callFeatureFlagDetailsStateless']>> | undefined
+    let remoteDetails: PostHogFeatureFlagDetails | undefined
     if (fallbackToFlags && !onlyEvaluateLocally) {
-      remoteDetails = await this._callFeatureFlagDetailsStateless(evaluationContext, disableGeoip, flagKeys)
+      remoteDetails = await super.getFeatureFlagDetailsStateless(
+        evaluationContext.distinctId,
+        evaluationContext.groups,
+        evaluationContext.personProperties,
+        evaluationContext.groupProperties,
+        disableGeoip,
+        flagKeys
+      )
       if (remoteDetails) {
         if (remoteDetails.featureFlags) {
           featureFlags = { ...featureFlags, ...remoteDetails.featureFlags }
@@ -1793,38 +1801,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Thin wrapper around `super.getFeatureFlagDetailsStateless` so
-   * `getAllFlagsAndPayloads` can share its full return shape with the
-   * event-emission path without losing per-flag metadata.
-   */
-  private async _callFeatureFlagDetailsStateless(
-    evaluationContext: FeatureFlagEvaluationContext,
-    disableGeoip?: boolean,
-    flagKeys?: string[]
-  ): Promise<
-    | {
-        featureFlags?: Record<string, FeatureFlagValue>
-        featureFlagPayloads?: Record<string, JsonType>
-        flags?: Record<string, import('@posthog/core').FeatureFlagDetail>
-        requestId?: string
-        evaluatedAt?: number
-        errorsWhileComputingFlags?: boolean
-        quotaLimited?: string[]
-      }
-    | undefined
-  > {
-    const details = await super.getFeatureFlagDetailsStateless(
-      evaluationContext.distinctId,
-      evaluationContext.groups,
-      evaluationContext.personProperties,
-      evaluationContext.groupProperties,
-      disableGeoip,
-      flagKeys
-    )
-    return details
-  }
-
-  /**
    * Emits `$feature_flag_called` events for a bulk evaluation, using whichever
    * source (local poller or remote response) produced each flag.
    */
@@ -1832,13 +1808,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string
     featureFlags: Record<string, FeatureFlagValue>
     locallyEvaluatedKeys: Set<string>
-    remoteDetails?: {
-      flags?: Record<string, import('@posthog/core').FeatureFlagDetail>
-      requestId?: string
-      evaluatedAt?: number
-      errorsWhileComputingFlags?: boolean
-      quotaLimited?: string[]
-    }
+    remoteDetails?: PostHogFeatureFlagDetails
     groups?: Record<string, string>
     disableGeoip?: boolean
   }): void {

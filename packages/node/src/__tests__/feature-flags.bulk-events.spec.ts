@@ -1,6 +1,6 @@
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogOptions } from '@/types'
-import { anyFlagsCall, anyLocalEvalCall, apiImplementation, apiImplementationV4, waitForPromises } from './utils'
+import { apiImplementation, apiImplementationV4, waitForPromises } from './utils'
 import { PostHogV2FlagsResponse } from '@posthog/core'
 
 jest.spyOn(console, 'debug').mockImplementation()
@@ -225,28 +225,40 @@ describe('getFeatureFlags', () => {
   })
 
   describe('getAllFlags sendFeatureFlagEvents option', () => {
-    it('emits $feature_flag_called per flag when explicitly enabled on the bulk method', async () => {
-      const flagsResponse: PostHogV2FlagsResponse = {
-        flags: {
-          'bulk-a': {
-            key: 'bulk-a',
-            enabled: true,
-            variant: undefined,
-            reason: { code: 'matched', condition_index: 0, description: 'Matched' },
-            metadata: { id: 1, version: 1, payload: undefined, description: undefined },
-          },
-          'bulk-b': {
-            key: 'bulk-b',
-            enabled: true,
-            variant: 'b-variant',
-            reason: { code: 'matched', condition_index: 0, description: 'Matched' },
-            metadata: { id: 2, version: 1, payload: undefined, description: undefined },
-          },
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'bulk-a': {
+          key: 'bulk-a',
+          enabled: true,
+          variant: undefined,
+          reason: { code: 'matched', condition_index: 0, description: 'Matched' },
+          metadata: { id: 1, version: 1, payload: undefined, description: undefined },
         },
-        errorsWhileComputingFlags: false,
-        requestId: 'req-all',
-        evaluatedAt: 1700000000000,
-      }
+        'bulk-b': {
+          key: 'bulk-b',
+          enabled: true,
+          variant: 'b-variant',
+          reason: { code: 'matched', condition_index: 0, description: 'Matched' },
+          metadata: { id: 2, version: 1, payload: undefined, description: undefined },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: 'req-all',
+      evaluatedAt: 1700000000000,
+    }
+
+    it.each([
+      {
+        name: 'emits $feature_flag_called per flag when explicitly enabled',
+        options: { sendFeatureFlagEvents: true } as const,
+        expectedEventKeys: ['bulk-a', 'bulk-b'],
+      },
+      {
+        name: 'does not emit events by default, preserving existing behavior',
+        options: undefined,
+        expectedEventKeys: [] as string[],
+      },
+    ])('$name', async ({ options, expectedEventKeys }) => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
@@ -256,42 +268,12 @@ describe('getFeatureFlags', () => {
       const captured: any[] = []
       posthog.on('capture', (msg) => captured.push(msg))
 
-      const all = await posthog.getAllFlags('user-1', { sendFeatureFlagEvents: true })
+      const all = await posthog.getAllFlags('user-1', options)
       await waitForPromises()
 
       expect(all).toEqual({ 'bulk-a': true, 'bulk-b': 'b-variant' })
       const events = captured.filter((m) => m.event === '$feature_flag_called')
-      expect(events).toHaveLength(2)
-      expect(events.map((e) => e.properties.$feature_flag).sort()).toEqual(['bulk-a', 'bulk-b'])
-    })
-
-    it('does not emit events by default, preserving existing behavior', async () => {
-      const flagsResponse: PostHogV2FlagsResponse = {
-        flags: {
-          'bulk-a': {
-            key: 'bulk-a',
-            enabled: true,
-            variant: undefined,
-            reason: { code: 'matched', condition_index: 0, description: 'Matched' },
-            metadata: { id: 1, version: 1, payload: undefined, description: undefined },
-          },
-        },
-        errorsWhileComputingFlags: false,
-        requestId: 'req-all-no-events',
-      }
-      mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
-      const captured: any[] = []
-      posthog.on('capture', (msg) => captured.push(msg))
-
-      await posthog.getAllFlags('user-1')
-      await waitForPromises()
-
-      expect(captured.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+      expect(events.map((e) => e.properties.$feature_flag).sort()).toEqual(expectedEventKeys)
     })
   })
 
@@ -320,7 +302,3 @@ describe('getFeatureFlags', () => {
     })
   })
 })
-
-// Suppress unused import warning when apiImplementation is unused in a describe block variant
-void anyFlagsCall
-void anyLocalEvalCall
