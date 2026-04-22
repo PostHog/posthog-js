@@ -114,7 +114,9 @@ const payload = useFeatureFlagPayload('config-flag')
 
 All these composables automatically update when feature flags are loaded or changed.
 
-4. On the server side, the PostHog client instance initialized by the plugin is intended exclusively for error tracking. If you require additional PostHog client functionality for other purposes, please instantiate a separate client within your application as needed.
+4. On the server side, the PostHog client instance initialized by the Nitro plugin is intended exclusively for error tracking. If you require additional PostHog client functionality for other purposes, please instantiate a separate client within your application as needed.
+
+   When `ssr: false` is set, the module skips registering the Nitro plugin entirely and only initializes the browser `posthog-js` client.
 
 ## FAQ
 

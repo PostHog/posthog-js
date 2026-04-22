@@ -81,8 +81,12 @@ export default defineNuxtModule<ModuleOptions>({
     const resolver = createResolver(import.meta.url)
     const normalizedPublicKey = normalizeApiKey(options.publicKey)
     const normalizedHost = normalizeHost(options.host)
+    const shouldRegisterServerPlugin = nuxt.options.ssr !== false
+
     addPlugin(resolver.resolve('./runtime/vue-plugin'))
-    addServerPlugin(resolver.resolve('./runtime/nitro-plugin'))
+    if (shouldRegisterServerPlugin) {
+      addServerPlugin(resolver.resolve('./runtime/nitro-plugin'))
+    }
     addImportsDir(resolver.resolve('./runtime/composables'))
 
     Object.assign(nuxt.options.runtimeConfig.public, {
