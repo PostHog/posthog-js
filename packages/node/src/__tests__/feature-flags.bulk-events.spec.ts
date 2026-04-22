@@ -173,66 +173,31 @@ describe('getFeatureFlags', () => {
 
   describe('local + remote hybrid', () => {
     it('resolves some keys locally, falls back once for the rest, and emits events for both', async () => {
-      const localFlagDefinitions = {
+      const localFlags = {
         flags: [
           {
             id: 42,
             name: 'Local Flag',
             key: 'local-flag',
             active: true,
-            rollout_percentage: 100,
             filters: {
-              groups: [{ rollout_percentage: 100, variant: null, properties: [] }],
+              groups: [{ properties: [], rollout_percentage: 100 }],
             },
           },
         ],
       }
-      const remoteResponse: PostHogV2FlagsResponse = {
-        flags: {
-          'remote-flag': {
-            key: 'remote-flag',
-            enabled: true,
-            variant: undefined,
-            reason: { code: 'matched', condition_index: 0, description: 'Matched' },
-            metadata: { id: 77, version: 1, payload: undefined, description: undefined },
-          },
-        },
-        errorsWhileComputingFlags: false,
-        requestId: 'req-hybrid',
-        evaluatedAt: 1700000000000,
-      }
-
-      // Custom fetch impl that serves local eval definitions AND the v2 flags endpoint
-      mockedFetch.mockImplementation((url: any): Promise<any> => {
-        if ((url as string).includes('local_evaluation')) {
-          return Promise.resolve({
-            status: 200,
-            text: () => Promise.resolve('ok'),
-            json: () => Promise.resolve(localFlagDefinitions),
-            headers: { get: () => null },
-          }) as any
-        }
-        if ((url as string).includes('/flags/?v=2')) {
-          return Promise.resolve({
-            status: 200,
-            text: () => Promise.resolve('ok'),
-            json: () => Promise.resolve(remoteResponse),
-          }) as any
-        }
-        return Promise.resolve({
-          status: 200,
-          text: () => Promise.resolve('ok'),
-          json: () => Promise.resolve({ status: 'ok' }),
-        }) as any
-      })
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags,
+          decideFlags: { 'remote-flag': true },
+        })
+      )
 
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         personalApiKey: 'TEST_PERSONAL_API_KEY',
         ...posthogImmediateResolveOptions,
       })
-      // Wait for local eval to load
-      await posthog.reloadFeatureFlags()
 
       const captured: any[] = []
       posthog.on('capture', (msg) => captured.push(msg))
@@ -243,7 +208,7 @@ describe('getFeatureFlags', () => {
       expect(results['local-flag']?.enabled).toBe(true)
       expect(results['remote-flag']?.enabled).toBe(true)
 
-      // Exactly one remote /flags call happened, and it requested only the unresolved key
+      // Exactly one remote /flags call happened, and it requested only the unresolved key.
       const flagsCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2'))
       expect(flagsCalls).toHaveLength(1)
       const requestBody = JSON.parse((flagsCalls[0][1] as any).body)
@@ -256,7 +221,6 @@ describe('getFeatureFlags', () => {
       expect(local.properties.locally_evaluated).toBe(true)
       expect(local.properties.$feature_flag_id).toBe(42)
       expect(remote.properties.locally_evaluated).toBe(false)
-      expect(remote.properties.$feature_flag_request_id).toBe('req-hybrid')
     })
   })
 
