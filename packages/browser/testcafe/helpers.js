@@ -156,6 +156,23 @@ export async function retryUntilResults(
     throw new Error(`Timed out after ${elapsedSeconds} seconds (attempt ${attempts})`)
 }
 
+export function dedupeEventsByUuid(events) {
+    const seen = new Set()
+
+    return events.filter((event) => {
+        if (!event?.uuid) {
+            return true
+        }
+
+        if (seen.has(event.uuid)) {
+            return false
+        }
+
+        seen.add(event.uuid)
+        return true
+    })
+}
+
 export async function queryAPI(testSessionId) {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_PROJECT_ID}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
@@ -171,7 +188,15 @@ export async function queryAPI(testSessionId) {
     }
 
     const { results } = JSON.parse(data)
-    return results
+    const dedupedResults = dedupeEventsByUuid(results)
+
+    if (dedupedResults.length !== results.length) {
+        log(
+            `De-duped ${results.length - dedupedResults.length} duplicate ingested events for test session ${testSessionId}`
+        )
+    }
+
+    return dedupedResults
 }
 
 export function log(...args) {
