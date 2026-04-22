@@ -10,7 +10,10 @@ const arrayFullNoExternalJs = fs.readFileSync(path.join(__dirname, '../../../dis
 const moduleJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.js'), 'utf-8')
 const moduleFullJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.full.js'), 'utf-8')
 const moduleNoExternalJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.no-external.js'), 'utf-8')
-const moduleFullNoExternalJs = fs.readFileSync(path.join(__dirname, '../../../dist/module.full.no-external.js'), 'utf-8')
+const moduleFullNoExternalJs = fs.readFileSync(
+    path.join(__dirname, '../../../dist/module.full.no-external.js'),
+    'utf-8'
+)
 
 describe('Array entrypoint', () => {
     it('should not contain any script loaders', () => {
