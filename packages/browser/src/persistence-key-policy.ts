@@ -169,7 +169,7 @@ export const getPersistenceKeyPolicy = (key: string): PersistenceKeyPolicyEntry 
     }
 
     for (const [prefix, policy] of PERSISTENCE_KEY_PREFIX_POLICY) {
-        if (key.startsWith(prefix)) {
+        if (key.indexOf(prefix) === 0) {
             return policy
         }
     }
