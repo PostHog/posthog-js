@@ -369,8 +369,10 @@ const extractCacheWriteTokens = (usage: Record<string, unknown>): unknown => {
 
 // Extract additional token values from provider metadata, with a V3 standardized fallback
 // (e.g. Amazon Bedrock exposes cache write tokens via usage.inputTokens.cacheWrite rather
-// than providerMetadata.anthropic.cacheCreationInputTokens).
-const extractAdditionalTokenValues = (providerMetadata: unknown, usage?: unknown): Record<string, any> => {
+// than providerMetadata.anthropic.cacheCreationInputTokens). A cacheWrite of 0 is treated
+// as absent so we preserve the pre-fallback event shape on providers that simply omit the
+// field — consumers downstream saw `$ai_cache_creation_input_tokens` missing, not 0.
+const extractAdditionalTokenValues = (providerMetadata: unknown, usage: unknown): Record<string, any> => {
   if (
     providerMetadata &&
     typeof providerMetadata === 'object' &&
@@ -385,7 +387,7 @@ const extractAdditionalTokenValues = (providerMetadata: unknown, usage?: unknown
   }
   if (usage && typeof usage === 'object') {
     const cacheWrite = extractCacheWriteTokens(usage as Record<string, unknown>)
-    if (cacheWrite !== undefined) {
+    if (typeof cacheWrite === 'number' && cacheWrite > 0) {
       return { cacheCreationInputTokens: cacheWrite }
     }
   }
@@ -395,13 +397,13 @@ const extractAdditionalTokenValues = (providerMetadata: unknown, usage?: unknown
 // Detects Anthropic Claude regardless of host (direct Anthropic, Amazon Bedrock, Google Vertex, etc.).
 // The server applies exclusive cache token accounting based on the model name, so any Claude model
 // needs its V3 input tokens adjusted to exclude cache tokens — not just those routed through a
-// provider whose name contains "anthropic".
-const isAnthropicClaudeModel = (model: LanguageModel, provider: string): boolean => {
+// provider whose name contains "anthropic". Accepts the resolved modelId string (not the raw model)
+// so it sees the same id the server does after posthogModelOverride / response.modelId fallbacks.
+const isAnthropicClaudeModel = (modelId: string, provider: string): boolean => {
   if (provider.toLowerCase().includes('anthropic')) {
     return true
   }
-  const modelId = (model.modelId ?? '').toLowerCase()
-  return /claude|anthropic/.test(modelId)
+  return /claude|anthropic/i.test(modelId)
 }
 
 // For Anthropic providers in V3, inputTokens.total is the sum of all tokens (uncached + cache read + cache write).
@@ -409,10 +411,11 @@ const isAnthropicClaudeModel = (model: LanguageModel, provider: string): boolean
 // This helper subtracts cache tokens from inputTokens for Anthropic V3 models.
 const adjustAnthropicV3CacheTokens = (
   model: LanguageModel,
+  modelId: string,
   provider: string,
   usage: { inputTokens?: number; cacheReadInputTokens?: unknown; cacheCreationInputTokens?: unknown }
 ): void => {
-  if (isV3Model(model) && isAnthropicClaudeModel(model, provider)) {
+  if (isV3Model(model) && isAnthropicClaudeModel(modelId, provider)) {
     const cacheReadTokens = (usage.cacheReadInputTokens as number) || 0
     const cacheWriteTokens = (usage.cacheCreationInputTokens as number) || 0
     const cacheTokens = cacheReadTokens + cacheWriteTokens
@@ -499,7 +502,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             rawUsage: rawUsageData,
           }
 
-          adjustAnthropicV3CacheTokens(model, provider, usage)
+          adjustAnthropicV3CacheTokens(model, modelId, provider, usage)
 
           // Extract finish reason - V2 returns a string, V3 returns an object with .unified
           const rawFinishReason = result.finishReason
@@ -713,7 +716,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 rawUsage: { usage, providerMetadata },
               }
 
-              adjustAnthropicV3CacheTokens(model, provider, finalUsage)
+              adjustAnthropicV3CacheTokens(model, modelId, provider, finalUsage)
 
               await sendEventToPosthog({
                 client: phClient,
