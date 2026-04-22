@@ -155,9 +155,9 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
 }
 
 export const PERSISTENCE_KEY_PREFIX_POLICY: Array<[string, PersistenceKeyPolicyEntry]> = [
-    [SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX, { exposure: 'hidden' }],
-    [SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX, { exposure: 'hidden' }],
-    [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX, { exposure: 'hidden' }],
+    [SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX, { exposure: 'event' }],
+    [SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX, { exposure: 'event' }],
+    [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX, { exposure: 'event' }],
 ]
 
 export const getPersistenceKeyPolicy = (key: string): PersistenceKeyPolicyEntry | undefined => {

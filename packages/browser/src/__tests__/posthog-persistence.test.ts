@@ -328,9 +328,10 @@ describe('persistence', () => {
             }
         )
 
-        it('should hide SDK persistence keys matched by prefix policy', () => {
-            library.register({ [`${SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX}abc123`]: 'session-id' })
-            expect(library.properties()).toEqual({})
+        it('keeps legacy event-visible SDK persistence keys matched by prefix policy visible in event properties', () => {
+            const key = `${SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX}abc123`
+            library.register({ [key]: 'session-id' })
+            expect(library.properties()).toEqual({ [key]: 'session-id' })
         })
 
         it('should have all PERSISTENCE_RESERVED_PROPERTIES excluded from properties()', () => {
