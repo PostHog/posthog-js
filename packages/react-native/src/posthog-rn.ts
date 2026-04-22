@@ -120,9 +120,14 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * @example
    * ```ts
    * new PostHog('<key>', {
-   *   __add_tracing_headers: ['api.example.com'],
+   *   addTracingHeaders: ['api.example.com'],
    * })
    * ```
+   */
+  addTracingHeaders?: string[]
+
+  /**
+   * @deprecated Use {@link addTracingHeaders} instead. Kept for backwards compatibility.
    */
   __add_tracing_headers?: string[]
 }
@@ -313,8 +318,10 @@ export class PostHog extends PostHogCore {
 
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
 
-      if (options?.__add_tracing_headers && options.__add_tracing_headers.length > 0) {
-        patchFetchForTracingHeaders(this, options.__add_tracing_headers)
+      // Prefer the new `addTracingHeaders` name; fall back to the deprecated `__add_tracing_headers`.
+      const tracingHostnames = options?.addTracingHeaders ?? options?.__add_tracing_headers
+      if (tracingHostnames && tracingHostnames.length > 0) {
+        patchFetchForTracingHeaders(this, tracingHostnames)
       }
     }
 

@@ -1545,13 +1545,18 @@ export interface PostHogConfig {
      */
     override_display_language?: string | null
 
+    /**
+     * A list of hostnames for which to inject PostHog tracing headers to all requests
+     * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID). Used to link
+     * frontend sessions to backend traces (see https://posthog.com/docs/llm-analytics/link-session-replay).
+     */
+    addTracingHeaders?: string[]
+
     // ------- PREVIEW CONFIGS -------
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * A list of hostnames for which to inject PostHog tracing headers to all requests
-     * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID)
-     * */
+     * @deprecated Use {@link addTracingHeaders} instead. Kept for backwards compatibility.
+     */
     __add_tracing_headers?: string[]
 
     /**

@@ -1,4 +1,4 @@
-import { isArray, isFunction } from '@posthog/core'
+import { isFunction } from '@posthog/core'
 import type { PostHog } from './posthog-rn'
 
 const DISTINCT_ID_HEADER = 'X-POSTHOG-DISTINCT-ID'
@@ -14,9 +14,6 @@ const parseHostname = (url: string): string | undefined => {
 }
 
 const shouldAddHeaders = (url: string, hostnames: string[]): boolean => {
-  if (!isArray(hostnames)) {
-    return false
-  }
   const hostname = parseHostname(url)
   if (!hostname) {
     return false
@@ -34,14 +31,25 @@ export const patchFetchForTracingHeaders = (instance: PostHog, hostnames: string
     return () => {}
   }
 
-  // If we (or a previous PostHog instance) already patched fetch, unwrap so the latest
-  // instance's hostname list and session/distinct ids take effect and patches don't stack.
+  // If we already patched fetch ourselves, unwrap so the latest PostHog instance's hostname list
+  // and session/distinct ids take effect without stacking patches.
+  //
+  // Limitation: we only unwrap our own immediate predecessor. If another library wraps fetch
+  // between two PostHog inits, their wrapper has no PATCH_MARKER, so we treat it as the original —
+  // meaning the earlier PostHog patch stays live underneath and headers could be written twice.
+  // This is considered out of scope; we rely on PostHog being initialised once per app.
   const originalFetch: FetchFn = currentFetch[PATCH_MARKER]?.original ?? currentFetch
 
   const wrappedFetch: PatchedFetch = async function (input, init) {
     try {
       const urlString =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request)?.url
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input instanceof Request
+              ? input.url
+              : undefined
       if (urlString && shouldAddHeaders(urlString, hostnames)) {
         const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
         const distinctId = instance.getDistinctId()
@@ -52,7 +60,8 @@ export const patchFetchForTracingHeaders = (instance: PostHog, hostnames: string
         if (sessionId) {
           headers.set(SESSION_ID_HEADER, sessionId)
         }
-        init = { ...(init ?? {}), headers }
+        const initWithHeaders = { ...(init ?? {}), headers }
+        return originalFetch.call(globalAny, input, initWithHeaders)
       }
     } catch {
       // If anything goes wrong, fall through to the original fetch without tracing headers.

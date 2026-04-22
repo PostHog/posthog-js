@@ -2,7 +2,9 @@ import { patchFetchForTracingHeaders } from '../src/tracing-headers'
 import type { PostHog } from '../src/posthog-rn'
 
 describe('patchFetchForTracingHeaders', () => {
-  const globalAny = globalThis as any
+  jest.useRealTimers()
+
+  const globalAny = globalThis as unknown as { fetch: typeof fetch | undefined }
   let originalFetch: typeof fetch | undefined
   let mockFetch: jest.Mock
   let restore: (() => void) | undefined
@@ -16,7 +18,7 @@ describe('patchFetchForTracingHeaders', () => {
   beforeEach(() => {
     originalFetch = globalAny.fetch
     mockFetch = jest.fn(async () => ({ status: 200 }))
-    globalAny.fetch = mockFetch
+    globalAny.fetch = mockFetch as unknown as typeof fetch
   })
 
   afterEach(() => {
@@ -26,16 +28,30 @@ describe('patchFetchForTracingHeaders', () => {
   })
 
   it.each([
-    { label: 'adds headers for a matching hostname', url: 'https://api.example.com/thing', expectHeaders: true },
     {
-      label: 'does not add headers for a non-matching hostname',
-      url: 'https://other.example.com/thing',
+      label: 'string input, matching hostname',
+      input: (): RequestInfo | URL => 'https://api.example.com/thing',
+      expectHeaders: true,
+    },
+    {
+      label: 'string input, non-matching hostname',
+      input: (): RequestInfo | URL => 'https://other.example.com/thing',
       expectHeaders: false,
     },
-  ])('$label', async ({ url, expectHeaders }) => {
+    {
+      label: 'URL input, matching hostname',
+      input: (): RequestInfo | URL => new URL('https://api.example.com/thing'),
+      expectHeaders: true,
+    },
+    {
+      label: 'Request input, matching hostname',
+      input: (): RequestInfo | URL => new Request('https://api.example.com/thing'),
+      expectHeaders: true,
+    },
+  ])('$label', async ({ input, expectHeaders }) => {
     restore = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
 
-    await globalAny.fetch(url)
+    await globalAny.fetch!(input())
 
     const [, init] = mockFetch.mock.calls[0]
     if (expectHeaders) {
@@ -47,10 +63,10 @@ describe('patchFetchForTracingHeaders', () => {
     }
   })
 
-  it('preserves caller-provided headers and init fields', async () => {
+  it('preserves caller-provided headers and init fields (plain object headers)', async () => {
     restore = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
 
-    await globalAny.fetch('https://api.example.com/thing', {
+    await globalAny.fetch!('https://api.example.com/thing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer abc' },
       body: '{}',
@@ -66,6 +82,32 @@ describe('patchFetchForTracingHeaders', () => {
     expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('s-1')
   })
 
+  it('preserves caller-provided Headers instance on init.headers', async () => {
+    restore = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
+
+    const callerHeaders = new Headers({ 'X-Caller': 'c' })
+    await globalAny.fetch!('https://api.example.com/thing', { headers: callerHeaders })
+
+    const [, init] = mockFetch.mock.calls[0]
+    const headers = init.headers as Headers
+    expect(headers.get('X-Caller')).toBe('c')
+    expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBe('d-1')
+    expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('s-1')
+  })
+
+  it('preserves caller-provided headers when fetch is called with a Request', async () => {
+    restore = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
+
+    const request = new Request('https://api.example.com/thing', { headers: { 'X-Caller': 'c' } })
+    await globalAny.fetch!(request)
+
+    const [, init] = mockFetch.mock.calls[0]
+    const headers = init.headers as Headers
+    expect(headers.get('X-Caller')).toBe('c')
+    expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBe('d-1')
+    expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('s-1')
+  })
+
   it('reads the current distinct/session id on every call', async () => {
     let distinct = 'd-1'
     let session = 's-1'
@@ -76,10 +118,10 @@ describe('patchFetchForTracingHeaders', () => {
 
     restore = patchFetchForTracingHeaders(instance, ['api.example.com'])
 
-    await globalAny.fetch('https://api.example.com/a')
+    await globalAny.fetch!('https://api.example.com/a')
     distinct = 'd-2'
     session = 's-2'
-    await globalAny.fetch('https://api.example.com/b')
+    await globalAny.fetch!('https://api.example.com/b')
 
     const firstHeaders = mockFetch.mock.calls[0][1].headers as Headers
     const secondHeaders = mockFetch.mock.calls[1][1].headers as Headers
@@ -92,7 +134,7 @@ describe('patchFetchForTracingHeaders', () => {
   it('ignores invalid URLs without throwing', async () => {
     restore = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
 
-    await expect(globalAny.fetch('not a url')).resolves.toEqual({ status: 200 })
+    await expect(globalAny.fetch!('not a url')).resolves.toEqual({ status: 200 })
     const [, init] = mockFetch.mock.calls[0]
     expect(init).toBeUndefined()
   })
@@ -106,14 +148,22 @@ describe('patchFetchForTracingHeaders', () => {
       '127.0.0.1:8000',
     ])
 
-    await globalAny.fetch('http://localhost:8000/api/chat')
-    await globalAny.fetch('http://127.0.0.1:8000/api/chat')
+    await globalAny.fetch!('http://localhost:8000/api/chat')
+    await globalAny.fetch!('http://127.0.0.1:8000/api/chat')
 
     for (const call of mockFetch.mock.calls) {
       const headers = call[1].headers as Headers
       expect(headers.get('X-POSTHOG-DISTINCT-ID')).toBe('d-1')
       expect(headers.get('X-POSTHOG-SESSION-ID')).toBe('s-1')
     }
+  })
+
+  it('propagates rejections from the underlying fetch transparently', async () => {
+    const err = new Error('network down')
+    mockFetch.mockRejectedValueOnce(err)
+    restore = patchFetchForTracingHeaders(makeInstance('d-1', 's-1'), ['api.example.com'])
+
+    await expect(globalAny.fetch!('https://api.example.com/thing')).rejects.toBe(err)
   })
 
   it('restore() returns fetch to the original implementation', async () => {
@@ -138,7 +188,7 @@ describe('patchFetchForTracingHeaders', () => {
     const firstRestore = patchFetchForTracingHeaders(makeInstance('d-old', 's-old'), ['api.example.com'])
     restore = patchFetchForTracingHeaders(makeInstance('d-new', 's-new'), ['api.example.com'])
 
-    await globalAny.fetch('https://api.example.com/thing')
+    await globalAny.fetch!('https://api.example.com/thing')
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
     const headers = mockFetch.mock.calls[0][1].headers as Headers
