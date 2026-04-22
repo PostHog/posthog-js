@@ -4,6 +4,7 @@ import { each, extend, stripEmptyProperties } from './utils'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
+    ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
@@ -163,7 +164,9 @@ export class PostHogPersistence {
             const policy = getPersistenceKeyPolicy(k)
 
             if (policy?.exposure === 'derived') {
-                if (policy.shouldSkipFromEventProperties?.(v, () => this._isFeatureFlagCacheStale())) {
+                const shouldSkip = k === ENABLED_FEATURE_FLAGS ? () => this._isFeatureFlagCacheStale() : () => false
+
+                if (policy.shouldSkipFromEventProperties?.(v, shouldSkip)) {
                     return
                 }
 
