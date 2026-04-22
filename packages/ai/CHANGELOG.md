@@ -1,5 +1,20 @@
 # posthog-ai
 
+## 7.16.4
+
+### Patch Changes
+
+- Updated dependencies [[`922a1c1`](https://github.com/PostHog/posthog-js/commit/922a1c1838a5ed2ad37f59dade5fc3cc81bb4246)]:
+  - @posthog/core@1.26.0
+  - posthog-node@5.29.5
+
+## 7.16.3
+
+### Patch Changes
+
+- [#3433](https://github.com/PostHog/posthog-js/pull/3433) [`6e7d4ce`](https://github.com/PostHog/posthog-js/commit/6e7d4cebb633f1bf8aed0f3548fe2927b9093be5) Thanks [@richardsolomou](https://github.com/richardsolomou)! - fix(ai): adjust V3 cache tokens for Claude on any host (including Bedrock)
+  (2026-04-22)
+
 ## 7.16.2
 
 ### Patch Changes

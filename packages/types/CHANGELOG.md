@@ -1,5 +1,14 @@
 # @posthog/types
 
+## 1.370.1
+
+## 1.370.0
+
+### Minor Changes
+
+- [#3389](https://github.com/PostHog/posthog-js/pull/3389) [`922a1c1`](https://github.com/PostHog/posthog-js/commit/922a1c1838a5ed2ad37f59dade5fc3cc81bb4246) Thanks [@hpouillot](https://github.com/hpouillot)! - Add exception steps to error tracking (aka breadcrumbs)
+  (2026-04-22)
+
 ## 1.369.5
 
 ## 1.369.4
