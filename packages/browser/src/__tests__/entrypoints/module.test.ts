@@ -17,6 +17,11 @@ describe('Array entrypoint', () => {
         expect(arrayNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
         expect(arrayFullNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
     })
+
+    it('full no-external bundle should eagerly bootstrap session recording', () => {
+        expect(arrayFullNoExternalJs).toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
+        expect(arrayNoExternalJs).not.toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
+    })
 })
 
 describe('Module entrypoint', () => {
@@ -34,5 +39,10 @@ describe('Module entrypoint', () => {
         expect(moduleFullJs).toContain('__PosthogExtensions__.loadExternalDependency=')
         expect(moduleNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
         expect(moduleFullNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
+    })
+
+    it('full no-external bundle should eagerly bootstrap session recording', () => {
+        expect(moduleFullNoExternalJs).toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
+        expect(moduleNoExternalJs).not.toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
     })
 })
