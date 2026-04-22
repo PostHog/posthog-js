@@ -79,13 +79,9 @@ import type { Properties, Property } from './types'
  */
 export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
 
-export interface PersistenceKeyPolicyRuntime {
-    _isFeatureFlagCacheStale(ttl?: number): boolean
-}
-
 interface PersistenceKeyPolicyEntry {
     exposure: PersistenceKeyExposure
-    shouldSkipFromEventProperties?: (value: Property, persistence: PersistenceKeyPolicyRuntime) => boolean
+    shouldSkipFromEventProperties?: (value: Property, shouldSkip: () => boolean) => boolean
     transformToEventProperties?: (value: Property) => Properties
 }
 
@@ -113,7 +109,7 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: { exposure: 'event' },
     [ENABLED_FEATURE_FLAGS]: {
         exposure: 'derived',
-        shouldSkipFromEventProperties: (_, persistence) => persistence._isFeatureFlagCacheStale(),
+        shouldSkipFromEventProperties: (_, shouldSkip) => shouldSkip(),
         transformToEventProperties: transformEnabledFeatureFlagsToEventProperties,
     },
     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: { exposure: 'event' },

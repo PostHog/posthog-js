@@ -163,7 +163,7 @@ export class PostHogPersistence {
             const policy = getPersistenceKeyPolicy(k)
 
             if (policy?.exposure === 'derived') {
-                if (policy.shouldSkipFromEventProperties?.(v, this)) {
+                if (policy.shouldSkipFromEventProperties?.(v, () => this._isFeatureFlagCacheStale())) {
                     return
                 }
 
