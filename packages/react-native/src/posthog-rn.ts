@@ -14,6 +14,7 @@ import {
   SurveyResponse,
   logFlushError,
   maybeAdd,
+  patchFetchForTracingHeaders,
   FeatureFlagValue,
 } from '@posthog/core'
 import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
@@ -29,7 +30,6 @@ import { getRemoteConfigBool, getRemoteConfigNumber, isValidSampleRate } from '.
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
-import { patchFetchForTracingHeaders } from './tracing-headers'
 
 export { PostHogPersistedProperty }
 
@@ -125,11 +125,6 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * ```
    */
   addTracingHeaders?: string[]
-
-  /**
-   * @deprecated Use {@link addTracingHeaders} instead. Kept for backwards compatibility.
-   */
-  __add_tracing_headers?: string[]
 }
 
 export class PostHog extends PostHogCore {
@@ -318,10 +313,8 @@ export class PostHog extends PostHogCore {
 
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
 
-      // Prefer the new `addTracingHeaders` name; fall back to the deprecated `__add_tracing_headers`.
-      const tracingHostnames = options?.addTracingHeaders ?? options?.__add_tracing_headers
-      if (tracingHostnames && tracingHostnames.length > 0) {
-        patchFetchForTracingHeaders(this, tracingHostnames)
+      if (options?.addTracingHeaders && options.addTracingHeaders.length > 0) {
+        patchFetchForTracingHeaders(this, options.addTracingHeaders)
       }
     }
 
