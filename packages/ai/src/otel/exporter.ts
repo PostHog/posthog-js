@@ -4,6 +4,17 @@ import { ExportResultCode } from '@opentelemetry/core'
 
 import { isAISpan } from './spans'
 
+const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
+
+function normalizeApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeHost(value?: unknown): string {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
+  return normalizedValue || DEFAULT_OTEL_HOST
+}
+
 export interface PostHogTraceExporterOptions {
   /**
    * Your PostHog project API key.
@@ -43,14 +54,15 @@ export interface PostHogTraceExporterOptions {
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
   constructor(options: PostHogTraceExporterOptions) {
-    if (!options.apiKey) {
+    const apiKey = normalizeApiKey(options.apiKey)
+    if (!apiKey) {
       throw new Error('PostHogTraceExporter requires an apiKey')
     }
-    const host = new URL(options.host || 'https://us.i.posthog.com').origin
+    const host = new URL(normalizeHost(options.host)).origin
     super({
       url: `${host}/i/v0/ai/otel`,
       headers: {
-        Authorization: `Bearer ${options.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
     })
   }

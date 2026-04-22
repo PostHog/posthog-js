@@ -66,6 +66,21 @@ describe('PostHogProvider', () => {
         )
     })
 
+    it('trims apiKey and api_host before passing them to ClientPostHogProvider', async () => {
+        const element = await PostHogProvider({
+            apiKey: '  phc_test123\n',
+            clientOptions: { api_host: '  https://custom.posthog.com/\t ' },
+            children: <div>Child</div>,
+        })
+        render(element)
+        expect(mockClientProvider).toHaveBeenCalledWith(
+            expect.objectContaining({
+                apiKey: 'phc_test123',
+                options: expect.objectContaining({ api_host: 'https://custom.posthog.com/' }),
+            })
+        )
+    })
+
     it('does not pass bootstrap when bootstrapFlags is not set', async () => {
         const element = await PostHogProvider({
             apiKey: 'phc_test123',
@@ -89,6 +104,7 @@ describe('PostHogProvider', () => {
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
                     options: expect.objectContaining({
+                        api_host: 'https://us.i.posthog.com',
                         persistence: 'localStorage+cookie',
                         opt_out_capturing_persistence_type: 'cookie',
                         opt_out_persistence_by_default: true,
@@ -193,6 +209,21 @@ describe('PostHogProvider', () => {
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
                     options: expect.objectContaining({ api_host: 'https://eu.posthog.com' }),
+                })
+            )
+        })
+
+        it('trims apiKey and api_host from env vars', async () => {
+            process.env.NEXT_PUBLIC_POSTHOG_KEY = '  phc_from_env\n'
+            process.env.NEXT_PUBLIC_POSTHOG_HOST = '  https://eu.posthog.com/\t '
+            const element = await PostHogProvider({
+                children: <div>Child</div>,
+            })
+            render(element)
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    apiKey: 'phc_from_env',
+                    options: expect.objectContaining({ api_host: 'https://eu.posthog.com/' }),
                 })
             )
         })

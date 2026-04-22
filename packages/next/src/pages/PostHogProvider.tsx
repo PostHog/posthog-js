@@ -1,7 +1,7 @@
 import React from 'react'
 import type { PostHogConfig, BootstrapConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
-import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey } from '../shared/config'
+import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config'
 
 export interface PagesPostHogProviderProps {
     /**
@@ -46,7 +46,7 @@ export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, bootstrap, 
         )
     }
 
-    const host = clientOptions?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const host = resolveHostOrDefault(clientOptions?.api_host)
     const resolvedOptions: Partial<PostHogConfig> = {
         ...NEXTJS_CLIENT_DEFAULTS,
         ...clientOptions,
