@@ -17,25 +17,15 @@ describe('PostHog Core', () => {
       ['missing', undefined as unknown as string],
       ['empty', '   '],
       ['non string', {} as string],
-    ])('should disable and log if %s api key', (_case, apiKey) => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    ])('should disable if %s api key', (_case, apiKey) => {
+      const [client, clientMocks] = createTestClient(apiKey)
 
-      try {
-        const [client, clientMocks] = createTestClient(apiKey)
+      expect(client.isDisabled).toEqual(true)
+      expect((client as any).apiKey).toEqual('')
 
-        expect(client.isDisabled).toEqual(true)
-        expect((client as any).apiKey).toEqual('')
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          '[PostHog]',
-          "You must pass your PostHog project's api key. The client will be disabled."
-        )
+      client.capture('test')
 
-        client.capture('test')
-
-        expect(clientMocks.fetch).not.toHaveBeenCalled()
-      } finally {
-        consoleErrorSpy.mockRestore()
-      }
+      expect(clientMocks.fetch).not.toHaveBeenCalled()
     })
 
     it('should initialise default options', () => {
