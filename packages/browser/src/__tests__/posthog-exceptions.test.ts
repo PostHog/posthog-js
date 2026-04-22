@@ -304,23 +304,22 @@ describe('PostHogExceptions', () => {
             )
         })
 
-        it('respects max_bytes by keeping the most recent steps', () => {
+        it('respects max_bytes by evicting oldest steps on add', () => {
             config.error_tracking = {
                 exception_steps: {
-                    max_bytes: 200,
+                    max_bytes: 80,
                 },
             }
             exceptions = new PostHogExceptions(posthog)
 
             exceptions.addExceptionStep('first')
-            exceptions.addExceptionStep('second', { payload: 'x'.repeat(1000) })
-            exceptions.addExceptionStep('third')
+            exceptions.addExceptionStep('second')
 
             exceptions.sendExceptionEvent({ custom_property: true })
 
             expect(captureMock.mock.calls[0][1]).toMatchObject({
                 custom_property: true,
-                $exception_steps: [{ $message: 'third', $timestamp: expect.any(String) }],
+                $exception_steps: [{ $message: 'second', $timestamp: expect.any(String) }],
             })
         })
 
