@@ -1,5 +1,28 @@
 import { createTestClient, waitForPromises, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
 
+// Force constructor-time logger calls through so they can be asserted in tests.
+class PostHogCoreLoggingTestClient extends PostHogCoreTestClient {
+  protected logMsgIfDebug(fn: () => void): void {
+    fn()
+  }
+}
+
+const createLoggingTestClient = (apiKey: string): [PostHogCoreTestClient, PostHogCoreTestClientMocks] => {
+  const mocks: PostHogCoreTestClientMocks = {
+    fetch: jest.fn(async () => ({
+      status: 200,
+      text: () => Promise.resolve('ok'),
+      json: () => Promise.resolve({ status: 'ok' }),
+    })),
+    storage: {
+      getItem: jest.fn(),
+      setItem: jest.fn(),
+    },
+  }
+
+  return [new PostHogCoreLoggingTestClient(mocks, apiKey, { disableCompression: true }), mocks]
+}
+
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
@@ -26,6 +49,25 @@ describe('PostHog Core', () => {
       client.capture('test')
 
       expect(clientMocks.fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['missing', undefined as unknown as string],
+      ['empty', '   '],
+      ['non string', {} as string],
+    ])('should log when %s api key disables the client', (_case, apiKey) => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        createLoggingTestClient(apiKey)
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[PostHog]',
+          "You must pass your PostHog project's api key. The client will be disabled."
+        )
+      } finally {
+        consoleErrorSpy.mockRestore()
+      }
     })
 
     it('should initialise default options', () => {
