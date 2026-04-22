@@ -11,6 +11,39 @@ const SESSION_OBJECT_METHODS = new Set(['register_for_session'])
 const SESSION_SINGLE_KEY_METHODS = new Set(['unregister_for_session'])
 const INTERNAL_SINGLE_KEY_METHODS = new Set(['_register_single', '_setProp', '_deleteProp'])
 
+const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set<string>([
+    constants.PEOPLE_DISTINCT_ID_KEY,
+    constants.ALIAS_ID_KEY,
+    constants.CAMPAIGN_IDS_KEY,
+    constants.EVENT_TIMERS_KEY,
+    constants.SESSION_RECORDING_ENABLED_SERVER_SIDE,
+    constants.HEATMAPS_ENABLED_SERVER_SIDE,
+    constants.SESSION_ID,
+    constants.ENABLED_FEATURE_FLAGS,
+    constants.ERROR_TRACKING_SUPPRESSION_RULES,
+    constants.USER_STATE,
+    constants.PERSISTENCE_EARLY_ACCESS_FEATURES,
+    constants.PERSISTENCE_FEATURE_FLAG_DETAILS,
+    constants.STORED_GROUP_PROPERTIES_KEY,
+    constants.STORED_PERSON_PROPERTIES_KEY,
+    constants.SURVEYS,
+    constants.FLAG_CALL_REPORTED,
+    constants.FLAG_CALL_REPORTED_SESSION_ID,
+    constants.PERSISTENCE_FEATURE_FLAG_ERRORS,
+    constants.PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    constants.CLIENT_SESSION_PROPS,
+    constants.CAPTURE_RATE_LIMIT,
+    constants.INITIAL_CAMPAIGN_PARAMS,
+    constants.INITIAL_REFERRER_INFO,
+    constants.ENABLE_PERSON_PROCESSING,
+    constants.INITIAL_PERSON_INFO,
+    constants.PRODUCT_TOURS,
+    constants.PRODUCT_TOURS_ACTIVATED,
+    constants.PRODUCT_TOURS_ENABLED_SERVER_SIDE,
+    constants.SESSION_RECORDING_REMOTE_CONFIG,
+    constants.PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
+])
+
 const isUpperSnakeCase = (value: string): boolean => /^[A-Z0-9_]+$/.test(value)
 
 const walkFiles = (dir: string): string[] => {
@@ -394,6 +427,15 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
 }
 
 describe('persistence key policy', () => {
+    it('does not newly hide SDK persistence keys that were event-visible before the policy migration', () => {
+        const newlyHiddenKeys = Object.entries(PERSISTENCE_KEY_POLICY)
+            .filter(([key, policy]) => policy.exposure === 'hidden' && !LEGACY_RESERVED_PERSISTENCE_KEYS.has(key))
+            .map(([key]) => key)
+            .sort()
+
+        expect(newlyHiddenKeys).toEqual([])
+    })
+
     it('keeps direct persistence mutations behind the PostHogPersistence sink helpers', () => {
         expect(collectPostHogPersistenceMutationBoundaryIssues()).toEqual([])
     })

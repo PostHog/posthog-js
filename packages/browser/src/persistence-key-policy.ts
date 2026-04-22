@@ -70,6 +70,13 @@ import {
 import { transformEnabledFeatureFlagsToEventProperties } from './persistence-key-transforms'
 import type { Properties, Property } from './types'
 
+/**
+ * - `event`: include the stored key/value on captured events as-is.
+ * - `hidden`: keep the key in persistence only; never expose it on captured events.
+ * - `derived`: do not expose the stored key directly, but derive one or more event properties from its value.
+ *   For example, `ENABLED_FEATURE_FLAGS` is stored as `$enabled_feature_flags`, but exposed on events as
+ *   `$feature/<flag-key>` properties via `transformToEventProperties`.
+ */
 export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
 
 interface PersistenceKeyPolicyEntry {
@@ -82,33 +89,33 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [ALIAS_ID_KEY]: { exposure: 'hidden' },
     [CAMPAIGN_IDS_KEY]: { exposure: 'hidden' },
     [EVENT_TIMERS_KEY]: { exposure: 'hidden' },
-    [AUTOCAPTURE_DISABLED_SERVER_SIDE]: { exposure: 'hidden' },
+    [AUTOCAPTURE_DISABLED_SERVER_SIDE]: { exposure: 'event' },
     [HEATMAPS_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
-    [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
+    [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: { exposure: 'event' },
     [ERROR_TRACKING_SUPPRESSION_RULES]: { exposure: 'hidden' },
-    [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: { exposure: 'hidden' },
-    [WEB_VITALS_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
-    [DEAD_CLICKS_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
+    [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: { exposure: 'event' },
+    [WEB_VITALS_ENABLED_SERVER_SIDE]: { exposure: 'event' },
+    [DEAD_CLICKS_ENABLED_SERVER_SIDE]: { exposure: 'event' },
     [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
-    [WEB_VITALS_ALLOWED_METRICS]: { exposure: 'hidden' },
+    [WEB_VITALS_ALLOWED_METRICS]: { exposure: 'event' },
     [SESSION_RECORDING_REMOTE_CONFIG]: { exposure: 'hidden' },
     [SESSION_RECORDING_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
     [SESSION_ID]: { exposure: 'hidden' },
-    [SESSION_RECORDING_IS_SAMPLED]: { exposure: 'hidden' },
-    [SESSION_RECORDING_PAST_MINIMUM_DURATION]: { exposure: 'hidden' },
-    [SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION]: { exposure: 'hidden' },
-    [SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: { exposure: 'hidden' },
-    [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: { exposure: 'hidden' },
+    [SESSION_RECORDING_IS_SAMPLED]: { exposure: 'event' },
+    [SESSION_RECORDING_PAST_MINIMUM_DURATION]: { exposure: 'event' },
+    [SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
+    [SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
+    [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: { exposure: 'event' },
     [ENABLED_FEATURE_FLAGS]: {
         exposure: 'derived',
         transformToEventProperties: transformEnabledFeatureFlagsToEventProperties,
     },
-    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: { exposure: 'hidden' },
+    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: { exposure: 'event' },
     [PERSISTENCE_EARLY_ACCESS_FEATURES]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_DETAILS]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { exposure: 'event' },
-    [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'hidden' },
-    [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { exposure: 'hidden' },
+    [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'event' },
+    [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { exposure: 'event' },
     [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden' },
     [STORED_PERSON_PROPERTIES_KEY]: { exposure: 'hidden' },
     [STORED_GROUP_PROPERTIES_KEY]: { exposure: 'hidden' },
@@ -116,10 +123,10 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SURVEYS_ACTIVATED]: { exposure: 'event' },
     [PRODUCT_TOURS]: { exposure: 'hidden' },
     [PRODUCT_TOURS_ACTIVATED]: { exposure: 'hidden' },
-    [CONVERSATIONS_LEGACY_WIDGET_SESSION_ID]: { exposure: 'hidden' },
-    [CONVERSATIONS_LEGACY_TICKET_ID]: { exposure: 'hidden' },
-    [CONVERSATIONS_LEGACY_WIDGET_STATE]: { exposure: 'hidden' },
-    [CONVERSATIONS_LEGACY_USER_TRAITS]: { exposure: 'hidden' },
+    [CONVERSATIONS_LEGACY_WIDGET_SESSION_ID]: { exposure: 'event' },
+    [CONVERSATIONS_LEGACY_TICKET_ID]: { exposure: 'event' },
+    [CONVERSATIONS_LEGACY_WIDGET_STATE]: { exposure: 'event' },
+    [CONVERSATIONS_LEGACY_USER_TRAITS]: { exposure: 'event' },
     [FLAG_CALL_REPORTED]: { exposure: 'hidden' },
     [FLAG_CALL_REPORTED_SESSION_ID]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_ERRORS]: { exposure: 'hidden' },
@@ -131,10 +138,10 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [INITIAL_REFERRER_INFO]: { exposure: 'hidden' },
     [INITIAL_PERSON_INFO]: { exposure: 'hidden' },
     [ENABLE_PERSON_PROCESSING]: { exposure: 'hidden' },
-    [SESSION_RECORDING_OVERRIDE_SAMPLING]: { exposure: 'hidden' },
-    [SESSION_RECORDING_OVERRIDE_LINKED_FLAG]: { exposure: 'hidden' },
-    [SESSION_RECORDING_OVERRIDE_URL_TRIGGER]: { exposure: 'hidden' },
-    [SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: { exposure: 'hidden' },
+    [SESSION_RECORDING_OVERRIDE_SAMPLING]: { exposure: 'event' },
+    [SESSION_RECORDING_OVERRIDE_LINKED_FLAG]: { exposure: 'event' },
+    [SESSION_RECORDING_OVERRIDE_URL_TRIGGER]: { exposure: 'event' },
+    [SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: { exposure: 'event' },
     [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: { exposure: 'event' },
     [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: { exposure: 'event' },
     [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: { exposure: 'event' },
