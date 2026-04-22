@@ -360,6 +360,24 @@ describe('network plugin', () => {
                 })
             })
 
+            it('should not throw when XMLHttpRequest is missing from window', () => {
+                jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const { mockWindow } = createMockWindow()
+                    // Simulate exotic webviews / aggressive privacy tooling that strip XHR.
+                    mockWindow.XMLHttpRequest = undefined
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+
+                    expect(() => {
+                        const cleanup = plugin.observer(() => {}, mockWindow, { recordBody: true })
+                        cleanup()
+                    }).not.toThrow()
+                })
+            })
+
             it('should not leak memory with multiple failed requests', () => {
                 const xhrInstances = Array.from({ length: 10 }, (_, i) => {
                     const testXhr = new mockWindow.XMLHttpRequest()

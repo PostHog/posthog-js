@@ -238,6 +238,13 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
             //
         }
     }
+    // Defend against environments (exotic webviews, privacy tooling, shims) where XMLHttpRequest
+    // is missing so accessing `.prototype` would throw before `patch`'s try/catch can swallow it.
+    if (isNullish(win.XMLHttpRequest) || isNullish(win.XMLHttpRequest.prototype)) {
+        return () => {
+            //
+        }
+    }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
 
