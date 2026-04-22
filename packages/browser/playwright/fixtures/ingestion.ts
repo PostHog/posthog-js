@@ -27,6 +27,23 @@ export const testIngestion = testPostHog.extend<{}, { ingestion: IngestionPage }
     ],
 })
 
+const dedupeEventsByUuid = (events: CaptureResult[]): CaptureResult[] => {
+    const seen = new Set<string>()
+
+    return events.filter((event) => {
+        if (!event.uuid) {
+            return true
+        }
+
+        if (seen.has(event.uuid)) {
+            return false
+        }
+
+        seen.add(event.uuid)
+        return true
+    })
+}
+
 export class IngestionPage {
     sessionChecks: {
         testSessionId: string
@@ -61,7 +78,16 @@ export class IngestionPage {
     async processSessionChecks(): Promise<void> {
         for (const { testSessionId, testTitle, eventsCount, check } of this.sessionChecks) {
             const events = await this.retrieveSessionEvents(testSessionId, testTitle, eventsCount)
-            await check(events)
+            const dedupedEvents = dedupeEventsByUuid(events)
+
+            if (dedupedEvents.length !== events.length) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                    `De-duped ${events.length - dedupedEvents.length} duplicate ingested events (testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+                )
+            }
+
+            await check(dedupedEvents)
         }
     }
 
