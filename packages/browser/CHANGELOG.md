@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.370.1
+
+### Patch Changes
+
+- [#3442](https://github.com/PostHog/posthog-js/pull/3442) [`6f19ce8`](https://github.com/PostHog/posthog-js/commit/6f19ce8fed80f81e75552c5725b648e5f2e53634) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(surveys): guard survey seen localStorage access
+  (2026-04-22)
+- Updated dependencies []:
+    - @posthog/types@1.370.1
+
 ## 1.370.0
 
 ### Minor Changes
