@@ -210,6 +210,18 @@ describe(`Autocapture utility functions`, () => {
             expect(shouldCaptureDomEvent(`div` as unknown as Element, makeMouseEvent({}))).toBe(false)
         })
 
+        it(`should not throw when target is parented to a bare DocumentFragment`, () => {
+            // A DocumentFragment without a shadow host (e.g. from
+            // document.createDocumentFragment() or <template>.content) has no
+            // .host — the parent walker must stop rather than dereference null.
+            const fragment = document!.createDocumentFragment()
+            const anchor = document!.createElement('a')
+            fragment.appendChild(anchor)
+
+            expect(() => shouldCaptureDomEvent(anchor, makeMouseEvent({}))).not.toThrow()
+            expect(shouldCaptureDomEvent(anchor, makeMouseEvent({}))).toBe(true)
+        })
+
         it(`should NOT capture "click" events on <form> elements`, () => {
             expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
@@ -452,6 +464,18 @@ describe(`Autocapture utility functions`, () => {
 
             // cleanup
             ;(el as any).replace = undefined
+        })
+
+        it(`should not throw when an ancestor is a bare DocumentFragment with no host`, () => {
+            // A DocumentFragment created via createDocumentFragment or template
+            // content is not a ShadowRoot and has no .host. Walking parents must
+            // not attempt to jump through a non-existent shadow host.
+            const fragment = document!.createDocumentFragment()
+            const child = document!.createElement('div')
+            fragment.appendChild(child)
+
+            expect(() => shouldCaptureElement(child)).not.toThrow()
+            expect(shouldCaptureElement(child)).toBe(true)
         })
     })
 
