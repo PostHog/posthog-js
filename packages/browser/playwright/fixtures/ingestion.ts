@@ -77,22 +77,17 @@ export class IngestionPage {
 
     async processSessionChecks(): Promise<void> {
         for (const { testSessionId, testTitle, eventsCount, check } of this.sessionChecks) {
-            const events = await this.retrieveSessionEvents(testSessionId, testTitle, eventsCount)
-            const dedupedEvents = dedupeEventsByUuid(events)
-
-            if (dedupedEvents.length !== events.length) {
-                // eslint-disable-next-line no-console
-                console.warn(
-                    `De-duped ${events.length - dedupedEvents.length} duplicate ingested events (testSessionId: ${testSessionId}, testTitle: ${testTitle})`
-                )
-            }
-
-            await check(dedupedEvents)
+            await this.retrieveSessionEvents(testSessionId, testTitle, eventsCount, check)
         }
     }
 
-    private async retrieveSessionEvents(sessionId: string, testTitle: string, count: number): Promise<CaptureResult[]> {
-        return await retryUntilResults(() => queryAPI(sessionId), count, sessionId, testTitle)
+    private async retrieveSessionEvents(
+        sessionId: string,
+        testTitle: string,
+        count: number,
+        check: (events: CaptureResult[]) => Promise<void>
+    ): Promise<CaptureResult[]> {
+        return await retryUntilResults(() => queryAPI(sessionId), count, sessionId, testTitle, { validate: check })
     }
 }
 
@@ -103,7 +98,7 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 // This means that this test can fail if the ingestion lag is higher than the timeout, so we're pretty
 // generous with the timeout here.
 export async function retryUntilResults(
-    operation: () => Promise<any>,
+    operation: () => Promise<CaptureResult[]>,
     target_results: number,
     testSessionId: string,
     testTitle: string,
@@ -111,13 +106,20 @@ export async function retryUntilResults(
         timeout = INGESTION_TIMEOUT,
         pollingIntervalSeconds = 30,
         maxAllowedApiErrors = 5,
-    }: { timeout?: number; pollingIntervalSeconds?: number; maxAllowedApiErrors?: number } = {}
+        validate,
+    }: {
+        timeout?: number
+        pollingIntervalSeconds?: number
+        maxAllowedApiErrors?: number
+        validate?: (results: CaptureResult[]) => Promise<void>
+    } = {}
 ) {
     const start = Date.now()
     const deadline = start + timeout
     let api_errors = 0
     let attempts = 0
-    let last_api_error = null
+    let last_api_error: unknown = null
+    let last_validation_error: unknown = null
     let elapsedSeconds = 0
 
     do {
@@ -131,27 +133,66 @@ export async function retryUntilResults(
             // eslint-disable-next-line no-console
             console.error('API Error:', err)
         }
+
         if (results) {
+            const dedupedResults = dedupeEventsByUuid(results)
             elapsedSeconds = Math.floor((Date.now() - start) / 1000)
-            if (results.length >= target_results) {
+
+            if (dedupedResults.length !== results.length) {
                 // eslint-disable-next-line no-console
-                console.log(
-                    `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+                console.warn(
+                    `De-duped ${results.length - dedupedResults.length} duplicate ingested events (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
                 )
-                return results
+            }
+
+            if (dedupedResults.length >= target_results) {
+                if (!validate) {
+                    // eslint-disable-next-line no-console
+                    console.log(
+                        `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+                    )
+                    return dedupedResults
+                }
+
+                try {
+                    await validate(dedupedResults)
+                    // eslint-disable-next-line no-console
+                    console.log(
+                        `Validated ${target_results} results after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+                    )
+                    return dedupedResults
+                } catch (err) {
+                    last_validation_error = err
+                    const message = err instanceof Error ? err.message : String(err)
+                    // eslint-disable-next-line no-console
+                    console.log(
+                        `Got ${dedupedResults.length} results but validation failed (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle}): ${message}`
+                    )
+                }
             } else {
                 // eslint-disable-next-line no-console
                 console.log(
-                    `Expected ${target_results} results, got ${results.length} (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+                    `Expected ${target_results} results, got ${dedupedResults.length} (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
                 )
             }
         }
+
         await delay(pollingIntervalSeconds * 1000)
     } while (api_errors < maxAllowedApiErrors && Date.now() <= deadline)
 
     if (api_errors >= maxAllowedApiErrors && last_api_error) {
         throw last_api_error
     }
+
+    if (last_validation_error) {
+        const message =
+            last_validation_error instanceof Error ? last_validation_error.message : String(last_validation_error)
+        throw new Error(
+            `Timed out after ${elapsedSeconds} seconds waiting for validated results (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle}). Last validation error: ${message}`,
+            { cause: last_validation_error instanceof Error ? last_validation_error : undefined }
+        )
+    }
+
     throw new Error(
         `Timed out after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
     )
