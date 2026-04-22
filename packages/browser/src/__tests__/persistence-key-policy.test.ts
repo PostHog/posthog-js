@@ -443,20 +443,20 @@ describe('persistence key policy', () => {
         expect(compatibilitySnapshot).toEqual([])
     })
 
-    it('keeps prefix-key visibility compatible with the legacy reserved-list behavior', () => {
+    it('classifies replay trigger-group prefix keys as hidden', () => {
         expect(
             getPersistenceKeyPolicy(`${constants.SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX}abc123`)
         ).toMatchObject({
-            exposure: 'event',
+            exposure: 'hidden',
         })
         expect(
             getPersistenceKeyPolicy(`${constants.SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX}abc123`)
         ).toMatchObject({
-            exposure: 'event',
+            exposure: 'hidden',
         })
         expect(
             getPersistenceKeyPolicy(`${constants.SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX}abc123`)
-        ).toMatchObject({ exposure: 'event' })
+        ).toMatchObject({ exposure: 'hidden' })
     })
 
     it('keeps direct persistence mutations behind the PostHogPersistence sink helpers', () => {
