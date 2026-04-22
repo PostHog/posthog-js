@@ -44,7 +44,7 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties
             mechanism: { handled: false },
         })
         captureFn(errorProperties)
-        return originalOnUnhandledRejection?.apply(win, [ev]) ?? false
+        return originalOnUnhandledRejection?.(ev) ?? false
     }
     win.onunhandledrejection.__POSTHOG_INSTRUMENTED__ = true
 
