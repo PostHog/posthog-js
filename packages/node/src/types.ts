@@ -90,6 +90,12 @@ export type FlagEvaluationOptions = BaseFlagEvaluationOptions & {
 
 export type AllFlagsOptions = BaseFlagEvaluationOptions & {
   flagKeys?: string[]
+  /**
+   * When true, emits a `$feature_flag_called` event for each resolved flag,
+   * matching the behavior of `getFeatureFlag`. Defaults to `false` for
+   * backwards compatibility with the existing bulk methods.
+   */
+  sendFeatureFlagEvents?: boolean
 }
 
 export type FeatureFlagOverrideOptions = {
@@ -481,6 +487,30 @@ export interface IPostHog {
    * @returns Promise that resolves to flags and payloads
    */
   getAllFlagsAndPayloads(distinctId: string, options?: AllFlagsOptions): Promise<PostHogFlagsAndPayloadsResponse>
+
+  /**
+   * @description Evaluate a subset of feature flags in one bulk pass using distinctId from withContext().
+   */
+  getFeatureFlags(
+    keys: string[],
+    options?: FlagEvaluationOptions
+  ): Promise<Record<string, FeatureFlagResult | undefined>>
+
+  /**
+   * @description Evaluate a subset of feature flags in a single local + remote pass while still
+   * emitting `$feature_flag_called` events per resolved flag. Useful when you know up front
+   * which flags you need and want usage signal without N separate `getFeatureFlag` calls.
+   *
+   * @param keys - The feature flag keys to evaluate
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation. `sendFeatureFlagEvents` defaults to `true`.
+   * @returns Promise that resolves to a record of flag keys to their results (undefined if not found)
+   */
+  getFeatureFlags(
+    keys: string[],
+    distinctId: string,
+    options?: FlagEvaluationOptions
+  ): Promise<Record<string, FeatureFlagResult | undefined>>
 
   /**
    * @description Get a feature flag result using distinctId from withContext().

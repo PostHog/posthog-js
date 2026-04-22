@@ -728,6 +728,90 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Emits a `$feature_flag_called` event for a single flag, reusing the
+   * `distinctIdHasSentFlagCalls` cache so a given (distinctId, key, value)
+   * tuple only produces one event per process.
+   */
+  private _emitFeatureFlagCalled(args: {
+    distinctId: string
+    key: string
+    response: FeatureFlagValue | undefined
+    flagWasLocallyEvaluated: boolean
+    flagId?: number
+    flagVersion?: number
+    flagReason?: string
+    requestId?: string
+    evaluatedAt?: number
+    featureFlagError?: FeatureFlagErrorType
+    groups?: Record<string, string>
+    disableGeoip?: boolean
+  }): void {
+    const {
+      distinctId,
+      key,
+      response,
+      flagWasLocallyEvaluated,
+      flagId,
+      flagVersion,
+      flagReason,
+      requestId,
+      evaluatedAt,
+      featureFlagError,
+      groups,
+      disableGeoip,
+    } = args
+
+    const featureFlagReportedKey = `${key}_${response}`
+
+    if (
+      distinctId in this.distinctIdHasSentFlagCalls &&
+      this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey)
+    ) {
+      return
+    }
+
+    if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
+      this.distinctIdHasSentFlagCalls = {}
+    }
+    if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
+      this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
+    } else {
+      this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
+    }
+
+    const properties: Record<string, any> = {
+      $feature_flag: key,
+      $feature_flag_response: response,
+      $feature_flag_id: flagId,
+      $feature_flag_version: flagVersion,
+      $feature_flag_reason: flagReason,
+      locally_evaluated: flagWasLocallyEvaluated,
+      [`$feature/${key}`]: response,
+      $feature_flag_request_id: requestId,
+      $feature_flag_evaluated_at: flagWasLocallyEvaluated ? Date.now() : evaluatedAt,
+    }
+
+    if (flagWasLocallyEvaluated && this.featureFlagsPoller) {
+      const flagDefinitionsLoadedAt = this.featureFlagsPoller.getFlagDefinitionsLoadedAt()
+      if (flagDefinitionsLoadedAt !== undefined) {
+        properties.$feature_flag_definitions_loaded_at = flagDefinitionsLoadedAt
+      }
+    }
+
+    if (featureFlagError) {
+      properties.$feature_flag_error = featureFlagError
+    }
+
+    this.capture({
+      distinctId,
+      event: '$feature_flag_called',
+      properties,
+      groups,
+      disableGeoip,
+    })
+  }
+
+  /**
    * Internal method that handles feature flag evaluation with full details.
    * Used by getFeatureFlag, getFeatureFlagPayload, and getFeatureFlagResult.
    *
@@ -899,56 +983,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Send feature flag event if configured
     if (sendFeatureFlagEvents) {
-      // Compute the response value for event tracking
       const response = result === undefined ? undefined : result.enabled === false ? false : (result.variant ?? true)
-      const featureFlagReportedKey = `${key}_${response}`
-
-      if (
-        !(distinctId in this.distinctIdHasSentFlagCalls) ||
-        !this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey)
-      ) {
-        if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
-          this.distinctIdHasSentFlagCalls = {}
-        }
-        if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
-          this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
-        } else {
-          this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
-        }
-
-        const properties: Record<string, any> = {
-          $feature_flag: key,
-          $feature_flag_response: response,
-          $feature_flag_id: flagId,
-          $feature_flag_version: flagVersion,
-          $feature_flag_reason: flagReason,
-          locally_evaluated: flagWasLocallyEvaluated,
-          [`$feature/${key}`]: response,
-          $feature_flag_request_id: requestId,
-          $feature_flag_evaluated_at: flagWasLocallyEvaluated ? Date.now() : evaluatedAt,
-        }
-
-        // Add local evaluation definition load timestamp
-        if (flagWasLocallyEvaluated && this.featureFlagsPoller) {
-          const flagDefinitionsLoadedAt = this.featureFlagsPoller.getFlagDefinitionsLoadedAt()
-
-          if (flagDefinitionsLoadedAt !== undefined) {
-            properties.$feature_flag_definitions_loaded_at = flagDefinitionsLoadedAt
-          }
-        }
-
-        if (featureFlagError) {
-          properties.$feature_flag_error = featureFlagError
-        }
-
-        this.capture({
-          distinctId,
-          event: '$feature_flag_called',
-          properties,
-          groups,
-          disableGeoip,
-        })
-      }
+      this._emitFeatureFlagCalled({
+        distinctId,
+        key,
+        response,
+        flagWasLocallyEvaluated,
+        flagId,
+        flagVersion,
+        flagReason,
+        requestId,
+        evaluatedAt,
+        featureFlagError,
+        groups,
+        disableGeoip,
+      })
     }
 
     // Apply payload override if present (even when there's no flag override)
@@ -961,6 +1010,252 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     return result
+  }
+
+  /**
+   * Internal method that evaluates a subset of feature flags in one local pass
+   * plus at most one remote round trip, and optionally emits
+   * `$feature_flag_called` events for every resolved flag.
+   */
+  private async _getFeatureFlagResults(
+    keys: string[],
+    distinctId: string,
+    options: {
+      groups?: Record<string, string>
+      personProperties?: Record<string, string>
+      groupProperties?: Record<string, Record<string, string>>
+      onlyEvaluateLocally?: boolean
+      sendFeatureFlagEvents?: boolean
+      disableGeoip?: boolean
+    } = {}
+  ): Promise<Record<string, FeatureFlagResult | undefined>> {
+    const sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
+    const { groups, disableGeoip } = options
+    let { onlyEvaluateLocally, personProperties, groupProperties } = options
+
+    const adjustedProperties = this.addLocalPersonAndGroupProperties(
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties
+    )
+    personProperties = adjustedProperties.allPersonProperties
+    groupProperties = adjustedProperties.allGroupProperties
+    const evaluationContext = this.createFeatureFlagEvaluationContext(
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties
+    )
+
+    if (onlyEvaluateLocally == undefined) {
+      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
+    }
+
+    type EventMeta = {
+      key: string
+      response: FeatureFlagValue | undefined
+      flagWasLocallyEvaluated: boolean
+      flagId?: number
+      flagVersion?: number
+      flagReason?: string
+      requestId?: string
+      evaluatedAt?: number
+      featureFlagError?: FeatureFlagErrorType
+    }
+
+    const results: Record<string, FeatureFlagResult | undefined> = {}
+    const eventMetadata: EventMeta[] = []
+    const nonOverriddenKeys: string[] = []
+
+    // Deduplicate requested keys while preserving order.
+    const uniqueKeys = Array.from(new Set(keys))
+
+    // Apply flag overrides up front. Overridden flags short-circuit evaluation
+    // and do not emit `$feature_flag_called` events, matching the single-flag path.
+    for (const key of uniqueKeys) {
+      if (this._flagOverrides !== undefined && key in this._flagOverrides) {
+        const overrideValue = this._flagOverrides[key]
+        if (overrideValue === undefined) {
+          results[key] = undefined
+        } else {
+          const overridePayload = this._payloadOverrides?.[key]
+          results[key] = {
+            key,
+            enabled: overrideValue !== false,
+            variant: typeof overrideValue === 'string' ? overrideValue : undefined,
+            payload: overridePayload,
+          }
+        }
+        continue
+      }
+      nonOverriddenKeys.push(key)
+    }
+
+    const stillUnresolved: string[] = []
+    const localEvaluationEnabled = this.featureFlagsPoller !== undefined
+    if (localEvaluationEnabled && nonOverriddenKeys.length > 0) {
+      await this.featureFlagsPoller?.loadFeatureFlags()
+
+      for (const key of nonOverriddenKeys) {
+        const flag = this.featureFlagsPoller?.featureFlagsByKey[key]
+        if (!flag) {
+          stillUnresolved.push(key)
+          continue
+        }
+        try {
+          const localResult = await this.featureFlagsPoller!.computeFlagAndPayloadLocally(flag, evaluationContext)
+          const value = localResult.value
+          results[key] = {
+            key,
+            enabled: value !== false,
+            variant: typeof value === 'string' ? value : undefined,
+            payload: localResult.payload ?? undefined,
+          }
+          const response: FeatureFlagValue = value === false ? false : typeof value === 'string' ? value : true
+          eventMetadata.push({
+            key,
+            response,
+            flagWasLocallyEvaluated: true,
+            flagId: flag.id,
+            flagReason: 'Evaluated locally',
+          })
+        } catch (e) {
+          if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
+            this._logger?.info(`${e.name} when computing flag locally: ${key}: ${e.message}`)
+            stillUnresolved.push(key)
+          } else {
+            throw e
+          }
+        }
+      }
+    } else {
+      stillUnresolved.push(...nonOverriddenKeys)
+    }
+
+    if (stillUnresolved.length > 0 && !onlyEvaluateLocally) {
+      const flagsResponse = await super.getFeatureFlagDetailsStateless(
+        evaluationContext.distinctId,
+        evaluationContext.groups,
+        evaluationContext.personProperties,
+        evaluationContext.groupProperties,
+        disableGeoip,
+        stillUnresolved
+      )
+
+      if (flagsResponse === undefined) {
+        for (const key of stillUnresolved) {
+          results[key] = undefined
+          eventMetadata.push({
+            key,
+            response: undefined,
+            flagWasLocallyEvaluated: false,
+            featureFlagError: FeatureFlagError.UNKNOWN_ERROR,
+          })
+        }
+      } else {
+        const requestId = flagsResponse.requestId
+        const evaluatedAt = flagsResponse.evaluatedAt
+        const topLevelErrors: string[] = []
+        if (flagsResponse.errorsWhileComputingFlags) {
+          topLevelErrors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+        }
+        if (flagsResponse.quotaLimited?.includes('feature_flags')) {
+          topLevelErrors.push(FeatureFlagError.QUOTA_LIMITED)
+        }
+
+        for (const key of stillUnresolved) {
+          const flagDetail = flagsResponse.flags[key]
+          const errors = [...topLevelErrors]
+          if (flagDetail === undefined) {
+            errors.push(FeatureFlagError.FLAG_MISSING)
+            results[key] = undefined
+            eventMetadata.push({
+              key,
+              response: undefined,
+              flagWasLocallyEvaluated: false,
+              requestId,
+              evaluatedAt,
+              featureFlagError: errors.length > 0 ? errors.join(',') : undefined,
+            })
+            continue
+          }
+
+          let parsedPayload: JsonType | undefined = undefined
+          if (flagDetail.metadata?.payload !== undefined) {
+            try {
+              parsedPayload = JSON.parse(flagDetail.metadata.payload)
+            } catch {
+              parsedPayload = flagDetail.metadata.payload
+            }
+          }
+
+          const flagResult: FeatureFlagResult = {
+            key,
+            enabled: flagDetail.enabled,
+            variant: flagDetail.variant,
+            payload: parsedPayload,
+          }
+          results[key] = flagResult
+
+          const response: FeatureFlagValue = flagResult.enabled === false ? false : (flagResult.variant ?? true)
+          eventMetadata.push({
+            key,
+            response,
+            flagWasLocallyEvaluated: false,
+            flagId: flagDetail.metadata?.id,
+            flagVersion: flagDetail.metadata?.version,
+            flagReason: flagDetail.reason?.description ?? flagDetail.reason?.code,
+            requestId,
+            evaluatedAt,
+            featureFlagError: errors.length > 0 ? errors.join(',') : undefined,
+          })
+        }
+      }
+    } else if (stillUnresolved.length > 0) {
+      // `onlyEvaluateLocally` is true: record undefined results and emit events
+      // so locally-unresolved keys are still reported, matching the single-flag path.
+      for (const key of stillUnresolved) {
+        results[key] = undefined
+        eventMetadata.push({
+          key,
+          response: undefined,
+          flagWasLocallyEvaluated: false,
+        })
+      }
+    }
+
+    // Payload overrides take precedence over any computed payload, mirroring
+    // the single-flag behavior.
+    if (this._payloadOverrides !== undefined) {
+      for (const key of uniqueKeys) {
+        const current = results[key]
+        if (current !== undefined && key in this._payloadOverrides) {
+          results[key] = { ...current, payload: this._payloadOverrides[key] }
+        }
+      }
+    }
+
+    if (sendFeatureFlagEvents) {
+      for (const meta of eventMetadata) {
+        this._emitFeatureFlagCalled({
+          distinctId,
+          key: meta.key,
+          response: meta.response,
+          flagWasLocallyEvaluated: meta.flagWasLocallyEvaluated,
+          flagId: meta.flagId,
+          flagVersion: meta.flagVersion,
+          flagReason: meta.flagReason,
+          requestId: meta.requestId,
+          evaluatedAt: meta.evaluatedAt,
+          featureFlagError: meta.featureFlagError,
+          groups,
+          disableGeoip,
+        })
+      }
+    }
+
+    return results
   }
 
   /**
@@ -1156,6 +1451,62 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     return this._getFeatureFlagResult(key, resolvedDistinctId, {
+      ...resolvedOptions,
+      sendFeatureFlagEvents: resolvedOptions?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+    })
+  }
+
+  /**
+   * Evaluate a subset of feature flags in one bulk pass while still emitting
+   * `$feature_flag_called` events for each resolved flag.
+   *
+   * Evaluates each key locally first (if local evaluation is enabled) and then
+   * makes at most one remote request for any keys that couldn't be resolved
+   * locally — avoiding the N remote round trips of calling `getFeatureFlag`
+   * per flag while preserving the flag-usage signal that `getAllFlags` loses.
+   *
+   * @example
+   * ```ts
+   * const results = await client.getFeatureFlags(
+   *   ['new-dashboard', 'beta-search'],
+   *   'user_123',
+   *   { personProperties: { plan: 'pro' } }
+   * )
+   * if (results['new-dashboard']?.enabled) { ... }
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param keys - The feature flag keys to evaluate
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation. `sendFeatureFlagEvents` defaults to `true`.
+   * @returns Promise that resolves to a record of flag keys to their results (undefined if not found)
+   */
+  async getFeatureFlags(
+    keys: string[],
+    options?: FlagEvaluationOptions
+  ): Promise<Record<string, FeatureFlagResult | undefined>>
+  async getFeatureFlags(
+    keys: string[],
+    distinctId: string,
+    options?: FlagEvaluationOptions
+  ): Promise<Record<string, FeatureFlagResult | undefined>>
+  async getFeatureFlags(
+    keys: string[],
+    distinctIdOrOptions?: string | FlagEvaluationOptions,
+    options?: FlagEvaluationOptions
+  ): Promise<Record<string, FeatureFlagResult | undefined>> {
+    const { distinctId: resolvedDistinctId, options: resolvedOptions } = this._resolveDistinctId(
+      distinctIdOrOptions,
+      options
+    )
+
+    if (!resolvedDistinctId) {
+      this._logger.warn('[PostHog] distinctId is required — pass it explicitly or use withContext()')
+      return {}
+    }
+
+    return this._getFeatureFlagResults(keys, resolvedDistinctId, {
       ...resolvedOptions,
       sendFeatureFlagEvents: resolvedOptions?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
     })
@@ -1361,7 +1712,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return { featureFlags: {}, featureFlagPayloads: {} }
     }
 
-    const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
+    const { groups, disableGeoip, flagKeys, sendFeatureFlagEvents } = resolvedOptions || {}
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
     const adjustedProperties = this.addLocalPersonAndGroupProperties(
@@ -1387,31 +1738,29 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const localEvaluationResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(evaluationContext, flagKeys)
 
-    let featureFlags = {}
-    let featureFlagPayloads = {}
+    let featureFlags: Record<string, FeatureFlagValue> = {}
+    let featureFlagPayloads: Record<string, JsonType> = {}
     let fallbackToFlags = true
+    const locallyEvaluatedKeys = new Set<string>()
     if (localEvaluationResult) {
       featureFlags = localEvaluationResult.response
       featureFlagPayloads = localEvaluationResult.payloads
       fallbackToFlags = localEvaluationResult.fallbackToFlags
+      for (const key of Object.keys(localEvaluationResult.response)) {
+        locallyEvaluatedKeys.add(key)
+      }
     }
 
+    let remoteDetails: Awaited<ReturnType<PostHogBackendClient['_callFeatureFlagDetailsStateless']>> | undefined
     if (fallbackToFlags && !onlyEvaluateLocally) {
-      const remoteEvaluationResult = await super.getFeatureFlagsAndPayloadsStateless(
-        evaluationContext.distinctId,
-        evaluationContext.groups,
-        evaluationContext.personProperties,
-        evaluationContext.groupProperties,
-        disableGeoip,
-        flagKeys
-      )
-      featureFlags = {
-        ...featureFlags,
-        ...(remoteEvaluationResult.flags || {}),
-      }
-      featureFlagPayloads = {
-        ...featureFlagPayloads,
-        ...(remoteEvaluationResult.payloads || {}),
+      remoteDetails = await this._callFeatureFlagDetailsStateless(evaluationContext, disableGeoip, flagKeys)
+      if (remoteDetails) {
+        if (remoteDetails.featureFlags) {
+          featureFlags = { ...featureFlags, ...remoteDetails.featureFlags }
+        }
+        if (remoteDetails.featureFlagPayloads) {
+          featureFlagPayloads = { ...featureFlagPayloads, ...remoteDetails.featureFlagPayloads }
+        }
       }
     }
 
@@ -1429,7 +1778,120 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
+    if (sendFeatureFlagEvents) {
+      this._emitBulkFeatureFlagCalledEvents({
+        distinctId: resolvedDistinctId,
+        featureFlags,
+        locallyEvaluatedKeys,
+        remoteDetails,
+        groups,
+        disableGeoip,
+      })
+    }
+
     return { featureFlags, featureFlagPayloads }
+  }
+
+  /**
+   * Thin wrapper around `super.getFeatureFlagDetailsStateless` so
+   * `getAllFlagsAndPayloads` can share its full return shape with the
+   * event-emission path without losing per-flag metadata.
+   */
+  private async _callFeatureFlagDetailsStateless(
+    evaluationContext: FeatureFlagEvaluationContext,
+    disableGeoip?: boolean,
+    flagKeys?: string[]
+  ): Promise<
+    | {
+        featureFlags?: Record<string, FeatureFlagValue>
+        featureFlagPayloads?: Record<string, JsonType>
+        flags?: Record<string, import('@posthog/core').FeatureFlagDetail>
+        requestId?: string
+        evaluatedAt?: number
+        errorsWhileComputingFlags?: boolean
+        quotaLimited?: string[]
+      }
+    | undefined
+  > {
+    const details = await super.getFeatureFlagDetailsStateless(
+      evaluationContext.distinctId,
+      evaluationContext.groups,
+      evaluationContext.personProperties,
+      evaluationContext.groupProperties,
+      disableGeoip,
+      flagKeys
+    )
+    return details
+  }
+
+  /**
+   * Emits `$feature_flag_called` events for a bulk evaluation, using whichever
+   * source (local poller or remote response) produced each flag.
+   */
+  private _emitBulkFeatureFlagCalledEvents(args: {
+    distinctId: string
+    featureFlags: Record<string, FeatureFlagValue>
+    locallyEvaluatedKeys: Set<string>
+    remoteDetails?: {
+      flags?: Record<string, import('@posthog/core').FeatureFlagDetail>
+      requestId?: string
+      evaluatedAt?: number
+      errorsWhileComputingFlags?: boolean
+      quotaLimited?: string[]
+    }
+    groups?: Record<string, string>
+    disableGeoip?: boolean
+  }): void {
+    const { distinctId, featureFlags, locallyEvaluatedKeys, remoteDetails, groups, disableGeoip } = args
+
+    const topLevelErrors: string[] = []
+    if (remoteDetails?.errorsWhileComputingFlags) {
+      topLevelErrors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+    }
+    if (remoteDetails?.quotaLimited?.includes('feature_flags')) {
+      topLevelErrors.push(FeatureFlagError.QUOTA_LIMITED)
+    }
+
+    for (const [key, value] of Object.entries(featureFlags)) {
+      // Overridden flags short-circuit evaluation in the single-flag path and
+      // do not emit events; preserve that behavior here.
+      if (this._flagOverrides !== undefined && key in this._flagOverrides) {
+        continue
+      }
+
+      const response: FeatureFlagValue = value === false ? false : typeof value === 'string' ? value : true
+
+      if (locallyEvaluatedKeys.has(key)) {
+        const flag = this.featureFlagsPoller?.featureFlagsByKey[key]
+        this._emitFeatureFlagCalled({
+          distinctId,
+          key,
+          response,
+          flagWasLocallyEvaluated: true,
+          flagId: flag?.id,
+          flagReason: 'Evaluated locally',
+          groups,
+          disableGeoip,
+        })
+        continue
+      }
+
+      const flagDetail = remoteDetails?.flags?.[key]
+      this._emitFeatureFlagCalled({
+        distinctId,
+        key,
+        response,
+        flagWasLocallyEvaluated: false,
+        flagId: flagDetail?.metadata?.id,
+        flagVersion: flagDetail?.metadata?.version,
+        flagReason: flagDetail?.reason?.description ?? flagDetail?.reason?.code,
+        requestId: remoteDetails?.requestId,
+        evaluatedAt: remoteDetails?.evaluatedAt,
+        featureFlagError: topLevelErrors.length > 0 ? topLevelErrors.join(',') : undefined,
+        groups,
+        disableGeoip,
+      })
+    }
   }
 
   /**
