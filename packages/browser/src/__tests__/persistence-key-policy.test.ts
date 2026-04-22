@@ -3,7 +3,7 @@ import path from 'path'
 import * as ts from 'typescript'
 
 import * as constants from '../constants'
-import { PERSISTENCE_KEY_POLICY, PERSISTENCE_KEY_PREFIX_POLICY } from '../persistence-key-policy'
+import { getPersistenceKeyPolicy, PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
 
 const PERSISTENCE_OBJECT_METHODS = new Set(['register', 'register_once'])
 const PERSISTENCE_SINGLE_KEY_METHODS = new Set(['set_property', 'unregister'])
@@ -444,11 +444,19 @@ describe('persistence key policy', () => {
     })
 
     it('keeps prefix-key visibility compatible with the legacy reserved-list behavior', () => {
-        expect(PERSISTENCE_KEY_PREFIX_POLICY.map(([prefix, policy]) => [prefix, policy.exposure])).toEqual([
-            [constants.SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX, 'event'],
-            [constants.SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX, 'event'],
-            [constants.SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX, 'event'],
-        ])
+        expect(
+            getPersistenceKeyPolicy(`${constants.SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX}abc123`)
+        ).toMatchObject({
+            exposure: 'event',
+        })
+        expect(
+            getPersistenceKeyPolicy(`${constants.SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX}abc123`)
+        ).toMatchObject({
+            exposure: 'event',
+        })
+        expect(
+            getPersistenceKeyPolicy(`${constants.SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX}abc123`)
+        ).toMatchObject({ exposure: 'event' })
     })
 
     it('keeps direct persistence mutations behind the PostHogPersistence sink helpers', () => {
@@ -457,7 +465,11 @@ describe('persistence key policy', () => {
 
     it('classifies SDK-owned persistence keys and forbids raw literal keys at persistence write sites', () => {
         const exactPolicyKeys = new Set(Object.keys(PERSISTENCE_KEY_POLICY))
-        const prefixPolicyKeys = new Set(PERSISTENCE_KEY_PREFIX_POLICY.map(([prefix]) => prefix))
+        const prefixPolicyKeys = new Set([
+            constants.SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+            constants.SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
+            constants.SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
+        ])
         const { identifiers, issues } = collectPersistenceKeyIdentifiers()
 
         expect(issues).toEqual([])

@@ -156,7 +156,7 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_START_REASON]: { exposure: 'event' },
 }
 
-export const PERSISTENCE_KEY_PREFIX_POLICY: Array<[string, PersistenceKeyPolicyEntry]> = [
+const PERSISTENCE_KEY_PREFIX_POLICY: Array<[string, PersistenceKeyPolicyEntry]> = [
     [SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX, { exposure: 'event' }],
     [SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX, { exposure: 'event' }],
     [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX, { exposure: 'event' }],
