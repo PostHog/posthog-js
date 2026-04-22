@@ -1,7 +1,7 @@
 import { CaptureResult } from '@/types'
 import { PosthogPage, testPostHog } from './posthog'
 
-const INGESTION_TIMEOUT = 10 * 60 * 1000 // 10 min
+const INGESTION_TIMEOUT = 30 * 60 * 1000 // 30 min
 const currentEnv = process.env
 const {
     POSTHOG_PERSONAL_API_KEY = 'private_key',
@@ -95,8 +95,7 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 // NOTE: This is limited by the real production ingestion lag, which you can see in grafana is usually
 // in the low minutes https://grafana.prod-us.posthog.dev/d/homepage/homepage
-// This means that this test can fail if the ingestion lag is higher than the timeout, so we're pretty
-// generous with the timeout here.
+// We keep polling until the semantic assertion passes, so this timeout should match the CI job timeout.
 export async function retryUntilResults(
     operation: () => Promise<CaptureResult[]>,
     target_results: number,
@@ -145,20 +144,12 @@ export async function retryUntilResults(
                 )
             }
 
-            if (dedupedResults.length >= target_results) {
-                if (!validate) {
-                    // eslint-disable-next-line no-console
-                    console.log(
-                        `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
-                    )
-                    return dedupedResults
-                }
-
+            if (validate) {
                 try {
                     await validate(dedupedResults)
                     // eslint-disable-next-line no-console
                     console.log(
-                        `Validated ${target_results} results after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+                        `Validated results after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle}, resultCount: ${dedupedResults.length})`
                     )
                     return dedupedResults
                 } catch (err) {
@@ -166,9 +157,15 @@ export async function retryUntilResults(
                     const message = err instanceof Error ? err.message : String(err)
                     // eslint-disable-next-line no-console
                     console.log(
-                        `Got ${dedupedResults.length} results but validation failed (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle}): ${message}`
+                        `Validation failed with ${dedupedResults.length} results (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle}): ${message}`
                     )
                 }
+            } else if (dedupedResults.length >= target_results) {
+                // eslint-disable-next-line no-console
+                console.log(
+                    `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+                )
+                return dedupedResults
             } else {
                 // eslint-disable-next-line no-console
                 console.log(
