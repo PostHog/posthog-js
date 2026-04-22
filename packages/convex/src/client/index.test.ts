@@ -11,12 +11,22 @@ function mockSchedulerCtx() {
 }
 
 describe('PostHog client', () => {
-  test('constructor uses defaults from env', () => {
-    process.env.POSTHOG_API_KEY = 'test-key'
-    process.env.POSTHOG_HOST = 'https://test.posthog.com'
+  test('constructor uses defaults from env', async () => {
+    process.env.POSTHOG_API_KEY = '  test-key\n'
+    process.env.POSTHOG_HOST = '  https://test.posthog.com\t '
 
-    const posthog = new PostHog({} as never)
-    expect(posthog).toBeInstanceOf(PostHog)
+    const component = { lib: { capture: 'capture_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = mockSchedulerCtx()
+
+    await posthog.capture(ctx as never, {
+      distinctId: 'user-1',
+      event: 'test-event',
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(args.apiKey).toBe('test-key')
+    expect(args.host).toBe('https://test.posthog.com')
 
     delete process.env.POSTHOG_API_KEY
     delete process.env.POSTHOG_HOST
@@ -28,6 +38,24 @@ describe('PostHog client', () => {
       host: 'https://custom.posthog.com',
     })
     expect(posthog).toBeInstanceOf(PostHog)
+  })
+
+  test('trims apiKey and host before scheduling events', async () => {
+    const component = { lib: { capture: 'capture_ref' } }
+    const posthog = new PostHog(component as never, {
+      apiKey: '  explicit-key\n',
+      host: '  https://custom.posthog.com/\t ',
+    })
+    const ctx = mockSchedulerCtx()
+
+    await posthog.capture(ctx as never, {
+      distinctId: 'user-1',
+      event: 'test-event',
+    })
+
+    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
+    expect(args.apiKey).toBe('explicit-key')
+    expect(args.host).toBe('https://custom.posthog.com/')
   })
 
   test('exposes capture, identify, groupIdentify, alias, captureException methods', () => {
