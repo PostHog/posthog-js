@@ -2,6 +2,7 @@ import ErrorTracking from '@/extensions/error-tracking'
 import { PostHog } from '@/entrypoints/index.node'
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from '@/extensions/error-tracking/autocapture'
 import { Worker } from 'worker_threads'
+import { relative } from 'path'
 import type { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 describe('exception autocapture', () => {
@@ -69,7 +70,7 @@ describe('exception autocapture', () => {
             type: 'onuncaughtexception',
           },
           framesLength: 3,
-          lastFrameFileName: workerFilename,
+          lastFrameFileName: relative(process.cwd(), workerFilename),
           lastFrameHasContext: true,
         })
         res()
@@ -95,7 +96,7 @@ describe('exception autocapture', () => {
             type: 'onunhandledrejection',
           },
           framesLength: 1,
-          lastFrameFileName: workerFilename,
+          lastFrameFileName: relative(process.cwd(), workerFilename),
           lastFrameHasContext: true,
         })
         res()
