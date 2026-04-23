@@ -706,6 +706,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "null",
     "string"
   ],
+  "addTracingHeaders": [
+    "undefined",
+    "string[]"
+  ],
   "__add_tracing_headers": [
     "undefined",
     "string[]"

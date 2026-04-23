@@ -14,6 +14,7 @@ import {
   SurveyResponse,
   logFlushError,
   maybeAdd,
+  patchFetchForTracingHeaders,
   FeatureFlagValue,
 } from '@posthog/core'
 import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
@@ -292,6 +293,10 @@ export class PostHog extends PostHogCore {
       void this.persistAppVersion()
 
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
+
+      if (options?.addTracingHeaders && options.addTracingHeaders.length > 0) {
+        patchFetchForTracingHeaders(this, options.addTracingHeaders)
+      }
     }
 
     // For async storage, we wait for the storage to be ready before we start the SDK

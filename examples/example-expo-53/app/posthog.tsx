@@ -24,6 +24,10 @@ export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_K
             console: ['error', 'warn'],
         },
     },
+    // Inject X-POSTHOG-DISTINCT-ID and X-POSTHOG-SESSION-ID on outgoing fetch
+    // requests to these hostnames. Used by the Tracing Headers screen to verify
+    // the patch works end-to-end; see https://posthog.com/docs/llm-analytics/link-session-replay
+    addTracingHeaders: ['httpbin.org'],
     // persistence: 'memory',
     // if using WebView, you have to disable masking for text inputs and images
     // sessionReplayConfig: {

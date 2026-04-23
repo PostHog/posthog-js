@@ -171,6 +171,7 @@
         "_getActionMatcher",
         "_getActivatedKey",
         "_getBufferDuration",
+        "_getConfiguredHostnames",
         "_getContextManager",
         "_getCurrentStep",
         "_getDelegate",
