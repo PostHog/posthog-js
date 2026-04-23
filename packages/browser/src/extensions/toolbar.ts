@@ -4,7 +4,7 @@ import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { createLogger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
-import { TOOLBAR_ID } from '../constants'
+import { TOOLBAR_CONTAINER_CLASS, TOOLBAR_ID } from '../constants'
 import { isFunction, isNullish } from '@posthog/core'
 import { Extension } from './types'
 
@@ -43,7 +43,7 @@ export class Toolbar implements Extension {
 
     hideToolbar(): boolean {
         const toolbar = document?.getElementById(TOOLBAR_ID)
-        const container = toolbar?.closest('.toolbar-global-fade-container')
+        const container = toolbar?.closest?.(`.${TOOLBAR_CONTAINER_CLASS}`)
 
         if (!toolbar) {
             return false
