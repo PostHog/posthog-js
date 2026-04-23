@@ -4,9 +4,10 @@ permissions:
     contents: read
 
 on:
-    pull_request:
-        types: [closed]
+    push:
         branches: [main]
+        paths:
+            - '.changeset/**'
     workflow_dispatch:
 
 # Concurrency control: only one release process can run at a time
@@ -16,15 +17,69 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
+    resolve-release-context:
+        name: Resolve release context
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            pull-requests: read
+        outputs:
+            should-release: ${{ steps.resolve.outputs.should-release }}
+        steps:
+            - name: Resolve release request
+              id: resolve
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  EVENT_NAME: ${{ github.event_name }}
+                  CURRENT_REF: ${{ github.ref }}
+                  PUSH_SHA: ${{ github.sha }}
+                  PUSH_HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+              run: |
+                  set -euo pipefail
+
+                  SHOULD_RELEASE=false
+
+                  if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+                      if [ "$CURRENT_REF" != "refs/heads/main" ]; then
+                          echo "::notice::Skipping release because workflow_dispatch must be run on main, got $CURRENT_REF."
+                      else
+                          SHOULD_RELEASE=true
+                          echo "✓ Manual release requested on main"
+                      fi
+
+                      echo "should-release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
+
+                  if [[ "${PUSH_HEAD_COMMIT_MESSAGE:-}" == *"[version bump]"* ]]; then
+                      echo "::notice::Skipping release for the automated version bump commit."
+                      echo "should-release=false" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
+
+                  PRS_JSON=$(gh api repos/${{ github.repository }}/commits/$PUSH_SHA/pulls)
+                  MATCHING_PR_COUNT=$(echo "$PRS_JSON" | jq '[.[] | select(.merged_at != null and .base.ref == "main" and (.labels | map(.name) | index("release")))] | length')
+
+                  if [ "$MATCHING_PR_COUNT" -eq 0 ]; then
+                      ASSOCIATED_PRS=$(echo "$PRS_JSON" | jq -r '[.[].number | tostring] | join(", ")')
+                      if [ -n "$ASSOCIATED_PRS" ]; then
+                          echo "::notice::Skipping release because push $PUSH_SHA is associated with PR(s) [$ASSOCIATED_PRS], but none currently have the 'release' label."
+                      else
+                          echo "::notice::Skipping release because push $PUSH_SHA is not associated with a merged PR to main that has the 'release' label."
+                      fi
+                      echo "should-release=false" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
+
+                  RELEASE_PRS=$(echo "$PRS_JSON" | jq -r '[.[] | select(.merged_at != null and .base.ref == "main" and (.labels | map(.name) | index("release"))) | "#\(.number)"] | join(", ")')
+                  echo "✓ Release requested by push $PUSH_SHA via $RELEASE_PRS"
+                  echo "should-release=true" >> "$GITHUB_OUTPUT"
+
     check-changesets:
         name: Check for changesets
+        needs: resolve-release-context
+        if: needs.resolve-release-context.outputs.should-release == 'true'
         runs-on: ubuntu-latest
-        # Run when PR with 'release' label is merged to main, or when manually triggered
-        if: |
-            github.event_name == 'workflow_dispatch' ||
-            (github.event_name == 'pull_request'
-             && github.event.pull_request.merged == true
-             && contains(github.event.pull_request.labels.*.name, 'release'))
         outputs:
             has-changesets: ${{ steps.check.outputs.has-changesets }}
         steps:
@@ -60,11 +115,11 @@ jobs:
 
     version-bump:
         name: Bump versions and commit to main
-        needs: [check-changesets, notify-approval-needed]
+        needs: [resolve-release-context, check-changesets, notify-approval-needed]
         runs-on: ubuntu-latest
         # Use `always()` to ensure the job runs even if the notify-approval-needed job fails
         # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
-        if: always() && needs.check-changesets.outputs.has-changesets == 'true'
+        if: always() && needs.resolve-release-context.outputs.should-release == 'true' && needs.check-changesets.outputs.has-changesets == 'true'
         environment: 'NPM Release' # This will require an approval from a maintainer, they are notified in Slack above
         permissions:
             contents: read
