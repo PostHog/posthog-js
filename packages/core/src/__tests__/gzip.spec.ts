@@ -34,25 +34,39 @@ describe('gzip', () => {
       expect(globalThis.CompressionStream).toBeDefined()
       expect(isGzipSupported()).toBe(true)
     })
-    it('should return false if CompressStream not available', () => {
-      const CompressionStream = globalThis.CompressionStream
-      delete (globalThis as any).CompressionStream
-      expect(isGzipSupported()).toBe(false)
-      ;(globalThis as any).CompressionStream = CompressionStream
-    })
+    it.each([
+      [
+        'CompressionStream',
+        () => {
+          const CompressionStream = globalThis.CompressionStream
+          delete (globalThis as any).CompressionStream
+          return () => ((globalThis as any).CompressionStream = CompressionStream)
+        },
+      ],
+      [
+        'TextEncoder',
+        () => {
+          const TextEncoder = globalThis.TextEncoder
+          delete (globalThis as any).TextEncoder
+          return () => ((globalThis as any).TextEncoder = TextEncoder)
+        },
+      ],
+      [
+        'Response.blob',
+        () => {
+          const blob = globalThis.Response.prototype.blob
+          delete (globalThis.Response.prototype as any).blob
+          return () => ((globalThis.Response.prototype as any).blob = blob)
+        },
+      ],
+    ])('should return false if %s not available', (_name, removeDependency) => {
+      const restoreDependency = removeDependency()
 
-    it('should return false if TextEncoder not available', () => {
-      const TextEncoder = globalThis.TextEncoder
-      delete (globalThis as any).TextEncoder
-      expect(isGzipSupported()).toBe(false)
-      ;(globalThis as any).TextEncoder = TextEncoder
-    })
-
-    it('should return false if Response.blob not available', () => {
-      const blob = globalThis.Response.prototype.blob
-      delete (globalThis.Response.prototype as any).blob
-      expect(isGzipSupported()).toBe(false)
-      ;(globalThis.Response.prototype as any).blob = blob
+      try {
+        expect(isGzipSupported()).toBe(false)
+      } finally {
+        restoreDependency()
+      }
     })
   })
   describe('isNativeAsyncGzipReadError', () => {
