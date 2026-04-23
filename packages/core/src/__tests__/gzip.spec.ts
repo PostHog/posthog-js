@@ -40,6 +40,20 @@ describe('gzip', () => {
       expect(isGzipSupported()).toBe(false)
       ;(globalThis as any).CompressionStream = CompressionStream
     })
+
+    it('should return false if TextEncoder not available', () => {
+      const TextEncoder = globalThis.TextEncoder
+      delete (globalThis as any).TextEncoder
+      expect(isGzipSupported()).toBe(false)
+      ;(globalThis as any).TextEncoder = TextEncoder
+    })
+
+    it('should return false if Response.blob not available', () => {
+      const blob = globalThis.Response.prototype.blob
+      delete (globalThis.Response.prototype as any).blob
+      expect(isGzipSupported()).toBe(false)
+      ;(globalThis.Response.prototype as any).blob = blob
+    })
   })
   describe('isNativeAsyncGzipReadError', () => {
     it('returns true for NotReadableError', () => {
@@ -58,6 +72,20 @@ describe('gzip', () => {
 
       await expect(gzipCompress(RANDOM_TEST_INPUT, false, { rethrow: true })).rejects.toThrow()
       ;(globalThis as any).CompressionStream = CompressionStream
+    })
+
+    it('does not read input using Blob.stream', async () => {
+      const blobStream = Blob.prototype.stream
+      Blob.prototype.stream = jest.fn(() => {
+        throw new Error('Blob.stream should not be used')
+      })
+
+      try {
+        const compressed = await gzipCompress(API_TEST_INPUT, false, { rethrow: true })
+        expect(compressed).not.toBe(null)
+      } finally {
+        Blob.prototype.stream = blobStream
+      }
     })
 
     it('compressed random data should match node', async () => {

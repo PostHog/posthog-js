@@ -3,7 +3,12 @@
  * This API (as of 2025-05-07) is not available on React Native.
  */
 export function isGzipSupported(): boolean {
-  return 'CompressionStream' in globalThis
+  return (
+    'CompressionStream' in globalThis &&
+    'TextEncoder' in globalThis &&
+    'Response' in globalThis &&
+    typeof Response.prototype.blob === 'function'
+  )
 }
 
 export const isNativeAsyncGzipReadError = (error: unknown): boolean => {
@@ -31,15 +36,14 @@ export type GzipCompressOptions = {
  */
 export async function gzipCompress(input: string, isDebug = true, options?: GzipCompressOptions): Promise<Blob | null> {
   try {
-    // Turn the string into a stream using a Blob, and then compress it
-    const dataStream = new Blob([input], {
-      type: 'text/plain',
-    }).stream()
+    const compressedStream = new CompressionStream('gzip')
+    const writer = compressedStream.writable.getWriter()
 
-    const compressedStream = dataStream.pipeThrough(new CompressionStream('gzip'))
+    const writePromise = writer.write(new TextEncoder().encode(input)).then(() => writer.close())
+    const responsePromise = new Response(compressedStream.readable).blob()
 
-    // Using a Response to easily extract the readablestream value. Decoding into a string for fetch
-    return await new Response(compressedStream).blob()
+    const [compressed] = await Promise.all([responsePromise, writePromise])
+    return compressed
   } catch (error) {
     if (options?.rethrow) {
       throw error
