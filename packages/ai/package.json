@@ -59,7 +59,7 @@
     "@posthog/core": "workspace:*",
     "langchain": "^1.2.28",
     "openai": "^6.25.0",
-    "uuid": "^14.0.0",
+    "uuid": "^11.1.0",
     "zod": "^4.1.13"
   },
   "peerDependencies": {
