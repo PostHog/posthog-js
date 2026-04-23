@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.43.0
+
+### Minor Changes
+
+- [#3432](https://github.com/PostHog/posthog-js/pull/3432) [`1a8b727`](https://github.com/PostHog/posthog-js/commit/1a8b7277c50a42bbb3f736afd530ff1c3389a7de) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat(react-native): add `addTracingHeaders` option to inject `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` headers on outgoing `fetch` requests for linking LLM traces and session replays to PostHog sessions.
+  (2026-04-23)
+
+### Patch Changes
+
+- Updated dependencies [[`1a8b727`](https://github.com/PostHog/posthog-js/commit/1a8b7277c50a42bbb3f736afd530ff1c3389a7de)]:
+  - @posthog/core@1.27.0
+
 ## 4.42.4
 
 ### Patch Changes
