@@ -15,6 +15,7 @@
  *
  * @see web-vitals-with-attribution.ts
  */
+import '../extensions/web-vitals/polyfill'
 import { assignableWindow } from '../utils/globals'
 
 import { onINP, onLCP, onCLS, onFCP } from 'web-vitals'

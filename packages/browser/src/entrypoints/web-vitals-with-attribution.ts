@@ -16,6 +16,7 @@
  *
  * @see web-vitals.ts for the lighter, default bundle
  */
+import '../extensions/web-vitals/polyfill'
 import { assignableWindow } from '../utils/globals'
 
 import {
