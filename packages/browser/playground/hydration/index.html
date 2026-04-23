@@ -18,6 +18,11 @@
         console.log('[Framework] Framework bundle loaded');
     </script>
 
+    <!-- Simulate SSR-rendered JSON-LD, a common pattern that triggered the hydration mismatch. -->
+    <script id="jsonld-bundle" type="application/ld+json">
+        {"@context":"https://schema.org","@type":"WebPage","name":"SSR Hydration Test"}
+    </script>
+
     <script>
         // Capture any hydration-related console errors/warnings
         window.hydrationErrors = [];
@@ -79,7 +84,6 @@
         window.posthog.init('test-token', {
             api_host: 'https://localhost:1234',
             persistence: 'memory',
-            external_scripts_inject_target: 'head',
             bootstrap: {
                 distinctID: 'test-user'
             },

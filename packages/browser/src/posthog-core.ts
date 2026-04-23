@@ -190,7 +190,7 @@ const defaultsThatVaryByConfig = (
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
-    external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
+    external_scripts_inject_target: 'head',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
 })
 
