@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.30.0
+
+### Minor Changes
+
+- [#3457](https://github.com/PostHog/posthog-js/pull/3457) [`eadbcd7`](https://github.com/PostHog/posthog-js/commit/eadbcd7b15e48e6d04f7cac487df25db2f73e9a7) Thanks [@hpouillot](https://github.com/hpouillot)! - send relative file paths in frames
+  (2026-04-23)
+
 ## 5.29.7
 
 ### Patch Changes
