@@ -665,6 +665,20 @@ export interface PostHog {
      */
     loadToolbar(params: ToolbarParams): boolean
 
+    /**
+     * Returns whether the PostHog toolbar is currently loaded.
+     *
+     * @returns Whether the toolbar is loaded
+     */
+    isToolbarLoaded(): boolean
+
+    /**
+     * Hide the PostHog toolbar if it is currently loaded.
+     *
+     * @returns Whether the toolbar was hidden
+     */
+    hideToolbar(): boolean
+
     // ============================================================================
     // Page View
     // ============================================================================

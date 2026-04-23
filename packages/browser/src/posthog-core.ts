@@ -3339,6 +3339,32 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Returns whether the [toolbar](/docs/toolbar) is currently loaded.
+     *
+     * {@label Toolbar}
+     *
+     * @public
+     *
+     * @returns {boolean} Whether the toolbar is loaded
+     */
+    isToolbarLoaded(): boolean {
+        return this.toolbar?.isToolbarLoaded() ?? false
+    }
+
+    /**
+     * Hides the [toolbar](/docs/toolbar) if it is currently loaded.
+     *
+     * {@label Toolbar}
+     *
+     * @public
+     *
+     * @returns {boolean} Whether the toolbar was hidden
+     */
+    hideToolbar(): boolean {
+        return this.toolbar?.hideToolbar() ?? false
+    }
+
+    /**
      * Returns the value of a super property. Returns undefined if the property doesn't exist.
      *
      * {@label Identification}

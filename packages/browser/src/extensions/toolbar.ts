@@ -37,6 +37,25 @@ export class Toolbar implements Extension {
         return assignableWindow['ph_toolbar_state'] ?? ToolbarState.UNINITIALIZED
     }
 
+    isToolbarLoaded(): boolean {
+        return !!document?.getElementById(TOOLBAR_ID)
+    }
+
+    hideToolbar(): boolean {
+        const toolbar = document?.getElementById(TOOLBAR_ID)
+        const container = toolbar?.closest('.toolbar-global-fade-container')
+
+        if (!toolbar) {
+            return false
+        }
+
+        container?.remove()
+        toolbar.remove()
+        window.localStorage.removeItem(LOCALSTORAGE_KEY)
+
+        return true
+    }
+
     initialize(): boolean {
         return this.maybeLoadToolbar()
     }
