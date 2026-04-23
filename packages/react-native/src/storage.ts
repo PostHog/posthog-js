@@ -1,7 +1,8 @@
 import { isPromise } from '@posthog/core'
 import { PostHogCustomStorage } from './types'
 
-const POSTHOG_STORAGE_KEY = '.posthog-rn.json'
+export const POSTHOG_MAIN_STORAGE_KEY = '.posthog-rn.json'
+export const POSTHOG_LOGS_STORAGE_KEY = '.posthog-rn-logs.json'
 const POSTHOG_STORAGE_VERSION = 'v1'
 
 type PostHogStorageContents = { [key: string]: any }
@@ -10,12 +11,14 @@ export class PostHogRNStorage {
   memoryCache: PostHogStorageContents = {}
   storage: PostHogCustomStorage
   preloadPromise: Promise<void> | undefined
+  private _storageKey: string
   private _pendingPromises: Set<Promise<void>> = new Set()
 
-  constructor(storage: PostHogCustomStorage) {
+  constructor(storage: PostHogCustomStorage, storageKey: string) {
     this.storage = storage
+    this._storageKey = storageKey
 
-    const preloadResult = this.storage.getItem(POSTHOG_STORAGE_KEY)
+    const preloadResult = this.storage.getItem(this._storageKey)
 
     if (isPromise(preloadResult)) {
       this.preloadPromise = preloadResult.then((res) => {
@@ -51,7 +54,7 @@ export class PostHogRNStorage {
       content: this.memoryCache,
     }
 
-    const result = this.storage.setItem(POSTHOG_STORAGE_KEY, JSON.stringify(payload))
+    const result = this.storage.setItem(this._storageKey, JSON.stringify(payload))
 
     // Track async persist operations so we can wait for them if needed
     if (isPromise(result)) {
@@ -104,7 +107,7 @@ export class PostHogRNStorage {
 }
 
 export class PostHogRNSyncMemoryStorage extends PostHogRNStorage {
-  constructor() {
+  constructor(storageKey: string) {
     const cache: { [key: string]: any | undefined } = {}
     const storage = {
       getItem: (key: string) => cache[key],
@@ -113,6 +116,6 @@ export class PostHogRNSyncMemoryStorage extends PostHogRNStorage {
       },
     }
 
-    super(storage)
+    super(storage, storageKey)
   }
 }

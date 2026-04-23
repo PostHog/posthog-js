@@ -17,7 +17,13 @@ import {
   patchFetchForTracingHeaders,
   FeatureFlagValue,
 } from '@posthog/core'
-import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
+import {
+  PostHogRNStorage,
+  PostHogRNSyncMemoryStorage,
+  POSTHOG_MAIN_STORAGE_KEY,
+  POSTHOG_LOGS_STORAGE_KEY,
+} from './storage'
+import { PostHogLogs } from './logs'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
@@ -111,6 +117,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
 export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']
   private _storage: PostHogRNStorage
+  private _logsStorage: PostHogRNStorage
   private _appProperties: PostHogCustomAppProperties = {}
   private _currentSessionId?: string | undefined
   private _enableSessionReplay?: boolean
@@ -119,6 +126,7 @@ export class PostHog extends PostHogCore {
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
+  private _logs: PostHogLogs
   private _surveysReadyPromise: Promise<void> | null = null
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
@@ -172,6 +180,35 @@ export class PostHog extends PostHogCore {
         ? options.customAppProperties(getAppProperties())
         : options?.customAppProperties || getAppProperties()
 
+    // Resolve storage and construct the logs module BEFORE registering the
+    // AppState listener — the listener body references `this._logs` and
+    // `this._storage`, and while AppState.addEventListener('change') only
+    // fires on changes (not at registration), the dependency direction
+    // should be explicit: dependencies first, callbacks that use them second.
+    let storagePromise: Promise<void> | undefined
+
+    let theStorage: PostHogCustomStorage | undefined
+    if (this._persistence === 'file') {
+      theStorage = options?.customStorage ?? buildOptimisticAsyncStorage()
+    }
+
+    if (theStorage) {
+      this._storage = new PostHogRNStorage(theStorage, POSTHOG_MAIN_STORAGE_KEY)
+      this._logsStorage = new PostHogRNStorage(theStorage, POSTHOG_LOGS_STORAGE_KEY)
+      storagePromise = this._storage.preloadPromise
+    } else {
+      this._storage = new PostHogRNSyncMemoryStorage(POSTHOG_MAIN_STORAGE_KEY)
+      this._logsStorage = new PostHogRNSyncMemoryStorage(POSTHOG_LOGS_STORAGE_KEY)
+    }
+
+    if (storagePromise) {
+      storagePromise.catch((error) => {
+        console.error('PostHog storage initialization failed:', error)
+      })
+    }
+
+    this._logs = new PostHogLogs(this, undefined, this._logger, this._logsStorage)
+
     AppState.addEventListener('change', (state) => {
       // ignore unknown state (usually initial state, the app might not be ready yet)
       if (state === 'unknown') {
@@ -181,32 +218,19 @@ export class PostHog extends PostHogCore {
       void this.flush().catch(async (err) => {
         await logFlushError(err)
       })
+      // Drain pending logs-storage writes to disk before the OS may suspend
+      // the process. The inline .catch() prevents an unhandled rejection if
+      // flushLogs ever throws; the actual diagnostic happens inside
+      // waitForPersist.
+      void this.flushLogs().catch(() => {
+        /* swallowed: waitForPersist already logs internally */
+      })
 
       if (state === 'active') {
         // rotate session id if needed (expired either 30 minutes inactive or max duration 24 hours)
         this.getSessionId()
       }
     })
-
-    let storagePromise: Promise<void> | undefined
-
-    let theStorage: PostHogCustomStorage | undefined
-    if (this._persistence === 'file') {
-      theStorage = options?.customStorage ?? buildOptimisticAsyncStorage()
-    }
-
-    if (theStorage) {
-      this._storage = new PostHogRNStorage(theStorage)
-      storagePromise = this._storage.preloadPromise
-    } else {
-      this._storage = new PostHogRNSyncMemoryStorage()
-    }
-
-    if (storagePromise) {
-      storagePromise.catch((error) => {
-        console.error('PostHog storage initialization failed:', error)
-      })
-    }
 
     const initAfterStorage = (): void => {
       // reset session id on app restart
@@ -331,12 +355,24 @@ export class PostHog extends PostHogCore {
     this._errorTracking.onRemoteConfig(response.errorTracking)
   }
 
+  /**
+   * Resolves the storage instance for a given persisted-property key.
+   * `LogsQueue` routes to `_logsStorage` (dedicated `.posthog-rn-logs.json`
+   * file); every other key routes to the main `_storage`. Single source of
+   * truth for routing — extending to new logs-scoped keys is a one-line
+   * edit here.
+   */
+  private _storageForKey(key: PostHogPersistedProperty): PostHogRNStorage {
+    return key === PostHogPersistedProperty.LogsQueue ? this._logsStorage : this._storage
+  }
+
   getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined {
-    return this._storage.getItem(key) as T | undefined
+    return this._storageForKey(key).getItem(key) as T | undefined
   }
 
   setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
-    return value !== null ? this._storage.setItem(key, value) : this._storage.removeItem(key)
+    const storage = this._storageForKey(key)
+    return value !== null ? storage.setItem(key, value) : storage.removeItem(key)
   }
 
   /**
@@ -543,6 +579,19 @@ export class PostHog extends PostHogCore {
    */
   flush(): Promise<void> {
     return super.flush()
+  }
+
+  /**
+   * Drains any pending logs-storage writes to disk.
+   *
+   * TODO: remove `private` to expose this as part of the
+   * customer-facing API. For now it's used internally by the AppState
+   * handler and accessible in tests via `(posthog as any).flushLogs()`.
+   *
+   * @internal
+   */
+  private flushLogs(): Promise<void> {
+    return this._logs.flushStorage()
   }
 
   /**

@@ -20,7 +20,14 @@ export type {
 import type { Logger as CaptureLoggerType } from '@posthog/types'
 export type CaptureLogger = CaptureLoggerType
 
-import type { LogAttributeValue, CaptureLogOptions } from '@posthog/types'
+import type { LogAttributeValue, CaptureLogOptions, OtlpLogRecord } from '@posthog/types'
+
+// Wrapper around OtlpLogRecord for queue entries. Parallels events' queue
+// item shape (`{ message }`) — future additions like `retryCount` or
+// `enqueuedAt` can be added without migrating the queue format.
+export interface BufferedLogEntry {
+  record: OtlpLogRecord
+}
 
 // Public configuration for the logs module. Mobile defaults diverge from
 // browser where cellular radio cost or platform constraints apply.
