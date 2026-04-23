@@ -117,13 +117,14 @@ export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 export async function retryUntilResults(
     operation,
     target_results,
-    { deadline = undefined, polling_interval_seconds = 30, max_allowed_api_errors = 5 } = {}
+    { deadline = undefined, polling_interval_seconds = 30, max_allowed_api_errors = 5, validate } = {}
 ) {
     const start = Date.now()
     deadline = deadline ?? start + 10 * 60 * 1000 // default to 10 minutes
     let api_errors = 0
     let attempts = 0
     let last_api_error = null
+    let last_validation_error = null
     let elapsedSeconds = 0
 
     do {
@@ -138,7 +139,20 @@ export async function retryUntilResults(
         }
         if (results) {
             elapsedSeconds = Math.floor((Date.now() - start) / 1000)
-            if (results.length >= target_results) {
+
+            if (validate) {
+                try {
+                    await validate(results)
+                    log(
+                        `Validated results after ${elapsedSeconds} seconds (attempt ${attempts}, resultCount ${results.length})`
+                    )
+                    return results
+                } catch (err) {
+                    last_validation_error = err
+                    const message = err instanceof Error ? err.message : String(err)
+                    log(`Validation failed with ${results.length} results (attempt ${attempts}): ${message}`)
+                }
+            } else if (results.length >= target_results) {
                 log(
                     `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt ${attempts})`
                 )
@@ -153,6 +167,15 @@ export async function retryUntilResults(
     if (api_errors >= max_allowed_api_errors && last_api_error) {
         throw last_api_error
     }
+
+    if (last_validation_error) {
+        const message =
+            last_validation_error instanceof Error ? last_validation_error.message : String(last_validation_error)
+        throw new Error(
+            `Timed out after ${elapsedSeconds} seconds waiting for validated results (attempt ${attempts}). Last validation error: ${message}`
+        )
+    }
+
     throw new Error(`Timed out after ${elapsedSeconds} seconds (attempt ${attempts})`)
 }
 
