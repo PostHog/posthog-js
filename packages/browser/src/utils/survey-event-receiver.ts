@@ -30,6 +30,10 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
         return logger
     }
 
+    protected _setActivatedItems(eligibleItems: string[]): void {
+        this._instance?.persistence?.register({ [SURVEYS_ACTIVATED]: eligibleItems })
+    }
+
     protected _isItemPermanentlyIneligible(): boolean {
         // Surveys have complex eligibility rules checked at display time
         // For now, we don't filter at activation time

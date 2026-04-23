@@ -51,6 +51,7 @@ import {
     SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_REMOTE_CONFIG,
+    SESSION_RECORDING_START_REASON,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
@@ -763,13 +764,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return parsedConfig as SessionRecordingPersistedConfig
     }
 
-    private _checkOverride(key: string, overrideFunction: () => void): void {
+    private _checkOverride(key: string, overrideFunction: () => void, clearOverride: () => void): void {
         const overrideFlag: boolean = this._instance.get_property(key) as boolean
         if (overrideFlag) {
             overrideFunction()
 
             // Clean up the override flag after applying it
-            this._instance.persistence?.unregister(key)
+            clearOverride()
         }
     }
 
@@ -824,18 +825,34 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail)
         )
 
-        this._checkOverride(SESSION_RECORDING_OVERRIDE_SAMPLING, () => {
-            this.overrideSampling()
-        })
-        this._checkOverride(SESSION_RECORDING_OVERRIDE_LINKED_FLAG, () => {
-            this.overrideLinkedFlag()
-        })
-        this._checkOverride(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER, () => {
-            this.overrideTrigger('event')
-        })
-        this._checkOverride(SESSION_RECORDING_OVERRIDE_URL_TRIGGER, () => {
-            this.overrideTrigger('url')
-        })
+        this._checkOverride(
+            SESSION_RECORDING_OVERRIDE_SAMPLING,
+            () => {
+                this.overrideSampling()
+            },
+            () => this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_SAMPLING)
+        )
+        this._checkOverride(
+            SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
+            () => {
+                this.overrideLinkedFlag()
+            },
+            () => this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_LINKED_FLAG)
+        )
+        this._checkOverride(
+            SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
+            () => {
+                this.overrideTrigger('event')
+            },
+            () => this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER)
+        )
+        this._checkOverride(
+            SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
+            () => {
+                this.overrideTrigger('url')
+            },
+            () => this._instance.persistence?.unregister(SESSION_RECORDING_OVERRIDE_URL_TRIGGER)
+        )
 
         // Let strategy make sampling decisions
         this._strategy.makeSamplingDecisions(this.sessionId)
@@ -1425,7 +1442,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _reportStarted(startReason: SessionStartReason, tagPayload?: Record<string, any>) {
         this._instance.register_for_session({
-            $session_recording_start_reason: startReason,
+            [SESSION_RECORDING_START_REASON]: startReason,
         })
         logger.info(startReason.replace('_', ' '), tagPayload)
         if (startReason !== 'session_id_changed') {

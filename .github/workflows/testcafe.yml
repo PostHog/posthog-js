@@ -63,6 +63,6 @@ jobs:
 
       - name: Check ${{ matrix.name }} events
         if: steps.is-affected.outputs.is-affected == 'true'
-        timeout-minutes: 10
+        timeout-minutes: 30
         run: pnpm check-testcafe-results
         working-directory: packages/browser

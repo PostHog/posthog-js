@@ -13,6 +13,9 @@ import {
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
+    SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS,
+    SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
+    SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
     STORED_PERSON_PROPERTIES_KEY,
 } from '../../../constants'
 import {
@@ -154,7 +157,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
         }
 
         this._instance.register_for_session({
-            $sdk_debug_replay_remote_trigger_matching_config: config.triggerMatchType,
+            [SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG]: config.triggerMatchType,
         })
 
         this._urlTriggerMatching.onConfig(config)
@@ -310,8 +313,8 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         this._setupTriggerGroups(config.triggerGroups)
 
         this._instance.register_for_session({
-            $sdk_debug_replay_remote_trigger_matching_config: 'v2_trigger_groups',
-            $sdk_debug_replay_trigger_groups_count: config.triggerGroups.length,
+            [SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG]: 'v2_trigger_groups',
+            [SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT]: config.triggerGroups.length,
         })
 
         // V2 needs URL blocklist (but not URL triggers)
@@ -528,7 +531,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         }
 
         this._instance.register_for_session({
-            $sdk_debug_replay_matched_recording_trigger_groups: recordingGroups,
+            [SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS]: recordingGroups,
         })
     }
 

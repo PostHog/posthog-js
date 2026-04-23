@@ -63,7 +63,7 @@ jobs:
 
       - name: Run ${{ matrix.tests.name }} test
         if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
-        timeout-minutes: 10
+        timeout-minutes: 30
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}

@@ -47,6 +47,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     protected abstract _getItems(callback: (items: T[]) => void): void
     protected abstract _cancelPendingItem(itemId: string): void
     protected abstract _getLogger(): ReturnType<typeof createLogger>
+    protected abstract _setActivatedItems(eligibleItems: string[]): void
     /** Check if item is permanently ineligible (e.g. completed/dismissed). Skip adding to activated list. */
     protected abstract _isItemPermanentlyIneligible(itemId?: string): boolean
 
@@ -252,7 +253,6 @@ export abstract class EventReceiver<T extends EventTriggerable> {
 
     private _updateActivatedItems(activatedItems: string[]) {
         const logger = this._getLogger()
-        const activatedKey = this._getActivatedKey()
         // Filter out permanently ineligible items and remove duplicates
         const eligibleItems = [...new Set(activatedItems)].filter(
             (itemId) => !this._isItemPermanentlyIneligible(itemId)
@@ -261,9 +261,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             activatedItems: eligibleItems,
         })
 
-        this._instance?.persistence?.register({
-            [activatedKey]: eligibleItems,
-        })
+        this._setActivatedItems(eligibleItems)
     }
 
     getActivatedIds(): string[] {

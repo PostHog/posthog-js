@@ -2,15 +2,19 @@
 import { PostHogPersistence } from '../posthog-persistence'
 import {
     DEVICE_ID,
+    ENABLED_FEATURE_FLAGS,
     INITIAL_PERSON_INFO,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
-    PERSISTENCE_RESERVED_PROPERTIES,
     PRODUCT_TOURS,
     PRODUCT_TOURS_ACTIVATED,
     SESSION_ID,
     SESSION_RECORDING_REMOTE_CONFIG,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+    SURVEYS_ACTIVATED,
     USER_STATE,
 } from '../constants'
+import { PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -21,6 +25,51 @@ import Mock = jest.Mock
 
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
+
+const PERSISTENCE_RESERVED_PROPERTIES = Object.keys(PERSISTENCE_KEY_POLICY).filter(
+    (key) => PERSISTENCE_KEY_POLICY[key].exposure !== 'event'
+)
+
+const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
+    '$people_distinct_id',
+    '__alias',
+    '__cmpns',
+    '__timers',
+    '$session_recording_enabled_server_side',
+    '$heatmaps_enabled_server_side',
+    '$sesid',
+    '$enabled_feature_flags',
+    '$error_tracking_suppression_rules',
+    '$user_state',
+    '$early_access_features',
+    '$feature_flag_details',
+    '$stored_group_properties',
+    '$stored_person_properties',
+    '$surveys',
+    '$flag_call_reported',
+    '$flag_call_reported_session_id',
+    '$feature_flag_errors',
+    '$feature_flag_evaluated_at',
+    '$client_session_props',
+    '$capture_rate_limit',
+    '$initial_campaign_params',
+    '$initial_referrer_info',
+    '$epp',
+    '$initial_person_info',
+    'ph_product_tours',
+    '$product_tours_activated',
+    '$product_tours_enabled_server_side',
+    '$session_recording_remote_config',
+    '$override_feature_flag_payloads',
+])
+
+const LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS = [...LEGACY_RESERVED_PERSISTENCE_KEYS].filter(
+    (key) => key !== ENABLED_FEATURE_FLAGS
+)
+
+const LEGACY_EVENT_VISIBLE_SDK_PERSISTENCE_KEYS = Object.keys(PERSISTENCE_KEY_POLICY).filter(
+    (key) => key !== ENABLED_FEATURE_FLAGS && !LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
+)
 
 function makePostHogConfig(name: string, persistenceMode: string): PostHogConfig {
     return <PostHogConfig>{
@@ -264,6 +313,36 @@ describe('persistence', () => {
         ])('should not include reserved property %s in event properties', (key, value) => {
             library.register({ [key]: value })
             expect(library.props[key]).toEqual(value)
+            expect(library.properties()).toEqual({})
+        })
+
+        it.each([
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS, { 'flag-a': '{"key":"value"}' }],
+            [SURVEYS_ACTIVATED, ['survey-1']],
+        ])('should include explicitly event-visible SDK property %s in event properties', (key, value) => {
+            library.register({ [key]: value })
+            expect(library.properties()).toEqual({ [key]: value })
+        })
+
+        it.each(LEGACY_EVENT_VISIBLE_SDK_PERSISTENCE_KEYS)(
+            'keeps legacy event-visible SDK persistence property %s visible in event properties',
+            (key) => {
+                library.register({ [key]: 'test-value' })
+                expect(library.properties()).toEqual({ [key]: 'test-value' })
+            }
+        )
+
+        it.each(LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS)(
+            'keeps legacy hidden SDK persistence property %s excluded from event properties',
+            (key) => {
+                library.register({ [key]: 'test-value' })
+                expect(library.properties()).toEqual({})
+            }
+        )
+
+        it('keeps SDK persistence keys matched by prefix policy hidden from event properties', () => {
+            const key = `${SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX}abc123`
+            library.register({ [key]: 'session-id' })
             expect(library.properties()).toEqual({})
         })
 
