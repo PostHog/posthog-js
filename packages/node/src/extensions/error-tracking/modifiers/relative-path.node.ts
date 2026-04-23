@@ -10,7 +10,6 @@ export function createRelativePathModifier(basePath: string = process.cwd()) {
         continue
       }
       if (isAbsolute(frame.filename)) {
-        frame.abs_path = frame.filename
         const normalizedFilename = sep === '\\' ? frame.filename.replace(/\\/g, '/') : frame.filename
         frame.filename = relative(normalizedBase, normalizedFilename)
         if (sep === '\\') {

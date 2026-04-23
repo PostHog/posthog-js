@@ -21,7 +21,7 @@ describe('relative path modifier', () => {
     const result = await modifier(frames)
 
     expect(result[0].filename).toBe('src/index.js')
-    expect(result[0].abs_path).toBe('/app/src/index.js')
+    expect(result[0].abs_path).toBeUndefined()
   })
 
   it('should handle nested paths', async () => {
@@ -31,7 +31,7 @@ describe('relative path modifier', () => {
     const result = await modifier(frames)
 
     expect(result[0].filename).toBe('src/lib/utils/helpers.js')
-    expect(result[0].abs_path).toBe('/app/src/lib/utils/helpers.js')
+    expect(result[0].abs_path).toBeUndefined()
   })
 
   it('should handle node_modules paths', async () => {
@@ -41,7 +41,7 @@ describe('relative path modifier', () => {
     const result = await modifier(frames)
 
     expect(result[0].filename).toBe('node_modules/express/index.js')
-    expect(result[0].abs_path).toBe('/app/node_modules/express/index.js')
+    expect(result[0].abs_path).toBeUndefined()
     expect(result[0].in_app).toBe(false)
   })
 
@@ -105,6 +105,6 @@ describe('relative path modifier', () => {
     const result = await modifier(frames)
 
     expect(result[0].filename).toBe('../other/project/file.js')
-    expect(result[0].abs_path).toBe('/other/project/file.js')
+    expect(result[0].abs_path).toBeUndefined()
   })
 })
