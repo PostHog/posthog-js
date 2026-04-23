@@ -6,6 +6,8 @@ permissions:
 on:
     push:
         branches: [main]
+        paths:
+            - '.changeset/**'
     workflow_dispatch:
 
 # Concurrency control: only one release process can run at a time
