@@ -138,7 +138,14 @@ export class Toolbar implements Extension {
             logger.warn('No toolbar load function found')
             return
         }
-        loadFn(params, this.instance)
+        // The toolbar load function is defined by the separately-hosted toolbar bundle and may throw
+        // synchronously (e.g. a rejected fetch in an ad-blocked or offline environment). Catch here so
+        // the failure does not bubble up through the script onload handler as an unhandled exception.
+        try {
+            loadFn(params, this.instance)
+        } catch (e) {
+            logger.error('ph_load_toolbar threw', e)
+        }
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
