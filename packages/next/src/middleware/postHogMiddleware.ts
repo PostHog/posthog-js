@@ -5,7 +5,7 @@ import type { NextRequest } from 'next/server.js'
 import { getPostHogCookieName, readPostHogCookie, serializePostHogCookie, isOptedOut } from '../shared/cookie.js'
 import { generateAnonymousId } from '../shared/identity.js'
 import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
-import { COOKIE_MAX_AGE_SECONDS, DEFAULT_API_HOST, DEFAULT_INGEST_PATH } from '../shared/constants.js'
+import { COOKIE_MAX_AGE_SECONDS, DEFAULT_INGEST_PATH } from '../shared/constants.js'
 
 export interface PostHogProxyOptions {
     /** Path prefix to intercept. Default: '/ingest'. */

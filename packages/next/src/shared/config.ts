@@ -1,6 +1,6 @@
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
-import { DEFAULT_API_HOST } from './constants'
+import { DEFAULT_API_HOST } from './constants.js'
 
 /**
  * Configuration for the client-side PostHog provider.
