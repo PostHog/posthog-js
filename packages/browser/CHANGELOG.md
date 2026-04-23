@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.371.1
+
+### Patch Changes
+
+- [#3425](https://github.com/PostHog/posthog-js/pull/3425) [`2da17e8`](https://github.com/PostHog/posthog-js/commit/2da17e8c94b2705cb5852a9fe993925bf1e24b55) Thanks [@marandaneto](https://github.com/marandaneto)! - Classify SDK-owned persistence keys with an explicit event exposure policy so new internal persistence state must be intentionally marked as event-visible, hidden, or derived.
+  (2026-04-23)
+- Updated dependencies []:
+    - @posthog/types@1.371.1
+
 ## 1.371.0
 
 ### Patch Changes
