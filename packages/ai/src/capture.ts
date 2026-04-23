@@ -2,6 +2,7 @@ import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { sendEventToPosthog, sendEventWithErrorToPosthog, AIEvent } from './utils'
 import type { TokenUsage } from './types'
+import type { MonitoringParams } from './utils'
 
 export interface CaptureAiGenerationOptions {
   /** Distinct ID of the user */
@@ -24,7 +25,7 @@ export interface CaptureAiGenerationOptions {
   timeToFirstToken?: number
   /** The base URL of the API */
   baseURL?: string
-  /** HTTP status code of the response */
+  /** HTTP status code of the response. Ignored if an error is provided. */
   httpStatus?: number
   /** Any error that occurred during the generation */
   error?: unknown
@@ -67,7 +68,7 @@ export const captureAiGeneration = async (
     privacyMode = false,
   } = options
 
-  const params: any = {
+  const params: MonitoringParams = {
     posthogProperties: properties,
     posthogGroups: groups,
     posthogPrivacyMode: privacyMode,
@@ -88,7 +89,7 @@ export const captureAiGeneration = async (
       baseURL,
       stopReason,
       tools,
-      params,
+      params: params as any,
       captureImmediate,
       error,
     })
@@ -109,7 +110,7 @@ export const captureAiGeneration = async (
       httpStatus,
       stopReason,
       tools,
-      params,
+      params: params as any,
       captureImmediate,
     })
   }
