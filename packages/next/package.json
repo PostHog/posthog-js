@@ -45,8 +45,9 @@
     ],
     "scripts": {
         "clean": "rimraf dist",
-        "build": "tsgo -p tsconfig.build.json",
+        "build": "tsgo -p tsconfig.build.json && pnpm check:esm-specifiers",
         "dev": "tsgo -p tsconfig.build.json --watch",
+        "check:esm-specifiers": "node ./scripts/check-relative-esm-specifiers.mjs",
         "test:unit": "jest",
         "test": "pnpm test:unit",
         "lint": "eslint src",
@@ -56,6 +57,7 @@
     },
     "dependencies": {
         "@posthog/core": "workspace:*",
+        "@posthog/react": "workspace:*",
         "posthog-js": "workspace:*",
         "posthog-node": "workspace:*",
         "server-only": "^0.0.1"

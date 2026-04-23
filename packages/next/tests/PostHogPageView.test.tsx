@@ -4,13 +4,13 @@ import { PostHogPageView } from '../src/client/PostHogPageView'
 
 const mockCapture = jest.fn()
 const mockUsePostHog = jest.fn(() => ({ capture: mockCapture }))
-jest.mock('posthog-js/react', () => ({
+jest.mock('@posthog/react', () => ({
     usePostHog: () => mockUsePostHog(),
 }))
 
 let mockPathname = '/initial'
 let mockSearchParams = new URLSearchParams()
-jest.mock('next/navigation', () => ({
+jest.mock('next/navigation.js', () => ({
     usePathname: () => mockPathname,
     useSearchParams: () => mockSearchParams,
 }))

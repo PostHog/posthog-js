@@ -49,7 +49,7 @@ function createMockHeaders(entries: Record<string, string>) {
 
 const mockHeaderStore = createMockHeaders({})
 
-jest.mock('next/headers', () => ({
+jest.mock('next/headers.js', () => ({
     cookies: jest.fn(() => Promise.resolve(mockCookieStore)),
     headers: jest.fn(() => Promise.resolve(mockHeaderStore)),
 }))
@@ -73,7 +73,7 @@ jest.mock('../src/server/nodeClientCache', () => ({
 }))
 
 import { getPostHog } from '../src/server/getPostHog'
-import { cookies, headers } from 'next/headers'
+import { cookies, headers } from 'next/headers.js'
 
 describe('getPostHog', () => {
     const originalEnv = process.env

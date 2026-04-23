@@ -1,7 +1,7 @@
 import React, { useContext } from 'react'
 import { render, screen } from '@testing-library/react'
 import { ClientPostHogProvider } from '../src/client/ClientPostHogProvider'
-import { PostHogContext, useFeatureFlagEnabled } from 'posthog-js/react'
+import { PostHogContext, useFeatureFlagEnabled } from '@posthog/react'
 import posthogJs from 'posthog-js'
 
 jest.mock('posthog-js', () => ({
