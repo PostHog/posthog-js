@@ -81,7 +81,11 @@ export interface OtlpLogsPayload {
 export interface LogSdkContext {
     distinctId?: string
     sessionId?: string
+    /** Web-only — current page URL */
     currentUrl?: string
+    /** Mobile-only — current screen / view name */
+    screenName?: string
+    /** Mobile-only — app foreground/background state at capture time */
+    appState?: 'foreground' | 'background'
     activeFeatureFlags?: string[]
-    lib: string
 }

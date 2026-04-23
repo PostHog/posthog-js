@@ -51,6 +51,9 @@
       "import": "./dist/utils/index.mjs"
     }
   },
+  "dependencies": {
+    "@posthog/types": "workspace:*"
+  },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",

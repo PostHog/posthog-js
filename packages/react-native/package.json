@@ -40,7 +40,8 @@
     "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
   },
   "dependencies": {
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:*",
+    "@posthog/types": "workspace:*"
   },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
