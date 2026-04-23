@@ -2,7 +2,9 @@ import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { relative, isAbsolute, sep } from 'path'
 
 export function createRelativePathModifier(basePath: string = process.cwd()) {
-  const normalizedBase = sep === '\\' ? basePath.replace(/\\/g, '/') : basePath
+  const isWindows = sep === '\\'
+  const toUnix = (p: string) => (isWindows ? p.replace(/\\/g, '/') : p)
+  const normalizedBase = toUnix(basePath)
 
   return async (frames: CoreErrorTracking.StackFrame[]): Promise<CoreErrorTracking.StackFrame[]> => {
     for (const frame of frames) {
@@ -10,11 +12,7 @@ export function createRelativePathModifier(basePath: string = process.cwd()) {
         continue
       }
       if (isAbsolute(frame.filename)) {
-        const normalizedFilename = sep === '\\' ? frame.filename.replace(/\\/g, '/') : frame.filename
-        frame.filename = relative(normalizedBase, normalizedFilename)
-        if (sep === '\\') {
-          frame.filename = frame.filename.replace(/\\/g, '/')
-        }
+        frame.filename = toUnix(relative(normalizedBase, toUnix(frame.filename)))
       }
     }
     return frames
