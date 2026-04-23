@@ -2,6 +2,7 @@ export * from '../exports'
 
 import { createModulerModifier } from '../extensions/error-tracking/modifiers/module.node'
 import { addSourceContext } from '../extensions/error-tracking/modifiers/context-lines.node'
+import { createRelativePathModifier } from '../extensions/error-tracking/modifiers/relative-path.node'
 import ErrorTracking from '../extensions/error-tracking'
 
 import { PostHogBackendClient } from '../client'
@@ -17,7 +18,7 @@ ErrorTracking.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuil
     new CoreErrorTracking.PrimitiveCoercer(),
   ],
   CoreErrorTracking.createStackParser('node:javascript', CoreErrorTracking.nodeStackLineParser),
-  [createModulerModifier(), addSourceContext]
+  [createModulerModifier(), addSourceContext, createRelativePathModifier()]
 )
 
 export class PostHog extends PostHogBackendClient {

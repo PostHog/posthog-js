@@ -1,6 +1,7 @@
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { createModulerModifier } from '@/extensions/error-tracking/modifiers/module.node'
 import { addSourceContext } from '@/extensions/error-tracking/modifiers/context-lines.node'
+import { createRelativePathModifier } from '@/extensions/error-tracking/modifiers/relative-path.node'
 
 describe('error conversion', () => {
   const errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuilder(
@@ -12,7 +13,7 @@ describe('error conversion', () => {
       new CoreErrorTracking.PrimitiveCoercer(),
     ],
     CoreErrorTracking.createStackParser('node:javascript', CoreErrorTracking.nodeStackLineParser),
-    [createModulerModifier(), addSourceContext]
+    [createModulerModifier(), addSourceContext, createRelativePathModifier()]
   )
 
   async function getExceptionList(error: unknown): Promise<CoreErrorTracking.ErrorProperties['$exception_list']> {
