@@ -102,6 +102,30 @@ describe('gzip', () => {
       }
     })
 
+    it('aborts the compression writer when writing input fails', async () => {
+      const CompressionStream = globalThis.CompressionStream
+      const writeError = new Error('write failed')
+      const abort = jest.fn(() => Promise.resolve())
+
+      ;(globalThis as any).CompressionStream = jest.fn(() => ({
+        writable: {
+          getWriter: () => ({
+            write: () => Promise.reject(writeError),
+            close: jest.fn(),
+            abort,
+          }),
+        },
+        readable: new ReadableStream(),
+      }))
+
+      try {
+        await expect(gzipCompress(API_TEST_INPUT, false, { rethrow: true })).rejects.toBe(writeError)
+        expect(abort).toHaveBeenCalledWith(writeError)
+      } finally {
+        ;(globalThis as any).CompressionStream = CompressionStream
+      }
+    })
+
     it('compressed random data should match node', async () => {
       const compressed = await gzipCompress(RANDOM_TEST_INPUT)
       expect(compressed).not.toBe(null)

@@ -39,7 +39,17 @@ export async function gzipCompress(input: string, isDebug = true, options?: Gzip
     const compressedStream = new CompressionStream('gzip')
     const writer = compressedStream.writable.getWriter()
 
-    const writePromise = writer.write(new TextEncoder().encode(input)).then(() => writer.close())
+    const writePromise = writer
+      .write(new TextEncoder().encode(input))
+      .then(() => writer.close())
+      .catch(async (err) => {
+        try {
+          await writer.abort(err)
+        } catch {
+          // Ignore abort failures and rethrow the original compression error below.
+        }
+        throw err
+      })
     const responsePromise = new Response(compressedStream.readable).blob()
 
     const [compressed] = await Promise.all([responsePromise, writePromise])
