@@ -158,8 +158,11 @@ export function autocapturePropertiesForElement(
     let curEl = target
     while (curEl.parentNode && !isTag(curEl, 'body')) {
         if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+            // Detached / programmatic shadow roots can have host === null; bail out to avoid dereferencing null in the next iteration.
+            const host = (curEl.parentNode as ShadowRoot).host
+            if (!isElementNode(host)) break
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         targetElementList.push(curEl.parentNode as Element)

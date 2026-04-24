@@ -1019,6 +1019,22 @@ describe('Autocapture system', () => {
             expect(props['$event_type']).toBe('click')
         })
 
+        it('does not throw when a click event bubbles out of a detached shadow root with a null host', () => {
+            // Programmatic / detached shadow roots can have host === null; the DOM-walking loop
+            // must bail out instead of dereferencing null on the next iteration.
+            const button = document.createElement('a')
+            const orphanFragment = document.createDocumentFragment()
+            Object.defineProperty(orphanFragment, 'host', { value: null, configurable: true })
+            Object.defineProperty(button, 'parentNode', { value: orphanFragment, configurable: true })
+
+            const e = makeMouseEvent({
+                target: button,
+                composedPath: () => [button],
+            })
+
+            expect(() => autocapture['_captureEvent'](e)).not.toThrow()
+        })
+
         it('should never capture an element with `ph-no-capture` class', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')

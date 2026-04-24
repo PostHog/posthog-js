@@ -240,8 +240,11 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
     while (curEl.parentNode && !isTag(curEl, 'body')) {
         // If element is a shadow root, we skip it
         if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+            // Detached / programmatic shadow roots can have host === null; bail out to avoid dereferencing null in the next iteration.
+            const host = (curEl.parentNode as ShadowRoot).host
+            if (!isElementNode(host)) break
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         const parentNode = getParentElement(curEl)
