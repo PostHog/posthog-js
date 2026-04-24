@@ -1,5 +1,13 @@
 # @posthog/convex
 
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [[`daf028d`](https://github.com/PostHog/posthog-js/commit/daf028d553f756b9f58c01b848ad2d431239458b)]:
+  - @posthog/core@1.27.2
+  - posthog-node@5.30.1
+
 ## 0.2.8
 
 ### Patch Changes

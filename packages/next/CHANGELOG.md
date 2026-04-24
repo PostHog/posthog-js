@@ -1,5 +1,16 @@
 # @posthog/next
 
+## 0.4.27
+
+### Patch Changes
+
+- [#3428](https://github.com/PostHog/posthog-js/pull/3428) [`afc7655`](https://github.com/PostHog/posthog-js/commit/afc76553ae9de5973fc7d59738342bbb491dfb27) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix native ESM module resolution in `@posthog/next` so it can be imported from Vitest and other Node ESM environments.
+  (2026-04-24)
+- Updated dependencies [[`61cf83e`](https://github.com/PostHog/posthog-js/commit/61cf83efbd0dd846ace9281b001daa0d633fcd8c), [`daf028d`](https://github.com/PostHog/posthog-js/commit/daf028d553f756b9f58c01b848ad2d431239458b)]:
+    - posthog-js@1.371.3
+    - @posthog/core@1.27.2
+    - posthog-node@5.30.1
+
 ## 0.4.26
 
 ### Patch Changes

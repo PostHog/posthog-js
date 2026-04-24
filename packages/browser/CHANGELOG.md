@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.371.3
+
+### Patch Changes
+
+- [#3445](https://github.com/PostHog/posthog-js/pull/3445) [`61cf83e`](https://github.com/PostHog/posthog-js/commit/61cf83efbd0dd846ace9281b001daa0d633fcd8c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix session recording in the full no-external browser bundles
+  (2026-04-24)
+- Updated dependencies [[`daf028d`](https://github.com/PostHog/posthog-js/commit/daf028d553f756b9f58c01b848ad2d431239458b)]:
+    - @posthog/core@1.27.2
+    - @posthog/types@1.371.3
+
 ## 1.371.2
 
 ### Patch Changes

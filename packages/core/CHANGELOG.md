@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.27.2
+
+### Patch Changes
+
+- [#3437](https://github.com/PostHog/posthog-js/pull/3437) [`daf028d`](https://github.com/PostHog/posthog-js/commit/daf028d553f756b9f58c01b848ad2d431239458b) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Disable the core client instead of throwing when the API key is missing, blank, or invalid.
+  (2026-04-24)
+- Updated dependencies []:
+  - @posthog/types@1.371.3
+
 ## 1.27.1
 
 ### Patch Changes

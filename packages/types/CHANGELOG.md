@@ -1,5 +1,7 @@
 # @posthog/types
 
+## 1.371.3
+
 ## 1.371.2
 
 ### Patch Changes
