@@ -29,6 +29,15 @@ export interface BufferedLogEntry {
   record: OtlpLogRecord
 }
 
+/**
+ * `beforeSend` hook signature. Matches the events pipeline's `BeforeSendFn`
+ * shape (`packages/core/src/types.ts:848`) so users get a consistent mental
+ * model: return the (possibly transformed) record to keep it, or `null` to
+ * drop it. Configure as a single function or an array (chain of filters,
+ * evaluated left-to-right).
+ */
+export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions | null
+
 // Public configuration for the logs module. Per-SDK defaults diverge (mobile
 // cellular radio cost, browser tab suspension, node process lifecycle).
 export interface PostHogLogsConfig {
@@ -54,13 +63,25 @@ export interface PostHogLogsConfig {
   terminationFlushBudgetMs?: number
 
   // Filtering. Runs synchronously before the rate cap so beforeSend-dropped
-  // records do not consume the per-interval budget.
-  beforeSend?: (record: CaptureLogOptions) => CaptureLogOptions | null
+  // records do not consume the per-interval budget. Accepts a single fn or
+  // an array (chain); mirrors the events-pipeline `before_send` contract in
+  // `packages/core/src/types.ts:193`. Throwing fns are logged and skipped —
+  // they must never crash the caller's `captureLog()`.
+  beforeSend?: BeforeSendLogFn | BeforeSendLogFn[]
 }
 
 // Fields PostHogLogs needs resolved at runtime. Each SDK supplies its own
 // defaults (mobile, browser, node have different right answers) and hands the
 // filled-in config to the PostHogLogs constructor.
+//
+// `rateCapWindowMs` is always resolved (falls back to `flushIntervalMs` if
+// unset) so the rate-cap arithmetic doesn't branch at the hot path. The cap
+// itself (`maxLogsPerInterval`) stays optional — `undefined` means unbounded,
+// which is the right default for node-style SDKs where bandwidth isn't the
+// concern.
 export interface ResolvedPostHogLogsConfig extends PostHogLogsConfig {
   maxBufferSize: number
+  flushIntervalMs: number
+  maxBatchRecordsPerPost: number
+  rateCapWindowMs: number
 }

@@ -1486,6 +1486,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
 
       const flushSpy = jest.spyOn(posthog, 'flush').mockResolvedValue(undefined)
+      const logsFlushSpy = jest.spyOn((posthog as any)._logs, 'flush').mockResolvedValue(undefined)
       const waitForPersistSpy = jest
         .spyOn((posthog as any)._logsStorage, 'waitForPersist')
         .mockResolvedValue(undefined as never)
@@ -1500,10 +1501,121 @@ describe('PostHog React Native', () => {
       callback('background' as AppStateStatus)
 
       expect(flushSpy).toHaveBeenCalled()
+      expect(logsFlushSpy).toHaveBeenCalled()
       expect(waitForPersistSpy).toHaveBeenCalled()
 
       flushSpy.mockRestore()
+      logsFlushSpy.mockRestore()
       waitForPersistSpy.mockRestore()
+    })
+
+    it('AppState surfaces a failing logs flush via logFlushError (console visibility)', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      // Suppress console.error noise from the assertion itself; the spy still
+      // records the call for verification.
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      jest.spyOn(posthog, 'flush').mockResolvedValue(undefined)
+      jest
+        .spyOn((posthog as any)._logs, 'flush')
+        .mockRejectedValue(new Error('logs transport down'))
+
+      const calls = (AppState.addEventListener as jest.Mock).mock.calls
+      const callback = calls.find((c) => c[0] === 'change')![1]
+      callback('background' as AppStateStatus)
+
+      // Let the catch + awaited logFlushError microtask resolve.
+      await new Promise((r) => setImmediate(r))
+
+      // logFlushError writes to console.error — matches the events pipeline
+      // so a silent transport failure is still visible in the app's logs.
+      expect(consoleErrorSpy).toHaveBeenCalled()
+
+      consoleErrorSpy.mockRestore()
+    })
+
+    it('captureLog → flush() posts OTLP payload to /i/v1/logs via _sendLogsBatch', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      const sendSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+
+      ;(posthog as any)._logs.captureLog({ body: 'integration-test' })
+      await (posthog as any)._logs.flush()
+
+      expect(sendSpy).toHaveBeenCalledTimes(1)
+      const payload = sendSpy.mock.calls[0][0] as any
+      const bodies = payload.resourceLogs[0].scopeLogs[0].logRecords.map((r: any) => r.body.stringValue)
+      expect(bodies).toEqual(['integration-test'])
+      // Successful send should drain the queue.
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue)).toEqual([])
+
+      sendSpy.mockRestore()
+    })
+
+    it('shutdown() drains both events and logs and clears the logs flush timer', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      const logsShutdownSpy = jest.spyOn((posthog as any)._logs, 'shutdown')
+      const sendLogsSpy = jest
+        .spyOn(posthog as any, '_sendLogsBatch')
+        .mockResolvedValue({ kind: 'ok' } as never)
+
+      // Queue a log and fire a single capture so both pipelines have work.
+      ;(posthog as any)._logs.captureLog({ body: 'terminal' })
+      posthog.capture('terminal-event', {})
+
+      await posthog.shutdown(5000)
+
+      // Both pipelines drained through the shared shutdown path.
+      expect(logsShutdownSpy).toHaveBeenCalledWith(5000)
+      expect(sendLogsSpy).toHaveBeenCalled()
+
+      logsShutdownSpy.mockRestore()
+      sendLogsSpy.mockRestore()
+    })
+
+    it('pre-init captureLog is drained on flush once init completes', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+
+      // Capture BEFORE ready() resolves — this exercises the wrap()/onReady
+      // init-gating path: the enqueue defers until _initPromise resolves.
+      ;(posthog as any)._logs.captureLog({ body: 'pre-init' })
+
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      const sendSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+
+      await (posthog as any)._logs.flush()
+
+      expect(sendSpy).toHaveBeenCalledTimes(1)
+      const bodies = (sendSpy.mock.calls[0][0] as any).resourceLogs[0].scopeLogs[0].logRecords.map(
+        (r: any) => r.body.stringValue
+      )
+      expect(bodies).toEqual(['pre-init'])
+
+      sendSpy.mockRestore()
     })
   })
 })
