@@ -463,8 +463,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     /**
      * Update the tickets list (called by manager during polling)
      */
-    updateTickets(tickets: Ticket[]): void {
-        const showTicketList = tickets.length > 1 || (tickets.length === 1 && tickets[0].status === 'resolved')
+    updateTickets(tickets: Ticket[], showTicketList: boolean): void {
         this.setState({
             tickets,
             ticketsLoading: false,

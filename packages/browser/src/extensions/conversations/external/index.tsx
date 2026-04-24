@@ -765,7 +765,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             const response = await this.getTickets()
             this._tickets = response.results
             this._showTicketList = this._computeShowTicketList(response.results)
-            this._widgetRef?.updateTickets(response.results)
+            this._widgetRef?.updateTickets(response.results, this._showTicketList)
 
             // Calculate total unread across all tickets
             const totalUnread = response.results.reduce((sum, t) => sum + (t.unread_count || 0), 0)
@@ -816,7 +816,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             ...this._tickets.slice(idx + 1),
         ]
         this._showTicketList = this._computeShowTicketList(this._tickets)
-        this._widgetRef?.updateTickets(this._tickets)
+        this._widgetRef?.updateTickets(this._tickets, this._showTicketList)
         this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
     }
 
@@ -1248,7 +1248,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             }
 
             const view = this._applyTicketsToState(response.results)
-            this._widgetRef?.updateTickets(response.results)
+            this._widgetRef?.updateTickets(response.results, this._showTicketList)
             this._widgetRef?.setUnreadCount(this._unreadCount)
             this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
             this._currentView = view
