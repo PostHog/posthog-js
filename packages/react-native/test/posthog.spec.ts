@@ -1521,9 +1521,7 @@ describe('PostHog React Native', () => {
       // records the call for verification.
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
       jest.spyOn(posthog, 'flush').mockResolvedValue(undefined)
-      jest
-        .spyOn((posthog as any)._logs, 'flush')
-        .mockRejectedValue(new Error('logs transport down'))
+      jest.spyOn((posthog as any)._logs, 'flush').mockRejectedValue(new Error('logs transport down'))
 
       const calls = (AppState.addEventListener as jest.Mock).mock.calls
       const callback = calls.find((c) => c[0] === 'change')![1]
@@ -1573,9 +1571,7 @@ describe('PostHog React Native', () => {
       await (posthog as any)._logsStorage.preloadPromise
 
       const logsShutdownSpy = jest.spyOn((posthog as any)._logs, 'shutdown')
-      const sendLogsSpy = jest
-        .spyOn(posthog as any, '_sendLogsBatch')
-        .mockResolvedValue({ kind: 'ok' } as never)
+      const sendLogsSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
       // Queue a log and fire a single capture so both pipelines have work.
       ;(posthog as any)._logs.captureLog({ body: 'terminal' })
@@ -1616,6 +1612,115 @@ describe('PostHog React Native', () => {
       expect(bodies).toEqual(['pre-init'])
 
       sendSpy.mockRestore()
+    })
+
+    // Public API — user-facing surface on PostHog: `captureLog` + `logger` +
+    // `options.logs`. These tests verify the seam that replaced the internal
+    // `_logs.captureLog` reach-ins above.
+    it('posthog.captureLog() delegates to the internal logs module', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      posthog.captureLog({ body: 'public-api', level: 'warn', attributes: { foo: 'bar' } })
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      expect(queue).toHaveLength(1)
+      expect(queue[0].record.body.stringValue).toBe('public-api')
+      expect(queue[0].record.severityText).toBe('WARN')
+      const attrs = Object.fromEntries(queue[0].record.attributes.map((a: any) => [a.key, a.value]))
+      expect(attrs['foo']).toEqual({ stringValue: 'bar' })
+    })
+
+    it('posthog.logger maps each method to the correct severity level', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      posthog.logger.trace('t')
+      posthog.logger.debug('d')
+      posthog.logger.info('i')
+      posthog.logger.warn('w')
+      posthog.logger.error('e')
+      posthog.logger.fatal('f')
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      expect(queue).toHaveLength(6)
+      expect(queue.map((e) => e.record.severityText)).toEqual(['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'])
+    })
+
+    it('posthog.logger returns the same instance on repeated access (lazy + memoized)', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      expect(posthog.logger).toBe(posthog.logger)
+    })
+
+    it('options.logs.beforeSend is honored through the public captureLog path', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+        logs: {
+          beforeSend: (r) => (r.body.includes('secret') ? null : { ...r, body: `${r.body}!` }),
+        },
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      posthog.captureLog({ body: 'hello' })
+      posthog.captureLog({ body: 'this has secret info' }) // dropped
+      posthog.captureLog({ body: 'world' })
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      expect(queue).toHaveLength(2)
+      expect(queue.map((e) => e.record.body.stringValue)).toEqual(['hello!', 'world!'])
+    })
+
+    it('options.logs.maxLogsPerInterval enforces the rate cap end-to-end', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+        logs: { maxLogsPerInterval: 3, rateCapWindowMs: 10000 },
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      for (let i = 0; i < 10; i++) {
+        posthog.captureLog({ body: `msg-${i}` })
+      }
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      expect(queue).toHaveLength(3)
+    })
+
+    it('options.logs.enabled=false keeps captures from reaching the queue', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+        logs: { enabled: false },
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      posthog.captureLog({ body: 'should-not-land' })
+      posthog.logger.error('also-should-not-land')
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue)).toBeUndefined()
     })
   })
 })
