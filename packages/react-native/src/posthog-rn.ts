@@ -13,6 +13,7 @@ import {
   PostHogRemoteConfig,
   Survey,
   SurveyResponse,
+  allSettled,
   logFlushError,
   maybeAdd,
   patchFetchForTracingHeaders,
@@ -207,7 +208,7 @@ export class PostHog extends PostHogCore {
         preloads.push(['logs', this._logsStorage.preloadPromise])
       }
       if (preloads.length > 0) {
-        storagePromise = Promise.allSettled(preloads.map(([, p]) => p)).then((results) => {
+        storagePromise = allSettled(preloads.map(([, p]) => p)).then((results) => {
           results.forEach((r, i) => {
             if (r.status === 'rejected') {
               console.error(`PostHog ${preloads[i][0]} storage preload failed:`, r.reason)
