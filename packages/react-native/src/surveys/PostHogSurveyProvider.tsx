@@ -12,7 +12,13 @@ import { usePostHog } from '../hooks/usePostHog'
 import { useFeatureFlags } from '../hooks/useFeatureFlags'
 import { PostHog } from '../posthog-rn'
 
-type ActiveSurveyContextType = { survey: Survey; onShow: () => void; onClose: (submitted: boolean) => void } | undefined
+type ActiveSurveyContextType =
+  | {
+      survey: Survey
+      onShow: () => void
+      onClose: (submitted: boolean, responses: Record<string, string | number | string[] | null>) => void
+    }
+  | undefined
 const ActiveSurveyContext = React.createContext<ActiveSurveyContextType>(undefined)
 // export const useActiveSurvey = (): ActiveSurveyContextType => React.useContext(ActiveSurveyContext)
 
@@ -155,11 +161,11 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
         sendSurveyShownEvent(activeSurvey, posthog)
         setLastSeenSurveyDate(new Date())
       },
-      onClose: (submitted: boolean) => {
+      onClose: (submitted: boolean, responses: Record<string, string | number | string[] | null>) => {
         setSeenSurvey(activeSurvey.id)
         setActiveSurvey(undefined)
         if (!submitted) {
-          dismissedSurveyEvent(activeSurvey, posthog)
+          dismissedSurveyEvent(activeSurvey, responses, posthog)
         }
       },
     }
