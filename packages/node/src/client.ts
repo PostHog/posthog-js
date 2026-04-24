@@ -1447,7 +1447,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * then pass the same snapshot to `capture()` via the `flags` option so the
    * captured event carries the exact flag values the code branched on.
    *
+   * Prefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and
+   * over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation
+   * into a single `/flags` request per incoming request.
+   *
+   * **Local evaluation is transparent.** When the poller can resolve a flag from
+   * cached definitions, no network call is made and the snapshot's `$feature_flag_called`
+   * events are tagged `locally_evaluated: true`.
+   *
+   * **Trim the request.** Pass `flagKeys` to scope the underlying `/flags` request
+   * to a subset of flags — useful when you only need a few flags and want to reduce
+   * the response payload.
+   *
+   * **Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()`
+   * to filter which flags get attached to a captured event without re-fetching.
+   *
    * @example
+   * Basic usage:
    * ```ts
    * const flags = await client.evaluateFlags('user_123', {
    *   personProperties: { plan: 'enterprise' },
@@ -1458,10 +1474,37 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * client.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
    * ```
    *
+   * @example
+   * Scope the `/flags` request to specific keys:
+   * ```ts
+   * const flags = await client.evaluateFlags('user_123', {
+   *   flagKeys: ['new-dashboard', 'checkout-flow'],
+   *   personProperties: { plan: 'enterprise' },
+   * })
+   * ```
+   *
+   * @example
+   * Attach only the flags the developer actually checked:
+   * ```ts
+   * const flags = await client.evaluateFlags('user_123')
+   * if (flags.isEnabled('new-dashboard')) { ... }
+   * client.capture({ distinctId: 'user_123', event: 'page_viewed', flags: flags.onlyAccessed() })
+   * ```
+   *
+   * @example
+   * Use `withContext()` to avoid repeating the distinctId:
+   * ```ts
+   * await client.withContext({ distinctId: 'user_123' }, async () => {
+   *   const flags = await client.evaluateFlags()
+   *   if (flags.isEnabled('new-dashboard')) { ... }
+   *   client.capture({ event: 'page_viewed', flags })
+   * })
+   * ```
+   *
    * {@label Feature flags}
    *
    * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
-   * @param options - Optional configuration for flag evaluation
+   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`, including `flagKeys` to scope the `/flags` request.
    * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
    */
   async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>

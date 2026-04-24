@@ -60,6 +60,10 @@ export interface FeatureFlagEvaluationsHost {
  *
  * posthog.capture({ distinctId, event: 'page_viewed', flags })
  * ```
+ *
+ * To narrow the set of flags that get attached to a captured event, use the in-memory
+ * helpers `only([...])` and `onlyAccessed()`. To narrow the set of flags requested from
+ * the server in the first place, pass `flagKeys` to `evaluateFlags()`.
  */
 export class FeatureFlagEvaluations {
   private readonly _host: FeatureFlagEvaluationsHost
