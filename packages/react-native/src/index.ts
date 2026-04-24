@@ -12,3 +12,15 @@ export * from './PostHogProvider'
 export * from './PostHogErrorBoundary'
 export * from './types'
 export * from './surveys'
+
+// Re-export logs public types so consumers can type their own wrappers
+// (e.g. hooks, HOCs, custom loggers) without pulling in @posthog/core.
+export type {
+  BeforeSendLogFn,
+  CaptureLogOptions,
+  CaptureLogger,
+  LogAttributes,
+  LogAttributeValue,
+  LogSeverityLevel,
+  PostHogLogsConfig,
+} from '@posthog/core'

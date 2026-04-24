@@ -1,6 +1,8 @@
 import { AppState, Dimensions, Linking, Platform } from 'react-native'
 
 import {
+  CaptureLogOptions,
+  CaptureLogger,
   JsonType,
   PostHogCaptureOptions,
   PostHogCore,
@@ -9,6 +11,7 @@ import {
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogLogs,
+  PostHogLogsConfig,
   PostHogPersistedProperty,
   PostHogRemoteConfig,
   Survey,
@@ -115,6 +118,23 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * @default true
    */
   setDefaultPersonProperties?: boolean
+
+  /**
+   * Logs feature configuration. Lets you send structured log records to
+   * PostHog via `posthog.captureLog(...)` or `posthog.logger.info(...)`.
+   *
+   * Not passing a `logs` key still enables the feature with mobile-tuned
+   * defaults (10s flush cadence, 500 logs/window rate cap, 50 records per
+   * POST). Pass `{ enabled: false }` to fully opt out.
+   *
+   * Common overrides:
+   * - `beforeSend` — filter / transform / redact records before they're
+   *   queued. Returning `null` drops the record.
+   * - `maxLogsPerInterval` / `rateCapWindowMs` — throttle capture rate.
+   * - `serviceName` / `environment` / `serviceVersion` — OTLP resource
+   *   attributes attached to every batch.
+   */
+  logs?: PostHogLogsConfig
 }
 
 export class PostHog extends PostHogCore {
@@ -221,11 +241,9 @@ export class PostHog extends PostHogCore {
       this._logsStorage = createLogsMemoryStorage()
     }
 
-    // TODO: wire user-supplied `options.logs` once the public captureLog API
-    // lands. Hardcoded to defaults while PostHogLogs is SDK-internal.
     this._logs = new PostHogLogs(
       this,
-      resolveLogsConfig(undefined),
+      resolveLogsConfig(options?.logs),
       this._logger,
       () => ({
         distinctId: this.getDistinctId() || undefined,
@@ -625,6 +643,70 @@ export class PostHog extends PostHogCore {
    */
   flush(): Promise<void> {
     return super.flush()
+  }
+
+  /**
+   * Captures a structured log record and sends it to PostHog's logs product
+   * (`/i/v1/logs`). Low-level primitive — most callers will prefer
+   * `posthog.logger.info(...)` / `.warn(...)` / `.error(...)` etc., which
+   * wrap this with a level pre-set.
+   *
+   * Records are buffered per-session, rate-limited, batched into OTLP
+   * payloads, and flushed on a timer, on AppState change, or when the
+   * buffer reaches capacity. Configure flush cadence, rate cap, and a
+   * `beforeSend` filter via the `logs` option on `new PostHog(...)`.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * posthog.captureLog({
+   *   body: 'checkout completed',
+   *   level: 'info',
+   *   attributes: { order_id: 'ord_789', amount_cents: 4999 },
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param options Log record. `body` is required; `level` defaults to
+   *   `'info'`. `attributes` are attached as OTLP key-value attributes
+   *   and will override auto-populated ones (distinctId, sessionId) on
+   *   key conflict.
+   */
+  captureLog(options: CaptureLogOptions): void {
+    this._logs.captureLog(options)
+  }
+
+  private _captureLogger?: CaptureLogger
+
+  /**
+   * Convenience per-level logger. Each method is shorthand for
+   * `posthog.captureLog({ body, level, attributes })`. Lazily constructed
+   * on first access, then reused.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+   * posthog.logger.error('payment failed', { code: 'E001' })
+   * ```
+   *
+   * @public
+   */
+  get logger(): CaptureLogger {
+    if (!this._captureLogger) {
+      this._captureLogger = {
+        trace: (body, attributes) => this.captureLog({ body, level: 'trace', attributes }),
+        debug: (body, attributes) => this.captureLog({ body, level: 'debug', attributes }),
+        info: (body, attributes) => this.captureLog({ body, level: 'info', attributes }),
+        warn: (body, attributes) => this.captureLog({ body, level: 'warn', attributes }),
+        error: (body, attributes) => this.captureLog({ body, level: 'error', attributes }),
+        fatal: (body, attributes) => this.captureLog({ body, level: 'fatal', attributes }),
+      }
+    }
+    return this._captureLogger
   }
 
   /**
