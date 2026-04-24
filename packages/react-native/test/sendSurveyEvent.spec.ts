@@ -292,65 +292,67 @@ describe('dismissedSurveyEvent', () => {
     }
   })
 
-  it('captures dismissal responses and marks partial completion when there are answers', () => {
+  it.each([
+    {
+      label: 'captures dismissal responses and marks partial completion when there are answers',
+      responses: {
+        '$survey_response_question-1': 4,
+        '$survey_response_question-2': 'Great service!',
+      },
+      expectedPayload: {
+        $survey_name: 'Test Survey',
+        $survey_id: 'test-survey-id',
+        $survey_partially_completed: true,
+        $survey_questions: [
+          {
+            id: 'question-1',
+            question: 'How satisfied are you?',
+            response: 4,
+          },
+          {
+            id: 'question-2',
+            question: 'Any additional comments?',
+            response: 'Great service!',
+          },
+        ],
+        '$survey_response_question-1': 4,
+        '$survey_response_question-2': 'Great service!',
+        $survey_response: 4,
+        $survey_response_1: 'Great service!',
+        $set: {
+          '$survey_dismissed/test-survey-id': true,
+        },
+      },
+    },
+    {
+      label: 'marks dismissal as not partially completed when no answers exist',
+      responses: {},
+      expectedPayload: {
+        $survey_name: 'Test Survey',
+        $survey_id: 'test-survey-id',
+        $survey_partially_completed: false,
+        $survey_questions: [
+          {
+            id: 'question-1',
+            question: 'How satisfied are you?',
+            response: undefined,
+          },
+          {
+            id: 'question-2',
+            question: 'Any additional comments?',
+            response: undefined,
+          },
+        ],
+        $set: {
+          '$survey_dismissed/test-survey-id': true,
+        },
+      },
+    },
+  ])('$label', ({ responses, expectedPayload }) => {
     const survey = createMockSurvey()
-    const responses = {
-      '$survey_response_question-1': 4,
-      '$survey_response_question-2': 'Great service!',
-    }
 
     dismissedSurveyEvent(survey, responses, mockPostHog)
 
-    expect(mockPostHog.capture).toHaveBeenCalledWith('survey dismissed', {
-      $survey_name: 'Test Survey',
-      $survey_id: 'test-survey-id',
-      $survey_partially_completed: true,
-      $survey_questions: [
-        {
-          id: 'question-1',
-          question: 'How satisfied are you?',
-          response: 4,
-        },
-        {
-          id: 'question-2',
-          question: 'Any additional comments?',
-          response: 'Great service!',
-        },
-      ],
-      '$survey_response_question-1': 4,
-      '$survey_response_question-2': 'Great service!',
-      $survey_response: 4,
-      $survey_response_1: 'Great service!',
-      $set: {
-        '$survey_dismissed/test-survey-id': true,
-      },
-    })
-  })
-
-  it('marks dismissal as not partially completed when no answers exist', () => {
-    const survey = createMockSurvey()
-
-    dismissedSurveyEvent(survey, {}, mockPostHog)
-
-    expect(mockPostHog.capture).toHaveBeenCalledWith('survey dismissed', {
-      $survey_name: 'Test Survey',
-      $survey_id: 'test-survey-id',
-      $survey_partially_completed: false,
-      $survey_questions: [
-        {
-          id: 'question-1',
-          question: 'How satisfied are you?',
-          response: undefined,
-        },
-        {
-          id: 'question-2',
-          question: 'Any additional comments?',
-          response: undefined,
-        },
-      ],
-      $set: {
-        '$survey_dismissed/test-survey-id': true,
-      },
-    })
+    expect(mockPostHog.capture).toHaveBeenCalledWith('survey dismissed', expectedPayload)
   })
 })
