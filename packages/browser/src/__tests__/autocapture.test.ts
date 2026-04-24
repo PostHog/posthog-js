@@ -1019,6 +1019,22 @@ describe('Autocapture system', () => {
             expect(props['$event_type']).toBe('click')
         })
 
+        it('should not throw when the click target is inside a bare DocumentFragment', () => {
+            // Unlike a ShadowRoot, a plain DocumentFragment has no .host. The
+            // parent walker used to unconditionally jump to (parent as any).host
+            // and throw a TypeError on the next iteration's parentNode lookup.
+            const fragment = document.createDocumentFragment()
+            const button = document.createElement('a')
+            button.innerHTML = 'hi'
+            fragment.appendChild(button)
+
+            const e = makeMouseEvent({ target: button })
+            expect(() => autocapture['_captureEvent'](e)).not.toThrow()
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const props = beforeSendMock.mock.calls[0][0].properties
+            expect(props['$event_type']).toBe('click')
+        })
+
         it('should never capture an element with `ph-no-capture` class', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')

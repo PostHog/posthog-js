@@ -155,11 +155,15 @@ export function autocapturePropertiesForElement(
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
     const targetElementList = [target]
-    let curEl = target
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
+    let curEl: Element | undefined = target
+    while (curEl && curEl.parentNode && !isTag(curEl, 'body')) {
         if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+            // Only ShadowRoot (a subtype of DocumentFragment) has a host — a bare
+            // DocumentFragment does not, so guard before dereferencing to avoid a null-deref.
+            const host: Element | null | undefined = (curEl.parentNode as ShadowRoot).host
+            if (!host) break
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         targetElementList.push(curEl.parentNode as Element)

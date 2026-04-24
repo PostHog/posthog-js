@@ -236,12 +236,16 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
 
     let parentIsUsefulElement = false
     const targetElementList: Element[] = [el]
-    let curEl: Element = el
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
-        // If element is a shadow root, we skip it
+    let curEl: Element | undefined = el
+    while (curEl && curEl.parentNode && !isTag(curEl, 'body')) {
+        // If element is a shadow root, we skip it. Only ShadowRoot (a subtype of
+        // DocumentFragment) has a host — a bare DocumentFragment does not, so guard
+        // before dereferencing to avoid a null-deref.
         if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+            const host: Element | null | undefined = (curEl.parentNode as ShadowRoot).host
+            if (!host) break
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         const parentNode = getParentElement(curEl)
@@ -344,7 +348,7 @@ export function shouldCaptureDomEvent(
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureElement(el: Element): boolean {
-    for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
+    for (let curEl: Element | false = el; curEl && !isTag(curEl, 'body'); curEl = getParentElement(curEl)) {
         const classes = getClassNames(curEl)
         if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
             return false
