@@ -123,15 +123,15 @@ export function Questions({
   survey,
   appearance,
   styleOverrides,
-  responses,
-  onResponsesChange,
+  responses = {},
+  onResponsesChange = () => {},
   onSubmit,
 }: {
   survey: Survey
   appearance: SurveyAppearanceTheme
   styleOverrides?: StyleProp<ViewStyle>
-  responses: Record<string, string | number | string[] | null>
-  onResponsesChange: (responses: Record<string, string | number | string[] | null>) => void
+  responses?: Record<string, string | number | string[] | null>
+  onResponsesChange?: (responses: Record<string, string | number | string[] | null>) => void
   onSubmit: () => void
 }): JSX.Element {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)

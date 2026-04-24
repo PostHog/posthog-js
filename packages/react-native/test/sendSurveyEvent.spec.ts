@@ -1,6 +1,27 @@
 import { dismissedSurveyEvent, sendSurveyEvent } from '../src/surveys/components/Surveys'
 import { Survey, SurveyQuestion } from '@posthog/core'
 
+const createMockSurvey = (overrides: Partial<Survey> = {}): Survey => ({
+  id: 'test-survey-id',
+  name: 'Test Survey',
+  questions: [
+    {
+      id: 'question-1',
+      question: 'How satisfied are you?',
+      type: 'rating',
+      scale: 5,
+      originalQuestionIndex: 0,
+    } as SurveyQuestion,
+    {
+      id: 'question-2',
+      question: 'Any additional comments?',
+      type: 'open',
+      originalQuestionIndex: 1,
+    } as SurveyQuestion,
+  ],
+  ...overrides,
+})
+
 describe('sendSurveyEvent', () => {
   let mockPostHog: any
 
@@ -8,27 +29,6 @@ describe('sendSurveyEvent', () => {
     mockPostHog = {
       capture: jest.fn(),
     }
-  })
-
-  const createMockSurvey = (overrides: Partial<Survey> = {}): Survey => ({
-    id: 'test-survey-id',
-    name: 'Test Survey',
-    questions: [
-      {
-        id: 'question-1',
-        question: 'How satisfied are you?',
-        type: 'rating',
-        scale: 5,
-        originalQuestionIndex: 0,
-      } as SurveyQuestion,
-      {
-        id: 'question-2',
-        question: 'Any additional comments?',
-        type: 'open',
-        originalQuestionIndex: 1,
-      } as SurveyQuestion,
-    ],
-    ...overrides,
   })
 
   describe('basic functionality', () => {
@@ -290,27 +290,6 @@ describe('dismissedSurveyEvent', () => {
     mockPostHog = {
       capture: jest.fn(),
     }
-  })
-
-  const createMockSurvey = (overrides: Partial<Survey> = {}): Survey => ({
-    id: 'test-survey-id',
-    name: 'Test Survey',
-    questions: [
-      {
-        id: 'question-1',
-        question: 'How satisfied are you?',
-        type: 'rating',
-        scale: 5,
-        originalQuestionIndex: 0,
-      } as SurveyQuestion,
-      {
-        id: 'question-2',
-        question: 'Any additional comments?',
-        type: 'open',
-        originalQuestionIndex: 1,
-      } as SurveyQuestion,
-    ],
-    ...overrides,
   })
 
   it('captures dismissal responses and marks partial completion when there are answers', () => {
