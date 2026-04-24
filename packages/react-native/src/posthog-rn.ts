@@ -231,7 +231,12 @@ export class PostHog extends PostHogCore {
         distinctId: this.getDistinctId() || undefined,
         sessionId: this.getSessionId() || undefined,
       }),
-      (fn) => this.wrap(fn)
+      (fn) => this.wrap(fn),
+      // Block between batches on the logs-storage disk write so a crash can't
+      // replay an already-sent batch. Events do the equivalent via
+      // `flushStorage()` (events-storage side). Mirror per-pipeline so one
+      // pipeline's slow disk doesn't stall the other.
+      () => this._logsStorage.waitForPersist()
     )
 
     AppState.addEventListener('change', (state) => {
@@ -241,6 +246,14 @@ export class PostHog extends PostHogCore {
       }
 
       void this.flush().catch(async (err) => {
+        await logFlushError(err)
+      })
+      // Flush buffered logs alongside events — OS may suspend or terminate the
+      // process next, and anything left in the queue won't get a second chance
+      // until the app is next foregrounded. Same diagnostic path as events
+      // (`logFlushError`) so a silent transport failure still reaches
+      // `console.error` even when no custom logger is configured.
+      void this._logs.flush().catch(async (err) => {
         await logFlushError(err)
       })
       // Drain pending logs-storage writes to disk before the OS may suspend
@@ -403,6 +416,17 @@ export class PostHog extends PostHogCore {
    */
   protected async flushStorage(): Promise<void> {
     await this._eventsStorage.waitForPersist()
+  }
+
+  /**
+   * Drain both pipelines on shutdown. Run in parallel so the logs final
+   * flush + timer teardown doesn't serialize behind events (and vice-versa).
+   * `_logs.shutdown()` swallows its own errors — a transient logs failure
+   * must not break events shutdown. Both sides share the same timeout budget
+   * so neither can outlive the caller's shutdown SLA.
+   */
+  async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    await Promise.all([this._logs.shutdown(shutdownTimeoutMs), super._shutdown(shutdownTimeoutMs)])
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
