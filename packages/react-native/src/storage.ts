@@ -17,10 +17,9 @@ export class PostHogRNStorage {
   private _storageKey: string
   private _pendingPromises: Set<Promise<void>> = new Set()
 
-  // `storageKey` defaults to the events file to keep the pre-logs constructor
-  // signature source-compatible. Prefer the `create*Storage` factories below
-  // over calling this directly.
-  constructor(storage: PostHogCustomStorage, storageKey: string = EVENTS_STORAGE_FILE) {
+  // Prefer the `create*Storage` factories below over calling this directly —
+  // they're the only callers that know which file to bind to.
+  constructor(storage: PostHogCustomStorage, storageKey: string) {
     this.storage = storage
     this._storageKey = storageKey
 
@@ -113,7 +112,7 @@ export class PostHogRNStorage {
 }
 
 export class PostHogRNSyncMemoryStorage extends PostHogRNStorage {
-  constructor(storageKey: string = EVENTS_STORAGE_FILE) {
+  constructor(storageKey: string) {
     const cache: { [key: string]: any | undefined } = {}
     const storage = {
       getItem: (key: string) => cache[key],

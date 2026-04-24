@@ -211,7 +211,7 @@ export class PostHog extends PostHogCore {
         storagePromise = allSettled(preloads.map(([, p]) => p)).then((results) => {
           results.forEach((r, i) => {
             if (r.status === 'rejected') {
-              console.error(`PostHog ${preloads[i][0]} storage preload failed:`, r.reason)
+              this._logger.error(`PostHog ${preloads[i][0]} storage preload failed:`, r.reason)
             }
           })
         })
@@ -221,6 +221,8 @@ export class PostHog extends PostHogCore {
       this._logsStorage = createLogsMemoryStorage()
     }
 
+    // TODO: wire user-supplied `options.logs` once the public captureLog API
+    // lands. Hardcoded to defaults while PostHogLogs is SDK-internal.
     this._logs = new PostHogLogs(
       this,
       resolveLogsConfig(undefined),

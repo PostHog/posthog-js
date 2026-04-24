@@ -77,7 +77,13 @@ describe('PostHogLogs', () => {
 
   describe('captureLog', () => {
     it('writes a record to the logs queue via setPersistedProperty', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({ body: 'hello world' })
 
       const queue = readQueue(mockInstance)
@@ -90,7 +96,13 @@ describe('PostHogLogs', () => {
     })
 
     it('maps severity levels correctly', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({ body: 'oh no', level: 'error' })
 
       const queue = readQueue(mockInstance)
@@ -99,7 +111,13 @@ describe('PostHogLogs', () => {
     })
 
     it('defaults to INFO when no level is provided', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({ body: 'hello' })
 
       const queue = readQueue(mockInstance)
@@ -107,7 +125,13 @@ describe('PostHogLogs', () => {
     })
 
     it('auto-populates distinctId and sessionId', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({ body: 'test' })
 
       const queue = readQueue(mockInstance)
@@ -117,7 +141,13 @@ describe('PostHogLogs', () => {
     })
 
     it('merges user attributes over auto-populated ones', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({ body: 'test', attributes: { posthogDistinctId: 'override' } })
 
       const queue = readQueue(mockInstance)
@@ -126,14 +156,26 @@ describe('PostHogLogs', () => {
     })
 
     it('is a no-op when body is empty', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({ body: '' })
       expect(readQueue(mockInstance)).toHaveLength(0)
       expect(mockInstance.setPersistedProperty).not.toHaveBeenCalled()
     })
 
     it('is a no-op when body is missing', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({} as any)
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
@@ -158,13 +200,25 @@ describe('PostHogLogs', () => {
     })
 
     it('captures when config is provided with enabled undefined (defaults to true)', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest({}), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({}),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({ body: 'kept' })
       expect(readQueue(mockInstance)).toHaveLength(1)
     })
 
     it('appends subsequent captures to the existing queue', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({ body: 'first' })
       logs.captureLog({ body: 'second' })
       logs.captureLog({ body: 'third' })
@@ -211,7 +265,13 @@ describe('PostHogLogs', () => {
     })
 
     it('passes trace context through to the OTLP record', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
       logs.captureLog({
         body: 'trace test',
         trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
