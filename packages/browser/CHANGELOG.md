@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.371.4
+
+### Patch Changes
+
+- [#3469](https://github.com/PostHog/posthog-js/pull/3469) [`3c4fc1e`](https://github.com/PostHog/posthog-js/commit/3c4fc1e70f3f2394fbdd141efda44bdbddbb9062) Thanks [@fasyy612](https://github.com/fasyy612)! - bump rrweb to 0.0.60
+  (2026-04-24)
+- Updated dependencies []:
+    - @posthog/types@1.371.4
+    - @posthog/core@1.27.3
+
 ## 1.371.3
 
 ### Patch Changes
