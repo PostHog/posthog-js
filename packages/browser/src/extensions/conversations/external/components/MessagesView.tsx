@@ -4,6 +4,7 @@ import { Message } from '../../../../posthog-conversations-types'
 import { getStyles } from './styles'
 import { SendMessageButton } from './SendMessageButton'
 import { RichContent } from './RichContent'
+import { NewConversationButton } from './NewConversationButton'
 import { formatRelativeTime } from './utils'
 
 interface MessagesViewProps {
@@ -14,9 +15,11 @@ interface MessagesViewProps {
     inputValue: string
     isLoading: boolean
     error: string | null
+    isResolved: boolean
     onInputChange: (e: Event) => void
     onKeyDown: (e: KeyboardEvent) => void
     onSendMessage: () => void
+    onStartNewConversation: () => void
     messagesEndRef: (el: HTMLDivElement | null) => void
     inputRef: (el: HTMLTextAreaElement | null) => void
 }
@@ -64,9 +67,11 @@ export function MessagesView({
     inputValue,
     isLoading,
     error,
+    isResolved,
     onInputChange,
     onKeyDown,
     onSendMessage,
+    onStartNewConversation,
     messagesEndRef,
     inputRef,
 }: MessagesViewProps) {
@@ -81,24 +86,31 @@ export function MessagesView({
 
             {error && <div style={styles.error}>{error}</div>}
 
-            <div style={styles.inputContainer}>
-                <textarea
-                    ref={inputRef}
-                    style={styles.input}
-                    placeholder={placeholderText}
-                    value={inputValue}
-                    onInput={onInputChange}
-                    onKeyDown={onKeyDown}
-                    rows={1}
-                    disabled={isLoading}
-                />
-                <SendMessageButton
-                    primaryColor={primaryColor}
-                    inputValue={inputValue}
-                    isLoading={isLoading}
-                    handleSendMessage={onSendMessage}
-                />
-            </div>
+            {isResolved ? (
+                <div style={styles.resolvedBanner}>
+                    <div style={styles.resolvedBannerText}>This conversation was resolved.</div>
+                    <NewConversationButton styles={styles} onClick={onStartNewConversation} />
+                </div>
+            ) : (
+                <div style={styles.inputContainer}>
+                    <textarea
+                        ref={inputRef}
+                        style={styles.input}
+                        placeholder={placeholderText}
+                        value={inputValue}
+                        onInput={onInputChange}
+                        onKeyDown={onKeyDown}
+                        rows={1}
+                        disabled={isLoading}
+                    />
+                    <SendMessageButton
+                        primaryColor={primaryColor}
+                        inputValue={inputValue}
+                        isLoading={isLoading}
+                        handleSendMessage={onSendMessage}
+                    />
+                </div>
+            )}
         </>
     )
 }

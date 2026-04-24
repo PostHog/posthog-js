@@ -16,6 +16,7 @@ import {
     RestoreFromTokenResponse,
     RequestRestoreLinkPayload,
     RequestRestoreLinkResponse,
+    TicketStatus,
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
@@ -63,7 +64,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     // View state management for ticket list vs message view
     private _currentView: WidgetView = 'messages'
     private _tickets: Ticket[] = []
-    private _hasMultipleTickets: boolean = false
+    private _showTicketList: boolean = false
 
     constructor(
         config: ConversationsRemoteConfig,
@@ -703,6 +704,12 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 }
             }
 
+            // Sync ticket_status so an agent-side resolve flips the UI to locked state even
+            // while we're polling messages (ticket polling doesn't run in messages view).
+            if (response.ticket_status) {
+                this._applyTicketStatusUpdate(this._currentTicketId, response.ticket_status)
+            }
+
             if (response.messages.length > 0) {
                 this._widgetRef?.addMessages(response.messages)
                 // Update last message timestamp
@@ -757,18 +764,60 @@ export class ConversationsManager implements ConversationsManagerInterface {
         try {
             const response = await this.getTickets()
             this._tickets = response.results
-            this._hasMultipleTickets = response.results.length > 1
-            this._widgetRef?.updateTickets(response.results)
+            this._showTicketList = this._computeShowTicketList(response.results)
+            this._widgetRef?.updateTickets(response.results, this._showTicketList)
 
             // Calculate total unread across all tickets
             const totalUnread = response.results.reduce((sum, t) => sum + (t.unread_count || 0), 0)
             this._unreadCount = totalUnread
             this._widgetRef?.setUnreadCount(totalUnread)
 
+            this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+
             logger.info('Tickets loaded', { count: response.results.length, totalUnread })
         } catch (error) {
             logger.error('Failed to load tickets', error)
         }
+    }
+
+    private _computeShowTicketList(tickets: Ticket[]): boolean {
+        if (tickets.length > 1) {
+            return true
+        }
+        if (tickets.length === 1 && tickets[0].status === 'resolved') {
+            return true
+        }
+        return false
+    }
+
+    private _isCurrentTicketResolved(): boolean {
+        if (!this._currentTicketId) {
+            return false
+        }
+        const ticket = this._tickets.find((t) => t.id === this._currentTicketId)
+        return ticket?.status === 'resolved'
+    }
+
+    /**
+     * Patch the local _tickets cache with a new status for a given ticket and push
+     * any UI-relevant changes (resolved lock + list visibility) to the widget.
+     */
+    private _applyTicketStatusUpdate(ticketId: string, status: TicketStatus): void {
+        const idx = this._tickets.findIndex((t) => t.id === ticketId)
+        if (idx === -1) {
+            return
+        }
+        if (this._tickets[idx].status === status) {
+            return
+        }
+        this._tickets = [
+            ...this._tickets.slice(0, idx),
+            { ...this._tickets[idx], status },
+            ...this._tickets.slice(idx + 1),
+        ]
+        this._showTicketList = this._computeShowTicketList(this._tickets)
+        this._widgetRef?.updateTickets(this._tickets, this._showTicketList)
+        this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
     }
 
     /**
@@ -809,6 +858,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._currentView = 'messages'
         this._widgetRef?.setView('messages')
 
+        // Push resolved state for this ticket so MessagesView locks the input if needed
+        this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+
         // Load messages for the selected ticket
         await this._loadMessages()
 
@@ -834,6 +886,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Switch view to messages
         this._currentView = 'messages'
         this._widgetRef?.setView('messages')
+
+        // Fresh ticket is never resolved — unlock the input
+        this._widgetRef?.setCurrentTicketResolved(false)
 
         // Clear messages and add greeting
         this._widgetRef?.clearMessages(true)
@@ -887,13 +942,20 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private _applyTicketsToState(tickets: Ticket[]): WidgetView {
         this._tickets = tickets
-        this._hasMultipleTickets = tickets.length > 1
+        this._showTicketList = this._computeShowTicketList(tickets)
 
         const totalUnread = tickets.reduce((sum, t) => sum + (t.unread_count || 0), 0)
         this._unreadCount = totalUnread
 
         if (tickets.length >= 2) {
             this._currentTicketId = null
+            return 'tickets'
+        }
+
+        // Single resolved ticket: show list so user can start a new conversation instead of writing to it
+        if (tickets.length === 1 && tickets[0].status === 'resolved') {
+            this._currentTicketId = null
+            this._persistence.clearTicketId()
             return 'tickets'
         }
 
@@ -1186,8 +1248,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
             }
 
             const view = this._applyTicketsToState(response.results)
-            this._widgetRef?.updateTickets(response.results)
+            this._widgetRef?.updateTickets(response.results, this._showTicketList)
             this._widgetRef?.setUnreadCount(this._unreadCount)
+            this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
             this._currentView = view
             this._widgetRef?.setView(view)
 
@@ -1284,7 +1347,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 isIdentityMode={!isNull(this._identityFields())}
                 initialView={initialView}
                 initialTickets={initialTickets}
-                hasMultipleTickets={this._hasMultipleTickets}
+                showTicketList={this._showTicketList}
                 onSendMessage={this._handleSendMessage}
                 onStateChange={this._handleStateChange}
                 onIdentify={this._handleIdentify}

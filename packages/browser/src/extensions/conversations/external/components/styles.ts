@@ -202,6 +202,21 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             alignItems: 'center', // Changed from flex-end to center to vertically align input and sendButton
             flexShrink: 0,
         },
+        resolvedBanner: {
+            paddingTop: '12px',
+            background: 'white',
+            borderTop: '1px solid #dcdcdc',
+            display: 'flex',
+            flexDirection: 'column' as const,
+            flexShrink: 0,
+        },
+        resolvedBannerText: {
+            padding: '0 20px',
+            fontSize: '13px',
+            color: '#64748b',
+            textAlign: 'center' as const,
+            lineHeight: 1.5,
+        },
         input: {
             flex: 1,
             maxHeight: '120px',
