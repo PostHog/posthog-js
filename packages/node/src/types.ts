@@ -553,16 +553,16 @@ export interface IPostHog {
    * posthog.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
    * ```
    *
-   * @param options - Optional configuration for flag evaluation
+   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
    */
-  evaluateFlags(options?: BaseFlagEvaluationOptions): Promise<FeatureFlagEvaluations>
+  evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
   /**
    * @description Evaluate all feature flags for a specific user.
    *
    * @param distinctId - The user's distinct ID
-   * @param options - Optional configuration for flag evaluation
+   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
    */
-  evaluateFlags(distinctId: string, options?: BaseFlagEvaluationOptions): Promise<FeatureFlagEvaluations>
+  evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
 
   /**
    * @description Sets a groups properties, which allows asking questions like "Who are the most active companies"

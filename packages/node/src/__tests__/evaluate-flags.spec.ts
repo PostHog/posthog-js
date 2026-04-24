@@ -219,6 +219,20 @@ describe('evaluateFlags', () => {
       expect(flags.keys.sort()).toEqual(['boolean-flag', 'disabled-flag', 'variant-flag'])
     })
 
+    it('forwards flagKeys to the /flags request to scope the evaluation', async () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthog.evaluateFlags('user-1', { flagKeys: ['boolean-flag', 'variant-flag'] })
+
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      const [, init] = mockedFetch.mock.calls[0]
+      const body = JSON.parse((init as any).body as string)
+      expect(body.flag_keys_to_evaluate).toEqual(['boolean-flag', 'variant-flag'])
+    })
+
     it('returns an empty snapshot when no distinctId is available', async () => {
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',

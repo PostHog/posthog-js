@@ -14,7 +14,6 @@ import {
   PostHogPersistedProperty,
 } from '@posthog/core'
 import {
-  BaseFlagEvaluationOptions,
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
@@ -1465,11 +1464,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param options - Optional configuration for flag evaluation
    * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
    */
-  async evaluateFlags(options?: BaseFlagEvaluationOptions): Promise<FeatureFlagEvaluations>
-  async evaluateFlags(distinctId: string, options?: BaseFlagEvaluationOptions): Promise<FeatureFlagEvaluations>
+  async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
+  async evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
   async evaluateFlags(
-    distinctIdOrOptions?: string | BaseFlagEvaluationOptions,
-    options?: BaseFlagEvaluationOptions
+    distinctIdOrOptions?: string | AllFlagsOptions,
+    options?: AllFlagsOptions
   ): Promise<FeatureFlagEvaluations> {
     const { distinctId: resolvedDistinctId, options: resolvedOptions } = this._resolveDistinctId(
       distinctIdOrOptions,
@@ -1487,7 +1486,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
     }
 
-    const { groups, disableGeoip } = resolvedOptions || {}
+    const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
     const adjustedProperties = this.addLocalPersonAndGroupProperties(
@@ -1514,7 +1513,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let evaluatedAt: number | undefined = undefined
 
     // Try local evaluation first and decorate each flag with metadata from the poller.
-    const localResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(evaluationContext)
+    // `flagKeys` scopes the evaluation to a subset of definitions when provided.
+    const localResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(evaluationContext, flagKeys)
     const locallyEvaluatedKeys = new Set<string>()
     if (localResult) {
       for (const [key, value] of Object.entries(localResult.response)) {
@@ -1543,7 +1543,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         evaluationContext.groups,
         evaluationContext.personProperties,
         evaluationContext.groupProperties,
-        disableGeoip
+        disableGeoip,
+        flagKeys
       )
       if (details) {
         requestId = details.requestId
