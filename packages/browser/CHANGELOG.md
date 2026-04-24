@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.372.0
+
+### Minor Changes
+
+- [#3470](https://github.com/PostHog/posthog-js/pull/3470) [`eaa1322`](https://github.com/PostHog/posthog-js/commit/eaa1322bcbf6606bb188f84ac64246a8cfb22256) Thanks [@veryayskiy](https://github.com/veryayskiy)! - You cannot write to a resolve ticket. Start a new one.
+  (2026-04-24)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.372.0
+    - @posthog/core@1.27.4
+
 ## 1.371.4
 
 ### Patch Changes
