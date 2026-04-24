@@ -1,8 +1,11 @@
 import { isPromise } from '@posthog/core'
 import { PostHogCustomStorage } from './types'
 
-export const POSTHOG_MAIN_STORAGE_KEY = '.posthog-rn.json'
-export const POSTHOG_LOGS_STORAGE_KEY = '.posthog-rn-logs.json'
+// Module-local: SDK-internal detail, not part of any public or reachable
+// surface. The factory functions below are the only way to obtain a storage
+// instance bound to one of these files.
+const EVENTS_STORAGE_FILE = '.posthog-rn.json'
+const LOGS_STORAGE_FILE = '.posthog-rn-logs.json'
 const POSTHOG_STORAGE_VERSION = 'v1'
 
 type PostHogStorageContents = { [key: string]: any }
@@ -14,7 +17,10 @@ export class PostHogRNStorage {
   private _storageKey: string
   private _pendingPromises: Set<Promise<void>> = new Set()
 
-  constructor(storage: PostHogCustomStorage, storageKey: string) {
+  // `storageKey` defaults to the events file to keep the pre-logs constructor
+  // signature source-compatible. Prefer the `create*Storage` factories below
+  // over calling this directly.
+  constructor(storage: PostHogCustomStorage, storageKey: string = EVENTS_STORAGE_FILE) {
     this.storage = storage
     this._storageKey = storageKey
 
@@ -107,7 +113,7 @@ export class PostHogRNStorage {
 }
 
 export class PostHogRNSyncMemoryStorage extends PostHogRNStorage {
-  constructor(storageKey: string) {
+  constructor(storageKey: string = EVENTS_STORAGE_FILE) {
     const cache: { [key: string]: any | undefined } = {}
     const storage = {
       getItem: (key: string) => cache[key],
@@ -118,4 +124,23 @@ export class PostHogRNSyncMemoryStorage extends PostHogRNStorage {
 
     super(storage, storageKey)
   }
+}
+
+// Factory functions that bind the storage instance to the correct SDK-internal
+// file. The file names never leave this module — callers (including tests)
+// reach storages only through these helpers.
+export function createEventsStorage(customStorage: PostHogCustomStorage): PostHogRNStorage {
+  return new PostHogRNStorage(customStorage, EVENTS_STORAGE_FILE)
+}
+
+export function createLogsStorage(customStorage: PostHogCustomStorage): PostHogRNStorage {
+  return new PostHogRNStorage(customStorage, LOGS_STORAGE_FILE)
+}
+
+export function createEventsMemoryStorage(): PostHogRNStorage {
+  return new PostHogRNSyncMemoryStorage(EVENTS_STORAGE_FILE)
+}
+
+export function createLogsMemoryStorage(): PostHogRNStorage {
+  return new PostHogRNSyncMemoryStorage(LOGS_STORAGE_FILE)
 }

@@ -1,7 +1,7 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { Linking, AppState, AppStateStatus } from 'react-native'
 import { waitForExpect } from './test-utils'
-import { PostHogRNStorage, POSTHOG_MAIN_STORAGE_KEY } from '../src/storage'
+import { PostHogRNStorage, createEventsStorage } from '../src/storage'
 import { FeatureFlagError } from '@posthog/core'
 
 Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
@@ -388,7 +388,7 @@ describe('PostHog React Native', () => {
 
   describe('async initialization', () => {
     beforeEach(async () => {
-      const semiAsyncStorage = new PostHogRNStorage(mockStorage, POSTHOG_MAIN_STORAGE_KEY)
+      const semiAsyncStorage = createEventsStorage(mockStorage)
       await semiAsyncStorage.preloadPromise
       semiAsyncStorage.setItem(PostHogPersistedProperty.AnonymousId, 'my-anonymous-id')
     })
@@ -452,7 +452,7 @@ describe('PostHog React Native', () => {
           cache[key] = value
         }),
       }
-      rnStorage = new PostHogRNStorage(storage, POSTHOG_MAIN_STORAGE_KEY)
+      rnStorage = createEventsStorage(storage)
       await rnStorage.preloadPromise
     })
 
@@ -1329,10 +1329,10 @@ describe('PostHog React Native', () => {
 
   // Hybrid storage routing: `PostHogPersistedProperty.LogsQueue` routes to
   // a dedicated `_logsStorage` instance backed by `.posthog-rn-logs.json`,
-  // while every other enum key stays in the main `_storage` backed by
+  // while every other enum key stays in `_eventsStorage` backed by
   // `.posthog-rn.json`. These tests lock in the routing invariants.
   describe('logs storage routing', () => {
-    it('routes LogsQueue to _logsStorage and other keys to _storage (bidirectional)', async () => {
+    it('routes LogsQueue to _logsStorage and other keys to _eventsStorage (bidirectional)', async () => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
@@ -1348,18 +1348,18 @@ describe('PostHog React Native', () => {
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue)).toEqual(['log1'])
 
       // Verify each value landed in its expected storage's memoryCache
-      const mainMemoryCache = (posthog as any)._storage.memoryCache
+      const eventsMemoryCache = (posthog as any)._eventsStorage.memoryCache
       const logsMemoryCache = (posthog as any)._logsStorage.memoryCache
 
-      expect(mainMemoryCache[PostHogPersistedProperty.Queue]).toEqual(['event1'])
+      expect(eventsMemoryCache[PostHogPersistedProperty.Queue]).toEqual(['event1'])
       expect(logsMemoryCache[PostHogPersistedProperty.LogsQueue]).toEqual(['log1'])
 
       // Cross-contamination check
-      expect(mainMemoryCache[PostHogPersistedProperty.LogsQueue]).toBeUndefined()
+      expect(eventsMemoryCache[PostHogPersistedProperty.LogsQueue]).toBeUndefined()
       expect(logsMemoryCache[PostHogPersistedProperty.Queue]).toBeUndefined()
     })
 
-    it('routes non-LogsQueue keys to _storage, not _logsStorage', async () => {
+    it('routes non-LogsQueue keys to _eventsStorage, not _logsStorage', async () => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
@@ -1370,12 +1370,12 @@ describe('PostHog React Native', () => {
       posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'user-abc')
       posthog.setPersistedProperty(PostHogPersistedProperty.SessionId, 'sess-xyz')
 
-      const mainMemoryCache = (posthog as any)._storage.memoryCache
+      const eventsMemoryCache = (posthog as any)._eventsStorage.memoryCache
       const logsMemoryCache = (posthog as any)._logsStorage.memoryCache
 
-      // Non-queue keys land in main storage
-      expect(mainMemoryCache[PostHogPersistedProperty.DistinctId]).toBe('user-abc')
-      expect(mainMemoryCache[PostHogPersistedProperty.SessionId]).toBe('sess-xyz')
+      // Non-queue keys land in events storage
+      expect(eventsMemoryCache[PostHogPersistedProperty.DistinctId]).toBe('user-abc')
+      expect(eventsMemoryCache[PostHogPersistedProperty.SessionId]).toBe('sess-xyz')
 
       // Logs storage stays untouched by non-logs keys
       expect(logsMemoryCache[PostHogPersistedProperty.DistinctId]).toBeUndefined()
@@ -1390,9 +1390,7 @@ describe('PostHog React Native', () => {
       })
       await posthog.ready()
 
-      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [
-        { record: { body: { stringValue: 'test' } } },
-      ])
+      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [{ record: { body: { stringValue: 'test' } } }])
 
       // Let async persist complete on the logs storage
       await (posthog as any)._logsStorage.waitForPersist()
@@ -1467,7 +1465,6 @@ describe('PostHog React Native', () => {
       // the capture goes through the direct read-mutate-write path, not the
       // pending-buffer path (which is tested separately in logs.spec.ts).
       await (posthog as any)._logsStorage.preloadPromise
-
       ;(posthog as any)._logs.captureLog({ body: 'hello' })
 
       const logsQueue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as
@@ -1489,9 +1486,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
 
       const flushSpy = jest.spyOn(posthog, 'flush').mockResolvedValue(undefined)
-      const flushLogsSpy = jest
-        .spyOn(posthog as any, 'flushLogs')
-        .mockResolvedValue(undefined as never)
+      const flushLogsSpy = jest.spyOn(posthog as any, 'flushLogs').mockResolvedValue(undefined as never)
 
       // AppState.addEventListener is globally mocked; grab the callback that
       // was passed to it during PostHog construction and invoke it manually.

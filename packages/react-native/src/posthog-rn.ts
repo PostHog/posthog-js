@@ -19,9 +19,10 @@ import {
 } from '@posthog/core'
 import {
   PostHogRNStorage,
-  PostHogRNSyncMemoryStorage,
-  POSTHOG_MAIN_STORAGE_KEY,
-  POSTHOG_LOGS_STORAGE_KEY,
+  createEventsStorage,
+  createLogsStorage,
+  createEventsMemoryStorage,
+  createLogsMemoryStorage,
 } from './storage'
 import { PostHogLogs } from './logs'
 import { version } from './version'
@@ -116,7 +117,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
 
 export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']
-  private _storage: PostHogRNStorage
+  private _eventsStorage: PostHogRNStorage
   private _logsStorage: PostHogRNStorage
   private _appProperties: PostHogCustomAppProperties = {}
   private _currentSessionId?: string | undefined
@@ -182,8 +183,8 @@ export class PostHog extends PostHogCore {
 
     // Resolve storage and construct the logs module BEFORE registering the
     // AppState listener — the listener body references `this._logs` and
-    // `this._storage`, and while AppState.addEventListener('change') only
-    // fires on changes (not at registration), the dependency direction
+    // `this._eventsStorage`, and while AppState.addEventListener('change')
+    // only fires on changes (not at registration), the dependency direction
     // should be explicit: dependencies first, callbacks that use them second.
     let storagePromise: Promise<void> | undefined
 
@@ -193,12 +194,17 @@ export class PostHog extends PostHogCore {
     }
 
     if (theStorage) {
-      this._storage = new PostHogRNStorage(theStorage, POSTHOG_MAIN_STORAGE_KEY)
-      this._logsStorage = new PostHogRNStorage(theStorage, POSTHOG_LOGS_STORAGE_KEY)
-      storagePromise = this._storage.preloadPromise
+      this._eventsStorage = createEventsStorage(theStorage)
+      this._logsStorage = createLogsStorage(theStorage)
+      const preloads = [this._eventsStorage.preloadPromise, this._logsStorage.preloadPromise].filter(
+        (p): p is Promise<void> => !!p
+      )
+      if (preloads.length > 0) {
+        storagePromise = Promise.all(preloads).then(() => undefined)
+      }
     } else {
-      this._storage = new PostHogRNSyncMemoryStorage(POSTHOG_MAIN_STORAGE_KEY)
-      this._logsStorage = new PostHogRNSyncMemoryStorage(POSTHOG_LOGS_STORAGE_KEY)
+      this._eventsStorage = createEventsMemoryStorage()
+      this._logsStorage = createLogsMemoryStorage()
     }
 
     if (storagePromise) {
@@ -358,12 +364,12 @@ export class PostHog extends PostHogCore {
   /**
    * Resolves the storage instance for a given persisted-property key.
    * `LogsQueue` routes to `_logsStorage` (dedicated `.posthog-rn-logs.json`
-   * file); every other key routes to the main `_storage`. Single source of
+   * file); every other key routes to `_eventsStorage`. Single source of
    * truth for routing — extending to new logs-scoped keys is a one-line
    * edit here.
    */
   private _storageForKey(key: PostHogPersistedProperty): PostHogRNStorage {
-    return key === PostHogPersistedProperty.LogsQueue ? this._logsStorage : this._storage
+    return key === PostHogPersistedProperty.LogsQueue ? this._logsStorage : this._eventsStorage
   }
 
   getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined {
@@ -381,7 +387,7 @@ export class PostHog extends PostHogCore {
    * considering events as sent, preventing duplicate events on app crash/restart.
    */
   protected async flushStorage(): Promise<void> {
-    await this._storage.waitForPersist()
+    await this._eventsStorage.waitForPersist()
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
@@ -472,8 +478,9 @@ export class PostHog extends PostHogCore {
    * To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild`
    * and `PostHogPersistedProperty.InstalledAppVersion` in your array.
    *
-   * Note: The event queue (`PostHogPersistedProperty.Queue`) is always preserved regardless of
-   * what is passed in `propertiesToKeep`, to ensure pending events are not lost.
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+   * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of
+   * what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.
    *
    * {@label Identification}
    *
@@ -496,7 +503,7 @@ export class PostHog extends PostHogCore {
    * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
    *   When not provided, app lifecycle and device bucketing properties are automatically preserved.
    *   When provided, only the specified properties are preserved.
-   *   The event queue is always preserved regardless.
+   *   The event queue and logs queue are always preserved regardless.
    *
    * @public
    */

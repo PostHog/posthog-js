@@ -2,7 +2,7 @@ import { PostHogPersistedProperty } from '@posthog/core'
 import type { Logger } from '@posthog/core'
 import { PostHogLogs } from '../src/logs'
 import type { BufferedLogEntry, PostHogLogsConfig } from '../src/logs/types'
-import { PostHogRNStorage, PostHogRNSyncMemoryStorage, POSTHOG_LOGS_STORAGE_KEY } from '../src/storage'
+import { PostHogRNStorage, createLogsStorage, createLogsMemoryStorage } from '../src/storage'
 
 // Mock PostHog instance that implements getPersistedProperty / setPersistedProperty
 // against an in-memory backing store. This mirrors the routing that the real
@@ -49,12 +49,12 @@ const readQueue = (instance: any): BufferedLogEntry[] => {
 
 describe('PostHogLogs', () => {
   let mockInstance: any
-  let logsStorage: PostHogRNSyncMemoryStorage
+  let logsStorage: PostHogRNStorage
   let logger: Logger
 
   beforeEach(() => {
     mockInstance = createMockInstance()
-    logsStorage = new PostHogRNSyncMemoryStorage(POSTHOG_LOGS_STORAGE_KEY)
+    logsStorage = createLogsMemoryStorage()
     logger = createMockLogger()
   })
 
@@ -204,6 +204,10 @@ describe('PostHogLogs', () => {
   // getItem returns a Promise. Until that Promise resolves, captureLog must
   // NOT invoke setPersistedProperty (would route to empty memoryCache and
   // overwrite pre-existing records on preload).
+  //
+  // Matches events' `wrap()` pattern in @posthog/core/posthog-core-stateless.ts:
+  // pre-init captures chain onto _initPromise.then(fn), which drains in-order
+  // on resolution and silently drops on rejection.
   describe('preload race during cold start', () => {
     let resolvePreload: (value: string | null) => void = () => {}
     let asyncStorage: PostHogRNStorage
@@ -226,10 +230,10 @@ describe('PostHogLogs', () => {
         }),
         setItem: jest.fn(),
       }
-      asyncStorage = new PostHogRNStorage(backend, POSTHOG_LOGS_STORAGE_KEY)
+      asyncStorage = createLogsStorage(backend)
     })
 
-    it('holds captures in a pending buffer until preload completes', async () => {
+    it('defers captures until preload completes, then drains in order', async () => {
       const logs = new PostHogLogs(mockInstance, undefined, logger, asyncStorage)
       logs.captureLog({ body: 'before-preload' })
 
@@ -244,6 +248,8 @@ describe('PostHogLogs', () => {
 
       resolvePreload(null)
       await asyncStorage.preloadPromise
+      // Allow the _initPromise.then(fn) microtasks to drain.
+      await new Promise((resolve) => setTimeout(resolve, 0))
 
       const queue = readQueue(mockInstance)
       expect(queue).toHaveLength(2)
@@ -251,36 +257,19 @@ describe('PostHogLogs', () => {
       expect(queue[1].record.body.stringValue).toBe('before-preload')
     })
 
-    it('applies maxBufferSize to the pending buffer (OOM guard)', async () => {
-      const config: PostHogLogsConfig = { maxBufferSize: 2 }
-      const logs = new PostHogLogs(mockInstance, config, logger, asyncStorage)
-
-      logs.captureLog({ body: 'one' })
-      logs.captureLog({ body: 'two' })
-      logs.captureLog({ body: 'three' })
-      logs.captureLog({ body: 'four' })
-
-      resolvePreload(null)
-      await asyncStorage.preloadPromise
-
-      const queue = readQueue(mockInstance)
-      expect(queue.map((e) => e.record.body.stringValue)).toEqual(['three', 'four'])
-    })
-
-    it('does not write to storage when there are no pending captures', async () => {
+    it('does not write to storage when no captures came in during preload', async () => {
       new PostHogLogs(mockInstance, undefined, logger, asyncStorage)
 
       resolvePreload(null)
       await asyncStorage.preloadPromise
+      await new Promise((resolve) => setTimeout(resolve, 0))
 
       expect(mockInstance.setPersistedProperty).not.toHaveBeenCalled()
     })
 
     it('drains pending captures with capture-time context, not drain-time', async () => {
-      // If _onStorageReady rebuilt records at drain time, identity changes
-      // between capture and drain would corrupt the recorded attributes.
-      // This test locks in that records are built at captureLog() time and
-      // merely moved into the persisted queue on drain.
+      // Records are built at captureLog() time — identity changes between
+      // capture and drain must not corrupt recorded attributes.
       const instance = createMockInstance()
       instance.getDistinctId = jest.fn().mockReturnValue('user-A')
 
@@ -288,11 +277,12 @@ describe('PostHogLogs', () => {
       logs.captureLog({ body: 'captured-as-user-A' })
 
       // Simulate an identity change BEFORE preload resolves (while the
-      // capture is still sitting in the pending buffer).
+      // capture is still pending on _initPromise).
       instance.getDistinctId = jest.fn().mockReturnValue('user-B')
 
       resolvePreload(null)
       await asyncStorage.preloadPromise
+      await new Promise((resolve) => setTimeout(resolve, 0))
 
       const queue = readQueue(instance)
       expect(queue).toHaveLength(1)
@@ -301,7 +291,7 @@ describe('PostHogLogs', () => {
       expect(attrs['posthogDistinctId']).toEqual({ stringValue: 'user-A' })
     })
 
-    it('drains pending captures even if preload rejects', async () => {
+    it('silently drops captures if preload rejects (matches events wrap())', async () => {
       let rejectPreload: (err: Error) => void = () => {}
       const backend = {
         getItem: jest.fn(
@@ -312,17 +302,43 @@ describe('PostHogLogs', () => {
         ),
         setItem: jest.fn(),
       }
-      const storage = new PostHogRNStorage(backend, POSTHOG_LOGS_STORAGE_KEY)
+      const storage = createLogsStorage(backend)
       const logs = new PostHogLogs(mockInstance, undefined, logger, storage)
 
       logs.captureLog({ body: 'pending-during-reject' })
       rejectPreload(new Error('disk read failed'))
       await new Promise((resolve) => setTimeout(resolve, 0))
 
-      const queue = readQueue(mockInstance)
-      expect(queue).toHaveLength(1)
-      expect(queue[0].record.body.stringValue).toBe('pending-during-reject')
+      // Captures chained on the rejected _initPromise never run → dropped.
+      expect(readQueue(mockInstance)).toHaveLength(0)
+      expect(mockInstance.setPersistedProperty).not.toHaveBeenCalled()
+      // The failure is still logged (diagnostic only — no recovery).
       expect(logger.error).toHaveBeenCalledWith('Logs storage preload failed:', expect.any(Error))
+    })
+
+    it('captureLog does not throw to callers after preload rejects', async () => {
+      let rejectPreload: (err: Error) => void = () => {}
+      const backend = {
+        getItem: jest.fn(
+          (_key: string) =>
+            new Promise<string | null>((_, reject) => {
+              rejectPreload = (err) => reject(err)
+            })
+        ),
+        setItem: jest.fn(),
+      }
+      const storage = createLogsStorage(backend)
+      const logs = new PostHogLogs(mockInstance, undefined, logger, storage)
+
+      rejectPreload(new Error('disk read failed'))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      // Calls AFTER the rejection must not propagate to the caller.
+      expect(() => logs.captureLog({ body: 'after-reject-1' })).not.toThrow()
+      expect(() => logs.captureLog({ body: 'after-reject-2' })).not.toThrow()
+
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(readQueue(mockInstance)).toHaveLength(0)
     })
   })
 
@@ -349,7 +365,7 @@ describe('PostHogLogs', () => {
             })
         ),
       }
-      const storage = new PostHogRNStorage(backend, POSTHOG_LOGS_STORAGE_KEY)
+      const storage = createLogsStorage(backend)
       await storage.preloadPromise
 
       const logs = new PostHogLogs(mockInstance, undefined, logger, storage)
@@ -385,7 +401,7 @@ describe('PostHogLogs', () => {
             })
         ),
       }
-      const storage = new PostHogRNStorage(backend, POSTHOG_LOGS_STORAGE_KEY)
+      const storage = createLogsStorage(backend)
       await storage.preloadPromise
 
       const logs = new PostHogLogs(mockInstance, undefined, logger, storage)
@@ -416,7 +432,7 @@ describe('PostHogLogs', () => {
         getItem: jest.fn((_key: string) => Promise.resolve(null)),
         setItem: jest.fn(() => Promise.resolve()),
       }
-      const storage = new PostHogRNStorage(backend, POSTHOG_LOGS_STORAGE_KEY)
+      const storage = createLogsStorage(backend)
       await storage.preloadPromise
 
       const logs = new PostHogLogs(mockInstance, undefined, logger, storage)
