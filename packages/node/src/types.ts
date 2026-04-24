@@ -112,6 +112,7 @@ export type FeatureFlagCondition = {
   properties: FlagProperty[]
   rollout_percentage?: number
   variant?: string
+  aggregation_group_type_index?: number | null
 }
 
 export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | null
