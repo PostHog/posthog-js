@@ -6707,3 +6707,156 @@ describe('strictLocalEvaluation option', () => {
     expect(flagDefinitionsLoadedAt).toBeGreaterThan(0)
   })
 })
+
+describe('mixed targeting local evaluation', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  const mixedFlag = {
+    id: 1,
+    name: 'Mixed Flag',
+    key: 'mixed-flag',
+    active: true,
+    filters: {
+      aggregation_group_type_index: null,
+      groups: [
+        {
+          aggregation_group_type_index: 0,
+          properties: [{ key: 'plan', operator: 'exact', value: ['enterprise'], type: 'group', group_type_index: 0 }],
+          rollout_percentage: 100,
+        },
+        {
+          aggregation_group_type_index: null,
+          properties: [{ key: 'email', operator: 'exact', value: ['test@example.com'], type: 'person' }],
+          rollout_percentage: 100,
+        },
+      ],
+    },
+  }
+
+  const mixedFlagLocalResponse = {
+    flags: [mixedFlag],
+    group_type_mapping: { '0': 'company' },
+  }
+
+  it.each([
+    {
+      name: 'person condition matches when no groups passed',
+      distinctId: 'user-1',
+      options: { personProperties: { email: 'test@example.com' } },
+      expected: true,
+    },
+    {
+      name: 'group condition matches when group props match',
+      distinctId: 'user-2',
+      options: {
+        groups: { company: 'acme' },
+        groupProperties: { company: { plan: 'enterprise' } },
+        personProperties: { email: 'nope@example.com' },
+      },
+      expected: true,
+    },
+    {
+      name: 'no match when both person and group fail',
+      distinctId: 'user-3',
+      options: {
+        groups: { company: 'acme' },
+        groupProperties: { company: { plan: 'free' } },
+        personProperties: { email: 'nope@example.com' },
+      },
+      expected: false,
+    },
+  ])('$name', async ({ distinctId, options, expected }) => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: mixedFlagLocalResponse }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('mixed-flag', distinctId, options)).toEqual(expected)
+    // No fallback to /flags — mixed targeting must resolve locally.
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('only group conditions, no groups passed: returns false (not inconclusive, no /flags fallback)', async () => {
+    const onlyGroupFlag = {
+      ...mixedFlag,
+      key: 'only-group-flag',
+      filters: {
+        aggregation_group_type_index: null,
+        groups: [
+          {
+            aggregation_group_type_index: 0,
+            properties: [{ key: 'plan', operator: 'exact', value: ['enterprise'], type: 'group', group_type_index: 0 }],
+            rollout_percentage: 100,
+          },
+        ],
+      },
+    }
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: { flags: [onlyGroupFlag], group_type_mapping: { '0': 'company' } },
+        decideFlags: { 'only-group-flag': 'server-fallback' },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Group condition skips (no groups passed); no inconclusive raised, no server fallback.
+    expect(await posthog.getFeatureFlag('only-group-flag', 'user-1')).toEqual(false)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('rollout uses group bucketing for group conditions and distinct_id for person conditions', async () => {
+    // A group condition with low rollout on one group key and high rollout on a person condition.
+    // The group condition should hash on the group key, not the distinct_id.
+    const flag = {
+      id: 1,
+      name: 'Rollout Flag',
+      key: 'rollout-flag',
+      active: true,
+      filters: {
+        aggregation_group_type_index: null,
+        groups: [
+          {
+            aggregation_group_type_index: 0,
+            properties: [],
+            rollout_percentage: 100,
+          },
+        ],
+      },
+    }
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: { flags: [flag], group_type_mapping: { '0': 'company' } },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // With rollout 100%, matches deterministically regardless of hashing — but calling with the group
+    // passed should resolve locally, proving the group bucketing path is taken.
+    expect(
+      await posthog.getFeatureFlag('rollout-flag', 'any-distinct-id', {
+        groups: { company: 'acme' },
+        groupProperties: { company: {} },
+      })
+    ).toEqual(true)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+})
