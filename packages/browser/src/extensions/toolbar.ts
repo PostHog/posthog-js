@@ -138,7 +138,14 @@ export class Toolbar implements Extension {
             logger.warn('No toolbar load function found')
             return
         }
-        loadFn(params, this.instance)
+        // ph_load_toolbar is externally-injected and can throw (e.g. a fetch failing when
+        // CDN-cached toolbar.js has a stale rotating token); contain it so the exception
+        // doesn't bubble out of the scriptTag onload handler.
+        try {
+            loadFn(params, this.instance)
+        } catch (err) {
+            logger.error('[Toolbar] Failed to load', err)
+        }
     }
 
     loadToolbar(params?: ToolbarParams): boolean {

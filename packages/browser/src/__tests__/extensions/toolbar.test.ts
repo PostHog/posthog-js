@@ -192,6 +192,17 @@ describe('Toolbar', () => {
 
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
         })
+
+        it('should swallow errors thrown by the externally-injected ph_load_toolbar', () => {
+            // Simulates toolbar.js throwing synchronously (e.g. `TypeError: Failed to fetch`
+            // from a stale rotating token in CDN-cached toolbar.js).
+            assignableWindow.ph_load_toolbar = jest.fn(() => {
+                throw new TypeError('Failed to fetch')
+            })
+
+            expect(() => toolbar.loadToolbar(toolbarParams)).not.toThrow()
+            expect(assignableWindow.ph_load_toolbar).toHaveBeenCalled()
+        })
     })
 
     describe('load and close toolbar with minimal params', () => {
