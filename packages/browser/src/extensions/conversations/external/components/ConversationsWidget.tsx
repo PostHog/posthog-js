@@ -32,7 +32,7 @@ interface WidgetProps {
     isIdentityMode?: boolean
     initialView?: WidgetView
     initialTickets?: Ticket[]
-    hasMultipleTickets?: boolean
+    showTicketList?: boolean
     onSendMessage: (message: string) => Promise<void>
     onStateChange?: (state: ConversationsWidgetState) => void
     onIdentify?: (traits: UserProvidedTraits) => void
@@ -57,7 +57,8 @@ interface WidgetState {
     formEmailError: string | null
     userTraits: UserProvidedTraits | null
     unreadCount: number
-    hasMultipleTickets: boolean
+    showTicketList: boolean
+    isCurrentTicketResolved: boolean
     isIdentityMode: boolean
     restoreEmail: string
     restoreEmailError: string | null
@@ -100,7 +101,8 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             formEmailError: null,
             userTraits,
             unreadCount: 0,
-            hasMultipleTickets: props.hasMultipleTickets || false,
+            showTicketList: props.showTicketList || false,
+            isCurrentTicketResolved: false,
             isIdentityMode,
             restoreEmail: userTraits?.email || '',
             restoreEmailError: null,
@@ -232,7 +234,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     }
 
     private _handleCloseRestoreRequest = () => {
-        const returnView = this.state.hasMultipleTickets ? 'tickets' : 'messages'
+        const returnView = this.state.showTicketList ? 'tickets' : 'messages'
         this.setState({ view: returnView, restoreEmailError: null, restoreRequestSuccess: false })
         if (this.props.onViewChange) {
             this.props.onViewChange(returnView)
@@ -304,7 +306,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         }
 
         // Navigate to appropriate view after identification
-        const nextView = this.state.hasMultipleTickets ? 'tickets' : 'messages'
+        const nextView = this.state.showTicketList ? 'tickets' : 'messages'
 
         // Update state and notify parent
         this.setState({
@@ -443,7 +445,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
      */
     setUserIdentified(): void {
         if (this.state.view === 'identification') {
-            const nextView = this.state.hasMultipleTickets ? 'tickets' : 'messages'
+            const nextView = this.state.showTicketList ? 'tickets' : 'messages'
             this.setState({ view: nextView })
             if (this.props.onViewChange) {
                 this.props.onViewChange(nextView)
@@ -462,11 +464,20 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
      * Update the tickets list (called by manager during polling)
      */
     updateTickets(tickets: Ticket[]): void {
+        const showTicketList = tickets.length > 1 || (tickets.length === 1 && tickets[0].status === 'resolved')
         this.setState({
             tickets,
             ticketsLoading: false,
-            hasMultipleTickets: tickets.length > 1,
+            showTicketList,
         })
+    }
+
+    /**
+     * Set whether the current ticket (if any) is in the resolved state.
+     * Called by the manager whenever the current ticket or tickets list changes.
+     */
+    setCurrentTicketResolved(resolved: boolean): void {
+        this.setState({ isCurrentTicketResolved: resolved })
     }
 
     /**
@@ -506,7 +517,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                     prevState.view === 'restore_request' ||
                     prevState.view === 'messages'
                 if (viewNeedsReset) {
-                    nextView = prevState.hasMultipleTickets ? 'tickets' : 'messages'
+                    nextView = prevState.showTicketList ? 'tickets' : 'messages'
                     update.view = nextView
                 }
                 return update as WidgetState
@@ -583,9 +594,11 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                 inputValue={this.state.inputValue}
                 isLoading={this.state.isLoading}
                 error={this.state.error}
+                isResolved={this.state.isCurrentTicketResolved}
                 onInputChange={this._handleInputChange}
                 onKeyDown={this._handleKeyPress}
                 onSendMessage={this._handleSendMessage}
+                onStartNewConversation={this._handleNewConversation}
                 messagesEndRef={(el) => {
                     this._messagesEndRef = el
                 }}
@@ -672,8 +685,8 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             ...styles.windowOpen,
         }
 
-        // Show back button in message view when there are multiple tickets or in restore request view
-        const showBackButton = (view === 'messages' && this.state.hasMultipleTickets) || view === 'restore_request'
+        // Show back button in message view when the ticket list is available, or in restore request view
+        const showBackButton = (view === 'messages' && this.state.showTicketList) || view === 'restore_request'
 
         // Show recover footer only in tickets and messages views, and not in identity mode
         const showRecoverFooter = !this.state.isIdentityMode && (view === 'tickets' || view === 'messages')
