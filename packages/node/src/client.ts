@@ -14,6 +14,7 @@ import {
   PostHogPersistedProperty,
 } from '@posthog/core'
 import {
+  BaseFlagEvaluationOptions,
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
@@ -28,6 +29,12 @@ import {
   FlagEvaluationOptions,
   AllFlagsOptions,
 } from './types'
+import {
+  EvaluatedFlagRecord,
+  FeatureFlagEvaluations,
+  FeatureFlagEvaluationsHost,
+  FlagCalledEventParams,
+} from './feature-flag-evaluations'
 import {
   FeatureFlagsPoller,
   type FeatureFlagEvaluationContext,
@@ -48,6 +55,27 @@ const MAX_CACHE_SIZE = 50 * 1000
 
 const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
+
+/**
+ * Derive `$feature/{key}` and `$active_feature_flags` event properties from a flat
+ * `{ key: value }` map returned by the legacy `sendFeatureFlags` path.
+ */
+function buildFlagEventProperties(flagValues: Record<string, FeatureFlagValue> | undefined): Record<string, any> {
+  if (!flagValues) {
+    return {}
+  }
+  const additionalProperties: Record<string, any> = {}
+  for (const [feature, variant] of Object.entries(flagValues)) {
+    additionalProperties[`$feature/${feature}`] = variant
+  }
+  const activeFlags = Object.keys(flagValues)
+    .filter((flag) => flagValues[flag] !== false)
+    .sort()
+  if (activeFlags.length > 0) {
+    additionalProperties['$active_feature_flags'] = activeFlags
+  }
+  return additionalProperties
+}
 
 // The actual exported Nodejs API.
 export abstract class PostHogBackendClient extends PostHogCoreStateless implements IPostHog {
@@ -899,56 +927,38 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Send feature flag event if configured
     if (sendFeatureFlagEvents) {
-      // Compute the response value for event tracking
       const response = result === undefined ? undefined : result.enabled === false ? false : (result.variant ?? true)
-      const featureFlagReportedKey = `${key}_${response}`
-
-      if (
-        !(distinctId in this.distinctIdHasSentFlagCalls) ||
-        !this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey)
-      ) {
-        if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
-          this.distinctIdHasSentFlagCalls = {}
-        }
-        if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
-          this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
-        } else {
-          this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
-        }
-
-        const properties: Record<string, any> = {
-          $feature_flag: key,
-          $feature_flag_response: response,
-          $feature_flag_id: flagId,
-          $feature_flag_version: flagVersion,
-          $feature_flag_reason: flagReason,
-          locally_evaluated: flagWasLocallyEvaluated,
-          [`$feature/${key}`]: response,
-          $feature_flag_request_id: requestId,
-          $feature_flag_evaluated_at: flagWasLocallyEvaluated ? Date.now() : evaluatedAt,
-        }
-
-        // Add local evaluation definition load timestamp
-        if (flagWasLocallyEvaluated && this.featureFlagsPoller) {
-          const flagDefinitionsLoadedAt = this.featureFlagsPoller.getFlagDefinitionsLoadedAt()
-
-          if (flagDefinitionsLoadedAt !== undefined) {
-            properties.$feature_flag_definitions_loaded_at = flagDefinitionsLoadedAt
-          }
-        }
-
-        if (featureFlagError) {
-          properties.$feature_flag_error = featureFlagError
-        }
-
-        this.capture({
-          distinctId,
-          event: '$feature_flag_called',
-          properties,
-          groups,
-          disableGeoip,
-        })
+      const properties: Record<string, any> = {
+        $feature_flag: key,
+        $feature_flag_response: response,
+        $feature_flag_id: flagId,
+        $feature_flag_version: flagVersion,
+        $feature_flag_reason: flagReason,
+        locally_evaluated: flagWasLocallyEvaluated,
+        [`$feature/${key}`]: response,
+        $feature_flag_request_id: requestId,
+        $feature_flag_evaluated_at: flagWasLocallyEvaluated ? Date.now() : evaluatedAt,
       }
+
+      if (flagWasLocallyEvaluated && this.featureFlagsPoller) {
+        const flagDefinitionsLoadedAt = this.featureFlagsPoller.getFlagDefinitionsLoadedAt()
+        if (flagDefinitionsLoadedAt !== undefined) {
+          properties.$feature_flag_definitions_loaded_at = flagDefinitionsLoadedAt
+        }
+      }
+
+      if (featureFlagError) {
+        properties.$feature_flag_error = featureFlagError
+      }
+
+      this._captureFlagCalledEventIfNeeded({
+        distinctId,
+        key,
+        response,
+        groups,
+        disableGeoip,
+        properties,
+      })
     }
 
     // Apply payload override if present (even when there's no flag override)
@@ -1430,6 +1440,232 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     return { featureFlags, featureFlagPayloads }
+  }
+
+  /**
+   * Evaluate all feature flags for a user in a single call and return a
+   * {@link FeatureFlagEvaluations} snapshot. Branch on `.isEnabled()` / `.getFlag()`,
+   * then pass the same snapshot to `capture()` via the `flags` option so the
+   * captured event carries the exact flag values the code branched on.
+   *
+   * @example
+   * ```ts
+   * const flags = await client.evaluateFlags('user_123', {
+   *   personProperties: { plan: 'enterprise' },
+   * })
+   * if (flags.isEnabled('new-dashboard')) {
+   *   renderNewDashboard()
+   * }
+   * client.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
+   * @param options - Optional configuration for flag evaluation
+   * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
+   */
+  async evaluateFlags(options?: BaseFlagEvaluationOptions): Promise<FeatureFlagEvaluations>
+  async evaluateFlags(distinctId: string, options?: BaseFlagEvaluationOptions): Promise<FeatureFlagEvaluations>
+  async evaluateFlags(
+    distinctIdOrOptions?: string | BaseFlagEvaluationOptions,
+    options?: BaseFlagEvaluationOptions
+  ): Promise<FeatureFlagEvaluations> {
+    const { distinctId: resolvedDistinctId, options: resolvedOptions } = this._resolveDistinctId(
+      distinctIdOrOptions,
+      options
+    )
+
+    if (!resolvedDistinctId) {
+      this._logger.warn(
+        '[PostHog] distinctId is required to evaluate feature flags — pass it explicitly or use withContext()'
+      )
+      return new FeatureFlagEvaluations({
+        host: this._getFeatureFlagEvaluationsHost(),
+        distinctId: '',
+        flags: {},
+      })
+    }
+
+    const { groups, disableGeoip } = resolvedOptions || {}
+    let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
+
+    const adjustedProperties = this.addLocalPersonAndGroupProperties(
+      resolvedDistinctId,
+      groups,
+      personProperties,
+      groupProperties
+    )
+    personProperties = adjustedProperties.allPersonProperties
+    groupProperties = adjustedProperties.allGroupProperties
+    const evaluationContext = this.createFeatureFlagEvaluationContext(
+      resolvedDistinctId,
+      groups,
+      personProperties,
+      groupProperties
+    )
+
+    if (onlyEvaluateLocally == undefined) {
+      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
+    }
+
+    const records: Record<string, EvaluatedFlagRecord> = {}
+    let requestId: string | undefined = undefined
+    let evaluatedAt: number | undefined = undefined
+
+    // Try local evaluation first and decorate each flag with metadata from the poller.
+    const localResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(evaluationContext)
+    const locallyEvaluatedKeys = new Set<string>()
+    if (localResult) {
+      for (const [key, value] of Object.entries(localResult.response)) {
+        const flagDef = this.featureFlagsPoller?.featureFlagsByKey[key]
+        records[key] = {
+          key,
+          enabled: value !== false,
+          variant: typeof value === 'string' ? value : undefined,
+          payload: localResult.payloads[key],
+          id: flagDef?.id,
+          version: undefined,
+          reason: 'Evaluated locally',
+          locallyEvaluated: true,
+        }
+        locallyEvaluatedKeys.add(key)
+      }
+    }
+
+    // Fall back to remote evaluation for any flags the poller couldn't resolve locally.
+    // We use the detail-shaped endpoint so the resulting records carry id/version/reason
+    // and fired $feature_flag_called events match what isFeatureEnabled()/getFeatureFlag() emit.
+    const fallbackToFlags = localResult ? localResult.fallbackToFlags : true
+    if (fallbackToFlags && !onlyEvaluateLocally) {
+      const details = await super.getFeatureFlagDetailsStateless(
+        evaluationContext.distinctId,
+        evaluationContext.groups,
+        evaluationContext.personProperties,
+        evaluationContext.groupProperties,
+        disableGeoip
+      )
+      if (details) {
+        requestId = details.requestId
+        evaluatedAt = details.evaluatedAt
+        for (const [key, detail] of Object.entries(details.flags)) {
+          if (locallyEvaluatedKeys.has(key)) {
+            continue
+          }
+          let parsedPayload: JsonType | undefined = undefined
+          if (detail.metadata?.payload !== undefined) {
+            try {
+              parsedPayload = JSON.parse(detail.metadata.payload)
+            } catch {
+              parsedPayload = detail.metadata.payload
+            }
+          }
+          records[key] = {
+            key,
+            enabled: detail.enabled,
+            variant: detail.variant,
+            payload: parsedPayload,
+            id: detail.metadata?.id,
+            version: detail.metadata?.version,
+            reason: detail.reason?.description ?? detail.reason?.code,
+            locallyEvaluated: false,
+          }
+        }
+      }
+    }
+
+    // Apply overrides last so they take precedence over evaluation.
+    if (this._flagOverrides !== undefined) {
+      for (const [key, value] of Object.entries(this._flagOverrides)) {
+        if (value === undefined) {
+          delete records[key]
+          continue
+        }
+        const existing = records[key]
+        records[key] = {
+          key,
+          enabled: value !== false,
+          variant: typeof value === 'string' ? value : undefined,
+          payload: existing?.payload,
+          id: existing?.id,
+          version: existing?.version,
+          reason: existing?.reason,
+          locallyEvaluated: existing?.locallyEvaluated ?? false,
+        }
+      }
+    }
+    if (this._payloadOverrides !== undefined) {
+      for (const [key, payload] of Object.entries(this._payloadOverrides)) {
+        const existing = records[key]
+        if (existing) {
+          records[key] = { ...existing, payload }
+        }
+      }
+    }
+
+    return new FeatureFlagEvaluations({
+      host: this._getFeatureFlagEvaluationsHost(),
+      distinctId: resolvedDistinctId,
+      groups,
+      disableGeoip,
+      flags: records,
+      requestId,
+      evaluatedAt,
+    })
+  }
+
+  /**
+   * Fires a `$feature_flag_called` event for the given flag if the (distinctId, flag, response)
+   * triple hasn't already been reported for this client. Shared by the single-flag evaluation
+   * path and `FeatureFlagEvaluations.isEnabled() / getFlag()` so both paths dedupe identically.
+   *
+   * @internal
+   */
+  public _captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void {
+    const { distinctId, key, response, groups, disableGeoip, properties } = params
+    const featureFlagReportedKey = `${key}_${response}`
+
+    if (
+      distinctId in this.distinctIdHasSentFlagCalls &&
+      this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey)
+    ) {
+      return
+    }
+
+    if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
+      this.distinctIdHasSentFlagCalls = {}
+    }
+    if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
+      this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
+    } else {
+      this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
+    }
+
+    this.capture({
+      distinctId,
+      event: '$feature_flag_called',
+      properties,
+      groups,
+      disableGeoip,
+    })
+  }
+
+  private _featureFlagEvaluationsHost?: FeatureFlagEvaluationsHost
+
+  private _getFeatureFlagEvaluationsHost(): FeatureFlagEvaluationsHost {
+    if (!this._featureFlagEvaluationsHost) {
+      this._featureFlagEvaluationsHost = {
+        captureFlagCalledEventIfNeeded: (params) => this._captureFlagCalledEventIfNeeded(params),
+        logWarning: (message) => {
+          if (this.options.featureFlagsLogWarnings !== false) {
+            // These warnings guide API usage (misuse of `onlyAccessed()` / `only()`) and
+            // should always surface — unlike `this._logger.warn` which is gated on debug mode.
+            console.warn(`[PostHog] ${message}`)
+          }
+        },
+      }
+    }
+    return this._featureFlagEvaluationsHost
   }
 
   /**
@@ -1984,8 +2220,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     properties: PostHogEventProperties
     options: PostHogCaptureOptions
   }> {
-    const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
-      props
+    const {
+      distinctId,
+      event,
+      properties,
+      groups,
+      flags,
+      sendFeatureFlags,
+      timestamp,
+      disableGeoip,
+      uuid,
+    }: EventMessage = props
 
     const contextData = this.context?.get()
 
@@ -2012,6 +2257,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       event,
       properties: mergedProperties,
       groups,
+      flags,
       sendFeatureFlags,
       timestamp,
       disableGeoip,
@@ -2025,39 +2271,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
     const eventProperties = await Promise.resolve()
       .then(async () => {
+        // Prefer the explicit `flags` object — it guarantees the event carries the same
+        // values the developer branched on, with no additional network call.
+        if (flags) {
+          return flags._getEventProperties()
+        }
+
         if (sendFeatureFlags) {
           // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
           const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
-          return await this.getFeatureFlagsForEvent(
+          const flagValues = await this.getFeatureFlagsForEvent(
             eventMessage.distinctId!,
             groups,
             disableGeoip,
             sendFeatureFlagsOptions
           )
+          return buildFlagEventProperties(flagValues)
         }
 
-        if (eventMessage.event === '$feature_flag_called') {
-          // If we're capturing a $feature_flag_called event, we don't want to enrich the event with cached flags that may be out of date.
-          return {}
-        }
+        // $feature_flag_called events are not enriched with cached flags — the flags
+        // on that event should reflect the specific call, not a potentially stale snapshot.
         return {}
-      })
-      .then((flags) => {
-        // Derive the relevant flag properties to add
-        const additionalProperties: Record<string, any> = {}
-        if (flags) {
-          for (const [feature, variant] of Object.entries(flags)) {
-            additionalProperties[`$feature/${feature}`] = variant
-          }
-        }
-        const activeFlags = Object.keys(flags || {})
-          .filter((flag) => flags?.[flag] !== false)
-          .sort()
-        if (activeFlags.length > 0) {
-          additionalProperties['$active_feature_flags'] = activeFlags
-        }
-
-        return additionalProperties
       })
       .catch(() => {
         // Something went wrong getting the flag info - we should capture the event anyways
