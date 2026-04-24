@@ -29,8 +29,8 @@ export interface BufferedLogEntry {
   record: OtlpLogRecord
 }
 
-// Public configuration for the logs module. Mobile defaults diverge from
-// browser where cellular radio cost or platform constraints apply.
+// Public configuration for the logs module. Per-SDK defaults diverge (mobile
+// cellular radio cost, browser tab suspension, node process lifecycle).
 export interface PostHogLogsConfig {
   // Master switch. Default: true when a config object is provided.
   enabled?: boolean
@@ -42,27 +42,25 @@ export interface PostHogLogsConfig {
   resourceAttributes?: Record<string, LogAttributeValue>
 
   // Buffering
-  flushIntervalMs?: number // default: 10000 (browser uses 3000; cellular radio tail)
-  rateCapWindowMs?: number // default: 10000, separate from flushIntervalMs so flush cadence does not move the rate-cap window
-  maxBufferSize?: number // default: 100 — RN's in-memory buffer
-  maxLogsPerInterval?: number // default: 500 (browser uses 1000; cellular data cost)
-  maxBatchRecordsPerPost?: number // default: 50 — keeps each POST under the 2 MB server cap
+  flushIntervalMs?: number
+  rateCapWindowMs?: number // separate from flushIntervalMs so flush cadence does not move the rate-cap window
+  maxBufferSize?: number
+  maxLogsPerInterval?: number
+  maxBatchRecordsPerPost?: number // keeps each POST under the 2 MB server cap
 
   // Shutdown — separate budgets because foreground→background and app-terminate
   // have different OS-imposed windows.
-  backgroundFlushBudgetMs?: number // default: 25000 (under iOS beginBackgroundTask ~30s)
-  terminationFlushBudgetMs?: number // default: 2000 (reset / app-terminate path)
+  backgroundFlushBudgetMs?: number
+  terminationFlushBudgetMs?: number
 
   // Filtering. Runs synchronously before the rate cap so beforeSend-dropped
   // records do not consume the per-interval budget.
   beforeSend?: (record: CaptureLogOptions) => CaptureLogOptions | null
 }
 
-// Mobile defaults
-export const DEFAULT_FLUSH_INTERVAL_MS = 10000
-export const DEFAULT_RATE_CAP_WINDOW_MS = 10000
-export const DEFAULT_MAX_BUFFER_SIZE = 100
-export const DEFAULT_MAX_LOGS_PER_INTERVAL = 500
-export const DEFAULT_MAX_BATCH_RECORDS_PER_POST = 50
-export const DEFAULT_BACKGROUND_FLUSH_BUDGET_MS = 25000
-export const DEFAULT_TERMINATION_FLUSH_BUDGET_MS = 2000
+// Fields PostHogLogs needs resolved at runtime. Each SDK supplies its own
+// defaults (mobile, browser, node have different right answers) and hands the
+// filled-in config to the PostHogLogs constructor.
+export interface ResolvedPostHogLogsConfig extends PostHogLogsConfig {
+  maxBufferSize: number
+}

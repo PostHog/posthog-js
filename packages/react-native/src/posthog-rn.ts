@@ -8,6 +8,7 @@ import {
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogLogs,
   PostHogPersistedProperty,
   PostHogRemoteConfig,
   Survey,
@@ -24,7 +25,7 @@ import {
   createEventsMemoryStorage,
   createLogsMemoryStorage,
 } from './storage'
-import { PostHogLogs } from './logs'
+import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
@@ -196,24 +197,33 @@ export class PostHog extends PostHogCore {
     if (theStorage) {
       this._eventsStorage = createEventsStorage(theStorage)
       this._logsStorage = createLogsStorage(theStorage)
-      const preloads = [this._eventsStorage.preloadPromise, this._logsStorage.preloadPromise].filter(
-        (p): p is Promise<void> => !!p
-      )
+      // `allSettled` so one pipeline's preload failure doesn't block the other — the failing side
+      // degrades to memory-only via PostHogRNStorage.persist()'s internal catch.
+      const preloads: Array<['events' | 'logs', Promise<void>]> = []
+      if (this._eventsStorage.preloadPromise) {
+        preloads.push(['events', this._eventsStorage.preloadPromise])
+      }
+      if (this._logsStorage.preloadPromise) {
+        preloads.push(['logs', this._logsStorage.preloadPromise])
+      }
       if (preloads.length > 0) {
-        storagePromise = Promise.all(preloads).then(() => undefined)
+        storagePromise = Promise.allSettled(preloads.map(([, p]) => p)).then((results) => {
+          results.forEach((r, i) => {
+            if (r.status === 'rejected') {
+              console.error(`PostHog ${preloads[i][0]} storage preload failed:`, r.reason)
+            }
+          })
+        })
       }
     } else {
       this._eventsStorage = createEventsMemoryStorage()
       this._logsStorage = createLogsMemoryStorage()
     }
 
-    if (storagePromise) {
-      storagePromise.catch((error) => {
-        console.error('PostHog storage initialization failed:', error)
-      })
-    }
-
-    this._logs = new PostHogLogs(this, undefined, this._logger, this._logsStorage)
+    this._logs = new PostHogLogs(this, resolveLogsConfig(undefined), this._logger, () => ({
+      distinctId: this.getDistinctId() || undefined,
+      sessionId: this.getSessionId() || undefined,
+    }))
 
     AppState.addEventListener('change', (state) => {
       // ignore unknown state (usually initial state, the app might not be ready yet)
@@ -225,12 +235,8 @@ export class PostHog extends PostHogCore {
         await logFlushError(err)
       })
       // Drain pending logs-storage writes to disk before the OS may suspend
-      // the process. The inline .catch() prevents an unhandled rejection if
-      // flushLogs ever throws; the actual diagnostic happens inside
-      // waitForPersist.
-      void this.flushLogs().catch(() => {
-        /* swallowed: waitForPersist already logs internally */
-      })
+      // the process. waitForPersist swallows errors internally.
+      void this._logsStorage.waitForPersist()
 
       if (state === 'active') {
         // rotate session id if needed (expired either 30 minutes inactive or max duration 24 hours)
@@ -586,19 +592,6 @@ export class PostHog extends PostHogCore {
    */
   flush(): Promise<void> {
     return super.flush()
-  }
-
-  /**
-   * Drains any pending logs-storage writes to disk.
-   *
-   * TODO: remove `private` to expose this as part of the
-   * customer-facing API. For now it's used internally by the AppState
-   * handler and accessible in tests via `(posthog as any).flushLogs()`.
-   *
-   * @internal
-   */
-  private flushLogs(): Promise<void> {
-    return this._logs.flushStorage()
   }
 
   /**

@@ -1486,7 +1486,9 @@ describe('PostHog React Native', () => {
       await posthog.ready()
 
       const flushSpy = jest.spyOn(posthog, 'flush').mockResolvedValue(undefined)
-      const flushLogsSpy = jest.spyOn(posthog as any, 'flushLogs').mockResolvedValue(undefined as never)
+      const waitForPersistSpy = jest
+        .spyOn((posthog as any)._logsStorage, 'waitForPersist')
+        .mockResolvedValue(undefined as never)
 
       // AppState.addEventListener is globally mocked; grab the callback that
       // was passed to it during PostHog construction and invoke it manually.
@@ -1498,10 +1500,10 @@ describe('PostHog React Native', () => {
       callback('background' as AppStateStatus)
 
       expect(flushSpy).toHaveBeenCalled()
-      expect(flushLogsSpy).toHaveBeenCalled()
+      expect(waitForPersistSpy).toHaveBeenCalled()
 
       flushSpy.mockRestore()
-      flushLogsSpy.mockRestore()
+      waitForPersistSpy.mockRestore()
     })
   })
 })
