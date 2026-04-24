@@ -194,15 +194,7 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  /**
-   * Schedule fn to run once the SDK has finished initializing. If init has
-   * been rejected or the SDK is disabled, fn is silently dropped. Used by
-   * the SDK's own capture/identify/alias/etc. paths, and by composition
-   * modules (e.g. PostHogLogs) that need init-gated work without subclassing.
-   *
-   * @internal
-   */
-  public wrap(fn: () => void): void {
+  protected wrap(fn: () => void): void {
     if (this.disabled) {
       this._logger.warn('The client is disabled')
       return

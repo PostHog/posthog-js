@@ -12,9 +12,8 @@ const resolveForTest = (partial?: PostHogLogsConfig): ResolvedPostHogLogsConfig 
   maxBufferSize: partial?.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
 })
 
-// Mock PostHog instance. Defaults to "already initialized" — `wrap(fn)` runs
-// fn synchronously, matching `PostHogCore.wrap` after init resolves. Tests that
-// need to model the cold-start window override `wrap` to defer.
+// Mock PostHog instance exposing the `PostHogCoreStateless` surface PostHogLogs
+// touches. Init gating is injected separately via the onReady closure.
 const createMockInstance = (overrides: Record<string, any> = {}): any => {
   const store: Record<string, any> = {}
   const instance: any = {
@@ -29,13 +28,16 @@ const createMockInstance = (overrides: Record<string, any> = {}): any => {
         store[key] = value
       }
     }),
-    wrap: jest.fn((fn: () => void) => fn()),
     addPendingPromise: jest.fn(<T>(promise: Promise<T>) => promise),
     _store: store,
     ...overrides,
   }
   return instance
 }
+
+// Default onReady for tests — runs fn synchronously, matching a post-init SDK.
+// Tests that model pre-init or rejected init provide their own closure.
+const immediateOnReady = (fn: () => void): void => fn()
 
 const createMockLogger = (): Logger => {
   const logger: any = {
@@ -69,13 +71,13 @@ describe('PostHogLogs', () => {
   })
 
   it('constructs without throwing', () => {
-    const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+    const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
     expect(logs).toBeDefined()
   })
 
   describe('captureLog', () => {
     it('writes a record to the logs queue via setPersistedProperty', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({ body: 'hello world' })
 
       const queue = readQueue(mockInstance)
@@ -88,7 +90,7 @@ describe('PostHogLogs', () => {
     })
 
     it('maps severity levels correctly', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({ body: 'oh no', level: 'error' })
 
       const queue = readQueue(mockInstance)
@@ -97,7 +99,7 @@ describe('PostHogLogs', () => {
     })
 
     it('defaults to INFO when no level is provided', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({ body: 'hello' })
 
       const queue = readQueue(mockInstance)
@@ -105,7 +107,7 @@ describe('PostHogLogs', () => {
     })
 
     it('auto-populates distinctId and sessionId', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({ body: 'test' })
 
       const queue = readQueue(mockInstance)
@@ -115,7 +117,7 @@ describe('PostHogLogs', () => {
     })
 
     it('merges user attributes over auto-populated ones', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({ body: 'test', attributes: { posthogDistinctId: 'override' } })
 
       const queue = readQueue(mockInstance)
@@ -124,21 +126,21 @@ describe('PostHogLogs', () => {
     })
 
     it('is a no-op when body is empty', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({ body: '' })
       expect(readQueue(mockInstance)).toHaveLength(0)
       expect(mockInstance.setPersistedProperty).not.toHaveBeenCalled()
     })
 
     it('is a no-op when body is missing', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({} as any)
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
     it('is a no-op when optedOut is true', () => {
       const instance = createMockInstance({ optedOut: true })
-      const logs = new PostHogLogs(instance, resolveForTest(), logger, getContextFor(instance))
+      const logs = new PostHogLogs(instance, resolveForTest(), logger, getContextFor(instance), immediateOnReady)
       logs.captureLog({ body: 'should be dropped' })
       expect(readQueue(instance)).toHaveLength(0)
     })
@@ -148,20 +150,21 @@ describe('PostHogLogs', () => {
         mockInstance,
         resolveForTest({ enabled: false }),
         logger,
-        getContextFor(mockInstance)
+        getContextFor(mockInstance),
+        immediateOnReady
       )
       logs.captureLog({ body: 'should be dropped' })
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
     it('captures when config is provided with enabled undefined (defaults to true)', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest({}), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest({}), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({ body: 'kept' })
       expect(readQueue(mockInstance)).toHaveLength(1)
     })
 
     it('appends subsequent captures to the existing queue', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({ body: 'first' })
       logs.captureLog({ body: 'second' })
       logs.captureLog({ body: 'third' })
@@ -178,7 +181,8 @@ describe('PostHogLogs', () => {
         mockInstance,
         resolveForTest({ maxBufferSize: 3 }),
         logger,
-        getContextFor(mockInstance)
+        getContextFor(mockInstance),
+        immediateOnReady
       )
 
       logs.captureLog({ body: 'one' })
@@ -196,7 +200,8 @@ describe('PostHogLogs', () => {
         mockInstance,
         resolveForTest({ maxBufferSize: 1 }),
         logger,
-        getContextFor(mockInstance)
+        getContextFor(mockInstance),
+        immediateOnReady
       )
 
       logs.captureLog({ body: 'first' })
@@ -206,7 +211,7 @@ describe('PostHogLogs', () => {
     })
 
     it('passes trace context through to the OTLP record', () => {
-      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
       logs.captureLog({
         body: 'trace test',
         trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
@@ -221,61 +226,55 @@ describe('PostHogLogs', () => {
     })
   })
 
-  // captureLog routes through `_instance.wrap()` so init gating is the parent
-  // SDK's responsibility. These tests exercise that contract by overriding
-  // `wrap` on the mock instance.
-  describe('init gating via _instance.wrap', () => {
-    it('defers captures until wrap calls fn, then drains in order', () => {
+  // captureLog routes deferred work through the injected onReady closure. These
+  // tests exercise that contract by substituting a custom onReady.
+  describe('init gating via onReady', () => {
+    it('defers captures until onReady runs fn, then drains in order', () => {
       const pending: Array<() => void> = []
-      const instance = createMockInstance({
-        wrap: jest.fn((fn: () => void) => {
-          pending.push(fn)
-        }),
-      })
+      const defer = (fn: () => void): void => {
+        pending.push(fn)
+      }
 
-      // Pre-existing persisted queue (as if previous session's records loaded).
-      instance._store[PostHogPersistedProperty.LogsQueue] = [
+      mockInstance._store[PostHogPersistedProperty.LogsQueue] = [
         { record: { body: { stringValue: 'prior-session' } } as any },
       ]
 
-      const logs = new PostHogLogs(instance, resolveForTest(), logger, getContextFor(instance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), defer)
       logs.captureLog({ body: 'before-init' })
 
-      expect(instance.setPersistedProperty).not.toHaveBeenCalled()
+      expect(mockInstance.setPersistedProperty).not.toHaveBeenCalled()
 
       pending.forEach((fn) => fn())
 
-      const queue = readQueue(instance)
+      const queue = readQueue(mockInstance)
       expect(queue).toHaveLength(2)
       expect(queue[0].record.body.stringValue).toBe('prior-session')
       expect(queue[1].record.body.stringValue).toBe('before-init')
     })
 
-    it('silently drops captures when wrap never invokes fn (rejected init)', () => {
-      const instance = createMockInstance({
-        wrap: jest.fn(() => {
-          /* simulate rejected init: fn is never called */
-        }),
+    it('silently drops captures when onReady never invokes fn (rejected init)', () => {
+      const neverReady = jest.fn(() => {
+        /* simulate rejected init: fn is never called */
       })
-      const logs = new PostHogLogs(instance, resolveForTest(), logger, getContextFor(instance))
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), neverReady)
 
       logs.captureLog({ body: 'dropped' })
 
-      expect(readQueue(instance)).toHaveLength(0)
-      expect(instance.setPersistedProperty).not.toHaveBeenCalled()
-      expect(instance.wrap).toHaveBeenCalledTimes(1)
+      expect(readQueue(mockInstance)).toHaveLength(0)
+      expect(mockInstance.setPersistedProperty).not.toHaveBeenCalled()
+      expect(neverReady).toHaveBeenCalledTimes(1)
     })
 
-    it('builds record with capture-time context even when wrap defers drain', () => {
+    it('builds record with capture-time context even when onReady defers drain', () => {
       const pending: Array<() => void> = []
+      const defer = (fn: () => void): void => {
+        pending.push(fn)
+      }
       const instance = createMockInstance({
         getDistinctId: jest.fn().mockReturnValue('user-A'),
-        wrap: jest.fn((fn: () => void) => {
-          pending.push(fn)
-        }),
       })
 
-      const logs = new PostHogLogs(instance, resolveForTest(), logger, getContextFor(instance))
+      const logs = new PostHogLogs(instance, resolveForTest(), logger, getContextFor(instance), defer)
       logs.captureLog({ body: 'captured-as-user-A' })
 
       instance.getDistinctId = jest.fn().mockReturnValue('user-B')
@@ -289,12 +288,10 @@ describe('PostHogLogs', () => {
     })
 
     it('captureLog does not throw to the caller', () => {
-      const instance = createMockInstance({
-        wrap: jest.fn(() => {
-          /* simulate rejected init */
-        }),
-      })
-      const logs = new PostHogLogs(instance, resolveForTest(), logger, getContextFor(instance))
+      const neverReady = (): void => {
+        /* simulate rejected init */
+      }
+      const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), neverReady)
 
       expect(() => logs.captureLog({ body: 'after-reject-1' })).not.toThrow()
       expect(() => logs.captureLog({ body: 'after-reject-2' })).not.toThrow()

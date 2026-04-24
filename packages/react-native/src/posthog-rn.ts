@@ -221,10 +221,16 @@ export class PostHog extends PostHogCore {
       this._logsStorage = createLogsMemoryStorage()
     }
 
-    this._logs = new PostHogLogs(this, resolveLogsConfig(undefined), this._logger, () => ({
-      distinctId: this.getDistinctId() || undefined,
-      sessionId: this.getSessionId() || undefined,
-    }))
+    this._logs = new PostHogLogs(
+      this,
+      resolveLogsConfig(undefined),
+      this._logger,
+      () => ({
+        distinctId: this.getDistinctId() || undefined,
+        sessionId: this.getSessionId() || undefined,
+      }),
+      (fn) => this.wrap(fn)
+    )
 
     AppState.addEventListener('change', (state) => {
       // ignore unknown state (usually initial state, the app might not be ready yet)
