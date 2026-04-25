@@ -192,6 +192,25 @@ describe('Toolbar', () => {
 
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
         })
+
+        it('should report when the toolbar is loaded', () => {
+            expect(toolbar.isToolbarLoaded()).toBe(false)
+
+            expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
+
+            expect(toolbar.isToolbarLoaded()).toBe(true)
+        })
+
+        it('should hide the toolbar and clear the persisted params', () => {
+            expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
+            expect(toolbar.hideToolbar()).toBe(true)
+            expect(toolbar.isToolbarLoaded()).toBe(false)
+            expect(window.localStorage.getItem('_postHogToolbarParams')).toBeNull()
+        })
+
+        it('should return false when hiding an unloaded toolbar', () => {
+            expect(toolbar.hideToolbar()).toBe(false)
+        })
     })
 
     describe('load and close toolbar with minimal params', () => {

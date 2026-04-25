@@ -4,7 +4,7 @@ import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { createLogger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
-import { TOOLBAR_ID } from '../constants'
+import { TOOLBAR_CONTAINER_CLASS, TOOLBAR_ID } from '../constants'
 import { isFunction, isNullish } from '@posthog/core'
 import { Extension } from './types'
 
@@ -35,6 +35,25 @@ export class Toolbar implements Extension {
 
     private _getToolbarState(): ToolbarState {
         return assignableWindow['ph_toolbar_state'] ?? ToolbarState.UNINITIALIZED
+    }
+
+    isToolbarLoaded(): boolean {
+        return !!document?.getElementById(TOOLBAR_ID)
+    }
+
+    hideToolbar(): boolean {
+        const toolbar = document?.getElementById(TOOLBAR_ID)
+        const container = toolbar?.closest?.(`.${TOOLBAR_CONTAINER_CLASS}`)
+
+        if (!toolbar) {
+            return false
+        }
+
+        container?.remove()
+        toolbar.remove()
+        window.localStorage.removeItem(LOCALSTORAGE_KEY)
+
+        return true
     }
 
     initialize(): boolean {
