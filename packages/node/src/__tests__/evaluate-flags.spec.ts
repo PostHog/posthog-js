@@ -243,6 +243,22 @@ describe('evaluateFlags', () => {
 
       expect(flags.keys).toEqual([])
     })
+
+    it('does not fire $feature_flag_called events from an empty-distinctId snapshot', async () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...posthogImmediateResolveOptions,
+      })
+      const captures: any[] = []
+      posthog.on('capture', (message) => captures.push(message))
+
+      const flags = await posthog.evaluateFlags()
+      flags.isEnabled('any-flag')
+      flags.getFlag('any-flag')
+
+      await waitForPromises()
+      expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+    })
   })
 
   describe('filtering helpers', () => {
@@ -430,21 +446,22 @@ describe('evaluateFlags', () => {
   })
 
   describe('local evaluation', () => {
-    it('evaluates flags locally and tags events with locally_evaluated=true', async () => {
-      const localFlags = {
-        flags: [
-          {
-            id: 42,
-            name: 'Always on',
-            key: 'local-flag',
-            active: true,
-            filters: {
-              groups: [{ variant: null, properties: [], rollout_percentage: 100 }],
-            },
+    const localFlagsFixture = () => ({
+      flags: [
+        {
+          id: 42,
+          name: 'Always on',
+          key: 'local-flag',
+          active: true,
+          filters: {
+            groups: [{ variant: null, properties: [], rollout_percentage: 100 }],
           },
-        ],
-      }
-      mockedFetch.mockImplementation(apiImplementation({ localFlags }))
+        },
+      ],
+    })
+
+    it('evaluates flags locally and tags events with locally_evaluated=true', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: localFlagsFixture() }))
 
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
@@ -470,6 +487,25 @@ describe('evaluateFlags', () => {
       // No remote /flags request since local evaluation covered it.
       const remoteFlagCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2'))
       expect(remoteFlagCalls).toHaveLength(0)
+    })
+
+    it('attaches $feature_flag_definitions_loaded_at on locally-evaluated $feature_flag_called events', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: localFlagsFixture() }))
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+      const captures: any[] = []
+      posthog.on('capture', (message) => captures.push(message))
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('local-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
+      expect(flagCalled.properties.$feature_flag_definitions_loaded_at).toEqual(expect.any(Number))
     })
   })
 

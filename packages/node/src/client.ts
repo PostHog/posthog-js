@@ -1568,6 +1568,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           variant: typeof value === 'string' ? value : undefined,
           payload: localResult.payloads[key],
           id: flagDef?.id,
+          // The local-evaluation flag definition (`PostHogFeatureFlag`) does not carry a
+          // version field; only the remote `/flags` response does via `metadata.version`.
           version: undefined,
           reason: 'Evaluated locally',
           locallyEvaluated: true,
@@ -1655,6 +1657,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       flags: records,
       requestId,
       evaluatedAt,
+      flagDefinitionsLoadedAt: this.featureFlagsPoller?.getFlagDefinitionsLoadedAt(),
     })
   }
 
@@ -1665,7 +1668,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @internal
    */
-  public _captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void {
+  protected _captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void {
     const { distinctId, key, response, groups, disableGeoip, properties } = params
     const featureFlagReportedKey = `${key}_${response}`
 

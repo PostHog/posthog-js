@@ -73,6 +73,7 @@ export class FeatureFlagEvaluations {
   private readonly _flags: Record<string, EvaluatedFlagRecord>
   private readonly _requestId: string | undefined
   private readonly _evaluatedAt: number | undefined
+  private readonly _flagDefinitionsLoadedAt: number | undefined
   private readonly _accessed: Set<string>
 
   /**
@@ -86,6 +87,7 @@ export class FeatureFlagEvaluations {
     flags: Record<string, EvaluatedFlagRecord>
     requestId?: string
     evaluatedAt?: number
+    flagDefinitionsLoadedAt?: number
     accessed?: Set<string>
   }) {
     this._host = init.host
@@ -95,6 +97,7 @@ export class FeatureFlagEvaluations {
     this._flags = init.flags
     this._requestId = init.requestId
     this._evaluatedAt = init.evaluatedAt
+    this._flagDefinitionsLoadedAt = init.flagDefinitionsLoadedAt
     this._accessed = init.accessed ?? new Set()
   }
 
@@ -142,9 +145,13 @@ export class FeatureFlagEvaluations {
 
   /**
    * Return a filtered copy containing only flags that have been accessed via
-   * `isEnabled()` or `getFlag()` before this call. If no flags have been accessed,
-   * logs a warning and returns a copy with all flags (to avoid dropping exposure
-   * data silently).
+   * `isEnabled()` or `getFlag()` before this call.
+   *
+   * **Empty-access fallback:** if no flags have been accessed yet, this method logs
+   * a warning and returns a copy with *all* evaluated flags. This avoids silently
+   * dropping every flag from the captured event when `onlyAccessed()` is called
+   * out of order (for example, before any branching has occurred). Pre-access
+   * before calling this if you want a guaranteed-empty result.
    */
   onlyAccessed(): FeatureFlagEvaluations {
     if (this._accessed.size === 0) {
@@ -240,6 +247,7 @@ export class FeatureFlagEvaluations {
       flags,
       requestId: this._requestId,
       evaluatedAt: this._evaluatedAt,
+      flagDefinitionsLoadedAt: this._flagDefinitionsLoadedAt,
       // Copy the accessed set so the child can track further access independently
       // of the parent. Callers expect `onlyAccessed()` on the parent to reflect
       // only what the parent saw, not what happened on filtered views.
@@ -249,6 +257,13 @@ export class FeatureFlagEvaluations {
 
   private _recordAccess(key: string): void {
     this._accessed.add(key)
+
+    // Empty snapshots (no resolvable distinctId) are returned by `evaluateFlags()` as a
+    // safety fallback. Firing $feature_flag_called for them would emit events with an
+    // empty distinct_id, polluting analytics — short-circuit here instead.
+    if (this._distinctId === '') {
+      return
+    }
 
     const flag = this._flags[key]
     const response: FeatureFlagValue | undefined =
@@ -264,6 +279,10 @@ export class FeatureFlagEvaluations {
       [`$feature/${key}`]: response,
       $feature_flag_request_id: this._requestId,
       $feature_flag_evaluated_at: flag?.locallyEvaluated ? Date.now() : this._evaluatedAt,
+    }
+
+    if (flag?.locallyEvaluated && this._flagDefinitionsLoadedAt !== undefined) {
+      properties.$feature_flag_definitions_loaded_at = this._flagDefinitionsLoadedAt
     }
 
     if (flag === undefined) {
