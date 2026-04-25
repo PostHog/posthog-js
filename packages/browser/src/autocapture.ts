@@ -161,7 +161,7 @@ export function autocapturePropertiesForElement(
         const parent: ParentNode | null = curEl.parentNode
         if (!parent) break
         if (isDocumentFragment(parent)) {
-            const host = (parent as ShadowRoot).host
+            const host: Element | null = (parent as any).host || null
             if (!host) break
             targetElementList.push(host)
             curEl = host

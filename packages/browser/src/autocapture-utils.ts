@@ -242,7 +242,7 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
         if (!parent) break
         // If element is a shadow root, we skip it
         if (isDocumentFragment(parent)) {
-            const host = (parent as ShadowRoot).host
+            const host: Element | null = (parent as any).host || null
             if (!host) break
             targetElementList.push(host)
             curEl = host
