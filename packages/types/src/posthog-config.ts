@@ -975,10 +975,10 @@ export interface PostHogConfig {
 
     /**
      * Where to inject external dependency scripts (recorder, surveys, etc.) in the DOM.
-     * - 'body': Injects scripts into document.body (legacy behavior)
-     * - 'head': Injects scripts into document.head (avoids SSR hydration errors)
+     * - 'head': Injects scripts into document.head (default — avoids SSR hydration errors)
+     * - 'body': Injects scripts into document.body (legacy behavior — opt-in)
      *
-     * @default 'body' (or 'head' when defaults >= '2026-01-30')
+     * @default 'head'
      */
     external_scripts_inject_target?: 'body' | 'head'
 
@@ -1113,7 +1113,7 @@ export interface PostHogConfig {
      * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
-     * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
+     * - `'2026-01-30'`: Defaults from '2025-11-30' plus internal_or_test_user_hostname defaults to `/^(localhost|127\.0\.0\.1)$/`
      *
      * @default 'unset'
      */
