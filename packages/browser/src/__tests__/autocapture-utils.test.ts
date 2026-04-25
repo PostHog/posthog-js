@@ -427,6 +427,21 @@ describe(`Autocapture utility functions`, () => {
             })
         })
 
+        it(`does not throw on a detached element with no parent`, () => {
+            const detached = document!.createElement(`div`)
+            expect(() => shouldCaptureElement(detached)).not.toThrow()
+            expect(shouldCaptureElement(detached)).toBe(true)
+        })
+
+        it(`does not throw when an ancestor's parent is not an element`, () => {
+            const detachedRoot = document!.createElement(`div`)
+            const child = document!.createElement(`span`)
+            detachedRoot.appendChild(child)
+            // detachedRoot.parentNode is null; ensure walk terminates safely
+            expect(() => shouldCaptureElement(child)).not.toThrow()
+            expect(shouldCaptureElement(child)).toBe(true)
+        })
+
         // See https://github.com/posthog/posthog-js/issues/165
         // Under specific circumstances a bug caused .replace to be called on a DOM element
         // instead of a string, removing the element from the page. Ensure this issue is mitigated.
