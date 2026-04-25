@@ -8,6 +8,7 @@ import type {
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
+import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
@@ -27,6 +28,17 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
   distinctId?: string // Optional - can be provided via context
   event: string
   groups?: Record<string, string | number> // Mapping of group type to group id
+  /**
+   * Attach feature flag values evaluated via `posthog.evaluateFlags()` to this event.
+   * Prefer this over `sendFeatureFlags` — it guarantees the event carries the exact
+   * values the code branched on and avoids a hidden `/flags` request on every capture.
+   */
+  flags?: FeatureFlagEvaluations
+  /**
+   * @deprecated Use the `flags` option with a `FeatureFlagEvaluations` object obtained
+   * from `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags`
+   * request on capture and may return different values than the ones the code branched on.
+   */
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
   timestamp?: Date
   uuid?: string
@@ -216,6 +228,14 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    */
   strictLocalEvaluation?: boolean
   /**
+   * Controls whether `FeatureFlagEvaluations` filter helpers (`onlyAccessed()` and
+   * `only()`) log warnings when their input is unexpected — for example, calling
+   * `onlyAccessed()` before accessing any flags, or passing unknown keys to `only()`.
+   *
+   * @default true
+   */
+  featureFlagsLogWarnings?: boolean
+  /**
    * Provides the API to extend the lifetime of a serverless invocation until
    * background work (like flushing analytics events) completes after the response
    * is sent.
@@ -311,9 +331,10 @@ export interface IPostHog {
    * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
    * @param properties OPTIONAL | which can be a object with any information you'd like to add
    * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
-   * @param sendFeatureFlags OPTIONAL | Used with experiments. Determines whether to send feature flag values with the event.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
    */
-  capture({ distinctId, event, properties, groups, sendFeatureFlags }: EventMessage): void
+  capture({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): void
 
   /**
    * @description Capture an event immediately. Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
@@ -321,9 +342,10 @@ export interface IPostHog {
    * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
    * @param properties OPTIONAL | which can be a object with any information you'd like to add
    * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
-   * @param sendFeatureFlags OPTIONAL | Used with experiments. Determines whether to send feature flag values with the event.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
    */
-  captureImmediate({ distinctId, event, properties, groups, sendFeatureFlags }: EventMessage): Promise<void>
+  captureImmediate({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): Promise<void>
 
   /**
    * @description Identify lets you add metadata on your users so you can more easily identify who they are in PostHog,
@@ -511,6 +533,36 @@ export interface IPostHog {
     distinctId: string,
     options?: FlagEvaluationOptions
   ): Promise<FeatureFlagResult | undefined>
+
+  /**
+   * @description Evaluate all feature flags for a user in a single call and return a
+   * {@link FeatureFlagEvaluations} snapshot. Branch on `.isEnabled()` / `.getFlag()`,
+   * then pass the same snapshot to `capture()` via the `flags` option so events carry
+   * the exact flag values the code branched on.
+   *
+   * Prefer this over calling `isFeatureEnabled()` / `getFeatureFlag()` repeatedly and
+   * over `capture({ sendFeatureFlags: true })` — it avoids multiple `/flags` requests
+   * per incoming request.
+   *
+   * @example
+   * ```ts
+   * const flags = await posthog.evaluateFlags('user_123', { personProperties: { plan: 'enterprise' } })
+   * if (flags.isEnabled('new-dashboard')) {
+   *   renderNewDashboard()
+   * }
+   * posthog.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
+   * ```
+   *
+   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   */
+  evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
+  /**
+   * @description Evaluate all feature flags for a specific user.
+   *
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   */
+  evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
 
   /**
    * @description Sets a groups properties, which allows asking questions like "Who are the most active companies"
