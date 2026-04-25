@@ -5,6 +5,7 @@ import {
     getDirectAndNestedSpanText,
     getElementsChainString,
     getEventTarget,
+    getParentElement,
     getSafeText,
     isAngularStyleAttr,
     isSensitiveElement,
@@ -155,15 +156,21 @@ export function autocapturePropertiesForElement(
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
     const targetElementList = [target]
-    let curEl = target
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
-        if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+    let curEl: Element | null = target
+    while (curEl && !isTag(curEl, 'body')) {
+        const parent: ParentNode | null = curEl.parentNode
+        if (!parent) break
+        if (isDocumentFragment(parent)) {
+            const host = (parent as ShadowRoot).host
+            if (!host) break
+            targetElementList.push(host)
+            curEl = host
             continue
         }
-        targetElementList.push(curEl.parentNode as Element)
-        curEl = curEl.parentNode as Element
+        const parentEl = getParentElement(curEl)
+        if (!parentEl) break
+        targetElementList.push(parentEl)
+        curEl = parentEl
     }
 
     const elementsJson: Properties[] = []
@@ -364,7 +371,8 @@ export class Autocapture implements Extension {
         let target = getEventTarget(e)
         if (isTextNode(target)) {
             // defeat Safari bug (see: http://www.quirksmode.org/js/events_properties.html)
-            target = (target.parentNode || null) as Element | null
+            const parent = target.parentNode
+            target = isElementNode(parent) ? parent : null
         }
 
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {

@@ -1019,6 +1019,35 @@ describe('Autocapture system', () => {
             expect(props['$event_type']).toBe('click')
         })
 
+        it('does not throw when the click target is a text node with no parent', () => {
+            const textNode = document.createTextNode('orphan')
+            const e = makeMouseEvent({ target: textNode as unknown as Element })
+            expect(() => autocapture['_captureEvent'](e)).not.toThrow()
+            expect(beforeSendMock).toHaveBeenCalledTimes(0)
+        })
+
+        it('does not throw when the click target is a detached element', () => {
+            const detached = document.createElement('a')
+            detached.innerHTML = 'click me'
+            const e = makeMouseEvent({ target: detached })
+            expect(() => autocapture['_captureEvent'](e)).not.toThrow()
+        })
+
+        it('does not throw when a shadow root has no host', () => {
+            const main_el = document.createElement('some-element')
+            const shadowRoot = main_el.attachShadow({ mode: 'open' })
+            const button = document.createElement('a')
+            button.innerHTML = 'bla'
+            shadowRoot.appendChild(button)
+            // Simulate the host being detached/null after capture started
+            Object.defineProperty(shadowRoot, 'host', { value: null, configurable: true })
+            const e = makeMouseEvent({
+                target: main_el,
+                composedPath: () => [button, main_el],
+            })
+            expect(() => autocapture['_captureEvent'](e)).not.toThrow()
+        })
+
         it('should never capture an element with `ph-no-capture` class', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')
