@@ -10,14 +10,12 @@ pnpm changeset
 
 CLI will prompt questions about the changes you've made and will generate a changeset file for you.
 
-Add a `release` label to your PR to automatically:
+When a PR containing a changeset is merged to `main`, the release workflow will automatically:
 
 1. Bump versions based on changesets
 2. Commit version updates directly to main
 3. Publish packages to npm
 4. Create GitHub releases
-
-All of this happens automatically when the PR is merged - no intermediate PRs needed!
 
 # for posthog-js browser sdk
 

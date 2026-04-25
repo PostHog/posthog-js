@@ -24,9 +24,6 @@ jobs:
         
       - name: Check for major version bumps
         id: check-major
-        env:
-          # Avoid wrapping labels JSON in shell single quotes; apostrophes in label text break the script.
-          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels) }}
         run: |
           # Get only added changeset files in this PR
           changesets=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD | grep '^\.changeset/.*\.md$' | grep -v 'README.md' || true)
@@ -34,14 +31,6 @@ jobs:
           if [ -z "$changesets" ]; then
             echo "No new changesets found in this PR"
             echo "no_changesets=true" >> $GITHUB_OUTPUT
-
-            # Check if PR has release label
-            has_release_label=$(echo "$PR_LABELS_JSON" | jq -r '.[] | select(.name == "release") | .name')
-
-            if [ -n "$has_release_label" ]; then
-              echo "❌ Error: PR has 'release' label but no changeset found"
-              exit 1
-            fi
 
             exit 0
           fi
@@ -190,24 +179,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const hasReleaseLabel = context.payload.pull_request.labels.some(label => label.name === 'release');
+            const comment = `## 📝 No Changeset Found
 
-            const comment = hasReleaseLabel
-              ? `## ❌ No Changeset Found (Build Failed)
-
-            This PR has the \`release\` label but doesn't include a changeset. A changeset is **required** when the release label is present.
-
-            ### How to add a changeset
-
-            Run this command and follow the prompts:
-            \`\`\`bash
-            pnpm changeset
-            \`\`\`
-
-            **Remember:** Never use \`major\` version bumps for \`posthog-js\` as it's autoloaded by clients.`
-              : `## 📝 No Changeset Found
-
-            This PR doesn't include a changeset. A changeset (and the release label) is required to release a new version.
+            This PR doesn't include a changeset. A changeset is required to release a new version.
 
             ### How to add a changeset
 

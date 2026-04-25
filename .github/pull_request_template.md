@@ -37,6 +37,5 @@
 ### If releasing new changes
 
 - [ ] Ran `pnpm changeset` to generate a changeset file
-- [ ] Added the "release" label to the PR to indicate we're publishing new versions for the affected packages
 
 <!-- For more details check RELEASING.md -->
