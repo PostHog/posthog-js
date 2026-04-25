@@ -10,6 +10,8 @@ export {
   toOtlpAnyValue,
   toOtlpKeyValueList,
 } from './logs/logs-utils'
+export { PostHogLogs } from './logs'
+export type { BufferedLogEntry, PostHogLogsConfig, ResolvedPostHogLogsConfig } from './logs/types'
 export { uuidv7 } from './vendor/uuidv7'
 export * from './posthog-core'
 export * from './posthog-core-stateless'

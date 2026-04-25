@@ -7,7 +7,7 @@ jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
   },
 }))
 
-import { PostHogRNStorage } from '../src/storage'
+import { PostHogRNStorage, createEventsStorage } from '../src/storage'
 import { buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
@@ -35,7 +35,7 @@ describe('PostHog React Native', () => {
         return res
       })
 
-      storage = new PostHogRNStorage(buildOptimisticAsyncStorage())
+      storage = createEventsStorage(buildOptimisticAsyncStorage())
     })
 
     it('should load storage from the file system', async () => {

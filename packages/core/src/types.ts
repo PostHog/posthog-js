@@ -220,6 +220,9 @@ export enum PostHogPersistedProperty {
   BootstrapFeatureFlagPayloads = 'bootstrap_feature_flag_payloads',
   OverrideFeatureFlags = 'override_feature_flags',
   Queue = 'queue',
+  // Logs queue. Individual SDKs may route this key to an isolated storage
+  // instance if they want to separate logs write volume from main state.
+  LogsQueue = 'logs_queue',
   OptedOut = 'opted_out',
   SessionId = 'session_id',
   SessionStartTimestamp = 'session_start_timestamp',
