@@ -13,14 +13,15 @@ export type SurveyModalProps = {
   survey: Survey
   appearance: SurveyAppearanceTheme
   onShow: () => void
-  onClose: (submitted: boolean) => void
+  onClose: (submitted: boolean, responses: Record<string, string | number | string[] | null>) => void
   androidKeyboardBehavior?: 'padding' | 'height'
 }
 
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { survey, appearance, onShow, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
-  const onClose = useCallback(() => props.onClose(isSurveySent), [isSurveySent, props])
+  const [responses, setResponses] = useState<Record<string, string | number | string[] | null>>({})
+  const onClose = useCallback(() => props.onClose(isSurveySent, responses), [isSurveySent, props, responses])
   const insets = useOptionalSafeAreaInsets()
 
   const [isVisible] = useState(true)
@@ -59,7 +60,13 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                 ]}
               >
                 {!shouldShowConfirmation ? (
-                  <Questions survey={survey} appearance={appearance} onSubmit={() => setIsSurveySent(true)} />
+                  <Questions
+                    survey={survey}
+                    appearance={appearance}
+                    responses={responses}
+                    onResponsesChange={setResponses}
+                    onSubmit={() => setIsSurveySent(true)}
+                  />
                 ) : (
                   <ConfirmationMessage
                     appearance={appearance}

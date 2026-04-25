@@ -9,6 +9,7 @@ import {
   maybeAdd,
   SurveyQuestionBranchingType,
   isUndefined,
+  isNullish,
 } from '@posthog/core'
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
@@ -51,11 +52,10 @@ const getSurveyResponseValue = (responses: Record<string, string | number | stri
   return response
 }
 
-export const sendSurveyEvent = (
+function buildSurveyResponseProperties(
   responses: Record<string, string | number | string[] | null> = {},
-  survey: Survey,
-  posthog: PostHog
-): void => {
+  survey: Survey
+): Record<string, unknown> {
   // map question ids also to the old format for back compatibility
   const oldFormatResponses: Record<string, string | number | string[] | null> = {}
   survey.questions.forEach((question: SurveyQuestion) => {
@@ -70,29 +70,49 @@ export const sendSurveyEvent = (
     ...oldFormatResponses,
   }
 
-  posthog.capture('survey sent', {
-    $survey_name: survey.name,
-    $survey_id: survey.id,
-    ...maybeAdd('$survey_iteration', survey.current_iteration),
-    ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
+  return {
     $survey_questions: survey.questions.map((question: SurveyQuestion) => ({
       id: question.id,
       question: question.question,
       response: getSurveyResponseValue(responses, question.id),
     })),
     ...allResponses,
+  }
+}
+
+function surveyHasResponses(responses: Record<string, string | number | string[] | null> = {}): boolean {
+  return Object.values(responses).some((response) => !isNullish(response))
+}
+
+export const sendSurveyEvent = (
+  responses: Record<string, string | number | string[] | null> = {},
+  survey: Survey,
+  posthog: PostHog
+): void => {
+  posthog.capture('survey sent', {
+    $survey_name: survey.name,
+    $survey_id: survey.id,
+    ...maybeAdd('$survey_iteration', survey.current_iteration),
+    ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
+    ...buildSurveyResponseProperties(responses, survey),
     $set: {
       [getSurveyInteractionProperty(survey, 'responded')]: true,
     },
   })
 }
 
-export const dismissedSurveyEvent = (survey: Survey, posthog: PostHog): void => {
+export const dismissedSurveyEvent = (
+  survey: Survey,
+  responses: Record<string, string | number | string[] | null> = {},
+  posthog: PostHog
+): void => {
   posthog.capture('survey dismissed', {
     $survey_name: survey.name,
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
+    $survey_partially_completed: surveyHasResponses(responses),
+    ...buildSurveyResponseProperties(responses, survey),
     $set: {
       [getSurveyInteractionProperty(survey, 'dismissed')]: true,
     },
@@ -103,14 +123,17 @@ export function Questions({
   survey,
   appearance,
   styleOverrides,
+  responses = {},
+  onResponsesChange = () => {},
   onSubmit,
 }: {
   survey: Survey
   appearance: SurveyAppearanceTheme
   styleOverrides?: StyleProp<ViewStyle>
+  responses?: Record<string, string | number | string[] | null>
+  onResponsesChange?: (responses: Record<string, string | number | string[] | null>) => void
   onSubmit: () => void
 }): JSX.Element {
-  const [questionsResponses, setQuestionsResponses] = useState({})
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
   const posthog = usePostHog()
@@ -129,10 +152,10 @@ export function Questions({
     const responseKey = getSurveyNewResponseKey(questionId)
 
     const allResponses = {
-      ...questionsResponses,
+      ...responses,
       [responseKey]: res,
     }
-    setQuestionsResponses(allResponses)
+    onResponsesChange(allResponses)
 
     // Get the next question index based on conditional logic
     const nextStep = getNextSurveyStep(survey, originalQuestionIndex, res)
