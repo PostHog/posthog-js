@@ -28,6 +28,21 @@ export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_K
     // requests to these hostnames. Used by the Tracing Headers screen to verify
     // the patch works end-to-end; see https://posthog.com/docs/llm-analytics/link-session-replay
     addTracingHeaders: ['httpbin.org'],
+    // Logs feature config. Defaults are reasonable; the values below mainly
+    // make local dogfooding nicer:
+    //   - serviceName / environment / serviceVersion show up as OTLP resource
+    //     attrs on every batch, so you can group/filter in the Logs UI and
+    //     spot example traffic vs your real apps.
+    //   - Try uncommenting `beforeSend` to redact bodies, or
+    //     `maxLogsPerInterval` to exercise the rate cap from the Logs tab.
+    logs: {
+        serviceName: 'expo-example',
+        environment: 'dev',
+        serviceVersion: '0.0.1',
+        // beforeSend: (r) => (r.body.includes('skip') ? null : r),
+        // maxLogsPerInterval: 5,
+        // rateCapWindowMs: 10000,
+    },
     // persistence: 'memory',
     // if using WebView, you have to disable masking for text inputs and images
     // sessionReplayConfig: {

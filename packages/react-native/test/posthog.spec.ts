@@ -1707,6 +1707,30 @@ describe('PostHog React Native', () => {
       expect(queue).toHaveLength(3)
     })
 
+    it('posthog.flushLogs() drains the logs queue (and only the logs queue)', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      const sendLogsSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+
+      posthog.captureLog({ body: 'manual-flush-target' })
+      await posthog.flushLogs()
+
+      expect(sendLogsSpy).toHaveBeenCalledTimes(1)
+      const bodies = (sendLogsSpy.mock.calls[0][0] as any).resourceLogs[0].scopeLogs[0].logRecords.map(
+        (r: any) => r.body.stringValue
+      )
+      expect(bodies).toEqual(['manual-flush-target'])
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue)).toEqual([])
+
+      sendLogsSpy.mockRestore()
+    })
+
     it('options.logs.enabled=false keeps captures from reaching the queue', async () => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,

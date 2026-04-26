@@ -678,6 +678,32 @@ export class PostHog extends PostHogCore {
     this._logs.captureLog(options)
   }
 
+  /**
+   * Manually flushes the logs queue.
+   *
+   * Logs flush automatically on a timer, when the buffer fills, or on
+   * AppState change — most apps never need to call this. Use it when you
+   * want a synchronous-style hand-off (e.g. before navigating away from a
+   * critical screen, in a custom crash handler, or while testing locally).
+   *
+   * If a flush is already in progress, both callers join the same in-flight
+   * promise — no double-send.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * await posthog.flushLogs()
+   * ```
+   *
+   * @public
+   *
+   * @returns Promise that resolves when the flush is complete.
+   */
+  flushLogs(): Promise<void> {
+    return this._logs.flush()
+  }
+
   private _captureLogger?: CaptureLogger
 
   /**
