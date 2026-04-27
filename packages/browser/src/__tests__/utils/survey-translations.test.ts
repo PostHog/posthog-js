@@ -128,6 +128,22 @@ describe('Survey Translations', () => {
                 }
             }
         )
+
+        it('calls get_property with the PostHog instance as context', () => {
+            mockPostHog = {
+                config: {},
+                persistence: {
+                    props: {
+                        [STORED_PERSON_PROPERTIES_KEY]: { language: 'it' },
+                    },
+                },
+                get_property(propertyName: string) {
+                    return this.persistence.props[propertyName]
+                },
+            } as unknown as PostHog
+
+            expect(detectUserLanguage(mockPostHog)).toBe('it')
+        })
     })
 
     describe('applySurveyTranslationForUser', () => {

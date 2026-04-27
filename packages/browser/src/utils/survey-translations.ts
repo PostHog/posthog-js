@@ -8,6 +8,19 @@ import { isArray, isFunction, isUndefined } from '@posthog/core'
 
 const logger = createLogger('[SurveyTranslations]')
 
+function getLanguageFromStoredPersonProperties(storedPersonProperties: unknown): string | null {
+    if (
+        !storedPersonProperties ||
+        typeof storedPersonProperties !== 'object' ||
+        !('language' in storedPersonProperties)
+    ) {
+        return null
+    }
+
+    const personLanguage = storedPersonProperties.language
+    return typeof personLanguage === 'string' && personLanguage.trim() ? personLanguage.trim() : null
+}
+
 /**
  * Detects the user's language using priority order:
  * 1. config.override_display_language (explicit override)
@@ -29,15 +42,12 @@ export function detectUserLanguage(instance: PostHog): string | null {
         return configLanguage
     }
 
-    const getProperty = (instance as Partial<PostHog>).get_property
-    const personProperties = isFunction(getProperty)
-        ? ((getProperty(STORED_PERSON_PROPERTIES_KEY) || {}) as Record<string, unknown>)
-        : {}
-    const personLanguage = personProperties.language
-
-    if (typeof personLanguage === 'string' && personLanguage.trim()) {
+    const personLanguage = getLanguageFromStoredPersonProperties(
+        isFunction(instance.get_property) ? instance.get_property(STORED_PERSON_PROPERTIES_KEY) : undefined
+    )
+    if (personLanguage) {
         logger.info(`Using person property language: ${personLanguage}`)
-        return personLanguage.trim()
+        return personLanguage
     }
 
     const browserLanguage = getBrowserLanguage()
