@@ -404,6 +404,10 @@ describe('PostHogLogs', () => {
       expect(resourceAttrs['service.name']).toEqual({ stringValue: 'my-service' })
       expect(resourceAttrs['deployment.environment']).toEqual({ stringValue: 'prod' })
       expect(resourceAttrs['service.version']).toEqual({ stringValue: '1.2.3' })
+      // OTLP-standard SDK identification — pulled from the instance's
+      // getLibraryId/Version so every SDK self-identifies.
+      expect(resourceAttrs['telemetry.sdk.name']).toEqual({ stringValue: 'posthog-core-tests' })
+      expect(resourceAttrs['telemetry.sdk.version']).toEqual({ stringValue: '0.0.0-test' })
 
       const scope = payload.resourceLogs[0].scopeLogs[0].scope
       expect(scope).toEqual({ name: 'posthog-core-tests', version: '0.0.0-test' })
@@ -432,6 +436,33 @@ describe('PostHogLogs', () => {
         ])
       )
       expect(attrs['service.name']).toEqual({ stringValue: 'unknown_service' })
+    })
+
+    it('user-supplied resourceAttributes win over auto-populated telemetry.sdk.*', async () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({
+          // Edge case: user pinning a specific telemetry.sdk.name (e.g. via
+          // a wrapper SDK that needs to identify as itself, not the core).
+          resourceAttributes: { 'telemetry.sdk.name': 'my-wrapper' },
+        }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'hi' })
+      await logs.flush()
+
+      const attrs = Object.fromEntries(
+        mockInstance._sendLogsBatch.mock.calls[0][0].resourceLogs[0].resource.attributes.map((a: any) => [
+          a.key,
+          a.value,
+        ])
+      )
+      expect(attrs['telemetry.sdk.name']).toEqual({ stringValue: 'my-wrapper' })
+      // The version still falls through from the instance — only the
+      // explicitly-overridden key is replaced.
+      expect(attrs['telemetry.sdk.version']).toEqual({ stringValue: '0.0.0-test' })
     })
 
     it('splits a large queue into multiple batches of maxBatchRecordsPerPost and persists after each', async () => {
