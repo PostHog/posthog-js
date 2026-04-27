@@ -44,11 +44,11 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             color: getContrastTextColor(primaryColor),
             border: 'none',
             cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            filter: 'drop-shadow(rgba(9, 14, 21, 0.54) 0px 1px 6px) drop-shadow(rgba(9, 14, 21, 0.9) 0px 2px 32px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'transform 0.2s ease-out, box-shadow 0.2s ease-out',
+            transition: 'transform 0.2s ease-out',
         },
         unreadBadge: {
             position: 'absolute' as const,
