@@ -16,11 +16,7 @@ const hasNativeSvgSupport = (): boolean => {
 
   const svgViewName = Platform.OS === 'android' ? 'RNSVGSvgViewAndroid' : 'RNSVGSvgView'
 
-  return !!(
-    hasViewManagerConfig(svgViewName) &&
-    hasViewManagerConfig('RNSVGGroup') &&
-    hasViewManagerConfig('RNSVGPath')
-  )
+  return !!(hasViewManagerConfig(svgViewName) && hasViewManagerConfig('RNSVGPath'))
 }
 
 export let OptionalReactNativeSvg: typeof ReactNativeSvg | undefined = undefined
