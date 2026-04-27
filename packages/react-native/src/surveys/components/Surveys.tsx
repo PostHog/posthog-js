@@ -6,6 +6,7 @@ import {
   Survey,
   SurveyAppearance,
   SurveyQuestion,
+  type SurveyResponses,
   maybeAdd,
   SurveyQuestionBranchingType,
   isUndefined,
@@ -14,6 +15,8 @@ import {
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
 import { usePostHog } from '../../hooks/usePostHog'
+
+const SURVEY_LANGUAGE_PROPERTY = '$survey_language'
 
 const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
   let surveyProperty = `$survey_${action}/${survey.id}`
@@ -24,12 +27,13 @@ const getSurveyInteractionProperty = (survey: Survey, action: string): string =>
   return surveyProperty
 }
 
-export const sendSurveyShownEvent = (survey: Survey, posthog: PostHog): void => {
+export const sendSurveyShownEvent = (survey: Survey, posthog: PostHog, surveyLanguage?: string | null): void => {
   posthog.capture('survey shown', {
     $survey_name: survey.name,
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
+    ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
   })
 }
 
@@ -41,7 +45,7 @@ function getSurveyOldResponseKey(originalQuestionIndex: number) {
   return originalQuestionIndex === 0 ? '$survey_response' : `$survey_response_${originalQuestionIndex}`
 }
 
-const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
+const getSurveyResponseValue = (responses: SurveyResponses, questionId?: string) => {
   if (!questionId) {
     return null
   }
@@ -52,12 +56,9 @@ const getSurveyResponseValue = (responses: Record<string, string | number | stri
   return response
 }
 
-function buildSurveyResponseProperties(
-  responses: Record<string, string | number | string[] | null> = {},
-  survey: Survey
-): Record<string, unknown> {
+function buildSurveyResponseProperties(responses: SurveyResponses = {}, survey: Survey): Record<string, unknown> {
   // map question ids also to the old format for back compatibility
-  const oldFormatResponses: Record<string, string | number | string[] | null> = {}
+  const oldFormatResponses: SurveyResponses = {}
   survey.questions.forEach((question: SurveyQuestion) => {
     const oldResponseKey = getSurveyOldResponseKey(question.originalQuestionIndex)
     const response = getSurveyResponseValue(responses, question.id)
@@ -80,20 +81,22 @@ function buildSurveyResponseProperties(
   }
 }
 
-function surveyHasResponses(responses: Record<string, string | number | string[] | null> = {}): boolean {
+function surveyHasResponses(responses: SurveyResponses = {}): boolean {
   return Object.values(responses).some((response) => !isNullish(response))
 }
 
 export const sendSurveyEvent = (
-  responses: Record<string, string | number | string[] | null> = {},
+  responses: SurveyResponses = {},
   survey: Survey,
-  posthog: PostHog
+  posthog: PostHog,
+  surveyLanguage?: string | null
 ): void => {
   posthog.capture('survey sent', {
     $survey_name: survey.name,
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
+    ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
     ...buildSurveyResponseProperties(responses, survey),
     $set: {
       [getSurveyInteractionProperty(survey, 'responded')]: true,
@@ -103,8 +106,9 @@ export const sendSurveyEvent = (
 
 export const dismissedSurveyEvent = (
   survey: Survey,
-  responses: Record<string, string | number | string[] | null> = {},
-  posthog: PostHog
+  responses: SurveyResponses = {},
+  posthog: PostHog,
+  surveyLanguage?: string | null
 ): void => {
   posthog.capture('survey dismissed', {
     $survey_name: survey.name,
@@ -113,6 +117,7 @@ export const dismissedSurveyEvent = (
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
     $survey_partially_completed: surveyHasResponses(responses),
     ...buildSurveyResponseProperties(responses, survey),
+    ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
     $set: {
       [getSurveyInteractionProperty(survey, 'dismissed')]: true,
     },
@@ -121,6 +126,7 @@ export const dismissedSurveyEvent = (
 
 export function Questions({
   survey,
+  surveyLanguage,
   appearance,
   styleOverrides,
   responses = {},
@@ -128,10 +134,11 @@ export function Questions({
   onSubmit,
 }: {
   survey: Survey
+  surveyLanguage?: string | null
   appearance: SurveyAppearanceTheme
   styleOverrides?: StyleProp<ViewStyle>
-  responses?: Record<string, string | number | string[] | null>
-  onResponsesChange?: (responses: Record<string, string | number | string[] | null>) => void
+  responses?: SurveyResponses
+  onResponsesChange?: (responses: SurveyResponses) => void
   onSubmit: () => void
 }): JSX.Element {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -162,7 +169,7 @@ export function Questions({
 
     if (nextStep === SurveyQuestionBranchingType.End) {
       // End the survey
-      sendSurveyEvent(allResponses, survey, posthog)
+      sendSurveyEvent(allResponses, survey, posthog, surveyLanguage)
       onSubmit()
     } else {
       // Move to the next question

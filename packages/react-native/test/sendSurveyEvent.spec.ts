@@ -1,4 +1,5 @@
 import { dismissedSurveyEvent, sendSurveyEvent } from '../src/surveys/components/Surveys'
+import { dismissedSurveyEvent, sendSurveyEvent, sendSurveyShownEvent } from '../src/surveys/components/Surveys'
 import { Survey, SurveyQuestion } from '@posthog/core'
 
 const createMockSurvey = (overrides: Partial<Survey> = {}): Survey => ({
@@ -64,6 +65,30 @@ describe('sendSurveyEvent', () => {
           '$survey_responded/test-survey-id': true,
         },
       })
+    })
+
+    it('should include survey language when provided', () => {
+      const survey = createMockSurvey()
+
+      sendSurveyShownEvent(survey, mockPostHog, 'pt')
+      dismissedSurveyEvent(survey, {}, mockPostHog, 'pt')
+      sendSurveyEvent({}, survey, mockPostHog, 'pt')
+
+      expect(mockPostHog.capture).toHaveBeenNthCalledWith(
+        1,
+        'survey shown',
+        expect.objectContaining({ $survey_language: 'pt' })
+      )
+      expect(mockPostHog.capture).toHaveBeenNthCalledWith(
+        2,
+        'survey dismissed',
+        expect.objectContaining({ $survey_language: 'pt' })
+      )
+      expect(mockPostHog.capture).toHaveBeenNthCalledWith(
+        3,
+        'survey sent',
+        expect.objectContaining({ $survey_language: 'pt' })
+      )
     })
   })
 

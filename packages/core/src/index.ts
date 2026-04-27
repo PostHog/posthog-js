@@ -29,3 +29,11 @@ export * from './posthog-core-stateless'
 export * from './tracing-headers'
 export * from './types'
 export { getValidationError, getLengthFromRules, getRequirementsHint } from './surveys/validation'
+export {
+  applySurveyTranslation,
+  detectSurveyLanguage,
+  findBestTranslationMatch,
+  getBaseLanguage,
+  getLanguageFromStoredPersonProperties,
+  normalizeLanguageCode,
+} from './surveys/translations'

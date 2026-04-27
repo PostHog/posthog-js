@@ -21,7 +21,7 @@ import {
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
 } from '../../utils/survey-utils'
-import { isArray, isNullish } from '@posthog/core'
+import { isArray, isNullish, type SurveyResponses } from '@posthog/core'
 
 import { propertyComparisons } from '../../utils/property-utils'
 import { localStore } from '../../storage'
@@ -402,7 +402,7 @@ export const retrieveSurveyShadow = (
 }
 
 interface SendSurveyEventArgs {
-    responses: Record<string, string | number | string[] | null>
+    responses: SurveyResponses
     survey: Survey
     surveySubmissionId: string
     isSurveyCompleted: boolean
@@ -413,7 +413,7 @@ interface SendSurveyEventArgs {
     surveyLanguage?: string | null
 }
 
-const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
+const getSurveyResponseValue = (responses: SurveyResponses, questionId?: string) => {
     if (!questionId) {
         return null
     }
@@ -715,7 +715,7 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
 interface InProgressSurveyState {
     surveySubmissionId: string
     lastQuestionIndex: number
-    responses: Record<string, string | number | string[] | null>
+    responses: SurveyResponses
     surveyLanguage?: string | null
 }
 

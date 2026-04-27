@@ -169,6 +169,13 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * ```
    */
   logs?: PostHogLogsConfig
+
+  /**
+   * Overrides the language used when rendering translated survey copy.
+   * When unset, the SDK falls back to the persisted person property `language`
+   * and then the device locale.
+   */
+  overrideDisplayLanguage?: string | null
 }
 
 export class PostHog extends PostHogCore {
@@ -196,6 +203,7 @@ export class PostHog extends PostHogCore {
   private _surveysReadyPromise: Promise<void> | null = null
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
+  private _overrideDisplayLanguage: string | null
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -239,6 +247,7 @@ export class PostHog extends PostHogCore {
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
+    this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -559,6 +568,10 @@ export class PostHog extends PostHogCore {
       $screen_height: Dimensions.get('screen').height,
       $screen_width: Dimensions.get('screen').width,
     }
+  }
+
+  getSurveyDisplayLanguageOverride(): string | null {
+    return this._overrideDisplayLanguage
   }
 
   /**

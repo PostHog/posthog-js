@@ -7,16 +7,18 @@ import { useSurveyStorage } from './useSurveyStorage'
 import { useActivatedSurveys } from './useActivatedSurveys'
 import { SurveyModal } from './components/SurveyModal'
 import { defaultSurveyAppearance, getContrastingTextColor, SurveyAppearanceTheme } from './surveys-utils'
-import { Survey, SurveyAppearance, SurveyType } from '@posthog/core'
+import { Survey, SurveyAppearance, SurveyType, type SurveyResponses } from '@posthog/core'
 import { usePostHog } from '../hooks/usePostHog'
 import { useFeatureFlags } from '../hooks/useFeatureFlags'
 import { PostHog } from '../posthog-rn'
+import { applySurveyTranslationForUser } from './survey-translations'
 
 type ActiveSurveyContextType =
   | {
       survey: Survey
+      surveyLanguage: string | null
       onShow: () => void
-      onClose: (submitted: boolean, responses: Record<string, string | number | string[] | null>) => void
+      onClose: (submitted: boolean, responses: SurveyResponses) => void
     }
   | undefined
 const ActiveSurveyContext = React.createContext<ActiveSurveyContextType>(undefined)
@@ -128,9 +130,13 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     }
   }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys])
 
+  const translatedActiveSurvey = useMemo(() => {
+    return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog) : undefined
+  }, [activeSurvey, posthog])
+
   // Merge survey appearance so that components and hooks can use a consistent model
   const surveyAppearance = useMemo<SurveyAppearanceTheme>(() => {
-    if (props.overrideAppearanceWithDefault || !activeSurvey) {
+    if (props.overrideAppearanceWithDefault || !translatedActiveSurvey) {
       return {
         ...defaultSurveyAppearance,
         ...(props.defaultSurveyAppearance ?? {}),
@@ -139,37 +145,38 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     return {
       ...defaultSurveyAppearance,
       ...(props.defaultSurveyAppearance ?? {}),
-      ...(activeSurvey.appearance ?? {}),
+      ...(translatedActiveSurvey.survey.appearance ?? {}),
       // If submitButtonColor is set by PostHog, ensure submitButtonTextColor is also set to contrast
-      ...(activeSurvey.appearance?.submitButtonColor
+      ...(translatedActiveSurvey.survey.appearance?.submitButtonColor
         ? {
             submitButtonTextColor:
-              activeSurvey.appearance.submitButtonTextColor ??
-              getContrastingTextColor(activeSurvey.appearance.submitButtonColor),
+              translatedActiveSurvey.survey.appearance.submitButtonTextColor ??
+              getContrastingTextColor(translatedActiveSurvey.survey.appearance.submitButtonColor),
           }
         : {}),
     }
-  }, [activeSurvey, props.defaultSurveyAppearance, props.overrideAppearanceWithDefault])
+  }, [translatedActiveSurvey, props.defaultSurveyAppearance, props.overrideAppearanceWithDefault])
 
   const activeContext = useMemo(() => {
-    if (!activeSurvey) {
+    if (!activeSurvey || !translatedActiveSurvey) {
       return undefined
     }
     return {
-      survey: activeSurvey,
+      survey: translatedActiveSurvey.survey,
+      surveyLanguage: translatedActiveSurvey.language,
       onShow: () => {
-        sendSurveyShownEvent(activeSurvey, posthog)
+        sendSurveyShownEvent(translatedActiveSurvey.survey, posthog, translatedActiveSurvey.language)
         setLastSeenSurveyDate(new Date())
       },
-      onClose: (submitted: boolean, responses: Record<string, string | number | string[] | null>) => {
+      onClose: (submitted: boolean, responses: SurveyResponses) => {
         setSeenSurvey(activeSurvey.id)
         setActiveSurvey(undefined)
         if (!submitted) {
-          dismissedSurveyEvent(activeSurvey, responses, posthog)
+          dismissedSurveyEvent(translatedActiveSurvey.survey, responses, posthog, translatedActiveSurvey.language)
         }
       },
     }
-  }, [activeSurvey, posthog, setLastSeenSurveyDate, setSeenSurvey])
+  }, [activeSurvey, posthog, setLastSeenSurveyDate, setSeenSurvey, translatedActiveSurvey])
 
   // Modal is shown for PopOver surveys or if automaticSurveyModal is true, and for all widget surveys
   // because these would have been invoked by the useFeedbackSurvey hook's showSurveyModal() method

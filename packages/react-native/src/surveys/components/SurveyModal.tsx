@@ -3,17 +3,17 @@ import { Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, View, useW
 
 import { Cancel } from './Cancel'
 import { ConfirmationMessage } from './ConfirmationMessage'
-import { Questions } from './Surveys'
-
 import { SurveyAppearanceTheme, resolveSurveyAlignment } from '../surveys-utils'
-import { Survey } from '@posthog/core'
+import { Survey, type SurveyResponses } from '@posthog/core'
 import { useOptionalSafeAreaInsets } from '../../optional/OptionalReactNativeSafeArea'
+import { Questions } from './Surveys'
 
 export type SurveyModalProps = {
   survey: Survey
+  surveyLanguage: string | null
   appearance: SurveyAppearanceTheme
   onShow: () => void
-  onClose: (submitted: boolean, responses: Record<string, string | number | string[] | null>) => void
+  onClose: (submitted: boolean, responses: SurveyResponses) => void
   androidKeyboardBehavior?: 'padding' | 'height'
 }
 
@@ -22,9 +22,9 @@ export type SurveyModalProps = {
 const VIEWPORT_BUFFER = 0
 
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
-  const { survey, appearance, onShow, androidKeyboardBehavior = 'height' } = props
+  const { survey, surveyLanguage, appearance, onShow, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
-  const [responses, setResponses] = useState<Record<string, string | number | string[] | null>>({})
+  const [responses, setResponses] = useState<SurveyResponses>({})
   const onClose = useCallback(() => props.onClose(isSurveySent, responses), [isSurveySent, props, responses])
   const insets = useOptionalSafeAreaInsets()
   const { height: windowHeight } = useWindowDimensions()
@@ -91,6 +91,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                 {!shouldShowConfirmation ? (
                   <Questions
                     survey={survey}
+                    surveyLanguage={surveyLanguage}
                     appearance={appearance}
                     responses={responses}
                     onResponsesChange={setResponses}
