@@ -16,6 +16,17 @@ export class PostHogRNStorage {
   preloadPromise: Promise<void> | undefined
   private _storageKey: string
   private _pendingPromises: Set<Promise<void>> = new Set()
+  // Tick-level write coalescing. Each setItem/removeItem/clear mutates
+  // memoryCache synchronously, then arms a single setTimeout(0) that calls
+  // persist() once on the next macrotask boundary with the final state.
+  // Multiple sync mutations within the same tick collapse into one write
+  // (which is the same total bytes today, but one fewer JSON.stringify and
+  // one fewer storage.setItem round-trip). Lifecycle paths that need
+  // durability now (AppState background, flushStorage, shutdown) call
+  // waitForPersist, which drains the scheduled write synchronously before
+  // awaiting in-flight async writes.
+  private _persistScheduled = false
+  private _persistTimer?: ReturnType<typeof setTimeout>
 
   // Prefer the `create*Storage` factories below over calling this directly —
   // they're the only callers that know which file to bind to.
@@ -42,8 +53,15 @@ export class PostHogRNStorage {
    * Waits for all pending storage persist operations to complete.
    * This ensures data has been written to the underlying storage before proceeding.
    * This method never throws - errors are logged but swallowed.
+   *
+   * If a write is currently scheduled but hasn't yet fired (the timer is
+   * pending), it is drained synchronously here before the await resolves —
+   * this preserves the durability contract for flushStorage callers
+   * (`posthog-core-stateless.ts:1131` "Wait for storage to complete to
+   * prevent duplicate events on app crash") under tick-level coalescing.
    */
   async waitForPersist(): Promise<void> {
+    this._drainScheduledPersist()
     try {
       if (this._pendingPromises.size > 0) {
         await Promise.all(this._pendingPromises)
@@ -74,22 +92,52 @@ export class PostHogRNStorage {
     }
   }
 
+  // Schedules a single persist() on the next macrotask. Repeated calls
+  // within the same tick are no-ops — the in-memory mutation is already in
+  // memoryCache, and the scheduled fire will read the final state.
+  private schedulePersist(): void {
+    if (this._persistScheduled) return
+    this._persistScheduled = true
+    this._persistTimer = setTimeout(() => {
+      // Reset before persist() so a sync throw from the storage backend
+      // can't leave the scheduler stuck. Async errors are caught inside
+      // persist() itself.
+      this._persistTimer = undefined
+      this._persistScheduled = false
+      this.persist()
+    }, 0)
+  }
+
+  // Force a scheduled persist to fire now. Used by waitForPersist (and
+  // therefore by flushStorage / AppState background / shutdown) so callers
+  // awaiting durability are guaranteed the latest state has been handed to
+  // the storage backend before they resume.
+  private _drainScheduledPersist(): void {
+    if (!this._persistScheduled) return
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer)
+      this._persistTimer = undefined
+    }
+    this._persistScheduled = false
+    this.persist()
+  }
+
   getItem(key: string): any | null | undefined {
     return this.memoryCache[key]
   }
   setItem(key: string, value: any): void {
     this.memoryCache[key] = value
-    this.persist()
+    this.schedulePersist()
   }
   removeItem(key: string): void {
     delete this.memoryCache[key]
-    this.persist()
+    this.schedulePersist()
   }
   clear(): void {
     for (const key in this.memoryCache) {
       delete this.memoryCache[key]
     }
-    this.persist()
+    this.schedulePersist()
   }
   getAllKeys(): readonly string[] {
     return Object.keys(this.memoryCache)

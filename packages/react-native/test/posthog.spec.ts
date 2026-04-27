@@ -391,6 +391,9 @@ describe('PostHog React Native', () => {
       const semiAsyncStorage = createEventsStorage(mockStorage)
       await semiAsyncStorage.preloadPromise
       semiAsyncStorage.setItem(PostHogPersistedProperty.AnonymousId, 'my-anonymous-id')
+      // Storage writes are tick-coalesced; force the scheduled write to land
+      // in `mockStorage` before the test's `new PostHog(...)` reads from it.
+      await semiAsyncStorage.waitForPersist()
     })
 
     it('should allow immediate calls but delay for the stored values', async () => {
@@ -470,6 +473,10 @@ describe('PostHog React Native', () => {
       })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
+      // Storage writes are tick-coalesced; force the override to land in
+      // `storage` before the second instance reads from it.
+      await (posthog as any)._eventsStorage.waitForPersist()
+
       // New instance but same sync storage — the override persisted via
       // the first instance is visible to the second without preload.
       posthog = new PostHog('1', {
@@ -485,6 +492,7 @@ describe('PostHog React Native', () => {
       const now = Date.now()
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, now)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, now)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -503,6 +511,7 @@ describe('PostHog React Native', () => {
       const now = Date.now()
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, now)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, now)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -523,6 +532,7 @@ describe('PostHog React Native', () => {
       const nowMinus45Minutes = JSON.stringify(now - 45 * 60 * 1000)
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, nowMinus45Minutes)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, nowMinus1Hour)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -545,6 +555,7 @@ describe('PostHog React Native', () => {
       const nowMinus15Minutes = JSON.stringify(now - 15 * 60 * 1000)
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, nowMinus15Minutes)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, nowMinus1Hour)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -566,6 +577,7 @@ describe('PostHog React Native', () => {
       const nowMinus15Minutes = JSON.stringify(now - 15 * 60 * 1000)
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, nowMinus15Minutes)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, nowMinus25Hour)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -588,6 +600,7 @@ describe('PostHog React Native', () => {
       const nowMinus15Minutes = JSON.stringify(now - 15 * 60 * 1000)
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, nowMinus15Minutes)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, nowMinus23Hour)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -1916,7 +1929,7 @@ describe('PostHog React Native', () => {
     it('captures across identify/reset boundaries keep their capture-time identity', async () => {
       // PostHogLogs builds the OTLP record at capture time, so distinctId/sessionId are
       // baked into `attributes` synchronously. reset() preserves the LogsQueue
-      // so a record captured by alice keeps alice's identity even after reset() 
+      // so a record captured by alice keeps alice's identity even after reset()
       // and a subsequent identify(bob).
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,

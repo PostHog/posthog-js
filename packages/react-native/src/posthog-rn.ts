@@ -319,8 +319,16 @@ export class PostHog extends PostHogCore {
       void this._logs.flush().catch(async (err) => {
         await logFlushError(err)
       })
-      // Drain pending logs-storage writes to disk before the OS may suspend
-      // the process. waitForPersist swallows errors internally.
+      // Drain pending storage writes to disk before the OS may suspend
+      // the process. waitForPersist swallows errors internally and drains
+      // any tick-coalesced scheduled write synchronously before awaiting
+      // in-flight async writes. Both sides are needed: writes are
+      // tick-coalesced in `storage.ts:schedulePersist`, and the AppState
+      // transition is itself a macrotask whose ordering vs. our scheduled
+      // setTimeout(0) callback is undefined — without this, a capture
+      // landing in the same tick as a foreground→background transition
+      // could lose its scheduled write to OS suspension.
+      void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
 
       if (state === 'active') {
@@ -490,6 +498,13 @@ export class PostHog extends PostHogCore {
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     await Promise.all([this._logs.shutdown(shutdownTimeoutMs), super._shutdown(shutdownTimeoutMs)])
+    // Drain any tick-coalesced storage writes that weren't flushed via the
+    // queue-advance path. setPersistedProperty calls for distinctId,
+    // sessionId, deviceId, feature flag overrides, etc. only get a scheduled
+    // setTimeout(0) write; without an explicit drain here, those writes
+    // could miss disk if the process exits before the next macrotask.
+    // waitForPersist swallows errors internally.
+    await Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
