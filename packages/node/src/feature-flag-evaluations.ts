@@ -75,6 +75,9 @@ export class FeatureFlagEvaluations {
   private readonly _evaluatedAt: number | undefined
   private readonly _flagDefinitionsLoadedAt: number | undefined
   private readonly _accessed: Set<string>
+  // True for snapshots produced by `only()` / `onlyAccessed()` — used to suppress
+  // misleading `flag_missing` events when branching is performed on a filtered slice.
+  private readonly _isSlice: boolean
 
   /**
    * @internal — instances are created by the SDK via `posthog.evaluateFlags()`.
@@ -89,6 +92,7 @@ export class FeatureFlagEvaluations {
     evaluatedAt?: number
     flagDefinitionsLoadedAt?: number
     accessed?: Set<string>
+    isSlice?: boolean
   }) {
     this._host = init.host
     this._distinctId = init.distinctId
@@ -99,6 +103,7 @@ export class FeatureFlagEvaluations {
     this._evaluatedAt = init.evaluatedAt
     this._flagDefinitionsLoadedAt = init.flagDefinitionsLoadedAt
     this._accessed = init.accessed ?? new Set()
+    this._isSlice = init.isSlice ?? false
   }
 
   /**
@@ -152,6 +157,11 @@ export class FeatureFlagEvaluations {
    * dropping every flag from the captured event when `onlyAccessed()` is called
    * out of order (for example, before any branching has occurred). Pre-access
    * before calling this if you want a guaranteed-empty result.
+   *
+   * **Note:** the returned snapshot is intended for `capture()`, not for further
+   * branching. Calling `isEnabled()` / `getFlag()` on it for a key that was filtered
+   * out is a no-op (no event is fired) — the flag wasn't actually missing, it was
+   * excluded from the slice.
    */
   onlyAccessed(): FeatureFlagEvaluations {
     if (this._accessed.size === 0) {
@@ -173,6 +183,9 @@ export class FeatureFlagEvaluations {
   /**
    * Return a filtered copy containing only flags with the given keys. Keys that
    * are not present in the evaluation are dropped and logged as a warning.
+   *
+   * **Note:** like `onlyAccessed()`, the returned snapshot is intended for `capture()`.
+   * Branching on a filtered key that was excluded from the slice is a no-op.
    */
   only(keys: string[]): FeatureFlagEvaluations {
     const filtered: Record<string, EvaluatedFlagRecord> = {}
@@ -252,6 +265,7 @@ export class FeatureFlagEvaluations {
       // of the parent. Callers expect `onlyAccessed()` on the parent to reflect
       // only what the parent saw, not what happened on filtered views.
       accessed: new Set(this._accessed),
+      isSlice: true,
     })
   }
 
@@ -262,6 +276,14 @@ export class FeatureFlagEvaluations {
     // safety fallback. Firing $feature_flag_called for them would emit events with an
     // empty distinct_id, polluting analytics — short-circuit here instead.
     if (this._distinctId === '') {
+      return
+    }
+
+    // On filtered slices (returned by `only()` / `onlyAccessed()`), a key absent from
+    // the slice doesn't mean the flag is missing from PostHog — it was filtered out.
+    // Don't fire a misleading `flag_missing` event; slices are intended for `capture()`,
+    // not for further branching.
+    if (this._isSlice && !(key in this._flags)) {
       return
     }
 

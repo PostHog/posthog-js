@@ -70,6 +70,21 @@ const flagsResponseFixture = (): PostHogV2FlagsResponse => ({
 
 describe('evaluateFlags', () => {
   let posthog: PostHog
+  let captures: any[] = []
+
+  // Per-test setup helper. The vast majority of tests want the same defaults; tests with
+  // custom options (`featureFlagsLogWarnings: false`, `personalApiKey: ...`) call this
+  // explicitly with overrides so the deviation stands out.
+  const setup = (overrides: Partial<PostHogOptions> = {}): PostHog => {
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+      ...overrides,
+    })
+    captures = []
+    posthog.on('capture', (message) => captures.push(message))
+    return posthog
+  }
 
   afterEach(async () => {
     await posthog.shutdown()
@@ -78,14 +93,10 @@ describe('evaluateFlags', () => {
   describe('remote evaluation', () => {
     beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+      setup()
     })
 
     it('makes a single /flags call and returns a FeatureFlagEvaluations instance', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
       const flags = await posthog.evaluateFlags('user-1')
 
       expect(flags).toBeInstanceOf(FeatureFlagEvaluations)
@@ -95,13 +106,6 @@ describe('evaluateFlags', () => {
     })
 
     it('does not fire $feature_flag_called events for flags that are not accessed', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       await posthog.evaluateFlags('user-1')
       await waitForPromises()
 
@@ -110,13 +114,6 @@ describe('evaluateFlags', () => {
     })
 
     it('isEnabled returns true/false and fires $feature_flag_called on first access', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags('user-1')
 
       expect(flags.isEnabled('boolean-flag')).toBe(true)
@@ -134,13 +131,6 @@ describe('evaluateFlags', () => {
     })
 
     it('getFlag returns variant/true/false/undefined and carries full metadata', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags('user-1')
 
       expect(flags.getFlag('variant-flag')).toBe('variant-value')
@@ -172,13 +162,6 @@ describe('evaluateFlags', () => {
     })
 
     it('dedupes $feature_flag_called events across repeated access for the same distinctId+value', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('boolean-flag')
       flags.isEnabled('boolean-flag')
@@ -192,13 +175,6 @@ describe('evaluateFlags', () => {
     })
 
     it('getFlagPayload returns parsed payload without firing an event', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags('user-1')
       expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
       expect(flags.getFlagPayload('missing-flag')).toBeUndefined()
@@ -208,11 +184,6 @@ describe('evaluateFlags', () => {
     })
 
     it('uses distinctId from context when not passed explicitly', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
       const flags = await posthog.withContext({ distinctId: 'context-user' }, () => posthog.evaluateFlags())
 
       expect(flags).toBeInstanceOf(FeatureFlagEvaluations)
@@ -220,11 +191,6 @@ describe('evaluateFlags', () => {
     })
 
     it('forwards flagKeys to the /flags request to scope the evaluation', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
       await posthog.evaluateFlags('user-1', { flagKeys: ['boolean-flag', 'variant-flag'] })
 
       expect(mockedFetch).toHaveBeenCalledTimes(1)
@@ -234,24 +200,12 @@ describe('evaluateFlags', () => {
     })
 
     it('returns an empty snapshot when no distinctId is available', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
       const flags = await posthog.evaluateFlags()
 
       expect(flags.keys).toEqual([])
     })
 
     it('does not fire $feature_flag_called events from an empty-distinctId snapshot', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags()
       flags.isEnabled('any-flag')
       flags.getFlag('any-flag')
@@ -264,14 +218,10 @@ describe('evaluateFlags', () => {
   describe('filtering helpers', () => {
     beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+      setup()
     })
 
     it('onlyAccessed returns a snapshot with only accessed flags', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('boolean-flag')
       flags.getFlag('variant-flag')
@@ -282,10 +232,6 @@ describe('evaluateFlags', () => {
 
     it('onlyAccessed warns and falls back to all flags when nothing was accessed', async () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
 
       const flags = await posthog.evaluateFlags('user-1')
       const accessed = flags.onlyAccessed()
@@ -299,11 +245,7 @@ describe('evaluateFlags', () => {
 
     it('featureFlagsLogWarnings=false silences filter warnings', async () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        featureFlagsLogWarnings: false,
-        ...posthogImmediateResolveOptions,
-      })
+      setup({ featureFlagsLogWarnings: false })
 
       const flags = await posthog.evaluateFlags('user-1')
       flags.onlyAccessed()
@@ -315,10 +257,6 @@ describe('evaluateFlags', () => {
 
     it('only returns a filtered snapshot and warns about missing keys', async () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
 
       const flags = await posthog.evaluateFlags('user-1')
       const only = flags.only(['boolean-flag', 'does-not-exist'])
@@ -329,11 +267,6 @@ describe('evaluateFlags', () => {
     })
 
     it('filtered snapshots do not back-propagate access to the parent', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('boolean-flag')
       const filtered = flags.onlyAccessed()
@@ -342,21 +275,34 @@ describe('evaluateFlags', () => {
 
       expect(flags.onlyAccessed().keys).toEqual(['boolean-flag'])
     })
+
+    it('branching on a key excluded from a slice is a no-op (no flag_missing event)', async () => {
+      // Filtered snapshots are intended for `capture()`. Calling `isEnabled()` on a slice
+      // for a key that was filtered out should not fire `$feature_flag_called` with
+      // `$feature_flag_error: flag_missing` — the flag wasn't missing, just sliced away.
+      const flags = await posthog.evaluateFlags('user-1')
+      const filtered = flags.only(['boolean-flag'])
+
+      expect(filtered.isEnabled('variant-flag')).toBe(false)
+
+      await waitForPromises()
+      const flagMissing = captures.filter(
+        (m) =>
+          m.event === '$feature_flag_called' &&
+          m.properties.$feature_flag === 'variant-flag' &&
+          m.properties.$feature_flag_error === 'flag_missing'
+      )
+      expect(flagMissing).toHaveLength(0)
+    })
   })
 
   describe('capture integration', () => {
     beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+      setup()
     })
 
     it('capture({ flags }) attaches $feature/* and $active_feature_flags from the snapshot', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags('user-1')
       posthog.capture({ distinctId: 'user-1', event: 'page_viewed', flags })
       await waitForPromises()
@@ -372,13 +318,6 @@ describe('evaluateFlags', () => {
     })
 
     it('capture({ flags: flags.onlyAccessed() }) only attaches accessed flags', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('boolean-flag')
       posthog.capture({ distinctId: 'user-1', event: 'page_viewed', flags: flags.onlyAccessed() })
@@ -394,11 +333,6 @@ describe('evaluateFlags', () => {
     })
 
     it('does not trigger an additional /flags request on capture', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
       const flags = await posthog.evaluateFlags('user-1')
       const callsAfterEvaluate = mockedFetch.mock.calls.length
 
@@ -415,13 +349,6 @@ describe('evaluateFlags', () => {
     })
 
     it('flags option takes precedence over sendFeatureFlags', async () => {
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags('user-1')
       const callsBefore = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2')).length
 
@@ -460,17 +387,12 @@ describe('evaluateFlags', () => {
       ],
     })
 
-    it('evaluates flags locally and tags events with locally_evaluated=true', async () => {
+    beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementation({ localFlags: localFlagsFixture() }))
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+    })
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
+    it('evaluates flags locally and tags events with locally_evaluated=true', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       expect(flags.isEnabled('local-flag')).toBe(true)
 
@@ -490,16 +412,6 @@ describe('evaluateFlags', () => {
     })
 
     it('attaches $feature_flag_definitions_loaded_at on locally-evaluated $feature_flag_called events', async () => {
-      mockedFetch.mockImplementation(apiImplementation({ localFlags: localFlagsFixture() }))
-
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
-      const captures: any[] = []
-      posthog.on('capture', (message) => captures.push(message))
-
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('local-flag')
 
@@ -510,14 +422,12 @@ describe('evaluateFlags', () => {
   })
 
   describe('overrides', () => {
-    it('applies flag and payload overrides to the snapshot', async () => {
+    beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+      setup()
+    })
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        ...posthogImmediateResolveOptions,
-      })
-
+    it('applies flag and payload overrides to the snapshot', async () => {
       posthog.overrideFeatureFlags({
         flags: { 'boolean-flag': false, 'new-flag': 'variant-a' },
         payloads: { 'variant-flag': { overridden: true } },
