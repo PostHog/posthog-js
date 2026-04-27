@@ -68,7 +68,6 @@ interface WidgetState {
 
 export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     private _messagesEndRef: HTMLDivElement | null = null
-    private _inputRef: HTMLTextAreaElement | null = null
 
     constructor(props: WidgetProps) {
         super(props)
@@ -162,9 +161,8 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             this.props.onStateChange(this.state.state)
         }
 
-        // Focus input and scroll to bottom when opening
+        // Scroll to bottom when opening
         if (this.state.state === 'open' && prevState.state !== 'open') {
-            this._focusInput()
             this._scrollToBottom()
         }
     }
@@ -184,12 +182,6 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
     private _scrollToBottom() {
         if (this._messagesEndRef) {
             this._messagesEndRef.scrollIntoView({ behavior: 'smooth' })
-        }
-    }
-
-    private _focusInput() {
-        if (this._inputRef) {
-            this._inputRef.focus()
         }
     }
 
@@ -601,9 +593,6 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                 messagesEndRef={(el) => {
                     this._messagesEndRef = el
                 }}
-                inputRef={(el) => {
-                    this._inputRef = el
-                }}
             />
         )
     }
@@ -632,9 +621,9 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             case 'restore_request':
                 return 'Restore conversations'
             case 'identification':
-                return 'Support Chat'
+                return 'Support chat'
             case 'messages':
-                return 'Support Chat'
+                return 'Support chat'
         }
     }
 
