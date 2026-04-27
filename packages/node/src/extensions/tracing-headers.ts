@@ -18,6 +18,16 @@ export interface PostHogTracingHeaderValues {
   distinctId?: string
 }
 
+export function addProperty(properties: Record<string, any>, key: string, value: unknown): void {
+  if (value !== undefined && value !== null && value !== '') {
+    properties[key] = value
+  }
+}
+
+export function getFirstHeaderValue(value: HeaderValue): string | undefined {
+  return Array.isArray(value) ? value[0] : value
+}
+
 export function sanitizeTracingHeaderValue(value: HeaderValue): string | undefined {
   if (Array.isArray(value)) {
     for (const item of value) {

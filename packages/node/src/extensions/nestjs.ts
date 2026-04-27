@@ -3,7 +3,7 @@ import { Observable, throwError } from 'rxjs'
 import { catchError } from 'rxjs/operators'
 
 import ErrorTracking from './error-tracking'
-import { getPostHogTracingHeaderValues } from './tracing-headers'
+import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
 import { PostHogBackendClient } from '../client'
 
 // Local interfaces to avoid runtime dependency on @nestjs/common
@@ -34,10 +34,6 @@ export interface PostHogInterceptorOptions {
   captureExceptions?: boolean | ExceptionCaptureOptions
 }
 
-function getFirstHeaderValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value
-}
-
 function getClientIp(headers: IncomingHttpHeaders, request: any): string | undefined {
   const forwarded = getFirstHeaderValue(headers['x-forwarded-for'])
   if (forwarded) {
@@ -45,12 +41,6 @@ function getClientIp(headers: IncomingHttpHeaders, request: any): string | undef
     if (ip) return ip
   }
   return request?.socket?.remoteAddress
-}
-
-function addProperty(properties: Record<string, any>, key: string, value: unknown): void {
-  if (value !== undefined && value !== null && value !== '') {
-    properties[key] = value
-  }
 }
 
 function getExceptionStatus(exception: unknown): number | undefined {

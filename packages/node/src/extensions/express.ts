@@ -1,7 +1,7 @@
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
-import { getPostHogTracingHeaderValues } from './tracing-headers'
+import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
 import type { Request, Response } from 'express'
 import type { ContextData } from './context/types'
 
@@ -21,16 +21,6 @@ interface MiddlewareError extends Error {
   output?: {
     statusCode?: number | string
   }
-}
-
-function addProperty(properties: Record<string, any>, key: string, value: unknown): void {
-  if (value !== undefined && value !== null && value !== '') {
-    properties[key] = value
-  }
-}
-
-function getFirstHeaderValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value
 }
 
 function getClientIp(req: Request): string | undefined {
