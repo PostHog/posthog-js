@@ -174,6 +174,7 @@ app.post('/get_feature_flag', async (req, res) => {
             groupProperties: group_properties,
             disableGeoip: disable_geoip,
             onlyEvaluateLocally: !force_remote,
+            sendFeatureFlagEvents: false,
         })
 
         res.json({ success: true, value })
