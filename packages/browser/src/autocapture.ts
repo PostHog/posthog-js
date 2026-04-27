@@ -154,12 +154,15 @@ export function autocapturePropertiesForElement(
         elementsChainAsString: boolean
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
-    const targetElementList = [target]
-    let curEl = target
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
+    const targetElementList: Element[] = [target]
+    let curEl: Element | null = target
+    while (curEl && curEl.parentNode && !isTag(curEl, 'body')) {
         if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+            const host: Element | null = (curEl.parentNode as ShadowRoot).host
+            // host can be null if the shadow root has been detached from its host
+            if (!host) break
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         targetElementList.push(curEl.parentNode as Element)

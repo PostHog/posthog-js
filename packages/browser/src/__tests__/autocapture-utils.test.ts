@@ -453,6 +453,40 @@ describe(`Autocapture utility functions`, () => {
             // cleanup
             ;(el as any).replace = undefined
         })
+
+        it(`should not throw when an ancestor is a detached shadow root with null host`, () => {
+            // simulate an element whose parentNode is a ShadowRoot whose host has been
+            // detached / GC'd — host is null, which previously caused a TypeError on the
+            // following iteration when we read curEl.parentNode against null.
+            const orphan = document!.createElement('div')
+            const detachedShadowRoot = {
+                nodeType: 11, // Node.DOCUMENT_FRAGMENT_NODE
+                host: null,
+            }
+            Object.defineProperty(orphan, 'parentNode', {
+                configurable: true,
+                value: detachedShadowRoot,
+            })
+
+            expect(() => shouldCaptureElement(orphan)).not.toThrow()
+        })
+
+        it(`should not throw when shouldCaptureDomEvent walks through a detached shadow root`, () => {
+            // shouldCaptureDomEvent -> getElementAndParentsForElement walks the same shadow
+            // DOM branch as autocapturePropertiesForElement and must also handle a null host
+            // without crashing.
+            const orphan = document!.createElement('a')
+            const detachedShadowRoot = {
+                nodeType: 11,
+                host: null,
+            }
+            Object.defineProperty(orphan, 'parentNode', {
+                configurable: true,
+                value: detachedShadowRoot,
+            })
+
+            expect(() => shouldCaptureDomEvent(orphan, makeMouseEvent({}))).not.toThrow()
+        })
     })
 
     describe(`shouldCaptureValue`, () => {
