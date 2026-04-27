@@ -323,7 +323,10 @@ app.post('/get_feature_flag', async (req, res) => {
         if (groups && typeof groups === 'object') {
             for (const [groupType, groupKey] of Object.entries(groups)) {
                 const props = (group_properties && group_properties[groupType]) || undefined
-                state.instance.group(groupType, groupKey, props)
+                // Pass false as the 4th arg so each group() call does not
+                // trigger its own reloadFeatureFlags(); we explicitly reload
+                // below when force_remote is requested.
+                state.instance.group(groupType, groupKey, props, false)
             }
         }
 
@@ -341,12 +344,21 @@ app.post('/get_feature_flag', async (req, res) => {
             // Wait for the next /flags response. addFeatureFlagsHandler does
             // not fire immediately when flags are already loaded, so the
             // promise resolves only after the reload we trigger below
-            // completes.
-            await new Promise((resolve) => {
+            // completes. Reject after 10s if the reload errors silently so
+            // the request does not hang forever.
+            await new Promise((resolve, reject) => {
+                let timeoutId = null
                 const handler = () => {
+                    if (timeoutId !== null) {
+                        clearTimeout(timeoutId)
+                    }
                     state.instance.featureFlags.removeFeatureFlagsHandler(handler)
                     resolve()
                 }
+                timeoutId = setTimeout(() => {
+                    state.instance.featureFlags.removeFeatureFlagsHandler(handler)
+                    reject(new Error('Timed out waiting for reloadFeatureFlags response'))
+                }, 10000)
                 state.instance.featureFlags.addFeatureFlagsHandler(handler)
                 state.instance.reloadFeatureFlags()
             })
