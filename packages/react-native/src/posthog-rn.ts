@@ -1,4 +1,4 @@
-import { AppState, Dimensions, Linking, Platform } from 'react-native'
+import { AppState, type AppStateStatus, Dimensions, Linking, Platform } from 'react-native'
 
 import {
   CaptureLogOptions,
@@ -44,6 +44,23 @@ import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionRepl
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 
 export { PostHogPersistedProperty }
+
+/**
+ * Collapses RN's broader AppState status set into the OTLP `app.state`
+ * enum (foreground|background). 'inactive' (iOS transition) and 'extension'
+ * are treated as foreground — the app is still running JS, just not the
+ * primary scene. 'unknown' returns undefined so the attribute is omitted
+ * rather than guessed.
+ */
+function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | 'background' | undefined {
+  if (state === 'background') {
+    return 'background'
+  }
+  if (!state || state === 'unknown') {
+    return undefined
+  }
+  return 'foreground'
+}
 
 export interface PostHogOptions extends PostHogCoreOptions {
   /**
@@ -150,6 +167,11 @@ export class PostHog extends PostHogCore {
   private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
   private _logs: PostHogLogs
+  // Cached, foreground/background view of the app's lifecycle. Read on the
+  // log-capture hot path (per record) so we tag every log with whether it
+  // happened in foreground or background. Updated by the AppState listener
+  // and seeded from `AppState.currentState` at construction.
+  private _currentAppState?: 'foreground' | 'background'
   private _surveysReadyPromise: Promise<void> | null = null
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
@@ -241,14 +263,29 @@ export class PostHog extends PostHogCore {
       this._logsStorage = createLogsMemoryStorage()
     }
 
+    // Seed from sync `AppState.currentState` so the very first capture (which
+    // can happen before any 'change' event fires) is already tagged. Maps
+    // RN's broader status set into the OTLP `app.state` enum's
+    // foreground/background dichotomy.
+    this._currentAppState = mapAppStateForLogs(AppState.currentState)
+
     this._logs = new PostHogLogs(
       this,
       resolveLogsConfig(options?.logs),
       this._logger,
-      () => ({
-        distinctId: this.getDistinctId() || undefined,
-        sessionId: this.getSessionId() || undefined,
-      }),
+      () => {
+        // Pulled at capture time so each tag reflects state at the moment
+        // the log was fired, not at flush.
+        const flags = this.getFeatureFlags()
+        const flagKeys = flags ? Object.keys(flags) : undefined
+        return {
+          distinctId: this.getDistinctId() || undefined,
+          sessionId: this.getSessionId() || undefined,
+          screenName: (this.sessionProps?.$screen_name as string | undefined) || undefined,
+          appState: this._currentAppState,
+          activeFeatureFlags: flagKeys && flagKeys.length > 0 ? flagKeys : undefined,
+        }
+      },
       (fn) => this.wrap(fn),
       // Block between batches on the logs-storage disk write so a crash can't
       // replay an already-sent batch. Events do the equivalent via
@@ -261,6 +298,14 @@ export class PostHog extends PostHogCore {
       // ignore unknown state (usually initial state, the app might not be ready yet)
       if (state === 'unknown') {
         return
+      }
+
+      // Update before kicking off the flush — captures that race the flush
+      // (e.g. fired in a `componentWillUnmount` triggered by backgrounding)
+      // should already see the new state.
+      const mapped = mapAppStateForLogs(state)
+      if (mapped) {
+        this._currentAppState = mapped
       }
 
       void this.flush().catch(async (err) => {

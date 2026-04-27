@@ -248,13 +248,18 @@ export class PostHogLogs {
    * Mirrors the web SDK's resource attribute layout
    * (`packages/browser/src/posthog-logs.ts:163`). `service.name` is always
    * present; `environment` / `serviceVersion` only appear when configured;
-   * `resourceAttributes` spreads last so user keys win.
+   * `telemetry.sdk.*` is OTLP-standard and identifies which client emitted
+   * the batch (most logs backends index on it for SDK-version dashboards
+   * and bug-correlation). `resourceAttributes` spreads last so user keys
+   * win on any conflict.
    */
   private _buildResourceAttributes(): Record<string, LogAttributeValue> {
     return {
       'service.name': this._config.serviceName || 'unknown_service',
       ...(this._config.environment && { 'deployment.environment': this._config.environment }),
       ...(this._config.serviceVersion && { 'service.version': this._config.serviceVersion }),
+      'telemetry.sdk.name': this._instance.getLibraryId(),
+      'telemetry.sdk.version': this._instance.getLibraryVersion(),
       ...this._config.resourceAttributes,
     }
   }

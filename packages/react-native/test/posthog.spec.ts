@@ -1731,6 +1731,220 @@ describe('PostHog React Native', () => {
       sendLogsSpy.mockRestore()
     })
 
+    it('flush emits os.* and telemetry.sdk.* resource attrs', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      const sendSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+
+      posthog.captureLog({ body: 'platform-tagged' })
+      await posthog.flushLogs()
+
+      const resourceAttrs = Object.fromEntries(
+        (sendSpy.mock.calls[0][0] as any).resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
+      )
+      // The RN test harness reports a real Platform.OS — assert presence
+      // and shape rather than a specific platform value.
+      expect(resourceAttrs['os.name']).toBeDefined()
+      expect(typeof resourceAttrs['os.name'].stringValue).toBe('string')
+      expect(resourceAttrs['os.version']).toBeDefined()
+      expect(typeof resourceAttrs['os.version'].stringValue).toBe('string')
+      expect(resourceAttrs['telemetry.sdk.name']).toEqual({ stringValue: 'posthog-react-native' })
+      expect(resourceAttrs['telemetry.sdk.version']).toBeDefined()
+
+      sendSpy.mockRestore()
+    })
+
+    it('user-supplied options.logs.resourceAttributes overrides os.* defaults', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+        logs: { resourceAttributes: { 'os.name': 'overridden-os' } },
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      const sendSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+
+      posthog.captureLog({ body: 'overridden' })
+      await posthog.flushLogs()
+
+      const resourceAttrs = Object.fromEntries(
+        (sendSpy.mock.calls[0][0] as any).resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
+      )
+      expect(resourceAttrs['os.name']).toEqual({ stringValue: 'overridden-os' })
+      // os.version still falls through from Platform — only the overridden
+      // key is replaced.
+      expect(resourceAttrs['os.version']).toBeDefined()
+
+      sendSpy.mockRestore()
+    })
+
+    it('captureLog tags records with screen.name from posthog.screen()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      // posthog.screen() registers $screen_name as a session-scoped property;
+      // the logs context-builder reads it at capture time.
+      await posthog.screen('checkout')
+      posthog.captureLog({ body: 'on-checkout-screen' })
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      // posthog.screen() emits a $screen event which goes to events queue.
+      // The captureLog goes to logs queue. Find ours by body.
+      const target = queue.find((e) => e.record.body.stringValue === 'on-checkout-screen')
+      expect(target).toBeDefined()
+      const attrs = Object.fromEntries(target!.record.attributes.map((a: any) => [a.key, a.value]))
+      expect(attrs['screen.name']).toEqual({ stringValue: 'checkout' })
+    })
+
+    it('captureLog tags records with feature_flags from getFeatureFlags()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      // Stub the flag store directly — `getFeatureFlags()` is the same
+      // primitive logs reads at capture time.
+      jest.spyOn(posthog, 'getFeatureFlags').mockReturnValue({
+        'new-checkout': true,
+        'experiment-ab': 'variant-a',
+      } as any)
+
+      posthog.captureLog({ body: 'flagged-capture' })
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      const target = queue.find((e) => e.record.body.stringValue === 'flagged-capture')
+      const attrs = Object.fromEntries(target!.record.attributes.map((a: any) => [a.key, a.value]))
+      // OTLP serializes a string[] as arrayValue with stringValue children.
+      expect(attrs['feature_flags']).toEqual({
+        arrayValue: {
+          values: [{ stringValue: 'new-checkout' }, { stringValue: 'experiment-ab' }],
+        },
+      })
+    })
+
+    it('captureLog omits feature_flags when flags have not loaded yet (undefined state)', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      jest.spyOn(posthog, 'getFeatureFlags').mockReturnValue(undefined)
+
+      posthog.captureLog({ body: 'no-flags' })
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      const target = queue.find((e) => e.record.body.stringValue === 'no-flags')
+      const attrs = Object.fromEntries(target!.record.attributes.map((a: any) => [a.key, a.value]))
+      // `undefined` flags → "we don't know yet" → attribute omitted.
+      expect(attrs['feature_flags']).toBeUndefined()
+    })
+
+    it('captureLog omits feature_flags when flags loaded but none are active (empty state)', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      // Logs gates `[]` to save bytes — same as browser logs. Distinct from
+      // events, which emit `$active_feature_flags: []` for back-compat (the
+      // shared helper preserves the empty array; only the caller's gate
+      // differs).
+      jest.spyOn(posthog, 'getFeatureFlags').mockReturnValue({} as any)
+
+      posthog.captureLog({ body: 'empty-flags' })
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      const target = queue.find((e) => e.record.body.stringValue === 'empty-flags')
+      const attrs = Object.fromEntries(target!.record.attributes.map((a: any) => [a.key, a.value]))
+      expect(attrs['feature_flags']).toBeUndefined()
+    })
+
+    it('captureLog tags records with app.state, flipping with AppState changes', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      // The harness mocks `AppState.addEventListener` but not
+      // `AppState.currentState`, so the constructor's seed is undefined and
+      // the first capture omits `app.state` (correct — we don't guess). Drive
+      // explicit 'active' then 'background' transitions through the listener
+      // to verify the foreground/background mapping end-to-end.
+      const calls = (AppState.addEventListener as jest.Mock).mock.calls
+      const callback = calls.find((c) => c[0] === 'change')![1]
+
+      callback('active' as AppStateStatus)
+      posthog.captureLog({ body: 'fg' })
+
+      callback('background' as AppStateStatus)
+      posthog.captureLog({ body: 'bg' })
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      const fg = queue.find((e) => e.record.body.stringValue === 'fg')
+      const bg = queue.find((e) => e.record.body.stringValue === 'bg')
+      const fgAttrs = Object.fromEntries(fg!.record.attributes.map((a: any) => [a.key, a.value]))
+      const bgAttrs = Object.fromEntries(bg!.record.attributes.map((a: any) => [a.key, a.value]))
+      expect(fgAttrs['app.state']).toEqual({ stringValue: 'foreground' })
+      expect(bgAttrs['app.state']).toEqual({ stringValue: 'background' })
+    })
+
+    it('captures across identify/reset boundaries keep their capture-time identity', async () => {
+      // PostHogLogs builds the OTLP record at capture time, so distinctId/sessionId are
+      // baked into `attributes` synchronously. reset() preserves the LogsQueue
+      // so a record captured by alice keeps alice's identity even after reset() 
+      // and a subsequent identify(bob).
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      await (posthog as any)._logsStorage.preloadPromise
+
+      posthog.identify('alice')
+      posthog.captureLog({ body: 'A-as-alice' })
+
+      posthog.reset()
+      posthog.identify('bob')
+      posthog.captureLog({ body: 'B-as-bob' })
+
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      const recordA = queue.find((e) => e.record.body.stringValue === 'A-as-alice')!
+      const recordB = queue.find((e) => e.record.body.stringValue === 'B-as-bob')!
+      const attrsA = Object.fromEntries(recordA.record.attributes.map((a: any) => [a.key, a.value]))
+      const attrsB = Object.fromEntries(recordB.record.attributes.map((a: any) => [a.key, a.value]))
+
+      expect(attrsA['posthogDistinctId']).toEqual({ stringValue: 'alice' })
+      expect(attrsB['posthogDistinctId']).toEqual({ stringValue: 'bob' })
+      // Both records should still be present — reset() must NOT drop the queue.
+      expect(queue).toHaveLength(2)
+    })
+
     it('options.logs.enabled=false keeps captures from reaching the queue', async () => {
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
