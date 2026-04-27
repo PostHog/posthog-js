@@ -5,7 +5,7 @@ describe('tracing headers', () => {
     it.each([
       ['plain string', 'session-123', 'session-123'],
       ['trims surrounding whitespace', '  user-456  ', 'user-456'],
-      ['removes ASCII control chars', 'win\x00dow\n-\t789\x7f', 'window-789'],
+      ['removes C0 and C1 control chars', 'win\x00dow\n-\t789\x7f\x80\x9f', 'window-789'],
       ['returns undefined for empty string', '', undefined],
       ['returns undefined when only whitespace/control chars remain', ' \n\t\x00 ', undefined],
       ['uses the first valid array item', [' \x00 session-123\t ', 'ignored'], 'session-123'],
@@ -31,7 +31,7 @@ describe('tracing headers', () => {
         'sanitizes extracted tracing headers',
         {
           'x-posthog-session-id': ' session\n-123 ',
-          'x-posthog-window-id': ' win\x00dow-789 ',
+          'x-posthog-window-id': ' win\x00dow\x85-789 ',
           'x-posthog-distinct-id': ` ${'u'.repeat(1105)} `,
         },
         { sessionId: 'session-123', windowId: 'window-789', distinctId: 'u'.repeat(1000) },

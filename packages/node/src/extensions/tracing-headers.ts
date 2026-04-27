@@ -1,8 +1,9 @@
 import type { IncomingHttpHeaders } from 'node:http'
 
 const TRACING_HEADER_MAX_LENGTH = 1000
+// Remove C0 controls, DEL, and C1 controls from PostHog tracing IDs only.
 // eslint-disable-next-line no-control-regex
-const TRACING_HEADER_CONTROL_CHARS_REGEX = /[\x00-\x1f\x7f]/g
+const TRACING_HEADER_CONTROL_CHARS_REGEX = /[\x00-\x1f\x7f-\x9f]/g
 
 type HeaderValue = IncomingHttpHeaders[string]
 
