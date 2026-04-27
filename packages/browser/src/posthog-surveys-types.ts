@@ -58,6 +58,7 @@ interface SurveyQuestionBase {
     buttonText?: string
     branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
     validation?: SurveyValidationRule[]
+    translations?: Record<string, SurveyQuestionTranslation>
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -128,8 +129,9 @@ export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string
     name: string
-    description: string
+    description?: string
     type: SurveyType
+    translations?: Record<string, SurveyTranslation>
     feature_flag_keys:
         | {
               key: string
@@ -327,6 +329,23 @@ export const SurveySchedule = {
 } as const
 export type SurveySchedule = (typeof SurveySchedule)[keyof typeof SurveySchedule]
 
+export interface SurveyTranslation {
+    name?: string
+    thankYouMessageHeader?: string
+    thankYouMessageDescription?: string
+    thankYouMessageCloseButtonText?: string
+}
+
+export interface SurveyQuestionTranslation {
+    question?: string
+    description?: string | null
+    buttonText?: string
+    link?: string | null
+    lowerBoundLabel?: string
+    upperBoundLabel?: string
+    choices?: string[]
+}
+
 export const SurveyEventName = {
     SHOWN: 'survey shown',
     DISMISSED: 'survey dismissed',
@@ -347,6 +366,7 @@ export const SurveyEventProperties = {
     SURVEY_COMPLETED: '$survey_completed',
     PRODUCT_TOUR_ID: '$product_tour_id',
     SURVEY_LAST_SEEN_DATE: '$survey_last_seen_date',
+    SURVEY_LANGUAGE: '$survey_language',
 } as const
 export type SurveyEventProperties = (typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]
 
