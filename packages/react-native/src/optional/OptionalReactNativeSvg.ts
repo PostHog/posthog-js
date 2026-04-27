@@ -22,7 +22,8 @@ const hasNativeSvgSupport = (): boolean => {
 export let OptionalReactNativeSvg: typeof ReactNativeSvg | undefined = undefined
 
 try {
+  const ReactNativeSvg = require('react-native-svg')
   if (hasNativeSvgSupport()) {
-    OptionalReactNativeSvg = require('react-native-svg')
+    OptionalReactNativeSvg = ReactNativeSvg
   }
 } catch (e) {}
