@@ -25,6 +25,7 @@ app.get('/health', (req, res) => {
         sdk_name: 'posthog-node',
         sdk_version: require('../../packages/node/package.json').version,
         adapter_version: '1.0.0',
+        capabilities: ['capture_v0', 'encoding_gzip'],
     })
 })
 
