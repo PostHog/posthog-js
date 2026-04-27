@@ -1,5 +1,5 @@
 ---
-'posthog-js': minor
+'posthog-js': patch
 ---
 
 Fix autofocus
