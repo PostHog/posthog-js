@@ -629,6 +629,9 @@ export class PostHog extends PostHogCore {
    * Setting this to 1 will send events immediately and will use more battery. This is set to 20 by default.
    * You can also manually flush the queue. If a flush is already in progress it returns a promise for the existing flush.
    *
+   * Note: this drains the **events** pipeline only. Logs are flushed via
+   * {@link flushLogs}, and {@link shutdown} drains both before terminating.
+   *
    * {@label Capture}
    *
    * @example
@@ -637,6 +640,7 @@ export class PostHog extends PostHogCore {
    * await posthog.flush()
    * ```
    *
+   * @see flushLogs
    * @public
    *
    * @returns Promise that resolves when the flush is complete
@@ -689,6 +693,9 @@ export class PostHog extends PostHogCore {
    * If a flush is already in progress, both callers join the same in-flight
    * promise — no double-send.
    *
+   * Note: this drains the **logs** pipeline only. Events are flushed via
+   * {@link flush}, and {@link shutdown} drains both before terminating.
+   *
    * {@label Capture}
    *
    * @example
@@ -696,6 +703,7 @@ export class PostHog extends PostHogCore {
    * await posthog.flushLogs()
    * ```
    *
+   * @see flush
    * @public
    *
    * @returns Promise that resolves when the flush is complete.
