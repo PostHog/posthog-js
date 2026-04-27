@@ -130,6 +130,9 @@
     },
     "react-native-safe-area-context": {
       "optional": true
+    },
+    "react-native-svg": {
+      "optional": true
     }
   }
 }
