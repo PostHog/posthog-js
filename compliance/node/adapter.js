@@ -145,6 +145,44 @@ app.get('/state', (req, res) => {
     })
 })
 
+app.post('/get_feature_flag', async (req, res) => {
+    if (!state.client) {
+        return res.status(400).json({ error: 'SDK not initialized' })
+    }
+
+    const {
+        key,
+        distinct_id,
+        person_properties,
+        groups,
+        group_properties,
+        disable_geoip,
+        force_remote = true,
+    } = req.body || {}
+
+    if (!key) {
+        return res.status(400).json({ error: 'key is required' })
+    }
+    if (!distinct_id) {
+        return res.status(400).json({ error: 'distinct_id is required' })
+    }
+
+    try {
+        const value = await state.client.getFeatureFlag(key, distinct_id, {
+            groups,
+            personProperties: person_properties,
+            groupProperties: group_properties,
+            disableGeoip: disable_geoip,
+            onlyEvaluateLocally: !force_remote,
+        })
+
+        res.json({ success: true, value })
+    } catch (error) {
+        state.lastError = error.message
+        res.status(500).json({ error: error.message })
+    }
+})
+
 app.post('/reset', (req, res) => {
     if (state.client) {
         state.client.shutdown()
