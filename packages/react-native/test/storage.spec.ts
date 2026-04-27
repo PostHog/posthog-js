@@ -192,7 +192,7 @@ describe('PostHog React Native', () => {
     })
 
     it('keeps scheduling writes after a previous persist fails', async () => {
-      // First write fails, second succeeds — the scheduled-flag must reset
+      // First write fails, second succeeds — the timer handle must reset
       // even on failure so subsequent mutations can schedule fresh writes.
       let callCount = 0
       mockedOptionalFileSystem!.writeAsStringAsync.mockImplementation(() => {
@@ -208,6 +208,111 @@ describe('PostHog React Native', () => {
       await storage.waitForPersist()
 
       expect(callCount).toBe(2)
+      consoleSpy.mockRestore()
+    })
+
+    it('swallows sync throws from the scheduled persist callback', async () => {
+      // A custom storage backend whose setItem throws *synchronously*
+      // (vs. returning a rejected Promise) must not surface as an
+      // unhandled error from the timer. Async storage wraps sync throws
+      // automatically (async function semantics), so we exercise this
+      // path with a directly-constructed instance over a sync stub.
+      const syncThrowingStorage = {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error('sync throw from storage backend')
+        },
+      }
+      const syncStorage = new PostHogRNStorage(syncThrowingStorage, '.test-sync.json')
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      syncStorage.setItem('a', '1')
+      // Yield a macrotask so the scheduled setTimeout(0) fires.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(consoleSpy).toHaveBeenCalledWith('PostHog storage scheduled persist threw:', expect.any(Error))
+      consoleSpy.mockRestore()
+    })
+
+    it('handles concurrent waitForPersist calls without losing writes', async () => {
+      // Two concurrent waitForPersist calls should both resolve correctly:
+      // the first drains the scheduled write; the second sees an empty
+      // timer slot (already drained) and just awaits the same in-flight
+      // promise. JS single-threaded model means no race — the drain runs
+      // synchronously to completion before the second call starts.
+      let resolveWrite: () => void
+      const writePromise = new Promise<void>((resolve) => {
+        resolveWrite = resolve
+      })
+      mockedOptionalFileSystem!.writeAsStringAsync.mockImplementation(() => writePromise)
+
+      storage.setItem('a', '1')
+
+      const wait1 = storage.waitForPersist()
+      const wait2 = storage.waitForPersist()
+
+      // Only one disk write should be in flight (drain was a no-op for
+      // the second call because the first had already drained the timer).
+      expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledTimes(1)
+
+      resolveWrite!()
+      await Promise.all([wait1, wait2])
+    })
+
+    it('does not include captures arriving during a waitForPersist await in the wait', async () => {
+      // waitForPersist promises to wait for writes pending at call time.
+      // A capture that arrives mid-await schedules its own subsequent
+      // write that fires after waitForPersist returns. This is correct
+      // semantics — the caller (e.g. AppState background) only got the
+      // durability up to the moment of the call.
+      let resolveFirst: () => void
+      const firstWrite = new Promise<void>((resolve) => {
+        resolveFirst = resolve
+      })
+      mockedOptionalFileSystem!.writeAsStringAsync.mockImplementationOnce(() => firstWrite)
+      mockedOptionalFileSystem!.writeAsStringAsync.mockResolvedValue(undefined)
+
+      storage.setItem('first', '1')
+      const waitPromise = storage.waitForPersist()
+
+      // Mid-await, a new mutation arrives.
+      storage.setItem('second', '2')
+
+      // The first write is still in flight; only one disk write so far.
+      expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledTimes(1)
+
+      // Resolve the first write — waitForPersist should resolve without
+      // waiting for the second write to fire.
+      resolveFirst!()
+      await waitPromise
+
+      // After waitForPersist returns, the second write hasn't fired yet
+      // (still scheduled for the next tick).
+      expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledTimes(1)
+
+      // A second waitForPersist drains the queued write and confirms.
+      await storage.waitForPersist()
+      expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledTimes(2)
+    })
+
+    it('waitForPersist swallows sync throws from the drained persist', async () => {
+      // Same scenario but on the drain path — waitForPersist is
+      // documented as "never throws" and must honor that even when the
+      // forced persist throws synchronously.
+      const syncThrowingStorage = {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error('sync throw from storage backend')
+        },
+      }
+      const syncStorage = new PostHogRNStorage(syncThrowingStorage, '.test-sync.json')
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      syncStorage.setItem('a', '1')
+      // Drain via waitForPersist before the timer fires.
+      await expect(syncStorage.waitForPersist()).resolves.toBeUndefined()
+
+      expect(consoleSpy).toHaveBeenCalledWith('PostHog storage drain persist threw:', expect.any(Error))
       consoleSpy.mockRestore()
     })
   })

@@ -24,8 +24,8 @@ export class PostHogRNStorage {
   // one fewer storage.setItem round-trip). Lifecycle paths that need
   // durability now (AppState background, flushStorage, shutdown) call
   // waitForPersist, which drains the scheduled write synchronously before
-  // awaiting in-flight async writes.
-  private _persistScheduled = false
+  // awaiting in-flight async writes. The timer handle doubles as the
+  // "scheduled" flag — a single source of truth.
   private _persistTimer?: ReturnType<typeof setTimeout>
 
   // Prefer the `create*Storage` factories below over calling this directly —
@@ -52,22 +52,24 @@ export class PostHogRNStorage {
   /**
    * Waits for all pending storage persist operations to complete.
    * This ensures data has been written to the underlying storage before proceeding.
-   * This method never throws - errors are logged but swallowed.
+   * This method never throws — errors are logged but swallowed.
    *
    * If a write is currently scheduled but hasn't yet fired (the timer is
    * pending), it is drained synchronously here before the await resolves —
    * this preserves the durability contract for flushStorage callers
    * (`posthog-core-stateless.ts:1131` "Wait for storage to complete to
    * prevent duplicate events on app crash") under tick-level coalescing.
+   *
+   * No try/catch needed around `Promise.all` because every promise in
+   * `_pendingPromises` already has its own `.catch` applied in `persist()`
+   * — they're guaranteed to resolve, so `Promise.all` can't reject. Sync
+   * throws from `_drainScheduledPersist` → `persist()` are swallowed
+   * inside the drain helper itself.
    */
   async waitForPersist(): Promise<void> {
     this._drainScheduledPersist()
-    try {
-      if (this._pendingPromises.size > 0) {
-        await Promise.all(this._pendingPromises)
-      }
-    } catch {
-      // Errors already logged in persist(), safe to ignore here
+    if (this._pendingPromises.size > 0) {
+      await Promise.all(this._pendingPromises)
     }
   }
 
@@ -94,32 +96,38 @@ export class PostHogRNStorage {
 
   // Schedules a single persist() on the next macrotask. Repeated calls
   // within the same tick are no-ops — the in-memory mutation is already in
-  // memoryCache, and the scheduled fire will read the final state.
+  // memoryCache, and the scheduled fire will read the final state. Sync
+  // throws from persist() (e.g. JSON.stringify on a circular ref or a
+  // buggy custom storage backend) are caught here so the timer callback
+  // can't surface as an unhandled error in the RN runtime.
   private schedulePersist(): void {
-    if (this._persistScheduled) return
-    this._persistScheduled = true
+    if (this._persistTimer !== undefined) return
     this._persistTimer = setTimeout(() => {
-      // Reset before persist() so a sync throw from the storage backend
-      // can't leave the scheduler stuck. Async errors are caught inside
-      // persist() itself.
+      // Clear handle before persist() so a sync throw can't leave the
+      // scheduler stuck. Async errors are caught inside persist() itself.
       this._persistTimer = undefined
-      this._persistScheduled = false
-      this.persist()
+      try {
+        this.persist()
+      } catch (err) {
+        console.warn('PostHog storage scheduled persist threw:', err)
+      }
     }, 0)
   }
 
   // Force a scheduled persist to fire now. Used by waitForPersist (and
   // therefore by flushStorage / AppState background / shutdown) so callers
   // awaiting durability are guaranteed the latest state has been handed to
-  // the storage backend before they resume.
+  // the storage backend before they resume. Catches sync throws from
+  // persist() so waitForPersist's "never throws" contract holds.
   private _drainScheduledPersist(): void {
-    if (!this._persistScheduled) return
-    if (this._persistTimer) {
-      clearTimeout(this._persistTimer)
-      this._persistTimer = undefined
+    if (this._persistTimer === undefined) return
+    clearTimeout(this._persistTimer)
+    this._persistTimer = undefined
+    try {
+      this.persist()
+    } catch (err) {
+      console.warn('PostHog storage drain persist threw:', err)
     }
-    this._persistScheduled = false
-    this.persist()
   }
 
   getItem(key: string): any | null | undefined {

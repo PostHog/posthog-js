@@ -497,14 +497,20 @@ export class PostHog extends PostHogCore {
    * so neither can outlive the caller's shutdown SLA.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
-    await Promise.all([this._logs.shutdown(shutdownTimeoutMs), super._shutdown(shutdownTimeoutMs)])
-    // Drain any tick-coalesced storage writes that weren't flushed via the
-    // queue-advance path. setPersistedProperty calls for distinctId,
-    // sessionId, deviceId, feature flag overrides, etc. only get a scheduled
-    // setTimeout(0) write; without an explicit drain here, those writes
-    // could miss disk if the process exits before the next macrotask.
-    // waitForPersist swallows errors internally.
-    await Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
+    try {
+      await Promise.all([this._logs.shutdown(shutdownTimeoutMs), super._shutdown(shutdownTimeoutMs)])
+    } finally {
+      // Drain any tick-coalesced storage writes that weren't flushed via
+      // the queue-advance path. setPersistedProperty calls for
+      // distinctId, sessionId, deviceId, feature flag overrides, etc.
+      // only get a scheduled setTimeout(0) write; without an explicit
+      // drain here, those writes could miss disk if the process exits
+      // before the next macrotask. Runs in `finally` so a timed-out
+      // shutdown (super._shutdown rejects after shutdownTimeoutMs) still
+      // flushes pending writes before the rejection propagates.
+      // waitForPersist swallows errors internally and never throws.
+      await Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
+    }
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
