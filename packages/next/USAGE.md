@@ -18,6 +18,7 @@ Comprehensive reference for every feature in the `@posthog/next` package.
     - [Bootstrapping Flags (Pages)](#bootstrapping-flags-pages)
 
 - [Feature Flag Bootstrap](#feature-flag-bootstrap)
+- [Error Tracking](#error-tracking)
 - [Consent Management](#consent-management)
 - [Middleware Reference](#middleware-reference)
     - [API Proxy](#api-proxy)
@@ -375,6 +376,78 @@ Pass an object to control evaluation:
 - Enabling `bootstrapFlags` opts the route into **dynamic rendering** (incompatible with static generation / ISR)
 - Adds a server-side call to PostHog on each request (deduplicated per render)
 - If the user has opted out of tracking, flag evaluation is skipped and no bootstrap data is passed
+
+---
+
+## Error Tracking
+
+`@posthog/next` does not enable error capture by default. Opt in with `capture_exceptions: true` on `clientOptions` to wire up `window.onerror`, `unhandledrejection`, and (optionally) `console.error`:
+
+```tsx
+// app/layout.tsx
+import { PostHogProvider, PostHogPageView } from '@posthog/next'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <html lang="en">
+            <body>
+                <PostHogProvider
+                    apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}
+                    clientOptions={{
+                        api_host: '/ingest',
+                        capture_exceptions: true,
+                    }}
+                >
+                    <PostHogPageView />
+                    {children}
+                </PostHogProvider>
+            </body>
+        </html>
+    )
+}
+```
+
+`capture_exceptions` accepts either a boolean or a fine-grained config:
+
+```ts
+{
+    capture_exceptions: {
+        capture_unhandled_errors: true,
+        capture_unhandled_rejections: true,
+        capture_console_errors: false,
+    }
+}
+```
+
+### Manually capturing exceptions
+
+To capture caught errors from inside a client component, reach the `posthog-js` instance with `usePostHog()` and call `captureException`:
+
+```tsx
+'use client'
+import { usePostHog } from '@posthog/next'
+
+export function CheckoutButton() {
+    const posthog = usePostHog()
+
+    return (
+        <button
+            onClick={async () => {
+                try {
+                    await checkout()
+                } catch (error) {
+                    posthog.captureException(error, { feature: 'checkout' })
+                    throw error
+                }
+            }}
+        >
+            Checkout
+        </button>
+    )
+}
+```
+
+`usePostHog()` is the supported way to reach the client — referencing a bare `posthog` identifier in a client component will throw `ReferenceError: posthog is not defined` because the SDK is not exposed on `window` by default.
 
 ---
 

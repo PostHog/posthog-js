@@ -102,4 +102,31 @@ assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrap
 // when 1.161.1 is the oldest version seen in production we can remove this
 assignableWindow.posthogErrorWrappingFunctions = posthogErrorWrappingFunctions
 
+// Pre-aaded54 (#1407) cores call this single function from inside the lazy
+// loader's onload callback. Without it, those cached old-core bundles throw
+// `TypeError: extendPostHogWithExceptionAutocapture is not a function` when
+// they finish downloading a current extension script.
+type LegacyPostHogInstance = {
+    capture?: (event: string, properties: Record<string, any>, options?: Record<string, any>) => void
+}
+const extendPostHogWithExceptionAutocapture = (instance: LegacyPostHogInstance) => {
+    const capture = instance?.capture
+    if (typeof capture !== 'function') {
+        return
+    }
+    const captureFn = (errorProperties: ErrorTracking.ErrorProperties) => {
+        capture.call(instance, '$exception', errorProperties as Record<string, any>, {
+            _noTruncate: true,
+            _batchKey: 'exceptionEvent',
+        })
+    }
+    try {
+        wrapOnError(captureFn)
+        wrapUnhandledRejection(captureFn)
+    } catch (e) {
+        logger.error('legacy back-compat shim failed to start exception autocapture', e)
+    }
+}
+assignableWindow.extendPostHogWithExceptionAutocapture = extendPostHogWithExceptionAutocapture
+
 export default posthogErrorWrappingFunctions

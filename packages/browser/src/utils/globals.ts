@@ -87,6 +87,18 @@ export type AssignableWindow = Window &
         posthogErrorWrappingFunctions: any
 
         /**
+         * Pre-1.161.1 cores call this single function from the lazy-loader's onload callback.
+         * Kept on the window so cached old-core bundles loading a current extension script
+         * don't throw `TypeError: extendPostHogWithExceptionAutocapture is not a function`.
+         * Can be removed once we drop support for those cores.
+         *
+         * See entrypoints/exception-autocapture.ts
+         *
+         * @deprecated use `__PosthogExtensions__.errorWrappingFunctions` instead
+         */
+        extendPostHogWithExceptionAutocapture: any
+
+        /**
          * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
          * Can be removed once we drop support for 1.161.1
          *
