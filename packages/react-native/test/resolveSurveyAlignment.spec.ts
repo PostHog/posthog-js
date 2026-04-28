@@ -16,8 +16,8 @@ describe('resolveSurveyAlignment', () => {
     expect(resolveSurveyAlignment(position)).toEqual({ vertical, horizontal })
   })
 
-  it('falls back to the documented Right default when position is undefined', () => {
-    expect(resolveSurveyAlignment(undefined)).toEqual({ vertical: 'flex-end', horizontal: 'flex-end' })
+  it('falls back to the Center default when position is undefined', () => {
+    expect(resolveSurveyAlignment(undefined)).toEqual({ vertical: 'flex-end', horizontal: 'center' })
   })
 
   it('warns once and falls back to the default for unknown position strings', () => {
@@ -27,7 +27,7 @@ describe('resolveSurveyAlignment', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       const result = resolveSurveyAlignment(unknown)
-      expect(result).toEqual({ vertical: 'flex-end', horizontal: 'flex-end' })
+      expect(result).toEqual({ vertical: 'flex-end', horizontal: 'center' })
       expect(warn).toHaveBeenCalledTimes(1)
       expect(warn.mock.calls[0][0]).toContain(unknown)
       // Calling again with the same unknown string does not re-warn.
