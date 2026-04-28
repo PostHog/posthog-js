@@ -6744,15 +6744,32 @@ describe('mixed targeting local evaluation', () => {
     group_type_mapping: { '0': 'company' },
   }
 
+  const onlyGroupFlag = {
+    ...mixedFlag,
+    key: 'only-group-flag',
+    filters: {
+      aggregation_group_type_index: null,
+      groups: [
+        {
+          aggregation_group_type_index: 0,
+          properties: [{ key: 'plan', operator: 'exact', value: ['enterprise'], type: 'group', group_type_index: 0 }],
+          rollout_percentage: 100,
+        },
+      ],
+    },
+  }
+
   it.each([
     {
       name: 'person condition matches when no groups passed',
+      flagKey: 'mixed-flag',
       distinctId: 'user-1',
       options: { personProperties: { email: 'test@example.com' } },
       expected: true,
     },
     {
       name: 'group condition matches when group props match',
+      flagKey: 'mixed-flag',
       distinctId: 'user-2',
       options: {
         groups: { company: 'acme' },
@@ -6763,6 +6780,7 @@ describe('mixed targeting local evaluation', () => {
     },
     {
       name: 'no match when both person and group fail',
+      flagKey: 'mixed-flag',
       distinctId: 'user-3',
       options: {
         groups: { company: 'acme' },
@@ -6771,39 +6789,20 @@ describe('mixed targeting local evaluation', () => {
       },
       expected: false,
     },
-  ])('$name', async ({ distinctId, options, expected }) => {
-    mockedFetch.mockImplementation(apiImplementation({ localFlags: mixedFlagLocalResponse }))
-
-    posthog = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      personalApiKey: 'TEST_PERSONAL_API_KEY',
-      ...posthogImmediateResolveOptions,
-    })
-
-    expect(await posthog.getFeatureFlag('mixed-flag', distinctId, options)).toEqual(expected)
-    // No fallback to /flags — mixed targeting must resolve locally.
-    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
-  })
-
-  it('only group conditions, no groups passed: returns false (not inconclusive, no /flags fallback)', async () => {
-    const onlyGroupFlag = {
-      ...mixedFlag,
-      key: 'only-group-flag',
-      filters: {
-        aggregation_group_type_index: null,
-        groups: [
-          {
-            aggregation_group_type_index: 0,
-            properties: [{ key: 'plan', operator: 'exact', value: ['enterprise'], type: 'group', group_type_index: 0 }],
-            rollout_percentage: 100,
-          },
-        ],
-      },
-    }
+    {
+      name: 'only group conditions, no groups passed: returns false without /flags fallback',
+      flagKey: 'only-group-flag',
+      distinctId: 'user-1',
+      options: {},
+      expected: false,
+      localFlags: { flags: [onlyGroupFlag], group_type_mapping: { '0': 'company' } },
+      decideFlags: { 'only-group-flag': 'server-fallback' },
+    },
+  ])('$name', async ({ flagKey, distinctId, options, expected, localFlags, decideFlags }) => {
     mockedFetch.mockImplementation(
       apiImplementation({
-        localFlags: { flags: [onlyGroupFlag], group_type_mapping: { '0': 'company' } },
-        decideFlags: { 'only-group-flag': 'server-fallback' },
+        localFlags: localFlags ?? mixedFlagLocalResponse,
+        decideFlags,
       })
     )
 
@@ -6813,8 +6812,8 @@ describe('mixed targeting local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Group condition skips (no groups passed); no inconclusive raised, no server fallback.
-    expect(await posthog.getFeatureFlag('only-group-flag', 'user-1')).toEqual(false)
+    expect(await posthog.getFeatureFlag(flagKey, distinctId, options)).toEqual(expected)
+    // No fallback to /flags — mixed targeting must resolve locally.
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
