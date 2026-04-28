@@ -4,7 +4,7 @@ import { each, entries } from './utils'
 import { isNullish, isString, isUndefined, isArray, isBoolean } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
-import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
 import { includes, trim } from '@posthog/core'
 
 export function splitClassString(s: string): string[] {
@@ -236,16 +236,11 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
 
     let parentIsUsefulElement = false
     const targetElementList: Element[] = [el]
-    let curEl: Element | null = el
-    while (curEl && curEl.parentNode && !isTag(curEl, 'body')) {
-        // If element is a shadow root, we skip it
-        if (isDocumentFragment(curEl.parentNode)) {
-            // Only ShadowRoots have a `.host`. Plain DocumentFragments (e.g. <template>)
-            // do not, so guard against pushing `undefined` into the chain.
-            const host: Element | undefined = (curEl.parentNode as any).host
-            if (!isElementNode(host)) break
-            targetElementList.push(host)
-            curEl = host
+    let curEl: Element = el
+    while (curEl.parentNode && !isTag(curEl, 'body')) {
+        if (isShadowRoot(curEl.parentNode)) {
+            targetElementList.push(curEl.parentNode.host)
+            curEl = curEl.parentNode.host
             continue
         }
         const parentNode = getParentElement(curEl)

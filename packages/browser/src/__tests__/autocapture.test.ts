@@ -635,21 +635,24 @@ describe('Autocapture system', () => {
                 expect(spyArgs.length).toBe(0)
             })
 
-            it('does not throw on copy from a text node inside a shadow root', () => {
+            it('walks through the shadow root host on copy from inside a web component', () => {
                 const host = document.createElement('some-element')
                 document.body.appendChild(host)
                 const shadowRoot = host.attachShadow({ mode: 'open' })
                 const paragraph = document.createElement('p')
-                const text = document.createTextNode('some text inside shadow dom')
-                paragraph.appendChild(text)
+                paragraph.appendChild(document.createTextNode('some text inside shadow dom'))
                 shadowRoot.appendChild(paragraph)
 
                 setWindowTextSelection('some text inside shadow dom')
 
-                // copy events bubble through the host because of composedPath
-                const fakeEvent = makeCopyEvent({ target: text as unknown as EventTarget })
+                const fakeEvent = makeCopyEvent({ target: paragraph })
 
-                expect(() => autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')).not.toThrow()
+                autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')
+
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                const captured = beforeSendMock.mock.calls[0][0]
+                expect(captured.event).toEqual('$copy_autocapture')
+                expect(captured.properties.$elements_chain).toContain('some-element')
             })
 
             it('does not throw on copy whose target lives inside a plain document fragment', () => {
@@ -663,6 +666,17 @@ describe('Autocapture system', () => {
                 const fakeEvent = makeCopyEvent({ target: paragraph })
 
                 expect(() => autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')).not.toThrow()
+            })
+
+            it('does not throw on click whose target ancestor chain includes a plain document fragment', () => {
+                const fragment = document.createDocumentFragment()
+                const button = document.createElement('button')
+                button.innerText = 'detached button'
+                fragment.appendChild(button)
+
+                const fakeEvent = makeMouseEvent({ target: button })
+
+                expect(() => autocapture['_captureEvent'](fakeEvent)).not.toThrow()
             })
         })
 

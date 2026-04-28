@@ -25,7 +25,7 @@ import { isBoolean, isFunction, isNull, isObject } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
-import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
 import { includes } from '@posthog/core'
 import type { Extension } from './extensions/types'
 
@@ -154,25 +154,23 @@ export function autocapturePropertiesForElement(
         elementsChainAsString: boolean
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
-    const targetElementList = isElementNode(target) ? [target] : []
-    let curEl: Element | null = isElementNode(target) ? target : null
-    while (curEl && curEl.parentNode && !isTag(curEl, 'body')) {
-        if (isDocumentFragment(curEl.parentNode)) {
-            // Only ShadowRoots have a `.host`. Plain DocumentFragments (e.g. <template>)
-            // do not, so guard against pushing `undefined` into the chain.
-            const host = (curEl.parentNode as any).host
-            if (!isElementNode(host)) {
-                break
-            }
-            targetElementList.push(host)
-            curEl = host
+    if (!isElementNode(target)) {
+        return { props: {} }
+    }
+
+    const targetElementList: Element[] = [target]
+    let curEl: Element = target
+    while (curEl.parentNode && !isTag(curEl, 'body')) {
+        if (isShadowRoot(curEl.parentNode)) {
+            targetElementList.push(curEl.parentNode.host)
+            curEl = curEl.parentNode.host
             continue
         }
         if (!isElementNode(curEl.parentNode)) {
             break
         }
-        targetElementList.push(curEl.parentNode as Element)
-        curEl = curEl.parentNode as Element
+        targetElementList.push(curEl.parentNode)
+        curEl = curEl.parentNode
     }
 
     const elementsJson: Properties[] = []
@@ -208,12 +206,12 @@ export function autocapturePropertiesForElement(
         return { props: {}, explicitNoCapture }
     }
 
-    if (!maskAllText && elementsJson[0]) {
+    if (!maskAllText) {
         // if the element is a button or anchor tag get the span text from any
         // children and include it as/with the text property on the parent element
         if (isTag(target, 'a') || isTag(target, 'button')) {
             elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target)
-        } else if (isElementNode(target)) {
+        } else {
             elementsJson[0]['$el_text'] = getSafeText(target)
         }
     }
