@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Button, ScrollView, StyleSheet, View } from 'react-native'
+import { useEffect, useState } from 'react'
+import { AppState, Button, ScrollView, StyleSheet, View } from 'react-native'
 
 import ParallaxScrollView from '@/components/ParallaxScrollView'
 import { ThemedText } from '@/components/ThemedText'
@@ -12,6 +12,20 @@ type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
 export default function LogsScreen() {
     const [status, setStatus] = useState('Idle')
     const [counter, setCounter] = useState(0)
+
+    // Emit a log on every AppState transition so the SDK's `app.state`
+    // tagging path can be exercised without manual taps. The PostHog
+    // constructor registers its own AppState listener first, which updates
+    // `_currentAppState` synchronously *before* this hook's body runs, so
+    // the captured record reads the new state.
+    useEffect(() => {
+        let prev: string = AppState.currentState
+        const sub = AppState.addEventListener('change', (next) => {
+            posthog.logger.info(`AppState ${prev} → ${next}`, { from: prev, to: next })
+            prev = next
+        })
+        return () => sub.remove()
+    }, [])
 
     const bump = (message: string) => {
         const next = counter + 1
