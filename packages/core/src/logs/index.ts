@@ -65,10 +65,9 @@ export class PostHogLogs {
    *   - `undefined` — no opinion; local config decides.
    *
    * AND semantics with local: this mirrors the RN session-replay
-   * `consoleLogRecordingEnabled` gate (`packages/react-native/src/posthog-rn.ts:1813-1825`)
-   * and other mobile-config patterns. Server can disable a locally-on
-   * feature, but cannot turn the feature on for a user who hasn't opted
-   * in locally.
+   * `consoleLogRecordingEnabled` gate (in `PostHog.startSessionReplay`) and
+   * other mobile-config patterns. Server can disable a locally-on feature,
+   * but cannot turn the feature on for a user who hasn't opted in locally.
    */
   setRemoteEnabled(enabled: boolean | undefined): void {
     if (enabled !== undefined) {
@@ -81,9 +80,9 @@ export class PostHogLogs {
    *   `enabled = localOptIn AND remote !== false`.
    *
    * The local opt-in is the source of truth for whether the user wants logs;
-   * remote acts purely as a server-side off-switch. Diverges from the JS SDK
-   * (`packages/browser/src/posthog-logs.ts:41-49`), which lets remote `true`
-   * flip a locally-off instance on. RN matches the session-replay precedent
+   * remote acts purely as a server-side off-switch. Diverges from the
+   * browser SDK's `PostHogLogs.onRemoteConfig`, which lets remote `true` flip
+   * a locally-off instance on. RN matches the session-replay precedent
    * because mobile users rarely expect the server to silently start
    * collecting data they didn't ask for locally.
    */
@@ -107,8 +106,8 @@ export class PostHogLogs {
 
     // Ordering: beforeSend → rate cap → OTLP build. beforeSend runs first so
     // user-dropped records don't consume the per-interval budget (documented
-    // in `logs/types.ts`). Matches the events pipeline's `before_send`
-    // semantics in `packages/core/src/posthog-core.ts:1478-1499`.
+    // in `PostHogLogsConfig.beforeSend`). Matches the events pipeline's
+    // `before_send` semantics in `PostHogCore._runBeforeSend`.
     const filtered = this._runBeforeSend(options)
     if (filtered === null) {
       return
@@ -133,7 +132,7 @@ export class PostHogLogs {
 
   /**
    * Runs the configured `beforeSend` hook(s) on a capture record. Mirrors the
-   * events pipeline at `packages/core/src/posthog-core.ts:1478-1499`:
+   * events pipeline's `PostHogCore._runBeforeSend`:
    *   - single fn OR array of fns (chain, left-to-right)
    *   - returning `null` drops the record (logged at info)
    *   - a thrown error is logged and the chain *continues* with the previous
@@ -169,7 +168,8 @@ export class PostHogLogs {
 
   /**
    * Returns `true` if this capture fits within the current rate-cap window,
-   * `false` if it should be dropped. Mirrors `packages/browser/src/posthog-logs.ts:103-120`.
+   * `false` if it should be dropped. Mirrors the rate-cap branch in the
+   * browser SDK's `PostHogLogs.captureLog`.
    *
    * Fixed (tumbling) window: the counter resets the first time
    * `captureLog` fires after `rateCapWindowMs` has elapsed — no timer
@@ -180,9 +180,9 @@ export class PostHogLogs {
    * change, big NTP correction), `elapsed` goes negative. We treat that the
    * same as "window expired" and reset — otherwise the rate cap would be
    * stuck until the clock caught up to the old window start, potentially
-   * dropping logs for hours. Browser's current impl has the same quirk
-   * (`packages/browser/src/posthog-logs.ts:105`); when browser migrates to
-   * this class, it inherits the fix for free.
+   * dropping logs for hours. The browser SDK's window-roll check has the
+   * same quirk; when browser migrates to this class, it inherits the fix
+   * for free.
    *
    * Pre-init note: the counter increments here, before `_onReady` defers
    * `_enqueue` to the init promise. If init resolves slowly and the user
@@ -350,8 +350,8 @@ export class PostHogLogs {
     this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, queue)
 
     // Threshold trigger: at-capacity means flushing now reclaims space before
-    // the next capture has to shift something out. Matches the web SDK at
-    // `packages/browser/src/posthog-logs.ts:128`.
+    // the next capture has to shift something out. Matches the threshold-flush
+    // branch in the browser SDK's `PostHogLogs.captureLog`.
     if (queue.length >= this._maxBufferSize) {
       this._flushInBackground()
       return

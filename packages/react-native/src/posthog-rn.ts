@@ -163,11 +163,10 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Logs feature configuration. Lets you send structured log records to
    * PostHog via `posthog.captureLog(...)` or `posthog.logger.info(...)`.
    *
-   * **Off by default** (matches the JS SDK at
-   * `packages/browser/src/posthog-logs.ts:31-49`). Opt in either locally
-   * (`logs: { captureConsoleLogs: true }`) or via remote config
-   * (`response.logs.captureConsoleLogs: true`); a remote `false` acts as a
-   * kill-switch even when local is `true`.
+   * **Off by default** (matches the browser SDK's `PostHogLogs` extension).
+   * Opt in either locally (`logs: { captureConsoleLogs: true }`) or via
+   * remote config (`response.logs.captureConsoleLogs: true`); a remote
+   * `false` acts as a kill-switch even when local is `true`.
    *
    * Common overrides:
    * - `captureConsoleLogs: true` — enable the feature.
@@ -500,10 +499,10 @@ export class PostHog extends PostHogCore {
    */
   protected onRemoteConfig(response: PostHogRemoteConfig): void {
     this._errorTracking.onRemoteConfig(response.errorTracking)
-    // Logs remote kill-switch. Mirrors the browser SDK
-    // (`packages/browser/src/posthog-logs.ts:42-49`) which reads
-    // `response.logs?.captureConsoleLogs`. RN treats absent/true as "leave
-    // the decision to local config" — only an explicit `false` disables.
+    // Logs remote kill-switch. Mirrors the browser SDK's `PostHogLogs.onRemoteConfig`
+    // which reads `response.logs?.captureConsoleLogs`. RN treats absent/true
+    // as "leave the decision to local config" — only an explicit `false`
+    // disables.
     this._logs.setRemoteEnabled(extractLogsCaptureFlag(response.logs))
   }
 

@@ -1201,8 +1201,8 @@ export abstract class PostHogCoreStateless {
    * Sends a pre-built OTLP logs payload to `/i/v1/logs`. Returns a tagged
    * outcome instead of throwing so PostHogLogs doesn't have to know about the
    * core's error class hierarchy. Error classification lives here (single
-   * source of truth, same policy events use in `_flush()` at
-   * `posthog-core-stateless.ts:1155`).
+   * source of truth, same policy the events `_flush()` uses for its own
+   * 413 / network / fatal handling).
    *
    * 413 is passed through as `too-large` (not auto-retried) so the caller can
    * shrink `maxBatchRecordsPerPost` and retry the same records.

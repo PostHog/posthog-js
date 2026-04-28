@@ -31,10 +31,9 @@ export interface BufferedLogEntry {
 
 /**
  * `beforeSend` hook signature. Matches the events pipeline's `BeforeSendFn`
- * shape (`packages/core/src/types.ts:848`) so users get a consistent mental
- * model: return the (possibly transformed) record to keep it, or `null` to
- * drop it. Configure as a single function or an array (chain of filters,
- * evaluated left-to-right).
+ * shape so users get a consistent mental model: return the (possibly
+ * transformed) record to keep it, or `null` to drop it. Configure as a single
+ * function or an array (chain of filters, evaluated left-to-right).
  */
 export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions | null
 
@@ -42,13 +41,13 @@ export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions |
 // cellular radio cost, browser tab suspension, node process lifecycle).
 export interface PostHogLogsConfig {
   // Master switch. Default: false. The logs feature is opt-in — pass `true`
-  // explicitly to enable, mirroring the JS SDK at
-  // `packages/browser/src/posthog-logs.ts:31-49`. Server-side remote config
-  // (`response.logs.captureConsoleLogs`) can also flip this on, and an
-  // explicit remote `false` acts as a kill-switch even when local is `true`.
-  // The name matches the JS SDK so cross-SDK config mental models stay in
-  // sync; the field gates the entire logs pipeline (manual `captureLog`
-  // included), not only `console.*` interception.
+  // explicitly to enable, mirroring the browser SDK's `PostHogLogs`
+  // extension. Server-side remote config (`response.logs.captureConsoleLogs`)
+  // can also flip this on, and an explicit remote `false` acts as a
+  // kill-switch even when local is `true`. The name matches the browser SDK
+  // so cross-SDK config mental models stay in sync; the field gates the
+  // entire logs pipeline (manual `captureLog` included), not only `console.*`
+  // interception.
   captureConsoleLogs?: boolean
 
   // Resource attributes
@@ -71,9 +70,9 @@ export interface PostHogLogsConfig {
 
   // Filtering. Runs synchronously before the rate cap so beforeSend-dropped
   // records do not consume the per-interval budget. Accepts a single fn or
-  // an array (chain); mirrors the events-pipeline `before_send` contract in
-  // `packages/core/src/types.ts:193`. Throwing fns are logged and skipped —
-  // they must never crash the caller's `captureLog()`.
+  // an array (chain); mirrors the events-pipeline `before_send` contract on
+  // `PostHogCoreOptions`. Throwing fns are logged and skipped — they must
+  // never crash the caller's `captureLog()`.
   beforeSend?: BeforeSendLogFn | BeforeSendLogFn[]
 }
 
