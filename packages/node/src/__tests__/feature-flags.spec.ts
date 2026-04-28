@@ -6020,7 +6020,7 @@ describe('error handling and backoff', () => {
   function createMockFetch(statusCode: number, onFlagFetch?: () => void): jest.Mock & { callCount: number } {
     let callCount = 0
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         callCount++
         onFlagFetch?.()
         return Promise.resolve({
@@ -6130,7 +6130,7 @@ describe('error handling and backoff', () => {
     Date.now = () => mockTime
 
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         // Always return 401 to keep triggering backoff
         return Promise.resolve({
@@ -6191,7 +6191,7 @@ describe('error handling and backoff', () => {
     Date.now = () => mockTime
 
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         return Promise.resolve({
           status: 401,
@@ -6246,7 +6246,7 @@ describe('error handling and backoff', () => {
   it('should clear backoff after successful response', async () => {
     let fetchCallCount = 0
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         if (fetchCallCount === 1) {
           // First fetch: return 401 to trigger backoff
@@ -6310,7 +6310,7 @@ describe('error handling and backoff', () => {
   it('should allow reloadFeatureFlags() to bypass backoff', async () => {
     let fetchCallCount = 0
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         // Always return 401 to keep backoff active
         return Promise.resolve({

@@ -1,5 +1,116 @@
 # @posthog/types
 
+## 1.372.3
+
+## 1.372.2
+
+## 1.372.1
+
+## 1.372.0
+
+## 1.371.4
+
+## 1.371.3
+
+## 1.371.2
+
+### Patch Changes
+
+- [#3453](https://github.com/PostHog/posthog-js/pull/3453) [`96f19b7`](https://github.com/PostHog/posthog-js/commit/96f19b79d563937ed8f98e12796eee541a2dae7f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Lift OTLP log serialization helpers from posthog-js into @posthog/core so the
+  upcoming React Native logs feature consumes the same builders. Browser gains
+  two fixes as a side effect: NaN and ±Infinity attribute values no longer get
+  silently dropped during JSON encoding, and the scope.version OTLP field is
+  now populated with the SDK version (changes the server's instrumentation_scope
+  column from "posthog-js@" to "posthog-js@<semver>"). (2026-04-23)
+
+## 1.371.1
+
+## 1.371.0
+
+### Minor Changes
+
+- [#3432](https://github.com/PostHog/posthog-js/pull/3432) [`1a8b727`](https://github.com/PostHog/posthog-js/commit/1a8b7277c50a42bbb3f736afd530ff1c3389a7de) Thanks [@richardsolomou](https://github.com/richardsolomou)! - refactor: rename `__add_tracing_headers` to `addTracingHeaders`. The `__` prefix signalled an internal/experimental option, but the config is a public API (documented for linking LLM traces to session replays). `__add_tracing_headers` continues to work as a deprecated alias on the browser SDK.
+
+    Also exposes `patchFetchForTracingHeaders` from `@posthog/core` so non-browser SDKs can reuse the implementation. (2026-04-23)
+
+## 1.370.1
+
+## 1.370.0
+
+### Minor Changes
+
+- [#3389](https://github.com/PostHog/posthog-js/pull/3389) [`922a1c1`](https://github.com/PostHog/posthog-js/commit/922a1c1838a5ed2ad37f59dade5fc3cc81bb4246) Thanks [@hpouillot](https://github.com/hpouillot)! - Add exception steps to error tracking (aka breadcrumbs)
+  (2026-04-22)
+
+## 1.369.5
+
+## 1.369.4
+
+## 1.369.3
+
+## 1.369.2
+
+### Patch Changes
+
+- [#3386](https://github.com/PostHog/posthog-js/pull/3386) [`4a65604`](https://github.com/PostHog/posthog-js/commit/4a65604775fe87c47e5fbdb5f03673f2481c26ea) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add a preview flag for versioned browser lazy bundle asset paths.
+  (2026-04-16)
+
+## 1.369.1
+
+## 1.369.0
+
+## 1.368.2
+
+## 1.368.1
+
+## 1.368.0
+
+### Minor Changes
+
+- [#3345](https://github.com/PostHog/posthog-js/pull/3345) [`3fcf5c4`](https://github.com/PostHog/posthog-js/commit/3fcf5c449b3fe10ce187d40ea03425de9f94e85f) Thanks [@jonmcwest](https://github.com/jonmcwest)! - Add posthog.captureLog() API for sending structured log entries to PostHog logs
+  (2026-04-13)
+
+## 1.367.0
+
+## 1.366.2
+
+## 1.366.1
+
+## 1.366.0
+
+## 1.365.5
+
+## 1.365.4
+
+## 1.365.3
+
+## 1.365.2
+
+### Patch Changes
+
+- [#3323](https://github.com/PostHog/posthog-js/pull/3323) [`c387f6d`](https://github.com/PostHog/posthog-js/commit/c387f6dc146c9c09640e471e66043ad832b0476e) Thanks [@pauldambra](https://github.com/pauldambra)! - perf(replay): reduce memory and CPU cost of event compression by caching gzipped empty arrays and eliminating redundant JSON.stringify for size estimation
+  (2026-04-08)
+
+## 1.365.1
+
+## 1.365.0
+
+## 1.364.7
+
+## 1.364.6
+
+## 1.364.5
+
+## 1.364.4
+
+## 1.364.3
+
+## 1.364.2
+
+## 1.364.1
+
+## 1.364.0
+
 ## 1.363.6
 
 ## 1.363.5

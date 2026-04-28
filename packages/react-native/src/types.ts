@@ -13,12 +13,41 @@ export type PostHogNavigationRef = {
 }
 
 export type PostHogAutocaptureOptions = {
-  // Touches
+  /**
+   * Enable autocapture of touch events
+   *
+   * @default false
+   */
   captureTouches?: boolean
+  /**
+   * Custom prop name used to label elements for autocapture
+   *
+   * @default 'ph-label'
+   */
   customLabelProp?: string
+  /**
+   * Prop name used to prevent autocapture on an element and its children
+   *
+   * @default 'ph-no-capture'
+   */
   noCaptureProp?: string
+  /**
+   * Maximum number of elements to capture in the component tree hierarchy
+   *
+   * @default 20
+   */
   maxElementsCaptured?: number
+  /**
+   * List of element labels to ignore during autocapture
+   *
+   * @default []
+   */
   ignoreLabels?: string[]
+  /**
+   * List of prop names to capture from elements
+   *
+   * @default ['style', 'testID', 'accessibilityLabel', 'ph-label', 'children']
+   */
   propsToCapture?: string[]
 
   /**
@@ -95,12 +124,14 @@ export interface PostHogCustomAppProperties {
 export type PostHogSessionReplayConfig = {
   /**
    * Enable masking of all text and text input fields
-   * Default: true
+   *
+   * @default true
    */
   maskAllTextInputs?: boolean
   /**
    * Enable masking of all images to a placeholder
-   * Default: true
+   *
+   * @default true
    */
   maskAllImages?: boolean
   /**
@@ -108,19 +139,22 @@ export type PostHogSessionReplayConfig = {
    * These may include UIImagePickerController, PHPickerViewController and CNContactPickerViewController
    * iOS only
    * Experimental support
-   * Default: true
+   *
+   * @default true
    */
   maskAllSandboxedViews?: boolean
   /**
    * Enable capturing of logs as console events
-   * Default: true
+   *
+   * @default true
    */
   captureLog?: boolean
   /**
    * Deboucer delay used to reduce the number of snapshots captured and reduce performance impact
    * This is used for capturing the view as a screenshot
    * The lower the number more snapshots will be captured but higher the performance impact
-   * Defaults to 1s on iOS
+   *
+   * @default 1000
    * @deprecated please use throttleDelayMs instead
    */
   iOSdebouncerDelayMs?: number
@@ -128,8 +162,9 @@ export type PostHogSessionReplayConfig = {
    * Deboucer delay used to reduce the number of snapshots captured and reduce performance impact
    * This is used for capturing the view as a screenshot
    * The lower the number more snapshots will be captured but higher the performance impact
-   * Defaults to 1000ms (1s)
    * Ps: it was 500ms (0.5s) by default until version 3.3.7
+   *
+   * @default 1000
    * @deprecated please use throttleDelayMs instead
    */
   androidDebouncerDelayMs?: number
@@ -141,13 +176,14 @@ export type PostHogSessionReplayConfig = {
    * This value has precedence over iOSdebouncerDelayMs and androidDebouncerDelayMs
    * If this is not set, we will take the max number between iOSdebouncerDelayMs and androidDebouncerDelayMs for back compatibility
    *
-   * Defaults to 1000ms = 1s
+   * @default 1000
    */
   throttleDelayMs?: number
   /**
    * Enable capturing network telemetry
    * iOS only
-   * Default: true
+   *
+   * @default true
    */
   captureNetworkTelemetry?: boolean
   /**

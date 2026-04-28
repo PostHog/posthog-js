@@ -458,6 +458,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         eventProperties['$ai_web_search_count'] = additionalTokenData.webSearchCount
       }
 
+      // Extract stop reason from generation info
+      const stopReason = this._extractStopReason(output)
+      if (stopReason) {
+        eventProperties['$ai_stop_reason'] = stopReason
+      }
+
       // Handle generations/completions
       let completions
       if (output.generations && Array.isArray(output.generations)) {
@@ -586,6 +592,39 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
     // Sanitize the message content to redact base64 images
     return sanitizeLangChain(messageDict) as Record<string, any>
+  }
+
+  private _extractStopReason(output: LLMResult): string | undefined {
+    if (!output.generations || !Array.isArray(output.generations)) {
+      return undefined
+    }
+    const lastGeneration = output.generations[output.generations.length - 1]
+    if (!Array.isArray(lastGeneration) || lastGeneration.length === 0) {
+      return undefined
+    }
+    const gen = lastGeneration[0]
+
+    // Check generationInfo for finish_reason (OpenAI format)
+    if (gen.generationInfo?.finish_reason) {
+      return String(gen.generationInfo.finish_reason)
+    }
+
+    // Check generationInfo for response_metadata.stop_reason (Anthropic format)
+    if (gen.generationInfo?.response_metadata?.stop_reason) {
+      return String(gen.generationInfo.response_metadata.stop_reason)
+    }
+
+    // Check message response_metadata for finish_reason (common LangChain format)
+    if (gen.generationInfo?.response_metadata?.finish_reason) {
+      return String(gen.generationInfo.response_metadata.finish_reason)
+    }
+
+    // Check for stop_reason directly in generationInfo
+    if (gen.generationInfo?.stop_reason) {
+      return String(gen.generationInfo.stop_reason)
+    }
+
+    return undefined
   }
 
   private _parseUsageModel(usage: any, provider?: string, model?: string): [number, number, Record<string, any>] {

@@ -66,10 +66,18 @@ describe('posthog-logs', () => {
                     props: {},
                 },
                 requestRouter: {
-                    endpointFor: jest.fn(() => 'https://app.posthog.com'),
+                    endpointFor: jest.fn(() => 'https://us.i.posthog.com'),
                 },
-                _send_request: jest.fn(),
+                _send_retriable_request: jest.fn(),
                 get_property: jest.fn(),
+                is_capturing: jest.fn(() => true),
+                get_distinct_id: jest.fn(() => 'distinct-id-123'),
+                sessionManager: {
+                    checkAndGetSessionAndWindowId: jest.fn(() => ({
+                        sessionId: 'session-abc',
+                        windowId: 'window-xyz',
+                    })),
+                },
                 consent: {
                     _instance: mockPostHog,
                     _config: {},
@@ -84,7 +92,7 @@ describe('posthog-logs', () => {
                     onConsentChange: jest.fn(),
                 },
                 featureFlags: {
-                    _send_request: jest.fn((_url, _params, callback) => {
+                    _send_retriable_request: jest.fn((_url, _params, callback) => {
                         callback({ statusCode: 200, json: flagsResponse })
                     }),
                     getFeatureFlag: jest.fn((flag) => {
@@ -93,6 +101,7 @@ describe('posthog-logs', () => {
                     isFeatureEnabled: jest.fn((flag) => {
                         return !!flagsResponse.featureFlags[flag as keyof typeof flagsResponse.featureFlags]
                     }),
+                    getFlags: jest.fn(() => ['logs-capture-enabled']),
                 },
             } as unknown as PostHog
 
@@ -439,6 +448,309 @@ describe('posthog-logs', () => {
                         resolve(undefined)
                     }, 10)
                 })
+            })
+        })
+
+        describe('captureLog', () => {
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            afterEach(() => {
+                jest.useRealTimers()
+            })
+
+            it('should silently skip when user has opted out of capturing', () => {
+                ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+
+                logs.captureLog({ body: 'should not be captured' })
+
+                expect((logs as any)._logBuffer).toHaveLength(0)
+                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
+            })
+
+            it('should warn and skip if no body provided', () => {
+                logs.captureLog({} as any)
+
+                expect(mockLogger.warn).toHaveBeenCalledWith('captureLog requires a body')
+                expect((logs as any)._logBuffer).toHaveLength(0)
+            })
+
+            it('should warn and skip if body is empty string', () => {
+                logs.captureLog({ body: '' })
+
+                expect(mockLogger.warn).toHaveBeenCalledWith('captureLog requires a body')
+            })
+
+            it('should add a log record to the buffer', () => {
+                logs.captureLog({ body: 'test message' })
+
+                expect((logs as any)._logBuffer).toHaveLength(1)
+                expect((logs as any)._logBuffer[0].record.body.stringValue).toBe('test message')
+            })
+
+            it('should schedule a flush after adding a record', () => {
+                logs.captureLog({ body: 'test message' })
+
+                expect((logs as any)._flushTimeout).toBeDefined()
+            })
+
+            it('should flush on timer expiry', () => {
+                logs.captureLog({ body: 'test message' })
+
+                jest.advanceTimersByTime(3000)
+
+                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
+                expect((logs as any)._logBuffer).toHaveLength(0)
+            })
+
+            it('should flush immediately when buffer reaches max size', () => {
+                for (let i = 0; i < 100; i++) {
+                    logs.captureLog({ body: `message ${i}` })
+                }
+
+                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
+                expect((logs as any)._logBuffer).toHaveLength(0)
+            })
+
+            it('should send to the correct URL with token', () => {
+                logs.captureLog({ body: 'test' })
+                jest.advanceTimersByTime(3000)
+
+                expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                expect(call.url).toContain('token=test-token')
+            })
+
+            it('should send OTLP formatted payload', () => {
+                logs.captureLog({ body: 'test', level: 'error' })
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                expect(call.data.resourceLogs).toBeDefined()
+                expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(1)
+                expect(call.data.resourceLogs[0].scopeLogs[0].logRecords[0].severityText).toBe('ERROR')
+            })
+
+            it('should use batchKey "logs" for independent rate limiting', () => {
+                logs.captureLog({ body: 'test' })
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                expect(call.batchKey).toBe('logs')
+            })
+
+            it('should use best-available compression', () => {
+                logs.captureLog({ body: 'test' })
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                expect(call.compression).toBe('best-available')
+            })
+
+            it('should batch multiple logs into one request', () => {
+                logs.captureLog({ body: 'log 1' })
+                logs.captureLog({ body: 'log 2' })
+                logs.captureLog({ body: 'log 3' })
+                jest.advanceTimersByTime(3000)
+
+                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(3)
+            })
+
+            it('should auto-populate SDK context', () => {
+                logs.captureLog({ body: 'test' })
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
+                const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
+
+                expect(attrs['posthogDistinctId']).toEqual({ stringValue: 'distinct-id-123' })
+                expect(attrs['sessionId']).toEqual({ stringValue: 'session-abc' })
+                expect(attrs['feature_flags']).toEqual({
+                    arrayValue: { values: [{ stringValue: 'logs-capture-enabled' }] },
+                })
+            })
+
+            it('should include named config fields in OTLP resource attributes', () => {
+                ;(mockPostHog.config as any).logs = {
+                    ...mockPostHog.config.logs,
+                    serviceName: 'my-service',
+                    serviceVersion: '1.2.3',
+                    environment: 'production',
+                }
+                logs.captureLog({ body: 'test' })
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const resourceAttrs = call.data.resourceLogs[0].resource.attributes
+                const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
+
+                expect(attrsMap['service.name']).toEqual({ stringValue: 'my-service' })
+                expect(attrsMap['service.version']).toEqual({ stringValue: '1.2.3' })
+                expect(attrsMap['deployment.environment']).toEqual({ stringValue: 'production' })
+            })
+
+            it('should allow resourceAttributes to override named fields', () => {
+                ;(mockPostHog.config as any).logs = {
+                    ...mockPostHog.config.logs,
+                    serviceName: 'from-named',
+                    resourceAttributes: {
+                        'service.name': 'from-resource-attrs',
+                    },
+                }
+                logs.captureLog({ body: 'test' })
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const resourceAttrs = call.data.resourceLogs[0].resource.attributes
+                const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
+
+                expect(attrsMap['service.name']).toEqual({ stringValue: 'from-resource-attrs' })
+            })
+
+            it('should use consistent resource attributes across all logs in a batch', () => {
+                ;(mockPostHog.config as any).logs = {
+                    ...mockPostHog.config.logs,
+                    serviceName: 'my-service',
+                }
+                logs.captureLog({ body: 'log 1' })
+                logs.captureLog({ body: 'log 2' })
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const resourceAttrs = call.data.resourceLogs[0].resource.attributes
+                const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
+
+                expect(attrsMap['service.name']).toEqual({ stringValue: 'my-service' })
+                expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
+            })
+
+            it('should default service.name to unknown_service when not configured', () => {
+                logs.captureLog({ body: 'test' })
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const resourceAttrs = call.data.resourceLogs[0].resource.attributes
+                const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
+
+                expect(attrsMap['service.name']).toEqual({ stringValue: 'unknown_service' })
+            })
+
+            it('should not send anything if buffer is empty on flush', () => {
+                logs.flushLogs()
+
+                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
+            })
+
+            it('should drop logs that exceed maxLogsPerInterval and warn once', () => {
+                ;(mockPostHog.config as any).logs = {
+                    ...mockPostHog.config.logs,
+                    maxLogsPerInterval: 3,
+                    maxBufferSize: 1000,
+                }
+
+                for (let i = 0; i < 10; i++) {
+                    logs.captureLog({ body: `msg ${i}` })
+                }
+
+                expect((logs as any)._logBuffer).toHaveLength(3)
+                expect(mockLogger.warn).toHaveBeenCalledTimes(1)
+                expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('dropping logs'))
+            })
+
+            it('should reset the rate-limit window after the interval elapses', () => {
+                ;(mockPostHog.config as any).logs = {
+                    ...mockPostHog.config.logs,
+                    maxLogsPerInterval: 2,
+                    flushIntervalMs: 3000,
+                    maxBufferSize: 1000,
+                }
+
+                logs.captureLog({ body: 'a' })
+                logs.captureLog({ body: 'b' })
+                logs.captureLog({ body: 'dropped' })
+                expect((logs as any)._logBuffer).toHaveLength(2)
+
+                jest.advanceTimersByTime(3001)
+                logs.captureLog({ body: 'c' })
+                expect((logs as any)._logBuffer.some((e: any) => e.record.body.stringValue === 'c')).toBe(true)
+            })
+
+            it('should work without console log autocapture enabled', () => {
+                // captureLog works independently of _isLogsEnabled
+                expect((logs as any)._isLogsEnabled).toBeFalsy()
+
+                logs.captureLog({ body: 'works without autocapture' })
+                jest.advanceTimersByTime(3000)
+
+                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
+            })
+
+            it('should support transport override for unload', () => {
+                logs.captureLog({ body: 'unload log' })
+                logs.flushLogs('sendBeacon')
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                expect(call.transport).toBe('sendBeacon')
+            })
+        })
+
+        describe('logger convenience methods', () => {
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            it.each(['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const)(
+                'logger.%s() should capture a log with the correct level',
+                (level) => {
+                    logs.logger[level]('test message', { key: 'value' })
+                    jest.advanceTimersByTime(3000)
+
+                    const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                    const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
+
+                    expect(record.body.stringValue).toBe('test message')
+                    const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
+                    expect(attrs.key).toEqual({ stringValue: 'value' })
+                }
+            )
+
+            it('logger.info() should work without attributes', () => {
+                logs.logger.info('no attrs')
+                jest.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
+                expect(record.body.stringValue).toBe('no attrs')
+            })
+        })
+
+        describe('reset with captureLog', () => {
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            afterEach(() => {
+                jest.useRealTimers()
+            })
+
+            it('should clear the buffer and cancel pending flush', () => {
+                logs.captureLog({ body: 'log 1' })
+                logs.captureLog({ body: 'log 2' })
+                expect((logs as any)._logBuffer).toHaveLength(2)
+                expect((logs as any)._flushTimeout).toBeDefined()
+
+                logs.reset()
+
+                expect((logs as any)._logBuffer).toHaveLength(0)
+                expect((logs as any)._flushTimeout).toBeUndefined()
+
+                // Advancing time should not trigger a flush
+                jest.advanceTimersByTime(5000)
+                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
             })
         })
 

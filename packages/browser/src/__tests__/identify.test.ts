@@ -41,6 +41,35 @@ describe('identify', () => {
         )
     })
 
+    describe('invalid distinct_id', () => {
+        it.each([
+            ['undefined', undefined, 'Unique user id has not been set in posthog.identify'],
+            ['null', null, 'Unique user id has not been set in posthog.identify'],
+            ['empty string', '', 'Unique user id has not been set in posthog.identify'],
+            ['whitespace only', '   ', 'Unique user id has not been set in posthog.identify'],
+            ['false', false, 'Unique user id has not been set in posthog.identify'],
+            [
+                'the string "undefined"',
+                'undefined',
+                'The string "undefined" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.',
+            ],
+            [
+                'the string "null"',
+                'null',
+                'The string "null" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.',
+            ],
+        ])('should reject %s and log a critical error', async (_label, invalidId, expectedMessage) => {
+            const token = uuidv7()
+            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const posthog = await createPosthogInstance(token, { before_send: beforeSendMock })
+
+            posthog.identify(invalidId as any)
+
+            expect(beforeSendMock).not.toHaveBeenCalled()
+            expect(mockLogger.critical).toHaveBeenCalledWith(expectedMessage)
+        })
+    })
+
     it('should send $is_identified = true with the identify event and following events', async () => {
         // arrange
         const token = uuidv7()

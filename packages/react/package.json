@@ -1,13 +1,13 @@
 {
     "name": "@posthog/react",
-    "version": "1.8.2",
+    "version": "1.9.0",
     "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/PostHog/posthog-js.git",
         "directory": "packages/react"
     },
-    "author": "hey@posthog.com",
+    "author": "engineering@posthog.com",
     "license": "MIT",
     "homepage": "https://posthog.com/docs/libraries/react",
     "packageManager": "pnpm@10.12.4",
@@ -27,7 +27,8 @@
     "files": [
         "dist",
         "src",
-        "surveys"
+        "surveys",
+        "slim"
     ],
     "peerDependencies": {
         "@types/react": ">=16.8.0",

@@ -12,13 +12,14 @@ jest.mock('posthog-node', () => ({
     })),
 }))
 
-function createMockContext(cookies: Record<string, string> = {}) {
+function createMockContext(cookies: Record<string, string> = {}, extraHeaders: Record<string, string> = {}) {
     return {
         req: {
             headers: {
                 cookie: Object.entries(cookies)
                     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
                     .join('; '),
+                ...extraHeaders,
             },
         },
         res: {},
@@ -34,6 +35,7 @@ describe('getServerSidePostHog', () => {
     })
 
     it('returns a posthog client', async () => {
+        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -43,6 +45,9 @@ describe('getServerSidePostHog', () => {
 
         const posthog = await getServerSidePostHog(ctx, 'phc_test123')
         expect(posthog).toBeDefined()
+        expect(PostHog).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://us.i.posthog.com',
+        })
     })
 
     it('calls enterContext with distinctId and properties', async () => {
@@ -81,5 +86,119 @@ describe('getServerSidePostHog', () => {
     it('throws when no apiKey provided and env not set', async () => {
         const ctx = createMockContext({})
         await expect(getServerSidePostHog(ctx)).rejects.toThrow('apiKey is required')
+    })
+
+    it('trims apiKey and host before creating the node client', async () => {
+        const { PostHog } = require('posthog-node')
+        const ctx = createMockContext({})
+
+        await getServerSidePostHog(ctx, '  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })
+
+        expect(PostHog).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://custom.posthog.com/',
+        })
+    })
+
+    it('defaults host when it is omitted', async () => {
+        const { PostHog } = require('posthog-node')
+        const ctx = createMockContext({})
+
+        await getServerSidePostHog(ctx, 'phc_default_host_test')
+
+        expect(PostHog).toHaveBeenCalledWith('phc_default_host_test', {
+            host: 'https://us.i.posthog.com',
+        })
+    })
+
+    describe('tracing headers', () => {
+        it('uses tracing headers when present and no cookie exists', async () => {
+            const ctx = createMockContext(
+                {},
+                {
+                    'x-posthog-session-id': 'header-session-456',
+                    'x-posthog-distinct-id': 'header-user-789',
+                    'x-posthog-window-id': 'window-abc',
+                }
+            )
+
+            await getServerSidePostHog(ctx, 'phc_test123')
+            expect(mockEnterContext).toHaveBeenCalledWith({
+                distinctId: 'header-user-789',
+                sessionId: 'header-session-456',
+                properties: {
+                    $session_id: 'header-session-456',
+                    $window_id: 'window-abc',
+                },
+            })
+        })
+
+        it('tracing headers override cookie values for distinctId and sessionId', async () => {
+            const ctx = createMockContext(
+                {
+                    ph_phc_test123_posthog: JSON.stringify({
+                        distinct_id: 'cookie-user',
+                        $device_id: 'device_xyz',
+                        $sesid: [1708700000000, 'cookie-session', 1708700000000],
+                    }),
+                },
+                {
+                    'x-posthog-session-id': 'header-session',
+                    'x-posthog-distinct-id': 'header-user',
+                }
+            )
+
+            await getServerSidePostHog(ctx, 'phc_test123')
+            expect(mockEnterContext).toHaveBeenCalledWith({
+                distinctId: 'header-user',
+                sessionId: 'header-session',
+                properties: {
+                    $session_id: 'header-session',
+                    $device_id: 'device_xyz',
+                },
+            })
+        })
+
+        it('falls back to cookie values when tracing headers are absent', async () => {
+            const ctx = createMockContext({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'cookie-user',
+                    $device_id: 'device_xyz',
+                    $sesid: [1708700000000, 'cookie-session', 1708700000000],
+                }),
+            })
+
+            await getServerSidePostHog(ctx, 'phc_test123')
+            expect(mockEnterContext).toHaveBeenCalledWith({
+                distinctId: 'cookie-user',
+                sessionId: 'cookie-session',
+                properties: { $session_id: 'cookie-session', $device_id: 'device_xyz' },
+            })
+        })
+
+        it('adds $window_id from tracing headers alongside cookie properties', async () => {
+            const ctx = createMockContext(
+                {
+                    ph_phc_test123_posthog: JSON.stringify({
+                        distinct_id: 'cookie-user',
+                        $device_id: 'device_xyz',
+                        $sesid: [1708700000000, 'cookie-session', 1708700000000],
+                    }),
+                },
+                {
+                    'x-posthog-window-id': 'window-123',
+                }
+            )
+
+            await getServerSidePostHog(ctx, 'phc_test123')
+            expect(mockEnterContext).toHaveBeenCalledWith({
+                distinctId: 'cookie-user',
+                sessionId: 'cookie-session',
+                properties: {
+                    $session_id: 'cookie-session',
+                    $device_id: 'device_xyz',
+                    $window_id: 'window-123',
+                },
+            })
+        })
     })
 })

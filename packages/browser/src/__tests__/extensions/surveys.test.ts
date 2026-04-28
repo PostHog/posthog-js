@@ -598,6 +598,53 @@ describe('SurveyManager', () => {
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
         })
+
+        it('exposes the current question index on .survey-box for embedders', () => {
+            // Embedders rendering surveys via the API (e.g. the standalone hosted survey page)
+            // need a reliable way to know which question is currently displayed so they can drive
+            // their own progress UI. Reading data-question-index works for every question type,
+            // including link questions which render no input/rating element.
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(mockSurvey, surveyDiv)
+            const surveyBox = surveyDiv.querySelector('.survey-box')
+            expect(surveyBox).not.toBeNull()
+            expect(surveyBox?.getAttribute('data-question-index')).toBe('0')
+        })
+
+        it('updates data-question-index when navigating to the next question', async () => {
+            const multiQuestionSurvey = {
+                ...mockSurvey,
+                questions: [
+                    {
+                        id: 'q1',
+                        question: 'Question 1',
+                        type: SurveyQuestionType.Open,
+                        optional: true,
+                    },
+                    {
+                        id: 'q2',
+                        question: 'Question 2',
+                        type: SurveyQuestionType.Open,
+                        optional: true,
+                    },
+                ],
+            } as unknown as Survey
+
+            const surveyDiv = document.createElement('div')
+            document.body.appendChild(surveyDiv)
+            surveyManager.renderSurvey(multiQuestionSurvey, surveyDiv)
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            const submitButton = surveyDiv.querySelector<HTMLButtonElement>('.form-submit')
+            await act(async () => {
+                fireEvent.click(submitButton!)
+            })
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('1')
+
+            document.body.removeChild(surveyDiv)
+        })
     })
 
     describe('renderSurvey with URL prefill that completes the survey', () => {

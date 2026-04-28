@@ -38,14 +38,10 @@ export class ConsentManager {
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             return true
         }
-        // we are opted out if:
-        // * consent is explicitly denied
-        // * consent is pending, and we are configured to opt out by default
-        // * consent is pending, and we are in cookieless mode "on_reject"
+        // we are opted out if we are rejected, or if consent is pending and we are in cookieless mode "on_reject"
         return (
-            this.consent === ConsentStatus.DENIED ||
-            (this.consent === ConsentStatus.PENDING &&
-                (this._config.opt_out_capturing_by_default || this._config.cookieless_mode === COOKIELESS_ON_REJECT))
+            this.isRejected() ||
+            (this.consent === ConsentStatus.PENDING && this._config.cookieless_mode === COOKIELESS_ON_REJECT)
         )
     }
 
@@ -55,6 +51,13 @@ export class ConsentManager {
 
     public isExplicitlyOptedOut() {
         return this.consent === ConsentStatus.DENIED
+    }
+
+    public isRejected() {
+        return (
+            this.consent === ConsentStatus.DENIED ||
+            (this.consent === ConsentStatus.PENDING && this._config.opt_out_capturing_by_default)
+        )
     }
 
     public optInOut(isOptedIn: boolean) {
@@ -93,9 +96,14 @@ export class ConsentManager {
     }
 
     private get _storage() {
-        if (!this._persistentStore) {
-            const persistenceType = this._config.opt_out_capturing_persistence_type
-            this._persistentStore = persistenceType === 'localStorage' ? localStore : cookieStore
+        // Re-evaluate the store on every access so that a config change after the first
+        // access (e.g. init() called after _dom_loaded() fires in bundled apps) is picked
+        // up and any value already stored under the old backend is migrated across.
+        const persistenceType = this._config.opt_out_capturing_persistence_type
+        const expectedStore = persistenceType === 'localStorage' ? localStore : cookieStore
+
+        if (!this._persistentStore || this._persistentStore !== expectedStore) {
+            this._persistentStore = expectedStore
             const otherStorage = persistenceType === 'localStorage' ? cookieStore : localStore
 
             if (otherStorage._get(this._storageKey)) {

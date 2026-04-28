@@ -1,6 +1,6 @@
 import { PostHogConfig, Properties } from '../types'
 import { logger } from './logger'
-import { isFormData, isNull, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
+import { isFormData, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
 
 export function find<T>(value: T[], predicate: (value: T) => boolean): T | undefined {
     for (let i = 0; i < value.length; i++) {
@@ -144,10 +144,10 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
 
 export function _copyAndTruncateStrings<T extends Record<string, any> = Record<string, any>>(
     object: T,
-    maxStringLength: number | null
+    maxStringLength: number
 ): T {
     return deepCircularCopy(object, (value: any) => {
-        if (isString(value) && !isNull(maxStringLength)) {
+        if (isString(value)) {
             return (value as string).slice(0, maxStringLength)
         }
         return value

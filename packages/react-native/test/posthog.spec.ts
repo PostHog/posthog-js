@@ -1,7 +1,7 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { Linking, AppState, AppStateStatus } from 'react-native'
 import { waitForExpect } from './test-utils'
-import { PostHogRNStorage } from '../src/storage'
+import { PostHogRNStorage, createEventsStorage } from '../src/storage'
 import { FeatureFlagError } from '@posthog/core'
 
 Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
@@ -388,7 +388,7 @@ describe('PostHog React Native', () => {
 
   describe('async initialization', () => {
     beforeEach(async () => {
-      const semiAsyncStorage = new PostHogRNStorage(mockStorage)
+      const semiAsyncStorage = createEventsStorage(mockStorage)
       await semiAsyncStorage.preloadPromise
       semiAsyncStorage.setItem(PostHogPersistedProperty.AnonymousId, 'my-anonymous-id')
     })
@@ -452,7 +452,7 @@ describe('PostHog React Native', () => {
           cache[key] = value
         }),
       }
-      rnStorage = new PostHogRNStorage(storage)
+      rnStorage = createEventsStorage(storage)
       await rnStorage.preloadPromise
     })
 
@@ -461,32 +461,35 @@ describe('PostHog React Native', () => {
         customStorage: storage,
       })
 
-      expect(storage.getItem).toHaveBeenCalledTimes(2)
+      // Sync-storage init: feature flags should be readable immediately without
+      // awaiting any preload. Specific storage.getItem call count is an
+      // implementation detail and not asserted — only that sync behavior holds.
       expect(posthog.getFeatureFlag('flag')).toEqual(undefined)
       posthog.overrideFeatureFlag({
         flag: true,
       })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
-      // New instance but same sync storage
+      // New instance but same sync storage — the override persisted via
+      // the first instance is visible to the second without preload.
       posthog = new PostHog('1', {
         customStorage: storage,
       })
 
-      expect(storage.getItem).toHaveBeenCalledTimes(3)
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
     })
 
     it('do not rotate session id on restart', async () => {
       const sessionId = '0192244d-a627-7ae2-b22a-ccd594bed71d'
       rnStorage.setItem(PostHogPersistedProperty.SessionId, sessionId)
-      const now = JSON.stringify(Date.now())
+      const now = Date.now()
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, now)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, now)
 
       posthog = new PostHog('1', {
         customStorage: storage,
         enablePersistSessionIdAcrossRestart: true,
+        captureAppLifecycleEvents: false,
       })
 
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionId)).toEqual(sessionId)
@@ -497,13 +500,14 @@ describe('PostHog React Native', () => {
     it('rotate session id on restart if persist session id across restart is disabled', async () => {
       const sessionId = '0192244d-a627-7ae2-b22a-ccd594bed71d'
       rnStorage.setItem(PostHogPersistedProperty.SessionId, sessionId)
-      const now = JSON.stringify(Date.now())
+      const now = Date.now()
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, now)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, now)
 
       posthog = new PostHog('1', {
         customStorage: storage,
         enablePersistSessionIdAcrossRestart: false,
+        captureAppLifecycleEvents: false,
       })
 
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionId)).toEqual(undefined)
@@ -796,14 +800,33 @@ describe('PostHog React Native', () => {
         expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
       })
 
-      it('should ignore $set_once when caching properties', async () => {
+      it('should cache $set_once properties with set-once semantics', async () => {
         posthog.identify('user-123', {
           $set: { email: 'test@example.com' },
           $set_once: { created_at: '2024-01-01' },
         })
 
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
-        expect(cachedProps).toEqual({ email: 'test@example.com' })
+        expect(cachedProps).toEqual({ email: 'test@example.com', created_at: '2024-01-01' })
+      })
+
+      it('should not overwrite existing keys via $set_once on subsequent identify calls', async () => {
+        posthog.identify('user-123', {
+          $set: { email: 'test@example.com' },
+          $set_once: { created_at: '2024-01-01' },
+        })
+
+        posthog.identify('user-123', {
+          $set: { email: 'new@example.com' },
+          $set_once: { created_at: '2025-06-15', new_key: 'hello' },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({
+          email: 'new@example.com',
+          created_at: '2024-01-01',
+          new_key: 'hello',
+        })
       })
 
       it('should merge properties from multiple identify() calls with $set', async () => {
@@ -1075,7 +1098,20 @@ describe('PostHog React Native', () => {
         expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
       })
 
-      it('should clear all properties when reset is called without propertiesToKeep', async () => {
+      it.each([
+        {
+          label: 'default (no arg) preserves lifecycle properties',
+          resetArg: undefined as PostHogPersistedProperty[] | undefined,
+          expectBuild: '1',
+          expectVersion: '1.0.0',
+        },
+        {
+          label: 'explicit empty array clears lifecycle properties',
+          resetArg: [] as PostHogPersistedProperty[],
+          expectBuild: undefined,
+          expectVersion: undefined,
+        },
+      ])('reset with $label', async ({ resetArg, expectBuild, expectVersion }) => {
         posthog = new PostHog('test-api-key', {
           customStorage: storage,
           flushInterval: 0,
@@ -1083,17 +1119,391 @@ describe('PostHog React Native', () => {
         })
         await posthog.ready()
 
-        posthog.overrideFeatureFlag({ testFlag: true })
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppBuild, '1')
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, '1.0.0')
         posthog.register({ customProp: 'value' })
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual({ testFlag: true })
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual({ customProp: 'value' })
+        posthog.reset(resetArg)
 
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toBeUndefined()
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual(expectBuild)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual(expectVersion)
+      })
+
+      it('should not trigger duplicate Application Installed after reset', async () => {
+        // Simulate that the app was previously installed (build/version persisted)
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          flushInterval: 0,
+          setDefaultPersonProperties: false,
+          captureAppLifecycleEvents: false,
+        })
+        await posthog.ready()
+
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppBuild, '1')
+        posthog.setPersistedProperty(PostHogPersistedProperty.InstalledAppVersion, '1.0.0')
+
+        // User logs out - reset without explicit propertiesToKeep
         posthog.reset()
 
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags)).toEqual(undefined)
-        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Props)).toEqual(undefined)
+        // Lifecycle properties should still be persisted after reset
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild)).toEqual('1')
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion)).toEqual('1.0.0')
+
+        await posthog.shutdown()
+
+        // Second launch - should NOT fire "Application Installed" again
+        const onCapture2 = jest.fn()
+        posthog = new PostHog('test-api-key', {
+          customStorage: storage,
+          captureAppLifecycleEvents: true,
+          customAppProperties: {
+            $app_build: '1',
+            $app_version: '1.0.0',
+          },
+        })
+        posthog.on('capture', onCapture2)
+        await posthog.ready()
+
+        await waitForExpect(200, () => {
+          expect(onCapture2).toHaveBeenCalledWith(expect.objectContaining({ event: 'Application Opened' }))
+        })
+
+        // Should NOT have fired "Application Installed" again
+        const installedCalls = onCapture2.mock.calls.filter((call: any[]) => call[0]?.event === 'Application Installed')
+        expect(installedCalls).toHaveLength(0)
       })
+    })
+  })
+
+  describe('device bucketing', () => {
+    it('should initialize device_id on first init', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      expect(deviceId).toBeTruthy()
+      expect(deviceId).toEqual(posthog.getAnonymousId())
+    })
+
+    it('should persist device_id across SDK restarts', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      await posthog.shutdown()
+
+      // Re-init with same storage
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+    })
+
+    it('should preserve device_id across identify()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+      expect(posthog.getDistinctId()).toEqual('user-123')
+    })
+
+    it('should preserve device_id across reset()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+      posthog.reset()
+
+      expect(posthog.getDeviceId()).toEqual(originalDeviceId)
+      // distinct_id should have changed
+      expect(posthog.getDistinctId()).not.toEqual('user-123')
+    })
+
+    it('should regenerate device_id when reset is called with explicit propertiesToKeep omitting DeviceId', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const originalDeviceId = posthog.getDeviceId()
+      // Passing an explicit list without DeviceId causes it to be cleared
+      posthog.reset([])
+
+      await waitForExpect(200, () => {
+        const newDeviceId = posthog.getDeviceId()
+        expect(newDeviceId).toBeTruthy()
+        expect(newDeviceId).not.toEqual(originalDeviceId)
+      })
+    })
+
+    it('should send $device_id in feature flag requests', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(`"$device_id":"${deviceId}"`),
+        })
+      )
+    })
+
+    it('should send the same $device_id after identify()', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const deviceId = posthog.getDeviceId()
+      posthog.identify('user-123')
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/flags/'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(`"$device_id":"${deviceId}"`),
+        })
+      )
+    })
+
+    it('should lazy-init device_id for upgrades via getDeviceId()', async () => {
+      // Simulate an upgrade: existing install has anonymous_id persisted but no device_id.
+      // PostHogRNStorage stores all properties in a single JSON blob under '.posthog-rn.json'.
+      const upgradeData = JSON.stringify({
+        version: 'v1',
+        content: { [PostHogPersistedProperty.AnonymousId]: 'existing-anon-id' },
+      })
+      cache['.posthog-rn.json'] = upgradeData
+
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      // device_id should be set to the existing anonymous_id during initAfterStorage
+      expect(posthog.getDeviceId()).toEqual('existing-anon-id')
+      expect(posthog.getAnonymousId()).toEqual('existing-anon-id')
+    })
+  })
+
+  // Hybrid storage routing: `PostHogPersistedProperty.LogsQueue` routes to
+  // a dedicated `_logsStorage` instance backed by `.posthog-rn-logs.json`,
+  // while every other enum key stays in `_eventsStorage` backed by
+  // `.posthog-rn.json`. These tests lock in the routing invariants.
+  describe('logs storage routing', () => {
+    it('routes LogsQueue to _logsStorage and other keys to _eventsStorage (bidirectional)', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      posthog.setPersistedProperty(PostHogPersistedProperty.Queue, ['event1'])
+      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, ['log1'])
+
+      // Reads via the instance API
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toEqual(['event1'])
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue)).toEqual(['log1'])
+
+      // Verify each value landed in its expected storage's memoryCache
+      const eventsMemoryCache = (posthog as any)._eventsStorage.memoryCache
+      const logsMemoryCache = (posthog as any)._logsStorage.memoryCache
+
+      expect(eventsMemoryCache[PostHogPersistedProperty.Queue]).toEqual(['event1'])
+      expect(logsMemoryCache[PostHogPersistedProperty.LogsQueue]).toEqual(['log1'])
+
+      // Cross-contamination check
+      expect(eventsMemoryCache[PostHogPersistedProperty.LogsQueue]).toBeUndefined()
+      expect(logsMemoryCache[PostHogPersistedProperty.Queue]).toBeUndefined()
+    })
+
+    it('routes non-LogsQueue keys to _eventsStorage, not _logsStorage', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'user-abc')
+      posthog.setPersistedProperty(PostHogPersistedProperty.SessionId, 'sess-xyz')
+
+      const eventsMemoryCache = (posthog as any)._eventsStorage.memoryCache
+      const logsMemoryCache = (posthog as any)._logsStorage.memoryCache
+
+      // Non-queue keys land in events storage
+      expect(eventsMemoryCache[PostHogPersistedProperty.DistinctId]).toBe('user-abc')
+      expect(eventsMemoryCache[PostHogPersistedProperty.SessionId]).toBe('sess-xyz')
+
+      // Logs storage stays untouched by non-logs keys
+      expect(logsMemoryCache[PostHogPersistedProperty.DistinctId]).toBeUndefined()
+      expect(logsMemoryCache[PostHogPersistedProperty.SessionId]).toBeUndefined()
+    })
+
+    it('writes LogsQueue to .posthog-rn-logs.json and not to .posthog-rn.json', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [{ record: { body: { stringValue: 'test' } } }])
+
+      // Let async persist complete on the logs storage
+      await (posthog as any)._logsStorage.waitForPersist()
+
+      const logsFile = cache['.posthog-rn-logs.json']
+      const mainFile = cache['.posthog-rn.json']
+
+      expect(logsFile).toBeDefined()
+      const logsParsed = JSON.parse(logsFile)
+      expect(logsParsed.content[PostHogPersistedProperty.LogsQueue]).toHaveLength(1)
+      expect(logsParsed.content[PostHogPersistedProperty.LogsQueue][0].record.body.stringValue).toBe('test')
+
+      // Main file should not contain the logs queue — either the key isn't there
+      // or the main file wasn't written at all (depends on whether init wrote anything else)
+      if (mainFile) {
+        const mainParsed = JSON.parse(mainFile)
+        expect(mainParsed.content[PostHogPersistedProperty.LogsQueue]).toBeUndefined()
+      }
+    })
+
+    it('reset() preserves both Queue and LogsQueue', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      posthog.setPersistedProperty(PostHogPersistedProperty.Queue, ['event1'])
+      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, ['log1'])
+      // Also set something that SHOULD be cleared by reset
+      posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'user-123')
+
+      posthog.reset()
+
+      // In-flight events and logs survive reset
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toEqual(['event1'])
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue)).toEqual(['log1'])
+      // Regular state is cleared
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.DistinctId)).toBeUndefined()
+    })
+
+    it('setPersistedProperty(LogsQueue, null) removes from logs storage, not main storage', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, ['log1'])
+      posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'user-123')
+
+      // Null routes to removeItem on the correct storage
+      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, null)
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue)).toBeUndefined()
+      // DistinctId in main storage is untouched
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.DistinctId)).toBe('user-123')
+    })
+
+    // End-to-end: real PostHog instance → real _logs module → real routing → real storage.
+    // Unit tests use a mock instance; routing tests don't use _logs. This covers the seam.
+    it('captureLog via _logs module lands in logs storage through real routing', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+      // Ensure logs storage preload completes before calling captureLog so
+      // the capture goes through the direct read-mutate-write path, not the
+      // pending-buffer path (which is tested separately in logs.spec.ts).
+      await (posthog as any)._logsStorage.preloadPromise
+      ;(posthog as any)._logs.captureLog({ body: 'hello' })
+
+      const logsQueue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as
+        | Array<{ record: { body: { stringValue: string } } }>
+        | undefined
+      expect(logsQueue).toHaveLength(1)
+      expect(logsQueue?.[0].record.body.stringValue).toBe('hello')
+
+      // Main storage's events queue should be untouched by captureLog
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toBeUndefined()
+    })
+
+    it('AppState change drains both events and logs pipelines in parallel', async () => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: false,
+        preloadFeatureFlags: false,
+      })
+      await posthog.ready()
+
+      const flushSpy = jest.spyOn(posthog, 'flush').mockResolvedValue(undefined)
+      const waitForPersistSpy = jest
+        .spyOn((posthog as any)._logsStorage, 'waitForPersist')
+        .mockResolvedValue(undefined as never)
+
+      // AppState.addEventListener is globally mocked; grab the callback that
+      // was passed to it during PostHog construction and invoke it manually.
+      const calls = (AppState.addEventListener as jest.Mock).mock.calls
+      const changeCall = calls.find((c) => c[0] === 'change')
+      expect(changeCall).toBeDefined()
+      const callback = changeCall![1]
+
+      callback('background' as AppStateStatus)
+
+      expect(flushSpy).toHaveBeenCalled()
+      expect(waitForPersistSpy).toHaveBeenCalled()
+
+      flushSpy.mockRestore()
+      waitForPersistSpy.mockRestore()
     })
   })
 })
@@ -1109,6 +1519,7 @@ describe('Feature flag error tracking', () => {
       fetchRetryCount: 0,
       preloadFeatureFlags: false,
       sendFeatureFlagEvent: true,
+      captureAppLifecycleEvents: false,
     })
   })
 

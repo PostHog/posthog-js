@@ -11,7 +11,7 @@ jest.mock('../src/client/ClientPostHogProvider', () => ({
 }))
 
 // Mock next/headers
-jest.mock('next/headers', () => ({
+jest.mock('next/headers.js', () => ({
     cookies: jest.fn(),
 }))
 
@@ -66,6 +66,21 @@ describe('PostHogProvider', () => {
         )
     })
 
+    it('trims apiKey and api_host before passing them to ClientPostHogProvider', async () => {
+        const element = await PostHogProvider({
+            apiKey: '  phc_test123\n',
+            clientOptions: { api_host: '  https://custom.posthog.com/\t ' },
+            children: <div>Child</div>,
+        })
+        render(element)
+        expect(mockClientProvider).toHaveBeenCalledWith(
+            expect.objectContaining({
+                apiKey: 'phc_test123',
+                options: expect.objectContaining({ api_host: 'https://custom.posthog.com/' }),
+            })
+        )
+    })
+
     it('does not pass bootstrap when bootstrapFlags is not set', async () => {
         const element = await PostHogProvider({
             apiKey: 'phc_test123',
@@ -89,6 +104,7 @@ describe('PostHogProvider', () => {
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
                     options: expect.objectContaining({
+                        api_host: 'https://us.i.posthog.com',
                         persistence: 'localStorage+cookie',
                         opt_out_capturing_persistence_type: 'cookie',
                         opt_out_persistence_by_default: true,
@@ -120,7 +136,7 @@ describe('PostHogProvider', () => {
     })
 
     it('does not call cookies() when bootstrapFlags is off (static-safe)', async () => {
-        const { cookies } = require('next/headers')
+        const { cookies } = require('next/headers.js')
 
         const element = await PostHogProvider({
             apiKey: 'phc_test123',
@@ -197,6 +213,21 @@ describe('PostHogProvider', () => {
             )
         })
 
+        it('trims apiKey and api_host from env vars', async () => {
+            process.env.NEXT_PUBLIC_POSTHOG_KEY = '  phc_from_env\n'
+            process.env.NEXT_PUBLIC_POSTHOG_HOST = '  https://eu.posthog.com/\t '
+            const element = await PostHogProvider({
+                children: <div>Child</div>,
+            })
+            render(element)
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    apiKey: 'phc_from_env',
+                    options: expect.objectContaining({ api_host: 'https://eu.posthog.com/' }),
+                })
+            )
+        })
+
         it('prefers clientOptions.api_host over env var', async () => {
             process.env.NEXT_PUBLIC_POSTHOG_HOST = 'https://eu.posthog.com'
             const element = await PostHogProvider({
@@ -222,7 +253,7 @@ describe('PostHogProvider', () => {
         const anonymousCookieValue = JSON.stringify({ distinct_id: 'device_xyz', $device_id: 'device_xyz' })
 
         function setupCookieMock(cookieValue: string) {
-            const { cookies } = require('next/headers')
+            const { cookies } = require('next/headers.js')
             cookies.mockResolvedValue({
                 get: jest.fn((name: string) => {
                     if (name === 'ph_phc_test123_posthog') {
@@ -365,7 +396,7 @@ describe('PostHogProvider', () => {
         })
 
         function setupCookiesWithConsent(cookies: Record<string, string>) {
-            const { cookies: cookiesFn } = require('next/headers')
+            const { cookies: cookiesFn } = require('next/headers.js')
             cookiesFn.mockResolvedValue({
                 get: jest.fn((name: string) => {
                     const value = cookies[name]

@@ -7,11 +7,13 @@
     "chat": "tsx callback-handler.ts"
   },
   "dependencies": {
-    "posthog-node": "*",
     "@posthog/ai": "*",
     "langchain": "^0.3.0",
     "@langchain/core": "^0.3.0",
-    "@langchain/openai": "^0.3.0"
+    "@langchain/openai": "^0.3.0",
+    "@opentelemetry/sdk-node": "^0.200.0",
+    "@opentelemetry/resources": "^2.0.0",
+    "@traceloop/instrumentation-langchain": "^0.16.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

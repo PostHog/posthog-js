@@ -1,5 +1,151 @@
 # @posthog/nextjs-config
 
+## 1.9.13
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.13
+
+## 1.9.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.12
+
+## 1.9.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.11
+
+## 1.9.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.10
+
+## 1.9.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.9
+
+## 1.9.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.8
+
+## 1.9.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.7
+
+## 1.9.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.6
+
+## 1.9.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.5
+
+## 1.9.4
+
+### Patch Changes
+
+- Updated dependencies [[`1a0b58d`](https://github.com/PostHog/posthog-js/commit/1a0b58d1d07c61662169d3bc56eed8cfd8855d65)]:
+  - @posthog/plugin-utils@1.1.1
+  - @posthog/webpack-plugin@1.4.4
+
+## 1.9.3
+
+### Patch Changes
+
+- Updated dependencies [[`04d276c`](https://github.com/PostHog/posthog-js/commit/04d276c340d97ee557d62d5df3ad1335fefda652)]:
+  - @posthog/plugin-utils@1.1.0
+  - @posthog/webpack-plugin@1.4.3
+
+## 1.9.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.2
+
+## 1.9.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.1
+
+## 1.9.0
+
+### Minor Changes
+
+- [#3302](https://github.com/PostHog/posthog-js/pull/3302) [`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11) Thanks [@dmarticus](https://github.com/dmarticus)! - preserve $set_once semantics in local flag evaluation cache
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
+  - @posthog/webpack-plugin@1.4.0
+
+## 1.8.28
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.3.6
+
+## 1.8.27
+
+### Patch Changes
+
+- [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
+  (2026-04-01)
+- Updated dependencies [[`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371)]:
+  - @posthog/plugin-utils@1.0.1
+  - @posthog/webpack-plugin@1.3.5
+
+## 1.8.26
+
+### Patch Changes
+
+- Updated dependencies [[`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c)]:
+  - @posthog/core@1.24.4
+  - @posthog/webpack-plugin@1.3.4
+
+## 1.8.25
+
+### Patch Changes
+
+- Updated dependencies [[`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f)]:
+  - @posthog/core@1.24.3
+  - @posthog/webpack-plugin@1.3.3
+
+## 1.8.24
+
+### Patch Changes
+
+- Updated dependencies [[`8d34289`](https://github.com/PostHog/posthog-js/commit/8d34289f7cf91945223eed4366b11fb187a63a40)]:
+  - @posthog/core@1.24.2
+  - @posthog/webpack-plugin@1.3.2
+
 ## 1.8.23
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.37.6",
+  "version": "4.43.10",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -40,7 +40,8 @@
     "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
   },
   "dependencies": {
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:*",
+    "@posthog/types": "workspace:*"
   },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
@@ -70,7 +71,7 @@
     "jest-expo": "catalog:",
     "metro": "0.83.1",
     "@expo/metro-config": "~0.20.0",
-    "posthog-react-native-session-replay": "^1.5.0",
+    "posthog-react-native-session-replay": "^1.5.6",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-native": "^0.69.1",
@@ -89,7 +90,7 @@
     "expo-device": ">= 4.0.0",
     "expo-file-system": ">= 13.0.0",
     "expo-localization": ">= 11.0.0",
-    "posthog-react-native-session-replay": ">= 1.5.0",
+    "posthog-react-native-session-replay": ">= 1.5.6",
     "react-native-device-info": ">= 10.0.0",
     "react-native-localize": ">= 3.0.0",
     "react-native-navigation": ">= 6.0.0",
@@ -128,6 +129,9 @@
       "optional": true
     },
     "react-native-safe-area-context": {
+      "optional": true
+    },
+    "react-native-svg": {
       "optional": true
     }
   }

@@ -1,6 +1,6 @@
 import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
 
-import { isObject } from '@posthog/core'
+import { isArray, isNull, isObject, isUndefined } from '@posthog/core'
 import { SnapshotBuffer } from './lazy-loaded-session-recorder'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
@@ -26,6 +26,53 @@ export function circularReferenceReplacer() {
 
 export function estimateSize(sizeable: unknown): number {
     return JSON.stringify(sizeable, circularReferenceReplacer())?.length || 0
+}
+
+// Lightweight size estimate for compressed events without allocating a JSON string.
+// Intentionally loose: does not account for JSON escaping of strings or keys.
+// This is fine because compressed event strings are base64 gzip output (safe alphabet)
+// and keys are known-safe identifiers. Used only for buffer threshold checks (~1MB)
+// and split-buffer decisions (~7MB) where a few bytes of drift don't matter.
+export function estimateCompressedEventSize(value: unknown): number {
+    if (isNull(value)) {
+        return 4
+    }
+    if (isUndefined(value)) {
+        return 0
+    }
+    switch (typeof value) {
+        case 'string':
+            return value.length + 2
+        case 'number':
+            return String(value).length
+        case 'boolean':
+            return value ? 4 : 5
+        case 'object': {
+            if (isArray(value)) {
+                let size = 2
+                for (let i = 0; i < value.length; i++) {
+                    if (i > 0) size += 1
+                    const el = value[i]
+                    size += isUndefined(el) || isNull(el) ? 4 : estimateCompressedEventSize(el)
+                }
+                return size
+            }
+            const obj = value as Record<string, unknown>
+            let size = 2
+            let first = true
+            for (const key in obj) {
+                if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
+                const val = obj[key]
+                if (isUndefined(val)) continue
+                if (!first) size += 1
+                first = false
+                size += key.length + 3 + estimateCompressedEventSize(val)
+            }
+            return size
+        }
+        default:
+            return 0
+    }
 }
 
 export const replacementImageURI =

@@ -411,8 +411,19 @@ describe('PostHog Feature Flags v1', () => {
       it('should reload if groups are set', async () => {
         posthog.group('my-group', 'is-great')
         await waitForPromises()
-        expect(mocks.fetch).toHaveBeenCalledTimes(2)
-        expect(JSON.parse((mocks.fetch.mock.calls[1][1].body as string) || '')).toMatchObject({
+        // 3 calls: 1 for flags reload, 1 for $groupidentify batch, 1 for flags decide
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
+        // The flags reload call contains the group
+        const flagsCall = mocks.fetch.mock.calls.find((call) => {
+          try {
+            const body = JSON.parse((call[1].body as string) || '')
+            return body.groups?.['my-group'] === 'is-great'
+          } catch {
+            return false
+          }
+        })
+        expect(flagsCall).toBeDefined()
+        expect(JSON.parse((flagsCall![1].body as string) || '')).toMatchObject({
           groups: { 'my-group': 'is-great' },
         })
       })

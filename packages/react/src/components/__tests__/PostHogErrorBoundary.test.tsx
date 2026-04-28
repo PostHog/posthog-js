@@ -4,8 +4,17 @@ import * as React from 'react'
 import { render } from '@testing-library/react'
 import { __POSTHOG_ERROR_MESSAGES, PostHogErrorBoundary } from '../PostHogErrorBoundary'
 import posthog from 'posthog-js'
+import { setDefaultPostHogInstance } from '../../context/posthog-default'
 
 describe('PostHogErrorBoundary component', () => {
+    beforeEach(() => {
+        setDefaultPostHogInstance(posthog)
+    })
+
+    afterEach(() => {
+        setDefaultPostHogInstance(undefined)
+    })
+
     mockFunction(console, 'error')
     mockFunction(console, 'warn')
     mockFunction(posthog, 'captureException')
@@ -60,6 +69,14 @@ describe('PostHogErrorBoundary component', () => {
 })
 
 describe('captureException processing', () => {
+    beforeEach(() => {
+        setDefaultPostHogInstance(posthog)
+    })
+
+    afterEach(() => {
+        setDefaultPostHogInstance(undefined)
+    })
+
     mockFunction(console, 'error')
     mockFunction(console, 'warn')
     mockFunction(posthog, 'capture')

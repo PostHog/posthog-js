@@ -22,14 +22,19 @@ import type { Extension } from './extensions/types'
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
     DEVICE_ID,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
     PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
     FLAG_CALL_REPORTED_SESSION_ID,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
 } from './constants'
 
 import { isUndefined, isArray, isNull } from '@posthog/core'
@@ -57,12 +62,6 @@ export const FeatureFlagError = {
     apiError: (status: number | string) => `api_error_${status}`,
 } as const
 
-const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
-const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
-const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
-const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
-const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
-
 /** Converts an array of flag names to a Record where each flag is set to true. */
 const arrayToFlagsRecord = (flags: string[]): Record<string, true> => {
     const flagsObj: Record<string, true> = {}
@@ -87,7 +86,8 @@ export const parseFlagsResponse = (
     persistence: PostHogPersistence,
     currentFlags: Record<string, string | boolean> = {},
     currentFlagPayloads: Record<string, JsonType> = {},
-    currentFlagDetails: Record<string, FeatureFlagDetail> = {}
+    currentFlagDetails: Record<string, FeatureFlagDetail> = {},
+    options?: { partialResponse?: boolean }
 ) => {
     const normalizedResponse = normalizeFlagsResponse(response)
     const flagDetails = normalizedResponse.flags
@@ -122,7 +122,14 @@ export const parseFlagsResponse = (
     let newFeatureFlags = featureFlags
     let newFeatureFlagPayloads = flagPayloads
     let newFeatureFlagDetails = flagDetails
-    if (response.errorsWhileComputingFlags) {
+    if (options?.partialResponse) {
+        // The response is intentionally partial (e.g., only survey flags were requested via
+        // advanced_only_evaluate_survey_feature_flags). Merge with existing flags so that
+        // bootstrapped or previously loaded non-survey flags are preserved.
+        newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
+        newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+        newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
+    } else if (response.errorsWhileComputingFlags) {
         // if not all flags were computed, we upsert flags instead of replacing them
         // but filter out flags that failed to evaluate so they don't overwrite cached values
         if (flagDetails) {
@@ -626,7 +633,9 @@ export class PostHogFeatureFlags implements Extension {
                 }
 
                 if (!data.disable_flags) {
-                    this.receivedFeatureFlags(response.json ?? {}, errorsLoading)
+                    this.receivedFeatureFlags(response.json ?? {}, errorsLoading, {
+                        partialResponse: !!this._config.advanced_only_evaluate_survey_feature_flags,
+                    })
                 }
 
                 if (this._additionalReloadRequested) {
@@ -927,7 +936,11 @@ export class PostHogFeatureFlags implements Extension {
         this.featureFlagEventHandlers = this.featureFlagEventHandlers.filter((h) => h !== handler)
     }
 
-    receivedFeatureFlags(response: Partial<FlagsResponse>, errorsLoading?: boolean): void {
+    receivedFeatureFlags(
+        response: Partial<FlagsResponse>,
+        errorsLoading?: boolean,
+        options?: { partialResponse?: boolean }
+    ): void {
         if (!this._persistence) {
             return
         }
@@ -936,7 +949,7 @@ export class PostHogFeatureFlags implements Extension {
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         const currentFlagDetails = this.getFlagsWithDetails()
-        parseFlagsResponse(response, this._persistence, currentFlags, currentFlagPayloads, currentFlagDetails)
+        parseFlagsResponse(response, this._persistence, currentFlags, currentFlagPayloads, currentFlagDetails, options)
 
         // Reset stale refresh flag when we successfully receive fresh flags
         if (!errorsLoading) {
@@ -1172,13 +1185,30 @@ export class PostHogFeatureFlags implements Extension {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        // Get persisted person properties
         const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
+
+        // If the caller passes { $set, $set_once }, split them apart so we can apply $set_once
+        // semantics (skip keys that already exist). Otherwise treat all properties as $set for
+        // backward compatibility with the public API.
+        const propsToSet = properties?.['$set'] || (!properties?.['$set_once'] ? properties : {})
+        const propsToSetOnce = properties?.['$set_once']
+
+        const setOnceProps: Properties = {}
+        if (propsToSetOnce) {
+            for (const key in propsToSetOnce) {
+                if (Object.prototype.hasOwnProperty.call(propsToSetOnce, key)) {
+                    if (!(key in existingProperties)) {
+                        setOnceProps[key] = propsToSetOnce[key]
+                    }
+                }
+            }
+        }
 
         this._instance.register({
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...existingProperties,
-                ...properties,
+                ...setOnceProps,
+                ...propsToSet,
             },
         })
 

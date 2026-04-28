@@ -59,7 +59,7 @@ export const apiImplementation = ({
   localFlagsEtag?: string
 }) => {
   return (url: any): Promise<any> => {
-    if ((url as any).includes('/flags/')) {
+    if ((url as any).includes('/flags/?')) {
       return Promise.resolve({
         status: flagsStatus,
         text: () => Promise.resolve('ok'),
@@ -79,7 +79,7 @@ export const apiImplementation = ({
       }) as any
     }
 
-    if ((url as any).includes('api/feature_flag/local_evaluation?token=TEST_API_KEY&send_cohorts')) {
+    if ((url as any).includes('flags/definitions?token=TEST_API_KEY&send_cohorts')) {
       const headers = localFlagsEtag ? createMockHeaders({ ETag: localFlagsEtag }) : createMockHeaders()
       return Promise.resolve({
         status: localFlagsStatus,
@@ -112,7 +112,7 @@ export const apiImplementation = ({
 }
 
 export const anyLocalEvalCall = [
-  'http://example.com/api/feature_flag/local_evaluation?token=TEST_API_KEY&send_cohorts',
+  'http://example.com/flags/definitions?token=TEST_API_KEY&send_cohorts',
   expect.any(Object),
 ]
 export const anyFlagsCall = ['http://example.com/flags/?v=2', expect.any(Object)]

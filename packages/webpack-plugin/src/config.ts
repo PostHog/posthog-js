@@ -3,7 +3,7 @@ import {
     ResolvedPluginConfig as CoreResolvedPluginConfig,
     resolveConfig as coreResolveConfig,
     ResolveConfigOptions,
-} from '@posthog/core/process'
+} from '@posthog/plugin-utils'
 
 // Re-export types for backward compatibility — consumers importing from @posthog/webpack-plugin
 // will continue to get the same types.

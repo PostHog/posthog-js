@@ -119,7 +119,7 @@ export function isErrorEvent(event: unknown): boolean {
 }
 
 export function isEvent(candidate: unknown): candidate is Event {
-  return !isUndefined(Event) && isInstanceOf(candidate, Event)
+  return typeof Event !== 'undefined' && isInstanceOf(candidate, Event)
 }
 
 export function isPlainObject(candidate: unknown): candidate is Record<string, unknown> {

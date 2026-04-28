@@ -41,8 +41,17 @@ function createMockCookies(entries: Record<string, string>) {
 
 const mockCookieStore = createMockCookies({})
 
-jest.mock('next/headers', () => ({
+function createMockHeaders(entries: Record<string, string>) {
+    return {
+        get: jest.fn((name: string) => entries[name.toLowerCase()] ?? null),
+    }
+}
+
+const mockHeaderStore = createMockHeaders({})
+
+jest.mock('next/headers.js', () => ({
     cookies: jest.fn(() => Promise.resolve(mockCookieStore)),
+    headers: jest.fn(() => Promise.resolve(mockHeaderStore)),
 }))
 
 // Mock nodeClientCache to avoid cross-test cache pollution
@@ -64,7 +73,7 @@ jest.mock('../src/server/nodeClientCache', () => ({
 }))
 
 import { getPostHog } from '../src/server/getPostHog'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers.js'
 
 describe('getPostHog', () => {
     const originalEnv = process.env
@@ -74,9 +83,11 @@ describe('getPostHog', () => {
         process.env = { ...originalEnv }
         process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
 
-        // Reset to empty cookies by default
+        // Reset to empty cookies and headers by default
         const emptyCookies = createMockCookies({})
         ;(cookies as jest.Mock).mockResolvedValue(emptyCookies)
+        const emptyHeaders = createMockHeaders({})
+        ;(headers as jest.Mock).mockResolvedValue(emptyHeaders)
     })
 
     afterAll(() => {
@@ -137,7 +148,9 @@ describe('getPostHog', () => {
 
         await getPostHog('phc_explicit_key')
 
-        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_explicit_key', undefined)
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_explicit_key', {
+            host: 'https://us.i.posthog.com',
+        })
     })
 
     it('falls back to NEXT_PUBLIC_POSTHOG_KEY env var when no apiKey provided', async () => {
@@ -145,7 +158,9 @@ describe('getPostHog', () => {
 
         await getPostHog()
 
-        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_env_key', undefined)
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_env_key', {
+            host: 'https://us.i.posthog.com',
+        })
     })
 
     it('throws when no apiKey provided and env var missing', async () => {
@@ -161,6 +176,22 @@ describe('getPostHog', () => {
 
         expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
             host: 'https://custom.posthog.com',
+        })
+    })
+
+    it('defaults host when it is omitted', async () => {
+        await getPostHog('phc_test123')
+
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://us.i.posthog.com',
+        })
+    })
+
+    it('trims apiKey and host before creating the node client', async () => {
+        await getPostHog('  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })
+
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://custom.posthog.com/',
         })
     })
 
@@ -195,6 +226,124 @@ describe('getPostHog', () => {
             },
             expect.any(Function)
         )
+    })
+
+    describe('tracing headers', () => {
+        it('uses tracing headers when present and no cookie exists', async () => {
+            const cookieStore = createMockCookies({})
+            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            const headerStore = createMockHeaders({
+                'x-posthog-session-id': 'header-session-456',
+                'x-posthog-distinct-id': 'header-user-789',
+                'x-posthog-window-id': 'window-abc',
+            })
+            ;(headers as jest.Mock).mockResolvedValue(headerStore)
+
+            const client = await getPostHog('phc_test123')
+            client.capture({ distinctId: 'header-user-789', event: 'test_event' })
+
+            expect(mockWithContext).toHaveBeenCalledWith(
+                {
+                    distinctId: 'header-user-789',
+                    sessionId: 'header-session-456',
+                    properties: {
+                        $session_id: 'header-session-456',
+                        $window_id: 'window-abc',
+                    },
+                },
+                expect.any(Function)
+            )
+        })
+
+        it('tracing headers override cookie values for distinctId and sessionId', async () => {
+            const cookieStore = createMockCookies({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'cookie-user',
+                    $device_id: 'device_xyz',
+                    $sesid: [1708700000000, 'cookie-session', 1708700000000],
+                }),
+            })
+            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            const headerStore = createMockHeaders({
+                'x-posthog-session-id': 'header-session',
+                'x-posthog-distinct-id': 'header-user',
+            })
+            ;(headers as jest.Mock).mockResolvedValue(headerStore)
+
+            const client = await getPostHog('phc_test123')
+            client.capture({ distinctId: 'header-user', event: 'test_event' })
+
+            expect(mockWithContext).toHaveBeenCalledWith(
+                {
+                    distinctId: 'header-user',
+                    sessionId: 'header-session',
+                    properties: {
+                        $session_id: 'header-session',
+                        $device_id: 'device_xyz',
+                    },
+                },
+                expect.any(Function)
+            )
+        })
+
+        it('falls back to cookie values when tracing headers are absent', async () => {
+            const cookieStore = createMockCookies({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'cookie-user',
+                    $device_id: 'device_xyz',
+                    $sesid: [1708700000000, 'cookie-session', 1708700000000],
+                }),
+            })
+            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            const headerStore = createMockHeaders({})
+            ;(headers as jest.Mock).mockResolvedValue(headerStore)
+
+            const client = await getPostHog('phc_test123')
+            client.capture({ distinctId: 'cookie-user', event: 'test_event' })
+
+            expect(mockWithContext).toHaveBeenCalledWith(
+                {
+                    distinctId: 'cookie-user',
+                    sessionId: 'cookie-session',
+                    properties: {
+                        $session_id: 'cookie-session',
+                        $device_id: 'device_xyz',
+                    },
+                },
+                expect.any(Function)
+            )
+        })
+
+        it('adds $window_id from tracing headers alongside cookie properties', async () => {
+            const cookieStore = createMockCookies({
+                ph_phc_test123_posthog: JSON.stringify({
+                    distinct_id: 'cookie-user',
+                    $device_id: 'device_xyz',
+                    $sesid: [1708700000000, 'cookie-session', 1708700000000],
+                }),
+            })
+            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            const headerStore = createMockHeaders({
+                'x-posthog-window-id': 'window-123',
+            })
+            ;(headers as jest.Mock).mockResolvedValue(headerStore)
+
+            const client = await getPostHog('phc_test123')
+            client.capture({ distinctId: 'cookie-user', event: 'test_event' })
+
+            expect(mockWithContext).toHaveBeenCalledWith(
+                {
+                    distinctId: 'cookie-user',
+                    sessionId: 'cookie-session',
+                    properties: {
+                        $session_id: 'cookie-session',
+                        $device_id: 'device_xyz',
+                        $window_id: 'window-123',
+                    },
+                },
+                expect.any(Function)
+            )
+        })
     })
 
     describe('consent awareness', () => {

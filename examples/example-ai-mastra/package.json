@@ -2,14 +2,15 @@
   "name": "example-ai-mastra",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.15.0",
   "scripts": {
     "workflow": "tsx workflow.ts"
   },
   "dependencies": {
-    "posthog-node": "*",
-    "@posthog/ai": "*",
     "@mastra/core": "^1.14.0",
+    "@mastra/observability": "^1.8.0",
+    "@mastra/posthog": "^1.0.16",
     "zod": "^3.0.0"
   },
   "devDependencies": {

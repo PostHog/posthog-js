@@ -1,2 +1,9 @@
 packages:
   - '.'
+minimumReleaseAge: 10080
+
+minimumReleaseAgeExclude:
+  - "@posthog/ai"
+
+blockExoticSubdeps: true
+trustPolicy: no-downgrade

@@ -54,30 +54,31 @@ export type attributes = {
     [key: string]: string | number | true | null
 }
 
-export enum NodeType {
-    Document = 0,
-    DocumentType = 1,
-    Element = 2,
-    Text = 3,
-    CDATA = 4,
-    Comment = 5,
-}
+export const NodeType = {
+    Document: 0,
+    DocumentType: 1,
+    Element: 2,
+    Text: 3,
+    CDATA: 4,
+    Comment: 5,
+} as const
+export type NodeType = (typeof NodeType)[keyof typeof NodeType]
 
 export type documentNode = {
-    type: NodeType.Document
+    type: typeof NodeType.Document
     childNodes: serializedNodeWithId[]
     compatMode?: string
 }
 
 export type documentTypeNode = {
-    type: NodeType.DocumentType
+    type: typeof NodeType.DocumentType
     name: string
     publicId: string
     systemId: string
 }
 
 export type elementNode = {
-    type: NodeType.Element
+    type: typeof NodeType.Element
     tagName: string
     attributes: attributes
     childNodes: serializedNodeWithId[]
@@ -87,18 +88,18 @@ export type elementNode = {
 }
 
 export type textNode = {
-    type: NodeType.Text
+    type: typeof NodeType.Text
     textContent: string
     isStyle?: true
 }
 
 export type cdataNode = {
-    type: NodeType.CDATA
+    type: typeof NodeType.CDATA
     textContent: ''
 }
 
 export type commentNode = {
-    type: NodeType.Comment
+    type: typeof NodeType.Comment
     textContent: string
 }
 
@@ -126,48 +127,50 @@ export type KeepIframeSrcFn = (src: string) => boolean
 
 export type PackFn = (event: eventWithTime) => string
 
-export enum EventType {
-    DomContentLoaded = 0,
-    Load = 1,
-    FullSnapshot = 2,
-    IncrementalSnapshot = 3,
-    Meta = 4,
-    Custom = 5,
-    Plugin = 6,
-}
+export const EventType = {
+    DomContentLoaded: 0,
+    Load: 1,
+    FullSnapshot: 2,
+    IncrementalSnapshot: 3,
+    Meta: 4,
+    Custom: 5,
+    Plugin: 6,
+} as const
+export type EventType = (typeof EventType)[keyof typeof EventType]
 
-export enum IncrementalSource {
-    Mutation = 0,
-    MouseMove = 1,
-    MouseInteraction = 2,
-    Scroll = 3,
-    ViewportResize = 4,
-    Input = 5,
-    TouchMove = 6,
-    MediaInteraction = 7,
-    StyleSheetRule = 8,
-    CanvasMutation = 9,
-    Font = 10,
-    Log = 11,
-    Drag = 12,
-    StyleDeclaration = 13,
-    Selection = 14,
-    AdoptedStyleSheet = 15,
-    CustomElement = 16,
-}
+export const IncrementalSource = {
+    Mutation: 0,
+    MouseMove: 1,
+    MouseInteraction: 2,
+    Scroll: 3,
+    ViewportResize: 4,
+    Input: 5,
+    TouchMove: 6,
+    MediaInteraction: 7,
+    StyleSheetRule: 8,
+    CanvasMutation: 9,
+    Font: 10,
+    Log: 11,
+    Drag: 12,
+    StyleDeclaration: 13,
+    Selection: 14,
+    AdoptedStyleSheet: 15,
+    CustomElement: 16,
+} as const
+export type IncrementalSource = (typeof IncrementalSource)[keyof typeof IncrementalSource]
 
 export type domContentLoadedEvent = {
-    type: EventType.DomContentLoaded
+    type: typeof EventType.DomContentLoaded
     data: unknown
 }
 
 export type loadedEvent = {
-    type: EventType.Load
+    type: typeof EventType.Load
     data: unknown
 }
 
 export type fullSnapshotEvent = {
-    type: EventType.FullSnapshot
+    type: typeof EventType.FullSnapshot
     data: {
         node: serializedNodeWithId
         initialOffset: {
@@ -178,7 +181,7 @@ export type fullSnapshotEvent = {
 }
 
 export type metaEvent = {
-    type: EventType.Meta
+    type: typeof EventType.Meta
     data: {
         href: string
         width: number
@@ -187,7 +190,7 @@ export type metaEvent = {
 }
 
 export type customEvent<T = unknown> = {
-    type: EventType.Custom
+    type: typeof EventType.Custom
     data: {
         tag: string
         payload: T
@@ -195,7 +198,7 @@ export type customEvent<T = unknown> = {
 }
 
 export type pluginEvent<T = unknown> = {
-    type: EventType.Plugin
+    type: typeof EventType.Plugin
     data: {
         plugin: string
         payload: T
@@ -242,7 +245,7 @@ export type mutationCallbackParam = {
 }
 
 export type mutationData = {
-    source: IncrementalSource.Mutation
+    source: typeof IncrementalSource.Mutation
 } & mutationCallbackParam
 
 export type mousePosition = {
@@ -252,25 +255,27 @@ export type mousePosition = {
     timeOffset: number
 }
 
-export enum MouseInteractions {
-    MouseUp = 0,
-    MouseDown = 1,
-    Click = 2,
-    ContextMenu = 3,
-    DblClick = 4,
-    Focus = 5,
-    Blur = 6,
-    TouchStart = 7,
-    TouchMove_Departed = 8,
-    TouchEnd = 9,
-    TouchCancel = 10,
-}
+export const MouseInteractions = {
+    MouseUp: 0,
+    MouseDown: 1,
+    Click: 2,
+    ContextMenu: 3,
+    DblClick: 4,
+    Focus: 5,
+    Blur: 6,
+    TouchStart: 7,
+    TouchMove_Departed: 8,
+    TouchEnd: 9,
+    TouchCancel: 10,
+} as const
+export type MouseInteractions = (typeof MouseInteractions)[keyof typeof MouseInteractions]
 
-export enum PointerTypes {
-    Mouse = 0,
-    Pen = 1,
-    Touch = 2,
-}
+export const PointerTypes = {
+    Mouse: 0,
+    Pen: 1,
+    Touch: 2,
+} as const
+export type PointerTypes = (typeof PointerTypes)[keyof typeof PointerTypes]
 
 type mouseInteractionParam = {
     type: MouseInteractions
@@ -281,11 +286,11 @@ type mouseInteractionParam = {
 }
 
 export type mouseInteractionData = {
-    source: IncrementalSource.MouseInteraction
+    source: typeof IncrementalSource.MouseInteraction
 } & mouseInteractionParam
 
 export type mousemoveData = {
-    source: IncrementalSource.MouseMove | IncrementalSource.TouchMove | IncrementalSource.Drag
+    source: typeof IncrementalSource.MouseMove | typeof IncrementalSource.TouchMove | typeof IncrementalSource.Drag
     positions: mousePosition[]
 }
 
@@ -296,7 +301,7 @@ export type scrollPosition = {
 }
 
 export type scrollData = {
-    source: IncrementalSource.Scroll
+    source: typeof IncrementalSource.Scroll
 } & scrollPosition
 
 export type viewportResizeDimension = {
@@ -305,7 +310,7 @@ export type viewportResizeDimension = {
 }
 
 export type viewportResizeData = {
-    source: IncrementalSource.ViewportResize
+    source: typeof IncrementalSource.ViewportResize
 } & viewportResizeDimension
 
 export type inputValue = {
@@ -315,17 +320,18 @@ export type inputValue = {
 }
 
 export type inputData = {
-    source: IncrementalSource.Input
+    source: typeof IncrementalSource.Input
     id: number
 } & inputValue
 
-export enum MediaInteractions {
-    Play = 0,
-    Pause = 1,
-    Seeked = 2,
-    VolumeChange = 3,
-    RateChange = 4,
-}
+export const MediaInteractions = {
+    Play: 0,
+    Pause: 1,
+    Seeked: 2,
+    VolumeChange: 3,
+    RateChange: 4,
+} as const
+export type MediaInteractions = (typeof MediaInteractions)[keyof typeof MediaInteractions]
 
 export type mediaInteractionParam = {
     type: MediaInteractions
@@ -338,7 +344,7 @@ export type mediaInteractionParam = {
 }
 
 export type mediaInteractionData = {
-    source: IncrementalSource.MediaInteraction
+    source: typeof IncrementalSource.MediaInteraction
 } & mediaInteractionParam
 
 export type styleSheetAddRule = {
@@ -360,14 +366,15 @@ export type styleSheetRuleParam = {
 }
 
 export type styleSheetRuleData = {
-    source: IncrementalSource.StyleSheetRule
+    source: typeof IncrementalSource.StyleSheetRule
 } & styleSheetRuleParam
 
-export enum CanvasContext {
-    '2D' = 0,
-    WebGL = 1,
-    WebGL2 = 2,
-}
+export const CanvasContext = {
+    '2D': 0,
+    WebGL: 1,
+    WebGL2: 2,
+} as const
+export type CanvasContext = (typeof CanvasContext)[keyof typeof CanvasContext]
 
 export type canvasMutationCommand = {
     property: string
@@ -387,7 +394,7 @@ export type canvasMutationParam =
       } & canvasMutationCommand)
 
 export type canvasMutationData = {
-    source: IncrementalSource.CanvasMutation
+    source: typeof IncrementalSource.CanvasMutation
 } & canvasMutationParam
 
 export type fontParam = {
@@ -398,7 +405,7 @@ export type fontParam = {
 }
 
 export type fontData = {
-    source: IncrementalSource.Font
+    source: typeof IncrementalSource.Font
 } & fontParam
 
 export type SelectionRange = {
@@ -413,7 +420,7 @@ export type selectionParam = {
 }
 
 export type selectionData = {
-    source: IncrementalSource.Selection
+    source: typeof IncrementalSource.Selection
 } & selectionParam
 
 export type styleDeclarationParam = {
@@ -431,7 +438,7 @@ export type styleDeclarationParam = {
 }
 
 export type styleDeclarationData = {
-    source: IncrementalSource.StyleDeclaration
+    source: typeof IncrementalSource.StyleDeclaration
 } & styleDeclarationParam
 
 export type adoptedStyleSheetParam = {
@@ -444,7 +451,7 @@ export type adoptedStyleSheetParam = {
 }
 
 export type adoptedStyleSheetData = {
-    source: IncrementalSource.AdoptedStyleSheet
+    source: typeof IncrementalSource.AdoptedStyleSheet
 } & adoptedStyleSheetParam
 
 export type customElementParam = {
@@ -454,7 +461,7 @@ export type customElementParam = {
 }
 
 export type customElementData = {
-    source: IncrementalSource.CustomElement
+    source: typeof IncrementalSource.CustomElement
 } & customElementParam
 
 export type incrementalData =
@@ -474,7 +481,7 @@ export type incrementalData =
     | customElementData
 
 export type incrementalSnapshotEvent = {
-    type: EventType.IncrementalSnapshot
+    type: typeof EventType.IncrementalSnapshot
     data: incrementalData
 }
 
@@ -496,7 +503,7 @@ export type mutationCallBack = (m: mutationCallbackParam) => void
 
 export type mousemoveCallBack = (
     p: mousePosition[],
-    source: IncrementalSource.MouseMove | IncrementalSource.TouchMove | IncrementalSource.Drag
+    source: typeof IncrementalSource.MouseMove | typeof IncrementalSource.TouchMove | typeof IncrementalSource.Drag
 ) => void
 
 export type mouseInteractionCallBack = (d: mouseInteractionParam) => void

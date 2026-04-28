@@ -284,7 +284,7 @@ describe('identify()', () => {
             expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
             expect(instance.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
             expect(instance.featureFlags.setPersonPropertiesForFlags).toHaveBeenCalledWith(
-                { email: 'john@example.com', howOftenAmISet: 'once!' },
+                { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } },
                 true
             )
         })
@@ -295,7 +295,7 @@ describe('identify()', () => {
             expect(instance.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
             expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
             expect(instance.featureFlags.setPersonPropertiesForFlags).toHaveBeenCalledWith(
-                { email: 'john@example.com', howOftenAmISet: 'once!' },
+                { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } },
                 false
             )
         })

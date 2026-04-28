@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
-import { isNumber } from '@posthog/core'
+import { isNumber, isNull } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -16,6 +16,7 @@ import {
     RestoreFromTokenResponse,
     RequestRestoreLinkPayload,
     RequestRestoreLinkResponse,
+    TicketStatus,
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
@@ -63,7 +64,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     // View state management for ticket list vs message view
     private _currentView: WidgetView = 'messages'
     private _tickets: Ticket[] = []
-    private _hasMultipleTickets: boolean = false
+    private _showTicketList: boolean = false
 
     constructor(
         config: ConversationsRemoteConfig,
@@ -107,22 +108,28 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
-            const distinctId = this._posthog.get_distinct_id()
             const personTraits = this._getPersonTraits()
 
             const name = userTraits?.name || personTraits.name || null
             const email = userTraits?.email || personTraits.email || null
 
+            const identity = this._identityFields()
             const payload: Partial<SendMessagePayload> = {
-                widget_session_id: this._widgetSessionId,
-                // distinct_id is only used for Person linking, not access control
-                distinct_id: distinctId,
                 message: message.trim(),
                 traits: {
                     name,
                     email,
                 },
                 ticket_id: ticketId,
+            }
+
+            if (identity) {
+                payload.identity_distinct_id = identity.identity_distinct_id
+                payload.identity_hash = identity.identity_hash
+                payload.distinct_id = identity.identity_distinct_id
+            } else {
+                payload.widget_session_id = this._widgetSessionId
+                payload.distinct_id = this._posthog.get_distinct_id()
             }
 
             try {
@@ -235,11 +242,16 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
-            // SECURITY: widget_session_id is required for access control
-            // distinct_id is NOT sent for getMessages - access is controlled by widget_session_id only
+            const identity = this._identityFields()
             const queryParams: Record<string, string> = {
-                widget_session_id: this._widgetSessionId,
                 limit: '50',
+            }
+
+            if (identity) {
+                queryParams.identity_distinct_id = identity.identity_distinct_id
+                queryParams.identity_hash = identity.identity_hash
+            } else {
+                queryParams.widget_session_id = this._widgetSessionId
             }
 
             if (after) {
@@ -298,15 +310,18 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
+            const identity = this._identityFields()
+            const data = identity
+                ? { identity_distinct_id: identity.identity_distinct_id, identity_hash: identity.identity_hash }
+                : { widget_session_id: this._widgetSessionId }
+
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
                     'api',
                     `/api/conversations/v1/widget/messages/${targetTicketId}/read`
                 ),
                 method: 'POST',
-                data: {
-                    widget_session_id: this._widgetSessionId,
-                },
+                data,
                 headers: {
                     'X-Conversations-Token': token,
                 },
@@ -329,8 +344,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
                         return
                     }
 
-                    const data = response.json as MarkAsReadResponse
-                    resolve(data)
+                    const responseData = response.json as MarkAsReadResponse
+                    resolve(responseData)
                 },
             })
         })
@@ -344,6 +359,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _initialize(): void {
         if (!document || !window) {
             logger.info('Conversations not available: Document or window not available')
+            return
+        }
+
+        // In identity mode, restore is unnecessary and the persisted anonymous
+        // ticket belongs to a different principal -- clear it before completing.
+        if (this._identityFields()) {
+            this._persistence.clearTicketId()
+            this._completeInitialization()
             return
         }
 
@@ -658,7 +681,17 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
+            const identityBefore = this._posthog.config.identity_distinct_id
+            const ticketBefore = this._currentTicketId
             const response = await this.getMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
+
+            // Discard stale response if identity or ticket changed while in-flight
+            if (
+                this._posthog.config.identity_distinct_id !== identityBefore ||
+                this._currentTicketId !== ticketBefore
+            ) {
+                return
+            }
 
             // Update unread count from response
             if (isNumber(response.unread_count)) {
@@ -669,6 +702,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 if (response.unread_count > 0 && this._isWidgetOpen()) {
                     this._markMessagesAsRead()
                 }
+            }
+
+            // Sync ticket_status so an agent-side resolve flips the UI to locked state even
+            // while we're polling messages (ticket polling doesn't run in messages view).
+            // Using ticketBefore (non-null, validated by the stale check above) avoids relying
+            // on TS narrowing of the mutable this._currentTicketId field.
+            if (response.ticket_status) {
+                this._applyTicketStatusUpdate(ticketBefore, response.ticket_status)
             }
 
             if (response.messages.length > 0) {
@@ -725,18 +766,60 @@ export class ConversationsManager implements ConversationsManagerInterface {
         try {
             const response = await this.getTickets()
             this._tickets = response.results
-            this._hasMultipleTickets = response.results.length > 1
-            this._widgetRef?.updateTickets(response.results)
+            this._showTicketList = this._computeShowTicketList(response.results)
+            this._widgetRef?.updateTickets(response.results, this._showTicketList)
 
             // Calculate total unread across all tickets
             const totalUnread = response.results.reduce((sum, t) => sum + (t.unread_count || 0), 0)
             this._unreadCount = totalUnread
             this._widgetRef?.setUnreadCount(totalUnread)
 
+            this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+
             logger.info('Tickets loaded', { count: response.results.length, totalUnread })
         } catch (error) {
             logger.error('Failed to load tickets', error)
         }
+    }
+
+    private _computeShowTicketList(tickets: Ticket[]): boolean {
+        if (tickets.length > 1) {
+            return true
+        }
+        if (tickets.length === 1 && tickets[0].status === 'resolved') {
+            return true
+        }
+        return false
+    }
+
+    private _isCurrentTicketResolved(): boolean {
+        if (!this._currentTicketId) {
+            return false
+        }
+        const ticket = this._tickets.find((t) => t.id === this._currentTicketId)
+        return ticket?.status === 'resolved'
+    }
+
+    /**
+     * Patch the local _tickets cache with a new status for a given ticket and push
+     * any UI-relevant changes (resolved lock + list visibility) to the widget.
+     */
+    private _applyTicketStatusUpdate(ticketId: string, status: TicketStatus): void {
+        const idx = this._tickets.findIndex((t) => t.id === ticketId)
+        if (idx === -1) {
+            return
+        }
+        if (this._tickets[idx].status === status) {
+            return
+        }
+        this._tickets = [
+            ...this._tickets.slice(0, idx),
+            { ...this._tickets[idx], status },
+            ...this._tickets.slice(idx + 1),
+        ]
+        this._showTicketList = this._computeShowTicketList(this._tickets)
+        this._widgetRef?.updateTickets(this._tickets, this._showTicketList)
+        this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
     }
 
     /**
@@ -777,6 +860,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._currentView = 'messages'
         this._widgetRef?.setView('messages')
 
+        // Push resolved state for this ticket so MessagesView locks the input if needed
+        this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+
         // Load messages for the selected ticket
         await this._loadMessages()
 
@@ -802,6 +888,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Switch view to messages
         this._currentView = 'messages'
         this._widgetRef?.setView('messages')
+
+        // Fresh ticket is never resolved — unlock the input
+        this._widgetRef?.setCurrentTicketResolved(false)
 
         // Clear messages and add greeting
         this._widgetRef?.clearMessages(true)
@@ -830,30 +919,54 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
         try {
+            const identityBefore = this._posthog.config.identity_distinct_id
             const response = await this.getTickets()
-            this._tickets = response.results
-            this._hasMultipleTickets = response.results.length > 1
 
-            // Calculate total unread
-            const totalUnread = response.results.reduce((sum, t) => sum + (t.unread_count || 0), 0)
-            this._unreadCount = totalUnread
-
-            // If 2+ tickets, show ticket list; otherwise show messages
-            if (response.results.length >= 2) {
-                return { view: 'tickets', tickets: response.results }
+            // If identity changed while the request was in-flight, discard this
+            // stale response -- setIdentity/clearIdentity already triggered a
+            // fresh _loadTicketsAndReconcileView() with the correct credentials.
+            if (this._posthog.config.identity_distinct_id !== identityBefore) {
+                return { view: 'messages', tickets: [] }
             }
 
-            // If exactly 1 ticket, set it as current
-            if (response.results.length === 1) {
-                this._currentTicketId = response.results[0].id
-                this._persistence.saveTicketId(response.results[0].id)
-            }
-
-            return { view: 'messages', tickets: response.results }
+            const view = this._applyTicketsToState(response.results)
+            return { view, tickets: response.results }
         } catch (error) {
             logger.error('Failed to determine initial view', error)
             return { view: 'messages', tickets: [] }
         }
+    }
+
+    /**
+     * Apply a fetched ticket list to internal state and return the appropriate view.
+     * Shared by _determineInitialView (widget boot) and _loadTicketsAndReconcileView
+     * (identity change at runtime).
+     */
+    private _applyTicketsToState(tickets: Ticket[]): WidgetView {
+        this._tickets = tickets
+        this._showTicketList = this._computeShowTicketList(tickets)
+
+        const totalUnread = tickets.reduce((sum, t) => sum + (t.unread_count || 0), 0)
+        this._unreadCount = totalUnread
+
+        if (tickets.length >= 2) {
+            this._currentTicketId = null
+            return 'tickets'
+        }
+
+        // Single resolved ticket: show list so user can start a new conversation instead of writing to it
+        if (tickets.length === 1 && tickets[0].status === 'resolved') {
+            this._currentTicketId = null
+            this._persistence.clearTicketId()
+            return 'tickets'
+        }
+
+        if (tickets.length === 1) {
+            this._currentTicketId = tickets[0].id
+            this._persistence.saveTicketId(tickets[0].id)
+        }
+
+        return 'messages'
     }
 
     /**
@@ -946,14 +1059,21 @@ export class ConversationsManager implements ConversationsManagerInterface {
         return this._isWidgetRendered
     }
 
-    /** Get tickets list for the current widget session */
+    /** Get tickets list for the current widget session or verified identity */
     async getTickets(options?: GetTicketsOptions): Promise<GetTicketsResponse> {
         const token = this._config.token
 
+        const identity = this._identityFields()
         const queryParams: Record<string, string> = {
-            widget_session_id: this._widgetSessionId,
             limit: String(options?.limit ?? 20),
             offset: String(options?.offset ?? 0),
+        }
+
+        if (identity) {
+            queryParams.identity_distinct_id = identity.identity_distinct_id
+            queryParams.identity_hash = identity.identity_hash
+        } else {
+            queryParams.widget_session_id = this._widgetSessionId
         }
 
         if (options?.status) {
@@ -997,6 +1117,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     async requestRestoreLink(email: string): Promise<RequestRestoreLinkResponse> {
+        if (this._identityFields()) {
+            return { ok: true }
+        }
+
         const normalizedEmail = email.trim().toLowerCase()
         if (!normalizedEmail) {
             throw new Error('Email is required')
@@ -1040,6 +1164,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     async restoreFromToken(restoreToken: string): Promise<RestoreFromTokenResponse> {
+        if (this._identityFields()) {
+            return { status: 'success' }
+        }
+
         const normalizedToken = restoreToken.trim()
         if (!normalizedToken) {
             throw new Error('Restore token is required')
@@ -1052,6 +1180,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     async restoreFromUrlToken(): Promise<RestoreFromTokenResponse | null> {
+        if (this._identityFields()) {
+            return null
+        }
+
         const restoreToken = getRestoreTokenFromUrl()
         if (!restoreToken) {
             return null
@@ -1078,6 +1210,58 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     getWidgetSessionId(): string {
         return this._widgetSessionId
+    }
+
+    private _identityFields(): { identity_distinct_id: string; identity_hash: string } | null {
+        const id = this._posthog.config.identity_distinct_id
+        const hash = this._posthog.config.identity_hash
+        if (!id || !hash) {
+            return null
+        }
+        return { identity_distinct_id: id, identity_hash: hash }
+    }
+
+    setIdentity(): void {
+        this._resetConversationState()
+        this._widgetRef?.setIdentityMode(true)
+        void this._loadTicketsAndReconcileView()
+    }
+
+    clearIdentity(): void {
+        this._resetConversationState()
+        this._widgetRef?.setIdentityMode(false)
+        void this._loadTicketsAndReconcileView()
+    }
+
+    private _resetConversationState(): void {
+        this._currentTicketId = null
+        this._persistence.clearTicketId()
+        this._lastMessageTimestamp = null
+        this._widgetRef?.clearMessages(true)
+    }
+
+    private async _loadTicketsAndReconcileView(): Promise<void> {
+        try {
+            const identityBefore = this._posthog.config.identity_distinct_id
+            const response = await this.getTickets()
+
+            if (this._posthog.config.identity_distinct_id !== identityBefore) {
+                return
+            }
+
+            const view = this._applyTicketsToState(response.results)
+            this._widgetRef?.updateTickets(response.results, this._showTicketList)
+            this._widgetRef?.setUnreadCount(this._unreadCount)
+            this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+            this._currentView = view
+            this._widgetRef?.setView(view)
+
+            if (view === 'messages' && this._currentTicketId) {
+                void this._loadMessages()
+            }
+        } catch (error) {
+            logger.error('Failed to load tickets after identity change', error)
+        }
     }
 
     /**
@@ -1162,9 +1346,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 initialState={initialState}
                 initialUserTraits={initialUserTraits}
                 isUserIdentified={this._posthog._isIdentified()}
+                isIdentityMode={!isNull(this._identityFields())}
                 initialView={initialView}
                 initialTickets={initialTickets}
-                hasMultipleTickets={this._hasMultipleTickets}
+                showTicketList={this._showTicketList}
                 onSendMessage={this._handleSendMessage}
                 onStateChange={this._handleStateChange}
                 onIdentify={this._handleIdentify}

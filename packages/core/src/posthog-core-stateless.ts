@@ -24,7 +24,6 @@ import {
 } from './types'
 import {
   allSettled,
-  assert,
   currentISOTime,
   PromiseQueue,
   removeTrailingSlash,
@@ -145,10 +144,17 @@ export abstract class PostHogCoreStateless {
   abstract setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
 
   constructor(apiKey: string, options: PostHogCoreOptions = {}) {
-    assert(apiKey, "You must pass your PostHog project's api key.")
+    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
+    const normalizedHost = typeof options.host === 'string' ? options.host.trim() : ''
+    const missingApiKey = !normalizedApiKey
 
-    this.apiKey = apiKey
-    this.host = removeTrailingSlash(options.host || 'https://us.i.posthog.com')
+    this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
+    if (missingApiKey) {
+      this._logger.error("You must pass your PostHog project's api key. The client will be disabled.")
+    }
+
+    this.apiKey = normalizedApiKey
+    this.host = removeTrailingSlash(normalizedHost || 'https://us.i.posthog.com')
     this.flushAt = options.flushAt ? Math.max(options.flushAt, 1) : 20
     this.maxBatchSize = Math.max(this.flushAt, options.maxBatchSize ?? 100)
     this.maxQueueSize = Math.max(this.flushAt, options.maxQueueSize ?? 1000)
@@ -167,12 +173,11 @@ export abstract class PostHogCoreStateless {
     this.featureFlagsRequestTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 3000 // 3 seconds
     this.remoteConfigRequestTimeoutMs = options.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
     this.disableGeoip = options.disableGeoip ?? true
-    this.disabled = options.disabled ?? false
+    this.disabled = (options.disabled ?? false) || missingApiKey
     this.historicalMigration = options?.historicalMigration ?? false
     // Init promise allows the derived class to block calls until it is ready
     this._initPromise = Promise.resolve()
     this._isInitialized = true
-    this._logger = createLogger('[PostHog]', this.logMsgIfDebug.bind(this))
     // Support both evaluationContexts (new) and evaluationEnvironments (deprecated)
     this.evaluationContexts = options?.evaluationContexts ?? options?.evaluationEnvironments
     if (options?.evaluationEnvironments && !options?.evaluationContexts) {
@@ -475,6 +480,12 @@ export abstract class PostHogCoreStateless {
       person_properties: personProperties,
       group_properties: groupProperties,
       ...extraPayload,
+    }
+
+    // Extract $device_id from personProperties and send it as a top-level field so the
+    // feature flags service can use it for device-based bucketing during remote evaluation.
+    if (personProperties.$device_id) {
+      requestData.$device_id = personProperties.$device_id
     }
 
     // Add evaluation contexts if configured

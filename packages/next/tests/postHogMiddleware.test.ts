@@ -45,7 +45,7 @@ const mockNextResponseRewrite = jest.fn((url: URL) => ({
     _rewriteUrl: url,
 }))
 
-jest.mock('next/server', () => ({
+jest.mock('next/server.js', () => ({
     NextResponse: {
         next: (...args: any[]) => mockNextResponseNext(...args),
         rewrite: (url: URL) => mockNextResponseRewrite(url),
@@ -98,6 +98,15 @@ describe('postHogMiddleware', () => {
         it('prefers config apiKey over env var', async () => {
             process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_from_env'
             const middleware = postHogMiddleware({ apiKey: 'phc_test123' })
+            const req = new MockNextRequest('https://example.com/')
+
+            await middleware(req as any)
+
+            expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
+        })
+
+        it('trims apiKey before seeding cookies', async () => {
+            const middleware = postHogMiddleware({ apiKey: '  phc_test123\n' })
             const req = new MockNextRequest('https://example.com/')
 
             await middleware(req as any)
@@ -326,6 +335,20 @@ describe('postHogMiddleware', () => {
             const middleware = postHogMiddleware({
                 apiKey: 'phc_test123',
                 proxy: { host: 'https://eu.i.posthog.com' },
+            })
+            const req = new MockNextRequest('https://example.com/ingest/e/')
+
+            await middleware(req as any)
+
+            const rewriteUrl: URL = mockNextResponseRewrite.mock.calls[0][0]
+            expect(rewriteUrl.origin).toBe('https://eu.i.posthog.com')
+            expect(rewriteUrl.pathname).toBe('/e/')
+        })
+
+        it('trims custom proxy host before rewriting', async () => {
+            const middleware = postHogMiddleware({
+                apiKey: 'phc_test123',
+                proxy: { host: '  https://eu.i.posthog.com/\t ' },
             })
             const req = new MockNextRequest('https://example.com/ingest/e/')
 

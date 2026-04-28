@@ -1,6 +1,6 @@
-# Gemini + PostHog AI Examples
+# Google Gemini + PostHog AI Examples
 
-Track Google Gemini API calls with PostHog.
+Track Google Gemini API calls with PostHog via OpenTelemetry.
 
 ## Setup
 
@@ -14,6 +14,7 @@ cp .env.example .env
 
 - **chat.ts** - Chat with tool calling
 - **streaming.ts** - Chat with streaming
+- **image-generation.ts** - Image generation
 
 ## Run
 
@@ -21,4 +22,5 @@ cp .env.example .env
 source .env
 npx tsx chat.ts
 npx tsx streaming.ts
+npx tsx image-generation.ts
 ```

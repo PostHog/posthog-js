@@ -914,7 +914,7 @@ class FeatureFlagsPoller {
   }
 
   _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
-    const url = `${this.host}/api/feature_flag/local_evaluation?token=${this.projectApiKey}&send_cohorts`
+    const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts`
 
     const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)
 

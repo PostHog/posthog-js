@@ -2,16 +2,17 @@ import { of, throwError, lastValueFrom } from 'rxjs'
 
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogInterceptor } from '@/extensions/nestjs'
-import { waitForPromises } from '../utils'
 
 jest.mock('../../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
-const waitForFlushTimer = async (): Promise<void> => {
-  await waitForPromises()
-  jest.runOnlyPendingTimers()
-  await waitForPromises()
+/**
+ * Deterministically drains all pending promises (including async chains like
+ * captureException's buildEventMessage) and flushes any remaining queued events.
+ */
+const waitForFlushTimer = async (posthog: PostHog): Promise<void> => {
+  await posthog.shutdown()
 }
 
 const getLastBatchEvents = (): any[] | undefined => {
@@ -129,7 +130,7 @@ describe('PostHogInterceptor', () => {
       }
 
       await lastValueFrom(interceptor.intercept(context, handler))
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
@@ -155,7 +156,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
       expect(batchCalls.length).toBe(0)
@@ -203,7 +204,7 @@ describe('PostHogInterceptor', () => {
       })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
@@ -228,7 +229,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
       expect(batchCalls.length).toBe(0)
@@ -246,7 +247,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext({ headers: {} })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
@@ -267,7 +268,7 @@ describe('PostHogInterceptor', () => {
       })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents![0].properties.$ip).toBe('10.0.0.1')
@@ -280,7 +281,7 @@ describe('PostHogInterceptor', () => {
       })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents![0].properties.$ip).toBe('10.0.0.1')
@@ -292,7 +293,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/'))
       expect(batchCalls.length).toBe(0)
@@ -304,7 +305,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
@@ -323,7 +324,7 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext()
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
-      await waitForFlushTimer()
+      await waitForFlushTimer(posthog)
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()

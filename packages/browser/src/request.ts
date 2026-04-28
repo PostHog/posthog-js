@@ -8,7 +8,7 @@ import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } 
 import { gzipSync, strToU8 } from 'fflate'
 
 import { _base64Encode } from './utils/encode-utils'
-import { gzipCompress } from '@posthog/core'
+import { gzipCompress, isNativeAsyncGzipReadError } from '@posthog/core'
 
 interface RequestWithEncodedBody extends RequestWithOptions {
     _encodedBody?: EncodedBody
@@ -27,6 +27,8 @@ const SIXTY_FOUR_KILOBYTES = 64 * 1024
  any overhead doesn't push over the threshold after checking here
 */
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
+let nativeAsyncGzipDisabled = false
+
 type EncodedBody = {
     contentType: string
     body: string | BlobPart | ArrayBuffer
@@ -118,15 +120,16 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
  * which can take 300ms+ on constrained devices.
  *
  * Callers must check preconditions (data exists, gzip compression, CompressionStream available)
- * before calling this function. Uses `gzipCompress` from @posthog/core.
+ * before calling this function.
  */
 const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestWithEncodedBody> => {
     const jsonData = jsonStringify(options.data)
-    const compressed = await gzipCompress(jsonData, Config.DEBUG)
+    const compressed = await gzipCompress(jsonData, Config.DEBUG, { rethrow: true })
     if (!compressed) {
         return options
     }
     const body = await compressed.arrayBuffer()
+
     return {
         ...options,
         _encodedBody: {
@@ -255,13 +258,26 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
     try {
         const { contentType, body } = encodePostData(options) ?? {}
-        // sendBeacon requires a blob so we convert it
-        const sendBeaconBody = typeof body === 'string' ? new Blob([body], { type: contentType }) : body
+        if (!body) {
+            return
+        }
+        // sendBeacon requires a Blob to set the Content-Type header correctly.
+        // Without wrapping, ArrayBuffer bodies are sent with no Content-Type,
+        // which can cause issues with proxies/WAFs that require it.
+        const sendBeaconBody = body instanceof Blob ? body : new Blob([body], { type: contentType })
         navigator!.sendBeacon!(url, sendBeaconBody)
     } catch {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
     }
+}
+
+const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
+    return extendURLParams(url, {
+        _: new Date().getTime().toString(),
+        ver: Config.JS_SDK_VERSION,
+        compression,
+    })
 }
 
 const AVAILABLE_TRANSPORTS: {
@@ -297,11 +313,7 @@ export const request = (_options: RequestWithOptions) => {
     const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
 
-    options.url = extendURLParams(options.url, {
-        _: new Date().getTime().toString(),
-        ver: Config.JS_SDK_VERSION,
-        compression: options.compression,
-    })
+    options.url = buildRequestURL(options.url, options.compression)
 
     const transport = options.transport ?? 'fetch'
 
@@ -323,14 +335,25 @@ export const request = (_options: RequestWithOptions) => {
         transport !== 'sendBeacon' &&
         options.data &&
         options.compression === Compression.GZipJS &&
-        !!CompressionStream
+        !!CompressionStream &&
+        !nativeAsyncGzipDisabled
     ) {
         preEncodeAsync(options)
             .then((encodedOptions) => {
                 transportMethod(encodedOptions)
             })
-            .catch(() => {
-                // If async compression fails, fall back to the synchronous fflate path
+            .catch((error) => {
+                if (isNativeAsyncGzipReadError(error)) {
+                    nativeAsyncGzipDisabled = true
+                    transportMethod({
+                        ...options,
+                        compression: undefined,
+                        url: buildRequestURL(_options.url, undefined),
+                    })
+                    return
+                }
+
+                // If async compression fails for another reason, fall back to the synchronous fflate path
                 transportMethod(options)
             })
     } else {

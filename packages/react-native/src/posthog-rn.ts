@@ -8,15 +8,25 @@ import {
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogLogs,
   PostHogPersistedProperty,
   PostHogRemoteConfig,
   Survey,
   SurveyResponse,
+  allSettled,
   logFlushError,
   maybeAdd,
+  patchFetchForTracingHeaders,
   FeatureFlagValue,
 } from '@posthog/core'
-import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
+import {
+  PostHogRNStorage,
+  createEventsStorage,
+  createLogsStorage,
+  createEventsMemoryStorage,
+  createLogsMemoryStorage,
+} from './storage'
+import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
@@ -33,30 +43,37 @@ import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 export { PostHogPersistedProperty }
 
 export interface PostHogOptions extends PostHogCoreOptions {
-  /** Allows you to provide the storage type. By default 'file'.
+  /**
+   * Allows you to provide the storage type.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
+   *
+   * @default 'file'
    */
   persistence?: 'memory' | 'file'
   /** Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated */
   customAppProperties?:
     | PostHogCustomAppProperties
     | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
-  /** Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
+  /**
+   * Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
    * If not provided, PostHog will attempt to use the best available storage via optional peer dependencies (async-storage, expo-file-system).
    * If `persistence` is set to 'memory', this option will be ignored.
    */
   customStorage?: PostHogCustomStorage
 
-  /** Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
-   * By default is false.
+  /**
+   * Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
    * Application Installed and Application Updated events are not supported with persistence set to 'memory'.
+   *
+   * @default true
    */
   captureAppLifecycleEvents?: boolean
 
   /**
    * Enable Recording of Session Replays for Android and iOS
    * Requires Record user sessions to be enabled in the PostHog Project Settings
-   * Defaults to false
+   *
+   * @default false
    */
   enableSessionReplay?: boolean
 
@@ -69,7 +86,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * If enabled, the session id ($session_id) will be persisted across app restarts.
    * This is an option for back compatibility, so your current data isn't skewed with the new version of the SDK.
    * If this is false, the session id will be always reset on app restart.
-   * Defaults to false
+   *
+   * @default false
    */
   enablePersistSessionIdAcrossRestart?: boolean
 
@@ -101,7 +119,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
 
 export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']
-  private _storage: PostHogRNStorage
+  private _eventsStorage: PostHogRNStorage
+  private _logsStorage: PostHogRNStorage
   private _appProperties: PostHogCustomAppProperties = {}
   private _currentSessionId?: string | undefined
   private _enableSessionReplay?: boolean
@@ -110,6 +129,7 @@ export class PostHog extends PostHogCore {
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
+  private _logs: PostHogLogs
   private _surveysReadyPromise: Promise<void> | null = null
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
@@ -163,6 +183,57 @@ export class PostHog extends PostHogCore {
         ? options.customAppProperties(getAppProperties())
         : options?.customAppProperties || getAppProperties()
 
+    // Resolve storage and construct the logs module BEFORE registering the
+    // AppState listener — the listener body references `this._logs` and
+    // `this._eventsStorage`, and while AppState.addEventListener('change')
+    // only fires on changes (not at registration), the dependency direction
+    // should be explicit: dependencies first, callbacks that use them second.
+    let storagePromise: Promise<void> | undefined
+
+    let theStorage: PostHogCustomStorage | undefined
+    if (this._persistence === 'file') {
+      theStorage = options?.customStorage ?? buildOptimisticAsyncStorage()
+    }
+
+    if (theStorage) {
+      this._eventsStorage = createEventsStorage(theStorage)
+      this._logsStorage = createLogsStorage(theStorage)
+      // `allSettled` so one pipeline's preload failure doesn't block the other — the failing side
+      // degrades to memory-only via PostHogRNStorage.persist()'s internal catch.
+      const preloads: Array<['events' | 'logs', Promise<void>]> = []
+      if (this._eventsStorage.preloadPromise) {
+        preloads.push(['events', this._eventsStorage.preloadPromise])
+      }
+      if (this._logsStorage.preloadPromise) {
+        preloads.push(['logs', this._logsStorage.preloadPromise])
+      }
+      if (preloads.length > 0) {
+        storagePromise = allSettled(preloads.map(([, p]) => p)).then((results) => {
+          results.forEach((r, i) => {
+            if (r.status === 'rejected') {
+              this._logger.error(`PostHog ${preloads[i][0]} storage preload failed:`, r.reason)
+            }
+          })
+        })
+      }
+    } else {
+      this._eventsStorage = createEventsMemoryStorage()
+      this._logsStorage = createLogsMemoryStorage()
+    }
+
+    // TODO: wire user-supplied `options.logs` once the public captureLog API
+    // lands. Hardcoded to defaults while PostHogLogs is SDK-internal.
+    this._logs = new PostHogLogs(
+      this,
+      resolveLogsConfig(undefined),
+      this._logger,
+      () => ({
+        distinctId: this.getDistinctId() || undefined,
+        sessionId: this.getSessionId() || undefined,
+      }),
+      (fn) => this.wrap(fn)
+    )
+
     AppState.addEventListener('change', (state) => {
       // ignore unknown state (usually initial state, the app might not be ready yet)
       if (state === 'unknown') {
@@ -172,32 +243,15 @@ export class PostHog extends PostHogCore {
       void this.flush().catch(async (err) => {
         await logFlushError(err)
       })
+      // Drain pending logs-storage writes to disk before the OS may suspend
+      // the process. waitForPersist swallows errors internally.
+      void this._logsStorage.waitForPersist()
 
       if (state === 'active') {
         // rotate session id if needed (expired either 30 minutes inactive or max duration 24 hours)
         this.getSessionId()
       }
     })
-
-    let storagePromise: Promise<void> | undefined
-
-    let theStorage: PostHogCustomStorage | undefined
-    if (this._persistence === 'file') {
-      theStorage = options?.customStorage ?? buildOptimisticAsyncStorage()
-    }
-
-    if (theStorage) {
-      this._storage = new PostHogRNStorage(theStorage)
-      storagePromise = this._storage.preloadPromise
-    } else {
-      this._storage = new PostHogRNSyncMemoryStorage()
-    }
-
-    if (storagePromise) {
-      storagePromise.catch((error) => {
-        console.error('PostHog storage initialization failed:', error)
-      })
-    }
 
     const initAfterStorage = (): void => {
       // reset session id on app restart
@@ -209,6 +263,16 @@ export class PostHog extends PostHogCore {
       }
 
       this.setupBootstrap(options)
+
+      // Initialize device_id if not already set. This provides a stable identifier
+      // for device-level feature flag bucketing that survives identify() and reset().
+      // We seed it from the anonymous ID at init time; once set, it's independent.
+      if (!this.getPersistedProperty(PostHogPersistedProperty.DeviceId)) {
+        const anonId = this.getAnonymousId()
+        if (anonId) {
+          this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        }
+      }
 
       // Set default person properties for flags if enabled
       if (this._setDefaultPersonProperties) {
@@ -266,13 +330,18 @@ export class PostHog extends PostHogCore {
         }
       }
 
-      if (options?.captureAppLifecycleEvents) {
+      // captureAppLifecycleEvents defaults to true; only skip if explicitly set to false
+      if (options?.captureAppLifecycleEvents !== false) {
         void this.captureAppLifecycleEvents()
       }
 
       void this.persistAppVersion()
 
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
+
+      if (options?.addTracingHeaders && options.addTracingHeaders.length > 0) {
+        patchFetchForTracingHeaders(this, options.addTracingHeaders)
+      }
     }
 
     // For async storage, we wait for the storage to be ready before we start the SDK
@@ -307,12 +376,24 @@ export class PostHog extends PostHogCore {
     this._errorTracking.onRemoteConfig(response.errorTracking)
   }
 
+  /**
+   * Resolves the storage instance for a given persisted-property key.
+   * `LogsQueue` routes to `_logsStorage` (dedicated `.posthog-rn-logs.json`
+   * file); every other key routes to `_eventsStorage`. Single source of
+   * truth for routing — extending to new logs-scoped keys is a one-line
+   * edit here.
+   */
+  private _storageForKey(key: PostHogPersistedProperty): PostHogRNStorage {
+    return key === PostHogPersistedProperty.LogsQueue ? this._logsStorage : this._eventsStorage
+  }
+
   getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined {
-    return this._storage.getItem(key) as T | undefined
+    return this._storageForKey(key).getItem(key) as T | undefined
   }
 
   setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
-    return value !== null ? this._storage.setItem(key, value) : this._storage.removeItem(key)
+    const storage = this._storageForKey(key)
+    return value !== null ? storage.setItem(key, value) : storage.removeItem(key)
   }
 
   /**
@@ -321,7 +402,7 @@ export class PostHog extends PostHogCore {
    * considering events as sent, preventing duplicate events on app crash/restart.
    */
   protected async flushStorage(): Promise<void> {
-    await this._storage.waitForPersist()
+    await this._eventsStorage.waitForPersist()
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
@@ -404,26 +485,54 @@ export class PostHog extends PostHogCore {
    * To reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out.
    * This also clears all stored super properties and more.
    *
+   * By default (when `propertiesToKeep` is not provided), the app lifecycle properties
+   * (`InstalledAppBuild` and `InstalledAppVersion`) are automatically preserved to prevent
+   * duplicate "Application Installed" events on the next app launch.
+   *
+   * If you pass `propertiesToKeep` explicitly, only the properties you specify will be preserved.
+   * To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild`
+   * and `PostHogPersistedProperty.InstalledAppVersion` in your array.
+   *
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+   * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of
+   * what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.
+   *
    * {@label Identification}
    *
    * @example
    * ```js
-   * // reset after logout
+   * // reset after logout (preserves app lifecycle properties by default)
    * posthog.reset()
    * ```
    *
    * @example
    * ```js
-   * // reset but keep feature flag overrides
-   * posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+   * // reset but keep feature flag overrides and app lifecycle properties
+   * posthog.reset([
+   *   PostHogPersistedProperty.OverrideFeatureFlags,
+   *   PostHogPersistedProperty.InstalledAppBuild,
+   *   PostHogPersistedProperty.InstalledAppVersion,
+   * ])
    * ```
    *
-   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset
+   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
+   *   When not provided, app lifecycle and device bucketing properties are automatically preserved.
+   *   When provided, only the specified properties are preserved.
+   *   The event queue and logs queue are always preserved regardless.
    *
    * @public
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
-    super.reset(propertiesToKeep)
+    // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
+    // properties and device_id to prevent duplicate "Application Installed" events and
+    // to maintain stable feature flag bucketing across identity changes.
+    const effectivePropertiesToKeep = propertiesToKeep ?? [
+      PostHogPersistedProperty.InstalledAppBuild,
+      PostHogPersistedProperty.InstalledAppVersion,
+      PostHogPersistedProperty.DeviceId,
+    ]
+
+    super.reset(effectivePropertiesToKeep)
 
     if (this._setDefaultPersonProperties) {
       // Reset reloads flags asyncrhonously, but doesn't wait for it.
@@ -733,6 +842,27 @@ export class PostHog extends PostHogCore {
    */
   getDistinctId(): string {
     return super.getDistinctId()
+  }
+
+  /**
+   * Returns the stable device identifier used for device-level feature flag bucketing.
+   * This ID persists across identify() and reset() calls, only changing on a fresh
+   * app install, manual cache clearing, or OS-initiated storage cleanup.
+   *
+   * @returns The device ID, or an empty string if not yet initialized
+   */
+  getDeviceId(): string {
+    const deviceId = this.getPersistedProperty<string>(PostHogPersistedProperty.DeviceId)
+    if (!deviceId) {
+      // Lazy init for upgrades: existing installs won't have a device_id yet
+      const anonId = this.getAnonymousId()
+      if (anonId) {
+        this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        return anonId
+      }
+      return ''
+    }
+    return deviceId
   }
 
   /**
@@ -1118,25 +1248,45 @@ export class PostHog extends PostHogCore {
    */
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     const previousDistinctId = this.getDistinctId()
+
+    // Extract $set_once before super.identify() because core deletes it from the properties object
+    const userProps = properties?.$set || properties
+    const userPropsOnce = properties?.$set_once
+
     super.identify(distinctId, properties, options)
 
     // Automatically cache person properties for feature flag evaluation
-    // Use $set if provided, otherwise use top-level properties
-    const userProps = properties?.$set || properties
-    if (userProps && Object.keys(userProps).length > 0) {
-      const propsToCache: Record<string, string> = {}
+
+    const propsToCache: Record<string, string> = {}
+    if (userProps) {
       Object.entries(userProps).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
           propsToCache[key] = String(value)
         }
       })
-      if (Object.keys(propsToCache).length > 0) {
-        // super.identify() already handles reloading flags in all cases:
-        // - When distinctId changes: it calls reloadFeatureFlags() directly
-        // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
-        // So we only need to set the properties here without triggering another reload.
-        this.setPersonPropertiesForFlags(propsToCache, false)
-      }
+    }
+
+    const propsOnceToCache: Record<string, string> = {}
+    if (userPropsOnce && typeof userPropsOnce === 'object') {
+      Object.entries(userPropsOnce as Record<string, unknown>).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          propsOnceToCache[key] = String(value)
+        }
+      })
+    }
+
+    if (Object.keys(propsToCache).length > 0 || Object.keys(propsOnceToCache).length > 0) {
+      // super.identify() already handles reloading flags in all cases:
+      // - When distinctId changes: it calls reloadFeatureFlags() directly
+      // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
+      // So we only need to set the properties here without triggering another reload.
+      this.setPersonPropertiesForFlags(
+        {
+          $set: propsToCache,
+          ...(Object.keys(propsOnceToCache).length > 0 ? { $set_once: propsOnceToCache } : {}),
+        },
+        false
+      )
     }
 
     if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {

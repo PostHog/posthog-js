@@ -129,6 +129,31 @@ describe('PostHog Core', () => {
       }
     })
 
+    it.each([
+      [{ $device_id: 'device-123', email: 'test@example.com' }, 'device-123'],
+      [{ email: 'test@example.com' }, undefined],
+    ])('should handle $device_id top-level field correctly (props=%o)', async (personProperties, expectedDeviceId) => {
+      mocks.fetch.mockImplementation((url) => {
+        if (url.includes('/flags/?v=2')) {
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ featureFlags: {}, featureFlagPayloads: {} }),
+          })
+        }
+        return errorAPIResponse
+      })
+
+      await posthog.getFlags('test-distinct-id', {}, personProperties)
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const requestBody = JSON.parse(mocks.fetch.mock.calls[0][1].body)
+      expect(requestBody.$device_id).toBe(expectedDeviceId)
+      if (expectedDeviceId) {
+        expect(requestBody.person_properties.$device_id).toBe(expectedDeviceId)
+      }
+    })
+
     it('should handle network errors', async () => {
       const emitSpy = jest.spyOn(posthog['_events'], 'emit')
       mocks.fetch.mockImplementation((url) => {

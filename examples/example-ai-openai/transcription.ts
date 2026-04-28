@@ -1,37 +1,49 @@
-/** OpenAI audio transcription (Whisper), tracked by PostHog. */
+/** OpenAI audio transcription (Whisper), tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from "posthog-node";
-import { OpenAI } from "@posthog/ai/openai";
-import * as fs from "fs";
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
+import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai'
+import OpenAI from 'openai'
+import * as fs from 'fs'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-  host: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-});
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-  posthog: phClient,
-});
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-openai-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
+    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
+    instrumentations: [new OpenAIInstrumentation()],
+})
+sdk.start()
 
 async function main() {
-  // Replace with the path to your audio file
-  const audioPath = process.env.AUDIO_PATH || "audio.mp3";
+    const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY!,
+    })
 
-  if (!fs.existsSync(audioPath)) {
-    console.log(`Skipping: audio file not found at '${audioPath}'`);
-    console.log("Set AUDIO_PATH to a valid audio file (mp3, wav, m4a, etc.)");
-    await phClient.shutdown();
-    return;
-  }
+    // Replace with the path to your audio file
+    const audioPath = process.env.AUDIO_PATH || 'audio.mp3'
 
-  const transcription = await client.audio.transcriptions.create({
-    file: fs.createReadStream(audioPath),
-    model: "whisper-1",
-    posthogDistinctId: "example-user",
-  });
+    if (!fs.existsSync(audioPath)) {
+        console.log(`Skipping: audio file not found at '${audioPath}'`)
+        console.log('Set AUDIO_PATH to a valid audio file (mp3, wav, m4a, etc.)')
+        return
+    }
 
-  console.log(`Transcription: ${transcription.text}`);
+    const transcription = await client.audio.transcriptions.create({
+        file: fs.createReadStream(audioPath),
+        model: 'whisper-1',
+    })
 
-  await phClient.shutdown();
+    console.log(`Transcription: ${transcription.text}`)
 }
 
-main();
+main().finally(() => sdk.shutdown())

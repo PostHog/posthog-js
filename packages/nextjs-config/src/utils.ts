@@ -1,7 +1,7 @@
 import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
 
-import { runSourcemapCli } from '@posthog/core/process'
+import { runSourcemapCli } from '@posthog/plugin-utils'
 import { ResolvedPluginConfig } from '@posthog/webpack-plugin'
 
 export function getNextJsVersion(): string {

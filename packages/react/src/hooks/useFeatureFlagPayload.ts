@@ -1,4 +1,4 @@
-import { JsonType } from 'posthog-js'
+import type { JsonType } from 'posthog-js'
 import { useContext, useEffect, useState } from 'react'
 import { PostHogContext } from '../context'
 

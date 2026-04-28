@@ -50,6 +50,13 @@ export default function TabLayout() {
                     ),
                 }}
             />
+            <Tabs.Screen
+                name="tracing-headers"
+                options={{
+                    title: 'Tracing Headers',
+                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="link" color={color} />,
+                }}
+            />
         </Tabs>
     )
 }

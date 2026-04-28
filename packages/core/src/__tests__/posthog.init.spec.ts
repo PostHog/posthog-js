@@ -1,5 +1,28 @@
 import { createTestClient, waitForPromises, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
 
+// Force constructor-time logger calls through so they can be asserted in tests.
+class PostHogCoreLoggingTestClient extends PostHogCoreTestClient {
+  protected logMsgIfDebug(fn: () => void): void {
+    fn()
+  }
+}
+
+const createLoggingTestClient = (apiKey: string): [PostHogCoreTestClient, PostHogCoreTestClientMocks] => {
+  const mocks: PostHogCoreTestClientMocks = {
+    fetch: jest.fn(async () => ({
+      status: 200,
+      text: () => Promise.resolve('ok'),
+      json: () => Promise.resolve({ status: 'ok' }),
+    })),
+    storage: {
+      getItem: jest.fn(),
+      setItem: jest.fn(),
+    },
+  }
+
+  return [new PostHogCoreLoggingTestClient(mocks, apiKey, { disableCompression: true }), mocks]
+}
+
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
@@ -13,18 +36,38 @@ describe('PostHog Core', () => {
       expect(posthog.optedOut).toEqual(false)
     })
 
-    it('should throw if missing api key', () => {
-      expect(() => createTestClient(undefined as unknown as string)).toThrowError(
-        "You must pass your PostHog project's api key."
-      )
+    it.each([
+      ['missing', undefined as unknown as string],
+      ['empty', '   '],
+      ['non string', {} as string],
+    ])('should disable if %s api key', (_case, apiKey) => {
+      const [client, clientMocks] = createTestClient(apiKey)
+
+      expect(client.isDisabled).toEqual(true)
+      expect((client as any).apiKey).toEqual('')
+
+      client.capture('test')
+
+      expect(clientMocks.fetch).not.toHaveBeenCalled()
     })
 
-    it('should throw if empty api key', () => {
-      expect(() => createTestClient('   ')).toThrowError("You must pass your PostHog project's api key.")
-    })
+    it.each([
+      ['missing', undefined as unknown as string],
+      ['empty', '   '],
+      ['non string', {} as string],
+    ])('should log when %s api key disables the client', (_case, apiKey) => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
-    it('should throw if non string api key', () => {
-      expect(() => createTestClient({} as string)).toThrowError("You must pass your PostHog project's api key.")
+      try {
+        createLoggingTestClient(apiKey)
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[PostHog]',
+          "You must pass your PostHog project's api key. The client will be disabled."
+        )
+      } finally {
+        consoleErrorSpy.mockRestore()
+      }
     })
 
     it('should initialise default options', () => {
@@ -56,10 +99,26 @@ describe('PostHog Core', () => {
       expect((posthog as any).flushAt).toEqual(1)
     })
 
-    it('should remove trailing slashes from `host`', () => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { host: 'http://my-posthog.com///' })
+    it.each([
+      {
+        name: 'trims whitespace from the api key and host',
+        apiKey: '  TEST_API_KEY\n',
+        host: '  http://my-posthog.com///\t ',
+        expectedApiKey: 'TEST_API_KEY',
+        expectedHost: 'http://my-posthog.com',
+      },
+      {
+        name: 'defaults a blank host after trimming whitespace',
+        apiKey: 'TEST_API_KEY',
+        host: ' \n\t ',
+        expectedApiKey: 'TEST_API_KEY',
+        expectedHost: 'https://us.i.posthog.com',
+      },
+    ])('should $name', ({ apiKey, host, expectedApiKey, expectedHost }) => {
+      ;[posthog, mocks] = createTestClient(apiKey, { host })
 
-      expect((posthog as any).host).toEqual('http://my-posthog.com')
+      expect((posthog as any).apiKey).toEqual(expectedApiKey)
+      expect((posthog as any).host).toEqual(expectedHost)
     })
 
     it('should use bootstrapped distinct ID when present', async () => {

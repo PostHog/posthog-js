@@ -1,32 +1,44 @@
-/** Gemini streaming chat, tracked by PostHog. */
+/** Google Gemini streaming chat, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from "posthog-node";
-import { Gemini as GoogleGenAI } from "@posthog/ai/gemini";
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
+import { GenAIInstrumentation } from '@traceloop/instrumentation-google-generativeai'
+import { GoogleGenAI } from '@google/genai'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-  host: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-});
-const client = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY!,
-  posthog: phClient,
-});
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-gemini-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
+    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
+    instrumentations: [new GenAIInstrumentation()],
+})
+sdk.start()
 
 async function main() {
-  const stream = client.models.generateContentStream({
-    model: "gemini-2.5-flash",
-    posthogDistinctId: "example-user",
-    contents: "Explain observability in three sentences.",
-  });
+    const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
 
-  for await (const chunk of stream) {
-    const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (text) {
-      process.stdout.write(text);
+    const stream = await client.models.generateContentStream({
+        model: 'gemini-2.5-flash',
+        contents: 'Explain observability in three sentences.',
+    })
+
+    for await (const chunk of stream) {
+        const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text
+        if (text) {
+            process.stdout.write(text)
+        }
     }
-  }
 
-  console.log();
-  await phClient.shutdown();
+    console.log()
 }
 
-main();
+main().finally(() => sdk.shutdown())

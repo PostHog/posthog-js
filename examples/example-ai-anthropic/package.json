@@ -8,9 +8,11 @@
     "chat:stream": "tsx streaming.ts"
   },
   "dependencies": {
-    "posthog-node": "*",
     "@posthog/ai": "*",
-    "@anthropic-ai/sdk": "^0.78.0"
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@opentelemetry/sdk-node": "^0.200.0",
+    "@opentelemetry/resources": "^2.0.0",
+    "@traceloop/instrumentation-anthropic": "^0.16.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

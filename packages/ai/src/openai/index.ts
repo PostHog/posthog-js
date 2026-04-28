@@ -121,6 +121,7 @@ export class WrappedCompletions extends Completions {
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
               let firstTokenTime: number | undefined
+              let stopReason: string | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -151,6 +152,10 @@ export class WrappedCompletions extends Completions {
                 }
 
                 const choice = chunk?.choices?.[0]
+
+                if (choice?.finish_reason) {
+                  stopReason = choice.finish_reason
+                }
 
                 const chunkWebSearchCount = calculateWebSearchCount(chunk)
                 if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
@@ -273,6 +278,7 @@ export class WrappedCompletions extends Completions {
                   webSearchCount: usage.webSearchCount,
                   rawUsage: rawUsageData,
                 },
+                stopReason,
                 tools: availableTools,
               })
             } catch (error: unknown) {
@@ -324,6 +330,7 @@ export class WrappedCompletions extends Completions {
                 webSearchCount: calculateWebSearchCount(result),
                 rawUsage: result.usage,
               },
+              stopReason: result.choices[0]?.finish_reason ?? undefined,
               tools: availableTools,
             })
           }
@@ -408,6 +415,7 @@ export class WrappedResponses extends Responses {
               let finalContent: unknown[] = []
               let modelFromResponse: string | undefined
               let firstTokenTime: number | undefined
+              let stopReason: string | undefined
               let usage: {
                 inputTokens?: number
                 outputTokens?: number
@@ -446,6 +454,9 @@ export class WrappedResponses extends Responses {
                   chunk.response.output.length > 0
                 ) {
                   finalContent = chunk.response.output
+                  if (chunk.response.status) {
+                    stopReason = chunk.response.status
+                  }
                 }
                 if ('response' in chunk && chunk.response?.usage) {
                   rawUsageData = chunk.response.usage
@@ -485,6 +496,7 @@ export class WrappedResponses extends Responses {
                   webSearchCount: usage.webSearchCount,
                   rawUsage: rawUsageData,
                 },
+                stopReason,
                 tools: availableTools,
               })
             } catch (error: unknown) {
@@ -538,6 +550,7 @@ export class WrappedResponses extends Responses {
                 webSearchCount: calculateWebSearchCount(result),
                 rawUsage: result.usage,
               },
+              stopReason: result.status ?? undefined,
               tools: availableTools,
             })
           }
@@ -610,6 +623,7 @@ export class WrappedResponses extends Responses {
               cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
               rawUsage: result.usage,
             },
+            stopReason: result.status ?? undefined,
           })
           return result
         },

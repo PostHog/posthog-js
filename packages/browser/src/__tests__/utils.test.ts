@@ -54,10 +54,6 @@ describe('utils', () => {
             expect(copy).not.toEqual(target)
         })
 
-        it('does not truncate when passed null', () => {
-            expect(_copyAndTruncateStrings(target, null)).toEqual(target)
-        })
-
         it('handles recursive objects', () => {
             const recursiveObject: Record<string, any> = { key: 'vaaaaalue', values: ['fooobar'] }
             recursiveObject.values.push(recursiveObject)

@@ -1,8 +1,9 @@
 /* eslint-disable no-console */
-import posthogJs, { PostHogConfig } from 'posthog-js'
+import type { PostHogConfig } from 'posthog-js'
 
 import React, { useEffect, useMemo, useRef } from 'react'
 import { PostHog, PostHogContext } from './PostHogContext'
+import { getDefaultPostHogInstance } from './posthog-default'
 import { isDeepEqual } from '../utils/object-utils'
 
 interface PreviousInitialization {
@@ -60,15 +61,20 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             return client
         }
 
+        // Indirection so the slim bundle can omit the posthog-js runtime import.
+        // Always defined here: the full entrypoint (index.ts) calls
+        // setDefaultPostHogInstance(posthogJs) before any component renders.
+        const defaultInstance = getDefaultPostHogInstance() as PostHog
+
         if (apiKey) {
             // return the global client, we'll initialize it in the useEffect
-            return posthogJs
+            return defaultInstance
         }
 
         console.warn(
             '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
         )
-        return posthogJs
+        return defaultInstance
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
 
@@ -79,16 +85,18 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             // if the user has passed their own client, assume they will also handle calling init().
             return
         }
+        // See comment in useMemo above for why this indirection exists.
+        const defaultInstance = getDefaultPostHogInstance() as PostHog
         const previousInitialization = previousInitializationRef.current
 
         if (!previousInitialization) {
             // If it's the first time running this, but it has been loaded elsewhere, warn the user about it.
-            if (posthogJs.__loaded) {
+            if (defaultInstance.__loaded) {
                 console.warn('[PostHog.js] `posthog` was already loaded elsewhere. This may cause issues.')
             }
 
             // Init global client
-            posthogJs.init(apiKey, options)
+            defaultInstance.init(apiKey, options)
 
             // Keep track of whether the client was already initialized
             // This is used to prevent double initialization when running under React.StrictMode, and to know when options change
@@ -111,10 +119,10 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
                 )
             }
 
-            // Changing options is better supported because we can just call `posthogJs.set_config(options)`
+            // Changing options is better supported because we can just call `defaultInstance.set_config(options)`
             // and they'll be good to go with their new config. The SDK will know how to handle the changes.
             if (options && !isDeepEqual(options, previousInitialization.options)) {
-                posthogJs.set_config(options)
+                defaultInstance.set_config(options)
             }
 
             // Keep track of the possibly-new set of apiKey and options

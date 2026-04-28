@@ -1971,6 +1971,76 @@ describe('featureflags', () => {
             })
         })
 
+        it('set_once properties skip keys that already exist in the cache', () => {
+            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01', plan: 'free' } }, false)
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                first_date: '2025-01-01',
+                plan: 'free',
+            })
+
+            // Calling again with set_once should NOT overwrite existing keys
+            featureFlags.setPersonPropertiesForFlags(
+                { $set_once: { first_date: '2026-03-30', new_key: 'hello' } },
+                false
+            )
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                first_date: '2025-01-01',
+                plan: 'free',
+                new_key: 'hello',
+            })
+        })
+
+        it('set properties overwrite existing keys even when set_once does not', () => {
+            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01' } }, false)
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                first_date: '2025-01-01',
+            })
+
+            // $set should overwrite, $set_once should not
+            featureFlags.setPersonPropertiesForFlags(
+                { $set: { first_date: 'overwritten' }, $set_once: { first_date: 'ignored-by-set-once' } },
+                false
+            )
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                first_date: 'overwritten',
+            })
+        })
+
+        it('set_once properties are included in /flags request', () => {
+            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.setPersonPropertiesForFlags(
+                { $set: { plan: 'pro' }, $set_once: { first_date: '2025-01-01' } },
+                false
+            )
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({
+                plan: 'pro',
+                first_date: '2025-01-01',
+            })
+
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(instance._send_request.mock.calls[0][0].data).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $anon_distinct_id: undefined,
+                groups: undefined,
+                group_properties: undefined,
+                person_properties: { plan: 'pro', first_date: '2025-01-01' },
+                timezone: expect.any(String),
+            })
+
+            // Clean up to avoid leaking into subsequent tests
+            featureFlags.resetPersonPropertiesForFlags()
+        })
+
         it('on providing groupProperties updates properties successively', () => {
             featureFlags.setGroupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
 
@@ -2885,6 +2955,87 @@ describe('parseFlagsResponse', () => {
             $feature_flag_payloads: {},
             $feature_flag_request_id: 'test-request-id-123',
         })
+    })
+
+    describe('partialResponse option', () => {
+        const surveyFlagDetail = {
+            key: 'survey-flag',
+            enabled: true,
+            variant: undefined,
+            reason: { code: 'condition_match', condition_index: 0, description: undefined },
+            metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+        }
+
+        const bootstrapDetail = {
+            key: 'bootstrapped-flag',
+            enabled: true,
+            variant: undefined,
+            reason: { code: 'condition_match', condition_index: 0, description: undefined },
+            metadata: { id: 10, version: 1, payload: 'bootstrap-payload', description: undefined },
+        }
+
+        it.each([
+            {
+                name: 'merges partial response with existing flags',
+                existingFlags: { 'bootstrapped-flag': true, 'session-recording': true },
+                existingPayloads: { 'bootstrapped-flag': 'bootstrap-payload' },
+                existingDetails: { 'bootstrapped-flag': bootstrapDetail },
+                options: { partialResponse: true },
+                expectedFlags: { 'bootstrapped-flag': true, 'session-recording': true, 'survey-flag': true },
+                expectedPayloads: { 'bootstrapped-flag': 'bootstrap-payload' },
+                expectedDetails: { 'bootstrapped-flag': bootstrapDetail, 'survey-flag': surveyFlagDetail },
+            },
+            {
+                name: 'partial response overwrites values for overlapping flag keys',
+                existingFlags: { 'survey-flag': false, 'other-flag': true },
+                existingPayloads: {},
+                existingDetails: {},
+                options: { partialResponse: true },
+                expectedFlags: { 'survey-flag': true, 'other-flag': true },
+                expectedPayloads: {},
+                expectedDetails: { 'survey-flag': surveyFlagDetail },
+            },
+            {
+                name: 'without partialResponse, response overwrites existing flags entirely',
+                existingFlags: { 'bootstrapped-flag': true, 'session-recording': true },
+                existingPayloads: {},
+                existingDetails: {},
+                options: undefined,
+                expectedFlags: { 'survey-flag': true },
+                expectedPayloads: {},
+                expectedDetails: { 'survey-flag': surveyFlagDetail },
+            },
+        ])(
+            '$name',
+            ({
+                existingFlags,
+                existingPayloads,
+                existingDetails,
+                options,
+                expectedFlags,
+                expectedPayloads,
+                expectedDetails,
+            }) => {
+                const flagsResponse = { flags: { 'survey-flag': surveyFlagDetail } }
+
+                parseFlagsResponse(
+                    flagsResponse,
+                    persistence,
+                    existingFlags,
+                    existingPayloads,
+                    existingDetails,
+                    options
+                )
+
+                expect(persistence.register).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        $enabled_feature_flags: expectedFlags,
+                        $feature_flag_payloads: expectedPayloads,
+                        $feature_flag_details: expectedDetails,
+                    })
+                )
+            }
+        )
     })
 })
 

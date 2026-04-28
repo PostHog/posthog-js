@@ -24,7 +24,8 @@ test.describe('group analytics', () => {
         await page.locator('[data-cy-custom-event-button]').click()
 
         const capturedEvents = await page.capturedEvents()
-        expect(capturedEvents).toHaveLength(3)
+        // 4 events: $groupidentify (from group() call), $pageview, $pageleave, custom event
+        expect(capturedEvents).toHaveLength(4)
         const hasGroups = new Set(capturedEvents.map((x) => !!x.properties.$groups))
         expect(hasGroups).toEqual(new Set([true]))
     })

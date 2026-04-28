@@ -516,8 +516,16 @@
         background-color: var(--ph-survey-rating-active-bg-color);
     }
 
-    &:hover {
-        cursor: pointer;
+    cursor: pointer;
+
+    @media (hover: hover) and (pointer: fine) {
+        &:hover:not(.rating-active) {
+            background-color: color-mix(
+                in srgb,
+                var(--ph-survey-rating-active-bg-color) 14%,
+                var(--ph-survey-rating-bg-color)
+            );
+        }
     }
 }
 

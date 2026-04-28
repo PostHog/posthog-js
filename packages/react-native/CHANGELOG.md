@@ -1,5 +1,253 @@
 # posthog-react-native
 
+## 4.43.10
+
+### Patch Changes
+
+- [`eae9407`](https://github.com/PostHog/posthog-js/commit/eae94077cd577323b4ccd5fc3f4238f98194b3f6) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Include survey response properties and partial completion state on survey dismissal events.
+  (2026-04-27)
+
+## 4.43.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.3
+  - @posthog/core@1.27.7
+
+## 4.43.8
+
+### Patch Changes
+
+- [#3486](https://github.com/PostHog/posthog-js/pull/3486) [`c95999a`](https://github.com/PostHog/posthog-js/commit/c95999a149d06d38f355b90fd213f111d262b5db) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: bump posthog-react-native-session-replay dependency to 1.5.6
+  (2026-04-27)
+
+## 4.43.7
+
+### Patch Changes
+
+- [#3485](https://github.com/PostHog/posthog-js/pull/3485) [`e65331c`](https://github.com/PostHog/posthog-js/commit/e65331cf6eb0843d7e6edc980d1ee44a29d6adc3) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Metro resolution for optional react-native-svg survey icons.
+  (2026-04-27)
+- Updated dependencies []:
+  - @posthog/types@1.372.2
+  - @posthog/core@1.27.6
+
+## 4.43.6
+
+### Patch Changes
+
+- [#3482](https://github.com/PostHog/posthog-js/pull/3482) [`da1acaf`](https://github.com/PostHog/posthog-js/commit/da1acaf8af62ecdf19836347bd0029e9ca8af318) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back to text survey icons when react-native-svg is unavailable.
+  (2026-04-27)
+
+## 4.43.5
+
+### Patch Changes
+
+- Updated dependencies [[`70508df`](https://github.com/PostHog/posthog-js/commit/70508dfd7dd1201dd9c61c126a3c27ad39311c6a)]:
+  - @posthog/core@1.27.5
+  - @posthog/types@1.372.1
+
+## 4.43.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.0
+  - @posthog/core@1.27.4
+
+## 4.43.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.371.4
+  - @posthog/core@1.27.3
+
+## 4.43.2
+
+### Patch Changes
+
+- Updated dependencies [[`daf028d`](https://github.com/PostHog/posthog-js/commit/daf028d553f756b9f58c01b848ad2d431239458b)]:
+  - @posthog/core@1.27.2
+  - @posthog/types@1.371.3
+
+## 4.43.1
+
+### Patch Changes
+
+- Updated dependencies [[`96f19b7`](https://github.com/PostHog/posthog-js/commit/96f19b79d563937ed8f98e12796eee541a2dae7f)]:
+  - @posthog/types@1.371.2
+  - @posthog/core@1.27.1
+
+## 4.43.0
+
+### Minor Changes
+
+- [#3432](https://github.com/PostHog/posthog-js/pull/3432) [`1a8b727`](https://github.com/PostHog/posthog-js/commit/1a8b7277c50a42bbb3f736afd530ff1c3389a7de) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat(react-native): add `addTracingHeaders` option to inject `X-POSTHOG-DISTINCT-ID` and `X-POSTHOG-SESSION-ID` headers on outgoing `fetch` requests for linking LLM traces and session replays to PostHog sessions.
+  (2026-04-23)
+
+### Patch Changes
+
+- Updated dependencies [[`1a8b727`](https://github.com/PostHog/posthog-js/commit/1a8b7277c50a42bbb3f736afd530ff1c3389a7de)]:
+  - @posthog/core@1.27.0
+
+## 4.42.4
+
+### Patch Changes
+
+- Updated dependencies [[`922a1c1`](https://github.com/PostHog/posthog-js/commit/922a1c1838a5ed2ad37f59dade5fc3cc81bb4246)]:
+  - @posthog/core@1.26.0
+
+## 4.42.3
+
+### Patch Changes
+
+- Updated dependencies [[`1a0b58d`](https://github.com/PostHog/posthog-js/commit/1a0b58d1d07c61662169d3bc56eed8cfd8855d65)]:
+  - @posthog/core@1.25.3
+
+## 4.42.2
+
+### Patch Changes
+
+- [#3429](https://github.com/PostHog/posthog-js/pull/3429) [`2f1390a`](https://github.com/PostHog/posthog-js/commit/2f1390a7fd949b5634b4e6886f61825df782b7a7) Thanks [@ioannisj](https://github.com/ioannisj)! - fix: `PostHogMaskView` not being detected on iOS
+  (2026-04-21)
+
+## 4.42.1
+
+### Patch Changes
+
+- [#3402](https://github.com/PostHog/posthog-js/pull/3402) [`f2758ef`](https://github.com/PostHog/posthog-js/commit/f2758ef4dae345d131c25281a75c3da764c1a109) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: bump plugin dependency to 1.5.4
+  (2026-04-17)
+
+## 4.42.0
+
+### Minor Changes
+
+- [#3399](https://github.com/PostHog/posthog-js/pull/3399) [`1d7e298`](https://github.com/PostHog/posthog-js/commit/1d7e298648a6c47880e2130f6d68d755342cbdd1) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add version and project to expo react native symbols
+  (2026-04-16)
+
+## 4.41.2
+
+### Patch Changes
+
+- [#3388](https://github.com/PostHog/posthog-js/pull/3388) [`6d0aae3`](https://github.com/PostHog/posthog-js/commit/6d0aae3795da50ba803ab99c65cc8e843254ed64) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - "exp" flag is no longer needed in tooling to upload or clone with hermes when using posthog-cli >= 0.7.4
+  (2026-04-14)
+
+## 4.41.1
+
+### Patch Changes
+
+- Updated dependencies [[`c735b08`](https://github.com/PostHog/posthog-js/commit/c735b08577f8fa85935dcec5bc5814870ac4ed56)]:
+  - @posthog/core@1.25.2
+
+## 4.41.0
+
+### Minor Changes
+
+- [#3340](https://github.com/PostHog/posthog-js/pull/3340) [`57ee5b2`](https://github.com/PostHog/posthog-js/commit/57ee5b25fd2c97f334f52b4eba28ea925033d6ed) Thanks [@dmarticus](https://github.com/dmarticus)! - Add device bucketing support to the React Native SDK for stable feature flag assignment across identity changes
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`57ee5b2`](https://github.com/PostHog/posthog-js/commit/57ee5b25fd2c97f334f52b4eba28ea925033d6ed)]:
+  - @posthog/core@1.25.1
+
+## 4.40.2
+
+### Patch Changes
+
+- [#3348](https://github.com/PostHog/posthog-js/pull/3348) [`e246d07`](https://github.com/PostHog/posthog-js/commit/e246d076360bd07c0f4b754d31efc5e96b01f2d4) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: preserve app lifecycle properties on reset() to prevent duplicate Application Installed events
+  (2026-04-07)
+
+## 4.40.1
+
+### Patch Changes
+
+- [#3291](https://github.com/PostHog/posthog-js/pull/3291) [`95ad66d`](https://github.com/PostHog/posthog-js/commit/95ad66d8cb406b253453a0c5dd01c9a5e46551a9) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: bump minimum version of posthog-react-native-session-replay dependency to 1.5.2
+  (2026-04-07)
+
+## 4.40.0
+
+### Minor Changes
+
+- [#3302](https://github.com/PostHog/posthog-js/pull/3302) [`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11) Thanks [@dmarticus](https://github.com/dmarticus)! - preserve $set_once semantics in local flag evaluation cache
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
+  - @posthog/core@1.25.0
+
+## 4.39.4
+
+### Patch Changes
+
+- [#3332](https://github.com/PostHog/posthog-js/pull/3332) [`3727051`](https://github.com/PostHog/posthog-js/commit/372705140150a46fd5641dbc55c27b246452ab72) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: update posthog-react-native-session-replay min version to 1.5.2
+  (2026-04-03)
+
+## 4.39.3
+
+### Patch Changes
+
+- Updated dependencies [[`a01a3d5`](https://github.com/PostHog/posthog-js/commit/a01a3d55dc134b1b269be58c7922ce3780c57fc5)]:
+  - @posthog/core@1.24.6
+
+## 4.39.2
+
+### Patch Changes
+
+- [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
+  (2026-04-01)
+- Updated dependencies [[`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371)]:
+  - @posthog/core@1.24.5
+
+## 4.39.1
+
+### Patch Changes
+
+- [#3296](https://github.com/PostHog/posthog-js/pull/3296) [`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `captureException` crashing with `ReferenceError: Property 'Event' doesn't exist`
+  (2026-03-30)
+- Updated dependencies [[`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c)]:
+  - @posthog/core@1.24.4
+
+## 4.39.0
+
+### Minor Changes
+
+- [#3292](https://github.com/PostHog/posthog-js/pull/3292) [`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f) Thanks [@marandaneto](https://github.com/marandaneto)! - `captureAppLifecycleEvents` is now enabled by default. If you want to disable it, you can set `captureAppLifecycleEvents: false` in the PostHog options:
+
+  ```js
+  const posthog = new PostHog('<ph_project_api_key>', {
+    captureAppLifecycleEvents: false,
+  })
+  ```
+
+  Or when using the PostHogProvider:
+
+  ````jsx
+  <PostHogProvider apiKey="<ph_project_api_key>" options={{ captureAppLifecycleEvents: false }}>
+    <MyApp />
+  </PostHogProvider>
+  ``` (2026-03-27)
+  ````
+
+### Patch Changes
+
+- Updated dependencies [[`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f)]:
+  - @posthog/core@1.24.3
+
+## 4.38.0
+
+### Minor Changes
+
+- [#3287](https://github.com/PostHog/posthog-js/pull/3287) [`470907d`](https://github.com/PostHog/posthog-js/commit/470907dcbcf0a0bd73819fa7610716b9a1f65536) Thanks [@marandaneto](https://github.com/marandaneto)! - Add $is_emulator property to detect emulator/simulator environments
+  (2026-03-27)
+
+### Patch Changes
+
+- Updated dependencies [[`8d34289`](https://github.com/PostHog/posthog-js/commit/8d34289f7cf91945223eed4366b11fb187a63a40)]:
+  - @posthog/core@1.24.2
+
 ## 4.37.6
 
 ### Patch Changes

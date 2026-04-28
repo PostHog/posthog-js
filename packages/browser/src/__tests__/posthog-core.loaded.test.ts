@@ -199,7 +199,9 @@ describe('loaded() with flags', () => {
             jest.advanceTimersByTime(10)
 
             if (expectedCall) {
-                expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(expectedArgs, false)
+                expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(expectedArgs, false, {
+                    partialResponse: false,
+                })
             } else {
                 expect(receivedFeatureFlagsSpy).not.toHaveBeenCalled()
             }

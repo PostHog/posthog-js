@@ -54,6 +54,8 @@ plugins.withId('com.android.application') {
                     def releaseName = currentVariant[1]
                     def versionCode = currentVariant[2]
                     applicationVariant = currentVariant[3]
+                    def appId = currentVariant[4]
+                    def versionName = currentVariant[5]
 
                     try {
                         if (versionCode instanceof String) {
@@ -76,6 +78,15 @@ plugins.withId('com.android.application') {
                         group = 'posthog.com'
 
                         def extraArgs = []
+                        if (appId != null && !appId.isEmpty()) {
+                            extraArgs.addAll(["--release-name", appId.toString()])
+                        }
+                        if (versionName != null && !versionName.toString().isEmpty()) {
+                            extraArgs.addAll(["--release-version", versionName.toString()])
+                        }
+                        if (versionCode != null) {
+                            extraArgs.addAll(["--build", versionCode.toString()])
+                        }
 
                         def injected = project.objects.newInstance(InjectedExecOps)
                         doFirst {
@@ -85,7 +96,7 @@ plugins.withId('com.android.application') {
                                 def cliPackage = resolvePostHogCliPackagePath(reactRoot)
                                 def args = [cliPackage]
 
-                                args.addAll(["exp", "hermes", "clone",
+                                args.addAll(["hermes", "clone",
                                     "--minified-map-path", packagerSourcemapOutput, // The path to a sourcemap
                                     "--composed-map-path", sourcemapOutput          // The path of the composed source map
                                 ])
@@ -107,7 +118,7 @@ plugins.withId('com.android.application') {
                                 def args = [cliPackage]
 
                                 def sourcemapDir = sourcemapOutput.getParent()
-                                args.addAll(["exp", "hermes", "upload",
+                                args.addAll(["hermes", "upload",
                                     "--directory", sourcemapDir        // The path to a sourcemap that should be uploaded.
                                 ])
 
@@ -365,7 +376,7 @@ static extractCurrentVariants(bundleTask, variant) {
             def outputName = output.baseName
 
             if (currentVariants[outputName] == null) currentVariants[outputName] = []
-            currentVariants[outputName] = [outputName, releaseName, versionCode, variantName]
+            currentVariants[outputName] = [outputName, releaseName, versionCode, variantName, appId, versionName]
         }
     }
 

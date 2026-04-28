@@ -17,6 +17,8 @@ import {
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    SDK_DEBUG_EXTENSIONS_INIT_METHOD,
+    SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
     COOKIELESS_ALWAYS,
@@ -44,6 +46,7 @@ import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
 import { localStore } from './storage'
 import {
+    CaptureLogOptions,
     CaptureOptions,
     CaptureResult,
     Compression,
@@ -212,6 +215,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
+    __preview_external_dependency_versioned_paths: false,
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -387,6 +391,7 @@ export class PostHog implements PostHogInterface {
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
+    _lastRemoteConfig?: RemoteConfig
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
@@ -410,6 +415,13 @@ export class PostHog implements PostHogInterface {
         this._extensions.push(newExt)
         newExt.initialize?.()
         return newExt
+    }
+
+    private _inCookielessMode(): boolean {
+        return (
+            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
+            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
+        )
     }
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
@@ -604,9 +616,7 @@ export class PostHog implements PostHogInterface {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        const startInCookielessMode =
-            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
+        const startInCookielessMode = this._inCookielessMode()
 
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
@@ -639,6 +649,16 @@ export class PostHog implements PostHogInterface {
                 p: initialPersistenceProps,
                 s: initialSessionProps,
             })
+        }
+
+        // When identity_distinct_id is provided at init time, use it as the
+        // bootstrap distinct ID so the Person record is created from the first event.
+        if (this.config.identity_distinct_id && !config.bootstrap?.distinctID) {
+            config.bootstrap = {
+                ...config.bootstrap,
+                distinctID: this.config.identity_distinct_id,
+                isIdentifiedID: true,
+            }
         }
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
@@ -869,10 +889,10 @@ export class PostHog implements PostHogInterface {
         // eslint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
-            $sdk_debug_extensions_init_method: this.config.__preview_deferred_init_extensions
+            [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
                 ? 'deferred'
                 : 'synchronous',
-            $sdk_debug_extensions_init_time_ms: taskInitTiming,
+            [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
         })
         if (this.config.__preview_deferred_init_extensions) {
             logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
@@ -892,6 +912,11 @@ export class PostHog implements PostHogInterface {
         if (this.config.__preview_deferred_init_extensions) {
             this._pendingRemoteConfig = config
         }
+
+        // Cache the latest remote config so extensions that are created later
+        // (e.g. sessionRecording after opt_in_capturing from cookieless mode) can
+        // replay it and pick up server-side settings like recording enable flags.
+        this._lastRemoteConfig = config
 
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {
@@ -939,7 +964,7 @@ export class PostHog implements PostHogInterface {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (this.consent.isOptedIn() || this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+                if (this.consent.isOptedIn() || this._inCookielessMode()) {
                     this._captureInitialPageview()
                 }
             }, 1)
@@ -980,6 +1005,7 @@ export class PostHog implements PostHogInterface {
             this.capture(EVENT_PAGELEAVE)
         }
 
+        this.logs?.flushLogs('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
     }
@@ -1269,7 +1295,9 @@ export class PostHog implements PostHogInterface {
             data.$set_once = setOnceProperties
         }
 
-        data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
+        if (!options?._noTruncate) {
+            data = _copyAndTruncateStrings(data, this.config.properties_string_max_length)
+        }
         data.timestamp = timestamp
         if (!isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
@@ -1374,10 +1402,7 @@ export class PostHog implements PostHogInterface {
         properties['token'] = this.config.token
         properties['$config_defaults'] = this.config.defaults
 
-        if (
-            this.config.cookieless_mode == COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode == COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
-        ) {
+        if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
             properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
         }
@@ -2290,6 +2315,26 @@ export class PostHog implements PostHogInterface {
         )
     }
 
+    private _validateIdentifyId(id: string | undefined): id is string {
+        if (!id || isEmptyString(id)) {
+            logger.critical('Unique user id has not been set in posthog.identify')
+            return false
+        }
+        if (id === COOKIELESS_SENTINEL_VALUE) {
+            logger.critical(
+                `The string "${id}" was set in posthog.identify which indicates an error. This ID is only used as a sentinel value.`
+            )
+            return false
+        }
+        if (isDistinctIdStringLike(id) || ['undefined', 'null'].includes(id.toLowerCase())) {
+            logger.critical(
+                `The string "${id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
+            )
+            return false
+        }
+        return true
+    }
+
     /**
      * Associates a user with a unique identifier instead of an auto-generated ID.
      * Learn more about [identifying users](/docs/product-analytics/identify)
@@ -2342,22 +2387,7 @@ export class PostHog implements PostHogInterface {
             )
         }
 
-        //if the new_distinct_id has not been set ignore the identify event
-        if (!new_distinct_id) {
-            logger.error('Unique user id has not been set in posthog.identify')
-            return
-        }
-
-        if (isDistinctIdStringLike(new_distinct_id)) {
-            logger.critical(
-                `The string "${new_distinct_id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
-            )
-            return
-        }
-        if (new_distinct_id === COOKIELESS_SENTINEL_VALUE) {
-            logger.critical(
-                `The string "${COOKIELESS_SENTINEL_VALUE}" was set in posthog.identify which indicates an error. This ID is only used as a sentinel value.`
-            )
+        if (!this._validateIdentifyId(new_distinct_id)) {
             return
         }
 
@@ -2397,7 +2427,7 @@ export class PostHog implements PostHogInterface {
 
             // Update current user properties
             this.setPersonPropertiesForFlags(
-                { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) },
+                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
                 false
             )
 
@@ -2487,7 +2517,10 @@ export class PostHog implements PostHogInterface {
         }
 
         // Update current user properties
-        this.setPersonPropertiesForFlags({ ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) })
+        this.setPersonPropertiesForFlags(
+            { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+            true
+        )
 
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 
@@ -2533,26 +2566,36 @@ export class PostHog implements PostHogInterface {
         }
 
         const existingGroups = this.getGroups()
+        const isNewGroup = existingGroups[groupType] !== groupKey
 
         // if group key changes, remove stored group properties
-        if (existingGroups[groupType] !== groupKey) {
+        if (isNewGroup) {
             this.resetGroupPropertiesForFlags(groupType)
         }
 
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
-        if (groupPropertiesToSet) {
-            this.capture(EVENT_GROUPIDENTIFY, {
+        // Send $groupidentify when the group is new/changed OR when properties
+        // are provided. Skip only when the group already exists with the same
+        // key and no new properties are being set.
+        if (isNewGroup || groupPropertiesToSet) {
+            const groupIdentifyProperties: Properties = {
                 $group_type: groupType,
                 $group_key: groupKey,
-                $group_set: groupPropertiesToSet,
-            })
+            }
+            if (groupPropertiesToSet) {
+                groupIdentifyProperties.$group_set = groupPropertiesToSet
+            }
+            this.capture(EVENT_GROUPIDENTIFY, groupIdentifyProperties)
+        }
+
+        if (groupPropertiesToSet) {
             this.setGroupPropertiesForFlags({ [groupType]: groupPropertiesToSet })
         }
 
         // If groups change and no properties change, reload feature flags.
         // The property change reload case is handled in setGroupPropertiesForFlags.
-        if (existingGroups[groupType] !== groupKey && !groupPropertiesToSet) {
+        if (isNewGroup && !groupPropertiesToSet) {
             this.reloadFeatureFlags()
         }
     }
@@ -2711,6 +2754,7 @@ export class PostHog implements PostHogInterface {
         // the debouncer, so if the order were reversed a pending refresh could fire after reset.
         this._remoteConfigLoader?.stop()
         this.featureFlags?.reset()
+        this.conversations?.reset()
         this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
@@ -2740,9 +2784,55 @@ export class PostHog implements PostHogInterface {
             1
         )
 
+        // Clear HMAC identity verification fields
+        delete this.config.identity_distinct_id
+        delete this.config.identity_hash
+
         // Reload feature flags for the new anonymous user, just like identify()
         // does when the distinct_id changes.
         this.reloadFeatureFlags()
+    }
+
+    /**
+     * Set HMAC-based identity verification.
+     *
+     * @remarks
+     * When set, products like conversations use server-verified identity
+     * (distinct_id + HMAC hash) instead of anonymous session identifiers.
+     * The hash should be computed server-side as HMAC-SHA256 of the
+     * distinct_id using the project's API secret.
+     *
+     * @param distinctId - The verified user distinct_id
+     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     *
+     * @example
+     * ```js
+     * posthog.setIdentity('user_123', 'a1b2c3d4e5f6...')
+     * ```
+     *
+     * @public
+     */
+    setIdentity(distinctId: string, hash: string): void {
+        this.config.identity_distinct_id = distinctId
+        this.config.identity_hash = hash
+        this.alias(distinctId)
+        this.conversations?._onIdentityChanged()
+    }
+
+    /**
+     * Clear HMAC-based identity verification, reverting to anonymous mode.
+     *
+     * @example
+     * ```js
+     * posthog.clearIdentity()
+     * ```
+     *
+     * @public
+     */
+    clearIdentity(): void {
+        delete this.config.identity_distinct_id
+        delete this.config.identity_hash
+        this.conversations?._onIdentityCleared()
     }
 
     /**
@@ -2954,6 +3044,7 @@ export class PostHog implements PostHogInterface {
             }
 
             this.exceptionObserver?.onConfigChange()
+            this.exceptions?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
@@ -3125,6 +3216,64 @@ export class PostHog implements PostHogInterface {
             ...errorToProperties,
             ...additionalProperties,
         })
+    }
+
+    /**
+     * Add a breadcrumb-like step that will be attached to the next captured exception.
+     *
+     * {@label Error tracking}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * posthog.addExceptionStep('Checkout button clicked', {
+     *   checkout_id: 'ch_123',
+     * })
+     * ```
+     */
+    addExceptionStep(message: string, properties?: Properties): void {
+        this.exceptions?.addExceptionStep(message, properties)
+    }
+
+    /**
+     * Capture a log entry and send it to the PostHog logs endpoint.
+     *
+     * {@label Logs}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * posthog.captureLog({
+     *   body: 'checkout completed',
+     *   level: 'info',
+     *   attributes: { order_id: 'ord_789', amount_cents: 4999 },
+     * })
+     * ```
+     *
+     * @param {CaptureLogOptions} options The log entry options
+     */
+    captureLog(options: CaptureLogOptions): void {
+        this.logs?.captureLog(options)
+    }
+
+    private static _noopLogger = (() => {
+        const noop = () => {}
+        return { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop }
+    })()
+
+    /**
+     * Logger with convenience methods for each severity level.
+     *
+     * @example
+     * ```js
+     * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+     * posthog.logger.error('payment failed', { error_code: 'E001' })
+     * ```
+     */
+    get logger() {
+        return this.logs?.logger ?? PostHog._noopLogger
     }
 
     /**
@@ -3425,8 +3574,8 @@ export class PostHog implements PostHogInterface {
             logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut()) {
-            // If the user has explicitly opted out on_reject mode, then before we can start sending regular non-cookieless events
+        if (this._inCookielessMode()) {
+            // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
             this.sessionManager?.destroy()
@@ -3443,6 +3592,12 @@ export class PostHog implements PostHogInterface {
                     this.sessionRecording,
                     new SessionRecordingClass(this) as SessionRecording
                 )
+                // Replay the cached remote config so the new recorder picks up server-side
+                // settings (enable flag, endpoint, sampling) that arrived while we were
+                // still in cookieless mode and sessionRecording didn't yet exist.
+                if (this._lastRemoteConfig) {
+                    this.sessionRecording?.onRemoteConfig?.(this._lastRemoteConfig)
+                }
             }
         }
 
@@ -3600,7 +3755,7 @@ export class PostHog implements PostHogInterface {
      * some config options.
      *
      * Additionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the
-     * user has explicitly opted out.
+     * user has opted out or been defaulted to opt-out.
      *
      * {@label Privacy}
      *
@@ -3615,7 +3770,7 @@ export class PostHog implements PostHogInterface {
             return true
         }
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
-            return this.consent.isExplicitlyOptedOut() || this.consent.isOptedIn()
+            return this.consent.isRejected() || this.consent.isOptedIn()
         } else {
             return !this.has_opted_out_capturing()
         }

@@ -1,5 +1,26 @@
-import { sendSurveyEvent } from '../src/surveys/components/Surveys'
+import { dismissedSurveyEvent, sendSurveyEvent } from '../src/surveys/components/Surveys'
 import { Survey, SurveyQuestion } from '@posthog/core'
+
+const createMockSurvey = (overrides: Partial<Survey> = {}): Survey => ({
+  id: 'test-survey-id',
+  name: 'Test Survey',
+  questions: [
+    {
+      id: 'question-1',
+      question: 'How satisfied are you?',
+      type: 'rating',
+      scale: 5,
+      originalQuestionIndex: 0,
+    } as SurveyQuestion,
+    {
+      id: 'question-2',
+      question: 'Any additional comments?',
+      type: 'open',
+      originalQuestionIndex: 1,
+    } as SurveyQuestion,
+  ],
+  ...overrides,
+})
 
 describe('sendSurveyEvent', () => {
   let mockPostHog: any
@@ -8,27 +29,6 @@ describe('sendSurveyEvent', () => {
     mockPostHog = {
       capture: jest.fn(),
     }
-  })
-
-  const createMockSurvey = (overrides: Partial<Survey> = {}): Survey => ({
-    id: 'test-survey-id',
-    name: 'Test Survey',
-    questions: [
-      {
-        id: 'question-1',
-        question: 'How satisfied are you?',
-        type: 'rating',
-        scale: 5,
-        originalQuestionIndex: 0,
-      } as SurveyQuestion,
-      {
-        id: 'question-2',
-        question: 'Any additional comments?',
-        type: 'open',
-        originalQuestionIndex: 1,
-      } as SurveyQuestion,
-    ],
-    ...overrides,
   })
 
   describe('basic functionality', () => {
@@ -280,5 +280,79 @@ describe('sendSurveyEvent', () => {
         },
       ])
     })
+  })
+})
+
+describe('dismissedSurveyEvent', () => {
+  let mockPostHog: any
+
+  beforeEach(() => {
+    mockPostHog = {
+      capture: jest.fn(),
+    }
+  })
+
+  it.each([
+    {
+      label: 'captures dismissal responses and marks partial completion when there are answers',
+      responses: {
+        '$survey_response_question-1': 4,
+        '$survey_response_question-2': 'Great service!',
+      },
+      expectedPayload: {
+        $survey_name: 'Test Survey',
+        $survey_id: 'test-survey-id',
+        $survey_partially_completed: true,
+        $survey_questions: [
+          {
+            id: 'question-1',
+            question: 'How satisfied are you?',
+            response: 4,
+          },
+          {
+            id: 'question-2',
+            question: 'Any additional comments?',
+            response: 'Great service!',
+          },
+        ],
+        '$survey_response_question-1': 4,
+        '$survey_response_question-2': 'Great service!',
+        $survey_response: 4,
+        $survey_response_1: 'Great service!',
+        $set: {
+          '$survey_dismissed/test-survey-id': true,
+        },
+      },
+    },
+    {
+      label: 'marks dismissal as not partially completed when no answers exist',
+      responses: {},
+      expectedPayload: {
+        $survey_name: 'Test Survey',
+        $survey_id: 'test-survey-id',
+        $survey_partially_completed: false,
+        $survey_questions: [
+          {
+            id: 'question-1',
+            question: 'How satisfied are you?',
+            response: undefined,
+          },
+          {
+            id: 'question-2',
+            question: 'Any additional comments?',
+            response: undefined,
+          },
+        ],
+        $set: {
+          '$survey_dismissed/test-survey-id': true,
+        },
+      },
+    },
+  ])('$label', ({ responses, expectedPayload }) => {
+    const survey = createMockSurvey()
+
+    dismissedSurveyEvent(survey, responses, mockPostHog)
+
+    expect(mockPostHog.capture).toHaveBeenCalledWith('survey dismissed', expectedPayload)
   })
 })

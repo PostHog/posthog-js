@@ -61,7 +61,43 @@ export function addPostHogWithBundledScriptsToBundleShellScript(script: string):
   )
 }
 
-const withIosPlugin = (config: any) => {
+export function disableUserScriptSandboxing(xcodeProject: any): void {
+  // posthog-cli needs to read .git/ for release auto-detection, which the
+  // Xcode 14+ user script sandbox blocks.
+  //
+  // Scope: withXcodeProject only exposes the main app's .xcodeproj (the Pods
+  // project is a separate .xcodeproj managed by CocoaPods — not touched here).
+  // Within the main .xcodeproj, this iterates ALL build configurations without
+  // filtering — that includes the app target, test targets, app extensions, and
+  // any other target defined in the project.
+  const configurations = xcodeProject.pbxXCBuildConfigurationSection()
+  for (const key in configurations) {
+    const configuration = configurations[key]
+    if (configuration && configuration.buildSettings) {
+      configuration.buildSettings.ENABLE_USER_SCRIPT_SANDBOXING = '"NO"'
+    }
+  }
+}
+
+type PostHogPluginProps = {
+  /**
+   * Whether to disable Xcode's user script sandboxing (ENABLE_USER_SCRIPT_SANDBOXING=NO).
+   *
+   * posthog-cli reads .git/ during sourcemap uploads for release auto-detection;
+   * sandboxing (on by default in Xcode 14+) blocks that, so uploads lose git info
+   * or fail silently.
+   *
+   * Default: true (disable sandboxing so uploads "just work").
+   * Set to false if your org requires sandboxing stays on —
+   * you'll lose automatic git metadata on sourcemap uploads on iOS builds only.
+   * 
+   * Note that this setting is recommended in the Expo docs: 
+   * https://docs.expo.dev/brownfield/integrated-approach/#configuring-your-xcode-project
+   */
+  disableSandboxing?: boolean
+}
+
+const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
   return withXcodeProject(config, (config: any) => {
     const xcodeProject = config.modResults
 
@@ -72,15 +108,33 @@ const withIosPlugin = (config: any) => {
 
     modifyExistingXcodeBuildScript(bundleReactNativePhase)
 
+    if (props.disableSandboxing !== false) {
+      disableUserScriptSandboxing(xcodeProject)
+      console.warn(
+        '[posthog-react-native] Setting ENABLE_USER_SCRIPT_SANDBOXING=NO on all Xcode ' +
+          'build configurations so sourcemap uploads can resolve git metadata. ' +
+          "If your org requires sandboxing to stay enabled, set `{ disableSandboxing: false }` " +
+          'on the plugin in app.json — note that stock Expo projects may fail to build under ' +
+          'sandboxing until every script build phase declares its input/output files.'
+      )
+    }
+
     return config
   })
 }
 
-const withPostHogPlugin = (config: any) => {
+const withPostHogPlugin = (config: any, props: PostHogPluginProps = {}) => {
   config = withAndroidPlugin(config)
-  return withIosPlugin(config)
+  return withIosPlugin(config, props)
 }
 
-module.exports = (config: any) => {
-  return withPostHogPlugin(config)
+const postHogPlugin = (config: any, props: PostHogPluginProps = {}): any => {
+  return withPostHogPlugin(config, props)
 }
+
+// Re-export the plugin function as the default export while keeping the
+// named exports above callable from tests.
+module.exports = postHogPlugin
+module.exports.modifyExistingXcodeBuildScript = modifyExistingXcodeBuildScript
+module.exports.addPostHogWithBundledScriptsToBundleShellScript = addPostHogWithBundledScriptsToBundleShellScript
+module.exports.disableUserScriptSandboxing = disableUserScriptSandboxing

@@ -197,12 +197,44 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "serviceName": [
         "undefined",
         "string"
+      ],
+      "environment": [
+        "undefined",
+        "string"
+      ],
+      "serviceVersion": [
+        "undefined",
+        "string"
+      ],
+      "resourceAttributes": [
+        "undefined",
+        "LogAttributes"
+      ],
+      "flushIntervalMs": [
+        "undefined",
+        "number"
+      ],
+      "maxBufferSize": [
+        "undefined",
+        "number"
+      ],
+      "maxLogsPerInterval": [
+        "undefined",
+        "number"
       ]
     }
   ],
   "disable_conversations": [
     "false",
     "true"
+  ],
+  "identity_distinct_id": [
+    "undefined",
+    "string"
+  ],
+  "identity_hash": [
+    "undefined",
+    "string"
   ],
   "disable_web_experiments": [
     "false",
@@ -439,6 +471,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "__exceptionRateLimiterBucketSize": [
       "undefined",
       "number"
+    ],
+    "exception_steps": [
+      "undefined",
+      "ExceptionStepsConfig"
     ]
   },
   "session_idle_timeout_seconds": "number",
@@ -670,6 +706,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "null",
     "string"
   ],
+  "addTracingHeaders": [
+    "undefined",
+    "string[]"
+  ],
   "__add_tracing_headers": [
     "undefined",
     "string[]"
@@ -691,6 +731,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "__preview_disable_xhr_credentials": [
     "undefined",
+    "false",
+    "true"
+  ],
+  "__preview_external_dependency_versioned_paths": [
+    "undefined",
+    "string",
     "false",
     "true"
   ],
