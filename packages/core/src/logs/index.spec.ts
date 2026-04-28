@@ -10,12 +10,20 @@ const DEFAULT_MAX_BUFFER_SIZE = 100
 const DEFAULT_FLUSH_INTERVAL_MS = 10000
 const DEFAULT_MAX_BATCH_RECORDS_PER_POST = 50
 const DEFAULT_RATE_CAP_WINDOW_MS = 10000
+const DEFAULT_BACKGROUND_FLUSH_BUDGET_MS = 25000
+const DEFAULT_TERMINATION_FLUSH_BUDGET_MS = 2000
 const resolveForTest = (partial?: PostHogLogsConfig): ResolvedPostHogLogsConfig => ({
+  // Default the gate to ON in tests so each spec doesn't have to repeat the
+  // opt-in. The gating-specific tests pass `captureConsoleLogs: false` (or
+  // `undefined`) explicitly to exercise the off paths.
+  captureConsoleLogs: true,
   ...partial,
   maxBufferSize: partial?.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
   flushIntervalMs: partial?.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS,
   maxBatchRecordsPerPost: partial?.maxBatchRecordsPerPost ?? DEFAULT_MAX_BATCH_RECORDS_PER_POST,
   rateCapWindowMs: partial?.rateCapWindowMs ?? DEFAULT_RATE_CAP_WINDOW_MS,
+  backgroundFlushBudgetMs: partial?.backgroundFlushBudgetMs ?? DEFAULT_BACKGROUND_FLUSH_BUDGET_MS,
+  terminationFlushBudgetMs: partial?.terminationFlushBudgetMs ?? DEFAULT_TERMINATION_FLUSH_BUDGET_MS,
   // Uncapped by default so existing tests aren't affected. The rate-limit
   // describe block opts in explicitly via { maxLogsPerInterval: N }.
   maxLogsPerInterval: partial?.maxLogsPerInterval,
@@ -199,10 +207,10 @@ describe('PostHogLogs', () => {
       expect(readQueue(instance)).toHaveLength(0)
     })
 
-    it('is a no-op when config.enabled is false', () => {
+    it('is a no-op when captureConsoleLogs is false', () => {
       const logs = new PostHogLogs(
         mockInstance,
-        resolveForTest({ enabled: false }),
+        resolveForTest({ captureConsoleLogs: false }),
         logger,
         getContextFor(mockInstance),
         immediateOnReady
@@ -211,15 +219,75 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
-    it('captures when config is provided with enabled undefined (defaults to true)', () => {
+    it('is a no-op when captureConsoleLogs is undefined (default off)', () => {
+      // Mirrors the JS SDK: the logs feature is opt-in, so an absent flag
+      // leaves it disabled until either local sets `true` or remote config
+      // turns it on via `setRemoteEnabled(true)`.
       const logs = new PostHogLogs(
         mockInstance,
-        resolveForTest({}),
+        resolveForTest({ captureConsoleLogs: undefined }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'should be dropped' })
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
+
+    it('captures when captureConsoleLogs is true', () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ captureConsoleLogs: true }),
         logger,
         getContextFor(mockInstance),
         immediateOnReady
       )
       logs.captureLog({ body: 'kept' })
+      expect(readQueue(mockInstance)).toHaveLength(1)
+    })
+
+    it('remote setRemoteEnabled(true) flips a local-off instance on', () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ captureConsoleLogs: false }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'pre-remote-drop' })
+      expect(readQueue(mockInstance)).toHaveLength(0)
+
+      logs.setRemoteEnabled(true)
+      logs.captureLog({ body: 'post-remote-keep' })
+      expect(readQueue(mockInstance)).toHaveLength(1)
+    })
+
+    it('remote setRemoteEnabled(false) acts as a kill-switch even when local is on', () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ captureConsoleLogs: true }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.setRemoteEnabled(false)
+      logs.captureLog({ body: 'killed' })
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
+
+    it('setRemoteEnabled(undefined) leaves the existing decision unchanged', () => {
+      // Mirrors the JS SDK: a remote response that omits the flag must not
+      // overwrite a previous explicit decision.
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ captureConsoleLogs: false }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.setRemoteEnabled(true)
+      logs.setRemoteEnabled(undefined)
+      logs.captureLog({ body: 'still-on' })
       expect(readQueue(mockInstance)).toHaveLength(1)
     })
 
@@ -438,13 +506,20 @@ describe('PostHogLogs', () => {
       expect(attrs['service.name']).toEqual({ stringValue: 'unknown_service' })
     })
 
-    it('user-supplied resourceAttributes win over auto-populated telemetry.sdk.*', async () => {
+    it('SDK-controlled telemetry.sdk.* and service.name win over user resourceAttributes', async () => {
+      // Most logs backends index on these keys for routing, SDK-version
+      // dashboards, and bug-correlation. Letting a stray user key clobber
+      // them silently breaks ingestion attribution, so the layout puts
+      // user attrs first and SDK identity attrs on top.
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({
-          // Edge case: user pinning a specific telemetry.sdk.name (e.g. via
-          // a wrapper SDK that needs to identify as itself, not the core).
-          resourceAttributes: { 'telemetry.sdk.name': 'my-wrapper' },
+          resourceAttributes: {
+            'telemetry.sdk.name': 'my-wrapper',
+            'service.name': 'user-supplied-service',
+            // Non-protected user keys still pass through.
+            'host.name': 'my-host',
+          },
         }),
         logger,
         getContextFor(mockInstance),
@@ -459,10 +534,10 @@ describe('PostHogLogs', () => {
           a.value,
         ])
       )
-      expect(attrs['telemetry.sdk.name']).toEqual({ stringValue: 'my-wrapper' })
-      // The version still falls through from the instance — only the
-      // explicitly-overridden key is replaced.
+      expect(attrs['telemetry.sdk.name']).toEqual({ stringValue: 'posthog-core-tests' })
       expect(attrs['telemetry.sdk.version']).toEqual({ stringValue: '0.0.0-test' })
+      expect(attrs['service.name']).toEqual({ stringValue: 'unknown_service' })
+      expect(attrs['host.name']).toEqual({ stringValue: 'my-host' })
     })
 
     it('splits a large queue into multiple batches of maxBatchRecordsPerPost and persists after each', async () => {
@@ -524,6 +599,43 @@ describe('PostHogLogs', () => {
 
       // First POST: 4 records → too-large. Retry with halved cap = 2, so: 2 + 2.
       expect(sendSizes).toEqual([4, 2, 2])
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
+
+    it('ramps maxBatchRecordsPerPost back toward the configured cap after a healthy streak', async () => {
+      // Reproduces the Greptile P1 concern: a one-off oversized payload
+      // should not permanently degrade throughput. After a 413 halves the
+      // cap, each healthy send grows it back by 1 until the configured
+      // maximum is reached.
+      const sendSizes: number[] = []
+      mockInstance._sendLogsBatch = jest.fn(async (payload: any) => {
+        const size = payload.resourceLogs[0].scopeLogs[0].logRecords.length
+        sendSizes.push(size)
+        // First POST is rejected as too-large; everything else succeeds.
+        if (sendSizes.length === 1) {
+          return { kind: 'too-large' }
+        }
+        return { kind: 'ok' }
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBatchRecordsPerPost: 4, maxBufferSize: 100 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      // Enqueue plenty so the recovery has room to ramp.
+      for (let i = 0; i < 16; i++) {
+        logs.captureLog({ body: `msg-${i}` })
+      }
+
+      await logs.flush()
+
+      // First POST: 4 records → too-large. Cap halves to 2. From there each
+      // healthy send grows the cap by 1 toward the configured 4:
+      //   sizes: [4 (413), 2, 3, 4, 4, ...] (the trailing 3 drains the
+      //   remainder of the 16-record queue).
+      expect(sendSizes).toEqual([4, 2, 3, 4, 4, 3])
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
@@ -835,71 +947,91 @@ describe('PostHogLogs', () => {
   })
 
   describe('beforeSend hook', () => {
-    it('mutates the record when the fn returns a transformed value', () => {
-      const beforeSend = jest.fn((r: any) => ({ ...r, body: r.body.toUpperCase() }))
-      const logs = new PostHogLogs(
+    // Helper that hides the constructor boilerplate so the table-driven
+    // cases below can be a single line of setup each.
+    const makeLogs = (beforeSend: PostHogLogsConfig['beforeSend']): PostHogLogs =>
+      new PostHogLogs(
         mockInstance,
         resolveForTest({ beforeSend }),
         logger,
         getContextFor(mockInstance),
         immediateOnReady
       )
-      logs.captureLog({ body: 'hello' })
+
+    // Cases that share a "captureLog → assert queue body" shape. Bespoke
+    // assertions (logger expectations, throw-doesn't-crash, post-chain
+    // continuation after throw) live in their own `it` blocks below — those
+    // were warping the table when forced into it.
+    type Case = {
+      name: string
+      beforeSend: PostHogLogsConfig['beforeSend']
+      input: string
+      expectedQueueLen: number
+      expectedBody?: string
+    }
+    const cases: Case[] = [
+      {
+        name: 'transforms body when fn returns mutated value',
+        beforeSend: (r) => ({ ...r, body: r.body.toUpperCase() }),
+        input: 'hello',
+        expectedQueueLen: 1,
+        expectedBody: 'HELLO',
+      },
+      {
+        name: 'drops the record when fn returns null',
+        beforeSend: () => null,
+        input: 'silent',
+        expectedQueueLen: 0,
+      },
+      {
+        name: 'chains an array left-to-right (each fn sees previous result)',
+        beforeSend: [
+          (r) => ({ ...r, body: `${r.body}-1` }),
+          (r) => ({ ...r, body: `${r.body}-2` }),
+          (r) => ({ ...r, body: `${r.body}-3` }),
+        ],
+        input: 'x',
+        expectedQueueLen: 1,
+        expectedBody: 'x-1-2-3',
+      },
+      {
+        name: 'short-circuits the chain when any fn returns null',
+        beforeSend: [(r) => r, () => null, (r) => r],
+        input: 'dropped',
+        expectedQueueLen: 0,
+      },
+      {
+        name: 'treats an empty body returned by beforeSend as a drop',
+        beforeSend: (r) => ({ ...r, body: '' }),
+        input: 'will-be-emptied',
+        expectedQueueLen: 0,
+      },
+    ]
+
+    it.each(cases)('$name', ({ beforeSend, input, expectedQueueLen, expectedBody }) => {
+      const logs = makeLogs(beforeSend)
+      logs.captureLog({ body: input })
 
       const queue = readQueue(mockInstance)
-      expect(queue).toHaveLength(1)
-      expect(queue[0].record.body.stringValue).toBe('HELLO')
-      expect(beforeSend).toHaveBeenCalledTimes(1)
+      expect(queue).toHaveLength(expectedQueueLen)
+      if (expectedBody !== undefined) {
+        expect(queue[0].record.body.stringValue).toBe(expectedBody)
+      }
     })
 
-    it('drops the record when the fn returns null (no budget consumed downstream)', () => {
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest({ beforeSend: () => null }),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
+    it('logs an info line when a fn returns null', () => {
+      // Carved out because the table only asserts queue shape; this
+      // verifies the diagnostic path that warns the user a record was
+      // dropped by their filter (no other knob to surface that).
+      const logs = makeLogs(() => null)
       logs.captureLog({ body: 'silent' })
-      expect(readQueue(mockInstance)).toHaveLength(0)
       expect(logger.info).toHaveBeenCalledWith('Log was rejected in beforeSend function')
     })
 
-    it('chains an array of fns left-to-right (each fn sees the previous result)', () => {
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest({
-          beforeSend: [
-            (r) => ({ ...r, body: `${r.body}-1` }),
-            (r) => ({ ...r, body: `${r.body}-2` }),
-            (r) => ({ ...r, body: `${r.body}-3` }),
-          ],
-        }),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
-      logs.captureLog({ body: 'x' })
-      expect(readQueue(mockInstance)[0].record.body.stringValue).toBe('x-1-2-3')
-    })
-
-    it('short-circuits the chain when any fn returns null', () => {
-      const after = jest.fn((r) => r)
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest({
-          beforeSend: [(r) => r, () => null, after],
-        }),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
-      logs.captureLog({ body: 'dropped' })
-      expect(readQueue(mockInstance)).toHaveLength(0)
-      expect(after).not.toHaveBeenCalled()
-    })
-
     it('never crashes the caller when a fn throws — the chain continues with the prior result', () => {
+      // Bespoke: needs to verify (a) no throw escapes captureLog, (b) the
+      // chain continues with the previous result so a buggy filter degrades
+      // to a no-op, and (c) the failure is logged. Doesn't fit the table.
       const thrower = jest.fn(() => {
         throw new Error('bad filter')
       })
@@ -913,25 +1045,11 @@ describe('PostHogLogs', () => {
       )
 
       expect(() => logs.captureLog({ body: 'hi' })).not.toThrow()
-      // After the thrower, the chain continues with the original options.
-      // `after` sees `body: 'hi'`, appends '!', so final body is 'hi!'.
       expect(readQueue(mockInstance)[0].record.body.stringValue).toBe('hi!')
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error in beforeSend function for log:'),
         expect.any(Error)
       )
-    })
-
-    it('treats an empty body returned by beforeSend as a drop', () => {
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest({ beforeSend: (r) => ({ ...r, body: '' }) }),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
-      logs.captureLog({ body: 'will-be-emptied' })
-      expect(readQueue(mockInstance)).toHaveLength(0)
     })
   })
 
@@ -939,32 +1057,43 @@ describe('PostHogLogs', () => {
     beforeEach(() => jest.useFakeTimers({ now: 0 }))
     afterEach(() => jest.useRealTimers())
 
-    it('is uncapped when maxLogsPerInterval is undefined (default)', () => {
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest(),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
-      for (let i = 0; i < 50; i++) {
-        logs.captureLog({ body: `msg-${i}` })
-      }
-      expect(readQueue(mockInstance)).toHaveLength(50)
-    })
+    // Tabular form for the simple in-window cap cases. Bespoke ones
+    // (warn-once, window-roll reset, clock-jump backward, beforeSend
+    // accounting) keep their own `it` blocks because they assert
+    // multi-window or interleaving behavior.
+    type CapCase = {
+      name: string
+      maxLogsPerInterval: number | undefined
+      capturesInWindow: number
+      expectedQueueLen: number
+    }
+    const capCases: CapCase[] = [
+      {
+        name: 'is uncapped when maxLogsPerInterval is undefined (default)',
+        maxLogsPerInterval: undefined,
+        capturesInWindow: 50,
+        expectedQueueLen: 50,
+      },
+      {
+        name: 'drops captures beyond maxLogsPerInterval within the window',
+        maxLogsPerInterval: 3,
+        capturesInWindow: 5,
+        expectedQueueLen: 3,
+      },
+    ]
 
-    it('drops captures beyond maxLogsPerInterval within the window', () => {
+    it.each(capCases)('$name', ({ maxLogsPerInterval, capturesInWindow, expectedQueueLen }) => {
       const logs = new PostHogLogs(
         mockInstance,
-        resolveForTest({ maxLogsPerInterval: 3, rateCapWindowMs: 1000 }),
+        resolveForTest({ maxLogsPerInterval, rateCapWindowMs: 1000 }),
         logger,
         getContextFor(mockInstance),
         immediateOnReady
       )
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < capturesInWindow; i++) {
         logs.captureLog({ body: `msg-${i}` })
       }
-      expect(readQueue(mockInstance)).toHaveLength(3)
+      expect(readQueue(mockInstance)).toHaveLength(expectedQueueLen)
     })
 
     it('warns exactly once per window when dropping, regardless of how many drops', () => {

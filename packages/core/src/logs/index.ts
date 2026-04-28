@@ -7,9 +7,17 @@ import type { BeforeSendLogFn, BufferedLogEntry, CaptureLogOptions, ResolvedPost
 
 export class PostHogLogs {
   private _localEnabled: boolean
+  // Tri-state remote flag:
+  //   - undefined → remote hasn't spoken yet; local config decides.
+  //   - true      → remote opt-in; capture allowed even if local is off.
+  //   - false     → remote kill-switch; capture forbidden even if local is on.
+  // Updated via `setRemoteEnabled()` from the host SDK's `onRemoteConfig`.
+  private _remoteEnabled?: boolean
   private _maxBufferSize: number
   private _flushIntervalMs: number
-  // Mutable — halved on 413 to shrink the next POST.
+  // Mutable — halved on 413 to shrink the next POST, and ramped back up by
+  // one record after each successful send so a one-off oversized payload
+  // (e.g. a giant stack trace) doesn't permanently degrade throughput.
   private _maxBatchRecordsPerPost: number
   private _flushTimer?: ReturnType<typeof safeSetTimeout>
   // Serializes concurrent flushes — the second caller awaits the first rather
@@ -39,7 +47,7 @@ export class PostHogLogs {
     // wires this to its dedicated `_logsStorage.waitForPersist()`.
     private readonly _waitForStoragePersist: () => Promise<void> = () => Promise.resolve()
   ) {
-    this._localEnabled = _config.enabled !== false
+    this._localEnabled = _config.captureConsoleLogs === true
     this._maxBufferSize = _config.maxBufferSize
     this._flushIntervalMs = _config.flushIntervalMs
     this._maxBatchRecordsPerPost = _config.maxBatchRecordsPerPost
@@ -47,8 +55,35 @@ export class PostHogLogs {
     this._maxLogsPerInterval = _config.maxLogsPerInterval
   }
 
+  /**
+   * The host SDK calls this from its `onRemoteConfig` handler with whatever
+   * `response.logs.captureConsoleLogs` resolves to:
+   *   - `true`  — server-side opt-in; capture allowed even if local is off.
+   *   - `false` — server-side kill-switch; capture forbidden even if local
+   *               is on.
+   *   - `undefined` — no opinion; local config decides.
+   */
+  setRemoteEnabled(enabled: boolean | undefined): void {
+    if (enabled !== undefined) {
+      this._remoteEnabled = enabled
+    }
+  }
+
+  /**
+   * Effective enabled state for the hot path. Either side can opt in; remote
+   * `false` is a hard kill-switch that overrides local. This matches the JS
+   * SDK except for the explicit kill-switch — browser only treats remote as
+   * an additional on-switch, not an off-switch.
+   */
+  private _isCaptureEnabled(): boolean {
+    if (this._remoteEnabled === false) {
+      return false
+    }
+    return this._localEnabled || this._remoteEnabled === true
+  }
+
   captureLog(options: CaptureLogOptions): void {
-    if (!this._localEnabled) {
+    if (!this._isCaptureEnabled()) {
       return
     }
     if (this._instance.optedOut) {
@@ -136,6 +171,13 @@ export class PostHogLogs {
    * dropping logs for hours. Browser's current impl has the same quirk
    * (`packages/browser/src/posthog-logs.ts:105`); when browser migrates to
    * this class, it inherits the fix for free.
+   *
+   * Pre-init note: the counter increments here, before `_onReady` defers
+   * `_enqueue` to the init promise. If init resolves slowly and the user
+   * is later opted out (or remote config disables logs), the counter has
+   * already consumed budget for records that won't enqueue. Cosmetic — no
+   * record is "lost" beyond what's already gated, and the window rolls on
+   * its own.
    */
   private _checkRateLimit(): boolean {
     if (this._maxLogsPerInterval === undefined) {
@@ -223,7 +265,19 @@ export class PostHogLogs {
 
       // ok | fatal | too-large-with-batch-of-1 → records are leaving the
       // queue. 'fatal' and size-1 413s are dropped so we don't spin on the
-      // same record forever.
+      // same record forever. Surface the size-1 413 explicitly so a single
+      // oversized record (e.g. a giant body field) is visible in logs
+      // instead of silently disappearing.
+      if (outcome.kind === 'too-large') {
+        this._logger.warn(
+          'Dropping a single log record after 413 with batch size 1 — the record is larger than the server cap and cannot be split further.'
+        )
+      } else if (outcome.kind === 'ok' && this._maxBatchRecordsPerPost < this._config.maxBatchRecordsPerPost) {
+        // Linear recovery: each healthy send pushes the cap back up by 1
+        // toward the configured maximum. Linear (not doubling) so we don't
+        // immediately retrigger a 413 if the previous shrink was justified.
+        this._maxBatchRecordsPerPost = Math.min(this._config.maxBatchRecordsPerPost, this._maxBatchRecordsPerPost + 1)
+      }
       await this._persistQueueAdvance(batch.length)
       queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
       sentCount += batch.length
@@ -245,22 +299,25 @@ export class PostHogLogs {
   }
 
   /**
-   * Mirrors the web SDK's resource attribute layout
-   * (`packages/browser/src/posthog-logs.ts:163`). `service.name` is always
-   * present; `environment` / `serviceVersion` only appear when configured;
-   * `telemetry.sdk.*` is OTLP-standard and identifies which client emitted
-   * the batch (most logs backends index on it for SDK-version dashboards
-   * and bug-correlation). `resourceAttributes` spreads last so user keys
-   * win on any conflict.
+   * OTLP resource attributes for every batch.
+   *
+   * Layout: user `resourceAttributes` spread first, then SDK-controlled
+   * keys layered on top so users cannot accidentally clobber them. Most logs
+   * backends index on `service.name` and `telemetry.sdk.*` for routing,
+   * SDK-version dashboards, and bug-correlation; letting a stray user key
+   * overwrite them silently breaks ingestion attribution. The dedicated
+   * `serviceName` / `environment` / `serviceVersion` config fields are the
+   * supported way to override `service.name` / `deployment.environment` /
+   * `service.version`.
    */
   private _buildResourceAttributes(): Record<string, LogAttributeValue> {
     return {
+      ...this._config.resourceAttributes,
       'service.name': this._config.serviceName || 'unknown_service',
       ...(this._config.environment && { 'deployment.environment': this._config.environment }),
       ...(this._config.serviceVersion && { 'service.version': this._config.serviceVersion }),
       'telemetry.sdk.name': this._instance.getLibraryId(),
       'telemetry.sdk.version': this._instance.getLibraryVersion(),
-      ...this._config.resourceAttributes,
     }
   }
 
@@ -320,6 +377,38 @@ export class PostHogLogs {
       return
     }
     await Promise.race([flushPromise, new Promise<void>((resolve) => safeSetTimeout(resolve, timeoutMs))])
+  }
+
+  /**
+   * Time-bounded flush for transient lifecycle events (e.g. RN
+   * foreground→background) that must complete inside an OS-imposed window.
+   * Unlike `shutdown`, this leaves the periodic flush timer in place so the
+   * pipeline keeps draining if the process is resumed instead of suspended.
+   *
+   * Errors propagate so the host SDK can route them through its standard
+   * lifecycle error handler (e.g. RN's `logFlushError`). If the timer wins
+   * the race, a late rejection from the in-flight flush is silenced via a
+   * no-op handler attached after the race settles, to avoid noisy
+   * unhandled-rejection logs — the next regular flush cycle will retry.
+   */
+  async flushWithTimeout(timeoutMs: number): Promise<void> {
+    let timedOut = false
+    const flushPromise = this.flush()
+    const timerPromise = new Promise<void>((resolve) =>
+      safeSetTimeout(() => {
+        timedOut = true
+        resolve()
+      }, timeoutMs)
+    )
+    try {
+      await Promise.race([flushPromise, timerPromise])
+    } finally {
+      if (timedOut) {
+        // Race lost — flush is still in flight. Attach a no-op rejection
+        // handler so a late failure isn't logged as unhandled.
+        void flushPromise.catch(() => {})
+      }
+    }
   }
 
   private _flushInBackground(): void {

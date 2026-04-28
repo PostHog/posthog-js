@@ -52,6 +52,29 @@ export { PostHogPersistedProperty }
  * primary scene. 'unknown' returns undefined so the attribute is omitted
  * rather than guessed.
  */
+/**
+ * Extracts the logs gate from a remote config response. Accepts the same
+ * `boolean | { captureConsoleLogs?: boolean }` shape the server may return,
+ * and surfaces the tri-state expected by `PostHogLogs.setRemoteEnabled`:
+ *   - `undefined`              → no opinion; leave local in charge
+ *   - `true`                   → server-side opt-in (forces on)
+ *   - `false`                  → server-side kill-switch (forces off)
+ *   - `{ captureConsoleLogs }` → tri-state by the inner key; missing key
+ *                                 means no opinion.
+ */
+function extractLogsCaptureFlag(logs: PostHogRemoteConfig['logs']): boolean | undefined {
+  if (logs === undefined) {
+    return undefined
+  }
+  if (typeof logs === 'boolean') {
+    return logs
+  }
+  if (typeof logs === 'object' && typeof logs.captureConsoleLogs === 'boolean') {
+    return logs.captureConsoleLogs
+  }
+  return undefined
+}
+
 function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | 'background' | undefined {
   if (state === 'background') {
     return 'background'
@@ -140,11 +163,14 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Logs feature configuration. Lets you send structured log records to
    * PostHog via `posthog.captureLog(...)` or `posthog.logger.info(...)`.
    *
-   * Not passing a `logs` key still enables the feature with mobile-tuned
-   * defaults (10s flush cadence, 500 logs/window rate cap, 50 records per
-   * POST). Pass `{ enabled: false }` to fully opt out.
+   * **Off by default** (matches the JS SDK at
+   * `packages/browser/src/posthog-logs.ts:31-49`). Opt in either locally
+   * (`logs: { captureConsoleLogs: true }`) or via remote config
+   * (`response.logs.captureConsoleLogs: true`); a remote `false` acts as a
+   * kill-switch even when local is `true`.
    *
    * Common overrides:
+   * - `captureConsoleLogs: true` — enable the feature.
    * - `beforeSend` — filter / transform / redact records before they're
    *   queued. Returning `null` drops the record.
    * - `maxLogsPerInterval` / `rateCapWindowMs` — throttle capture rate.
@@ -167,6 +193,10 @@ export class PostHog extends PostHogCore {
   private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
   private _logs: PostHogLogs
+  // Resolved logs config — kept around so lifecycle handlers (AppState
+  // background, _shutdown) can read the configured flush-time budgets without
+  // reaching back into the user's options object.
+  private _resolvedLogsConfig: ReturnType<typeof resolveLogsConfig>
   // Cached, foreground/background view of the app's lifecycle. Read on the
   // log-capture hot path (per record) so we tag every log with whether it
   // happened in foreground or background. Updated by the AppState listener
@@ -269,9 +299,10 @@ export class PostHog extends PostHogCore {
     // foreground/background dichotomy.
     this._currentAppState = mapAppStateForLogs(AppState.currentState)
 
+    this._resolvedLogsConfig = resolveLogsConfig(options?.logs)
     this._logs = new PostHogLogs(
       this,
-      resolveLogsConfig(options?.logs),
+      this._resolvedLogsConfig,
       this._logger,
       () => {
         // Pulled at capture time so each tag reflects state at the moment
@@ -294,6 +325,12 @@ export class PostHog extends PostHogCore {
       () => this._logsStorage.waitForPersist()
     )
 
+    // NOTE: this listener is registered for the lifetime of the PostHog
+    // instance and is never explicitly removed. RN apps typically construct
+    // a single long-lived PostHog and keep it until process exit, so a leak
+    // doesn't matter in practice; just be aware that constructing many
+    // instances (e.g. in tests without an explicit teardown) would
+    // accumulate listeners.
     AppState.addEventListener('change', (state) => {
       // ignore unknown state (usually initial state, the app might not be ready yet)
       if (state === 'unknown') {
@@ -308,15 +345,24 @@ export class PostHog extends PostHogCore {
         this._currentAppState = mapped
       }
 
+      // Flush on every transition, including foreground→active. Foreground
+      // flush is technically redundant (the timer would catch up shortly),
+      // but it's cheap and keeps the lifecycle handler symmetric — no
+      // special-casing of which transitions should drain.
       void this.flush().catch(async (err) => {
         await logFlushError(err)
       })
       // Flush buffered logs alongside events — OS may suspend or terminate the
       // process next, and anything left in the queue won't get a second chance
-      // until the app is next foregrounded. Same diagnostic path as events
-      // (`logFlushError`) so a silent transport failure still reaches
-      // `console.error` even when no custom logger is configured.
-      void this._logs.flush().catch(async (err) => {
+      // until the app is next foregrounded. On background, race the flush
+      // against `backgroundFlushBudgetMs` so a slow network can't run past
+      // the OS-imposed background window (~30s on iOS). Foreground/active
+      // transitions don't need a budget — the app is staying alive.
+      const isBackgrounding = mapped === 'background'
+      const logsFlushPromise = isBackgrounding
+        ? this._logs.flushWithTimeout(this._resolvedLogsConfig.backgroundFlushBudgetMs)
+        : this._logs.flush()
+      void logsFlushPromise.catch(async (err) => {
         await logFlushError(err)
       })
       // Drain pending logs-storage writes to disk before the OS may suspend
@@ -364,6 +410,10 @@ export class PostHog extends PostHogCore {
       )
       if (cachedRemoteConfig) {
         this._errorTracking.onRemoteConfig(cachedRemoteConfig.errorTracking)
+        // Hydrate the logs kill-switch from the last response so the very
+        // first capture after launch already honours a server-side disable
+        // (the fresh remote config call may not return for several seconds).
+        this._logs.setRemoteEnabled(extractLogsCaptureFlag(cachedRemoteConfig.logs))
       }
 
       if (this._disableRemoteConfig === false) {
@@ -450,6 +500,11 @@ export class PostHog extends PostHogCore {
    */
   protected onRemoteConfig(response: PostHogRemoteConfig): void {
     this._errorTracking.onRemoteConfig(response.errorTracking)
+    // Logs remote kill-switch. Mirrors the browser SDK
+    // (`packages/browser/src/posthog-logs.ts:42-49`) which reads
+    // `response.logs?.captureConsoleLogs`. RN treats absent/true as "leave
+    // the decision to local config" — only an explicit `false` disables.
+    this._logs.setRemoteEnabled(extractLogsCaptureFlag(response.logs))
   }
 
   /**
@@ -485,11 +540,16 @@ export class PostHog extends PostHogCore {
    * Drain both pipelines on shutdown. Run in parallel so the logs final
    * flush + timer teardown doesn't serialize behind events (and vice-versa).
    * `_logs.shutdown()` swallows its own errors — a transient logs failure
-   * must not break events shutdown. Both sides share the same timeout budget
-   * so neither can outlive the caller's shutdown SLA.
+   * must not break events shutdown.
+   *
+   * Logs use the smaller of `terminationFlushBudgetMs` and the caller's
+   * `shutdownTimeoutMs` so a final flush can never run past the caller's
+   * shutdown SLA, while still respecting the configured logs-specific
+   * termination budget when it's tighter.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
-    await Promise.all([this._logs.shutdown(shutdownTimeoutMs), super._shutdown(shutdownTimeoutMs)])
+    const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
+    await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
@@ -704,6 +764,13 @@ export class PostHog extends PostHogCore {
    * payloads, and flushed on a timer, on AppState change, or when the
    * buffer reaches capacity. Configure flush cadence, rate cap, and a
    * `beforeSend` filter via the `logs` option on `new PostHog(...)`.
+   *
+   * Note — naming collision: `posthog.captureLog()` (this method) is the
+   * **logs product** API. There is also a separate, pre-existing
+   * `sessionReplayConfig.captureLog` boolean that controls whether
+   * **session replay** records the device's `console.*` output. The two
+   * are unrelated: this method emits structured records to the logs
+   * pipeline regardless of whether session replay is on.
    *
    * {@label Capture}
    *

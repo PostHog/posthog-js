@@ -344,6 +344,19 @@ export type PostHogRemoteConfig = {
     | {
         [key: string]: JsonType
       }
+
+  /**
+   * Logs feature remote config.
+   * When a map, `captureConsoleLogs` (boolean) is the server-side kill-switch
+   * for the logs pipeline. `false` disables capture even if local config has
+   * it on; missing/`true` leaves the local config in charge. Mirrors the
+   * browser SDK's `response.logs?.captureConsoleLogs` gate.
+   */
+  logs?:
+    | boolean
+    | {
+        [key: string]: JsonType
+      }
 }
 
 export type FeatureFlagValue = string | boolean

@@ -1337,6 +1337,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
 
@@ -1364,6 +1365,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
 
@@ -1387,6 +1389,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
 
@@ -1416,6 +1419,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
 
@@ -1438,6 +1442,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
 
@@ -1459,6 +1464,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       // Ensure logs storage preload completes before calling captureLog so
@@ -1482,6 +1488,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
 
@@ -1514,6 +1521,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
 
@@ -1542,6 +1550,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1566,6 +1575,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1579,8 +1589,10 @@ describe('PostHog React Native', () => {
 
       await posthog.shutdown(5000)
 
-      // Both pipelines drained through the shared shutdown path.
-      expect(logsShutdownSpy).toHaveBeenCalledWith(5000)
+      // Both pipelines drained through the shared shutdown path. Logs use
+      // the smaller of the caller's shutdown budget and the configured
+      // `terminationFlushBudgetMs` (default 2000ms) — see _shutdown.
+      expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
       expect(sendLogsSpy).toHaveBeenCalled()
 
       logsShutdownSpy.mockRestore()
@@ -1592,6 +1604,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
 
       // Capture BEFORE ready() resolves — this exercises the wrap()/onReady
@@ -1622,6 +1635,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1641,6 +1655,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1662,6 +1677,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
 
@@ -1674,6 +1690,7 @@ describe('PostHog React Native', () => {
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
         logs: {
+          captureConsoleLogs: true,
           beforeSend: (r) => (r.body.includes('secret') ? null : { ...r, body: `${r.body}!` }),
         },
       })
@@ -1694,7 +1711,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
-        logs: { maxLogsPerInterval: 3, rateCapWindowMs: 10000 },
+        logs: { captureConsoleLogs: true, maxLogsPerInterval: 3, rateCapWindowMs: 10000 },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1712,6 +1729,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1736,6 +1754,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1765,7 +1784,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
-        logs: { resourceAttributes: { 'os.name': 'overridden-os' } },
+        logs: { captureConsoleLogs: true, resourceAttributes: { 'os.name': 'overridden-os' } },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1791,6 +1810,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1814,6 +1834,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1843,6 +1864,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1863,6 +1885,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1886,6 +1909,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1916,12 +1940,13 @@ describe('PostHog React Native', () => {
     it('captures across identify/reset boundaries keep their capture-time identity', async () => {
       // PostHogLogs builds the OTLP record at capture time, so distinctId/sessionId are
       // baked into `attributes` synchronously. reset() preserves the LogsQueue
-      // so a record captured by alice keeps alice's identity even after reset() 
+      // so a record captured by alice keeps alice's identity even after reset()
       // and a subsequent identify(bob).
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
+        logs: { captureConsoleLogs: true },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
@@ -1950,7 +1975,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
-        logs: { enabled: false },
+        logs: { captureConsoleLogs: false },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
