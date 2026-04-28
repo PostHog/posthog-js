@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.372.3
+
+### Patch Changes
+
+- [#3488](https://github.com/PostHog/posthog-js/pull/3488) [`5b8efc3`](https://github.com/PostHog/posthog-js/commit/5b8efc35d9acf77db2d6979ffa4b655b5f279721) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add browser survey translation rendering and language tracking.
+  (2026-04-27)
+- Updated dependencies []:
+    - @posthog/types@1.372.3
+    - @posthog/core@1.27.7
+
 ## 1.372.2
 
 ### Patch Changes

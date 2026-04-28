@@ -150,15 +150,20 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /**
    * Resets the user's ID and clears all persisted properties.
    *
-   * Note: The event queue (`PostHogPersistedProperty.Queue`) is always preserved
-   * regardless of what is passed in `propertiesToKeep`, to ensure pending events
-   * are not lost.
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+   * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless
+   * of what is passed in `propertiesToKeep`, to ensure in-flight data
+   * is not lost when identity changes.
    *
    * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
     this.wrap(() => {
-      const allPropertiesToKeep = [PostHogPersistedProperty.Queue, ...(propertiesToKeep || [])]
+      const allPropertiesToKeep = [
+        PostHogPersistedProperty.Queue,
+        PostHogPersistedProperty.LogsQueue,
+        ...(propertiesToKeep || []),
+      ]
 
       // clean up props
       this.clearProps()

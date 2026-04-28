@@ -573,6 +573,7 @@
         "_timer",
         "_timestamp",
         "_totalBytes",
+        "_translateSurveyForRendering",
         "_transport",
         "_triggerGroupMatchers",
         "_triggerGroupSamplingResults",
