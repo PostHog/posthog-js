@@ -58,10 +58,17 @@ export class PostHogLogs {
   /**
    * The host SDK calls this from its `onRemoteConfig` handler with whatever
    * `response.logs.captureConsoleLogs` resolves to:
-   *   - `true`  — server-side opt-in; capture allowed even if local is off.
    *   - `false` — server-side kill-switch; capture forbidden even if local
-   *               is on.
+   *               opted in.
+   *   - `true`  — server has no objection; effective state still requires a
+   *               local opt-in.
    *   - `undefined` — no opinion; local config decides.
+   *
+   * AND semantics with local: this mirrors the RN session-replay
+   * `consoleLogRecordingEnabled` gate (`packages/react-native/src/posthog-rn.ts:1813-1825`)
+   * and other mobile-config patterns. Server can disable a locally-on
+   * feature, but cannot turn the feature on for a user who hasn't opted
+   * in locally.
    */
   setRemoteEnabled(enabled: boolean | undefined): void {
     if (enabled !== undefined) {
@@ -70,16 +77,21 @@ export class PostHogLogs {
   }
 
   /**
-   * Effective enabled state for the hot path. Either side can opt in; remote
-   * `false` is a hard kill-switch that overrides local. This matches the JS
-   * SDK except for the explicit kill-switch — browser only treats remote as
-   * an additional on-switch, not an off-switch.
+   * Effective enabled state for the hot path:
+   *   `enabled = localOptIn AND remote !== false`.
+   *
+   * The local opt-in is the source of truth for whether the user wants logs;
+   * remote acts purely as a server-side off-switch. Diverges from the JS SDK
+   * (`packages/browser/src/posthog-logs.ts:41-49`), which lets remote `true`
+   * flip a locally-off instance on. RN matches the session-replay precedent
+   * because mobile users rarely expect the server to silently start
+   * collecting data they didn't ask for locally.
    */
   private _isCaptureEnabled(): boolean {
     if (this._remoteEnabled === false) {
       return false
     }
-    return this._localEnabled || this._remoteEnabled === true
+    return this._localEnabled
   }
 
   captureLog(options: CaptureLogOptions): void {

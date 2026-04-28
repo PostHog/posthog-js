@@ -246,7 +246,10 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(1)
     })
 
-    it('remote setRemoteEnabled(true) flips a local-off instance on', () => {
+    it('setRemoteEnabled(true) does NOT flip a local-off instance on (AND semantics)', () => {
+      // Diverges from the JS SDK: server cannot start capture for a user
+      // who has not opted in locally. Mirrors the RN session-replay
+      // `consoleLogRecordingEnabled` gate.
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ captureConsoleLogs: false }),
@@ -258,11 +261,29 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(0)
 
       logs.setRemoteEnabled(true)
-      logs.captureLog({ body: 'post-remote-keep' })
+      logs.captureLog({ body: 'still-dropped-no-local-optin' })
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
+
+    it('setRemoteEnabled(false) acts as a kill-switch when local is on', () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ captureConsoleLogs: true }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'pre-kill-keep' })
+      expect(readQueue(mockInstance)).toHaveLength(1)
+
+      logs.setRemoteEnabled(false)
+      logs.captureLog({ body: 'killed' })
       expect(readQueue(mockInstance)).toHaveLength(1)
     })
 
-    it('remote setRemoteEnabled(false) acts as a kill-switch even when local is on', () => {
+    it('setRemoteEnabled(undefined) leaves the existing decision unchanged', () => {
+      // A remote response that omits the flag must not overwrite a
+      // previous explicit decision.
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ captureConsoleLogs: true }),
@@ -271,24 +292,9 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.setRemoteEnabled(false)
-      logs.captureLog({ body: 'killed' })
-      expect(readQueue(mockInstance)).toHaveLength(0)
-    })
-
-    it('setRemoteEnabled(undefined) leaves the existing decision unchanged', () => {
-      // Mirrors the JS SDK: a remote response that omits the flag must not
-      // overwrite a previous explicit decision.
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest({ captureConsoleLogs: false }),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
-      logs.setRemoteEnabled(true)
       logs.setRemoteEnabled(undefined)
-      logs.captureLog({ body: 'still-on' })
-      expect(readQueue(mockInstance)).toHaveLength(1)
+      logs.captureLog({ body: 'still-killed' })
+      expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
     it('appends subsequent captures to the existing queue', () => {
