@@ -634,6 +634,36 @@ describe('Autocapture system', () => {
                 const spyArgs = beforeSendMock.mock.calls
                 expect(spyArgs.length).toBe(0)
             })
+
+            it('does not throw on copy from a text node inside a shadow root', () => {
+                const host = document.createElement('some-element')
+                document.body.appendChild(host)
+                const shadowRoot = host.attachShadow({ mode: 'open' })
+                const paragraph = document.createElement('p')
+                const text = document.createTextNode('some text inside shadow dom')
+                paragraph.appendChild(text)
+                shadowRoot.appendChild(paragraph)
+
+                setWindowTextSelection('some text inside shadow dom')
+
+                // copy events bubble through the host because of composedPath
+                const fakeEvent = makeCopyEvent({ target: text as unknown as EventTarget })
+
+                expect(() => autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')).not.toThrow()
+            })
+
+            it('does not throw on copy whose target lives inside a plain document fragment', () => {
+                const fragment = document.createDocumentFragment()
+                const paragraph = document.createElement('p')
+                paragraph.innerText = 'detached'
+                fragment.appendChild(paragraph)
+
+                setWindowTextSelection('detached')
+
+                const fakeEvent = makeCopyEvent({ target: paragraph })
+
+                expect(() => autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')).not.toThrow()
+            })
         })
 
         it('should capture augment properties', () => {

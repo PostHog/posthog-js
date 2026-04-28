@@ -236,12 +236,16 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
 
     let parentIsUsefulElement = false
     const targetElementList: Element[] = [el]
-    let curEl: Element = el
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
+    let curEl: Element | null = el
+    while (curEl && curEl.parentNode && !isTag(curEl, 'body')) {
         // If element is a shadow root, we skip it
         if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+            // Only ShadowRoots have a `.host`. Plain DocumentFragments (e.g. <template>)
+            // do not, so guard against pushing `undefined` into the chain.
+            const host: Element | undefined = (curEl.parentNode as any).host
+            if (!isElementNode(host)) break
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         const parentNode = getParentElement(curEl)

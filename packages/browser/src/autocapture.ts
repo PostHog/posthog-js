@@ -154,13 +154,22 @@ export function autocapturePropertiesForElement(
         elementsChainAsString: boolean
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
-    const targetElementList = [target]
-    let curEl = target
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
+    const targetElementList = isElementNode(target) ? [target] : []
+    let curEl: Element | null = isElementNode(target) ? target : null
+    while (curEl && curEl.parentNode && !isTag(curEl, 'body')) {
         if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+            // Only ShadowRoots have a `.host`. Plain DocumentFragments (e.g. <template>)
+            // do not, so guard against pushing `undefined` into the chain.
+            const host = (curEl.parentNode as any).host
+            if (!isElementNode(host)) {
+                break
+            }
+            targetElementList.push(host)
+            curEl = host
             continue
+        }
+        if (!isElementNode(curEl.parentNode)) {
+            break
         }
         targetElementList.push(curEl.parentNode as Element)
         curEl = curEl.parentNode as Element
@@ -176,7 +185,7 @@ export function autocapturePropertiesForElement(
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
-        if (el.tagName.toLowerCase() === 'a') {
+        if (isTag(el, 'a')) {
             href = el.getAttribute('href')
             href = shouldCaptureEl && href && shouldCaptureValue(href) && href
         }
@@ -199,12 +208,12 @@ export function autocapturePropertiesForElement(
         return { props: {}, explicitNoCapture }
     }
 
-    if (!maskAllText) {
+    if (!maskAllText && elementsJson[0]) {
         // if the element is a button or anchor tag get the span text from any
         // children and include it as/with the text property on the parent element
-        if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
+        if (isTag(target, 'a') || isTag(target, 'button')) {
             elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target)
-        } else {
+        } else if (isElementNode(target)) {
             elementsJson[0]['$el_text'] = getSafeText(target)
         }
     }
@@ -285,7 +294,11 @@ export class Autocapture implements Extension {
         if (this._config.capture_copied_text) {
             const copiedTextHandler = (e: Event) => {
                 e = e || window?.event
-                this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
+                try {
+                    this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
+                } catch (error) {
+                    logger.error('Failed to capture copy/cut event', error)
+                }
             }
 
             addEventListener(document, 'copy', copiedTextHandler, { capture: true })
