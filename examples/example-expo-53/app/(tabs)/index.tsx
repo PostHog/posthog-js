@@ -60,7 +60,6 @@ const DEMO_APPEARANCE: any = {
     submitButtonText: 'Submit',
     autoDisappear: false,
     surveyPopupDelaySeconds: 0,
-    position: 'right',
 }
 
 export default function HomeScreen() {

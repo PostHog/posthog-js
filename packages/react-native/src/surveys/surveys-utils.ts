@@ -140,7 +140,7 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   placeholder: 'Start typing...',
   displayThankYouMessage: true,
   thankYouMessageHeader: 'Thank you for your feedback!',
-  position: SurveyPosition.Right,
+  position: SurveyPosition.Center,
   submitButtonText: 'Submit',
   autoDisappear: false,
   thankYouMessageDescription: '',
@@ -162,7 +162,7 @@ export function resolveSurveyAlignment(position: string | undefined): {
   vertical: SurveyFlexAlign
   horizontal: SurveyFlexAlign
 } {
-  let resolvedPosition: SurveyPosition = SurveyPosition.Right
+  let resolvedPosition: SurveyPosition = defaultSurveyAppearance.position
   if (position) {
     if (KNOWN_SURVEY_POSITIONS.has(position)) {
       resolvedPosition = position as SurveyPosition
@@ -170,7 +170,7 @@ export function resolveSurveyAlignment(position: string | undefined): {
       warnedUnknownPositions.add(position)
       // eslint-disable-next-line no-console
       console.warn(
-        `[PostHog.surveys] Unknown survey position ${JSON.stringify(position)} — falling back to ${SurveyPosition.Right}. Expected one of: ${Object.values(SurveyPosition).join(', ')}.`
+        `[PostHog.surveys] Unknown survey position ${JSON.stringify(position)} — falling back to ${defaultSurveyAppearance.position}. Expected one of: ${Object.values(SurveyPosition).join(', ')}.`
       )
     }
   }
