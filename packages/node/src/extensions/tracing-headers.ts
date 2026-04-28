@@ -9,13 +9,11 @@ type HeaderValue = IncomingHttpHeaders[string]
 
 export const POSTHOG_TRACING_HEADERS = {
   sessionId: 'x-posthog-session-id',
-  windowId: 'x-posthog-window-id',
   distinctId: 'x-posthog-distinct-id',
 } as const
 
 export interface PostHogTracingHeaderValues {
   sessionId?: string
-  windowId?: string
   distinctId?: string
 }
 
@@ -58,12 +56,10 @@ export function getPostHogTracingHeaderValues(headers?: IncomingHttpHeaders): Po
   }
 
   const sessionId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.sessionId])
-  const windowId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.windowId])
   const distinctId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.distinctId])
 
   return {
     ...(sessionId !== undefined ? { sessionId } : {}),
-    ...(windowId !== undefined ? { windowId } : {}),
     ...(distinctId !== undefined ? { distinctId } : {}),
   }
 }

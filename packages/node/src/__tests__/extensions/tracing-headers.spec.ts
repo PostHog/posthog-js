@@ -19,28 +19,25 @@ describe('tracing headers', () => {
   describe('getPostHogTracingHeaderValues', () => {
     it.each([
       [
-        'extracts all lowercase tracing headers',
+        'extracts supported lowercase tracing headers',
         {
           'x-posthog-session-id': 'session-123',
-          'x-posthog-window-id': 'window-789',
           'x-posthog-distinct-id': 'user-456',
         },
-        { sessionId: 'session-123', windowId: 'window-789', distinctId: 'user-456' },
+        { sessionId: 'session-123', distinctId: 'user-456' },
       ],
       [
         'sanitizes extracted tracing headers',
         {
           'x-posthog-session-id': ' session\n-123 ',
-          'x-posthog-window-id': ' win\x00dow\x85-789 ',
           'x-posthog-distinct-id': ` ${'u'.repeat(1105)} `,
         },
-        { sessionId: 'session-123', windowId: 'window-789', distinctId: 'u'.repeat(1000) },
+        { sessionId: 'session-123', distinctId: 'u'.repeat(1000) },
       ],
       [
         'omits invalid tracing headers',
         {
           'x-posthog-session-id': ' \x00\t ',
-          'x-posthog-window-id': ' \x00\t ',
           'x-posthog-distinct-id': [],
         },
         {},

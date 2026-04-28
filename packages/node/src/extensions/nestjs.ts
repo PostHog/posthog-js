@@ -74,13 +74,12 @@ export class PostHogInterceptor implements NestInterceptor {
     const response = httpHost.getResponse()
 
     const headers = (request?.headers ?? {}) as IncomingHttpHeaders
-    const { sessionId, windowId, distinctId } = getPostHogTracingHeaderValues(headers)
+    const { sessionId, distinctId } = getPostHogTracingHeaderValues(headers)
 
     const properties: Record<string, any> = {}
     addProperty(properties, '$current_url', request?.url)
     addProperty(properties, '$request_method', request?.method)
     addProperty(properties, '$request_path', request?.path ?? request?.url)
-    addProperty(properties, '$window_id', windowId)
     addProperty(properties, '$user_agent', getFirstHeaderValue(headers['user-agent']))
     addProperty(properties, '$ip', getClientIp(headers, request))
 

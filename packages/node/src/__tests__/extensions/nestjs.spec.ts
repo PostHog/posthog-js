@@ -86,7 +86,6 @@ describe('PostHogInterceptor', () => {
         headers: {
           'x-posthog-session-id': 'session-123',
           'x-posthog-distinct-id': 'user-456',
-          'x-posthog-window-id': 'window-789',
           'user-agent': 'TestAgent/1.0',
         },
         url: '/api/test',
@@ -111,7 +110,6 @@ describe('PostHogInterceptor', () => {
       expect(capturedContext.properties.$current_url).toBe('/api/test')
       expect(capturedContext.properties.$request_method).toBe('POST')
       expect(capturedContext.properties.$request_path).toBe('/api/test')
-      expect(capturedContext.properties.$window_id).toBe('window-789')
       expect(capturedContext.properties.$user_agent).toBe('TestAgent/1.0')
       expect(capturedContext.properties.$ip).toBe('192.168.1.1')
     })
@@ -122,7 +120,6 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext({
         headers: {
           'x-posthog-session-id': [' \u0000 session-123\t ', 'ignored'],
-          'x-posthog-window-id': ' win\u0001dow-789 ',
           'x-posthog-distinct-id': longDistinctId,
           'user-agent': ['Test\u0000Agent/1.0'],
         },
@@ -140,7 +137,6 @@ describe('PostHogInterceptor', () => {
 
       expect(capturedContext.sessionId).toBe('session-123')
       expect(capturedContext.distinctId).toBe('u'.repeat(1000))
-      expect(capturedContext.properties.$window_id).toBe('window-789')
       expect(capturedContext.properties.$user_agent).toBe('Test\u0000Agent/1.0')
     })
 
@@ -149,7 +145,6 @@ describe('PostHogInterceptor', () => {
       const context = createMockContext({
         headers: {
           'x-posthog-session-id': ' \u0000\t ',
-          'x-posthog-window-id': ' \u0001 ',
           'x-posthog-distinct-id': [],
         },
       })
@@ -166,7 +161,6 @@ describe('PostHogInterceptor', () => {
 
       expect(capturedContext.sessionId).toBeUndefined()
       expect(capturedContext.distinctId).toBeUndefined()
-      expect(capturedContext.properties).not.toHaveProperty('$window_id')
     })
 
     it('should propagate context to capture calls in handler', async () => {
@@ -250,7 +244,6 @@ describe('PostHogInterceptor', () => {
         headers: {
           'x-posthog-session-id': 'session-123',
           'x-posthog-distinct-id': 'user-456',
-          'x-posthog-window-id': 'window-789',
           'user-agent': 'TestAgent/1.0',
         },
         url: '/api/test',
@@ -274,7 +267,6 @@ describe('PostHogInterceptor', () => {
       expect(event.properties.$current_url).toBe('/api/test')
       expect(event.properties.$request_method).toBe('POST')
       expect(event.properties.$request_path).toBe('/api/test')
-      expect(event.properties.$window_id).toBe('window-789')
       expect(event.properties.$user_agent).toBe('TestAgent/1.0')
       expect(event.properties.$response_status_code).toBe(500)
       expect(event.properties.$ip).toBe('192.168.1.1')

@@ -33,7 +33,7 @@ function getClientIp(req: Request): string | undefined {
 }
 
 function buildRequestContextData(req: Request): Partial<ContextData> {
-  const { sessionId, windowId, distinctId } = getPostHogTracingHeaderValues(req.headers)
+  const { sessionId, distinctId } = getPostHogTracingHeaderValues(req.headers)
   const properties: Record<string, any> = {}
 
   addProperty(properties, '$current_url', req.originalUrl || req.url)
@@ -41,7 +41,6 @@ function buildRequestContextData(req: Request): Partial<ContextData> {
   addProperty(properties, '$request_path', req.path)
   addProperty(properties, '$user_agent', getFirstHeaderValue(req.headers['user-agent']))
   addProperty(properties, '$ip', getClientIp(req))
-  addProperty(properties, '$window_id', windowId)
 
   return {
     ...(sessionId !== undefined ? { sessionId } : {}),

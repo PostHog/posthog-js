@@ -90,7 +90,6 @@ describe('Express extension', () => {
         headers: {
           'x-posthog-session-id': 'session-123',
           'x-posthog-distinct-id': 'user-456',
-          'x-posthog-window-id': 'window-789',
           'user-agent': 'TestAgent/1.0',
           'x-forwarded-for': '10.0.0.1, 172.16.0.1',
         },
@@ -113,7 +112,6 @@ describe('Express extension', () => {
       expect(event).toBeDefined()
       expect(event.distinct_id).toBe('user-456')
       expect(event.properties.$session_id).toBe('session-123')
-      expect(event.properties.$window_id).toBe('window-789')
       expect(event.properties.$current_url).toBe('/api/test?query=1')
       expect(event.properties.$request_method).toBe('POST')
       expect(event.properties.$request_path).toBe('/api/test')
@@ -127,7 +125,6 @@ describe('Express extension', () => {
         headers: {
           'x-posthog-session-id': [' \u0000 session-123\t ', 'ignored'],
           'x-posthog-distinct-id': ' user-456\u0001 ',
-          'x-posthog-window-id': ` ${'w'.repeat(1105)} `,
         },
       })
       const res = createMockResponse()
@@ -137,7 +134,6 @@ describe('Express extension', () => {
           event: 'handler_event',
           properties: {
             $session_id: 'explicit-session',
-            $window_id: 'explicit-window',
           },
         })
       })
@@ -147,7 +143,6 @@ describe('Express extension', () => {
       const event = batchEvents!.find((e: any) => e.event === 'handler_event')
       expect(event.distinct_id).toBe('user-456')
       expect(event.properties.$session_id).toBe('explicit-session')
-      expect(event.properties.$window_id).toBe('explicit-window')
     })
 
     it('should not swallow errors thrown by downstream middleware', () => {
@@ -171,14 +166,13 @@ describe('Express extension', () => {
       expect(app.use).toHaveBeenCalledWith(expect.any(Function))
     })
 
-    it('should capture exceptions with sanitized session, distinct, and window headers', async () => {
+    it('should capture exceptions with sanitized session and distinct headers', async () => {
       const handler = createErrorHandlerMiddleware(posthog)
       const error = new Error('Express error')
       const req = createMockRequest({
         headers: {
           'x-posthog-session-id': ' session-123\u0000 ',
           'x-posthog-distinct-id': ' user-456 ',
-          'x-posthog-window-id': ' window-789 ',
           'user-agent': 'TestAgent/1.0',
         },
         url: '/api/error',
@@ -201,7 +195,6 @@ describe('Express extension', () => {
       expect(event.event).toBe('$exception')
       expect(event.distinct_id).toBe('user-456')
       expect(event.properties.$session_id).toBe('session-123')
-      expect(event.properties.$window_id).toBe('window-789')
       expect(event.properties.$current_url).toBe('/api/error')
       expect(event.properties.$request_method).toBe('POST')
       expect(event.properties.$request_path).toBe('/api/error')
