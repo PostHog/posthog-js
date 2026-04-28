@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "4.43.10",
+    "version": "4.43.9",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -2636,7 +2636,7 @@
       "name": "SurveyModalProps",
       "properties": [],
       "path": "dist/surveys/components/SurveyModal.d.ts",
-      "example": "{\n    survey: Survey;\n    appearance: SurveyAppearanceTheme;\n    onShow: () => void;\n    onClose: (submitted: boolean, responses: Record<string, string | number | string[] | null>) => void;\n    androidKeyboardBehavior?: 'padding' | 'height';\n}"
+      "example": "{\n    survey: Survey;\n    appearance: SurveyAppearanceTheme;\n    onShow: () => void;\n    onClose: (submitted: boolean) => void;\n    androidKeyboardBehavior?: 'padding' | 'height';\n}"
     },
     {
       "id": "SurveyPosition",

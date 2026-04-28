@@ -1,5 +1,20 @@
 # posthog-react-native
 
+## 4.43.10
+
+### Patch Changes
+
+- [`eae9407`](https://github.com/PostHog/posthog-js/commit/eae94077cd577323b4ccd5fc3f4238f98194b3f6) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Include survey response properties and partial completion state on survey dismissal events.
+  (2026-04-27)
+
+## 4.43.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.3
+  - @posthog/core@1.27.7
+
 ## 4.43.8
 
 ### Patch Changes
