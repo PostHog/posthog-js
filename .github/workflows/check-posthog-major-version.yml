@@ -24,9 +24,11 @@ jobs:
         
       - name: Check for major version bumps
         id: check-major
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # Get only added changeset files in this PR
-          changesets=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD | grep '^\.changeset/.*\.md$' | grep -v 'README.md' || true)
+          changesets=$(git diff --name-only --diff-filter=A "origin/${BASE_REF}...HEAD" | grep '^\.changeset/.*\.md$' | grep -v 'README.md' || true)
 
           if [ -z "$changesets" ]; then
             echo "No new changesets found in this PR"
