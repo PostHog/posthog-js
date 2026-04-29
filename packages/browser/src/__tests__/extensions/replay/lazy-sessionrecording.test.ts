@@ -3952,6 +3952,40 @@ describe('Lazy SessionRecording', () => {
                 expect.anything()
             )
         })
+
+        it('masks query params from custom_personal_data_properties before reaching the snapshot', () => {
+            posthog.config.mask_personal_data_properties = true
+            posthog.config.custom_personal_data_properties = ['token']
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123&other=value' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=<masked>&other=value',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
     })
 
     describe('wait for fresh config before starting', () => {
