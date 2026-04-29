@@ -7,8 +7,8 @@ import {
   MonitoringParams,
   withPrivacyMode,
   formatOpenAIResponsesInput,
+  captureAiGeneration,
 } from '../utils'
-import { captureAiGeneration } from '../captureAiGeneration'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
