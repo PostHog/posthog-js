@@ -3953,9 +3953,31 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
-        it('masks query params from custom_personal_data_properties before reaching the snapshot', () => {
-            posthog.config.mask_personal_data_properties = true
-            posthog.config.custom_personal_data_properties = ['token']
+        it.each([
+            {
+                case: 'masking disabled leaves params untouched',
+                maskPersonalData: false,
+                customParams: ['token'],
+                inputHref: 'https://example.com/?token=secret123&gclid=abc&other=value',
+                expectedHref: 'https://example.com/?token=secret123&gclid=abc&other=value',
+            },
+            {
+                case: 'masking enabled redacts custom param',
+                maskPersonalData: true,
+                customParams: ['token'],
+                inputHref: 'https://example.com/?token=secret123&other=value',
+                expectedHref: 'https://example.com/?token=<masked>&other=value',
+            },
+            {
+                case: 'masking enabled redacts built-in PII param alongside custom',
+                maskPersonalData: true,
+                customParams: ['token'],
+                inputHref: 'https://example.com/?token=secret123&gclid=abc&other=value',
+                expectedHref: 'https://example.com/?token=<masked>&gclid=<masked>&other=value',
+            },
+        ])('$case', ({ maskPersonalData, customParams, inputHref, expectedHref }) => {
+            posthog.config.mask_personal_data_properties = maskPersonalData
+            posthog.config.custom_personal_data_properties = customParams
 
             addRRwebToWindow()
             sessionRecording.onRemoteConfig(
@@ -3965,11 +3987,7 @@ describe('Lazy SessionRecording', () => {
             )
             sessionRecording['_onScriptLoaded']()
 
-            _emit(
-                createMetaSnapshot({
-                    data: { href: 'https://example.com/?token=secret123&other=value' },
-                })
-            )
+            _emit(createMetaSnapshot({ data: { href: inputHref } }))
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -3977,9 +3995,7 @@ describe('Lazy SessionRecording', () => {
                 expect.objectContaining({
                     $snapshot_data: [
                         expect.objectContaining({
-                            data: {
-                                href: 'https://example.com/?token=<masked>&other=value',
-                            },
+                            data: { href: expectedHref },
                         }),
                     ],
                 }),
