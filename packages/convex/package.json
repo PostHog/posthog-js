@@ -74,7 +74,7 @@
     "jest": "catalog:",
     "ts-jest": "catalog:",
     "typescript": "catalog:",
-    "vite": "7.3.1"
+    "vite": "7.3.2"
   },
   "peerDependencies": {
     "convex": "^1.31.7"
