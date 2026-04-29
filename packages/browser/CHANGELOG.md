@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.372.5
+
+### Patch Changes
+
+- [#3448](https://github.com/PostHog/posthog-js/pull/3448) [`c726aae`](https://github.com/PostHog/posthog-js/commit/c726aaea62483509469317870e6c3a3bedee3f18) Thanks [@posthog](https://github.com/apps/posthog)! - fix(exceptions): avoid cross-origin property access when calling the previous `window.onunhandledrejection` handler
+  (2026-04-29)
+- Updated dependencies []:
+    - @posthog/types@1.372.5
+    - @posthog/core@1.27.9
+
 ## 1.372.4
 
 ### Patch Changes

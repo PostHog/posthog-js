@@ -6,12 +6,14 @@ on:
     paths:
       - 'packages/browser/**'
       - 'packages/core/**'
+      - 'compliance/browser/**'
       - '.github/workflows/sdk-compliance-tests-browser.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'packages/browser/**'
       - 'packages/core/**'
+      - 'compliance/browser/**'
       - '.github/workflows/sdk-compliance-tests-browser.yml'
   workflow_dispatch:
 
