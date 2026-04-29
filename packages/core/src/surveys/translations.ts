@@ -185,10 +185,7 @@ function mergeQuestionTranslation<TQuestion extends TranslatableSurveyQuestion>(
 export function applySurveyTranslation<
   TQuestion extends TranslatableSurveyQuestion,
   TSurvey extends TranslatableSurvey<TQuestion>,
->(
-  survey: TSurvey,
-  targetLanguage: string
-): { survey: TSurvey; matchedKey: string | null } {
+>(survey: TSurvey, targetLanguage: string): { survey: TSurvey; matchedKey: string | null } {
   const translationKey = findBestTranslationMatch(survey.translations, targetLanguage)
 
   const translated: TSurvey = { ...survey }

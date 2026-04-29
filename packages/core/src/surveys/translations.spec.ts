@@ -156,7 +156,9 @@ describe('survey translations', () => {
 
       expect(result.survey.questions[0].question).toBe('Como foi?')
       expect('lowerBoundLabel' in result.survey.questions[0] && result.survey.questions[0].lowerBoundLabel).toBe('Ruim')
-      expect('upperBoundLabel' in result.survey.questions[0] && result.survey.questions[0].upperBoundLabel).toBe('Otimo')
+      expect('upperBoundLabel' in result.survey.questions[0] && result.survey.questions[0].upperBoundLabel).toBe(
+        'Otimo'
+      )
       expect('choices' in result.survey.questions[1] && result.survey.questions[1].choices).toEqual(['Um', 'Outro'])
       expect(result.matchedKey).toBe('pt')
     })

@@ -5,6 +5,25 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "error-tracking": [
+        "dist/error-tracking/index.d.ts"
+      ],
+      "surveys": [
+        "dist/surveys/index.d.ts"
+      ],
+      "testing": [
+        "dist/testing/index.d.ts"
+      ],
+      "utils": [
+        "dist/utils/index.d.ts"
+      ],
+      "vendor/*": [
+        "dist/vendor/*.d.ts"
+      ]
+    }
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/PostHog/posthog-js.git",
@@ -44,6 +63,11 @@
       "types": "./dist/testing/index.d.ts",
       "require": "./dist/testing/index.js",
       "import": "./dist/testing/index.mjs"
+    },
+    "./surveys": {
+      "types": "./dist/surveys/index.d.ts",
+      "require": "./dist/surveys/index.js",
+      "import": "./dist/surveys/index.mjs"
     },
     "./utils": {
       "types": "./dist/utils/index.d.ts",

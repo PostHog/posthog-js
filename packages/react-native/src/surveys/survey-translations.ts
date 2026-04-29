@@ -1,10 +1,5 @@
-import {
-  applySurveyTranslation,
-  createLogger,
-  detectSurveyLanguage,
-  PostHogPersistedProperty,
-  Survey,
-} from '@posthog/core'
+import { createLogger, PostHogPersistedProperty, Survey } from '@posthog/core'
+import { applySurveyTranslation, detectSurveyLanguage } from '@posthog/core/surveys'
 import { PostHog } from '../posthog-rn'
 
 const logger = createLogger('[SurveyTranslations]')

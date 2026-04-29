@@ -3,7 +3,8 @@ import { Survey } from '../posthog-surveys-types'
 import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
 import { createLogger } from './logger'
 import { getBrowserLanguage } from './event-utils'
-import { applySurveyTranslation, detectSurveyLanguage, isFunction } from '@posthog/core'
+import { isFunction } from '@posthog/core'
+import { applySurveyTranslation, detectSurveyLanguage } from '@posthog/core/surveys'
 
 const logger = createLogger('[SurveyTranslations]')
 
@@ -29,8 +30,8 @@ export function detectUserLanguage(instance: PostHog): string | null {
         storedPersonProperties: overrideLanguage
             ? undefined
             : isFunction(instance.get_property)
-            ? instance.get_property(STORED_PERSON_PROPERTIES_KEY)
-            : undefined,
+              ? instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+              : undefined,
         locale: overrideLanguage ? undefined : getBrowserLanguage(),
     })
 }
