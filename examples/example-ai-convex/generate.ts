@@ -15,7 +15,6 @@ import { openai } from '@ai-sdk/openai'
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
         'service.name': 'example-convex-app',
-        'posthog.distinct_id': 'example-user',
         foo: 'bar',
         conversation_id: 'abc-123',
     }),
