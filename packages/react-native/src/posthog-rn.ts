@@ -52,16 +52,7 @@ export { PostHogPersistedProperty }
  * primary scene. 'unknown' returns undefined so the attribute is omitted
  * rather than guessed.
  */
-/**
- * Extracts the logs gate from a remote config response. Accepts the same
- * `boolean | { captureConsoleLogs?: boolean }` shape the server may return,
- * and surfaces the tri-state expected by `PostHogLogs.setRemoteEnabled`:
- *   - `undefined`              → no opinion; leave local in charge
- *   - `true`                   → server-side opt-in (forces on)
- *   - `false`                  → server-side kill-switch (forces off)
- *   - `{ captureConsoleLogs }` → tri-state by the inner key; missing key
- *                                 means no opinion.
- */
+// Flatten the server's `logs` field into the tri-state PostHogLogs.setRemoteEnabled consumes.
 function extractLogsCaptureFlag(logs: PostHogRemoteConfig['logs']): boolean | undefined {
   if (logs === undefined) {
     return undefined
@@ -167,14 +158,6 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Opt in either locally (`logs: { captureConsoleLogs: true }`) or via
    * remote config (`response.logs.captureConsoleLogs: true`); a remote
    * `false` acts as a kill-switch even when local is `true`.
-   *
-   * Common overrides:
-   * - `captureConsoleLogs: true` — enable the feature.
-   * - `beforeSend` — filter / transform / redact records before they're
-   *   queued. Returning `null` drops the record.
-   * - `maxLogsPerInterval` / `rateCapWindowMs` — throttle capture rate.
-   * - `serviceName` / `environment` / `serviceVersion` — OTLP resource
-   *   attributes attached to every batch.
    */
   logs?: PostHogLogsConfig
 }
@@ -369,7 +352,6 @@ export class PostHog extends PostHogCore {
       void this._logsStorage.waitForPersist()
 
       if (state === 'active') {
-        // rotate session id if needed (expired either 30 minutes inactive or max duration 24 hours)
         this.getSessionId()
       }
     })
@@ -385,9 +367,9 @@ export class PostHog extends PostHogCore {
 
       this.setupBootstrap(options)
 
-      // Initialize device_id if not already set. This provides a stable identifier
-      // for device-level feature flag bucketing that survives identify() and reset().
-      // We seed it from the anonymous ID at init time; once set, it's independent.
+      // Seed device_id from the anonymous id at init time so existing installs
+      // get a stable device-level identifier; once set, it survives identify()
+      // and reset() independently of anonymous_id.
       if (!this.getPersistedProperty(PostHogPersistedProperty.DeviceId)) {
         const anonId = this.getAnonymousId()
         if (anonId) {
