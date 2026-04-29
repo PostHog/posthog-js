@@ -548,28 +548,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maskUrl(url: string): string | undefined {
         const userSessionRecordingOptions = this._instance.config.session_recording
 
-        const paramsToMask = this._instance.config.mask_personal_data_properties
-            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(this._instance.config.custom_personal_data_properties || [])]
-            : []
-        const maskedUrl = maskQueryParams(url, paramsToMask, MASKED)
+        let maskedUrl: string | undefined = url
 
         // userSessionRecordingOptions.maskNetworkRequestFn is deprecated, fallback to it
         if (userSessionRecordingOptions.maskCapturedNetworkRequestFn) {
             const result = userSessionRecordingOptions.maskCapturedNetworkRequestFn({
-                name: maskedUrl,
+                name: url,
             } as any)
             // CapturedNetworkRequest uses 'name' for URL, but also check 'url' for compatibility
-            return result?.name ?? (result as any)?.url
-        }
-
-        if (userSessionRecordingOptions.maskNetworkRequestFn) {
+            maskedUrl = result?.name ?? (result as any)?.url
+        } else if (userSessionRecordingOptions.maskNetworkRequestFn) {
             const result = userSessionRecordingOptions.maskNetworkRequestFn({
-                url: maskedUrl,
+                url,
             })
-            return result?.url
+            maskedUrl = result?.url
         }
 
-        return maskedUrl
+        const paramsToMask = this._instance.config.mask_personal_data_properties
+            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(this._instance.config.custom_personal_data_properties || [])]
+            : []
+        return maskQueryParams(maskedUrl, paramsToMask, MASKED)
     }
 
     private _tryRRWebMethod(queuedRRWebEvent: QueuedRRWebEvent): boolean {
