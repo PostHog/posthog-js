@@ -42,7 +42,7 @@ export interface CaptureAiGenerationOptions {
 
   /** Extra event properties merged into the captured event. */
   properties?: Record<string, unknown>
-  groups?: Record<string, unknown>
+  groups?: Record<string, any>
   privacyMode?: boolean
 
   /**
@@ -94,7 +94,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
   let httpStatus = options.httpStatus
   let errorData: Record<string, unknown> = {}
   let enrichedError: unknown
-  if (options.error !== undefined) {
+  if (options.error) {
     if (httpStatus === undefined) {
       httpStatus =
         options.error && typeof options.error === 'object' && 'status' in options.error
@@ -169,7 +169,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     distinctId: options.distinctId ?? traceId,
     event: eventType,
     properties,
-    groups: options.groups as Record<string, any> | undefined,
+    groups: options.groups,
   }
 
   if (options.captureImmediate) {

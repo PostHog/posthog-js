@@ -212,6 +212,28 @@ describe('captureAiGeneration', () => {
     expect((client.capture as jest.Mock).mock.calls[0][0].event).toBe(AIEvent.Embedding)
   })
 
+  it.each([
+    { name: 'null', error: null },
+    { name: 'undefined', error: undefined },
+  ])('does not emit error metadata when error is $name', async ({ error }) => {
+    const client = buildClient()
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, error })
+
+    const properties = lastCaptureProperties(client)
+    expect(properties.$ai_is_error).toBeUndefined()
+    expect(properties.$ai_error).toBeUndefined()
+    expect(properties.$ai_http_status).toBe(200)
+  })
+
+  it('returns undefined and skips emission when client.capture is unavailable', async () => {
+    const client = { options: {} } as unknown as jest.Mocked<PostHog>
+
+    const returned = await captureAiGeneration(client, baseRequiredOptions)
+
+    expect(returned).toBeUndefined()
+  })
+
   it('marks tokens source as passthrough when properties contain token overrides', async () => {
     const client = buildClient()
 
