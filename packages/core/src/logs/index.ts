@@ -6,12 +6,11 @@ import { isArray, safeSetTimeout } from '../utils'
 import type { BeforeSendLogFn, BufferedLogEntry, CaptureLogOptions, ResolvedPostHogLogsConfig } from './types'
 
 export class PostHogLogs {
-  private _localEnabled: boolean
-  // Tri-state remote flag:
-  //   - undefined → remote hasn't spoken yet; local config decides.
-  //   - true      → remote opt-in; capture allowed even if local is off.
-  //   - false     → remote kill-switch; capture forbidden even if local is on.
-  // Updated via `setRemoteEnabled()` from the host SDK's `onRemoteConfig`.
+  // Server-side kill switch. Tri-state:
+  //   - undefined → remote hasn't spoken (or host SDK ignores remote); allow.
+  //   - true      → remote explicitly allowed; allow.
+  //   - false     → remote explicitly disabled; block all capture.
+  // Set via `setRemoteEnabled()` from the host SDK's `onRemoteConfig`.
   private _remoteEnabled?: boolean
   private _maxBufferSize: number
   private _flushIntervalMs: number
@@ -47,7 +46,6 @@ export class PostHogLogs {
     // wires this to its dedicated `_logsStorage.waitForPersist()`.
     private readonly _waitForStoragePersist: () => Promise<void> = () => Promise.resolve()
   ) {
-    this._localEnabled = _config.captureConsoleLogs === true
     this._maxBufferSize = _config.maxBufferSize
     this._flushIntervalMs = _config.flushIntervalMs
     this._maxBatchRecordsPerPost = _config.maxBatchRecordsPerPost
@@ -56,18 +54,18 @@ export class PostHogLogs {
   }
 
   /**
-   * The host SDK calls this from its `onRemoteConfig` handler with whatever
-   * `response.logs.captureConsoleLogs` resolves to:
-   *   - `false` — server-side kill-switch; capture forbidden even if local
-   *               opted in.
-   *   - `true`  — server has no objection; effective state still requires a
-   *               local opt-in.
-   *   - `undefined` — no opinion; local config decides.
+   * Server-side kill switch. The host SDK calls this from its
+   * `onRemoteConfig` handler with whatever `response.logs.captureConsoleLogs`
+   * resolves to:
+   *   - `false` — block all capture going forward.
+   *   - `true` / `undefined` — allow (default state).
    *
-   * AND semantics with local: this mirrors the RN session-replay
-   * `consoleLogRecordingEnabled` gate (in `PostHog.startSessionReplay`) and
-   * other mobile-config patterns. Server can disable a locally-on feature,
-   * but cannot turn the feature on for a user who hasn't opted in locally.
+   * Manual `captureLog` and `logger.*` are otherwise unconditional (matching
+   * the browser SDK's manual path). The kill switch is the one mobile-only
+   * lever — useful for shutting down a runaway log flood remotely without
+   * shipping an app update. An undefined value never overwrites a previous
+   * explicit decision so a remote response that omits the key can't silently
+   * re-enable a feature the server explicitly disabled.
    */
   setRemoteEnabled(enabled: boolean | undefined): void {
     if (enabled !== undefined) {
@@ -76,21 +74,11 @@ export class PostHogLogs {
   }
 
   /**
-   * Effective enabled state for the hot path:
-   *   `enabled = localOptIn AND remote !== false`.
-   *
-   * The local opt-in is the source of truth for whether the user wants logs;
-   * remote acts purely as a server-side off-switch. Diverges from the
-   * browser SDK's `PostHogLogs.onRemoteConfig`, which lets remote `true` flip
-   * a locally-off instance on. RN matches the session-replay precedent
-   * because mobile users rarely expect the server to silently start
-   * collecting data they didn't ask for locally.
+   * Effective enabled state for the hot path: `remote !== false`.
+   * `undefined` and `true` both pass — only an explicit server `false` blocks.
    */
   private _isCaptureEnabled(): boolean {
-    if (this._remoteEnabled === false) {
-      return false
-    }
-    return this._localEnabled
+    return this._remoteEnabled !== false
   }
 
   captureLog(options: CaptureLogOptions): void {

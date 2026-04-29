@@ -13,10 +13,6 @@ const DEFAULT_RATE_CAP_WINDOW_MS = 10000
 const DEFAULT_BACKGROUND_FLUSH_BUDGET_MS = 25000
 const DEFAULT_TERMINATION_FLUSH_BUDGET_MS = 2000
 const resolveForTest = (partial?: PostHogLogsConfig): ResolvedPostHogLogsConfig => ({
-  // Default the gate to ON in tests so each spec doesn't have to repeat the
-  // opt-in. The gating-specific tests pass `captureConsoleLogs: false` (or
-  // `undefined`) explicitly to exercise the off paths.
-  captureConsoleLogs: true,
   ...partial,
   maxBufferSize: partial?.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
   flushIntervalMs: partial?.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS,
@@ -207,37 +203,12 @@ describe('PostHogLogs', () => {
       expect(readQueue(instance)).toHaveLength(0)
     })
 
-    it('is a no-op when captureConsoleLogs is false', () => {
+    it('captures unconditionally without any local opt-in', () => {
+      // Manual capture has no local gate (matches the browser SDK's manual
+      // path). Only optedOut, missing body, and the remote kill switch block.
       const logs = new PostHogLogs(
         mockInstance,
-        resolveForTest({ captureConsoleLogs: false }),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
-      logs.captureLog({ body: 'should be dropped' })
-      expect(readQueue(mockInstance)).toHaveLength(0)
-    })
-
-    it('is a no-op when captureConsoleLogs is undefined (default off)', () => {
-      // Mirrors the JS SDK: the logs feature is opt-in, so an absent flag
-      // leaves it disabled until either local sets `true` or remote config
-      // turns it on via `setRemoteEnabled(true)`.
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest({ captureConsoleLogs: undefined }),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
-      logs.captureLog({ body: 'should be dropped' })
-      expect(readQueue(mockInstance)).toHaveLength(0)
-    })
-
-    it('captures when captureConsoleLogs is true', () => {
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest({ captureConsoleLogs: true }),
+        resolveForTest(),
         logger,
         getContextFor(mockInstance),
         immediateOnReady
@@ -246,29 +217,10 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(1)
     })
 
-    it('setRemoteEnabled(true) does NOT flip a local-off instance on (AND semantics)', () => {
-      // Diverges from the JS SDK: server cannot start capture for a user
-      // who has not opted in locally. Mirrors the RN session-replay
-      // `consoleLogRecordingEnabled` gate.
+    it('setRemoteEnabled(false) acts as a server-side kill switch', () => {
       const logs = new PostHogLogs(
         mockInstance,
-        resolveForTest({ captureConsoleLogs: false }),
-        logger,
-        getContextFor(mockInstance),
-        immediateOnReady
-      )
-      logs.captureLog({ body: 'pre-remote-drop' })
-      expect(readQueue(mockInstance)).toHaveLength(0)
-
-      logs.setRemoteEnabled(true)
-      logs.captureLog({ body: 'still-dropped-no-local-optin' })
-      expect(readQueue(mockInstance)).toHaveLength(0)
-    })
-
-    it('setRemoteEnabled(false) acts as a kill-switch when local is on', () => {
-      const logs = new PostHogLogs(
-        mockInstance,
-        resolveForTest({ captureConsoleLogs: true }),
+        resolveForTest(),
         logger,
         getContextFor(mockInstance),
         immediateOnReady
@@ -281,12 +233,28 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(1)
     })
 
-    it('setRemoteEnabled(undefined) leaves the existing decision unchanged', () => {
-      // A remote response that omits the flag must not overwrite a
-      // previous explicit decision.
+    it('setRemoteEnabled(true) and undefined both leave capture allowed', () => {
+      // Functionally identical: the gate only blocks on an explicit `false`.
       const logs = new PostHogLogs(
         mockInstance,
-        resolveForTest({ captureConsoleLogs: true }),
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.setRemoteEnabled(true)
+      logs.captureLog({ body: 'remote-true' })
+      logs.setRemoteEnabled(undefined)
+      logs.captureLog({ body: 'remote-undefined-after-true' })
+      expect(readQueue(mockInstance)).toHaveLength(2)
+    })
+
+    it('setRemoteEnabled(undefined) does not overwrite a previous kill-switch', () => {
+      // A response that omits the key must not silently re-enable a feature
+      // the server explicitly disabled.
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
         logger,
         getContextFor(mockInstance),
         immediateOnReady

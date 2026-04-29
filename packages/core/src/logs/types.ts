@@ -39,17 +39,13 @@ export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions |
 
 // Public configuration for the logs module. Per-SDK defaults diverge (mobile
 // cellular radio cost, browser tab suspension, node process lifecycle).
+//
+// Manual capture (`captureLog`, `logger.*`) has no local opt-in — calling the
+// API ships records, matching the browser SDK's manual path. The host SDK can
+// still wire a server-side kill switch via `PostHogLogs.setRemoteEnabled` if
+// it wants the server to be able to remotely block capture (RN does this by
+// reading `response.logs.captureConsoleLogs: false`).
 export interface PostHogLogsConfig {
-  // Master switch. Default: false. The logs feature is opt-in — pass `true`
-  // explicitly to enable, mirroring the browser SDK's `PostHogLogs`
-  // extension. Server-side remote config (`response.logs.captureConsoleLogs`)
-  // can also flip this on, and an explicit remote `false` acts as a
-  // kill-switch even when local is `true`. The name matches the browser SDK
-  // so cross-SDK config mental models stay in sync; the field gates the
-  // entire logs pipeline (manual `captureLog` included), not only `console.*`
-  // interception.
-  captureConsoleLogs?: boolean
-
   // Resource attributes
   serviceName?: string
   serviceVersion?: string

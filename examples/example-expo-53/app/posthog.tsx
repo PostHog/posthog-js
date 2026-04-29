@@ -28,17 +28,18 @@ export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_K
     // requests to these hostnames. Used by the Tracing Headers screen to verify
     // the patch works end-to-end; see https://posthog.com/docs/llm-analytics/link-session-replay
     addTracingHeaders: ['httpbin.org'],
-    // Logs feature config. Off by default — `captureConsoleLogs: true`
-    // Server can also enable via remote config, or kill-switch with an explicit `false`.
+    // Logs feature config. Manual capture (`posthog.captureLog`,
+    // `posthog.logger.*`) is unconditional — these settings only customize
+    // resource attributes, rate cap, and filtering for local dogfooding.
+    // The server can kill-switch the pipeline via remote config
+    // (`response.logs.captureConsoleLogs: false`).
     //
-    // The remaining values are mainly for local dogfooding:
     //   - serviceName / environment / serviceVersion show up as OTLP resource
     //     attrs on every batch, so you can group/filter in the Logs UI and
     //     spot example traffic vs your real apps.
-    //   - Try uncommenting `beforeSend` to redact bodies, or
-    //     `maxLogsPerInterval` to exercise the rate cap from the Logs tab.
+    //   - Uncomment `beforeSend` to redact bodies, or `maxLogsPerInterval`
+    //     to exercise the rate cap from the Logs tab.
     logs: {
-        captureConsoleLogs: true,
         serviceName: 'expo-example',
         environment: 'dev',
         serviceVersion: '0.0.1',
