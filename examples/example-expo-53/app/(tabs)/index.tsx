@@ -1,5 +1,6 @@
 import { Image } from 'expo-image'
 import { Platform, StyleSheet, Button, View } from 'react-native'
+import { Link } from 'expo-router'
 
 import { HelloWave } from '@/components/HelloWave'
 import ParallaxScrollView from '@/components/ParallaxScrollView'
@@ -7,67 +8,12 @@ import { ThemedText } from '@/components/ThemedText'
 import { ThemedView } from '@/components/ThemedView'
 import { posthog } from '../posthog'
 import { useState } from 'react'
-import { SurveyModal } from 'posthog-react-native'
-
-// Demo survey for local dogfooding. Real apps get Survey objects from
-// PostHogSurveyProvider, so consumers don't usually construct these by hand.
-const DEMO_SURVEY: any = {
-    id: 'demo-survey',
-    name: 'Demo survey',
-    type: 'popover',
-    questions: [
-        {
-            type: 'rating',
-            question: 'How would you rate this example app?',
-            id: 'q1',
-            display: 'number',
-            scale: 5,
-            lowerBoundLabel: 'Bad',
-            upperBoundLabel: 'Great',
-            originalQuestionIndex: 0,
-        },
-        {
-            type: 'single_choice',
-            question: 'What would make it better?',
-            id: 'q2',
-            choices: ['More examples', 'Better docs', 'Nothing, it’s great'],
-            originalQuestionIndex: 1,
-        },
-        {
-            type: 'open',
-            question: 'Anything else?',
-            id: 'q3',
-            optional: true,
-            originalQuestionIndex: 2,
-        },
-    ],
-}
-
-const DEMO_APPEARANCE: any = {
-    backgroundColor: '#eeeded',
-    submitButtonColor: 'black',
-    submitButtonTextColor: 'white',
-    ratingButtonColor: 'white',
-    ratingButtonActiveColor: 'black',
-    inputBackground: 'white',
-    borderColor: '#c9c6c6',
-    placeholder: 'Start typing...',
-    displayThankYouMessage: true,
-    thankYouMessageHeader: 'Thank you!',
-    thankYouMessageDescription: 'Your feedback helps us improve.',
-    thankYouMessageDescriptionContentType: 'text',
-    thankYouMessageCloseButtonText: 'Close',
-    submitButtonText: 'Submit',
-    autoDisappear: false,
-    surveyPopupDelaySeconds: 0,
-}
 
 export default function HomeScreen() {
     const [buttonText, setButtonText] = useState(
         `Tap the Explore tab to learn more about what's included in this starter app.`
     )
     const [replayStatus, setReplayStatus] = useState('Unknown')
-    const [showSurvey, setShowSurvey] = useState(false)
 
     const handleClick = () => {
         posthog.capture('button_clicked', { name: 'example' })
@@ -140,16 +86,10 @@ export default function HomeScreen() {
             </ThemedView>
             <ThemedView style={styles.stepContainer}>
                 <ThemedText type="subtitle">Surveys</ThemedText>
-                <Button title="Show survey" onPress={() => setShowSurvey(true)} />
+                <Link href="/surveys" asChild>
+                    <Button title="Open survey demo" />
+                </Link>
             </ThemedView>
-            {showSurvey && (
-                <SurveyModal
-                    survey={DEMO_SURVEY}
-                    appearance={DEMO_APPEARANCE}
-                    onShow={() => {}}
-                    onClose={() => setShowSurvey(false)}
-                />
-            )}
             <ThemedView style={styles.stepContainer}>
                 <ThemedText type="subtitle">Session Replay Controls</ThemedText>
                 <ThemedText>Status: {replayStatus}</ThemedText>
