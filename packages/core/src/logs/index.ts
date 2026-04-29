@@ -63,9 +63,23 @@ export class PostHogLogs {
    * Manual `captureLog` and `logger.*` are otherwise unconditional (matching
    * the browser SDK's manual path). The kill switch is the one mobile-only
    * lever — useful for shutting down a runaway log flood remotely without
-   * shipping an app update. An undefined value never overwrites a previous
-   * explicit decision so a remote response that omits the key can't silently
-   * re-enable a feature the server explicitly disabled.
+   * shipping an app update.
+   *
+   * Best-effort, eventually consistent: between SDK init and the first
+   * remote-config response, `_remoteEnabled` is `undefined` and capture is
+   * allowed. Records emitted in that window will enqueue and flush even if
+   * the customer's project has the switch on. Hosts that cache the previous
+   * remote-config response (RN does, see `posthog-rn.ts`) cover second-and-
+   * later launches; the very first launch and any post-`reset()` of the
+   * cached response are uncovered.
+   *
+   * Monotonically biased toward "allow": `setRemoteEnabled(undefined)` is a
+   * no-op and never overwrites a previous explicit decision. If the server
+   * has flipped the kill switch on (`false`) and later wants to release it,
+   * it must respond with an explicit `true` — removing the key from the
+   * response leaves the kill switch in place. This prevents a flaky or
+   * partially-populated response from silently re-enabling a feature the
+   * server explicitly disabled.
    */
   setRemoteEnabled(enabled: boolean | undefined): void {
     if (enabled !== undefined) {
@@ -322,10 +336,15 @@ export class PostHogLogs {
   }
 
   private _enqueue(entry: BufferedLogEntry): void {
-    // Re-check: optedOut can flip between captureLog and here — preload may
-    // have hydrated the real persisted value, or optIn/optOut may have fired
-    // while this fn was deferred.
+    // Re-check both gates: state can flip between captureLog and here.
+    // optedOut: preload may have hydrated the real persisted value, or
+    //   optIn/optOut may have fired while this fn was deferred.
+    // _isCaptureEnabled: a remote-config response that flipped the kill
+    //   switch may have landed during the same init-promise tick window.
     if (this._instance.optedOut) {
+      return
+    }
+    if (!this._isCaptureEnabled()) {
       return
     }
 
