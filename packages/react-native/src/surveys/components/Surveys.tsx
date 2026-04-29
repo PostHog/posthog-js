@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { ScrollView, StyleProp, ViewStyle } from 'react-native'
+import { StyleProp, ViewStyle } from 'react-native'
 
 import { getDisplayOrderQuestions, getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
 import {
@@ -172,29 +172,23 @@ export function Questions({
 
   const question = surveyQuestions[currentQuestionIndex]
 
-  return (
-    <ScrollView
-      style={[styleOverrides, { flexGrow: 0 }]}
-      keyboardShouldPersistTaps="handled" // do not dismiss keyboard on submit button tap
-    >
-      {getQuestionComponent({
-        question,
-        appearance,
-        onSubmit: (res) =>
-          onNextButtonClick({
-            res,
-            originalQuestionIndex: question.originalQuestionIndex,
-            questionId: question.id,
-            // displayQuestionIndex: currentQuestionIndex,
-          }),
-      })}
-    </ScrollView>
-  )
+  return getQuestionComponent({
+    question,
+    appearance,
+    styleOverrides,
+    onSubmit: (res) =>
+      onNextButtonClick({
+        res,
+        originalQuestionIndex: question.originalQuestionIndex,
+        questionId: question.id,
+      }),
+  })
 }
 
 type GetQuestionComponentProps = {
   question: SurveyQuestion
   appearance: SurveyAppearance
+  styleOverrides?: StyleProp<ViewStyle>
   onSubmit: (res: string | string[] | number | null) => void
 }
 
