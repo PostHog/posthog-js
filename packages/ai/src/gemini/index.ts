@@ -18,8 +18,8 @@ import {
   toContentString,
   withPrivacyMode,
   getModelParams,
-  captureAiGeneration,
 } from '../utils'
+import { captureAiGeneration } from '../captureAiGeneration'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'

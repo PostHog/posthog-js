@@ -7,8 +7,8 @@ import {
   extractAvailableToolCalls,
   extractPosthogParams,
   getModelParams,
-  captureAiGeneration,
 } from '../utils'
+import { captureAiGeneration } from '../captureAiGeneration'
 import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
 
 type MessageCreateParamsNonStreaming = AnthropicOriginal.Messages.MessageCreateParamsNonStreaming

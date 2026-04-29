@@ -1,14 +1,12 @@
-import { EventMessage, PostHog } from 'posthog-node'
+import { PostHog } from 'posthog-node'
 import OpenAIOrignal from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
 import type { Tool as GeminiTool } from '@google/genai'
-import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
-import { version } from '../package.json'
+import type { FormattedMessage, FormattedContent } from './types'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
-import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { redactBase64DataUrl } from './sanitization'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
@@ -614,180 +612,6 @@ function addDefaults(params: MonitoringEventProperties): MonitoringEventProperti
     privacyMode: params.privacyMode ?? false,
     traceId: params.traceId ?? uuidv4(),
   }
-}
-
-/**
- * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
- * directly so that any caller — first-party SDK wrappers and external code
- * alike — produces an identical event.
- */
-export interface CaptureAiGenerationOptions {
-  distinctId?: string
-  /** Auto-generated when omitted. */
-  traceId?: string
-  /** Defaults to `$ai_generation`. */
-  eventType?: AIEvent
-
-  /** Required for the event to be useful, but accepted as optional so SDK wrappers can pass through whatever they detect. */
-  model?: string
-  provider: string
-  input: unknown
-  output: unknown
-
-  /** Maps to `$ai_model_parameters` (temperature, max_tokens, top_p, …). */
-  modelParameters?: Record<string, unknown>
-
-  baseURL?: string
-  httpStatus?: number
-  /** Wall-clock latency in seconds. */
-  latency?: number
-  /** Time from request start to the first streamed token, in seconds. */
-  timeToFirstToken?: number
-
-  usage?: TokenUsage
-
-  /** Extra event properties merged into the captured event. */
-  properties?: Record<string, unknown>
-  groups?: Record<string, unknown>
-  privacyMode?: boolean
-
-  /**
-   * For SDK wrappers: overrides the auto-detected model. External callers
-   * should pass `model` directly instead.
-   */
-  modelOverride?: string
-  /**
-   * For SDK wrappers: overrides the auto-detected provider. External callers
-   * should pass `provider` directly instead.
-   */
-  providerOverride?: string
-  costOverride?: CostOverride
-
-  tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
-  stopReason?: string
-  /** When set, the event is captured as an error. */
-  error?: unknown
-
-  /** Awaits delivery instead of batching. Useful in serverless environments. */
-  captureImmediate?: boolean
-}
-
-/**
- * Capture an `$ai_generation` (or `$ai_embedding`) event to PostHog.
- *
- * This is the canonical primitive that every `@posthog/ai` wrapper
- * (`withTracing`, `OpenAI`, `Anthropic`, `GoogleGenAI`, …) funnels through, so
- * external code can use it directly to instrument LLM calls made through
- * arbitrary clients (Cloudflare Workers AI, custom HTTP, etc.) and get the
- * same events the SDK wrappers produce.
- *
- * When `error` is set, the event is captured as an error and the enriched
- * error is returned so the caller can re-throw it.
- */
-export const captureAiGeneration = async (
-  client: PostHog,
-  options: CaptureAiGenerationOptions
-): Promise<unknown | void> => {
-  if (!client.capture) {
-    return undefined
-  }
-
-  const traceId = options.traceId ?? uuidv4()
-  const eventType = options.eventType ?? AIEvent.Generation
-  const privacyMode = options.privacyMode ?? false
-  const usage = options.usage ?? {}
-
-  const safeInput = sanitizeValues(options.input)
-  const safeOutput = sanitizeValues(options.output)
-
-  let httpStatus = options.httpStatus
-  let errorData: Record<string, unknown> = {}
-  let enrichedError: unknown
-  if (options.error !== undefined) {
-    if (httpStatus === undefined) {
-      httpStatus =
-        options.error && typeof options.error === 'object' && 'status' in options.error
-          ? ((options.error as { status?: number }).status ?? 500)
-          : 500
-    }
-
-    let exceptionId: string | undefined
-    if (client.options?.enableExceptionAutocapture) {
-      exceptionId = uuidv7()
-      client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
-      if (options.error && typeof options.error === 'object') {
-        const enriched = options.error as CoreErrorTracking.PreviouslyCapturedError
-        enriched.__posthog_previously_captured_error = true
-      }
-    }
-    enrichedError = options.error
-
-    errorData = {
-      $ai_is_error: true,
-      $ai_error: sanitizeValues(JSON.stringify(options.error)),
-      $exception_event_id: exceptionId,
-    }
-  }
-  httpStatus = httpStatus ?? 200
-
-  let costOverrideData: Record<string, number> = {}
-  if (options.costOverride) {
-    const inputCostUSD = (options.costOverride.inputCost ?? 0) * (usage.inputTokens ?? 0)
-    const outputCostUSD = (options.costOverride.outputCost ?? 0) * (usage.outputTokens ?? 0)
-    costOverrideData = {
-      $ai_input_cost_usd: inputCostUSD,
-      $ai_output_cost_usd: outputCostUSD,
-      $ai_total_cost_usd: inputCostUSD + outputCostUSD,
-    }
-  }
-
-  const additionalTokenValues = {
-    ...(usage.reasoningTokens ? { $ai_reasoning_tokens: usage.reasoningTokens } : {}),
-    ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
-    ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
-    ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
-    ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
-  }
-
-  const properties: Record<string, unknown> = {
-    $ai_lib: 'posthog-ai',
-    $ai_lib_version: version,
-    $ai_provider: options.providerOverride ?? options.provider,
-    $ai_model: options.modelOverride ?? options.model,
-    $ai_model_parameters: options.modelParameters ?? {},
-    $ai_input: withPrivacyMode(client, privacyMode, safeInput),
-    $ai_output_choices: withPrivacyMode(client, privacyMode, safeOutput),
-    $ai_http_status: httpStatus,
-    $ai_input_tokens: usage.inputTokens ?? 0,
-    ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
-    ...additionalTokenValues,
-    $ai_latency: options.latency ?? 0,
-    ...(options.timeToFirstToken !== undefined ? { $ai_time_to_first_token: options.timeToFirstToken } : {}),
-    $ai_trace_id: traceId,
-    $ai_base_url: options.baseURL ?? '',
-    ...options.properties,
-    $ai_tokens_source: getTokensSource(options.properties),
-    ...(options.distinctId ? {} : { $process_person_profile: false }),
-    ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
-    ...(options.tools ? { $ai_tools: options.tools } : {}),
-    ...errorData,
-    ...costOverrideData,
-  }
-
-  const event: EventMessage = {
-    distinctId: options.distinctId ?? traceId,
-    event: eventType,
-    properties,
-    groups: options.groups as Record<string, any> | undefined,
-  }
-
-  if (options.captureImmediate) {
-    await client.captureImmediate(event)
-  } else {
-    client.capture(event)
-  }
-
-  return enrichedError
 }
 
 export function formatOpenAIResponsesInput(input: unknown, instructions?: string | null): FormattedMessage[] {

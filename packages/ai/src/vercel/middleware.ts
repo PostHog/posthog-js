@@ -20,8 +20,8 @@ import {
   toContentString,
   calculateWebSearchCount,
   getModelParams,
-  captureAiGeneration,
 } from '../utils'
+import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl } from '../sanitization'
 import { isString } from '../typeGuards'
 

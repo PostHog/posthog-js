@@ -1,5 +1,6 @@
 import { PostHog } from 'posthog-node'
-import { captureAiGeneration, AIEvent } from '../src/utils'
+import { captureAiGeneration } from '../src/captureAiGeneration'
+import { AIEvent } from '../src/utils'
 import { version } from '../package.json'
 
 jest.mock('posthog-node')
