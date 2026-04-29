@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from 'react-native'
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
 
 import { Cancel } from './Cancel'
 import { ConfirmationMessage } from './ConfirmationMessage'
@@ -68,10 +60,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
     return null
   }
 
-  const maxModalHeight = Math.max(
-    windowHeight - keyboardHeight - insets.top - insets.bottom - VIEWPORT_BUFFER,
-    200
-  )
+  const maxModalHeight = Math.max(windowHeight - keyboardHeight - insets.top - insets.bottom - VIEWPORT_BUFFER, 200)
 
   const keyboardBehavior = Platform.OS === 'ios' ? 'padding' : androidKeyboardBehavior
 
