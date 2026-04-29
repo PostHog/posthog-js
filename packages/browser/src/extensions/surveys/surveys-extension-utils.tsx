@@ -709,7 +709,12 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
     if (!survey.conditions?.selector) {
         return true
     }
-    return !!document?.querySelector(survey.conditions.selector)
+    try {
+        return !!document?.querySelector(survey.conditions.selector)
+    } catch (e) {
+        logger.warn(`Invalid CSS selector for survey ${survey.id}: ${JSON.stringify(survey.conditions.selector)}`, e)
+        return false
+    }
 }
 
 interface InProgressSurveyState {

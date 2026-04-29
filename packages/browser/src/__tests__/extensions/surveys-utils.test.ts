@@ -1,6 +1,7 @@
 import {
     addSurveyCSSVariablesToElement,
     canActivateRepeatedly,
+    doesSurveyMatchSelector,
     doesSurveyUrlMatch,
     getFontFamily,
     getSurveySeen,
@@ -11,6 +12,7 @@ import {
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
+import { isUndefined } from '@posthog/core'
 
 describe('hasWaitPeriodPassed', () => {
     let originalDate: DateConstructor
@@ -562,6 +564,61 @@ describe('doesSurveyUrlMatch', () => {
             }
             expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
         })
+    })
+})
+
+describe('doesSurveyMatchSelector', () => {
+    const baseSurvey = {
+        id: 'test-survey-id',
+        name: 'Test Survey',
+        description: '',
+        type: SurveyType.Popover,
+        questions: [],
+        appearance: null,
+        start_date: null,
+        end_date: null,
+        current_iteration: null,
+        current_iteration_start_date: null,
+        feature_flag_keys: null,
+        linked_flag_key: null,
+        targeting_flag_key: null,
+        internal_targeting_flag_key: null,
+    } as unknown as Survey
+
+    const buildSurvey = (selector?: string): Survey =>
+        ({
+            ...baseSurvey,
+            conditions: isUndefined(selector) ? null : ({ selector, events: null, actions: null } as any),
+        }) as Survey
+
+    afterEach(() => {
+        document.body.innerHTML = ''
+    })
+
+    it('should return true when no selector is configured', () => {
+        expect(doesSurveyMatchSelector(buildSurvey())).toBe(true)
+        expect(doesSurveyMatchSelector(buildSurvey(undefined))).toBe(true)
+    })
+
+    it('should return true when the selector matches an element on the page', () => {
+        const el = document.createElement('div')
+        el.setAttribute('data-ph-survey', 'approve-post-overview')
+        document.body.appendChild(el)
+
+        expect(doesSurveyMatchSelector(buildSurvey("[data-ph-survey='approve-post-overview']"))).toBe(true)
+    })
+
+    it('should return false when the selector does not match anything on the page', () => {
+        expect(doesSurveyMatchSelector(buildSurvey('.does-not-exist'))).toBe(false)
+    })
+
+    it('should return false (and not throw) when the selector is syntactically invalid', () => {
+        // The customer reported a bare attribute expression instead of a valid attribute selector,
+        // which causes querySelector to throw a SyntaxError.
+        const invalidSelector = "data-ph-survey='approve-post-overview'"
+
+        expect(() => doesSurveyMatchSelector(buildSurvey(invalidSelector))).not.toThrow()
+        expect(doesSurveyMatchSelector(buildSurvey(invalidSelector))).toBe(false)
     })
 })
 
