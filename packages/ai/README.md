@@ -39,6 +39,37 @@ console.log(completion.choices[0].message.content)
 await phClient.shutdown()
 ```
 
+## Custom and unsupported providers
+
+For LLM calls that don't go through one of the wrapped clients — direct Cloudflare Workers AI bindings, TanStack AI adapters, custom HTTP clients — use `captureAiGeneration` to emit the same `$ai_generation` events the wrappers produce.
+
+```typescript
+import { captureAiGeneration } from '@posthog/ai'
+import { PostHog } from 'posthog-node'
+
+const phClient = new PostHog('<YOUR_PROJECT_API_KEY>', { host: 'https://us.i.posthog.com' })
+
+const start = Date.now()
+const result = await env.AI.run('@cf/zai-org/glm-4.7-flash', { messages, reasoning_effort: 'high' })
+
+await captureAiGeneration(phClient, {
+  distinctId: 'user_123',
+  traceId: 'trace_abc',
+  provider: 'cloudflare-workers-ai',
+  model: '@cf/zai-org/glm-4.7-flash',
+  input: messages,
+  output: result.response,
+  modelParameters: { reasoning_effort: 'high' },
+  usage: { inputTokens: result.usage?.prompt_tokens, outputTokens: result.usage?.completion_tokens },
+  latency: (Date.now() - start) / 1000,
+  properties: { feature: 'transcript-toc' },
+})
+
+await phClient.shutdown()
+```
+
+`captureAiGeneration` is the same primitive that every other `@posthog/ai` wrapper funnels through, so the resulting events are indistinguishable from those produced by `withTracing`, `OpenAI`, `Anthropic`, etc.
+
 ## OpenTelemetry
 
 `@posthog/ai/otel` provides two ways to send AI traces to PostHog via OpenTelemetry. Both automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`) and PostHog converts them into `$ai_generation` events server-side. This works with any LLM provider SDK that supports OpenTelemetry.
