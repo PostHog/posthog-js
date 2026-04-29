@@ -45,6 +45,9 @@ describe('Session ID manager', () => {
                 // Mock the behavior of register - it should update the props
                 Object.assign(persistence.props, props)
             }),
+            unregister: jest.fn().mockImplementation((prop: string) => {
+                delete persistence.props[prop]
+            }),
             _disabled: false,
         }
         ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
@@ -308,9 +311,17 @@ describe('Session ID manager', () => {
     })
 
     describe('reset session id', () => {
-        it('clears the existing session id', () => {
+        it('clears the existing session id by removing it from persistence', () => {
+            // Seed a real session id so reset has something to clear and the unregister branch fires.
+            persistence.props[SESSION_ID] = [timestamp, 'oldSessionID', timestamp]
+
             sessionIdMgr(persistence).resetSessionId()
-            expect(persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
+
+            // It must NOT write [null, null, null] into persistence — that ends up URL-encoded in the
+            // cookie as "[null,null,null]" which some WAFs flag as a SQLi pattern.
+            expect(persistence.register).not.toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
+            expect(persistence.unregister).toHaveBeenCalledWith(SESSION_ID)
+            expect(persistence.props).not.toHaveProperty(SESSION_ID)
         })
         it('a new session id is generated when called', () => {
             persistence.props[SESSION_ID] = [null, null, null]
@@ -345,6 +356,19 @@ describe('Session ID manager', () => {
                 expect(secondResult.changeReason).toBeUndefined()
             }
         )
+
+        it('serializes persistence without "[null,null,null]" after reset (cookie SQLi false-positive guard)', () => {
+            // Seed a session, then reset it. This simulates posthog.reset() in a slim-bundle setup
+            // where no autocapture event re-populates the session id.
+            persistence.props[SESSION_ID] = [timestamp, 'oldSessionID', timestamp]
+
+            sessionIdMgr(persistence).resetSessionId()
+
+            // The cookie is JSON.stringify(persistence.props) — make sure it never contains the
+            // "[null,null,null]" substring that triggers WAF SQLi rules on URL-decoded cookies.
+            expect(JSON.stringify(persistence.props)).not.toContain('[null,null,null]')
+            expect(JSON.stringify(persistence.props)).not.toContain('"$sesid"')
+        })
     })
 
     describe('primary_window_exists_storage_key', () => {
@@ -447,8 +471,12 @@ describe('Session ID manager', () => {
             // Timer should have fired and called resetSessionId
             expect(resetSpy).toHaveBeenCalled()
 
-            // After reset, persistence.register should have been called with null values
-            expect(persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
+            // After reset, the SESSION_ID key should be unregistered from persistence rather
+            // than written as [null, null, null] (which would be URL-encoded into the cookie
+            // and matched as a SQLi pattern by some WAFs).
+            expect(persistence.unregister).toHaveBeenCalledWith(SESSION_ID)
+            expect(persistence.register).not.toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
+            expect(persistence.props).not.toHaveProperty(SESSION_ID)
 
             // Next call should generate a new session due to no session ID
             const newSessionData = sessionIdManager.checkAndGetSessionAndWindowId(false)

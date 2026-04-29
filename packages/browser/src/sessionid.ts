@@ -7,7 +7,7 @@ import { window } from './utils/globals'
 
 import { createLogger } from './utils/logger'
 
-import { isArray, isUndefined, clampToRange, isPositiveNumber } from '@posthog/core'
+import { isArray, isNull, isUndefined, clampToRange, isPositiveNumber } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -173,9 +173,18 @@ export class SessionIdManager {
             this._sessionActivityTimestamp = sessionActivityTimestamp
             this._sessionId = sessionId
 
-            this._persistence.register({
-                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
-            })
+            // When clearing the session (e.g. via resetSessionId), remove the key from persistence
+            // entirely instead of writing [null, null, null]. Some WAFs flag the URL-decoded
+            // "[null,null,null]" substring in cookies as a SQLi pattern and block requests.
+            // _getSessionId already falls back to [0, null, 0] when the key is absent, so
+            // downstream behaviour is unchanged.
+            if (isNull(sessionId) && isNull(sessionActivityTimestamp) && isNull(sessionStartTimestamp)) {
+                this._persistence.unregister(SESSION_ID)
+            } else {
+                this._persistence.register({
+                    [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
+                })
+            }
         }
     }
 
