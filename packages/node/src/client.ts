@@ -56,6 +56,26 @@ const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
 const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
 
+// Process-wide dedup for deprecation warnings — without this, calling a deprecated
+// method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
+const _emittedDeprecations = new Set<string>()
+
+function emitDeprecationWarningOnce(id: string, message: string): void {
+  if (_emittedDeprecations.has(id)) {
+    return
+  }
+  _emittedDeprecations.add(id)
+  // eslint-disable-next-line no-console
+  console.warn(`[PostHog] ${message}`)
+}
+
+/**
+ * @internal — clears the process-wide deprecation dedup set. Test-only.
+ */
+export function _resetDeprecationWarningsForTests(): void {
+  _emittedDeprecations.clear()
+}
+
 function normalizeApiKey(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -1047,6 +1067,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<FeatureFlagValue | undefined> {
+    emitDeprecationWarningOnce(
+      'getFeatureFlag',
+      '`getFeatureFlag` is deprecated and will be removed in a future major version. ' +
+        'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.getFlag(key)` instead — ' +
+        'this consolidates flag evaluation into a single `/flags` request per incoming request.'
+    )
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
       sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
@@ -1109,6 +1135,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<JsonType | undefined> {
+    emitDeprecationWarningOnce(
+      'getFeatureFlagPayload',
+      '`getFeatureFlagPayload` is deprecated and will be removed in a future major version. ' +
+        'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.getFlagPayload(key)` instead — ' +
+        'this consolidates flag evaluation into a single `/flags` request per incoming request.'
+    )
     // Check for payload overrides first - they take precedence over all evaluation
     // This is checked independently from flag overrides
     if (this._payloadOverrides !== undefined && key in this._payloadOverrides) {
@@ -1280,10 +1312,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<boolean | undefined> {
-    const feat = await this.getFeatureFlag(key, distinctId, options)
-    if (feat === undefined) {
+    emitDeprecationWarningOnce(
+      'isFeatureEnabled',
+      '`isFeatureEnabled` is deprecated and will be removed in a future major version. ' +
+        'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.isEnabled(key)` instead — ' +
+        'this consolidates flag evaluation into a single `/flags` request per incoming request.'
+    )
+    // Bypass the public `getFeatureFlag` so the user only sees one deprecation warning per call.
+    const result = await this._getFeatureFlagResult(key, distinctId, {
+      ...options,
+      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+    })
+    if (result === undefined) {
       return undefined
     }
+    if (result.enabled === false) {
+      return false
+    }
+    const feat: FeatureFlagValue = result.variant ?? true
     return !!feat || false
   }
 
@@ -1576,6 +1622,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const records: Record<string, EvaluatedFlagRecord> = {}
     let requestId: string | undefined = undefined
     let evaluatedAt: number | undefined = undefined
+    let errorsWhileComputing = false
+    let quotaLimited = false
 
     // Try local evaluation first and decorate each flag with metadata from the poller.
     // `flagKeys` scopes the evaluation to a subset of definitions when provided.
@@ -1616,6 +1664,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if (details) {
         requestId = details.requestId
         evaluatedAt = details.evaluatedAt
+        errorsWhileComputing = Boolean((details as any).errorsWhileComputingFlags)
+        quotaLimited = Array.isArray(details.quotaLimited) && details.quotaLimited.includes('feature_flags')
         for (const [key, detail] of Object.entries(details.flags)) {
           if (locallyEvaluatedKeys.has(key)) {
             continue
@@ -1680,6 +1730,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       requestId,
       evaluatedAt,
       flagDefinitionsLoadedAt: this.featureFlagsPoller?.getFlagDefinitionsLoadedAt(),
+      errorsWhileComputing,
+      quotaLimited,
     })
   }
 
@@ -2216,18 +2268,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param error - The error to capture
    * @param distinctId - Optional user distinct ID
    * @param additionalProperties - Optional additional properties to include
+   * @param uuid - Optional event UUID
+   * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
    */
   captureException(
     error: unknown,
     distinctId?: string,
     additionalProperties?: Record<string | number, any>,
-    uuid?: EventMessage['uuid']
+    uuid?: EventMessage['uuid'],
+    flags?: FeatureFlagEvaluations
   ): void {
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
         ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.capture({ ...msg, uuid })
+          this.capture({ ...msg, uuid, flags })
         )
       )
     }
@@ -2266,18 +2321,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param error - The error to capture
    * @param distinctId - Optional user distinct ID
    * @param additionalProperties - Optional additional properties to include
+   * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
    * @returns Promise that resolves when the error is captured
    */
   async captureExceptionImmediate(
     error: unknown,
     distinctId?: string,
-    additionalProperties?: Record<string | number, any>
+    additionalProperties?: Record<string | number, any>,
+    flags?: FeatureFlagEvaluations
   ): Promise<void> {
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
         ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.captureImmediate(msg)
+          this.captureImmediate({ ...msg, flags })
         )
       )
     }
@@ -2340,13 +2397,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
     const eventProperties = await Promise.resolve()
       .then(async () => {
-        // Prefer the explicit `flags` object — it guarantees the event carries the same
-        // values the developer branched on, with no additional network call.
+        // Precedence: an explicit `flags` snapshot always wins, regardless of
+        // `sendFeatureFlags`. The snapshot guarantees the event carries the same
+        // values the developer branched on with no additional network call. The
+        // `sendFeatureFlags` path only runs when no snapshot is provided.
         if (flags) {
+          if (sendFeatureFlags) {
+            console.warn(
+              '[PostHog] Both `flags` and `sendFeatureFlags` were passed to capture(); using `flags` and ignoring `sendFeatureFlags`.'
+            )
+          }
           return flags._getEventProperties()
         }
 
         if (sendFeatureFlags) {
+          emitDeprecationWarningOnce(
+            'sendFeatureFlags',
+            '`sendFeatureFlags` is deprecated and will be removed in a future major version. ' +
+              'Pass a `flags` snapshot from `posthog.evaluateFlags(...)` instead — it avoids a ' +
+              'second `/flags` request per capture and guarantees the event carries the exact ' +
+              'flag values your code branched on.'
+          )
           // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
           const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
           const flagValues = await this.getFeatureFlagsForEvent(

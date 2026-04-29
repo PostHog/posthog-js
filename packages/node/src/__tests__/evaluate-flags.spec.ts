@@ -1,6 +1,7 @@
+import { _resetDeprecationWarningsForTests } from '@/client'
 import { PostHog } from '@/entrypoints/index.node'
 import { FeatureFlagEvaluations } from '@/feature-flag-evaluations'
-import { PostHogOptions } from '@/types'
+import { EventMessage, PostHogOptions } from '@/types'
 import { apiImplementation, apiImplementationV4, waitForPromises } from './utils'
 import { PostHogV2FlagsResponse } from '@posthog/core'
 
@@ -230,17 +231,12 @@ describe('evaluateFlags', () => {
       expect(accessed.keys.sort()).toEqual(['boolean-flag', 'variant-flag'])
     })
 
-    it('onlyAccessed warns and falls back to all flags when nothing was accessed', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-
+    it('onlyAccessed returns empty when no flags accessed', async () => {
+      // The method honors its name: nothing accessed → empty snapshot, no fallback.
       const flags = await posthog.evaluateFlags('user-1')
       const accessed = flags.onlyAccessed()
 
-      expect(accessed.keys.sort()).toEqual(['boolean-flag', 'disabled-flag', 'variant-flag'])
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('onlyAccessed() was called before any flags were accessed')
-      )
-      warnSpy.mockRestore()
+      expect(accessed.keys).toEqual([])
     })
 
     it('featureFlagsLogWarnings=false silences filter warnings', async () => {
@@ -348,7 +344,8 @@ describe('evaluateFlags', () => {
       expect(flagCallsAfterCapture).toEqual(flagCallsBeforeCapture)
     })
 
-    it('flags option takes precedence over sendFeatureFlags', async () => {
+    it('flags option takes precedence over sendFeatureFlags and warns when both passed', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
       const flags = await posthog.evaluateFlags('user-1')
       const callsBefore = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2')).length
 
@@ -369,6 +366,155 @@ describe('evaluateFlags', () => {
         $active_feature_flags: ['boolean-flag'],
       })
       expect(pageViewed.properties['$feature/variant-flag']).toBeUndefined()
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Both `flags` and `sendFeatureFlags` were passed to capture()')
+      )
+      warnSpy.mockRestore()
+    })
+
+    it('captureException forwards flags through to the $exception event', async () => {
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag')
+
+      posthog.captureException(new Error('boom'), 'user-1', undefined, undefined, flags.onlyAccessed())
+
+      // captureException → addPendingPromise(buildEventMessage().then(msg => capture(...)))
+      // → capture itself queues async work via prepareEventMessage. The 'capture' event
+      // fires inside captureStateless before the network flush, so we just need enough
+      // microtask cycles to let the chain resolve.
+      await waitForPromises()
+      await waitForPromises()
+      await waitForPromises()
+
+      const exception = captures.find((m) => m.event === '$exception')
+      expect(exception).toBeDefined()
+      expect(exception.properties).toMatchObject({
+        '$feature/boolean-flag': true,
+        $active_feature_flags: ['boolean-flag'],
+      })
+      expect(exception.properties['$feature/variant-flag']).toBeUndefined()
+    })
+
+    it('captureExceptionImmediate forwards the flags snapshot to captureImmediate', async () => {
+      // captureStatelessImmediate doesn't fire the EventEmitter 'capture' event (it sends
+      // directly), so we verify forwarding by spying on captureImmediate itself.
+      const flags = await posthog.evaluateFlags('user-1')
+      const filtered = flags.only(['boolean-flag'])
+      const spy = jest.spyOn(posthog, 'captureImmediate').mockResolvedValue(undefined)
+
+      await posthog.captureExceptionImmediate(new Error('boom'), 'user-1', undefined, filtered)
+      await waitForPromises()
+
+      expect(spy).toHaveBeenCalledTimes(1)
+      const arg = spy.mock.calls[0][0] as EventMessage
+      expect(arg.flags).toBe(filtered)
+      expect(arg.event).toBe('$exception')
+
+      spy.mockRestore()
+    })
+  })
+
+  describe('error granularity', () => {
+    beforeEach(() => {
+      setup()
+    })
+
+    it('combines response-level errors_while_computing with per-flag flag_missing', async () => {
+      const response = flagsResponseFixture()
+      response.errorsWhileComputingFlags = true
+      mockedFetch.mockImplementation(apiImplementationV4(response))
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag') // known flag — only response-level error
+      flags.isEnabled('missing-flag') // missing — both errors combined
+
+      await waitForPromises()
+      const byKey = Object.fromEntries(
+        captures
+          .filter((m) => m.event === '$feature_flag_called')
+          .map((m) => [m.properties.$feature_flag, m.properties])
+      )
+      expect(byKey['boolean-flag'].$feature_flag_error).toEqual('errors_while_computing_flags')
+      expect(byKey['missing-flag'].$feature_flag_error).toEqual('errors_while_computing_flags,flag_missing')
+    })
+
+    it('reports quota_limited from response.quotaLimited', async () => {
+      const response = flagsResponseFixture()
+      ;(response as any).quotaLimited = ['feature_flags']
+      mockedFetch.mockImplementation(apiImplementationV4(response))
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
+      // Quota-limited responses strip flag data; the access becomes a missing-flag lookup
+      // against the empty snapshot, so the combined error string surfaces both.
+      expect(flagCalled.properties.$feature_flag_error).toEqual('quota_limited,flag_missing')
+    })
+  })
+
+  describe('deprecation warnings', () => {
+    beforeEach(() => {
+      _resetDeprecationWarningsForTests()
+      mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+      setup()
+    })
+
+    it('getFeatureFlag emits a deprecation warning pointing at evaluateFlags', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      await posthog.getFeatureFlag('boolean-flag', 'user-1')
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('`getFeatureFlag` is deprecated'))
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('evaluateFlags'))
+      warnSpy.mockRestore()
+    })
+
+    it('isFeatureEnabled emits exactly one deprecation warning per call (no cascade)', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      await posthog.isFeatureEnabled('boolean-flag', 'user-1')
+
+      const deprecation = warnSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && /is deprecated/.test(call[0])
+      )
+      expect(deprecation).toHaveLength(1)
+      expect(deprecation[0][0]).toEqual(expect.stringContaining('`isFeatureEnabled` is deprecated'))
+      warnSpy.mockRestore()
+    })
+
+    it('getFeatureFlagPayload emits a deprecation warning', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      await posthog.getFeatureFlagPayload('variant-flag', 'user-1')
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('`getFeatureFlagPayload` is deprecated'))
+      warnSpy.mockRestore()
+    })
+
+    it('capture(sendFeatureFlags: true) emits a deprecation warning', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      posthog.capture({ distinctId: 'user-1', event: 'page_viewed', sendFeatureFlags: true })
+      await posthog.flush()
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('`sendFeatureFlags` is deprecated'))
+      warnSpy.mockRestore()
+    })
+
+    it('dedupes deprecation warnings across repeated calls', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      await posthog.getFeatureFlag('boolean-flag', 'user-1')
+      await posthog.getFeatureFlag('variant-flag', 'user-2')
+      await posthog.getFeatureFlag('disabled-flag', 'user-3')
+
+      const deprecation = warnSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && /`getFeatureFlag` is deprecated/.test(call[0])
+      )
+      expect(deprecation).toHaveLength(1)
+      warnSpy.mockRestore()
     })
   })
 

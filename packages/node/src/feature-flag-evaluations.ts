@@ -74,6 +74,8 @@ export class FeatureFlagEvaluations {
   private readonly _requestId: string | undefined
   private readonly _evaluatedAt: number | undefined
   private readonly _flagDefinitionsLoadedAt: number | undefined
+  private readonly _errorsWhileComputing: boolean
+  private readonly _quotaLimited: boolean
   private readonly _accessed: Set<string>
   // True for snapshots produced by `only()` / `onlyAccessed()` — used to suppress
   // misleading `flag_missing` events when branching is performed on a filtered slice.
@@ -91,6 +93,8 @@ export class FeatureFlagEvaluations {
     requestId?: string
     evaluatedAt?: number
     flagDefinitionsLoadedAt?: number
+    errorsWhileComputing?: boolean
+    quotaLimited?: boolean
     accessed?: Set<string>
     isSlice?: boolean
   }) {
@@ -102,6 +106,8 @@ export class FeatureFlagEvaluations {
     this._requestId = init.requestId
     this._evaluatedAt = init.evaluatedAt
     this._flagDefinitionsLoadedAt = init.flagDefinitionsLoadedAt
+    this._errorsWhileComputing = init.errorsWhileComputing ?? false
+    this._quotaLimited = init.quotaLimited ?? false
     this._accessed = init.accessed ?? new Set()
     this._isSlice = init.isSlice ?? false
   }
@@ -152,11 +158,8 @@ export class FeatureFlagEvaluations {
    * Return a filtered copy containing only flags that have been accessed via
    * `isEnabled()` or `getFlag()` before this call.
    *
-   * **Empty-access fallback:** if no flags have been accessed yet, this method logs
-   * a warning and returns a copy with *all* evaluated flags. This avoids silently
-   * dropping every flag from the captured event when `onlyAccessed()` is called
-   * out of order (for example, before any branching has occurred). Pre-access
-   * before calling this if you want a guaranteed-empty result.
+   * Order-dependent: if nothing has been accessed yet, the returned snapshot is
+   * empty. The method honors its name — pre-access if you want a populated result.
    *
    * **Note:** the returned snapshot is intended for `capture()`, not for further
    * branching. Calling `isEnabled()` / `getFlag()` on it for a key that was filtered
@@ -164,12 +167,6 @@ export class FeatureFlagEvaluations {
    * excluded from the slice.
    */
   onlyAccessed(): FeatureFlagEvaluations {
-    if (this._accessed.size === 0) {
-      this._host.logWarning(
-        'FeatureFlagEvaluations.onlyAccessed() was called before any flags were accessed — attaching all evaluated flags as a fallback. See https://posthog.com/docs/feature-flags/server-sdks for details.'
-      )
-      return this._cloneWith(this._flags)
-    }
     const filtered: Record<string, EvaluatedFlagRecord> = {}
     for (const key of this._accessed) {
       const flag = this._flags[key]
@@ -261,6 +258,8 @@ export class FeatureFlagEvaluations {
       requestId: this._requestId,
       evaluatedAt: this._evaluatedAt,
       flagDefinitionsLoadedAt: this._flagDefinitionsLoadedAt,
+      errorsWhileComputing: this._errorsWhileComputing,
+      quotaLimited: this._quotaLimited,
       // Copy the accessed set so the child can track further access independently
       // of the parent. Callers expect `onlyAccessed()` on the parent to reflect
       // only what the parent saw, not what happened on filtered views.
@@ -307,8 +306,21 @@ export class FeatureFlagEvaluations {
       properties.$feature_flag_definitions_loaded_at = this._flagDefinitionsLoadedAt
     }
 
+    // Build the comma-joined `$feature_flag_error` matching the single-flag path's
+    // granularity: response-level errors (errors-while-computing, quota-limited) are
+    // combined with per-flag errors (flag-missing) so consumers can filter by type.
+    const errors: string[] = []
+    if (this._errorsWhileComputing) {
+      errors.push(FeatureFlagError.ERRORS_WHILE_COMPUTING)
+    }
+    if (this._quotaLimited) {
+      errors.push(FeatureFlagError.QUOTA_LIMITED)
+    }
     if (flag === undefined) {
-      properties.$feature_flag_error = FeatureFlagError.FLAG_MISSING
+      errors.push(FeatureFlagError.FLAG_MISSING)
+    }
+    if (errors.length > 0) {
+      properties.$feature_flag_error = errors.join(',')
     }
 
     this._host.captureFlagCalledEventIfNeeded({
