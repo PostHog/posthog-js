@@ -113,32 +113,35 @@ describe('captureAiGeneration', () => {
     expect(properties.$ai_output_choices).toBeNull()
   })
 
-  it('records error metadata and returns the original error when error is provided', async () => {
+  it.each([
+    {
+      name: 'derives httpStatus from error.status',
+      error: Object.assign(new Error('boom'), { status: 503 }),
+      httpStatus: undefined,
+      expected: 503,
+    },
+    {
+      name: 'falls back to 500 when the error has no status',
+      error: new Error('plain'),
+      httpStatus: undefined,
+      expected: 500,
+    },
+    {
+      name: 'preserves a caller-supplied httpStatus even when error is provided',
+      error: new Error('no status field'),
+      httpStatus: 429,
+      expected: 429,
+    },
+  ])('error path: $name', async ({ error, httpStatus, expected }) => {
     const client = buildClient()
-    const error = Object.assign(new Error('boom'), { status: 503 })
 
-    const returned = await captureAiGeneration(client, {
-      ...baseRequiredOptions,
-      error,
-    })
+    const returned = await captureAiGeneration(client, { ...baseRequiredOptions, error, httpStatus })
 
     expect(returned).toBe(error)
     const properties = lastCaptureProperties(client)
     expect(properties.$ai_is_error).toBe(true)
     expect(properties.$ai_error).toEqual(expect.any(String))
-    expect(properties.$ai_http_status).toBe(503)
-  })
-
-  it('preserves a caller-supplied httpStatus even when error is provided', async () => {
-    const client = buildClient()
-
-    await captureAiGeneration(client, {
-      ...baseRequiredOptions,
-      error: new Error('no status field'),
-      httpStatus: 429,
-    })
-
-    expect(lastCaptureProperties(client).$ai_http_status).toBe(429)
+    expect(properties.$ai_http_status).toBe(expected)
   })
 
   it('runs exception autocapture and tags the trace when enabled', async () => {
@@ -157,20 +160,34 @@ describe('captureAiGeneration', () => {
     expect((error as any).__posthog_previously_captured_error).toBe(true)
   })
 
-  it('honours providerOverride and modelOverride', async () => {
-    const client = buildClient()
-
-    await captureAiGeneration(client, {
-      ...baseRequiredOptions,
+  it.each([
+    {
+      name: 'falls back to model/provider when no override is set',
+      modelOverride: undefined,
+      providerOverride: undefined,
+      expectedModel: baseRequiredOptions.model,
+      expectedProvider: baseRequiredOptions.provider,
+    },
+    {
+      name: 'honours providerOverride and modelOverride when set',
       modelOverride: 'override-model',
       providerOverride: 'override-provider',
-    })
+      expectedModel: 'override-model',
+      expectedProvider: 'override-provider',
+    },
+  ])(
+    'model/provider resolution: $name',
+    async ({ modelOverride, providerOverride, expectedModel, expectedProvider }) => {
+      const client = buildClient()
 
-    expect(lastCaptureProperties(client)).toMatchObject({
-      $ai_model: 'override-model',
-      $ai_provider: 'override-provider',
-    })
-  })
+      await captureAiGeneration(client, { ...baseRequiredOptions, modelOverride, providerOverride })
+
+      expect(lastCaptureProperties(client)).toMatchObject({
+        $ai_model: expectedModel,
+        $ai_provider: expectedProvider,
+      })
+    }
+  )
 
   it('computes cost overrides from inputTokens/outputTokens', async () => {
     const client = buildClient()

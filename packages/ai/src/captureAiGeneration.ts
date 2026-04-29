@@ -78,10 +78,7 @@ export interface CaptureAiGenerationOptions {
  * When `error` is set, the event is captured as an error and the enriched
  * error is returned so the caller can re-throw it.
  */
-export const captureAiGeneration = async (
-  client: PostHog,
-  options: CaptureAiGenerationOptions
-): Promise<unknown | void> => {
+export const captureAiGeneration = async (client: PostHog, options: CaptureAiGenerationOptions): Promise<unknown> => {
   if (!client.capture) {
     return undefined
   }
