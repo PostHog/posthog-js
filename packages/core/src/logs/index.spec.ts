@@ -204,11 +204,6 @@ describe('PostHogLogs', () => {
     })
 
     it('captures unconditionally — only optedOut, missing body, and beforeSend can drop', () => {
-      // Manual capture has no SDK gate beyond opt-out and body validation.
-      // Matches the events pipeline's `capture()` shape: server cannot
-      // remotely block. The wire field `response.logs.captureConsoleLogs` is
-      // browser-only (controls console autocapture there) and is not read
-      // by RN until console autocapture lands as a follow-up.
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest(),

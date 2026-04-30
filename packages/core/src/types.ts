@@ -346,14 +346,10 @@ export type PostHogRemoteConfig = {
       }
 
   /**
-   * Logs feature remote config.
-   * When a map, `captureConsoleLogs` (boolean) gates browser-side `console.*`
-   * autocapture (the JS SDK's `PostHogLogs` extension reads it to decide
-   * whether to load the autocapture bundle). RN does not read this field
-   * today; manual `captureLog` / `logger.*` is unconditional, matching the
-   * events pipeline. When console autocapture lands on RN as a follow-up,
-   * that field will gate the RN autocapture path too — manual capture
-   * remains unconditional regardless.
+   * Logs feature remote config. When a map, `captureConsoleLogs` (boolean)
+   * is the local opt-in flag for `console.*` autocapture (read by the JS
+   * SDK's `PostHogLogs` extension to decide whether to load the autocapture
+   * bundle).
    */
   logs?:
     | boolean

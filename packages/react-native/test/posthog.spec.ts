@@ -1948,9 +1948,6 @@ describe('PostHog React Native', () => {
     })
 
     it('manual capture is unconditional — remote config cannot block it', async () => {
-      // Matches the events pipeline shape. The wire field
-      // `response.logs.captureConsoleLogs` is browser-only (gates JS console
-      // autocapture there). RN ignores it for manual capture.
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,

@@ -22,29 +22,18 @@ export type CaptureLogger = CaptureLoggerType
 
 import type { LogAttributeValue, CaptureLogOptions, OtlpLogRecord } from '@posthog/types'
 
-// Wrapper around OtlpLogRecord for queue entries. Parallels events' queue
-// item shape (`{ message }`) — future additions like `retryCount` or
-// `enqueuedAt` can be added without migrating the queue format.
 export interface BufferedLogEntry {
   record: OtlpLogRecord
 }
 
 /**
- * `beforeSend` hook signature. Matches the events pipeline's `BeforeSendFn`
- * shape so users get a consistent mental model: return the (possibly
- * transformed) record to keep it, or `null` to drop it. Configure as a single
- * function or an array (chain of filters, evaluated left-to-right).
+ * `beforeSend` hook signature. Return the (possibly transformed) record to
+ * keep it, or `null` to drop it. Configure as a single function or an array
+ * (chain of filters, evaluated left-to-right).
  */
 export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions | null
 
-// Public configuration for the logs module. Per-SDK defaults diverge (mobile
-// cellular radio cost, browser tab suspension, node process lifecycle).
-//
-// Manual capture (`captureLog`, `logger.*`) has no local opt-in — calling the
-// API ships records. Matches the events pipeline's manual `capture()` shape
-// across SDKs. Console autocapture, when added (browser today, RN later),
-// has its own local-opt-in flag (`response.logs.captureConsoleLogs` for the
-// browser; same field name on RN once that path lands).
+// Public configuration for the logs module.
 export interface PostHogLogsConfig {
   // Resource attributes
   serviceName?: string
@@ -66,21 +55,17 @@ export interface PostHogLogsConfig {
 
   // Filtering. Runs synchronously before the rate cap so beforeSend-dropped
   // records do not consume the per-interval budget. Accepts a single fn or
-  // an array (chain); mirrors the events-pipeline `before_send` contract on
-  // `PostHogCoreOptions`. Throwing fns are logged and skipped — they must
-  // never crash the caller's `captureLog()`.
+  // an array (chain). Throwing fns are logged and skipped — they must never
+  // crash the caller's `captureLog()`.
   beforeSend?: BeforeSendLogFn | BeforeSendLogFn[]
 }
 
-// Fields PostHogLogs needs resolved at runtime. Each SDK supplies its own
-// defaults (mobile, browser, node have different right answers) and hands the
-// filled-in config to the PostHogLogs constructor.
+// Fields PostHogLogs needs resolved at runtime. The host SDK fills in its
+// defaults and hands the resolved config to the PostHogLogs constructor.
 //
-// `rateCapWindowMs` is always resolved (falls back to `flushIntervalMs` if
-// unset) so the rate-cap arithmetic doesn't branch at the hot path. The cap
-// itself (`maxLogsPerInterval`) stays optional — `undefined` means unbounded,
-// which is the right default for node-style SDKs where bandwidth isn't the
-// concern.
+// `rateCapWindowMs` is always resolved so the rate-cap arithmetic doesn't
+// branch at the hot path. `maxLogsPerInterval` stays optional — `undefined`
+// means unbounded.
 export interface ResolvedPostHogLogsConfig extends PostHogLogsConfig {
   maxBufferSize: number
   flushIntervalMs: number

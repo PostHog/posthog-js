@@ -139,18 +139,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
   /**
    * Logs feature configuration. Lets you send structured log records to
    * PostHog via `posthog.captureLog(...)` or `posthog.logger.info(...)`.
-   *
-   * Manual capture is unconditional — call the API and records ship.
-   * Matches the events pipeline's manual `capture()` shape. Only blockers:
-   * `optedOut`, missing/empty `body`, and missing API key.
-   *
-   * The wire field `response.logs.captureConsoleLogs` is browser-only — it
-   * controls whether the JS SDK loads its `console.*` autocapture extension.
-   * RN does not read this field today. When console autocapture lands as a
-   * follow-up, the RN SDK will read it as a local-opt-in flag for that
-   * autocapture path specifically (matching the events pattern of
-   * `<PostHogProvider autocapture>` and `captureAppLifecycleEvents`); manual
-   * capture will remain unconditional regardless.
+   * Manual capture ships records whenever the API is called; the only
+   * blockers are `optedOut`, missing/empty `body`, and missing API key.
    */
   logs?: PostHogLogsConfig
 }

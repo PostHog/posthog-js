@@ -56,9 +56,7 @@ export class PostHogLogs {
     }
 
     // Ordering: beforeSend → rate cap → OTLP build. beforeSend runs first so
-    // user-dropped records don't consume the per-interval budget (documented
-    // in `PostHogLogsConfig.beforeSend`). Matches the events pipeline's
-    // `before_send` semantics in `PostHogCore._runBeforeSend`.
+    // user-dropped records don't consume the per-interval budget.
     const filtered = this._runBeforeSend(options)
     if (filtered === null) {
       return
@@ -82,16 +80,12 @@ export class PostHogLogs {
   }
 
   /**
-   * Runs the configured `beforeSend` hook(s) on a capture record. Mirrors the
-   * events pipeline's `PostHogCore._runBeforeSend`:
+   * Runs the configured `beforeSend` hook(s) on a capture record:
    *   - single fn OR array of fns (chain, left-to-right)
    *   - returning `null` drops the record (logged at info)
    *   - a thrown error is logged and the chain *continues* with the previous
    *     result — a buggy user filter must never crash the caller's
    *     `captureLog()` call
-   *
-   * Kept private to match events' `_runBeforeSend`; exposed behaviour is
-   * whatever `captureLog` chooses to do with the return value.
    */
   private _runBeforeSend(options: CaptureLogOptions): CaptureLogOptions | null {
     const beforeSend = this._config.beforeSend
@@ -119,28 +113,23 @@ export class PostHogLogs {
 
   /**
    * Returns `true` if this capture fits within the current rate-cap window,
-   * `false` if it should be dropped. Mirrors the rate-cap branch in the
-   * browser SDK's `PostHogLogs.captureLog`.
+   * `false` if it should be dropped.
    *
-   * Fixed (tumbling) window: the counter resets the first time
-   * `captureLog` fires after `rateCapWindowMs` has elapsed — no timer
-   * needed. `maxLogsPerInterval === undefined` means unbounded (useful for
-   * node-style SDKs where bandwidth isn't the concern).
+   * Fixed (tumbling) window: the counter resets the first time `captureLog`
+   * fires after `rateCapWindowMs` has elapsed — no timer needed.
+   * `maxLogsPerInterval === undefined` means unbounded.
    *
    * Wall-clock safety: if `Date.now()` jumps backward (manual device-clock
    * change, big NTP correction), `elapsed` goes negative. We treat that the
    * same as "window expired" and reset — otherwise the rate cap would be
    * stuck until the clock caught up to the old window start, potentially
-   * dropping logs for hours. The browser SDK's window-roll check has the
-   * same quirk; when browser migrates to this class, it inherits the fix
-   * for free.
+   * dropping logs for hours.
    *
    * Pre-init note: the counter increments here, before `_onReady` defers
-   * `_enqueue` to the init promise. If init resolves slowly and the user
-   * is later opted out (or remote config disables logs), the counter has
-   * already consumed budget for records that won't enqueue. Cosmetic — no
-   * record is "lost" beyond what's already gated, and the window rolls on
-   * its own.
+   * `_enqueue` to the init promise. If init resolves slowly and the user is
+   * later opted out, the counter has already consumed budget for records
+   * that won't enqueue. Cosmetic — no record is "lost" beyond what's
+   * already gated, and the window rolls on its own.
    */
   private _checkRateLimit(): boolean {
     if (this._maxLogsPerInterval === undefined) {
@@ -168,7 +157,7 @@ export class PostHogLogs {
 
   /**
    * Drains `LogsQueue` in `maxBatchRecordsPerPost` slices, POSTing each as an
-   * OTLP payload. Mirrors `PostHogCoreStateless._flush()` semantics:
+   * OTLP payload.
    *   - Network error   → keep items in queue, re-throw (caller retries later)
    *   - 413             → halve batch size, retry same records (do not advance)
    *   - Any other error → drop the batch (avoid infinite loop on malformed data),
@@ -300,8 +289,7 @@ export class PostHogLogs {
     this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, queue)
 
     // Threshold trigger: at-capacity means flushing now reclaims space before
-    // the next capture has to shift something out. Matches the threshold-flush
-    // branch in the browser SDK's `PostHogLogs.captureLog`.
+    // the next capture has to shift something out.
     if (queue.length >= this._maxBufferSize) {
       this._flushInBackground()
       return
