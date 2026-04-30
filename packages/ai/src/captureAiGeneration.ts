@@ -42,7 +42,7 @@ export interface CaptureAiGenerationOptions {
 
   /** Extra event properties merged into the captured event. */
   properties?: Record<string, unknown>
-  groups?: Record<string, any>
+  groups?: Record<string, unknown>
   privacyMode?: boolean
 
   /**
@@ -75,12 +75,13 @@ export interface CaptureAiGenerationOptions {
  * arbitrary clients (Cloudflare Workers AI, custom HTTP, etc.) and get the
  * same events the SDK wrappers produce.
  *
- * When `error` is set, the event is captured as an error and the enriched
- * error is returned so the caller can re-throw it.
+ * When `error` is set, the event is captured as an error. If the error is an
+ * object, it is mutated in place to set `__posthog_previously_captured_error`
+ * so callers can re-throw the original error reference safely.
  */
-export const captureAiGeneration = async (client: PostHog, options: CaptureAiGenerationOptions): Promise<unknown> => {
+export const captureAiGeneration = async (client: PostHog, options: CaptureAiGenerationOptions): Promise<void> => {
   if (!client.capture) {
-    return undefined
+    return
   }
 
   const traceId = options.traceId ?? uuidv4()
@@ -93,25 +94,23 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
 
   let httpStatus = options.httpStatus
   let errorData: Record<string, unknown> = {}
-  let enrichedError: unknown
   if (options.error) {
     if (httpStatus === undefined) {
-      httpStatus =
-        options.error && typeof options.error === 'object' && 'status' in options.error
-          ? ((options.error as { status?: number }).status ?? 500)
-          : 500
+      if (typeof options.error === 'object' && 'status' in options.error && typeof options.error.status === 'number') {
+        httpStatus = options.error.status
+      } else {
+        httpStatus = 500
+      }
     }
 
     let exceptionId: string | undefined
     if (client.options?.enableExceptionAutocapture) {
       exceptionId = uuidv7()
       client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
-      if (options.error && typeof options.error === 'object') {
-        const enriched = options.error as CoreErrorTracking.PreviouslyCapturedError
-        enriched.__posthog_previously_captured_error = true
+      if (typeof options.error === 'object') {
+        ;(options.error as CoreErrorTracking.PreviouslyCapturedError).__posthog_previously_captured_error = true
       }
     }
-    enrichedError = options.error
 
     errorData = {
       $ai_is_error: true,
@@ -177,6 +176,4 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
   } else {
     client.capture(event)
   }
-
-  return enrichedError
 }

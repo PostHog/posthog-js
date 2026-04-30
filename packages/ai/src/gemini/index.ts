@@ -89,7 +89,7 @@ export class WrappedModels {
       return response
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      const enrichedError = await captureAiGeneration(this.phClient, {
+      await captureAiGeneration(this.phClient, {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
@@ -104,7 +104,7 @@ export class WrappedModels {
         },
         error,
       })
-      throw enrichedError
+      throw error
     }
   }
 
@@ -231,7 +231,7 @@ export class WrappedModels {
       })
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      const enrichedError = await captureAiGeneration(this.phClient, {
+      await captureAiGeneration(this.phClient, {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
@@ -246,7 +246,7 @@ export class WrappedModels {
         },
         error,
       })
-      throw enrichedError
+      throw error
     }
   }
 
@@ -279,7 +279,7 @@ export class WrappedModels {
       return response
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      const enrichedError = await captureAiGeneration(this.phClient, {
+      await captureAiGeneration(this.phClient, {
         ...posthogParams,
         eventType: AIEvent.Embedding,
         model: geminiParams.model,
@@ -294,7 +294,7 @@ export class WrappedModels {
         },
         error,
       })
-      throw enrichedError
+      throw error
     }
   }
 

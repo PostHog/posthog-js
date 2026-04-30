@@ -250,7 +250,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const enrichedError = await captureAiGeneration(this.phClient, {
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
@@ -265,7 +265,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 },
                 error: error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 

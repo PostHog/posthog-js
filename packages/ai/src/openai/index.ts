@@ -281,7 +281,7 @@ export class WrappedCompletions extends Completions {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const enrichedError = await captureAiGeneration(this.phClient, {
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'openai',
@@ -293,7 +293,7 @@ export class WrappedCompletions extends Completions {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -495,7 +495,7 @@ export class WrappedResponses extends Responses {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const enrichedError = await captureAiGeneration(this.phClient, {
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'openai',
@@ -510,7 +510,7 @@ export class WrappedResponses extends Responses {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -619,7 +619,7 @@ export class WrappedResponses extends Responses {
           return result
         },
         async (error: Error) => {
-          const enrichedError = await captureAiGeneration(this.phClient, {
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
@@ -634,7 +634,7 @@ export class WrappedResponses extends Responses {
             },
             error,
           })
-          throw enrichedError
+          throw error
         }
       )
 
@@ -857,7 +857,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const enrichedError = await captureAiGeneration(this.phClient, {
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'openai',
@@ -869,7 +869,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -902,7 +902,7 @@ export class WrappedTranscriptions extends Transcriptions {
           }
         },
         async (error: unknown) => {
-          const enrichedError = await captureAiGeneration(this.phClient, {
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
@@ -917,7 +917,7 @@ export class WrappedTranscriptions extends Transcriptions {
             },
             error,
           })
-          throw enrichedError
+          throw error
         }
       ) as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>
 

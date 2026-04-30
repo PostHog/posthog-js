@@ -73,7 +73,7 @@ describe('captureAiGeneration', () => {
       $ai_tokens_source: 'sdk',
       feature: 'transcript-toc',
     })
-    expect(event.properties.$ai_tools).toHaveLength(1)
+    expect(event.properties.$ai_tools).toEqual([{ type: 'function', function: { name: 'foo', parameters: {} } }])
     expect(event.properties.$process_person_profile).toBeUndefined()
   })
 
@@ -135,13 +135,21 @@ describe('captureAiGeneration', () => {
   ])('error path: $name', async ({ error, httpStatus, expected }) => {
     const client = buildClient()
 
-    const returned = await captureAiGeneration(client, { ...baseRequiredOptions, error, httpStatus })
+    await captureAiGeneration(client, { ...baseRequiredOptions, error, httpStatus })
 
-    expect(returned).toBe(error)
     const properties = lastCaptureProperties(client)
     expect(properties.$ai_is_error).toBe(true)
     expect(properties.$ai_error).toEqual(expect.any(String))
     expect(properties.$ai_http_status).toBe(expected)
+  })
+
+  it('mutates the original error in place when autocapture is enabled, so callers can re-throw safely', async () => {
+    const client = buildClient({ enableExceptionAutocapture: true })
+    const error = new Error('boom')
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, error })
+
+    expect((error as any).__posthog_previously_captured_error).toBe(true)
   })
 
   it('runs exception autocapture and tags the trace when enabled', async () => {
@@ -226,12 +234,10 @@ describe('captureAiGeneration', () => {
     expect(properties.$ai_http_status).toBe(200)
   })
 
-  it('returns undefined and skips emission when client.capture is unavailable', async () => {
+  it('skips emission when client.capture is unavailable', async () => {
     const client = { options: {} } as unknown as jest.Mocked<PostHog>
 
-    const returned = await captureAiGeneration(client, baseRequiredOptions)
-
-    expect(returned).toBeUndefined()
+    await expect(captureAiGeneration(client, baseRequiredOptions)).resolves.toBeUndefined()
   })
 
   it('marks tokens source as passthrough when properties contain token overrides', async () => {

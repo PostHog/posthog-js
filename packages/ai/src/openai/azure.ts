@@ -243,7 +243,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 usage,
               })
             } catch (error: unknown) {
-              const enrichedError = await captureAiGeneration(this.phClient, {
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
@@ -255,7 +255,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error: error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -423,7 +423,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 usage,
               })
             } catch (error: unknown) {
-              const enrichedError = await captureAiGeneration(this.phClient, {
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
@@ -435,7 +435,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error: error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 

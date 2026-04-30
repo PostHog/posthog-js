@@ -448,6 +448,19 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     },
   }
 
+  // Shared `captureAiGeneration` options for every call site in this wrapper.
+  const baseOptions = {
+    distinctId: mergedOptions.posthogDistinctId,
+    traceId,
+    properties: mergedOptions.posthogProperties,
+    groups: mergedOptions.posthogGroups,
+    privacyMode: mergedOptions.posthogPrivacyMode,
+    modelOverride: mergedOptions.posthogModelOverride,
+    providerOverride: mergedOptions.posthogProviderOverride,
+    costOverride: mergedOptions.posthogCostOverride,
+    captureImmediate: mergedOptions.posthogCaptureImmediate,
+  }
+
   // Create wrapped model using Object.create to preserve the prototype chain
   // This automatically inherits all properties (including getters) from the model
   const wrappedModel = Object.create(model, {
@@ -516,8 +529,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 : undefined
 
           await captureAiGeneration(phClient, {
-            distinctId: mergedOptions.posthogDistinctId,
-            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+            ...baseOptions,
             model: modelId,
             provider: provider,
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
@@ -529,21 +541,13 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             usage,
             stopReason: finishReasonStr,
             tools: availableTools,
-            properties: mergedOptions.posthogProperties,
-            groups: mergedOptions.posthogGroups,
-            privacyMode: mergedOptions.posthogPrivacyMode,
-            modelOverride: mergedOptions.posthogModelOverride,
-            providerOverride: mergedOptions.posthogProviderOverride,
-            costOverride: mergedOptions.posthogCostOverride,
-            captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
 
           return result
         } catch (error: unknown) {
           const modelId = model.modelId
-          const enrichedError = await captureAiGeneration(phClient, {
-            distinctId: mergedOptions.posthogDistinctId,
-            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+          await captureAiGeneration(phClient, {
+            ...baseOptions,
             model: modelId,
             provider: model.provider,
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
@@ -557,15 +561,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             },
             error: error,
             tools: availableTools,
-            properties: mergedOptions.posthogProperties,
-            groups: mergedOptions.posthogGroups,
-            privacyMode: mergedOptions.posthogPrivacyMode,
-            modelOverride: mergedOptions.posthogModelOverride,
-            providerOverride: mergedOptions.posthogProviderOverride,
-            costOverride: mergedOptions.posthogCostOverride,
-            captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
-          throw enrichedError
+          throw error
         }
       },
       writable: true,
@@ -731,8 +728,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
               adjustAnthropicV3CacheTokens(model, modelId, provider, finalUsage)
 
               await captureAiGeneration(phClient, {
-                distinctId: mergedOptions.posthogDistinctId,
-                traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+                ...baseOptions,
                 model: modelId,
                 provider: provider,
                 input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
@@ -745,13 +741,6 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 usage: finalUsage,
                 stopReason,
                 tools: availableTools,
-                properties: mergedOptions.posthogProperties,
-                groups: mergedOptions.posthogGroups,
-                privacyMode: mergedOptions.posthogPrivacyMode,
-                modelOverride: mergedOptions.posthogModelOverride,
-                providerOverride: mergedOptions.posthogProviderOverride,
-                costOverride: mergedOptions.posthogCostOverride,
-                captureImmediate: mergedOptions.posthogCaptureImmediate,
               })
             },
           })
@@ -761,9 +750,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...rest,
           }
         } catch (error: unknown) {
-          const enrichedError = await captureAiGeneration(phClient, {
-            distinctId: mergedOptions.posthogDistinctId,
-            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+          await captureAiGeneration(phClient, {
+            ...baseOptions,
             model: modelId,
             provider: provider,
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
@@ -777,15 +765,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             },
             error: error,
             tools: availableTools,
-            properties: mergedOptions.posthogProperties,
-            groups: mergedOptions.posthogGroups,
-            privacyMode: mergedOptions.posthogPrivacyMode,
-            modelOverride: mergedOptions.posthogModelOverride,
-            providerOverride: mergedOptions.posthogProviderOverride,
-            costOverride: mergedOptions.posthogCostOverride,
-            captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
-          throw enrichedError
+          throw error
         }
       },
       writable: true,
