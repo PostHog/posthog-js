@@ -59,6 +59,7 @@ const immediateOnReady = (fn: () => void): void => fn()
 
 const createMockLogger = (): Logger => {
   const logger: any = {
+    debug: jest.fn(),
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),

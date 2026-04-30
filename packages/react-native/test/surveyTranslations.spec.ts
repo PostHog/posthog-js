@@ -38,7 +38,7 @@ const createMockPostHog = ({
   }) as unknown as PostHog
 
 describe('react native survey translations', () => {
-  it('prioritizes override_display_language over person properties and locale', () => {
+  it('prioritizes overrideDisplayLanguage over person properties and locale', () => {
     const posthog = createMockPostHog({
       overrideLanguage: 'de',
       storedPersonProperties: { language: 'es' },

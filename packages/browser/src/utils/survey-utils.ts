@@ -1,6 +1,8 @@
 import { DisplaySurveyOptions, Survey, SurveyType, DisplaySurveyType } from '../posthog-surveys-types'
 import { createLogger } from '../utils/logger'
 
+export { getSurveyInteractionProperty } from '@posthog/core/surveys'
+
 export const SURVEY_LOGGER = createLogger('[Surveys]')
 
 export function isSurveyRunning(survey: Survey): boolean {
@@ -18,18 +20,6 @@ export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): 
 export const SURVEY_SEEN_PREFIX = 'seenSurvey_'
 export const SURVEY_IN_PROGRESS_PREFIX = 'inProgressSurvey_'
 export const SURVEY_ABANDONED_PREFIX = 'abandonedSurvey_'
-
-export const getSurveyInteractionProperty = (
-    survey: Pick<Survey, 'id' | 'current_iteration'>,
-    action: 'responded' | 'dismissed'
-): string => {
-    let surveyProperty = `$survey_${action}/${survey.id}`
-    if (survey.current_iteration && survey.current_iteration > 0) {
-        surveyProperty = `$survey_${action}/${survey.id}/${survey.current_iteration}`
-    }
-
-    return surveyProperty
-}
 
 const getSurveyStorageKey = (prefix: string, survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
     let key = `${prefix}${survey.id}`

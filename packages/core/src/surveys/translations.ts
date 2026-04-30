@@ -72,7 +72,7 @@ export function findBestTranslationMatch(
 
   const exactMatch = Object.keys(translations).find((key) => normalizeLanguageCode(key) === normalizedTarget)
   if (exactMatch) {
-    logger.info(`Found exact translation match: ${exactMatch}`)
+    logger.debug(`Found exact translation match: ${exactMatch}`)
     return exactMatch
   }
 
@@ -80,7 +80,7 @@ export function findBestTranslationMatch(
     const baseLanguage = getBaseLanguage(normalizedTarget)
     const baseMatch = Object.keys(translations).find((key) => normalizeLanguageCode(key) === baseLanguage)
     if (baseMatch) {
-      logger.info(`Found base language translation match: ${baseMatch} (from ${targetLanguage})`)
+      logger.debug(`Found base language translation match: ${baseMatch} (from ${targetLanguage})`)
       return baseMatch
     }
   }

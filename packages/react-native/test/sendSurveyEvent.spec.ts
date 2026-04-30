@@ -1,4 +1,3 @@
-import { dismissedSurveyEvent, sendSurveyEvent } from '../src/surveys/components/Surveys'
 import { dismissedSurveyEvent, sendSurveyEvent, sendSurveyShownEvent } from '../src/surveys/components/Surveys'
 import { Survey, SurveyQuestion } from '@posthog/core'
 

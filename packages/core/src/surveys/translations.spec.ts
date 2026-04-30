@@ -176,5 +176,30 @@ describe('survey translations', () => {
       expect(result.survey.questions[0].question).toBe('Was denkst du?')
       expect(result.matchedKey).toBe('de')
     })
+
+    it('preserves custom survey and question fields for shared consumers', () => {
+      const survey = {
+        name: 'Custom Survey',
+        customSurveyField: true,
+        questions: [
+          {
+            question: 'Pick one',
+            customQuestionField: 'native-renderer',
+            translations: {
+              fr: {
+                question: 'Choisissez une option',
+              },
+            },
+          },
+        ],
+      }
+
+      const result = applySurveyTranslation(survey, 'fr')
+
+      expect(result.survey.customSurveyField).toBe(true)
+      expect(result.survey.questions[0].question).toBe('Choisissez une option')
+      expect(result.survey.questions[0].customQuestionField).toBe('native-renderer')
+      expect(result.matchedKey).toBe('fr')
+    })
   })
 })
