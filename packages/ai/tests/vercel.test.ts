@@ -668,7 +668,6 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         expect(JSON.stringify(input).length).toBeLessThan(210_000)
       }
     )
-
   })
 
   describe('Anthropic V3 cache token handling', () => {
