@@ -271,6 +271,7 @@ export type PostHogFetchResponse = {
   headers?: {
     get(name: string): string | null
   }
+  body?: ReadableStream<Uint8Array> | null
 }
 
 export type PostHogQueueItem = {
