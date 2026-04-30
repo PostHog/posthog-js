@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AppState, Button, ScrollView, StyleSheet, View } from 'react-native'
+import { PostHogPersistedProperty } from 'posthog-react-native'
 
 import ParallaxScrollView from '@/components/ParallaxScrollView'
 import { ThemedText } from '@/components/ThemedText'
@@ -8,10 +9,35 @@ import { IconSymbol } from '@/components/ui/IconSymbol'
 import { posthog } from '../posthog'
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+type BeforeSendMode = 'pass' | 'drop' | 'throw'
+
+interface DevStatus {
+    distinctId: string | null
+    sessionId: string | null
+    appState: 'foreground' | 'background' | null
+}
 
 export default function LogsScreen() {
     const [status, setStatus] = useState('Idle')
     const [counter, setCounter] = useState(0)
+    const [devStatus, setDevStatus] = useState<DevStatus>({
+        distinctId: null,
+        sessionId: null,
+        appState: null,
+    })
+    const [beforeSendMode, setBeforeSendMode] = useState<BeforeSendMode>('pass')
+    const [queueDump, setQueueDump] = useState<string>('')
+    // Snapshot any user-supplied beforeSend at first render so the "pass"
+    // button can restore it instead of overwriting with `undefined`.
+    const [originalBeforeSend] = useState<unknown>(() => (posthog as any)._logs?._config?.beforeSend)
+
+    const refresh = (): void => {
+        setDevStatus({
+            distinctId: posthog.getDistinctId() || null,
+            sessionId: posthog.getSessionId() || null,
+            appState: ((posthog as any)._currentAppState ?? null) as DevStatus['appState'],
+        })
+    }
 
     // Emit a log on every AppState transition so the SDK's `app.state`
     // tagging path can be exercised without manual taps. The PostHog
@@ -23,17 +49,21 @@ export default function LogsScreen() {
         const sub = AppState.addEventListener('change', (next) => {
             posthog.logger.info(`AppState ${prev} → ${next}`, { from: prev, to: next })
             prev = next
+            refresh()
         })
+        refresh()
         return () => sub.remove()
     }, [])
 
-    const bump = (message: string) => {
+    const bump = (message: string): void => {
         const next = counter + 1
         setCounter(next)
         setStatus(`${message} (#${next} @ ${new Date().toISOString().slice(11, 19)})`)
     }
 
-    const sendOne = (level: LogLevel) => {
+    // ===== Existing capture buttons =====
+
+    const sendOne = (level: LogLevel): void => {
         posthog.logger[level](`${level} log from example-expo-53`, {
             source: 'logs-tab',
             level,
@@ -42,7 +72,7 @@ export default function LogsScreen() {
         bump(`Sent ${level}`)
     }
 
-    const sendAllLevels = () => {
+    const sendAllLevels = (): void => {
         const levels: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal']
         levels.forEach((level, i) => {
             posthog.logger[level](`Level-sweep message (${level}) #${i}`, { sweep: true, index: i })
@@ -50,7 +80,7 @@ export default function LogsScreen() {
         bump(`Sent all 6 levels`)
     }
 
-    const sendStructured = () => {
+    const sendStructured = (): void => {
         posthog.captureLog({
             body: 'Structured attributes payload',
             level: 'info',
@@ -65,14 +95,14 @@ export default function LogsScreen() {
         bump('Sent structured attrs')
     }
 
-    const sendBurst = () => {
+    const sendBurst = (): void => {
         for (let i = 0; i < 20; i++) {
             posthog.logger[i % 2 === 0 ? 'info' : 'debug'](`Burst log #${i}`, { i })
         }
         bump('Sent 20-burst')
     }
 
-    const sendFlood = () => {
+    const sendFlood = (): void => {
         // Hit the rate-cap window (default 500/10s on RN). Should emit
         // 500-ish and then warn + drop.
         for (let i = 0; i < 600; i++) {
@@ -81,7 +111,7 @@ export default function LogsScreen() {
         bump('Sent 600-flood (expect rate cap)')
     }
 
-    const sendError = () => {
+    const sendError = (): void => {
         posthog.logger.error('Simulated error with stack', {
             errorName: 'SimulatedError',
             errorMessage: 'Something bad happened',
@@ -90,7 +120,7 @@ export default function LogsScreen() {
         bump('Sent error+stack')
     }
 
-    const flushNow = async () => {
+    const flushNow = async (): Promise<void> => {
         try {
             // Drain BOTH pipelines — events on `flush()`, logs on `flushLogs()`.
             // Run in parallel so a slow events flush doesn't delay logs and
@@ -100,6 +130,84 @@ export default function LogsScreen() {
         } catch (e) {
             setStatus(`Flush error: ${e}`)
         }
+    }
+
+    // ===== Dev tools =====
+    //
+    // The buttons below reach into private SDK internals (`_logs`, `_config`,
+    // `_currentAppState`) so we can exercise edge cases from the example app
+    // without re-building or running adb. Reach-ins are ONLY appropriate in
+    // dogfood-style examples; production wrappers should stick to the public
+    // surface (`captureLog`, `logger.*`, `flushLogs`).
+
+    const setBefore = (mode: BeforeSendMode): void => {
+        const config = (posthog as any)._logs?._config
+        if (!config) return
+        if (mode === 'pass') {
+            config.beforeSend = originalBeforeSend
+        } else if (mode === 'drop') {
+            config.beforeSend = (): null => null
+        } else {
+            config.beforeSend = (): never => {
+                throw new Error('beforeSend boom')
+            }
+        }
+        setBeforeSendMode(mode)
+        bump(`beforeSend = ${mode}`)
+    }
+
+    const captureNoLevel = (): void => {
+        // Verifies default-level INFO behaviour without a `level` arg.
+        posthog.captureLog({ body: 'no-level test (defaults to INFO)' })
+        bump('Sent no-level (default INFO)')
+    }
+
+    const captureEmptyBody = (): void => {
+        posthog.captureLog({ body: '' })
+        bump('Sent empty body (should be silently dropped)')
+    }
+
+    const captureNoBody = (): void => {
+        posthog.captureLog({} as any)
+        bump('Sent no body (should be silently dropped)')
+    }
+
+    const dumpQueue = (): void => {
+        const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as unknown[] | undefined
+        const text = queue
+            ? `length=${queue.length}\n${JSON.stringify(queue, null, 2).slice(0, 4000)}`
+            : '(empty/undefined)'
+        setQueueDump(text)
+    }
+
+    const screenAndCapture = async (name: string): Promise<void> => {
+        await posthog.screen(name)
+        posthog.logger.info(`captured on ${name}`, { screenTagTest: true })
+        bump(`screen('${name}') + capture`)
+    }
+
+    const callIdentify = (id: string): void => {
+        posthog.identify(id, { source: 'logs-tab' })
+        refresh()
+        bump(`identify('${id}')`)
+    }
+
+    const callReset = (): void => {
+        posthog.reset()
+        refresh()
+        bump('reset()')
+    }
+
+    const callOptOut = async (): Promise<void> => {
+        await posthog.optOut()
+        refresh()
+        bump('optOut()')
+    }
+
+    const callOptIn = async (): Promise<void> => {
+        await posthog.optIn()
+        refresh()
+        bump('optIn()')
     }
 
     return (
@@ -140,6 +248,61 @@ export default function LogsScreen() {
                     <ThemedText type="subtitle">Control</ThemedText>
                     <Button title="Flush now" onPress={flushNow} />
                 </View>
+
+                <View style={styles.divider} />
+                <ThemedText type="subtitle">Dev tools</ThemedText>
+
+                <View style={styles.section}>
+                    <ThemedText type="defaultSemiBold">Status</ThemedText>
+                    <ThemedText>distinctId: {devStatus.distinctId ?? '<none>'}</ThemedText>
+                    <ThemedText>sessionId: {devStatus.sessionId ?? '<none>'}</ThemedText>
+                    <ThemedText>app.state: {devStatus.appState ?? '<unknown>'}</ThemedText>
+                    <ThemedText>beforeSend mode: {beforeSendMode}</ThemedText>
+                    <Button title="Refresh status" onPress={refresh} />
+                </View>
+
+                <View style={styles.section}>
+                    <ThemedText type="defaultSemiBold">Identity</ThemedText>
+                    <View style={styles.row}>
+                        <Button title="identify(alice)" onPress={() => callIdentify('alice')} />
+                        <Button title="identify(bob)" onPress={() => callIdentify('bob')} />
+                    </View>
+                    <View style={styles.row}>
+                        <Button title="reset()" onPress={callReset} />
+                        <Button title="optOut()" onPress={callOptOut} />
+                        <Button title="optIn()" onPress={callOptIn} />
+                    </View>
+                </View>
+
+                <View style={styles.section}>
+                    <ThemedText type="defaultSemiBold">Screen tagging</ThemedText>
+                    <Button title="screen('Checkout') + capture" onPress={() => screenAndCapture('Checkout')} />
+                    <Button title="screen('Profile') + capture" onPress={() => screenAndCapture('Profile')} />
+                </View>
+
+                <View style={styles.section}>
+                    <ThemedText type="defaultSemiBold">Edge captures</ThemedText>
+                    <Button title="captureLog (no level → INFO)" onPress={captureNoLevel} />
+                    <Button title="captureLog (empty body)" onPress={captureEmptyBody} />
+                    <Button title="captureLog (no body)" onPress={captureNoBody} />
+                </View>
+
+                <View style={styles.section}>
+                    <ThemedText type="defaultSemiBold">beforeSend hook</ThemedText>
+                    <View style={styles.row}>
+                        <Button title="pass-through" onPress={() => setBefore('pass')} />
+                        <Button title="drop (return null)" onPress={() => setBefore('drop')} />
+                        <Button title="throw" onPress={() => setBefore('throw')} />
+                    </View>
+                </View>
+
+                <View style={styles.section}>
+                    <ThemedText type="defaultSemiBold">Storage</ThemedText>
+                    <Button title="Dump LogsQueue" onPress={dumpQueue} />
+                    <ScrollView style={styles.dump}>
+                        <ThemedText>{queueDump || '(tap Dump to inspect)'}</ThemedText>
+                    </ScrollView>
+                </View>
             </ScrollView>
         </ParallaxScrollView>
     )
@@ -167,5 +330,17 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 8,
         marginBottom: 6,
+        flexWrap: 'wrap',
+    },
+    divider: {
+        height: 1,
+        backgroundColor: 'rgba(128,128,128,0.4)',
+        marginVertical: 8,
+    },
+    dump: {
+        marginTop: 6,
+        maxHeight: 220,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        padding: 8,
     },
 })

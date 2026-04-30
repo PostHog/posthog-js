@@ -52,20 +52,6 @@ export { PostHogPersistedProperty }
  * primary scene. 'unknown' returns undefined so the attribute is omitted
  * rather than guessed.
  */
-// Flatten the server's `logs` field into the tri-state PostHogLogs.setRemoteEnabled consumes.
-function extractLogsCaptureFlag(logs: PostHogRemoteConfig['logs']): boolean | undefined {
-  if (logs === undefined) {
-    return undefined
-  }
-  if (typeof logs === 'boolean') {
-    return logs
-  }
-  if (typeof logs === 'object' && typeof logs.captureConsoleLogs === 'boolean') {
-    return logs.captureConsoleLogs
-  }
-  return undefined
-}
-
 function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | 'background' | undefined {
   if (state === 'background') {
     return 'background'
@@ -154,10 +140,17 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Logs feature configuration. Lets you send structured log records to
    * PostHog via `posthog.captureLog(...)` or `posthog.logger.info(...)`.
    *
-   * Manual capture is unconditional — call the API and records ship,
-   * matching the browser SDK's manual path. The server can remotely block
-   * capture by returning `response.logs.captureConsoleLogs: false`; an
-   * explicit `true` and an absent key both leave it allowed.
+   * Manual capture is unconditional — call the API and records ship.
+   * Matches the events pipeline's manual `capture()` shape. Only blockers:
+   * `optedOut`, missing/empty `body`, and missing API key.
+   *
+   * The wire field `response.logs.captureConsoleLogs` is browser-only — it
+   * controls whether the JS SDK loads its `console.*` autocapture extension.
+   * RN does not read this field today. When console autocapture lands as a
+   * follow-up, the RN SDK will read it as a local-opt-in flag for that
+   * autocapture path specifically (matching the events pattern of
+   * `<PostHogProvider autocapture>` and `captureAppLifecycleEvents`); manual
+   * capture will remain unconditional regardless.
    */
   logs?: PostHogLogsConfig
 }
@@ -391,10 +384,6 @@ export class PostHog extends PostHogCore {
       )
       if (cachedRemoteConfig) {
         this._errorTracking.onRemoteConfig(cachedRemoteConfig.errorTracking)
-        // Hydrate the logs kill-switch from the last response so the very
-        // first capture after launch already honours a server-side disable
-        // (the fresh remote config call may not return for several seconds).
-        this._logs.setRemoteEnabled(extractLogsCaptureFlag(cachedRemoteConfig.logs))
       }
 
       if (this._disableRemoteConfig === false) {
@@ -481,10 +470,6 @@ export class PostHog extends PostHogCore {
    */
   protected onRemoteConfig(response: PostHogRemoteConfig): void {
     this._errorTracking.onRemoteConfig(response.errorTracking)
-    // Logs remote kill switch. Reads `response.logs?.captureConsoleLogs`:
-    // explicit `false` blocks manual capture going forward; `true` or absent
-    // leaves it allowed.
-    this._logs.setRemoteEnabled(extractLogsCaptureFlag(response.logs))
   }
 
   /**

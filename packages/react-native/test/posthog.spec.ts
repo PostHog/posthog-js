@@ -1947,7 +1947,10 @@ describe('PostHog React Native', () => {
       expect(queue).toHaveLength(2)
     })
 
-    it('remote kill switch (response.logs.captureConsoleLogs: false) blocks captures', async () => {
+    it('manual capture is unconditional — remote config cannot block it', async () => {
+      // Matches the events pipeline shape. The wire field
+      // `response.logs.captureConsoleLogs` is browser-only (gates JS console
+      // autocapture there). RN ignores it for manual capture.
       posthog = new PostHog('test-token', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
@@ -1956,13 +1959,11 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      // Simulate a remote-config response that explicitly disables logs.
-      ;(posthog as any)._logs.setRemoteEnabled(false)
+      posthog.captureLog({ body: 'manual-1' })
+      posthog.logger.error('manual-2')
 
-      posthog.captureLog({ body: 'should-not-land' })
-      posthog.logger.error('also-should-not-land')
-
-      expect(posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue)).toBeUndefined()
+      const queue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as any[]
+      expect(queue).toHaveLength(2)
     })
   })
 })

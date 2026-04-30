@@ -6,12 +6,6 @@ import { isArray, safeSetTimeout } from '../utils'
 import type { BeforeSendLogFn, BufferedLogEntry, CaptureLogOptions, ResolvedPostHogLogsConfig } from './types'
 
 export class PostHogLogs {
-  // Server-side kill switch. Tri-state:
-  //   - undefined → remote hasn't spoken (or host SDK ignores remote); allow.
-  //   - true      → remote explicitly allowed; allow.
-  //   - false     → remote explicitly disabled; block all capture.
-  // Set via `setRemoteEnabled()` from the host SDK's `onRemoteConfig`.
-  private _remoteEnabled?: boolean
   private _maxBufferSize: number
   private _flushIntervalMs: number
   // Mutable — halved on 413 to shrink the next POST, and ramped back up by
@@ -53,52 +47,7 @@ export class PostHogLogs {
     this._maxLogsPerInterval = _config.maxLogsPerInterval
   }
 
-  /**
-   * Server-side kill switch. The host SDK calls this from its
-   * `onRemoteConfig` handler with whatever `response.logs.captureConsoleLogs`
-   * resolves to:
-   *   - `false` — block all capture going forward.
-   *   - `true` / `undefined` — allow (default state).
-   *
-   * Manual `captureLog` and `logger.*` are otherwise unconditional (matching
-   * the browser SDK's manual path). The kill switch is the one mobile-only
-   * lever — useful for shutting down a runaway log flood remotely without
-   * shipping an app update.
-   *
-   * Best-effort, eventually consistent: between SDK init and the first
-   * remote-config response, `_remoteEnabled` is `undefined` and capture is
-   * allowed. Records emitted in that window will enqueue and flush even if
-   * the customer's project has the switch on. Hosts that cache the previous
-   * remote-config response (RN does, see `posthog-rn.ts`) cover second-and-
-   * later launches; the very first launch and any post-`reset()` of the
-   * cached response are uncovered.
-   *
-   * Monotonically biased toward "allow": `setRemoteEnabled(undefined)` is a
-   * no-op and never overwrites a previous explicit decision. If the server
-   * has flipped the kill switch on (`false`) and later wants to release it,
-   * it must respond with an explicit `true` — removing the key from the
-   * response leaves the kill switch in place. This prevents a flaky or
-   * partially-populated response from silently re-enabling a feature the
-   * server explicitly disabled.
-   */
-  setRemoteEnabled(enabled: boolean | undefined): void {
-    if (enabled !== undefined) {
-      this._remoteEnabled = enabled
-    }
-  }
-
-  /**
-   * Effective enabled state for the hot path: `remote !== false`.
-   * `undefined` and `true` both pass — only an explicit server `false` blocks.
-   */
-  private _isCaptureEnabled(): boolean {
-    return this._remoteEnabled !== false
-  }
-
   captureLog(options: CaptureLogOptions): void {
-    if (!this._isCaptureEnabled()) {
-      return
-    }
     if (this._instance.optedOut) {
       return
     }
@@ -336,15 +285,9 @@ export class PostHogLogs {
   }
 
   private _enqueue(entry: BufferedLogEntry): void {
-    // Re-check both gates: state can flip between captureLog and here.
-    // optedOut: preload may have hydrated the real persisted value, or
-    //   optIn/optOut may have fired while this fn was deferred.
-    // _isCaptureEnabled: a remote-config response that flipped the kill
-    //   switch may have landed during the same init-promise tick window.
+    // Re-check optedOut: preload may have hydrated the real persisted value,
+    // or optIn/optOut may have fired while this fn was deferred.
     if (this._instance.optedOut) {
-      return
-    }
-    if (!this._isCaptureEnabled()) {
       return
     }
 

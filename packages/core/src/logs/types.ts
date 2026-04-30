@@ -41,10 +41,10 @@ export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions |
 // cellular radio cost, browser tab suspension, node process lifecycle).
 //
 // Manual capture (`captureLog`, `logger.*`) has no local opt-in — calling the
-// API ships records, matching the browser SDK's manual path. The host SDK can
-// still wire a server-side kill switch via `PostHogLogs.setRemoteEnabled` if
-// it wants the server to be able to remotely block capture (RN does this by
-// reading `response.logs.captureConsoleLogs: false`).
+// API ships records. Matches the events pipeline's manual `capture()` shape
+// across SDKs. Console autocapture, when added (browser today, RN later),
+// has its own local-opt-in flag (`response.logs.captureConsoleLogs` for the
+// browser; same field name on RN once that path lands).
 export interface PostHogLogsConfig {
   // Resource attributes
   serviceName?: string
