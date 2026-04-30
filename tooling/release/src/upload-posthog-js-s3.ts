@@ -56,17 +56,17 @@ async function listFilesRecursively(root: string): Promise<string[]> {
     return files.flat()
 }
 
-async function collectReleaseAssets(): Promise<ReleaseAsset[]> {
-    const distEntries = await fs.readdir(DIST_DIR)
+export async function collectReleaseAssets(distDir = DIST_DIR): Promise<ReleaseAsset[]> {
+    const distEntries = (await fs.readdir(distDir)).sort()
     const assets: ReleaseAsset[] = distEntries
-        .filter((name) => name.endsWith('.js'))
+        .filter((name) => name.endsWith('.js') || name.endsWith('.js.map'))
         .map((entry) => ({
             relativeKey: entry,
-            filePath: path.join(DIST_DIR, entry),
-            contentType: 'application/javascript',
+            filePath: path.join(distDir, entry),
+            contentType: entry.endsWith('.js.map') ? 'application/json' : 'application/javascript',
         }))
 
-    const toolbarCssPath = path.join(DIST_DIR, 'toolbar.css')
+    const toolbarCssPath = path.join(distDir, 'toolbar.css')
     if (await fileExists(toolbarCssPath)) {
         assets.push({
             relativeKey: 'toolbar.css',
@@ -75,7 +75,7 @@ async function collectReleaseAssets(): Promise<ReleaseAsset[]> {
         })
     }
 
-    const assetsDir = path.join(DIST_DIR, 'assets')
+    const assetsDir = path.join(distDir, 'assets')
     if (await fileExists(assetsDir)) {
         const files = await listFilesRecursively(assetsDir)
         assets.push(
