@@ -1696,7 +1696,7 @@ describe('PostHog React Native', () => {
         customStorage: mockStorage,
         captureAppLifecycleEvents: false,
         preloadFeatureFlags: false,
-        logs: { maxLogsPerInterval: 3, rateCapWindowMs: 10000 },
+        logs: { rateCap: { maxLogs: 3, windowMs: 10000 } },
       })
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise

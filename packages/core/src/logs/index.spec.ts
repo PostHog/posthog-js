@@ -1,25 +1,27 @@
 import { PostHogPersistedProperty } from '../types'
 import type { Logger } from '../types'
 import { PostHogLogs } from './index'
-import type { BufferedLogEntry, PostHogLogsConfig, ResolvedPostHogLogsConfig } from './types'
+import type { BufferedLogEntry, ResolvedPostHogLogsConfig } from './types'
 
 // Default resolved config for tests — mirrors what each SDK would build by
 // merging user config onto its own defaults. Test-only fixture; the real
-// defaults live per-SDK.
+// defaults live per-SDK. Takes the resolved (flat) shape directly so tests
+// can override `maxLogsPerInterval` / `rateCapWindowMs` without going through
+// the public `rateCap: { maxLogs, windowMs }` wrapper.
 const DEFAULT_MAX_BUFFER_SIZE = 100
 const DEFAULT_FLUSH_INTERVAL_MS = 10000
 const DEFAULT_MAX_BATCH_RECORDS_PER_POST = 50
 const DEFAULT_RATE_CAP_WINDOW_MS = 10000
 const DEFAULT_BACKGROUND_FLUSH_BUDGET_MS = 25000
 const DEFAULT_TERMINATION_FLUSH_BUDGET_MS = 2000
-const resolveForTest = (partial?: PostHogLogsConfig): ResolvedPostHogLogsConfig => ({
+const resolveForTest = (partial?: Partial<ResolvedPostHogLogsConfig>): ResolvedPostHogLogsConfig => ({
   ...partial,
   maxBufferSize: partial?.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
   flushIntervalMs: partial?.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS,
   maxBatchRecordsPerPost: partial?.maxBatchRecordsPerPost ?? DEFAULT_MAX_BATCH_RECORDS_PER_POST,
   rateCapWindowMs: partial?.rateCapWindowMs ?? DEFAULT_RATE_CAP_WINDOW_MS,
-  backgroundFlushBudgetMs: partial?.backgroundFlushBudgetMs ?? DEFAULT_BACKGROUND_FLUSH_BUDGET_MS,
-  terminationFlushBudgetMs: partial?.terminationFlushBudgetMs ?? DEFAULT_TERMINATION_FLUSH_BUDGET_MS,
+  backgroundFlushBudgetMs: DEFAULT_BACKGROUND_FLUSH_BUDGET_MS,
+  terminationFlushBudgetMs: DEFAULT_TERMINATION_FLUSH_BUDGET_MS,
   // Uncapped by default so existing tests aren't affected. The rate-limit
   // describe block opts in explicitly via { maxLogsPerInterval: N }.
   maxLogsPerInterval: partial?.maxLogsPerInterval,

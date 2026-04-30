@@ -29,20 +29,21 @@ function defaultResourceAttributes(): Record<string, string> {
 }
 
 export function resolveLogsConfig(config: PostHogLogsConfig | undefined): ResolvedPostHogLogsConfig {
+  // `rateCap` is dropped from the spread so the resolved (flat) names below
+  // are the only authoritative form on the resolved config.
+  const { rateCap: _rateCap, ...rest } = config ?? {}
   return {
-    ...config,
+    ...rest,
     maxBufferSize: config?.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
     flushIntervalMs: config?.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS,
     maxBatchRecordsPerPost: config?.maxBatchRecordsPerPost ?? DEFAULT_MAX_BATCH_RECORDS_PER_POST,
     // Rate-cap window defaults independently of flush cadence: changing flush
     // frequency shouldn't implicitly re-shape the rate budget.
-    rateCapWindowMs: config?.rateCapWindowMs ?? DEFAULT_RATE_CAP_WINDOW_MS,
-    // `maxLogsPerInterval` stays optional in the resolved config. RN defaults
-    // to 500/window to bound cellular data cost; pass `maxLogsPerInterval:
-    // undefined` in user config to opt out.
-    maxLogsPerInterval: config?.maxLogsPerInterval ?? DEFAULT_MAX_LOGS_PER_INTERVAL,
-    backgroundFlushBudgetMs: config?.backgroundFlushBudgetMs ?? DEFAULT_BACKGROUND_FLUSH_BUDGET_MS,
-    terminationFlushBudgetMs: config?.terminationFlushBudgetMs ?? DEFAULT_TERMINATION_FLUSH_BUDGET_MS,
+    rateCapWindowMs: config?.rateCap?.windowMs ?? DEFAULT_RATE_CAP_WINDOW_MS,
+    // RN defaults to 500/window to bound cellular data cost.
+    maxLogsPerInterval: config?.rateCap?.maxLogs ?? DEFAULT_MAX_LOGS_PER_INTERVAL,
+    backgroundFlushBudgetMs: DEFAULT_BACKGROUND_FLUSH_BUDGET_MS,
+    terminationFlushBudgetMs: DEFAULT_TERMINATION_FLUSH_BUDGET_MS,
     // Merge platform-detected attrs first so user-provided `resourceAttributes`
     // wins on any conflict. Never throw if `Platform` is unavailable in
     // unusual envs (web bundle, jest without RN preset) — fall back silently.
