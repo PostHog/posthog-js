@@ -254,6 +254,12 @@ export default class MutationBuffer {
   public reset() {
     this.shadowDomManager.reset();
     this.canvasManager.reset();
+    // Defence in depth: clear doc in case a stale closure still pins the buffer.
+    (this as unknown as { doc: Document | null }).doc = null;
+  }
+
+  public bufferDoc(): Document | null {
+    return (this as unknown as { doc: Document | null }).doc;
   }
 
   public destroy() {
@@ -338,6 +344,12 @@ export default class MutationBuffer {
         onIframeLoad: (iframe, childSn) => {
           this.iframeManager.attachIframe(iframe, childSn);
           this.shadowDomManager.observeAttachShadow(iframe);
+        },
+        onIframeListenerRegistered: (
+          iframe: HTMLIFrameElement,
+          disposer: () => void,
+        ) => {
+          this.iframeManager.registerLoadListenerDisposer(iframe, disposer);
         },
         onStylesheetLoad: (link, childSn) => {
           this.stylesheetManager.attachLinkElement(link, childSn);

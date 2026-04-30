@@ -339,54 +339,88 @@ export function needMaskingText(
   return false;
 }
 
+// Returns a disposer that removes the load listener and clears any pending
+// timer — call it if the iframe is detached before the listener fires.
 // https://stackoverflow.com/a/36155560
 function onceIframeLoaded(
   iframeEl: HTMLIFrameElement,
   listener: () => unknown,
   iframeLoadTimeout: number,
-) {
+): () => void {
+  const noop = () => {};
   const win = iframeEl.contentWindow;
   if (!win) {
-    return;
+    return noop;
   }
-  // document is loading
-  let fired = false;
-
   let readyState: DocumentReadyState;
   try {
     readyState = win.document.readyState;
   } catch (error) {
-    return;
+    return noop;
   }
+
   if (readyState !== 'complete') {
-    const timer = setTimeout(() => {
-      if (!fired) {
-        listener();
-        fired = true;
-      }
-    }, iframeLoadTimeout);
-    iframeEl.addEventListener('load', () => {
-      clearTimeout(timer);
+    let fired = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onLoad = () => {
+      if (fired) return;
       fired = true;
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      iframeEl.removeEventListener('load', onLoad);
       listener();
-    });
-    return;
+    };
+    timer = setTimeout(() => {
+      if (fired) return;
+      fired = true;
+      timer = null;
+      iframeEl.removeEventListener('load', onLoad);
+      listener();
+    }, iframeLoadTimeout);
+    iframeEl.addEventListener('load', onLoad);
+    return () => {
+      if (fired) return;
+      fired = true;
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      iframeEl.removeEventListener('load', onLoad);
+    };
   }
-  // check blank frame for Chrome
+
+  // readyState === 'complete' but Chrome reports about:blank during the
+  // initial transition to a non-blank src; serializing now would emit the
+  // blank doc and re-emit when the real load completes.
   const blankUrl = 'about:blank';
+  let winLocationHref: string;
+  try {
+    winLocationHref = win.location.href;
+  } catch {
+    return noop;
+  }
+  const onSubsequentLoad = () => listener();
   if (
-    win.location.href !== blankUrl ||
+    winLocationHref !== blankUrl ||
     iframeEl.src === blankUrl ||
     iframeEl.src === ''
   ) {
-    // iframe was already loaded, make sure we wait to trigger the listener
-    // till _after_ the mutation that found this iframe has had time to process
-    setTimeout(listener, 0);
-
-    return iframeEl.addEventListener('load', listener); // keep listing for future loads
+    // Genuinely loaded — fire on the next tick so the host mutation that
+    // surfaced this iframe has time to commit; also re-fire on later loads.
+    const initialTimer = setTimeout(listener, 0);
+    iframeEl.addEventListener('load', onSubsequentLoad);
+    return () => {
+      clearTimeout(initialTimer);
+      iframeEl.removeEventListener('load', onSubsequentLoad);
+    };
   }
-  // use default listener
-  iframeEl.addEventListener('load', listener);
+  // Transient blank during navigation — wait for the real load.
+  iframeEl.addEventListener('load', onSubsequentLoad);
+  return () => {
+    iframeEl.removeEventListener('load', onSubsequentLoad);
+  };
 }
 
 function onceStylesheetLoaded(
@@ -1023,6 +1057,10 @@ export function serializeNodeWithId(
       node: serializedElementNodeWithId,
     ) => unknown;
     iframeLoadTimeout?: number;
+    onIframeListenerRegistered?: (
+      iframeNode: HTMLIFrameElement,
+      disposer: () => void,
+    ) => void;
     onStylesheetLoad?: (
       linkNode: HTMLLinkElement,
       node: serializedElementNodeWithId,
@@ -1052,6 +1090,7 @@ export function serializeNodeWithId(
     onSerialize,
     onIframeLoad,
     iframeLoadTimeout = 5000,
+    onIframeListenerRegistered,
     onStylesheetLoad,
     stylesheetLoadTimeout = 5000,
     keepIframeSrcFn = () => false,
@@ -1179,6 +1218,7 @@ export function serializeNodeWithId(
       onSerialize,
       onIframeLoad,
       iframeLoadTimeout,
+      onIframeListenerRegistered,
       onStylesheetLoad,
       stylesheetLoadTimeout,
       keepIframeSrcFn,
@@ -1223,7 +1263,7 @@ export function serializeNodeWithId(
     serializedNode.type === NodeType.Element &&
     serializedNode.tagName === 'iframe'
   ) {
-    onceIframeLoaded(
+    const iframeDisposer = onceIframeLoaded(
       n as HTMLIFrameElement,
       () => {
         const iframeDoc = (n as HTMLIFrameElement).contentDocument;
@@ -1249,6 +1289,7 @@ export function serializeNodeWithId(
             onSerialize,
             onIframeLoad,
             iframeLoadTimeout,
+            onIframeListenerRegistered,
             onStylesheetLoad,
             stylesheetLoadTimeout,
             keepIframeSrcFn,
@@ -1266,6 +1307,7 @@ export function serializeNodeWithId(
       },
       iframeLoadTimeout,
     );
+    onIframeListenerRegistered?.(n as HTMLIFrameElement, iframeDisposer);
   }
 
   // <link rel=stylesheet href=...>
@@ -1372,6 +1414,10 @@ function snapshot(
       node: serializedElementNodeWithId,
     ) => unknown;
     iframeLoadTimeout?: number;
+    onIframeListenerRegistered?: (
+      iframeNode: HTMLIFrameElement,
+      disposer: () => void,
+    ) => void;
     onStylesheetLoad?: (
       linkNode: HTMLLinkElement,
       node: serializedElementNodeWithId,
@@ -1399,6 +1445,7 @@ function snapshot(
     onSerialize,
     onIframeLoad,
     iframeLoadTimeout,
+    onIframeListenerRegistered,
     onStylesheetLoad,
     stylesheetLoadTimeout,
     keepIframeSrcFn = () => false,
@@ -1450,6 +1497,7 @@ function snapshot(
     onSerialize,
     onIframeLoad,
     iframeLoadTimeout,
+    onIframeListenerRegistered,
     onStylesheetLoad,
     stylesheetLoadTimeout,
     keepIframeSrcFn,

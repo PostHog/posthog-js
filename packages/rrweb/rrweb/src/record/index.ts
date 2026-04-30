@@ -180,32 +180,12 @@ function record<T = eventWithTime>(
 
   let lastFullSnapshotEvent: eventWithTime;
   let incrementalSnapshotCount = 0;
-  // Track observer cleanup functions for individual iframes to prevent memory leaks
-  const iframeObserverCleanups = new Map<number, listenerHandler>();
+  // Set per id — one iframe id can collect several cleanups across loads.
+  const iframeObserverCleanups = new Map<number, Set<listenerHandler>>();
 
-  function cleanupDetachedIframeObservers() {
-    for (const [iframeId, cleanup] of iframeObserverCleanups) {
-      const iframe = mirror.getNode(iframeId) as HTMLIFrameElement | null;
-
-      if (!iframe) {
-        cleanup();
-        iframeObserverCleanups.delete(iframeId);
-        continue;
-      }
-
-      try {
-        // Check if iframe is detached or its content is no longer accessible
-        if (!iframe.contentDocument || !iframe.contentDocument.defaultView) {
-          cleanup();
-          iframeObserverCleanups.delete(iframeId);
-        }
-      } catch {
-        // Cross-origin: contentDocument access throws, cleanup anyway
-        cleanup();
-        iframeObserverCleanups.delete(iframeId);
-      }
-    }
-  }
+  // Forward-declared; assigned inside the try{} block where `handlers` is in scope.
+  let runAndDetachIframeCleanup: (iframeId: number) => void = () => {};
+  let cleanupDetachedIframeObservers: () => void = () => {};
 
   const eventProcessor = (e: eventWithTime): T => {
     for (const plugin of plugins || []) {
@@ -275,27 +255,37 @@ function record<T = eventWithTime>(
   };
 
   const wrappedMutationEmit = (m: mutationCallbackParam) => {
-    // Clean up removed iframes from the attachedIframes Map to prevent memory leaks
-    // Only clean up iframes that are actually being removed, not moved
-    // (moved iframes appear in both removes and adds)
-    if (recordCrossOriginIframes && m.removes && m.removes.length > 0) {
-      // Only create the Set if there are adds to check against
+    // Clean up removed iframes (same-origin too). Detect reparenting by id
+    // AND by element identity — MutationBuffer.emit clears mirror entries
+    // before re-serializing adds, so a moved iframe may have a fresh id.
+    if (m.removes && m.removes.length > 0) {
       const addedIds =
         m.adds.length > 0 ? new Set(m.adds.map((add) => add.node.id)) : null;
-      m.removes.forEach(({ id }) => {
-        // Only remove if not being re-added (i.e., actually removed, not moved)
-        if (!addedIds || !addedIds.has(id)) {
-          // Disconnect observers for this iframe to prevent memory leaks
-          const cleanup = iframeObserverCleanups.get(id);
-          if (cleanup) {
-            cleanup();
-            iframeObserverCleanups.delete(id);
+      const addedIframeElements = new Set<HTMLIFrameElement>();
+      if (m.adds.length > 0) {
+        for (const add of m.adds) {
+          const node = mirror.getNode(add.node.id);
+          if (node && (node as Element).nodeName === 'IFRAME') {
+            addedIframeElements.add(node as HTMLIFrameElement);
           }
-          iframeManager.removeIframeById(id);
         }
+      }
+
+      m.removes.forEach(({ id }) => {
+        if (addedIds && addedIds.has(id)) return;
+        const removedIframe = iframeManager.getIframeElementById(id);
+        if (removedIframe && addedIframeElements.has(removedIframe)) {
+          // Reparent: keep observers/listeners; just drop stale id mapping.
+          iframeManager.forgetIframeId(id);
+          return;
+        }
+        runAndDetachIframeCleanup(id);
+        iframeManager.removeIframeById(id);
       });
 
-      // Safety net: cleanup any iframes that have become detached or inaccessible
+      // Catch iframes removed inside a removed subtree (only the ancestor's
+      // id appears in m.removes).
+      iframeManager.cleanupDetachedIframes();
       cleanupDetachedIframeObservers();
     }
 
@@ -450,6 +440,12 @@ function record<T = eventWithTime>(
         iframeManager.attachIframe(iframe, childSn);
         shadowDomManager.observeAttachShadow(iframe);
       },
+      onIframeListenerRegistered: (
+        iframe: HTMLIFrameElement,
+        disposer: () => void,
+      ) => {
+        iframeManager.registerLoadListenerDisposer(iframe, disposer);
+      },
       onStylesheetLoad: (linkEl, childSn) => {
         stylesheetManager.attachLinkElement(linkEl, childSn);
       },
@@ -486,6 +482,35 @@ function record<T = eventWithTime>(
 
   try {
     const handlers: listenerHandler[] = [];
+
+    // Disposes per-iframe observer cleanups and unlinks them from `handlers`.
+    runAndDetachIframeCleanup = (iframeId: number) => {
+      const cleanups = iframeObserverCleanups.get(iframeId);
+      if (!cleanups) return;
+      cleanups.forEach((cleanup) => {
+        callSafely(cleanup);
+        const idx = handlers.indexOf(cleanup);
+        if (idx !== -1) handlers.splice(idx, 1);
+      });
+      iframeObserverCleanups.delete(iframeId);
+    };
+
+    cleanupDetachedIframeObservers = () => {
+      for (const [iframeId] of iframeObserverCleanups) {
+        const iframe = mirror.getNode(iframeId) as HTMLIFrameElement | null;
+        if (!iframe) {
+          runAndDetachIframeCleanup(iframeId);
+          continue;
+        }
+        try {
+          if (!iframe.contentDocument || !iframe.contentDocument.defaultView) {
+            runAndDetachIframeCleanup(iframeId);
+          }
+        } catch {
+          runAndDetachIframeCleanup(iframeId);
+        }
+      }
+    };
 
     const observe = (doc: Document) => {
       return callbackWrapper(initObservers)(
@@ -627,9 +652,14 @@ function record<T = eventWithTime>(
         const iframeId = mirror.getId(iframeEl);
         const cleanup = observe(iframeEl.contentDocument!);
         handlers.push(cleanup);
-        // Store cleanup function so we can disconnect this iframe's observers when it's removed
+        // Accumulate cleanups across iframe navigations.
         if (iframeId !== -1) {
-          iframeObserverCleanups.set(iframeId, cleanup);
+          let bucket = iframeObserverCleanups.get(iframeId);
+          if (!bucket) {
+            bucket = new Set();
+            iframeObserverCleanups.set(iframeId, bucket);
+          }
+          bucket.add(cleanup);
         }
       } catch (error) {
         // TODO: handle internal error
@@ -640,11 +670,7 @@ function record<T = eventWithTime>(
 
     iframeManager.addPageHideListener((iframeEl) => {
       const iframeId = mirror.getId(iframeEl);
-      const cleanup = iframeObserverCleanups.get(iframeId);
-      if (cleanup) {
-        cleanup();
-        iframeObserverCleanups.delete(iframeId);
-      }
+      runAndDetachIframeCleanup(iframeId);
       findAndRemoveIframeBuffer(iframeEl);
     });
 
