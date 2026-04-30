@@ -867,8 +867,12 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-bjfrkkzz2VIlAgZ3brGn/tR8v+rNqONscPh0QZcyu/chY6BtmT5rCQZGZUCTh1uale9jajMDlju6FVBdNQKqgA==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.23.4
+    resolution: {integrity: sha512-XeeSqo/UNA8itbVs9qlseZMA/Z3MWtkQZ7nb+N/fTeeltNtBZCfL0Tt7tgnZ9+932nh/+cT7J205mPyCn/JC7g==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.27.7
+
+  '@posthog/types@file:../../target/posthog-types.tgz':
+    resolution: {integrity: sha512-67d/J6sJY2YFuM57v61jrvwk31nea//DR4scLzu5f1GdJuBafCoRx4DcMNF+wgO5+95g8vDGA/DNcZdLELBCvQ==, tarball: file:../../target/posthog-types.tgz}
+    version: 1.372.3
 
   '@radix-ui/react-compose-refs@1.1.2':
     resolution: {integrity: sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==}
@@ -1225,6 +1229,7 @@ packages:
   '@xmldom/xmldom@0.8.11':
     resolution: {integrity: sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -3135,8 +3140,8 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-+nqFZywVNk4kgGHRrVivoReJTuC+an7Ka5ButL4nsTDso72IaRqnve7FHu4DhpNFQ3lq5N84N1nzlOUEMV7Jmw==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.37.3
+    resolution: {integrity: sha512-XvkNZkDbnsz/hzV2emgIdMsWATiazRBGC4MjEVgpcYXY3dTRT91Oh2OChZpwSE7gnPEMssHiQbnjhUW9qIBRBQ==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.43.10
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
@@ -3144,7 +3149,7 @@ packages:
       expo-device: '>= 4.0.0'
       expo-file-system: '>= 13.0.0'
       expo-localization: '>= 11.0.0'
-      posthog-react-native-session-replay: '>= 1.5.0'
+      posthog-react-native-session-replay: '>= 1.5.6'
       react-native-device-info: '>= 10.0.0'
       react-native-localize: '>= 3.0.0'
       react-native-navigation: '>= 6.0.0'
@@ -3172,6 +3177,8 @@ packages:
       react-native-navigation:
         optional: true
       react-native-safe-area-context:
+        optional: true
+      react-native-svg:
         optional: true
 
   prelude-ls@1.2.1:
@@ -5085,7 +5092,9 @@ snapshots:
 
   '@posthog/core@file:../../target/posthog-core.tgz':
     dependencies:
-      cross-spawn: 7.0.6
+      '@posthog/types': file:../../target/posthog-types.tgz
+
+  '@posthog/types@file:../../target/posthog-types.tgz': {}
 
   '@radix-ui/react-compose-refs@1.1.2(@types/react@19.0.14)(react@19.0.0)':
     dependencies:
@@ -7768,7 +7777,7 @@ snapshots:
   posthog-react-native@file:../../target/posthog-react-native.tgz(60444f062407d5e43e33bacdf6e729df):
     dependencies:
       '@posthog/core': file:../../target/posthog-core.tgz
-      react-native-svg: 15.11.2(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      '@posthog/types': file:../../target/posthog-types.tgz
     optionalDependencies:
       '@react-navigation/native': 7.1.31(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       expo-application: 6.1.5(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))
@@ -7777,6 +7786,7 @@ snapshots:
       expo-localization: 16.1.6(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react@19.0.0)
       posthog-react-native-session-replay: 1.5.6(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       react-native-safe-area-context: 5.4.0(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      react-native-svg: 15.11.2(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
 
   prelude-ls@1.2.1: {}
 

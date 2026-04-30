@@ -344,6 +344,18 @@ export type PostHogRemoteConfig = {
     | {
         [key: string]: JsonType
       }
+
+  /**
+   * Logs feature remote config. When a map, `captureConsoleLogs` (boolean)
+   * is the local opt-in flag for `console.*` autocapture (read by the JS
+   * SDK's `PostHogLogs` extension to decide whether to load the autocapture
+   * bundle).
+   */
+  logs?:
+    | boolean
+    | {
+        [key: string]: JsonType
+      }
 }
 
 export type FeatureFlagValue = string | boolean
