@@ -6,7 +6,7 @@ import ParallaxScrollView from '@/components/ParallaxScrollView'
 import { ThemedText } from '@/components/ThemedText'
 import { ThemedView } from '@/components/ThemedView'
 import { IconSymbol } from '@/components/ui/IconSymbol'
-import { posthog } from '../posthog'
+import { beforeSendMode, posthog } from '../posthog'
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
 type BeforeSendMode = 'pass' | 'drop' | 'throw'
@@ -25,11 +25,10 @@ export default function LogsScreen() {
         sessionId: null,
         appState: null,
     })
-    const [beforeSendMode, setBeforeSendMode] = useState<BeforeSendMode>('pass')
+    // Mirror of `beforeSendMode.current` for UI display. The actual filter
+    // reads from the module-level ref in posthog.tsx.
+    const [beforeSendModeUI, setBeforeSendModeUI] = useState<BeforeSendMode>(beforeSendMode.current)
     const [queueDump, setQueueDump] = useState<string>('')
-    // Snapshot any user-supplied beforeSend at first render so the "pass"
-    // button can restore it instead of overwriting with `undefined`.
-    const [originalBeforeSend] = useState<unknown>(() => (posthog as any)._logs?._config?.beforeSend)
 
     const refresh = (): void => {
         setDevStatus({
@@ -134,25 +133,19 @@ export default function LogsScreen() {
 
     // ===== Dev tools =====
     //
-    // The buttons below reach into private SDK internals (`_logs`, `_config`,
-    // `_currentAppState`) so we can exercise edge cases from the example app
-    // without re-building or running adb. Reach-ins are ONLY appropriate in
-    // dogfood-style examples; production wrappers should stick to the public
-    // surface (`captureLog`, `logger.*`, `flushLogs`).
+    // Status reads `_currentAppState` via a reach-in because there's no
+    // public getter for the SDK's cached AppState. Reach-ins like this are
+    // ONLY appropriate in dogfood-style examples; production wrappers
+    // should stick to the public surface (`captureLog`, `logger.*`,
+    // `flushLogs`).
 
     const setBefore = (mode: BeforeSendMode): void => {
-        const config = (posthog as any)._logs?._config
-        if (!config) return
-        if (mode === 'pass') {
-            config.beforeSend = originalBeforeSend
-        } else if (mode === 'drop') {
-            config.beforeSend = (): null => null
-        } else {
-            config.beforeSend = (): never => {
-                throw new Error('beforeSend boom')
-            }
-        }
-        setBeforeSendMode(mode)
+        // Update the shared ref in posthog.tsx — the `beforeSend` closure
+        // reads it on every capture, so behavior switches at runtime
+        // without touching SDK internals. This is the public-API-only
+        // pattern customers should follow for runtime-tunable filters.
+        beforeSendMode.current = mode
+        setBeforeSendModeUI(mode)
         bump(`beforeSend = ${mode}`)
     }
 
@@ -257,7 +250,7 @@ export default function LogsScreen() {
                     <ThemedText>distinctId: {devStatus.distinctId ?? '<none>'}</ThemedText>
                     <ThemedText>sessionId: {devStatus.sessionId ?? '<none>'}</ThemedText>
                     <ThemedText>app.state: {devStatus.appState ?? '<unknown>'}</ThemedText>
-                    <ThemedText>beforeSend mode: {beforeSendMode}</ThemedText>
+                    <ThemedText>beforeSend mode: {beforeSendModeUI}</ThemedText>
                     <Button title="Refresh status" onPress={refresh} />
                 </View>
 
