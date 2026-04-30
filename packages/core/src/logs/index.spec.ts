@@ -583,6 +583,81 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
+    it('warns explicitly when dropping a size-1 413 (visibility for the lost record)', async () => {
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'too-large' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBatchRecordsPerPost: 1 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'oversized' })
+      await logs.flush()
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Dropping a single log record after 413 with batch size 1')
+      )
+    })
+
+    it('keeps draining the queue after a size-1 413 drop (one bad record does not stall the pipeline)', async () => {
+      // First record returns too-large with size 1 (drops and warns), then
+      // the rest of the queue should continue flushing normally.
+      let callCount = 0
+      mockInstance._sendLogsBatch = jest.fn(() => {
+        callCount++
+        return Promise.resolve(callCount === 1 ? { kind: 'too-large' } : { kind: 'ok' })
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBatchRecordsPerPost: 1, maxBufferSize: 10 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'oversized' })
+      logs.captureLog({ body: 'ok-1' })
+      logs.captureLog({ body: 'ok-2' })
+
+      await logs.flush()
+
+      // Three sends: oversized (dropped), ok-1, ok-2. Queue is empty.
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
+
+    it('size-1 413 retry-shrink path: starts at maxBatchRecordsPerPost, halves to 1, drops at 1', async () => {
+      // Realistic flow: batch=N gets too-large, halves to N/2, halves to 1,
+      // then 413 on size 1 is the permanent drop. Verifies the cap actually
+      // shrinks all the way down before the size-1 drop fires.
+      const sendSizes: number[] = []
+      mockInstance._sendLogsBatch = jest.fn(async (payload: any) => {
+        const size = payload.resourceLogs[0].scopeLogs[0].logRecords.length
+        sendSizes.push(size)
+        return { kind: 'too-large' }
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBatchRecordsPerPost: 4, maxBufferSize: 10 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      // Single oversized record. With maxBatchRecordsPerPost=4 but only 1 record
+      // in the queue, the first send is size 1 — going straight to the drop path.
+      logs.captureLog({ body: 'huge' })
+
+      await logs.flush()
+
+      // Single send of size 1, dropped immediately (no halving rounds because
+      // batch was already at 1).
+      expect(sendSizes).toEqual([1])
+      expect(readQueue(mockInstance)).toHaveLength(0)
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Dropping a single log record after 413 with batch size 1')
+      )
+    })
+
     it('keeps records in the queue on retry-later outcome and re-throws the carried error', async () => {
       const netErr = new Error('offline')
       mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'retry-later', error: netErr }))
