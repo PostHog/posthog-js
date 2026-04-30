@@ -137,10 +137,36 @@ export interface PostHogOptions extends PostHogCoreOptions {
   setDefaultPersonProperties?: boolean
 
   /**
-   * Logs feature configuration. Lets you send structured log records to
-   * PostHog via `posthog.captureLog(...)` or `posthog.logger.info(...)`.
-   * Manual capture ships records whenever the API is called; the only
-   * blockers are `optedOut`, missing/empty `body`, and missing API key.
+   * Logs feature configuration. Enables structured log capture via
+   * `posthog.captureLog(...)` or `posthog.logger.info(...)`. Records ship to
+   * PostHog's logs product (`/i/v1/logs`) in OTLP format, batched on a timer,
+   * AppState change, buffer fill, or manual `flushLogs()`.
+   *
+   * Capture is **unconditional** — calling the API ships records as long as
+   * the SDK is initialized and the user hasn't opted out. The only blockers
+   * are `optedOut`, missing/empty `body`, and missing API key.
+   *
+   * All fields below are optional; per-SDK defaults apply (mobile defaults
+   * are tuned for cellular bandwidth and battery, ~50 logs/sec ceiling).
+   *
+   * @example Minimal — just service tagging, defaults for everything else
+   * ```ts
+   * new PostHog(key, {
+   *   logs: { serviceName: 'my-app', environment: 'production' }
+   * })
+   * ```
+   *
+   * @example Tune for higher-volume logging
+   * ```ts
+   * new PostHog(key, {
+   *   logs: {
+   *     serviceName: 'my-app',
+   *     rateCap: { maxLogs: 5000, windowMs: 60000 },
+   *     maxBufferSize: 500,
+   *     beforeSend: (r) => r.body.includes('secret') ? null : r,
+   *   }
+   * })
+   * ```
    */
   logs?: PostHogLogsConfig
 }

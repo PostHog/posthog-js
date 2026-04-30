@@ -30,12 +30,29 @@ export interface CaptureLogOptions {
     attributes?: LogAttributes
 }
 
+/**
+ * Per-level convenience logger. Each method captures a structured log record
+ * at the corresponding severity, equivalent to
+ * `posthog.captureLog({ body, level, attributes })`.
+ *
+ * @example
+ * ```ts
+ * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+ * posthog.logger.error('payment failed', { code: 'E001' })
+ * ```
+ */
 export interface Logger {
+    /** Lowest severity. Trace-level diagnostic detail. */
     trace(body: string, attributes?: LogAttributes): void
+    /** Debug-level detail. Verbose, only useful while diagnosing. */
     debug(body: string, attributes?: LogAttributes): void
+    /** Informational. Normal app events worth recording. */
     info(body: string, attributes?: LogAttributes): void
+    /** Warning. Something unexpected but non-fatal. */
     warn(body: string, attributes?: LogAttributes): void
+    /** Error. Operation failed; the app may continue. */
     error(body: string, attributes?: LogAttributes): void
+    /** Fatal. Operation failed; the app likely cannot continue. */
     fatal(body: string, attributes?: LogAttributes): void
 }
 

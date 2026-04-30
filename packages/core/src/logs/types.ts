@@ -46,38 +46,134 @@ export interface BufferedLogEntry {
 }
 
 /**
- * `beforeSend` hook signature. Return the (possibly transformed) record to
- * keep it, or `null` to drop it. Configure as a single function or an array
- * (chain of filters, evaluated left-to-right).
+ * Pre-send filter. Inspect, mutate, or drop a captured record before it
+ * enters the rate-cap or the queue. Return the (possibly transformed) record
+ * to keep it; return `null` to drop it.
+ *
+ * Configure as a single fn or an array. Arrays form a left-to-right chain:
+ * each fn receives the previous fn's return value. A `null` from any link
+ * short-circuits the chain and drops the record.
+ *
+ * Runs *before* the rate cap so dropped records don't consume the
+ * per-interval budget. Throwing fns are logged and skipped — the chain
+ * continues with the previous return value, so a buggy filter degrades to a
+ * no-op rather than crashing `captureLog()`.
+ *
+ * @example Redact secrets from log bodies
+ * ```ts
+ * logs: {
+ *   beforeSend: (record) => ({
+ *     ...record,
+ *     body: record.body.replace(/api_key=\S+/g, 'api_key=[REDACTED]'),
+ *   }),
+ * }
+ * ```
+ *
+ * @example Drop noisy debug logs in production
+ * ```ts
+ * logs: {
+ *   beforeSend: (record) => (record.level === 'debug' ? null : record),
+ * }
+ * ```
  */
 export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions | null
 
-// Public configuration for the logs module.
+/**
+ * Configuration for the logs feature on `new PostHog(key, { logs: ... })`.
+ * All fields are optional; per-SDK defaults apply (mobile vs browser tune
+ * differently for cellular cost vs tab-suspension behavior).
+ */
 export interface PostHogLogsConfig {
-  // Resource attributes
+  /**
+   * Service name attached to every record as the OTLP `service.name`
+   * resource attribute. Used by the Logs UI for filtering / grouping.
+   * Default: `'unknown_service'`.
+   */
   serviceName?: string
-  serviceVersion?: string
-  environment?: string
-  resourceAttributes?: Record<string, LogAttributeValue>
-
-  // Buffering
-  flushIntervalMs?: number
-  maxBufferSize?: number
-  maxBatchRecordsPerPost?: number // keeps each POST under the 2 MB server cap
 
   /**
-   * Tumbling-window rate cap. Both fields default per-SDK; pass either to
-   * tune. `maxLogs` undefined means unbounded.
+   * Service version attached as OTLP `service.version`. Useful for
+   * correlating regressions to specific app releases.
+   */
+  serviceVersion?: string
+
+  /**
+   * Deployment environment attached as OTLP `deployment.environment`
+   * (e.g. `'production'`, `'staging'`, `'dev'`).
+   */
+  environment?: string
+
+  /**
+   * Extra OTLP resource attributes attached to every record. Spread first;
+   * SDK-controlled keys (`service.name`, `telemetry.sdk.*`, RN's `os.*`)
+   * are layered on top so users cannot accidentally clobber them. Use the
+   * dedicated `serviceName` / `environment` / `serviceVersion` fields to
+   * override those keys.
+   */
+  resourceAttributes?: Record<string, LogAttributeValue>
+
+  /**
+   * How often the periodic background flush fires (ms). Records also flush
+   * eagerly when the buffer fills, on AppState changes (RN), and on
+   * `shutdown()`. Lower values trade battery/bandwidth for fresher data.
+   * Default: 10000 (RN) / 3000 (browser).
+   */
+  flushIntervalMs?: number
+
+  /**
+   * Max records held in memory before the queue evicts the oldest on push
+   * (FIFO). Bounds memory footprint and on-disk-queue size. When the buffer
+   * hits this size, an immediate flush is triggered to reclaim space; if
+   * the flush hasn't completed before the next capture, the oldest record
+   * is shifted out. Default: 100.
+   */
+  maxBufferSize?: number
+
+  /**
+   * Max records per outbound POST. Keeps each request under the server's
+   * 2 MB cap. On a 413 response, the SDK halves this value, retries the
+   * same records, then ramps back up by 1 per healthy send. A 413 on a
+   * single-record batch drops the record (it's larger than the server can
+   * accept regardless of batch size). Default: 50 (RN) / 100 (browser).
+   */
+  maxBatchRecordsPerPost?: number
+
+  /**
+   * Tumbling-window rate cap. Bounds how many records can be captured
+   * within a sliding (technically tumbling) time window. Records exceeding
+   * the cap are dropped synchronously at `captureLog()` (they never enter
+   * the buffer or consume bandwidth). A single warn line is logged per
+   * window when the cap is hit.
+   *
+   * Defaults are per-SDK; on RN the default is `{ maxLogs: 500, windowMs:
+   * 10000 }` (≈50 logs/sec ceiling, tuned for cellular bandwidth).
+   *
+   * @example Allow brief bursts up to 1000/min
+   * ```ts
+   * logs: { rateCap: { maxLogs: 1000, windowMs: 60000 } }
+   * ```
+   *
+   * @example Disable the cap entirely (unbounded)
+   * ```ts
+   * logs: { rateCap: { maxLogs: undefined } }
+   * ```
    */
   rateCap?: {
+    /**
+     * Max records accepted per `windowMs` window. `undefined` = unbounded.
+     */
     maxLogs?: number
+    /**
+     * Window length in ms. Tumbling, not sliding — the counter resets the
+     * first time a capture fires after the window expires.
+     */
     windowMs?: number
   }
 
-  // Filtering. Runs synchronously before the rate cap so beforeSend-dropped
-  // records do not consume the per-interval budget. Accepts a single fn or
-  // an array (chain). Throwing fns are logged and skipped — they must never
-  // crash the caller's `captureLog()`.
+  /**
+   * Pre-send filter. See {@link BeforeSendLogFn} for shape and examples.
+   * Configure as a single function or a chain.
+   */
   beforeSend?: BeforeSendLogFn | BeforeSendLogFn[]
 }
 
