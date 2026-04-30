@@ -1,9 +1,15 @@
-import type { LogAttributeValue, LogSdkContext } from '@posthog/types'
+import type { LogAttributeValue } from '@posthog/types'
 import { buildOtlpLogRecord, buildOtlpLogsPayload } from './logs-utils'
 import { Logger, PostHogPersistedProperty } from '../types'
 import type { PostHogCoreStateless } from '../posthog-core-stateless'
 import { isArray, safeSetTimeout } from '../utils'
-import type { BeforeSendLogFn, BufferedLogEntry, CaptureLogOptions, ResolvedPostHogLogsConfig } from './types'
+import type {
+  BeforeSendLogFn,
+  BufferedLogEntry,
+  CaptureLogOptions,
+  LogSdkContext,
+  ResolvedPostHogLogsConfig,
+} from './types'
 
 export class PostHogLogs {
   private _maxBufferSize: number

@@ -15,6 +15,7 @@ export type {
   BeforeSendLogFn,
   BufferedLogEntry,
   CaptureLogger,
+  LogSdkContext,
   PostHogLogsConfig,
   ResolvedPostHogLogsConfig,
 } from './logs/types'

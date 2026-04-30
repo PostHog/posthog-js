@@ -11,8 +11,27 @@ export type {
   OtlpKeyValue,
   OtlpLogRecord,
   OtlpLogsPayload,
-  LogSdkContext,
 } from '@posthog/types'
+
+/**
+ * SDK-internal context the host SDK passes to `buildOtlpLogRecord` at capture
+ * time. Each SDK populates the fields that apply to it: browser fills
+ * `currentUrl`, mobile fills `screenName` / `appState`. Missing fields are
+ * omitted from the OTLP record (no stray attributes).
+ *
+ * Internal to `@posthog/core` — customers don't see this in autocomplete.
+ */
+export interface LogSdkContext {
+  distinctId?: string
+  sessionId?: string
+  /** Web-only — current page URL */
+  currentUrl?: string
+  /** Mobile-only — current screen / view name */
+  screenName?: string
+  /** Mobile-only — app foreground/background state at capture time */
+  appState?: 'foreground' | 'background'
+  activeFeatureFlags?: string[]
+}
 
 // The public capture-logger interface lives in @posthog/types as `Logger`. Core
 // also exports a `Logger` (the SDK's internal warn/info/error logger). Alias the

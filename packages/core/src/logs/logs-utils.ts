@@ -1,7 +1,6 @@
 import type {
   CaptureLogOptions,
   LogAttributeValue,
-  LogSdkContext,
   LogSeverityLevel,
   OtlpAnyValue,
   OtlpKeyValue,
@@ -10,6 +9,7 @@ import type {
   OtlpSeverityEntry,
   OtlpSeverityText,
 } from '@posthog/types'
+import type { LogSdkContext } from './types'
 import { isArray, isBoolean, isNull, isUndefined } from '../utils'
 
 // ============================================================================
