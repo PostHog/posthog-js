@@ -1,5 +1,7 @@
 packages:
   - packages/*
+  - packages/rrweb/*
+  - packages/rrweb/plugins/*
   - tooling/*
   - "!**/playground/**"
   - "!**/examples/**"
@@ -32,17 +34,13 @@ catalog:
   ts-jest: 29.4.0
   tslib: ^2.5.0
   typescript: 5.8.2
+  vite: ^6.2.0
+  vite-plugin-dts: ^4.5.4
+  esbuild-plugin-umd-wrapper: ^3.0.0
 
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
-  - "@posthog/rrweb-plugin-console-record@0.0.60"
-  - "@posthog/rrweb-record@0.0.60"
-  - "@posthog/rrweb-types@0.0.60"
-  - "@posthog/rrweb-utils@0.0.60"
-  - "@posthog/rrweb@0.0.60"
-  - "@posthog/rrweb-snapshot@0.0.60"
-  - "@posthog/rrdom@0.0.60"
   - "@posthog/cli"
   - "posthog-react-native-session-replay"
 

@@ -226,6 +226,13 @@ jobs:
                     - name: '@posthog/rollup-plugin'
                     - name: '@posthog/types'
                     - name: '@posthog/webpack-plugin'
+                    - name: '@posthog/rrweb'
+                    - name: '@posthog/rrweb-types'
+                    - name: '@posthog/rrweb-utils'
+                    - name: '@posthog/rrdom'
+                    - name: '@posthog/rrweb-snapshot'
+                    - name: '@posthog/rrweb-record'
+                    - name: '@posthog/rrweb-plugin-console-record'
 
         steps:
             - name: Checkout repository

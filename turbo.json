@@ -12,10 +12,19 @@
                 ".babelrc",
                 "babel.config.js",
                 "rollup.config.mjs",
-                "rslib.config.mjs"
+                "rslib.config.mjs",
+                "vite.config.ts",
+                "vite.config.js"
             ],
             "outputs": ["dist/**", "lib/**", "react/**"],
             "env": ["WRITE_MANGLED_PROPERTIES"]
+        },
+        "prepublish": {
+            "dependsOn": ["^prepublish"],
+            "outputs": ["dist/**", "lib/**"]
+        },
+        "check-types": {
+            "dependsOn": ["^prepublish", "^build"]
         },
         "package": {
             "cache": false,

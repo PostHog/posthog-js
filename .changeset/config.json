@@ -8,5 +8,15 @@
     "baseBranch": "main",
     "updateInternalDependencies": "patch",
     "bumpVersionsWithWorkspaceProtocolOnly": true,
-    "ignore": []
+    "ignore": [
+        "rrdom-nodejs",
+        "@posthog/rrweb-replay",
+        "@posthog/rrweb-packer",
+        "@posthog/rrweb-all",
+        "@posthog/rrweb-plugin-console-replay",
+        "@posthog/rrweb-plugin-sequential-id-record",
+        "@posthog/rrweb-plugin-sequential-id-replay",
+        "@posthog/rrweb-plugin-canvas-webrtc-record",
+        "@posthog/rrweb-plugin-canvas-webrtc-replay"
+    ]
 }
