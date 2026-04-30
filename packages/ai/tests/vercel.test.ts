@@ -663,8 +663,9 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         expect(input.length).toBeGreaterThan(0)
         expect(input[0].role).toBe('posthog')
         expect(input[0].content).toMatch(/^\[\d+ messages? removed due to size limit\]$/)
-        // Trimmed payload should fit comfortably under the 200kb cap.
-        expect(JSON.stringify(input).length).toBeLessThan(250_000)
+        // Trimmed payload sits just above the 200kb cap because the placeholder
+        // (~100 bytes) is unshifted after the byte-budget loop runs.
+        expect(JSON.stringify(input).length).toBeLessThan(210_000)
       }
     )
 
