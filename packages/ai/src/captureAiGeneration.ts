@@ -42,7 +42,8 @@ export interface CaptureAiGenerationOptions {
 
   /** Extra event properties merged into the captured event. */
   properties?: Record<string, unknown>
-  groups?: Record<string, unknown>
+  /** Mapping of group type to group id, matching `EventMessage.groups`. */
+  groups?: Record<string, string | number>
   privacyMode?: boolean
 
   /**
