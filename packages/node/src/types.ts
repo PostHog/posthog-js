@@ -400,6 +400,9 @@ export interface IPostHog {
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
    * @returns true if the flag is on, false if the flag is off, undefined if there was an error.
+   *
+   * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.isEnabled(key)` on the
+   *   returned snapshot. Will be removed in the next major version.
    */
   isFeatureEnabled(
     key: string,
@@ -428,6 +431,9 @@ export interface IPostHog {
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
    * @returns true or string(for multivariates) if the flag is on, false if the flag is off, undefined if there was an error.
+   *
+   * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.getFlag(key)` on the
+   *   returned snapshot. Will be removed in the next major version.
    */
   getFeatureFlag(
     key: string,
@@ -466,6 +472,9 @@ export interface IPostHog {
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    *
    * @returns payload of a json type object
+   *
+   * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.getFlagPayload(key)` on
+   *   the returned snapshot. Will be removed in the next major version.
    */
   getFeatureFlagPayload(
     key: string,

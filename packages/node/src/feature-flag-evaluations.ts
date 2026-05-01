@@ -234,20 +234,6 @@ export class FeatureFlagEvaluations {
     return properties
   }
 
-  /**
-   * @internal
-   */
-  _getDistinctId(): string {
-    return this._distinctId
-  }
-
-  /**
-   * @internal
-   */
-  _getGroups(): Record<string, string | number> | undefined {
-    return this._groups
-  }
-
   private _cloneWith(flags: Record<string, EvaluatedFlagRecord>): FeatureFlagEvaluations {
     return new FeatureFlagEvaluations({
       host: this._host,

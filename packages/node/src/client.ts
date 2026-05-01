@@ -1050,6 +1050,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Feature flags}
    *
+   * @deprecated Use {@link evaluateFlags} and call `flags.getFlag(key)` on the returned snapshot.
+   *   This consolidates flag evaluation into a single `/flags` request per incoming request and
+   *   avoids drift between the values your code branched on and the values attached to events.
+   *   Will be removed in the next major version.
+   *
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
    * @param options - Optional configuration for flag evaluation
@@ -1114,6 +1119,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * ```
    *
    * {@label Feature flags}
+   *
+   * @deprecated Use {@link evaluateFlags} and call `flags.getFlagPayload(key)` on the returned
+   *   snapshot. This consolidates flag evaluation into a single `/flags` request per incoming
+   *   request. Will be removed in the next major version.
    *
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
@@ -1294,6 +1303,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * ```
    *
    * {@label Feature flags}
+   *
+   * @deprecated Use {@link evaluateFlags} and call `flags.isEnabled(key)` on the returned snapshot.
+   *   This consolidates flag evaluation into a single `/flags` request per incoming request.
+   *   Will be removed in the next major version.
    *
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
