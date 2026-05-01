@@ -1511,7 +1511,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        if (this._isIdle) {
+        if (this._isIdle === true) {
             return
         }
 

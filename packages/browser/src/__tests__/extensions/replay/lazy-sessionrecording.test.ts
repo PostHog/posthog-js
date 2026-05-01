@@ -1240,6 +1240,35 @@ describe('Lazy SessionRecording', () => {
                 const recorderSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
                 expect(recorderSessionId).toEqual(rotatedSessionId)
             })
+
+            it('restarts recorder when session rotates while _isIdle is unknown', () => {
+                // _isIdle stays 'unknown' until an rrweb-interactive event fires. Without that, an
+                // external rotation must still be picked up by _updateWindowAndSessionIds rather
+                // than be silently dropped by the idle bail-out.
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                sessionIdGeneratorMock.mockClear()
+                const rotatedSessionId = 'externally-rotated-session-id'
+                sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+
+                const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+
+                // Force the session manager to rotate. _onSessionIdCallback fires sync but its
+                // idle-branch only restarts when _isIdle === true, so the recorder's sessionId
+                // is still the old one at this point.
+                sessionManager.checkAndGetSessionAndWindowId(false, rotationTimestamp)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(firstSessionId)
+
+                // The next event through onRRwebEmit should trigger the restart via
+                // _updateWindowAndSessionIds, which previously bailed on 'unknown'.
+                emitInactiveEvent(rotationTimestamp, 'unknown')
+
+                const recorderSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+                expect(recorderSessionId).toEqual(rotatedSessionId)
+                expect(recorderSessionId).not.toEqual(firstSessionId)
+            })
         })
 
         describe('scheduled full snapshots', () => {
