@@ -5,7 +5,13 @@
  */
 
 import type { Properties, PropertyMatchType } from './types'
-import type { SurveyAppearance as CoreSurveyAppearance, SurveyValidationRule } from '@posthog/core'
+import type {
+    SurveyAppearance as CoreSurveyAppearance,
+    SurveyQuestionTranslation,
+    SurveyResponseValue as CoreSurveyResponseValue,
+    SurveyTranslation,
+    SurveyValidationRule,
+} from '@posthog/core'
 
 // Extended operator type to include numeric operators not in PropertyMatchType
 export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
@@ -255,7 +261,7 @@ export interface SurveyConfig {
     autoSubmitDelay?: number
 }
 
-export type SurveyResponseValue = string | number | string[] | null
+export type SurveyResponseValue = CoreSurveyResponseValue
 
 /**
  * Surveys related enums and constants.
@@ -328,23 +334,6 @@ export const SurveySchedule = {
     Always: 'always',
 } as const
 export type SurveySchedule = (typeof SurveySchedule)[keyof typeof SurveySchedule]
-
-export interface SurveyTranslation {
-    name?: string
-    thankYouMessageHeader?: string
-    thankYouMessageDescription?: string
-    thankYouMessageCloseButtonText?: string
-}
-
-export interface SurveyQuestionTranslation {
-    question?: string
-    description?: string | null
-    buttonText?: string
-    link?: string | null
-    lowerBoundLabel?: string
-    upperBoundLabel?: string
-    choices?: string[]
-}
 
 export const SurveyEventName = {
     SHOWN: 'survey shown',

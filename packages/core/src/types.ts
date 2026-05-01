@@ -618,16 +618,34 @@ export interface SurveyValidationRule {
   errorMessage?: string
 }
 
+export interface SurveyTranslation {
+  name?: string
+  thankYouMessageHeader?: string
+  thankYouMessageDescription?: string
+  thankYouMessageCloseButtonText?: string
+}
+
+export interface SurveyQuestionTranslation {
+  question?: string
+  description?: string | null
+  buttonText?: string
+  link?: string | null
+  lowerBoundLabel?: string
+  upperBoundLabel?: string
+  choices?: string[]
+}
+
 type SurveyQuestionBase = {
   question: string
   id: string
-  description?: string
+  description?: string | null
   descriptionContentType?: SurveyQuestionDescriptionContentType
   optional?: boolean
   buttonText?: string
   originalQuestionIndex: number
   branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
   validation?: SurveyValidationRule[]
+  translations?: Record<string, SurveyQuestionTranslation>
 }
 
 export type BasicSurveyQuestion = SurveyQuestionBase & {
@@ -636,7 +654,7 @@ export type BasicSurveyQuestion = SurveyQuestionBase & {
 
 export type LinkSurveyQuestion = SurveyQuestionBase & {
   type: SurveyQuestionType.Link
-  link?: string
+  link?: string | null
 }
 
 export type RatingSurveyQuestion = SurveyQuestionBase & {
@@ -698,6 +716,10 @@ export type SurveyResponse = {
   surveys: Survey[]
 }
 
+export type SurveyResponseValue = string | number | string[] | null
+
+export type SurveyResponses = Record<string, SurveyResponseValue>
+
 export type SurveyCallback = (surveys: Survey[]) => void
 
 export enum SurveyMatchType {
@@ -740,6 +762,7 @@ export type Survey = {
   name: string
   description?: string
   type: SurveyType
+  translations?: Record<string, SurveyTranslation>
   feature_flag_keys?: {
     key: string
     value?: string
@@ -802,6 +825,7 @@ export type ActionStepType = {
 }
 
 export type Logger = {
+  debug: (...args: any[]) => void
   info: (...args: any[]) => void
   warn: (...args: any[]) => void
   error: (...args: any[]) => void

@@ -10,7 +10,6 @@ import { z } from 'zod'
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
         'service.name': 'example-vercel-ai-app',
-        'posthog.distinct_id': 'example-user',
         foo: 'bar',
         conversation_id: 'abc-123',
     }),

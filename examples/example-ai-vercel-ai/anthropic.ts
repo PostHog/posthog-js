@@ -9,7 +9,6 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 const sdk = new NodeSDK({
     resource: resourceFromAttributes({
         'service.name': 'example-vercel-ai-app',
-        'posthog.distinct_id': 'example-user',
         foo: 'bar',
         conversation_id: 'abc-123',
     }),
