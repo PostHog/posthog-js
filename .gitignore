@@ -26,6 +26,7 @@ test-result.json
 yarn-error.log
 stats.html
 bundle-stats*.html
+*-bundle-analysis.html
 
 # vite temp files
 vite.config.js.timestamp-*

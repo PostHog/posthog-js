@@ -323,7 +323,7 @@ function stripBlobURLsFromAttributes(node: {
   }
 }
 
-function stringifyDomSnapshot(mhtml: string): string {
+async function stringifyDomSnapshot(mhtml: string): Promise<string> {
   const { Parser } = require('fast-mhtml');
   const resources: string[] = [];
   const p = new Parser({
@@ -342,17 +342,18 @@ function stringifyDomSnapshot(mhtml: string): string {
     .rewrite() // rewrite all links
     .spit(); // return all contents
 
-  const newResult: { filename: string; content: string }[] = result.map(
-    (asset: { filename: string; content: string }) => {
+  // prettier v3's `format` is async (returns a Promise), so this map is async
+  const newResult: { filename: string; content: string }[] = await Promise.all(
+    result.map(async (asset: { filename: string; content: string }) => {
       const { filename, content } = asset;
       let res: string | undefined;
       if (filename.includes('frame')) {
-        res = format(content, {
+        res = await format(content, {
           parser: 'html',
         });
       }
       return { filename, content: res || content };
-    },
+    }),
   );
   return newResult.map((asset) => Object.values(asset).join('\n')).join('\n\n');
 }
@@ -393,7 +394,7 @@ export async function assertDomSnapshot(page: puppeteer.Page) {
     format: 'mhtml',
   });
 
-  expect(stringifyDomSnapshot(data)).toMatchSnapshot();
+  expect(await stringifyDomSnapshot(data)).toMatchSnapshot();
 }
 
 export function stripBase64(events: eventWithTime[]) {
