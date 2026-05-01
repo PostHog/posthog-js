@@ -100,14 +100,6 @@ catalogs:
 overrides:
   node-forge: 1.3.2
 
-patchedDependencies:
-  '@rrweb/record@2.0.0-alpha.17':
-    hash: 4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f
-    path: patches/@rrweb__record@2.0.0-alpha.17.patch
-  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17':
-    hash: 70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515
-    path: patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch
-
 importers:
 
   .:
@@ -378,15 +370,6 @@ importers:
       '@rollup/plugin-typescript':
         specifier: ^12.1.4
         version: 12.1.4(rollup@4.53.3)(tslib@2.8.1)(typescript@5.8.2)
-      '@rrweb/record':
-        specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17(patch_hash=4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f)
-      '@rrweb/rrweb-plugin-console-record':
-        specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17(patch_hash=70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515)(rrweb@2.0.0-alpha.17)
-      '@rrweb/types':
-        specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17
       '@sentry/types':
         specifier: 8.7.0
         version: 8.7.0
@@ -5223,20 +5206,6 @@ packages:
     resolution: {integrity: sha512-UhTd8u31dXadv0MopwGgNOBpUVROFKWVQgAg5N1ESyCz8AuBcMqm4AuTjrwgQKGDfoFuz02EuMRHQIw/frmYKQ==}
     cpu: [x64]
     os: [win32]
-
-  '@rrweb/record@2.0.0-alpha.17':
-    resolution: {integrity: sha512-Je+lzjeWMF8/I0IDoXFzkGPKT8j7AkaBup5YcwUHlkp18VhLVze416MvI6915teE27uUA2ScXMXzG0Yiu5VTIw==}
-
-  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17':
-    resolution: {integrity: sha512-tjNJ3wWUDMMf275xr4Rb5tVYF2UR+wXvSxnyS9tRKnRa574PQQvx7sGbqM/O9AytYjnbiTrAMqNR7OFysGCMwQ==}
-    peerDependencies:
-      rrweb: ^2.0.0-alpha.17
-
-  '@rrweb/types@2.0.0-alpha.17':
-    resolution: {integrity: sha512-AfDTVUuCyCaIG0lTSqYtrZqJX39ZEYzs4fYKnexhQ+id+kbZIpIJtaut5cto6dWZbB3SEe4fW0o90Po3LvTmfg==}
-
-  '@rrweb/utils@2.0.0-alpha.17':
-    resolution: {integrity: sha512-HCsasPERBwOS9/LQeOytO2ETKTCqRj1wORBuxiy3t41hKhmi225DdrUPiWnyDdTQm1GdVbOymMRknJVPnZaSXw==}
 
   '@rsbuild/core@1.4.8':
     resolution: {integrity: sha512-IJhpLl8lrp5ynlf04V5l7rMrVTNuGLG36ZDadHiBIC5qLRGSS3rMF8cVLSkSA6qM1OiRlPpMgwQbqFYh325RvQ==}
@@ -13434,17 +13403,8 @@ packages:
     resolution: {integrity: sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==}
     engines: {node: '>= 18'}
 
-  rrdom@2.0.0-alpha.17:
-    resolution: {integrity: sha512-b6caDiNcFO96Opp7TGdcVd4OLGSXu5dJe+A0IDiAu8mk7OmhqZCSDlgQdTKmdO5wMf4zPsUTgb8H/aNvR3kDHA==}
-
   rrweb-cssom@0.6.0:
     resolution: {integrity: sha512-APM0Gt1KoXBz0iIkkdB/kfvGOwC4UuJFeG/c+yV7wSc7q96cG/kJ0HiYCnzivD9SB53cLV1MlHFNfOuPaadYSw==}
-
-  rrweb-snapshot@2.0.0-alpha.17:
-    resolution: {integrity: sha512-GBg5pV8LHOTbeVmH2VHLEFR0mc2QpQMzAvcoxEGfPNWgWHc8UvKCyq7pqN1vA+fDZ+yXXbixeO0kB2pzVvFCBw==}
-
-  rrweb@2.0.0-alpha.17:
-    resolution: {integrity: sha512-GQxBkCC4r9XL2bwSdv7iIS49M3cEA8OtObVq0rrQ4GUT4+h7omucGQ4x7m5YN5Vq1oalStBaBlYqF7yRnfG3JA==}
 
   rsbuild-plugin-dts@0.10.6:
     resolution: {integrity: sha512-rVP82fFMDHW0GirhYx+w2bER1HhkOKJ8e/bAAF2OkMUP2k2fviMpl/gsnbO8KI9vcSqsQE2QXHkj781m6W84Ow==}
@@ -20611,21 +20571,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.53.3':
     optional: true
-
-  '@rrweb/record@2.0.0-alpha.17(patch_hash=4a974d451d029e3ef6c302f641dfaf41fb0881146b6d5198ccdbe8d50776b64f)':
-    dependencies:
-      '@rrweb/types': 2.0.0-alpha.17
-      rrweb: 2.0.0-alpha.17
-
-  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(patch_hash=70915838e13e38a12d8b9a5e9f76e1b58a10a6d634133f01644cc4b5c63a5515)(rrweb@2.0.0-alpha.17)':
-    dependencies:
-      rrweb: 2.0.0-alpha.17
-
-  '@rrweb/types@2.0.0-alpha.17':
-    dependencies:
-      rrweb-snapshot: 2.0.0-alpha.17
-
-  '@rrweb/utils@2.0.0-alpha.17': {}
 
   '@rsbuild/core@1.4.8':
     dependencies:
@@ -31964,26 +31909,7 @@ snapshots:
       - supports-color
     optional: true
 
-  rrdom@2.0.0-alpha.17:
-    dependencies:
-      rrweb-snapshot: 2.0.0-alpha.17
-
   rrweb-cssom@0.6.0: {}
-
-  rrweb-snapshot@2.0.0-alpha.17:
-    dependencies:
-      postcss: 8.5.6
-
-  rrweb@2.0.0-alpha.17:
-    dependencies:
-      '@rrweb/types': 2.0.0-alpha.17
-      '@rrweb/utils': 2.0.0-alpha.17
-      '@types/css-font-loading-module': 0.0.7
-      '@xstate/fsm': 1.5.2
-      base64-arraybuffer: 1.0.2
-      mitt: 3.0.1
-      rrdom: 2.0.0-alpha.17
-      rrweb-snapshot: 2.0.0-alpha.17
 
   rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.55.1(@types/node@20.19.9))(@rsbuild/core@1.4.8)(typescript@5.9.3):
     dependencies:

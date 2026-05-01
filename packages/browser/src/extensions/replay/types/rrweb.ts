@@ -1,8 +1,7 @@
-// This file is supposed to replicate some of the types hidden inside `@rrweb/record`
-// to guarantee that our users can use this library - and validate types - without
-// having to install `@rrweb/record`
+// This file replicates some of the types hidden inside `@posthog/rrweb-record`
+// (the in-repo rrweb fork) so users can validate types without depending on it directly.
 //
-// NOTE: This file should be updated and kept in sync with `@rrweb/record` if we ever update it.
+// NOTE: Keep this file in sync with `@posthog/rrweb-record` if we ever update it.
 // NOTE²: The initial types are not exported, we're only exporting the two types at the bottom.
 //        They're only here to allow the bottom types to be more easily defined.
 
@@ -17,7 +16,7 @@ import type {
     SamplingStrategy,
 } from './rrweb-types'
 
-// Replication of `MaskInputOptions` from inside `@rrweb/record/rrweb-snapshot`
+// Replication of `MaskInputOptions` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type MaskInputOptions = Partial<{
     color: boolean
     date: boolean
@@ -37,13 +36,13 @@ type MaskInputOptions = Partial<{
     password: boolean
 }>
 
-// Replication of `MaskInputFn` from inside `@rrweb/record/rrweb-snapshot`
+// Replication of `MaskInputFn` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type MaskInputFn = (text: string, element: HTMLElement) => string
 
-// Replication of `MaskTextFn` from inside `@rrweb/record/rrweb-snapshot`
+// Replication of `MaskTextFn` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type MaskTextFn = (text: string, element: HTMLElement | null) => string
 
-// Replication of `SlimDOMOptions` from inside `@rrweb/record/rrweb-snapshot`
+// Replication of `SlimDOMOptions` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type SlimDOMOptions = Partial<{
     script: boolean
     comment: boolean
@@ -58,16 +57,16 @@ type SlimDOMOptions = Partial<{
     headTitleMutations: boolean
 }>
 
-// Replication of `DataURLOptions` from inside `@rrweb/record/rrweb-snapshot`
+// Replication of `DataURLOptions` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type DataURLOptions = Partial<{
     type: string
     quality: number
 }>
 
-// Replication of `ErrorHandler` from inside `@rrweb/record`
+// Replication of `ErrorHandler` from inside `@posthog/rrweb-record`
 type ErrorHandler = (error: unknown) => void | boolean
 
-// Replication of `recordOptions` from inside `@rrweb/record`
+// Replication of `recordOptions` from inside `@posthog/rrweb-record`
 export type recordOptions = {
     emit?: (e: eventWithTime, isCheckout?: boolean) => void
     checkoutEveryNth?: number
@@ -102,7 +101,7 @@ export type recordOptions = {
     errorHandler?: ErrorHandler
 }
 
-// Replication of `record` from inside `@rrweb/record`
+// Replication of `record` from inside `@posthog/rrweb-record`
 export type rrwebRecord = {
     (options: recordOptions): (() => void) | undefined
     addCustomEvent: (tag: string, payload: any) => void
