@@ -245,7 +245,7 @@ export class PostHog extends PostHogCore {
       console.error("You must pass your PostHog project's api key. The client will be disabled.")
     }
 
-    super(apiKey, options)
+    super(normalizedApiKey, options)
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
