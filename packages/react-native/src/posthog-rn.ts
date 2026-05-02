@@ -240,6 +240,11 @@ export class PostHog extends PostHogCore {
    * @param options - PostHog configuration options
    */
   constructor(apiKey: string, options?: PostHogOptions) {
+    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
+    if (!normalizedApiKey) {
+      console.error("You must pass your PostHog project's api key. The client will be disabled.")
+    }
+
     super(apiKey, options)
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
@@ -401,6 +406,10 @@ export class PostHog extends PostHogCore {
       }
 
       this._isInitialized = true
+
+      if (this.isDisabled) {
+        return
+      }
 
       // Preload error tracking state from cached remote config.
       // This gates error tracking autocapture before the fresh remote config is fetched.

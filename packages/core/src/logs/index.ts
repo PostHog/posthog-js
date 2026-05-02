@@ -54,6 +54,9 @@ export class PostHogLogs {
   }
 
   captureLog(options: CaptureLogOptions): void {
+    if (this._instance.isDisabled) {
+      return
+    }
     if (this._instance.optedOut) {
       return
     }
@@ -172,6 +175,9 @@ export class PostHogLogs {
    * head of the queue can't be sent twice.
    */
   async flush(): Promise<void> {
+    if (this._instance.isDisabled) {
+      return
+    }
     if (this._flushPromise) {
       return this._flushPromise
     }

@@ -807,6 +807,10 @@ export abstract class PostHogCoreStateless {
   public async getSurveysStateless(): Promise<SurveyResponse['surveys']> {
     await this._initPromise
 
+    if (this.disabled) {
+      return []
+    }
+
     if (this.disableSurveys === true) {
       this._logger.info('Loading surveys is disabled.')
       return []
@@ -1071,6 +1075,10 @@ export abstract class PostHogCoreStateless {
    * @throws Error
    */
   async flush(): Promise<void> {
+    if (this.disabled) {
+      return
+    }
+
     // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
     // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
     // Use a custom allSettled implementation to avoid issues with patching Promise on RN
@@ -1208,6 +1216,10 @@ export abstract class PostHogCoreStateless {
    * shrink `maxBatchRecordsPerPost` and retry the same records.
    */
   async _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
+    if (this.disabled) {
+      return { kind: 'fatal', error: new Error('The client is disabled') }
+    }
+
     const serialized = JSON.stringify(payload)
     const url = `${this.host}/i/v1/logs?token=${encodeURIComponent(this.apiKey)}`
 
@@ -1304,6 +1316,10 @@ export abstract class PostHogCoreStateless {
     await this._initPromise
     let hasTimedOut = false
     this.clearFlushTimer()
+
+    if (this.disabled) {
+      return
+    }
 
     const doShutdown = async (): Promise<void> => {
       try {
