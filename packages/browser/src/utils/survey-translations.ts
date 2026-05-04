@@ -23,13 +23,16 @@ const logger = createLogger('[SurveyTranslations]')
  * @returns The detected language code (e.g., 'fr', 'es', 'en-US') or null if not found
  */
 export function detectUserLanguage(instance: PostHog): string | null {
-    return detectSurveyLanguage({
-        overrideLanguage: instance.config.override_display_language,
-        storedPersonProperties: isFunction(instance.get_property)
-            ? instance.get_property(STORED_PERSON_PROPERTIES_KEY)
-            : undefined,
-        locale: getBrowserLanguage(),
-    })
+    return detectSurveyLanguage(
+        {
+            overrideLanguage: instance.config.override_display_language,
+            storedPersonProperties: isFunction(instance.get_property)
+                ? instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+                : undefined,
+            locale: getBrowserLanguage(),
+        },
+        logger
+    )
 }
 
 /**
@@ -49,7 +52,7 @@ export function applySurveyTranslationForUser(
         return { survey, language: null }
     }
 
-    const result = applySurveyTranslation(survey, userLanguage)
+    const result = applySurveyTranslation(survey, userLanguage, logger)
 
     return {
         survey: result.survey,

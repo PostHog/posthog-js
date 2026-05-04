@@ -5,6 +5,7 @@ import { detectUserLanguage, applySurveyTranslationForUser } from '../../utils/s
 import { Survey, SurveyType, SurveyQuestionType } from '../../posthog-surveys-types'
 import { PostHog } from '../../posthog-core'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
+import Config from '../../config'
 
 describe('Survey Translations', () => {
     let mockPostHog: PostHog
@@ -25,6 +26,8 @@ describe('Survey Translations', () => {
     })
 
     afterEach(() => {
+        Config.DEBUG = false
+
         // Restore original navigator
         Object.defineProperty(global, 'navigator', {
             value: originalNavigator,
@@ -143,6 +146,24 @@ describe('Survey Translations', () => {
             } as unknown as PostHog
 
             expect(detectUserLanguage(mockPostHog)).toBe('it')
+        })
+
+        it('only logs language detection when browser debug logging is enabled', () => {
+            const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+            ;(global.navigator as any).language = 'en-US'
+            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({})
+
+            try {
+                expect(detectUserLanguage(mockPostHog)).toBe('en-US')
+                expect(logSpy).not.toHaveBeenCalled()
+
+                Config.DEBUG = true
+
+                expect(detectUserLanguage(mockPostHog)).toBe('en-US')
+                expect(logSpy).toHaveBeenCalledWith('[PostHog.js] [SurveyTranslations]', 'Using detected locale: en-US')
+            } finally {
+                logSpy.mockRestore()
+            }
         })
     })
 

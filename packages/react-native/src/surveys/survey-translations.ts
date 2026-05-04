@@ -2,14 +2,28 @@ import { createLogger, PostHogPersistedProperty, Survey } from '@posthog/core'
 import { applySurveyTranslation, detectSurveyLanguage } from '@posthog/core/surveys'
 import { PostHog } from '../posthog-rn'
 
-const logger = createLogger('[SurveyTranslations]')
+let isDebugEnabled = false
+const logger = createLogger('[SurveyTranslations]', (fn) => {
+  if (isDebugEnabled) {
+    fn()
+  }
+})
+
+function syncLoggerDebugState(instance: PostHog): void {
+  isDebugEnabled = instance.isDebug
+}
 
 export function detectUserLanguage(instance: PostHog): string | null {
-  return detectSurveyLanguage({
-    overrideLanguage: instance.getSurveyDisplayLanguageOverride(),
-    storedPersonProperties: instance.getPersistedProperty(PostHogPersistedProperty.PersonProperties),
-    locale: instance.getCommonEventProperties().$locale,
-  })
+  syncLoggerDebugState(instance)
+
+  return detectSurveyLanguage(
+    {
+      overrideLanguage: instance.getSurveyDisplayLanguageOverride(),
+      storedPersonProperties: instance.getPersistedProperty(PostHogPersistedProperty.PersonProperties),
+      locale: instance.getCommonEventProperties().$locale,
+    },
+    logger
+  )
 }
 
 export function applySurveyTranslationForUser(
@@ -23,7 +37,7 @@ export function applySurveyTranslationForUser(
     return { survey, language: null }
   }
 
-  const result = applySurveyTranslation(survey, userLanguage)
+  const result = applySurveyTranslation(survey, userLanguage, logger)
 
   return {
     survey: result.survey,
