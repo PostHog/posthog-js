@@ -17,5 +17,4 @@ jobs:
         # NOTE: pinned to feat/changeset-hygiene for testing — change to @main once merged.
         uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@feat/changeset-hygiene
         with:
-            forbidden-major-packages: posthog-js
             script-ref: feat/changeset-hygiene
