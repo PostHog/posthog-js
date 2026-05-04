@@ -1,0 +1,17 @@
+name: Changeset hygiene
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@main
