@@ -189,12 +189,12 @@ This will:
 
 ### Publishing
 
-1. Add the `release` label to your PR
-2. When the PR is merged to `main`, the `release.yml` GitHub Action will:
-    - Update package versions
-    - Update CHANGELOG files
-    - Publish to npm
-    - Create GitHub releases
+When a PR containing a changeset is merged to `main`, the `release.yml` GitHub Action will:
+
+- Update package versions
+- Update CHANGELOG files
+- Publish to npm
+- Create GitHub releases
 
 ## CI/CD
 

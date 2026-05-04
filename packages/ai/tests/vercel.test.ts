@@ -373,6 +373,62 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         },
       ])
     })
+
+    it.each<[string, { input?: unknown; args?: unknown; arguments?: unknown }]>([
+      ['input as string (AI SDK v6 spec)', { input: '{"message":"hello world"}' }],
+      ['input as object (defensive)', { input: { message: 'hello world' } }],
+      ['args fallback (legacy SDK)', { args: '{"message":"hello world"}' }],
+      ['arguments fallback (legacy SDK)', { arguments: { message: 'hello world' } }],
+    ])('should handle non-streaming tool calls with %s', async (_label, extraFields) => {
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockResolvedValue({
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call_123',
+              toolName: 'myTool',
+              ...extraFields,
+            },
+          ],
+          usage: v3TokenUsage(10, 5),
+          response: { modelId: 'gpt-4o' },
+          providerMetadata: {},
+          finishReason: { unified: 'tool-calls' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-v3-tool-input',
+      })
+
+      const callOptions: LanguageModelV3CallOptions = {
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Call myTool' }] }],
+      }
+      await model.doGenerate(callOptions)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      expect(captureCall[0].properties.$ai_output_choices).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              id: 'call_123',
+              function: { name: 'myTool', arguments: '{"message":"hello world"}' },
+            },
+          ],
+        },
+      ])
+    })
   })
 
   describe('V2 Model (AI SDK 5)', () => {
@@ -578,6 +634,40 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       // Input should be null in privacy mode (withPrivacyMode returns null)
       expect(captureCall[0].properties.$ai_input).toBeNull()
     })
+
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])(
+      'should trim oversized prompts and prepend a removal placeholder in %s models',
+      async (_version, createModel) => {
+        const baseModel = createModel('gpt-4')
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: 'test-trim',
+        })
+
+        // Build a prompt whose serialized JSON well exceeds MAX_OUTPUT_SIZE (200kb).
+        // Each message is ~15kb of text, totaling ~1.5MB serialized.
+        const oversizedPrompt = Array.from({ length: 100 }, (_, i) => ({
+          role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: [{ type: 'text' as const, text: 'x'.repeat(15_000) }],
+        }))
+
+        await model.doGenerate({ prompt: oversizedPrompt as any })
+
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+        const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
+        expect(input.length).toBeGreaterThan(0)
+        expect(input[0].role).toBe('posthog')
+        expect(input[0].content).toMatch(/^\[\d+ messages? removed due to size limit\]$/)
+        // Trimmed payload sits just above the 200kb cap because the placeholder
+        // (~100 bytes) is unshifted after the byte-budget loop runs.
+        expect(JSON.stringify(input).length).toBeLessThan(210_000)
+      }
+    )
   })
 
   describe('Anthropic V3 cache token handling', () => {
@@ -793,6 +883,158 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
 
       // inputTokens should be adjusted: 1120 - 1000 - 20 = 100
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
+      expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(1000)
+      expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(20)
+    })
+
+    // Covers Claude hosted by providers whose name doesn't contain "anthropic". Server-side
+    // exclusive cache accounting triggers on "claude" in the model id, so the client must
+    // recognise the same signal and subtract cache tokens from inputTokens before sending.
+    //
+    // Vertex row exercises the `|anthropic` arm of the regex: `claude-sonnet-4-5@20250929`
+    // has no "anthropic" substring.
+    it.each([
+      {
+        name: 'Bedrock Claude, cacheRead only — omits $ai_cache_creation_input_tokens when cacheWrite is 0',
+        provider: 'amazon-bedrock',
+        modelId: 'global.anthropic.claude-opus-4-6-v1',
+        inputTokens: { total: 22145, noCache: 740, cacheRead: 21405, cacheWrite: 0 },
+        outputTokens: { total: 50, text: 50, reasoning: undefined },
+        expectedInputTokens: 740,
+        expectedCacheRead: 21405,
+        expectedCacheCreation: undefined,
+        expectedOutputTokens: 50,
+      },
+      {
+        name: 'Bedrock Claude, cacheRead + cacheWrite via V3 standardized location',
+        provider: 'amazon-bedrock',
+        modelId: 'anthropic.claude-sonnet-4-5-v1',
+        inputTokens: { total: 21561, noCache: 5, cacheRead: 17399, cacheWrite: 4157 },
+        outputTokens: { total: 139, text: 139, reasoning: undefined },
+        expectedInputTokens: 5,
+        expectedCacheRead: 17399,
+        expectedCacheCreation: 4157,
+        expectedOutputTokens: 139,
+      },
+      {
+        name: 'Vertex Claude (modelId carries "claude" without "anthropic")',
+        provider: 'google-vertex',
+        modelId: 'claude-sonnet-4-5@20250929',
+        inputTokens: { total: 1000, noCache: 100, cacheRead: 800, cacheWrite: 100 },
+        outputTokens: { total: 50, text: 50, reasoning: undefined },
+        expectedInputTokens: 100,
+        expectedCacheRead: 800,
+        expectedCacheCreation: 100,
+        expectedOutputTokens: 50,
+      },
+    ])(
+      'adjusts V3 cache tokens for $name',
+      async ({
+        provider,
+        modelId,
+        inputTokens,
+        outputTokens,
+        expectedInputTokens,
+        expectedCacheRead,
+        expectedCacheCreation,
+        expectedOutputTokens,
+      }) => {
+        const baseModel: LanguageModelV3 = {
+          specificationVersion: 'v3' as const,
+          provider,
+          modelId,
+          supportedUrls: {},
+          doGenerate: jest.fn().mockImplementation(async () => ({
+            text: 'Cached response',
+            usage: { inputTokens, outputTokens },
+            content: [{ type: 'text', text: 'Cached response' }],
+            response: { modelId },
+            providerMetadata: {},
+            finishReason: { unified: 'stop' as const, raw: undefined },
+            warnings: [],
+          })),
+          doStream: jest.fn(),
+        }
+
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${provider}-${modelId}`,
+        })
+
+        await simulateGenerateText({ model, prompt: 'Test non-anthropic-provider Claude cache' })
+
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const properties = captureCall[0].properties
+
+        expect(properties['$ai_input_tokens']).toBe(expectedInputTokens)
+        expect(properties['$ai_cache_read_input_tokens']).toBe(expectedCacheRead)
+        expect(properties['$ai_output_tokens']).toBe(expectedOutputTokens)
+        if (expectedCacheCreation === undefined) {
+          expect(properties['$ai_cache_creation_input_tokens']).toBeUndefined()
+        } else {
+          expect(properties['$ai_cache_creation_input_tokens']).toBe(expectedCacheCreation)
+        }
+      }
+    )
+
+    it('should handle Bedrock Claude V3 streaming with cache tokens', async () => {
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'Cached streaming response' },
+        {
+          type: 'finish',
+          usage: {
+            inputTokens: { total: 1120, noCache: 100, cacheRead: 1000, cacheWrite: 20 },
+            outputTokens: { total: 50, text: 50, reasoning: undefined },
+          },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          providerMetadata: {},
+        },
+      ]
+
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3' as const,
+        provider: 'amazon-bedrock',
+        modelId: 'global.anthropic.claude-opus-4-6-v1',
+        supportedUrls: {},
+        doGenerate: jest.fn(),
+        doStream: jest.fn().mockImplementation(async () => {
+          const stream = new ReadableStream({
+            async start(controller) {
+              for (const part of streamParts) {
+                controller.enqueue(part)
+              }
+              controller.close()
+            },
+          })
+          return {
+            stream,
+            response: { modelId: 'global.anthropic.claude-opus-4-6-v1' },
+          }
+        }),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-bedrock-claude-v3-stream-cache',
+      })
+
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Cached?' }] }],
+      })
+
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // Consume stream
+      }
+
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      // 1120 - 1000 - 20 = 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
       expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(1000)
       expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(20)

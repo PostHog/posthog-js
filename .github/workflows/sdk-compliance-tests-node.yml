@@ -6,12 +6,14 @@ on:
     paths:
       - 'packages/node/**'
       - 'packages/core/**'
+      - 'compliance/node/**'
       - '.github/workflows/sdk-compliance-tests-node.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'packages/node/**'
       - 'packages/core/**'
+      - 'compliance/node/**'
       - '.github/workflows/sdk-compliance-tests-node.yml'
   workflow_dispatch:
 

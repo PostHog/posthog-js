@@ -1,10 +1,15 @@
 import {
+    SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
-import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
+import { isNullish, isBoolean, isString, isObject, isUndefined } from '@posthog/core'
 import { window } from '../../../utils/globals'
 import { logger } from '../../../utils/logger'
 
@@ -32,6 +37,15 @@ export interface RecordingTriggersStatus {
     get eventTriggerMatching(): EventTriggerMatching
     get linkedFlagMatching(): LinkedFlagMatching
     get sessionId(): string
+}
+
+/**
+ * Extended interface for V2 trigger groups
+ */
+export interface RecordingTriggersStatusV2 extends RecordingTriggersStatus {
+    get triggerGroupMatchers(): TriggerGroupMatching[]
+    get triggerGroupSamplingResults(): Map<string, boolean> // group id -> sampled decision
+    get minimumDuration(): number | null
 }
 
 export type TriggerType = 'url' | 'event'
@@ -67,6 +81,12 @@ export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 
 // while we have both lazy and eager loaded replay we might get either type of config
 type ReplayConfigType = RemoteConfig | SessionRecordingPersistedConfig
+
+// Type for trigger group matching config - subset of SessionRecordingPersistedConfig properties
+type TriggerMatchingConfig = Pick<
+    SessionRecordingPersistedConfig,
+    'urlTriggers' | 'urlBlocklist' | 'eventTriggers' | 'linkedFlag'
+>
 
 function sessionRecordingUrlTriggerMatches(
     url: string,
@@ -144,7 +164,17 @@ export class PendingTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-const isEagerLoadedConfig = (x: ReplayConfigType): x is RemoteConfig => {
+export class AlwaysActivatedTriggerMatching implements TriggerStatusMatching {
+    triggerStatus(): TriggerStatus {
+        return TRIGGER_ACTIVATED
+    }
+
+    stop(): void {
+        // no-op
+    }
+}
+
+const isEagerLoadedConfig = (x: ReplayConfigType | TriggerMatchingConfig): x is RemoteConfig => {
     return 'sessionRecording' in x
 }
 
@@ -156,12 +186,18 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     private _compiledBlocklistRegexes: Map<string, RegExp> = new Map()
 
     private _lastCheckedUrl: string = ''
+    private _groupId?: string // Optional group ID for V2 per-group persistence
 
     urlBlocked: boolean = false
 
-    constructor(private readonly _instance: PostHog) {}
+    constructor(
+        private readonly _instance: PostHog,
+        groupId?: string
+    ) {
+        this._groupId = groupId
+    }
 
-    onConfig(config: ReplayConfigType) {
+    onConfig(config: ReplayConfigType | TriggerMatchingConfig) {
         this._urlTriggers =
             (isEagerLoadedConfig(config)
                 ? isObject(config.sessionRecording)
@@ -219,7 +255,12 @@ export class URLTriggerMatching implements TriggerStatusMatching {
             return TRIGGER_DISABLED
         }
 
-        const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        // V2: Use per-group persistence key if groupId is provided
+        const persistenceKey = this._groupId
+            ? SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX + this._groupId
+            : SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
+
+        const currentTriggerSession = this._instance?.get_property(persistenceKey)
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
@@ -230,9 +271,44 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
         const result = eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
         this._instance.register_for_session({
-            $sdk_debug_replay_url_trigger_status: result,
+            [SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS]: result,
         })
         return result
+    }
+
+    /**
+     * Check URL blocklist and pause/resume recording accordingly
+     * This is separate from trigger checking and is used by both V1 and V2
+     *
+     * Performance optimization: Only checks when URL changes to avoid redundant regex matching
+     */
+    checkUrlBlocklist(onPause: () => void, onResume: () => void): void {
+        if (typeof window === 'undefined' || !window.location.href) {
+            return
+        }
+
+        const url = window.location.href
+
+        // Performance optimization: Skip if URL hasn't changed since last check
+        if (url === this._lastCheckedUrl) {
+            return
+        }
+        this._lastCheckedUrl = url
+
+        // Check blocklist and call onPause/onResume
+        // Note: DON'T set this.urlBlocked here - let the callbacks (_pauseRecording/_resumeRecording) set it
+        const wasBlocked = this.urlBlocked
+        const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist, this._compiledBlocklistRegexes)
+
+        if (wasBlocked && isNowBlocked) {
+            return
+        }
+
+        if (isNowBlocked && !wasBlocked) {
+            onPause()
+        } else if (!isNowBlocked && wasBlocked) {
+            onResume()
+        }
     }
 
     checkUrlTriggerConditions(
@@ -246,17 +322,18 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         }
 
         const url = window.location.href
+
+        // Performance optimization: Skip if URL hasn't changed since last check
+        // This prevents redundant checks on every rrweb event
         if (url === this._lastCheckedUrl) {
             return
         }
         this._lastCheckedUrl = url
 
+        // Check blocklist and call onPause/onResume
+        // Note: DON'T set this.urlBlocked here - let the callbacks (_pauseRecording/_resumeRecording) set it
         const wasBlocked = this.urlBlocked
         const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist, this._compiledBlocklistRegexes)
-
-        if (wasBlocked && isNowBlocked) {
-            return
-        }
 
         if (isNowBlocked && !wasBlocked) {
             onPause()
@@ -264,6 +341,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
             onResume()
         }
 
+        // Check URL triggers
         const isActivated = this._urlTriggerStatus(sessionId) === TRIGGER_ACTIVATED
         const urlMatches = sessionRecordingUrlTriggerMatches(url, this._urlTriggers, this._compiledTriggerRegexes)
 
@@ -292,12 +370,15 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
             result = TRIGGER_ACTIVATED
         }
         this._instance.register_for_session({
-            $sdk_debug_replay_linked_flag_trigger_status: result,
+            [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: result,
         })
         return result
     }
 
-    onConfig(config: ReplayConfigType, onStarted: (flag: string, variant: string | null) => void) {
+    onConfig(
+        config: ReplayConfigType | TriggerMatchingConfig,
+        onStarted: (flag: string, variant: string | null) => void
+    ) {
         this.linkedFlag =
             (isEagerLoadedConfig(config)
                 ? isObject(config.sessionRecording)
@@ -344,10 +425,17 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
 
 export class EventTriggerMatching implements TriggerStatusMatching {
     _eventTriggers: string[] = []
+    private _groupId?: string // Optional group ID for V2 per-group persistence
 
-    constructor(private readonly _instance: PostHog) {}
+    constructor(
+        private readonly _instance: PostHog,
+        groupId?: string
+    ) {
+        this._groupId = groupId
+    }
 
-    onConfig(config: ReplayConfigType) {
+    onConfig(config: ReplayConfigType | TriggerMatchingConfig) {
+        // Handle both RemoteConfig (nested) and SessionRecordingPersistedConfig (flattened) structures
         this._eventTriggers =
             (isEagerLoadedConfig(config)
                 ? isObject(config.sessionRecording)
@@ -368,7 +456,12 @@ export class EventTriggerMatching implements TriggerStatusMatching {
             return TRIGGER_DISABLED
         }
 
-        const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+        // V2: Use per-group persistence key if groupId is provided
+        const persistenceKey = this._groupId
+            ? SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX + this._groupId
+            : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION
+
+        const currentTriggerSession = this._instance?.get_property(persistenceKey)
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
@@ -381,7 +474,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
                   ? TRIGGER_PENDING
                   : TRIGGER_DISABLED
         this._instance.register_for_session({
-            $sdk_debug_replay_event_trigger_status: result,
+            [SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS]: result,
         })
         return result
     }
@@ -396,13 +489,112 @@ export class EventTriggerMatching implements TriggerStatusMatching {
         }
 
         const isActivated = this._eventTriggerStatus(sessionId) === TRIGGER_ACTIVATED
-        if (!isActivated && this._eventTriggers.includes(eventName)) {
+        const includes = this._eventTriggers.includes(eventName)
+        if (!isActivated && includes) {
             onActivate('event', eventName)
         }
     }
 
     stop(): void {
         // no-op
+    }
+}
+
+/**
+ * V2 Trigger Group Matching - manages a single trigger group with its own conditions
+ */
+export class TriggerGroupMatching implements TriggerStatusMatching {
+    private _urlTriggerMatching: URLTriggerMatching
+    private _eventTriggerMatching: EventTriggerMatching
+    private _linkedFlagMatching: LinkedFlagMatching
+    private _combinedMatching: TriggerStatusMatching
+    public readonly group: import('../../../types').SessionRecordingTriggerGroup
+
+    constructor(
+        private readonly _instance: PostHog,
+        group: import('../../../types').SessionRecordingTriggerGroup,
+        onFlagStarted: (flag: string, variant: string | null) => void
+    ) {
+        this.group = group
+        // V2: Pass groupId to child matchers for per-group persistence
+        this._urlTriggerMatching = new URLTriggerMatching(_instance, group.id)
+        this._eventTriggerMatching = new EventTriggerMatching(_instance, group.id)
+        this._linkedFlagMatching = new LinkedFlagMatching(_instance)
+
+        // Check if all conditions are empty (no events, urls, or flags)
+        const hasEvents = group.conditions.events && group.conditions.events.length > 0
+        const hasUrls = group.conditions.urls && group.conditions.urls.length > 0
+        const hasFlag = !!group.conditions.flag
+
+        if (!hasEvents && !hasUrls && !hasFlag) {
+            // Empty conditions = trigger immediately on session start
+            this._combinedMatching = new AlwaysActivatedTriggerMatching()
+        } else {
+            // V2: Events arrive as objects {name, properties?} from the server.
+            // Extract just the names — property filter evaluation is handled by the strategy.
+            const eventNames = (group.conditions.events || []).map((e) => e.name)
+
+            // Convert group config to the format expected by the individual matchers
+            const config: TriggerMatchingConfig = {
+                urlTriggers: group.conditions.urls || [],
+                eventTriggers: eventNames,
+                linkedFlag: group.conditions.flag || null,
+                urlBlocklist: [],
+            }
+
+            this._urlTriggerMatching.onConfig(config)
+            this._eventTriggerMatching.onConfig(config)
+            this._linkedFlagMatching.onConfig(config, onFlagStarted)
+
+            // Combine matchers based on the group's matchType
+            const matchers = [this._eventTriggerMatching, this._urlTriggerMatching, this._linkedFlagMatching]
+            this._combinedMatching =
+                group.conditions.matchType === 'any'
+                    ? new OrTriggerMatching(matchers)
+                    : new AndTriggerMatching(matchers)
+        }
+    }
+
+    triggerStatus(sessionId: string): TriggerStatus {
+        return this._combinedMatching.triggerStatus(sessionId)
+    }
+
+    checkEventTriggerConditions(
+        eventName: string,
+        onActivate: (triggerType: TriggerType, matchDetail?: string) => void,
+        sessionId: string
+    ) {
+        this._eventTriggerMatching.checkEventTriggerConditions(eventName, onActivate, sessionId)
+    }
+
+    checkUrlTriggerConditions(
+        onPause: () => void,
+        onResume: () => void,
+        onActivate: (triggerType: TriggerType, matchDetail?: string) => void,
+        sessionId: string
+    ) {
+        this._urlTriggerMatching.checkUrlTriggerConditions(onPause, onResume, onActivate, sessionId)
+    }
+
+    /**
+     * V2: Activate this group's trigger and persist to group-specific key
+     * This prevents cross-group contamination and survives page reloads
+     */
+    activateTrigger(triggerType: TriggerType, sessionId: string): void {
+        const persistenceKey =
+            triggerType === 'url'
+                ? SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX + this.group.id
+                : SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX + this.group.id
+
+        this._instance.persistence?.register({
+            [persistenceKey]: sessionId,
+        })
+    }
+
+    stop(): void {
+        this._urlTriggerMatching.stop()
+        this._eventTriggerMatching.stop()
+        this._linkedFlagMatching.stop()
     }
 }
 
@@ -512,4 +704,74 @@ export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
     }
 
     return ACTIVE
+}
+
+/**
+ * V2 Trigger Groups Status Matcher - implements union behavior:
+ * 1. Evaluate ALL trigger groups
+ * 2. For each matching group, check if its sample rate hits
+ * 3. If ANY group's sample rate hits → record session
+ */
+export function triggerGroupsMatchSessionRecordingStatus(
+    triggersStatus: RecordingTriggersStatusV2
+): SessionRecordingStatus {
+    if (triggersStatus.rrwebError) {
+        return RRWEB_ERROR
+    }
+
+    if (!triggersStatus.receivedFlags) {
+        return BUFFERING
+    }
+
+    if (!triggersStatus.isRecordingEnabled) {
+        return DISABLED
+    }
+
+    // Check if any URL is blocked (url blocklist is global, not per-group)
+    if (triggersStatus.urlTriggerMatching.urlBlocked) {
+        return PAUSED
+    }
+
+    const groupMatchers = triggersStatus.triggerGroupMatchers
+    const samplingResults = triggersStatus.triggerGroupSamplingResults
+
+    if (groupMatchers.length === 0) {
+        // No V2 groups configured - should not happen, but treat as disabled
+        return DISABLED
+    }
+
+    // Evaluate all groups to determine overall status
+    let anyGroupPending = false
+    let anyGroupSampled = false
+
+    for (const matcher of groupMatchers) {
+        const groupStatus = matcher.triggerStatus(triggersStatus.sessionId)
+
+        if (groupStatus === TRIGGER_ACTIVATED) {
+            // Check if this group's sample rate hit
+            const groupId = matcher.group.id
+            const samplingResult = samplingResults.get(groupId)
+
+            if (isUndefined(samplingResult)) {
+                logger.warn('[V2 Triggers] Group activated but no sampling decision found', { groupId })
+            } else if (samplingResult === true) {
+                anyGroupSampled = true
+            }
+        } else if (groupStatus === TRIGGER_PENDING) {
+            anyGroupPending = true
+        }
+    }
+
+    // Union behavior: if ANY group hit its sample rate, record
+    if (anyGroupSampled) {
+        return SAMPLED
+    }
+
+    // If any group is pending, keep buffering
+    if (anyGroupPending) {
+        return BUFFERING
+    }
+
+    // All groups are either disabled, conditions not met, or sampled out
+    return DISABLED
 }

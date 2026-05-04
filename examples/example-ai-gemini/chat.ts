@@ -1,26 +1,38 @@
-/** Gemini chat with tool calling, tracked by PostHog. */
+/** Google Gemini chat with tool calling, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { Gemini as GoogleGenAI } from '@posthog/ai/gemini'
-import type { FunctionDeclaration, Type } from '@google/genai'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
+import { GenAIInstrumentation } from '@traceloop/instrumentation-google-generativeai'
+import { GoogleGenAI, Type } from '@google/genai'
+import type { FunctionDeclaration } from '@google/genai'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-gemini-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
+    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
+    instrumentations: [new GenAIInstrumentation()],
 })
-const client = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY!,
-    posthog: phClient,
-})
+sdk.start()
 
 const weatherTool: FunctionDeclaration = {
     name: 'get_weather',
     description: 'Get current weather for a location',
     parameters: {
-        type: 'OBJECT' as Type,
+        type: Type.OBJECT,
         properties: {
-            latitude: { type: 'NUMBER' as Type },
-            longitude: { type: 'NUMBER' as Type },
-            location_name: { type: 'STRING' as Type },
+            latitude: { type: Type.NUMBER },
+            longitude: { type: Type.NUMBER },
+            location_name: { type: Type.STRING },
         },
         required: ['latitude', 'longitude', 'location_name'],
     },
@@ -35,9 +47,10 @@ async function getWeather(latitude: number, longitude: number, locationName: str
 }
 
 async function main() {
+    const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
+
     const response = await client.models.generateContent({
         model: 'gemini-2.5-flash',
-        posthogDistinctId: 'example-user',
         contents: "What's the weather like in Dublin, Ireland?",
         config: {
             tools: [{ functionDeclarations: [weatherTool] }],
@@ -54,8 +67,6 @@ async function main() {
             console.log(result)
         }
     }
-
-    await phClient.shutdown()
 }
 
-main()
+main().finally(() => sdk.shutdown())

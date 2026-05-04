@@ -6,6 +6,9 @@ module.exports = {
     '^.+\\.ts$': 'ts-jest',
   },
   moduleFileExtensions: ['ts', 'js', 'json', 'node', 'tsx'],
+  moduleNameMapper: {
+    '^@posthog/core/surveys$': '<rootDir>/../core/src/surveys/index.ts',
+  },
   collectCoverage: true,
   clearMocks: true,
   coverageDirectory: 'coverage',

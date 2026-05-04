@@ -1,4 +1,4 @@
-import { EventMessage, PostHog } from 'posthog-node'
+import { PostHog } from 'posthog-node'
 import OpenAIOrignal from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
@@ -10,12 +10,9 @@ import type {
   FormattedAudioContent,
   FormattedImageContent,
   FormattedDocumentContent,
-  TokenUsage,
 } from './types'
-import { version } from '../package.json'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
-import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { redactBase64DataUrl } from './sanitization'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
@@ -44,6 +41,13 @@ export function getTokensSource(posthogProperties?: Record<string, unknown>): st
 // limit large outputs by truncating to 200kb (approx 200k bytes)
 export const MAX_OUTPUT_SIZE = 200000
 const STRING_FORMAT = 'utf8'
+
+// Reused across calls to avoid per-invocation allocation; truncate() runs
+// hundreds of times for prompts with many parts.
+const sharedTextEncoder = new TextEncoder()
+const sharedTextDecoder = new TextDecoder(STRING_FORMAT, { fatal: false })
+
+export const utf8ByteLength = (str: string): number => sharedTextEncoder.encode(str).byteLength
 
 /**
  * Safely converts content to a string, preserving structure for objects/arrays.
@@ -395,18 +399,16 @@ export const truncate = (input: unknown): string => {
   }
 
   // Check if we need to truncate and ensure STRING_FORMAT is respected
-  const encoder = new TextEncoder()
-  const buffer = encoder.encode(str)
+  const buffer = sharedTextEncoder.encode(str)
   if (buffer.length <= MAX_OUTPUT_SIZE) {
     // Ensure STRING_FORMAT is respected
-    return new TextDecoder(STRING_FORMAT).decode(buffer)
+    return sharedTextDecoder.decode(buffer)
   }
 
-  // Truncate the buffer and ensure a valid string is returned
+  // Truncate the buffer and ensure a valid string is returned.
+  // fatal: false means we get U+FFFD at the end if truncation broke the encoding.
   const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
-  // fatal: false means we get U+FFFD at the end if truncation broke the encoding
-  const decoder = new TextDecoder(STRING_FORMAT, { fatal: false })
-  let truncatedStr = decoder.decode(truncatedBuffer)
+  let truncatedStr = sharedTextDecoder.decode(truncatedBuffer)
   if (truncatedStr.endsWith('\uFFFD')) {
     truncatedStr = truncatedStr.slice(0, -1)
   }
@@ -573,37 +575,7 @@ export enum AIEvent {
   Embedding = '$ai_embedding',
 }
 
-export type SendEventToPosthogParams = {
-  client: PostHog
-  eventType?: AIEvent
-  distinctId?: string
-  traceId: string
-  model?: string
-  provider: string
-  input: any
-  output: any
-  latency: number
-  timeToFirstToken?: number
-  baseURL: string
-  httpStatus: number
-  usage?: TokenUsage
-  params: (
-    | ChatCompletionCreateParamsBase
-    | MessageCreateParams
-    | ResponseCreateParams
-    | ResponseCreateParamsWithTools
-    | EmbeddingCreateParams
-    | TranscriptionCreateParams
-  ) &
-    MonitoringParams
-  error?: unknown
-  exceptionId?: string
-  stopReason?: string
-  tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
-  captureImmediate?: boolean
-}
-
-function sanitizeValues(obj: any): any {
+export function sanitizeValues(obj: any): any {
   if (obj === undefined || obj === null) {
     return obj
   }
@@ -660,130 +632,6 @@ function addDefaults(params: MonitoringEventProperties): MonitoringEventProperti
     privacyMode: params.privacyMode ?? false,
     traceId: params.traceId ?? uuidv4(),
   }
-}
-
-export const sendEventWithErrorToPosthog = async ({
-  client,
-  traceId,
-  error,
-  ...args
-}: Omit<SendEventToPosthogParams, 'error' | 'httpStatus'> &
-  Required<Pick<SendEventToPosthogParams, 'error'>>): Promise<unknown> => {
-  const httpStatus =
-    error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
-
-  const properties = { client, traceId, httpStatus, error: JSON.stringify(error), ...args }
-  const enrichedError = error as CoreErrorTracking.PreviouslyCapturedError
-
-  if (client.options?.enableExceptionAutocapture) {
-    // assign a uuid that can be used to link the trace and exception events
-    const exceptionId = uuidv7()
-    client.captureException(error, undefined, { $ai_trace_id: traceId }, exceptionId)
-    enrichedError.__posthog_previously_captured_error = true
-    properties.exceptionId = exceptionId
-  }
-
-  await sendEventToPosthog(properties)
-
-  return enrichedError
-}
-
-export const sendEventToPosthog = async ({
-  client,
-  eventType = AIEvent.Generation,
-  distinctId,
-  traceId,
-  model,
-  provider,
-  input,
-  output,
-  latency,
-  timeToFirstToken,
-  baseURL,
-  params,
-  httpStatus = 200,
-  usage = {},
-  error,
-  exceptionId,
-  stopReason,
-  tools,
-  captureImmediate = false,
-}: SendEventToPosthogParams): Promise<void> => {
-  if (!client.capture) {
-    return Promise.resolve()
-  }
-  // sanitize input and output for UTF-8 validity
-  const safeInput = sanitizeValues(input)
-  const safeOutput = sanitizeValues(output)
-  const safeError = sanitizeValues(error)
-
-  let errorData = {}
-  if (error) {
-    errorData = {
-      $ai_is_error: true,
-      $ai_error: safeError,
-      $exception_event_id: exceptionId,
-    }
-  }
-  let costOverrideData = {}
-  if (params.posthogCostOverride) {
-    const inputCostUSD = (params.posthogCostOverride.inputCost ?? 0) * (usage.inputTokens ?? 0)
-    const outputCostUSD = (params.posthogCostOverride.outputCost ?? 0) * (usage.outputTokens ?? 0)
-    costOverrideData = {
-      $ai_input_cost_usd: inputCostUSD,
-      $ai_output_cost_usd: outputCostUSD,
-      $ai_total_cost_usd: inputCostUSD + outputCostUSD,
-    }
-  }
-
-  const additionalTokenValues = {
-    ...(usage.reasoningTokens ? { $ai_reasoning_tokens: usage.reasoningTokens } : {}),
-    ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
-    ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
-    ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
-    ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
-  }
-
-  const properties = {
-    $ai_lib: 'posthog-ai',
-    $ai_lib_version: version,
-    $ai_provider: params.posthogProviderOverride ?? provider,
-    $ai_model: params.posthogModelOverride ?? model,
-    $ai_model_parameters: getModelParams(params),
-    $ai_input: withPrivacyMode(client, params.posthogPrivacyMode ?? false, safeInput),
-    $ai_output_choices: withPrivacyMode(client, params.posthogPrivacyMode ?? false, safeOutput),
-    $ai_http_status: httpStatus,
-    $ai_input_tokens: usage.inputTokens ?? 0,
-    ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
-    ...additionalTokenValues,
-    $ai_latency: latency,
-    ...(timeToFirstToken !== undefined ? { $ai_time_to_first_token: timeToFirstToken } : {}),
-    $ai_trace_id: traceId,
-    $ai_base_url: baseURL,
-    ...params.posthogProperties,
-    $ai_tokens_source: getTokensSource(params.posthogProperties),
-    ...(distinctId ? {} : { $process_person_profile: false }),
-    ...(stopReason ? { $ai_stop_reason: stopReason } : {}),
-    ...(tools ? { $ai_tools: tools } : {}),
-    ...errorData,
-    ...costOverrideData,
-  }
-
-  const event: EventMessage = {
-    distinctId: distinctId ?? traceId,
-    event: eventType,
-    properties,
-    groups: params.posthogGroups,
-  }
-
-  if (captureImmediate) {
-    // await capture promise to send single event in serverless environments
-    await client.captureImmediate(event)
-  } else {
-    client.capture(event)
-  }
-
-  return Promise.resolve()
 }
 
 export function formatOpenAIResponsesInput(input: unknown, instructions?: string | null): FormattedMessage[] {

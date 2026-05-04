@@ -1,7 +1,9 @@
+import type { IncomingHttpHeaders } from 'node:http'
 import { Observable, throwError } from 'rxjs'
 import { catchError } from 'rxjs/operators'
 
 import ErrorTracking from './error-tracking'
+import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
 import { PostHogBackendClient } from '../client'
 
 // Local interfaces to avoid runtime dependency on @nestjs/common
@@ -32,10 +34,10 @@ export interface PostHogInterceptorOptions {
   captureExceptions?: boolean | ExceptionCaptureOptions
 }
 
-function getClientIp(headers: Record<string, any>, request: any): string | undefined {
-  const forwarded = headers['x-forwarded-for']
+function getClientIp(headers: IncomingHttpHeaders, request: any): string | undefined {
+  const forwarded = getFirstHeaderValue(headers['x-forwarded-for'])
   if (forwarded) {
-    const ip = String(forwarded).split(',')[0].trim()
+    const ip = forwarded.split(',')[0].trim()
     if (ip) return ip
   }
   return request?.socket?.remoteAddress
@@ -71,22 +73,20 @@ export class PostHogInterceptor implements NestInterceptor {
     const request = httpHost.getRequest()
     const response = httpHost.getResponse()
 
-    const headers = request?.headers ?? {}
-    const sessionId: string | undefined = headers['x-posthog-session-id']
-    const windowId: string | undefined = headers['x-posthog-window-id']
-    const distinctId: string | undefined = headers['x-posthog-distinct-id']
+    const headers = (request?.headers ?? {}) as IncomingHttpHeaders
+    const { sessionId, distinctId } = getPostHogTracingHeaderValues(headers)
+
+    const properties: Record<string, any> = {}
+    addProperty(properties, '$current_url', request?.url)
+    addProperty(properties, '$request_method', request?.method)
+    addProperty(properties, '$request_path', request?.path ?? request?.url)
+    addProperty(properties, '$user_agent', getFirstHeaderValue(headers['user-agent']))
+    addProperty(properties, '$ip', getClientIp(headers, request))
 
     const contextData = {
-      sessionId,
-      distinctId,
-      properties: {
-        $current_url: request?.url,
-        $request_method: request?.method,
-        $request_path: request?.path ?? request?.url,
-        $window_id: windowId,
-        $user_agent: headers['user-agent'],
-        $ip: getClientIp(headers, request),
-      },
+      ...(sessionId !== undefined ? { sessionId } : {}),
+      ...(distinctId !== undefined ? { distinctId } : {}),
+      properties,
     }
 
     // Use enterContext so the context propagates through RxJS Observable

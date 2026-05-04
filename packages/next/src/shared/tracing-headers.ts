@@ -1,6 +1,6 @@
 import { isFunction, isArray } from '@posthog/core'
-import type { PostHogCookieState } from './cookie'
-import { cookieStateToProperties } from './cookie'
+import type { PostHogCookieState } from './cookie.js'
+import { cookieStateToProperties } from './cookie.js'
 
 /**
  * Header names used by the PostHog browser SDK's tracing headers feature.

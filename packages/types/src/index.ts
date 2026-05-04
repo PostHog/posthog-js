@@ -64,6 +64,7 @@ export type {
     PerformanceCaptureConfig,
     DeadClickCandidate,
     ExceptionAutoCaptureConfig,
+    ExceptionStepsConfig,
     DeadClicksAutoCaptureConfig,
     HeatmapConfig,
     ConfigDefaults,
@@ -102,5 +103,4 @@ export type {
     OtlpKeyValue,
     OtlpLogRecord,
     OtlpLogsPayload,
-    LogSdkContext,
 } from './capture-log'

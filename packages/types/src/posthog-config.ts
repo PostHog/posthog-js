@@ -211,27 +211,49 @@ export interface DeadClickCandidate {
     absoluteDelayMs?: number
 }
 
+/**
+ * Controls buffering and payload limits for exception steps added via `addExceptionStep`.
+ *
+ * NOTE: This type is also defined in `@posthog/core` (exception-steps.ts). Keep both in sync.
+ */
+export type ExceptionStepsConfig = {
+    /**
+     * Determines whether PostHog should collect exception steps and attach them to the next captured exception.
+     *
+     * @default true
+     */
+    enabled?: boolean
+
+    /**
+     * The maximum UTF-8 byte budget for exception steps buffered in memory.
+     * Oldest steps are evicted when the budget is exceeded.
+     *
+     * @default 32768 (~32KB)
+     */
+    max_bytes?: number
+}
+
 export type ExceptionAutoCaptureConfig = {
     /**
      * Determines whether PostHog should capture unhandled errors.
      *
      * @default true
      */
-    capture_unhandled_errors: boolean
+    capture_unhandled_errors?: boolean
 
     /**
      * Determines whether PostHog should capture unhandled promise rejections.
      *
      * @default true
      */
-    capture_unhandled_rejections: boolean
+    capture_unhandled_rejections?: boolean
 
     /**
      * Determines whether PostHog should capture console errors.
      *
      * @default false
      */
-    capture_console_errors: boolean
+    capture_console_errors?: boolean
 }
 
 export type DeadClicksAutoCaptureConfig = {
@@ -323,6 +345,11 @@ export interface ErrorTrackingOptions {
      * @default 10
      */
     __exceptionRateLimiterBucketSize?: number
+
+    /**
+     * Controls buffering and payload limits for exception steps added via `addExceptionStep`.
+     */
+    exception_steps?: ExceptionStepsConfig
 }
 
 /**
@@ -1545,13 +1572,18 @@ export interface PostHogConfig {
      */
     override_display_language?: string | null
 
+    /**
+     * A list of hostnames for which to inject PostHog tracing headers to all requests
+     * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID). Used to link
+     * frontend sessions to backend traces (see https://posthog.com/docs/llm-analytics/link-session-replay).
+     */
+    addTracingHeaders?: string[]
+
     // ------- PREVIEW CONFIGS -------
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * A list of hostnames for which to inject PostHog tracing headers to all requests
-     * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID)
-     * */
+     * @deprecated Use {@link addTracingHeaders} instead. Kept for backwards compatibility.
+     */
     __add_tracing_headers?: string[]
 
     /**
@@ -1578,6 +1610,17 @@ export interface PostHogConfig {
      * Disables sending credentials when using XHR requests.
      */
     __preview_disable_xhr_credentials?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Loads external dependency bundles (for example recorder.js and toolbar.js) from
+     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead of the
+     * legacy /static/recorder.js?v=1.370.0 form.
+     *
+     * When set to a string, that string is treated as an asset host override for any
+     * /static/* asset path while leaving non-static asset paths unchanged.
+     */
+    __preview_external_dependency_versioned_paths?: boolean | string
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION

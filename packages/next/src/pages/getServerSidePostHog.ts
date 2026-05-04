@@ -1,9 +1,9 @@
 import type { GetServerSidePropsContext } from 'next'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
-import { getOrCreateNodeClient } from '../server/nodeClientCache'
-import { cookieStoreFromHeader, readPostHogCookie, isOptedOut } from '../shared/cookie'
-import { resolveApiKey } from '../shared/config'
-import { readTracingHeaders, buildContextData } from '../shared/tracing-headers'
+import { getOrCreateNodeClient } from '../server/nodeClientCache.js'
+import { cookieStoreFromHeader, readPostHogCookie, isOptedOut } from '../shared/cookie.js'
+import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.js'
 
 /**
  * Creates a PostHog server client scoped to the current request.
@@ -34,8 +34,8 @@ export async function getServerSidePostHog(
     options?: Partial<PostHogOptions>
 ): Promise<IPostHog> {
     const resolvedApiKey = resolveApiKey(apiKey)
-    const host = options?.host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
-    const resolvedOptions = host ? { ...options, host } : options
+    const host = resolveHostOrDefault(options?.host)
+    const resolvedOptions = { ...options, host }
     const client = await getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
 
     const cookieStore = cookieStoreFromHeader(ctx.req.headers.cookie || '')

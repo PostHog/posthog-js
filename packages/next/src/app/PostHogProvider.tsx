@@ -1,12 +1,12 @@
 import React from 'react'
 import type { PostHogConfig } from 'posthog-js'
-import { ClientPostHogProvider } from '../client/ClientPostHogProvider'
-import type { BootstrapConfig } from '../client/ClientPostHogProvider'
-import { cookies } from 'next/headers'
+import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
+import type { BootstrapConfig } from '../client/ClientPostHogProvider.js'
+import { cookies } from 'next/headers.js'
 import type { PostHogOptions } from 'posthog-node'
-import { getOrCreateNodeClient } from '../server/nodeClientCache'
-import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey } from '../shared/config'
-import { readPostHogCookie, isOptedOut } from '../shared/cookie'
+import { getOrCreateNodeClient } from '../server/nodeClientCache.js'
+import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
 
 type AllFlagsOptions = {
     groups?: Record<string, string>
@@ -82,7 +82,7 @@ export async function PostHogProvider({
         )
     }
 
-    const host = clientOptions?.api_host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const host = resolveHostOrDefault(clientOptions?.api_host)
     const resolvedOptions: Partial<PostHogConfig> = {
         ...NEXTJS_CLIENT_DEFAULTS,
         ...clientOptions,
@@ -131,7 +131,7 @@ async function evaluateFlags(
         return undefined
     }
 
-    const host = serverOptions?.host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const host = resolveHostOrDefault(serverOptions?.host)
     const nodeOptions: Partial<PostHogOptions> = { ...serverOptions, ...(host ? { host } : {}) }
     const client = await getOrCreateNodeClient(apiKey, nodeOptions)
 

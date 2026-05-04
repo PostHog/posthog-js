@@ -33,6 +33,23 @@ describe('Pages PostHogProvider', () => {
         expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'phc_test123' }))
     })
 
+    it('trims apiKey and api_host before passing them to ClientPostHogProvider', () => {
+        render(
+            <PostHogProvider
+                apiKey={'  phc_test123\n'}
+                clientOptions={{ api_host: '  https://custom.posthog.com/\t ' }}
+            >
+                <div>Child</div>
+            </PostHogProvider>
+        )
+        expect(mockClientPostHogProvider).toHaveBeenCalledWith(
+            expect.objectContaining({
+                apiKey: 'phc_test123',
+                options: expect.objectContaining({ api_host: 'https://custom.posthog.com/' }),
+            })
+        )
+    })
+
     it('applies NEXTJS_CLIENT_DEFAULTS to options', () => {
         render(
             <PostHogProvider apiKey="phc_test123">
@@ -42,6 +59,7 @@ describe('Pages PostHogProvider', () => {
         expect(mockClientPostHogProvider).toHaveBeenCalledWith(
             expect.objectContaining({
                 options: expect.objectContaining({
+                    api_host: 'https://us.i.posthog.com',
                     persistence: 'localStorage+cookie',
                     opt_out_capturing_persistence_type: 'cookie',
                     opt_out_persistence_by_default: true,
@@ -80,6 +98,26 @@ describe('Pages PostHogProvider', () => {
                 }),
             })
         )
+        delete process.env.NEXT_PUBLIC_POSTHOG_HOST
+    })
+
+    it('trims apiKey and api_host from env vars', () => {
+        process.env.NEXT_PUBLIC_POSTHOG_KEY = '  phc_from_env\n'
+        process.env.NEXT_PUBLIC_POSTHOG_HOST = '  https://env-host.posthog.com/\t '
+        render(
+            <PostHogProvider>
+                <div>Child</div>
+            </PostHogProvider>
+        )
+        expect(mockClientPostHogProvider).toHaveBeenCalledWith(
+            expect.objectContaining({
+                apiKey: 'phc_from_env',
+                options: expect.objectContaining({
+                    api_host: 'https://env-host.posthog.com/',
+                }),
+            })
+        )
+        delete process.env.NEXT_PUBLIC_POSTHOG_KEY
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
     })
 

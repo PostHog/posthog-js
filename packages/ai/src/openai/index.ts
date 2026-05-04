@@ -3,14 +3,14 @@ import { PostHog } from 'posthog-node'
 import {
   formatResponseOpenAI,
   MonitoringParams,
-  sendEventToPosthog,
   extractAvailableToolCalls,
   withPrivacyMode,
   AIEvent,
   formatOpenAIResponsesInput,
   calculateWebSearchCount,
-  sendEventWithErrorToPosthog,
+  getModelParams,
 } from '../utils'
+import { captureAiGeneration } from '../captureAiGeneration'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -258,8 +258,7 @@ export class WrappedCompletions extends Completions {
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
-              await sendEventToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'openai',
@@ -268,7 +267,7 @@ export class WrappedCompletions extends Completions {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 httpStatus: 200,
                 usage: {
                   inputTokens: usage.inputTokens,
@@ -282,8 +281,7 @@ export class WrappedCompletions extends Completions {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const enrichedError = await sendEventWithErrorToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'openai',
@@ -291,11 +289,11 @@ export class WrappedCompletions extends Completions {
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -311,8 +309,7 @@ export class WrappedCompletions extends Completions {
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
             const formattedOutput = formatResponseOpenAI(result)
-            await sendEventToPosthog({
-              client: this.phClient,
+            await captureAiGeneration(this.phClient, {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'openai',
@@ -320,7 +317,7 @@ export class WrappedCompletions extends Completions {
               output: formattedOutput,
               latency,
               baseURL: this.baseURL,
-              params: body,
+              modelParameters: getModelParams(body),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.prompt_tokens ?? 0,
@@ -342,8 +339,7 @@ export class WrappedCompletions extends Completions {
               ? ((error as { status?: number }).status ?? 500)
               : 500
 
-          await sendEventToPosthog({
-            client: this.phClient,
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
@@ -351,13 +347,13 @@ export class WrappedCompletions extends Completions {
             output: [],
             latency: 0,
             baseURL: this.baseURL,
-            params: body,
+            modelParameters: getModelParams(body),
             httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            error: JSON.stringify(error),
+            error,
           })
           throw error
         }
@@ -473,8 +469,7 @@ export class WrappedResponses extends Responses {
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
-              await sendEventToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'openai',
@@ -486,7 +481,7 @@ export class WrappedResponses extends Responses {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 httpStatus: 200,
                 usage: {
                   inputTokens: usage.inputTokens,
@@ -500,8 +495,7 @@ export class WrappedResponses extends Responses {
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const enrichedError = await sendEventWithErrorToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'openai',
@@ -512,11 +506,11 @@ export class WrappedResponses extends Responses {
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
-                error: error,
+                error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -531,8 +525,7 @@ export class WrappedResponses extends Responses {
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
             const formattedOutput = formatResponseOpenAI({ output: result.output })
-            await sendEventToPosthog({
-              client: this.phClient,
+            await captureAiGeneration(this.phClient, {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'openai',
@@ -540,7 +533,7 @@ export class WrappedResponses extends Responses {
               output: formattedOutput,
               latency,
               baseURL: this.baseURL,
-              params: body,
+              modelParameters: getModelParams(body),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.input_tokens ?? 0,
@@ -562,8 +555,7 @@ export class WrappedResponses extends Responses {
               ? ((error as { status?: number }).status ?? 500)
               : 500
 
-          await sendEventToPosthog({
-            client: this.phClient,
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
@@ -571,13 +563,13 @@ export class WrappedResponses extends Responses {
             output: [],
             latency: 0,
             baseURL: this.baseURL,
-            params: body,
+            modelParameters: getModelParams(body),
             httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            error: JSON.stringify(error),
+            error,
           })
           throw error
         }
@@ -605,8 +597,7 @@ export class WrappedResponses extends Responses {
       const wrappedPromise = parentPromise.then(
         async (result) => {
           const latency = (Date.now() - startTime) / 1000
-          await sendEventToPosthog({
-            client: this.phClient,
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model ?? result.model,
             provider: 'openai',
@@ -614,7 +605,7 @@ export class WrappedResponses extends Responses {
             output: result.output,
             latency,
             baseURL: this.baseURL,
-            params: body,
+            modelParameters: getModelParams(body),
             httpStatus: 200,
             usage: {
               inputTokens: result.usage?.input_tokens ?? 0,
@@ -628,8 +619,7 @@ export class WrappedResponses extends Responses {
           return result
         },
         async (error: Error) => {
-          const enrichedError = await sendEventWithErrorToPosthog({
-            client: this.phClient,
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
@@ -637,14 +627,14 @@ export class WrappedResponses extends Responses {
             output: [],
             latency: 0,
             baseURL: this.baseURL,
-            params: body,
+            modelParameters: getModelParams(body),
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            error: JSON.stringify(error),
+            error,
           })
-          throw enrichedError
+          throw error
         }
       )
 
@@ -678,8 +668,7 @@ export class WrappedEmbeddings extends Embeddings {
     const wrappedPromise = parentPromise.then(
       async (result) => {
         const latency = (Date.now() - startTime) / 1000
-        await sendEventToPosthog({
-          client: this.phClient,
+        await captureAiGeneration(this.phClient, {
           ...posthogParams,
           eventType: AIEvent.Embedding,
           model: openAIParams.model,
@@ -688,7 +677,7 @@ export class WrappedEmbeddings extends Embeddings {
           output: null, // Embeddings don't have output content
           latency,
           baseURL: this.baseURL,
-          params: body,
+          modelParameters: getModelParams(body),
           httpStatus: 200,
           usage: {
             inputTokens: result.usage?.prompt_tokens ?? 0,
@@ -701,8 +690,7 @@ export class WrappedEmbeddings extends Embeddings {
         const httpStatus =
           error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
 
-        await sendEventToPosthog({
-          client: this.phClient,
+        await captureAiGeneration(this.phClient, {
           eventType: AIEvent.Embedding,
           ...posthogParams,
           model: openAIParams.model,
@@ -711,12 +699,12 @@ export class WrappedEmbeddings extends Embeddings {
           output: null, // Embeddings don't have output content
           latency: 0,
           baseURL: this.baseURL,
-          params: body,
+          modelParameters: getModelParams(body),
           httpStatus,
           usage: {
             inputTokens: 0,
           },
-          error: JSON.stringify(error),
+          error,
         })
         throw error
       }
@@ -854,8 +842,7 @@ export class WrappedTranscriptions extends Transcriptions {
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
-              await sendEventToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'openai',
@@ -864,14 +851,13 @@ export class WrappedTranscriptions extends Transcriptions {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 httpStatus: 200,
                 usage,
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const enrichedError = await sendEventWithErrorToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'openai',
@@ -879,11 +865,11 @@ export class WrappedTranscriptions extends Transcriptions {
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
-                error: error,
+                error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -896,8 +882,7 @@ export class WrappedTranscriptions extends Transcriptions {
         async (result) => {
           if ('text' in result) {
             const latency = (Date.now() - startTime) / 1000
-            await sendEventToPosthog({
-              client: this.phClient,
+            await captureAiGeneration(this.phClient, {
               ...posthogParams,
               model: openAIParams.model,
               provider: 'openai',
@@ -905,7 +890,7 @@ export class WrappedTranscriptions extends Transcriptions {
               output: result.text,
               latency,
               baseURL: this.baseURL,
-              params: body,
+              modelParameters: getModelParams(body),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.type === 'tokens' ? (result.usage.input_tokens ?? 0) : 0,
@@ -917,8 +902,7 @@ export class WrappedTranscriptions extends Transcriptions {
           }
         },
         async (error: unknown) => {
-          const enrichedError = await sendEventWithErrorToPosthog({
-            client: this.phClient,
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
@@ -926,14 +910,14 @@ export class WrappedTranscriptions extends Transcriptions {
             output: [],
             latency: 0,
             baseURL: this.baseURL,
-            params: body,
+            modelParameters: getModelParams(body),
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            error: error,
+            error,
           })
-          throw enrichedError
+          throw error
         }
       ) as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>
 

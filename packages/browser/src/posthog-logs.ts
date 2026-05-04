@@ -2,11 +2,10 @@ import { LOAD_EXT_NOT_FOUND } from './constants'
 import Config from './config'
 import { PostHog } from './posthog-core'
 import type { CaptureLogOptions, RemoteConfig, Logger, LogSdkContext, LogAttributeValue, OtlpLogRecord } from './types'
-import { isNullish } from '@posthog/core'
+import { buildOtlpLogRecord, buildOtlpLogsPayload, isNullish } from '@posthog/core'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { Extension } from './extensions/types'
-import { buildOtlpLogRecord, buildOtlpLogsPayload } from './logs-utils'
 
 const DEFAULT_FLUSH_INTERVAL_MS = 3000
 const DEFAULT_MAX_BUFFER_SIZE = 100
@@ -170,7 +169,9 @@ export class PostHogLogs implements Extension {
 
         const payload = buildOtlpLogsPayload(
             entries.map((e) => e.record),
-            resourceAttributes
+            resourceAttributes,
+            Config.LIB_NAME,
+            Config.LIB_VERSION
         )
 
         const url =
@@ -199,9 +200,7 @@ export class PostHogLogs implements Extension {
     }
 
     private _getSdkContext(): LogSdkContext {
-        const context: LogSdkContext = {
-            lib: Config.LIB_NAME,
-        }
+        const context: LogSdkContext = {}
 
         context.distinctId = this._instance.get_distinct_id()
 

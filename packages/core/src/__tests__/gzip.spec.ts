@@ -34,11 +34,39 @@ describe('gzip', () => {
       expect(globalThis.CompressionStream).toBeDefined()
       expect(isGzipSupported()).toBe(true)
     })
-    it('should return false if CompressStream not available', () => {
-      const CompressionStream = globalThis.CompressionStream
-      delete (globalThis as any).CompressionStream
-      expect(isGzipSupported()).toBe(false)
-      ;(globalThis as any).CompressionStream = CompressionStream
+    it.each([
+      [
+        'CompressionStream',
+        () => {
+          const CompressionStream = globalThis.CompressionStream
+          delete (globalThis as any).CompressionStream
+          return () => ((globalThis as any).CompressionStream = CompressionStream)
+        },
+      ],
+      [
+        'TextEncoder',
+        () => {
+          const TextEncoder = globalThis.TextEncoder
+          delete (globalThis as any).TextEncoder
+          return () => ((globalThis as any).TextEncoder = TextEncoder)
+        },
+      ],
+      [
+        'Response.blob',
+        () => {
+          const blob = globalThis.Response.prototype.blob
+          delete (globalThis.Response.prototype as any).blob
+          return () => ((globalThis.Response.prototype as any).blob = blob)
+        },
+      ],
+    ])('should return false if %s not available', (_name, removeDependency) => {
+      const restoreDependency = removeDependency()
+
+      try {
+        expect(isGzipSupported()).toBe(false)
+      } finally {
+        restoreDependency()
+      }
     })
   })
   describe('isNativeAsyncGzipReadError', () => {
@@ -58,6 +86,44 @@ describe('gzip', () => {
 
       await expect(gzipCompress(RANDOM_TEST_INPUT, false, { rethrow: true })).rejects.toThrow()
       ;(globalThis as any).CompressionStream = CompressionStream
+    })
+
+    it('does not read input using Blob.stream', async () => {
+      const blobStream = Blob.prototype.stream
+      Blob.prototype.stream = jest.fn(() => {
+        throw new Error('Blob.stream should not be used')
+      })
+
+      try {
+        const compressed = await gzipCompress(API_TEST_INPUT, false, { rethrow: true })
+        expect(compressed).not.toBe(null)
+      } finally {
+        Blob.prototype.stream = blobStream
+      }
+    })
+
+    it('aborts the compression writer when writing input fails', async () => {
+      const CompressionStream = globalThis.CompressionStream
+      const writeError = new Error('write failed')
+      const abort = jest.fn(() => Promise.resolve())
+
+      ;(globalThis as any).CompressionStream = jest.fn(() => ({
+        writable: {
+          getWriter: () => ({
+            write: () => Promise.reject(writeError),
+            close: jest.fn(),
+            abort,
+          }),
+        },
+        readable: new ReadableStream(),
+      }))
+
+      try {
+        await expect(gzipCompress(API_TEST_INPUT, false, { rethrow: true })).rejects.toBe(writeError)
+        expect(abort).toHaveBeenCalledWith(writeError)
+      } finally {
+        ;(globalThis as any).CompressionStream = CompressionStream
+      }
     })
 
     it('compressed random data should match node', async () => {

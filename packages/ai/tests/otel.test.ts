@@ -37,38 +37,50 @@ describe('PostHogTraceExporter', () => {
       apiKey: 'phc_test123',
       host: undefined,
       expectedUrl: 'https://us.i.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test123',
     },
     {
       name: 'custom host',
       apiKey: 'phc_test456',
       host: 'https://eu.i.posthog.com',
       expectedUrl: 'https://eu.i.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test456',
     },
     {
       name: 'trailing slash',
       apiKey: 'phc_test789',
       host: 'https://custom.posthog.com/',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test789',
     },
     {
       name: 'multiple trailing slashes',
       apiKey: 'phc_test000',
       host: 'https://custom.posthog.com///',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test000',
     },
-  ])('configures the OTLP exporter correctly with $name', ({ apiKey, host, expectedUrl }) => {
+    {
+      name: 'trimmed whitespace-sensitive values',
+      apiKey: '  phc_test999\t ',
+      host: '  https://custom.posthog.com/\n',
+      expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
+      expectedApiKey: 'phc_test999',
+    },
+  ])('configures the OTLP exporter correctly with $name', ({ apiKey, host, expectedUrl, expectedApiKey }) => {
     new PostHogTraceExporter({ apiKey, host })
 
     expect(OTLPTraceExporter).toHaveBeenCalledWith({
       url: expectedUrl,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${expectedApiKey}`,
       },
     })
   })
 
   it('throws when apiKey is missing', () => {
     expect(() => new PostHogTraceExporter({ apiKey: '' })).toThrow('PostHogTraceExporter requires an apiKey')
+    expect(() => new PostHogTraceExporter({ apiKey: '  \n\t ' })).toThrow('PostHogTraceExporter requires an apiKey')
   })
 
   it('inherits shutdown from OTLPTraceExporter', async () => {

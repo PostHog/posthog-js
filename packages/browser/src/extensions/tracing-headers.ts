@@ -29,8 +29,13 @@ export class TracingHeaders implements Extension {
             cb()
         })
     }
+    private _getConfiguredHostnames(): string[] | undefined {
+        // Prefer the new `addTracingHeaders` name; fall back to the deprecated `__add_tracing_headers`.
+        return this._instance.config.addTracingHeaders ?? this._instance.config.__add_tracing_headers
+    }
+
     public startIfEnabledOrStop() {
-        if (this._instance.config.__add_tracing_headers) {
+        if (this._getConfiguredHostnames()) {
             this._loadScript(this._startCapturing)
         } else {
             this._restoreXHRPatch?.()
@@ -42,16 +47,17 @@ export class TracingHeaders implements Extension {
     }
 
     private _startCapturing = () => {
+        const hostnames = this._getConfiguredHostnames() || []
         if (isUndefined(this._restoreXHRPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
-                this._instance.config.__add_tracing_headers || [],
+                hostnames,
                 this._instance.get_distinct_id(),
                 this._instance.sessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
-                this._instance.config.__add_tracing_headers || [],
+                hostnames,
                 this._instance.get_distinct_id(),
                 this._instance.sessionManager
             )

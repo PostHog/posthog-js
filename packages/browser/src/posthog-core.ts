@@ -17,6 +17,8 @@ import {
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    SDK_DEBUG_EXTENSIONS_INIT_METHOD,
+    SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
     COOKIELESS_ALWAYS,
@@ -162,8 +164,6 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
-const RESOLVED_SDK_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
-
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
 /*
@@ -215,6 +215,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
+    __preview_external_dependency_versioned_paths: false,
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -390,8 +391,8 @@ export class PostHog implements PostHogInterface {
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfig
+    _lastRemoteConfig?: RemoteConfig
     _remoteConfigLoader?: RemoteConfigLoader
-    _resolvedSdkVersion?: string
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -414,6 +415,13 @@ export class PostHog implements PostHogInterface {
         this._extensions.push(newExt)
         newExt.initialize?.()
         return newExt
+    }
+
+    private _inCookielessMode(): boolean {
+        return (
+            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
+            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
+        )
     }
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
@@ -608,25 +616,11 @@ export class PostHog implements PostHogInterface {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        const startInCookielessMode =
-            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
+        const startInCookielessMode = this._inCookielessMode()
 
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
-        }
-
-        // Read resolved SDK version from pre-loaded config (snippet v2) before extensions
-        // initialize, so loadExternalDependency uses the versioned asset path
-        const preloadedConfig = assignableWindow._POSTHOG_REMOTE_CONFIG?.[this.config.token]?.config
-        const resolved = preloadedConfig?.sdkVersion?.resolved
-        if (resolved) {
-            if (RESOLVED_SDK_VERSION_RE.test(resolved)) {
-                this._resolvedSdkVersion = resolved
-            } else {
-                logger.warn(`Ignoring invalid preloaded sdkVersion.resolved from remote config: ${resolved}`)
-            }
         }
 
         // Conditionally defer extension initialization based on config
@@ -895,10 +889,10 @@ export class PostHog implements PostHogInterface {
         // eslint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
-            $sdk_debug_extensions_init_method: this.config.__preview_deferred_init_extensions
+            [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
                 ? 'deferred'
                 : 'synchronous',
-            $sdk_debug_extensions_init_time_ms: taskInitTiming,
+            [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
         })
         if (this.config.__preview_deferred_init_extensions) {
             logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
@@ -918,6 +912,11 @@ export class PostHog implements PostHogInterface {
         if (this.config.__preview_deferred_init_extensions) {
             this._pendingRemoteConfig = config
         }
+
+        // Cache the latest remote config so extensions that are created later
+        // (e.g. sessionRecording after opt_in_capturing from cookieless mode) can
+        // replay it and pick up server-side settings like recording enable flags.
+        this._lastRemoteConfig = config
 
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {
@@ -965,7 +964,7 @@ export class PostHog implements PostHogInterface {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (this.consent.isOptedIn() || this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+                if (this.consent.isOptedIn() || this._inCookielessMode()) {
                     this._captureInitialPageview()
                 }
             }, 1)
@@ -1403,10 +1402,7 @@ export class PostHog implements PostHogInterface {
         properties['token'] = this.config.token
         properties['$config_defaults'] = this.config.defaults
 
-        if (
-            this.config.cookieless_mode == COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode == COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut())
-        ) {
+        if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
             properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
         }
@@ -3048,6 +3044,7 @@ export class PostHog implements PostHogInterface {
             }
 
             this.exceptionObserver?.onConfigChange()
+            this.exceptions?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
@@ -3219,6 +3216,24 @@ export class PostHog implements PostHogInterface {
             ...errorToProperties,
             ...additionalProperties,
         })
+    }
+
+    /**
+     * Add a breadcrumb-like step that will be attached to the next captured exception.
+     *
+     * {@label Error tracking}
+     *
+     * @public
+     *
+     * @example
+     * ```js
+     * posthog.addExceptionStep('Checkout button clicked', {
+     *   checkout_id: 'ch_123',
+     * })
+     * ```
+     */
+    addExceptionStep(message: string, properties?: Properties): void {
+        this.exceptions?.addExceptionStep(message, properties)
     }
 
     /**
@@ -3559,8 +3574,8 @@ export class PostHog implements PostHogInterface {
             logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isExplicitlyOptedOut()) {
-            // If the user has explicitly opted out on_reject mode, then before we can start sending regular non-cookieless events
+        if (this._inCookielessMode()) {
+            // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
             this.sessionManager?.destroy()
@@ -3577,6 +3592,12 @@ export class PostHog implements PostHogInterface {
                     this.sessionRecording,
                     new SessionRecordingClass(this) as SessionRecording
                 )
+                // Replay the cached remote config so the new recorder picks up server-side
+                // settings (enable flag, endpoint, sampling) that arrived while we were
+                // still in cookieless mode and sessionRecording didn't yet exist.
+                if (this._lastRemoteConfig) {
+                    this.sessionRecording?.onRemoteConfig?.(this._lastRemoteConfig)
+                }
             }
         }
 
@@ -3734,7 +3755,7 @@ export class PostHog implements PostHogInterface {
      * some config options.
      *
      * Additionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the
-     * user has explicitly opted out.
+     * user has opted out or been defaulted to opt-out.
      *
      * {@label Privacy}
      *
@@ -3749,7 +3770,7 @@ export class PostHog implements PostHogInterface {
             return true
         }
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
-            return this.consent.isExplicitlyOptedOut() || this.consent.isOptedIn()
+            return this.consent.isRejected() || this.consent.isOptedIn()
         } else {
             return !this.has_opted_out_capturing()
         }

@@ -1,5 +1,116 @@
 # @posthog/core
 
+## 1.28.0
+
+### Minor Changes
+
+- [#3492](https://github.com/PostHog/posthog-js/pull/3492) [`cf56753`](https://github.com/PostHog/posthog-js/commit/cf56753d775225df2751dee2de7987d4a47fef8c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add translated survey rendering support in React Native and share survey translation logic through `@posthog/core`.
+  (2026-05-01)
+
+- [#3480](https://github.com/PostHog/posthog-js/pull/3480) [`04db756`](https://github.com/PostHog/posthog-js/commit/04db75663208251d1b09c80b09e5d00188e897fd) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add manual log capture API for React Native: `posthog.captureLog()`, `posthog.logger.{trace,debug,info,warn,error,fatal}()`, `posthog.flushLogs()`, and a `logs` config option on the constructor. Records ship to PostHog's logs product (`/i/v1/logs`) in OTLP format, batched on a timer / AppState change / buffer fill, and persisted to a dedicated logs-storage file.
+
+  Manual capture is unconditional — calling the API ships records, matching the events pipeline's manual `capture()` shape. Only blockers: `optedOut`, missing/empty `body`, and missing API key. The wire field `response.logs.captureConsoleLogs` is browser-only (it gates the JS SDK's `console.*` autocapture extension) and is not read by RN. When console autocapture lands on RN as a follow-up, that PR will introduce a local opt-in for the autocapture path specifically; manual capture will remain unconditional. (2026-05-01)
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.6
+
+## 1.27.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.5
+
+## 1.27.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.4
+
+## 1.27.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.3
+
+## 1.27.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.2
+
+## 1.27.5
+
+### Patch Changes
+
+- [#3464](https://github.com/PostHog/posthog-js/pull/3464) [`70508df`](https://github.com/PostHog/posthog-js/commit/70508dfd7dd1201dd9c61c126a3c27ad39311c6a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Avoid using `Blob.stream()` for native async gzip compression to prevent Safari `NotReadableError` stream failures.
+  (2026-04-24)
+- Updated dependencies []:
+  - @posthog/types@1.372.1
+
+## 1.27.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.0
+
+## 1.27.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.371.4
+
+## 1.27.2
+
+### Patch Changes
+
+- [#3437](https://github.com/PostHog/posthog-js/pull/3437) [`daf028d`](https://github.com/PostHog/posthog-js/commit/daf028d553f756b9f58c01b848ad2d431239458b) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Disable the core client instead of throwing when the API key is missing, blank, or invalid.
+  (2026-04-24)
+- Updated dependencies []:
+  - @posthog/types@1.371.3
+
+## 1.27.1
+
+### Patch Changes
+
+- [#3453](https://github.com/PostHog/posthog-js/pull/3453) [`96f19b7`](https://github.com/PostHog/posthog-js/commit/96f19b79d563937ed8f98e12796eee541a2dae7f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Lift OTLP log serialization helpers from posthog-js into @posthog/core so the
+  upcoming React Native logs feature consumes the same builders. Browser gains
+  two fixes as a side effect: NaN and ±Infinity attribute values no longer get
+  silently dropped during JSON encoding, and the scope.version OTLP field is
+  now populated with the SDK version (changes the server's instrumentation_scope
+  column from "posthog-js@" to "posthog-js@<semver>"). (2026-04-23)
+- Updated dependencies [[`96f19b7`](https://github.com/PostHog/posthog-js/commit/96f19b79d563937ed8f98e12796eee541a2dae7f)]:
+  - @posthog/types@1.371.2
+
+## 1.27.0
+
+### Minor Changes
+
+- [#3432](https://github.com/PostHog/posthog-js/pull/3432) [`1a8b727`](https://github.com/PostHog/posthog-js/commit/1a8b7277c50a42bbb3f736afd530ff1c3389a7de) Thanks [@richardsolomou](https://github.com/richardsolomou)! - refactor: rename `__add_tracing_headers` to `addTracingHeaders`. The `__` prefix signalled an internal/experimental option, but the config is a public API (documented for linking LLM traces to session replays). `__add_tracing_headers` continues to work as a deprecated alias on the browser SDK.
+
+  Also exposes `patchFetchForTracingHeaders` from `@posthog/core` so non-browser SDKs can reuse the implementation. (2026-04-23)
+
+## 1.26.0
+
+### Minor Changes
+
+- [#3389](https://github.com/PostHog/posthog-js/pull/3389) [`922a1c1`](https://github.com/PostHog/posthog-js/commit/922a1c1838a5ed2ad37f59dade5fc3cc81bb4246) Thanks [@hpouillot](https://github.com/hpouillot)! - Add exception steps to error tracking (aka breadcrumbs)
+  (2026-04-22)
+
+## 1.25.3
+
+### Patch Changes
+
+- [#3426](https://github.com/PostHog/posthog-js/pull/3426) [`1a0b58d`](https://github.com/PostHog/posthog-js/commit/1a0b58d1d07c61662169d3bc56eed8cfd8855d65) Thanks [@marandaneto](https://github.com/marandaneto)! - Trim surrounding whitespace from user-provided API keys, personal API keys, and host config values before using them.
+  (2026-04-21)
+
 ## 1.25.2
 
 ### Patch Changes

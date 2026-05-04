@@ -9,9 +9,9 @@ import {
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
-    PERSISTENCE_RESERVED_PROPERTIES,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
 } from './constants'
+import { getPersistenceKeyPolicy } from './persistence-key-policy'
 
 import { isUndefined } from '@posthog/core'
 import {
@@ -160,17 +160,21 @@ export class PostHogPersistence {
     properties(): Properties {
         const p: Properties = {}
 
-        // Filter out reserved properties
         each(this.props, (v, k) => {
-            if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
-                // Skip $feature/ properties if cache is stale
-                if (!this._isFeatureFlagCacheStale()) {
-                    const keys = Object.keys(v)
-                    for (let i = 0; i < keys.length; i++) {
-                        p[`$feature/${keys[i]}`] = v[keys[i]]
-                    }
+            const policy = getPersistenceKeyPolicy(k)
+
+            if (policy?.exposure === 'derived') {
+                const shouldSkip = k === ENABLED_FEATURE_FLAGS ? () => this._isFeatureFlagCacheStale() : () => false
+
+                if (policy.shouldSkipFromEventProperties?.(v, shouldSkip)) {
+                    return
                 }
-            } else if (PERSISTENCE_RESERVED_PROPERTIES.indexOf(k) === -1) {
+
+                if (policy.transformToEventProperties) {
+                    extend(p, policy.transformToEventProperties(v))
+                }
+            } else if (!policy || policy.exposure === 'event') {
+                // Unknown keys are treated as user-defined super properties and remain event-visible.
                 p[k] = v
             }
         })
@@ -239,7 +243,7 @@ export class PostHogPersistence {
 
             each(props, (val, prop) => {
                 if (!this.props.hasOwnProperty(prop) || this.props[prop] === default_value) {
-                    this.props[prop] = val
+                    this._setProp(prop, val)
                     hasChanges = true
                 }
             })
@@ -265,7 +269,7 @@ export class PostHogPersistence {
 
             each(props, (val, prop) => {
                 if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
-                    this.props[prop] = val
+                    this._setProp(prop, val)
                     hasChanges = true
                 }
             })
@@ -280,7 +284,7 @@ export class PostHogPersistence {
 
     unregister(prop: string): void {
         if (prop in this.props) {
-            delete this.props[prop]
+            this._deleteProp(prop)
             this.save()
         }
     }
@@ -412,7 +416,7 @@ export class PostHogPersistence {
     set_event_timer(event_name: string, timestamp: number): void {
         const timers = this.props[EVENT_TIMERS_KEY] || {}
         timers[event_name] = timestamp
-        this.props[EVENT_TIMERS_KEY] = timers
+        this._setProp(EVENT_TIMERS_KEY, timers)
         this.save()
     }
 
@@ -420,7 +424,8 @@ export class PostHogPersistence {
         const timers = this.props[EVENT_TIMERS_KEY] || {}
         const timestamp = timers[event_name]
         if (!isUndefined(timestamp)) {
-            delete this.props[EVENT_TIMERS_KEY][event_name]
+            delete timers[event_name]
+            this._setProp(EVENT_TIMERS_KEY, timers)
             this.save()
         }
         return timestamp
@@ -431,7 +436,15 @@ export class PostHogPersistence {
     }
 
     set_property(prop: string, to: any): void {
-        this.props[prop] = to
+        this._setProp(prop, to)
         this.save()
+    }
+
+    private _setProp(prop: string, to: any): void {
+        this.props[prop] = to
+    }
+
+    private _deleteProp(prop: string): void {
+        delete this.props[prop]
     }
 }

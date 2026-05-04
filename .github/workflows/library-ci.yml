@@ -57,7 +57,7 @@ jobs:
         run: pnpm exec playwright test --workers=5
         working-directory: packages/browser
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
         with:
           name: playwright-report
@@ -207,7 +207,7 @@ jobs:
               comment_id: process.env.COMMENT_ID
             })
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
         with:
           name: playwright-compat-report

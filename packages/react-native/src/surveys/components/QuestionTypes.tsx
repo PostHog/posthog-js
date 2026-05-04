@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import React, { ReactNode, useMemo, useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 import {
   CheckSVG,
@@ -24,11 +24,9 @@ import {
   LinkSurveyQuestion,
   RatingSurveyQuestion,
   MultipleSurveyQuestion,
-  getValidationError,
-  getLengthFromRules,
-  getRequirementsHint,
   SurveyValidationType,
 } from '@posthog/core'
+import { getValidationError, getLengthFromRules, getRequirementsHint } from '@posthog/core/surveys'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 
@@ -36,6 +34,34 @@ interface QuestionCommonProps {
   question: SurveyQuestion
   appearance: SurveyAppearanceTheme
 }
+
+// Wraps question content in a scrollable region with a sticky BottomSection
+// (Submit button) at the bottom. The ScrollView has flexShrink: 1 so it
+// shrinks to fit when the parent modal is capped at its keyboard-aware
+// maxHeight, keeping Submit visible regardless of survey length.
+function QuestionLayout({ children, footer }: { children: ReactNode; footer: ReactNode }): JSX.Element {
+  return (
+    <View style={questionLayoutStyles.container}>
+      <ScrollView
+        style={questionLayoutStyles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+      {footer}
+    </View>
+  )
+}
+
+const questionLayoutStyles = StyleSheet.create({
+  container: {
+    flexShrink: 1,
+  },
+  scroll: {
+    flexShrink: 1,
+  },
+})
 
 export function OpenTextQuestion({
   question,
@@ -65,7 +91,16 @@ export function OpenTextQuestion({
   }
 
   return (
-    <View>
+    <QuestionLayout
+      footer={
+        <BottomSection
+          text={question.buttonText ?? appearance.submitButtonText}
+          submitDisabled={!!validationError}
+          appearance={appearance}
+          onSubmit={handleSubmit}
+        />
+      }
+    >
       <QuestionHeader
         question={question.question}
         description={question.description}
@@ -106,13 +141,7 @@ export function OpenTextQuestion({
           </Text>
         )}
       </View>
-      <BottomSection
-        text={question.buttonText ?? appearance.submitButtonText}
-        submitDisabled={!!validationError}
-        appearance={appearance}
-        onSubmit={handleSubmit}
-      />
-    </View>
+    </QuestionLayout>
   )
 }
 
@@ -126,21 +155,24 @@ export function LinkQuestion({
   question = question as LinkSurveyQuestion
 
   return (
-    <>
+    <QuestionLayout
+      footer={
+        <BottomSection
+          text={question.buttonText ?? appearance.submitButtonText ?? 'Submit'}
+          submitDisabled={false}
+          link={question.link}
+          appearance={appearance}
+          onSubmit={() => onSubmit('link clicked')}
+        />
+      }
+    >
       <QuestionHeader
         question={question.question}
         description={question.description}
         descriptionContentType={question.descriptionContentType}
         appearance={appearance}
       />
-      <BottomSection
-        text={question.buttonText ?? appearance.submitButtonText ?? 'Submit'}
-        submitDisabled={false}
-        link={question.link}
-        appearance={appearance}
-        onSubmit={() => onSubmit('link clicked')}
-      />
-    </>
+    </QuestionLayout>
   )
 }
 
@@ -156,7 +188,17 @@ export function RatingQuestion({
   question = question as RatingSurveyQuestion
 
   return (
-    <>
+    <QuestionLayout
+      footer={
+        <BottomSection
+          text={question.buttonText ?? appearance.submitButtonText}
+          submitDisabled={rating === null && !question.optional}
+          appearance={appearance}
+          onSubmit={() => onSubmit(rating)}
+          skipSubmitButton={question.skipSubmitButton}
+        />
+      }
+    >
       <QuestionHeader
         question={question.question}
         description={question.description}
@@ -229,14 +271,7 @@ export function RatingQuestion({
           </Text>
         </View>
       </View>
-      <BottomSection
-        text={question.buttonText ?? appearance.submitButtonText}
-        submitDisabled={rating === null && !question.optional}
-        appearance={appearance}
-        onSubmit={() => onSubmit(rating)}
-        skipSubmitButton={question.skipSubmitButton}
-      />
-    </>
+    </QuestionLayout>
   )
 }
 
@@ -292,7 +327,24 @@ export function MultipleChoiceQuestion({
   const shouldSkipSubmit = question.skipSubmitButton && isSingleChoice && !question.hasOpenChoice
 
   return (
-    <View>
+    <QuestionLayout
+      footer={
+        <BottomSection
+          text={question.buttonText ?? appearance.submitButtonText}
+          submitDisabled={
+            !question.optional &&
+            (selectedChoices.length === 0 ||
+              (openChoice !== null && selectedChoices.includes(openChoice) && openEndedInput.length === 0))
+          }
+          appearance={appearance}
+          onSubmit={() => {
+            const result = selectedChoices.map((c) => (c === openChoice ? openEndedInput : c))
+            onSubmit(allowMultiple ? result : result[0])
+          }}
+          skipSubmitButton={shouldSkipSubmit}
+        />
+      }
+    >
       <QuestionHeader
         question={question.question}
         description={question.description}
@@ -349,24 +401,7 @@ export function MultipleChoiceQuestion({
           )
         })}
       </View>
-      <BottomSection
-        text={question.buttonText ?? appearance.submitButtonText}
-        submitDisabled={
-          !question.optional &&
-          (selectedChoices.length === 0 ||
-            (openChoice !== null && selectedChoices.includes(openChoice) && openEndedInput.length === 0))
-        }
-        appearance={appearance}
-        onSubmit={() => {
-          // If open choice is selected, replace the choice name with the actual value entered
-          const result = selectedChoices.map((c) => (c === openChoice ? openEndedInput : c))
-          // For single choice questions, return the first element
-          // For multiple choice questions, always return an array
-          onSubmit(allowMultiple ? result : result[0])
-        }}
-        skipSubmitButton={shouldSkipSubmit}
-      />
-    </View>
+    </QuestionLayout>
   )
 }
 
@@ -402,6 +437,10 @@ const styles = StyleSheet.create({
     padding: 10,
     marginVertical: 10,
     fontSize: 16,
+    // Fixed height keeps the surrounding layout stable as the user types —
+    // the TextInput scrolls its own content internally
+    height: 80,
+    textAlignVertical: 'top',
   },
   ratingSection: {
     marginVertical: 10,

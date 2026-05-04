@@ -1,20 +1,33 @@
-/** Gemini streaming chat, tracked by PostHog. */
+/** Google Gemini streaming chat, tracked by PostHog via OpenTelemetry. */
 
-import { PostHog } from 'posthog-node'
-import { Gemini as GoogleGenAI } from '@posthog/ai/gemini'
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
+import { GenAIInstrumentation } from '@traceloop/instrumentation-google-generativeai'
+import { GoogleGenAI } from '@google/genai'
 
-const phClient = new PostHog(process.env.POSTHOG_API_KEY!, {
-    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+        'service.name': 'example-gemini-app',
+        'posthog.distinct_id': 'example-user',
+        foo: 'bar',
+        conversation_id: 'abc-123',
+    }),
+    spanProcessors: [
+        new PostHogSpanProcessor({
+            apiKey: process.env.POSTHOG_API_KEY!,
+            host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+        }),
+    ],
+    instrumentations: [new GenAIInstrumentation()],
 })
-const client = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY!,
-    posthog: phClient,
-})
+sdk.start()
 
 async function main() {
-    const stream = client.models.generateContentStream({
+    const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
+
+    const stream = await client.models.generateContentStream({
         model: 'gemini-2.5-flash',
-        posthogDistinctId: 'example-user',
         contents: 'Explain observability in three sentences.',
     })
 
@@ -26,7 +39,6 @@ async function main() {
     }
 
     console.log()
-    await phClient.shutdown()
 }
 
-main()
+main().finally(() => sdk.shutdown())

@@ -471,6 +471,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "__exceptionRateLimiterBucketSize": [
       "undefined",
       "number"
+    ],
+    "exception_steps": [
+      "undefined",
+      "ExceptionStepsConfig"
     ]
   },
   "session_idle_timeout_seconds": "number",
@@ -702,6 +706,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "null",
     "string"
   ],
+  "addTracingHeaders": [
+    "undefined",
+    "string[]"
+  ],
   "__add_tracing_headers": [
     "undefined",
     "string[]"
@@ -723,6 +731,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "__preview_disable_xhr_credentials": [
     "undefined",
+    "false",
+    "true"
+  ],
+  "__preview_external_dependency_versioned_paths": [
+    "undefined",
+    "string",
     "false",
     "true"
   ],

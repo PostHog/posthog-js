@@ -44,11 +44,11 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             color: getContrastTextColor(primaryColor),
             border: 'none',
             cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            filter: 'drop-shadow(rgba(9, 14, 21, 0.54) 0px 1px 6px) drop-shadow(rgba(9, 14, 21, 0.9) 0px 2px 32px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'transform 0.2s ease-out, box-shadow 0.2s ease-out',
+            transition: 'transform 0.2s ease-out',
         },
         unreadBadge: {
             position: 'absolute' as const,
@@ -201,6 +201,21 @@ export const getStyles = (primaryColor: string, position: WidgetPosition = 'bott
             gap: '8px',
             alignItems: 'center', // Changed from flex-end to center to vertically align input and sendButton
             flexShrink: 0,
+        },
+        resolvedBanner: {
+            paddingTop: '12px',
+            background: 'white',
+            borderTop: '1px solid #dcdcdc',
+            display: 'flex',
+            flexDirection: 'column' as const,
+            flexShrink: 0,
+        },
+        resolvedBannerText: {
+            padding: '0 20px',
+            fontSize: '13px',
+            color: '#64748b',
+            textAlign: 'center' as const,
+            lineHeight: 1.5,
         },
         input: {
             flex: 1,

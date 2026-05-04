@@ -24,6 +24,10 @@ export function buildSourcemapCliArgs(
         args.push('--release-version', config.sourcemaps.releaseVersion)
     }
 
+    if (config.sourcemaps.build !== undefined && config.sourcemaps.build !== '') {
+        args.push('--build', config.sourcemaps.build)
+    }
+
     if (config.sourcemaps.deleteAfterUpload) {
         args.push('--delete-after')
     }

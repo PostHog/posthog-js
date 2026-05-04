@@ -634,6 +634,80 @@ describe('Autocapture system', () => {
                 const spyArgs = beforeSendMock.mock.calls
                 expect(spyArgs.length).toBe(0)
             })
+
+            it('walks through the shadow root host on copy from inside a web component', () => {
+                const host = document.createElement('some-element')
+                document.body.appendChild(host)
+
+                try {
+                    const shadowRoot = host.attachShadow({ mode: 'open' })
+                    const paragraph = document.createElement('p')
+                    paragraph.appendChild(document.createTextNode('some text inside shadow dom'))
+                    shadowRoot.appendChild(paragraph)
+
+                    setWindowTextSelection('some text inside shadow dom')
+
+                    const fakeEvent = makeCopyEvent({ target: paragraph })
+
+                    autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')
+
+                    expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                    const captured = beforeSendMock.mock.calls[0][0]
+                    expect(captured.event).toEqual('$copy_autocapture')
+                    expect(captured.properties.$elements_chain).toContain('some-element')
+                } finally {
+                    host.remove()
+                }
+            })
+
+            it.each([
+                {
+                    name: 'text node inside a shadow root',
+                    buildTarget: () => {
+                        const host = document.createElement('some-element')
+                        document.body.appendChild(host)
+                        const shadowRoot = host.attachShadow({ mode: 'open' })
+                        const paragraph = document.createElement('p')
+                        const text = document.createTextNode('some text inside shadow dom')
+                        paragraph.appendChild(text)
+                        shadowRoot.appendChild(paragraph)
+                        return { target: text as unknown as EventTarget, cleanup: () => host.remove() }
+                    },
+                    selectedText: 'some text inside shadow dom',
+                },
+                {
+                    name: 'element inside a plain document fragment',
+                    buildTarget: () => {
+                        const fragment = document.createDocumentFragment()
+                        const paragraph = document.createElement('p')
+                        paragraph.innerText = 'detached'
+                        fragment.appendChild(paragraph)
+                        return { target: paragraph }
+                    },
+                    selectedText: 'detached',
+                },
+            ])('does not throw on copy from $name', ({ buildTarget, selectedText }) => {
+                const { target, cleanup } = buildTarget()
+
+                try {
+                    setWindowTextSelection(selectedText)
+                    const fakeEvent = makeCopyEvent({ target })
+                    expect(() => autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')).not.toThrow()
+                } finally {
+                    cleanup?.()
+                }
+            })
+
+            it('does not throw on click whose target ancestor chain includes a plain document fragment', () => {
+                const fragment = document.createDocumentFragment()
+                const button = document.createElement('button')
+                button.innerText = 'detached button'
+                fragment.appendChild(button)
+
+                const fakeEvent = makeMouseEvent({ target: button })
+
+                expect(() => autocapture['_captureEvent'](fakeEvent)).not.toThrow()
+            })
         })
 
         it('should capture augment properties', () => {

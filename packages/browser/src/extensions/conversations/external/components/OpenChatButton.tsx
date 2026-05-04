@@ -26,11 +26,9 @@ export const OpenChatButton = ({
                     aria-label={unreadCount > 0 ? `Open chat (${unreadCount} unread)` : 'Open chat'}
                     onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.05)'
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.2)'
                     }}
                     onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'scale(1)'
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)'
                     }}
                 >
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -2,11 +2,11 @@ import 'server-only'
 
 import { isFunction } from '@posthog/core'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
-import { cookies, headers } from 'next/headers'
-import { getOrCreateNodeClient } from './nodeClientCache'
-import { readPostHogCookie, isOptedOut } from '../shared/cookie'
-import { resolveApiKey } from '../shared/config'
-import { readTracingHeaders, buildContextData } from '../shared/tracing-headers'
+import { cookies, headers } from 'next/headers.js'
+import { getOrCreateNodeClient } from './nodeClientCache.js'
+import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
+import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.js'
 
 /**
  * Returns a PostHog server client scoped to the current request.
@@ -35,8 +35,8 @@ import { readTracingHeaders, buildContextData } from '../shared/tracing-headers'
  */
 export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptions>): Promise<IPostHog> {
     const resolvedApiKey = resolveApiKey(apiKey)
-    const host = options?.host ?? process.env.NEXT_PUBLIC_POSTHOG_HOST
-    const resolvedOptions = host ? { ...options, host } : options
+    const host = resolveHostOrDefault(options?.host)
+    const resolvedOptions = { ...options, host }
     const client = await getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
     const cookieStore = await cookies()
 

@@ -1,8 +1,8 @@
 'use client'
 
 import { Suspense, useEffect } from 'react'
-import { usePathname, useSearchParams } from 'next/navigation'
-import { usePostHog } from 'posthog-js/react'
+import { usePathname, useSearchParams } from 'next/navigation.js'
+import { usePostHog } from '@posthog/react'
 
 /**
  * Tracks pageviews on route change in Next.js App Router.

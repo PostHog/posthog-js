@@ -140,13 +140,60 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   placeholder: 'Start typing...',
   displayThankYouMessage: true,
   thankYouMessageHeader: 'Thank you for your feedback!',
-  position: SurveyPosition.Right,
+  position: SurveyPosition.Center,
   submitButtonText: 'Submit',
   autoDisappear: false,
   thankYouMessageDescription: '',
   thankYouMessageDescriptionContentType: SurveyQuestionDescriptionContentType.Text,
   thankYouMessageCloseButtonText: 'Close',
   surveyPopupDelaySeconds: 0,
+}
+
+export type SurveyFlexAlign = 'flex-start' | 'center' | 'flex-end'
+
+const KNOWN_SURVEY_POSITIONS: ReadonlySet<string> = new Set(Object.values(SurveyPosition))
+const warnedUnknownPositions = new Set<string>()
+
+// Mirrors web SDK semantics: `.ph-survey` is bottom-anchored by default and
+// getPopoverPosition only overrides `top` for top_* / middle_* variants. So
+// `left` / `right` / `center` (no prefix) anchor to the bottom edge — they
+// are NOT shorthand for middle.
+export function resolveSurveyAlignment(position: string | undefined): {
+  vertical: SurveyFlexAlign
+  horizontal: SurveyFlexAlign
+} {
+  let resolvedPosition: SurveyPosition = defaultSurveyAppearance.position
+  if (position) {
+    if (KNOWN_SURVEY_POSITIONS.has(position)) {
+      resolvedPosition = position as SurveyPosition
+    } else if (!warnedUnknownPositions.has(position)) {
+      warnedUnknownPositions.add(position)
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[PostHog.surveys] Unknown survey position ${JSON.stringify(position)} — falling back to ${defaultSurveyAppearance.position}. Expected one of: ${Object.values(SurveyPosition).join(', ')}.`
+      )
+    }
+  }
+  const isTop =
+    resolvedPosition === SurveyPosition.TopLeft ||
+    resolvedPosition === SurveyPosition.TopCenter ||
+    resolvedPosition === SurveyPosition.TopRight
+  const isMiddle =
+    resolvedPosition === SurveyPosition.MiddleLeft ||
+    resolvedPosition === SurveyPosition.MiddleCenter ||
+    resolvedPosition === SurveyPosition.MiddleRight
+  const isLeft =
+    resolvedPosition === SurveyPosition.TopLeft ||
+    resolvedPosition === SurveyPosition.MiddleLeft ||
+    resolvedPosition === SurveyPosition.Left
+  const isRight =
+    resolvedPosition === SurveyPosition.TopRight ||
+    resolvedPosition === SurveyPosition.MiddleRight ||
+    resolvedPosition === SurveyPosition.Right
+  return {
+    vertical: isTop ? 'flex-start' : isMiddle ? 'center' : 'flex-end',
+    horizontal: isLeft ? 'flex-start' : isRight ? 'flex-end' : 'center',
+  }
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {

@@ -12,10 +12,7 @@ jest.mock('posthog-node', () => ({
     })),
 }))
 
-function createMockContext(
-    cookies: Record<string, string> = {},
-    extraHeaders: Record<string, string> = {}
-) {
+function createMockContext(cookies: Record<string, string> = {}, extraHeaders: Record<string, string> = {}) {
     return {
         req: {
             headers: {
@@ -38,6 +35,7 @@ describe('getServerSidePostHog', () => {
     })
 
     it('returns a posthog client', async () => {
+        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -47,6 +45,9 @@ describe('getServerSidePostHog', () => {
 
         const posthog = await getServerSidePostHog(ctx, 'phc_test123')
         expect(posthog).toBeDefined()
+        expect(PostHog).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://us.i.posthog.com',
+        })
     })
 
     it('calls enterContext with distinctId and properties', async () => {
@@ -85,6 +86,28 @@ describe('getServerSidePostHog', () => {
     it('throws when no apiKey provided and env not set', async () => {
         const ctx = createMockContext({})
         await expect(getServerSidePostHog(ctx)).rejects.toThrow('apiKey is required')
+    })
+
+    it('trims apiKey and host before creating the node client', async () => {
+        const { PostHog } = require('posthog-node')
+        const ctx = createMockContext({})
+
+        await getServerSidePostHog(ctx, '  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })
+
+        expect(PostHog).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://custom.posthog.com/',
+        })
+    })
+
+    it('defaults host when it is omitted', async () => {
+        const { PostHog } = require('posthog-node')
+        const ctx = createMockContext({})
+
+        await getServerSidePostHog(ctx, 'phc_default_host_test')
+
+        expect(PostHog).toHaveBeenCalledWith('phc_default_host_test', {
+            host: 'https://us.i.posthog.com',
+        })
     })
 
     describe('tracing headers', () => {

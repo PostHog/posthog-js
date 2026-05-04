@@ -7,7 +7,7 @@
         "url": "git+https://github.com/PostHog/posthog-js.git",
         "directory": "packages/react"
     },
-    "author": "hey@posthog.com",
+    "author": "engineering@posthog.com",
     "license": "MIT",
     "homepage": "https://posthog.com/docs/libraries/react",
     "packageManager": "pnpm@10.12.4",

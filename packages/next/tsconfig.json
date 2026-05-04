@@ -11,10 +11,7 @@
         "isolatedModules": true,
         "lib": ["ES2022", "DOM"],
         "outDir": "dist",
-        "rootDir": ".",
-        "paths": {
-            "posthog-js/react": ["../react/dist/types/index.d.ts"]
-        }
+        "rootDir": "."
     },
     "include": ["src", "tests"],
     "exclude": ["node_modules", "dist"]

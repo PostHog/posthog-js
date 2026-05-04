@@ -49,12 +49,18 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     writeResultsJsonFile(t.testRun.test.name, testSessionId, assertCustomEventsWorkAndAreAccessibleViaApi)
 })
 
-export async function assertCustomEventsWorkAndAreAccessibleViaApi(testSessionId, deadline) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, { deadline })
+async function validateCustomEventsWorkAndAreAccessibleViaApi(results) {
     expect(results.length).toEqual(3)
     expect(results.filter(({ event }) => event === 'custom-event').length).toEqual(1)
     expect(results.filter(({ event }) => event === '$pageview').length).toEqual(1)
     expect(results.filter(({ event }) => event === '$autocapture').length).toEqual(1)
+}
+
+export async function assertCustomEventsWorkAndAreAccessibleViaApi(testSessionId, deadline) {
+    await retryUntilResults(() => queryAPI(testSessionId), 3, {
+        deadline,
+        validate: validateCustomEventsWorkAndAreAccessibleViaApi,
+    })
 }
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
@@ -80,11 +86,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 })
 
-export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(testSessionId, deadline) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, {
-        deadline,
-    })
-
+async function validateAutocapturedEventsWorkAndAreAccessibleViaApi(results) {
     expect(results.filter(({ event }) => event === '$pageview').length).toEqual(1)
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
 
@@ -111,6 +113,13 @@ export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(testSes
         'attr__data-sensitive',
         'attr__id',
     ])
+}
+
+export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(testSessionId, deadline) {
+    await retryUntilResults(() => queryAPI(testSessionId), 3, {
+        deadline,
+        validate: validateAutocapturedEventsWorkAndAreAccessibleViaApi,
+    })
 }
 
 test('Config options change autocapture behavior accordingly', async (t) => {
@@ -140,11 +149,7 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     writeResultsJsonFile(t.testRun.test.name, testSessionId, assertConfigOptionsChangeAutocaptureBehaviourAccordingly)
 })
 
-export async function assertConfigOptionsChangeAutocaptureBehaviourAccordingly(testSessionId, deadline) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, {
-        deadline,
-    })
-
+async function validateConfigOptionsChangeAutocaptureBehaviourAccordingly(results) {
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
     await expect(autocapturedEvents.length).toEqual(2)
 
@@ -157,4 +162,11 @@ export async function assertConfigOptionsChangeAutocaptureBehaviourAccordingly(t
 
     // mask_all_element_attributes does not capture any attributes at all from all elements
     await expect(Object.keys(autocapturedButtonElement.attributes).length).toEqual(0)
+}
+
+export async function assertConfigOptionsChangeAutocaptureBehaviourAccordingly(testSessionId, deadline) {
+    await retryUntilResults(() => queryAPI(testSessionId), 3, {
+        deadline,
+        validate: validateConfigOptionsChangeAutocaptureBehaviourAccordingly,
+    })
 }

@@ -951,6 +951,19 @@ describe('PostHog Node.js', () => {
       expect(posthog.options.featureFlagsPollingInterval).toEqual(30000)
     })
 
+    it('should trim whitespace-sensitive api keys and host during initialization', async () => {
+      posthog = new PostHog('  TEST_API_KEY\n', {
+        host: '  http://example.com\t ',
+        fetchRetryCount: 0,
+        personalApiKey: '  TEST_PERSONAL_API_KEY\t ',
+        disableCompression: true,
+      })
+
+      expect(posthog.apiKey).toEqual('TEST_API_KEY')
+      expect(posthog.host).toEqual('http://example.com')
+      expect(posthog.options.personalApiKey).toEqual('TEST_PERSONAL_API_KEY')
+    })
+
     it('should throw an error when creating SDK if a project key is passed in as personalApiKey', async () => {
       expect(() => {
         posthog = new PostHog('TEST_API_KEY', {

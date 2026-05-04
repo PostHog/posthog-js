@@ -3,12 +3,12 @@ import { PostHog } from 'posthog-node'
 import {
   AIEvent,
   formatResponseOpenAI,
+  getModelParams,
   MonitoringParams,
-  sendEventToPosthog,
-  sendEventWithErrorToPosthog,
   withPrivacyMode,
   formatOpenAIResponsesInput,
 } from '../utils'
+import { captureAiGeneration } from '../captureAiGeneration'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -229,8 +229,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
 
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-              await sendEventToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
@@ -239,13 +238,12 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 httpStatus: 200,
                 usage,
               })
             } catch (error: unknown) {
-              const enrichedError = await sendEventWithErrorToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
@@ -253,11 +251,11 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error: error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -271,8 +269,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
         async (result) => {
           if ('choices' in result) {
             const latency = (Date.now() - startTime) / 1000
-            await sendEventToPosthog({
-              client: this.phClient,
+            await captureAiGeneration(this.phClient, {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'azure',
@@ -280,7 +277,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               output: formatResponseOpenAI(result),
               latency,
               baseURL: this.baseURL,
-              params: body,
+              modelParameters: getModelParams(body),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.prompt_tokens ?? 0,
@@ -298,8 +295,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               ? ((error as { status?: number }).status ?? 500)
               : 500
 
-          await sendEventToPosthog({
-            client: this.phClient,
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'azure',
@@ -307,13 +303,13 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             output: [],
             latency: 0,
             baseURL: this.baseURL,
-            params: body,
+            modelParameters: getModelParams(body),
             httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            error: JSON.stringify(error),
+            error,
           })
           throw error
         }
@@ -413,8 +409,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
 
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-              await sendEventToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
@@ -423,13 +418,12 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 httpStatus: 200,
                 usage,
               })
             } catch (error: unknown) {
-              const enrichedError = await sendEventWithErrorToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
@@ -437,11 +431,11 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error: error,
               })
-              throw enrichedError
+              throw error
             }
           })()
 
@@ -454,8 +448,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         async (result) => {
           if ('output' in result) {
             const latency = (Date.now() - startTime) / 1000
-            await sendEventToPosthog({
-              client: this.phClient,
+            await captureAiGeneration(this.phClient, {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'azure',
@@ -463,7 +456,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               output: result.output,
               latency,
               baseURL: this.baseURL,
-              params: body,
+              modelParameters: getModelParams(body),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.input_tokens ?? 0,
@@ -481,8 +474,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               ? ((error as { status?: number }).status ?? 500)
               : 500
 
-          await sendEventToPosthog({
-            client: this.phClient,
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'azure',
@@ -490,13 +482,13 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             output: [],
             latency: 0,
             baseURL: this.baseURL,
-            params: body,
+            modelParameters: getModelParams(body),
             httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            error: JSON.stringify(error),
+            error,
           })
           throw error
         }
@@ -518,8 +510,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     const wrappedPromise = parentPromise.then(
       async (result) => {
         const latency = (Date.now() - startTime) / 1000
-        await sendEventToPosthog({
-          client: this.phClient,
+        await captureAiGeneration(this.phClient, {
           ...posthogParams,
           model: openAIParams.model ?? result.model,
           provider: 'azure',
@@ -527,7 +518,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           output: result.output,
           latency,
           baseURL: this.baseURL,
-          params: body,
+          modelParameters: getModelParams(body),
           httpStatus: 200,
           usage: {
             inputTokens: result.usage?.input_tokens ?? 0,
@@ -539,8 +530,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         return result
       },
       async (error: any) => {
-        await sendEventToPosthog({
-          client: this.phClient,
+        await captureAiGeneration(this.phClient, {
           ...posthogParams,
           model: openAIParams.model,
           provider: 'azure',
@@ -548,13 +538,13 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           output: [],
           latency: 0,
           baseURL: this.baseURL,
-          params: body,
+          modelParameters: getModelParams(body),
           httpStatus: error?.status ? error.status : 500,
           usage: {
             inputTokens: 0,
             outputTokens: 0,
           },
-          error: JSON.stringify(error),
+          error,
         })
         throw error
       }
@@ -585,8 +575,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
     const wrappedPromise = parentPromise.then(
       async (result) => {
         const latency = (Date.now() - startTime) / 1000
-        await sendEventToPosthog({
-          client: this.phClient,
+        await captureAiGeneration(this.phClient, {
           eventType: AIEvent.Embedding,
           ...posthogParams,
           model: openAIParams.model,
@@ -595,7 +584,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
           output: null, // Embeddings don't have output content
           latency,
           baseURL: this.baseURL,
-          params: body,
+          modelParameters: getModelParams(body),
           httpStatus: 200,
           usage: {
             inputTokens: result.usage?.prompt_tokens ?? 0,
@@ -607,8 +596,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
         const httpStatus =
           error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
 
-        await sendEventToPosthog({
-          client: this.phClient,
+        await captureAiGeneration(this.phClient, {
           eventType: AIEvent.Embedding,
           ...posthogParams,
           model: openAIParams.model,
@@ -617,12 +605,12 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
           output: null,
           latency: 0,
           baseURL: this.baseURL,
-          params: body,
+          modelParameters: getModelParams(body),
           httpStatus,
           usage: {
             inputTokens: 0,
           },
-          error: JSON.stringify(error),
+          error,
         })
         throw error
       }

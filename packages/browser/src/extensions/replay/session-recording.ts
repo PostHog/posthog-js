@@ -1,11 +1,12 @@
 import {
+    COOKIELESS_ALWAYS,
+    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
     SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_REMOTE_CONFIG,
-    COOKIELESS_ALWAYS,
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigLoader } from '../../remote-config'
@@ -217,6 +218,9 @@ export class SessionRecording implements Extension {
                         triggerMatchType: sessionRecordingConfigResponse?.triggerMatchType,
                         masking: sessionRecordingConfigResponse?.masking,
                         urlTriggers: sessionRecordingConfigResponse?.urlTriggers,
+                        // V2 fields - will be undefined for V1 configs
+                        version: sessionRecordingConfigResponse?.version,
+                        triggerGroups: sessionRecordingConfigResponse?.triggerGroups,
                     } satisfies SessionRecordingPersistedConfig,
                 })
             }
@@ -282,7 +286,7 @@ export class SessionRecording implements Extension {
                 'Called on script loaded before session recording is available. This can be caused by adblockers.'
             )
             this._instance.register_for_session({
-                $sdk_debug_recording_script_not_loaded: true,
+                [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
             })
             return
         }

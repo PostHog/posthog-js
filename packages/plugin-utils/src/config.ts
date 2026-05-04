@@ -1,5 +1,16 @@
 import { resolveBinaryPath } from './utils'
 
+const DEFAULT_PLUGIN_HOST = 'https://us.i.posthog.com'
+
+function normalizeApiKey(value?: unknown): string {
+    return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeHost(value?: unknown): string {
+    const normalizedHost = typeof value === 'string' ? value.trim() : ''
+    return normalizedHost || DEFAULT_PLUGIN_HOST
+}
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 
 export interface PluginConfig {
@@ -18,6 +29,7 @@ export interface PluginConfig {
         /** @deprecated Use releaseVersion instead */
         version?: string
         releaseVersion?: string
+        build?: string | number
         deleteAfterUpload?: boolean
         batchSize?: number
     }
@@ -32,6 +44,7 @@ export interface ResolvedPluginConfig extends Omit<PluginConfig, 'envId' | 'proj
         enabled: boolean
         releaseName?: string
         releaseVersion?: string
+        build?: string
         deleteAfterUpload: boolean
         batchSize?: number
     }
@@ -46,7 +59,8 @@ export interface ResolveConfigOptions {
 
 export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveConfigOptions): ResolvedPluginConfig {
     const projectId = options.projectId ?? options.envId
-    const host = options.host ?? 'https://us.i.posthog.com'
+    const personalApiKey = normalizeApiKey(options.personalApiKey)
+    const host = normalizeHost(options.host)
     const logLevel = options.logLevel ?? 'info'
     const cwd = resolveOptions?.cwd ?? process.cwd()
     const cliBinaryPath =
@@ -64,13 +78,13 @@ export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveCon
         if (!projectId) {
             throw new Error('projectId is required when sourcemaps are enabled (envId is deprecated)')
         }
-        if (!options.personalApiKey) {
+        if (!personalApiKey) {
             throw new Error('personalApiKey is required when sourcemaps are enabled')
         }
     }
 
     return {
-        personalApiKey: options.personalApiKey,
+        personalApiKey,
         projectId,
         host,
         logLevel,
@@ -79,6 +93,7 @@ export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveCon
             enabled,
             releaseName: userSourcemaps.releaseName ?? userSourcemaps.project,
             releaseVersion: userSourcemaps.releaseVersion ?? userSourcemaps.version,
+            build: userSourcemaps.build !== undefined ? String(userSourcemaps.build) : undefined,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
             batchSize: userSourcemaps.batchSize,
         },

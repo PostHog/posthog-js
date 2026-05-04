@@ -49,7 +49,7 @@ function createMockHeaders(entries: Record<string, string>) {
 
 const mockHeaderStore = createMockHeaders({})
 
-jest.mock('next/headers', () => ({
+jest.mock('next/headers.js', () => ({
     cookies: jest.fn(() => Promise.resolve(mockCookieStore)),
     headers: jest.fn(() => Promise.resolve(mockHeaderStore)),
 }))
@@ -73,7 +73,7 @@ jest.mock('../src/server/nodeClientCache', () => ({
 }))
 
 import { getPostHog } from '../src/server/getPostHog'
-import { cookies, headers } from 'next/headers'
+import { cookies, headers } from 'next/headers.js'
 
 describe('getPostHog', () => {
     const originalEnv = process.env
@@ -148,7 +148,9 @@ describe('getPostHog', () => {
 
         await getPostHog('phc_explicit_key')
 
-        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_explicit_key', undefined)
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_explicit_key', {
+            host: 'https://us.i.posthog.com',
+        })
     })
 
     it('falls back to NEXT_PUBLIC_POSTHOG_KEY env var when no apiKey provided', async () => {
@@ -156,7 +158,9 @@ describe('getPostHog', () => {
 
         await getPostHog()
 
-        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_env_key', undefined)
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_env_key', {
+            host: 'https://us.i.posthog.com',
+        })
     })
 
     it('throws when no apiKey provided and env var missing', async () => {
@@ -172,6 +176,22 @@ describe('getPostHog', () => {
 
         expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
             host: 'https://custom.posthog.com',
+        })
+    })
+
+    it('defaults host when it is omitted', async () => {
+        await getPostHog('phc_test123')
+
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://us.i.posthog.com',
+        })
+    })
+
+    it('trims apiKey and host before creating the node client', async () => {
+        await getPostHog('  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })
+
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('phc_test123', {
+            host: 'https://custom.posthog.com/',
         })
     })
 

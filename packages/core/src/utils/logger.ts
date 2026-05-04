@@ -2,10 +2,10 @@ import { Logger } from '../types'
 
 // We want to make sure to get the original console methods as soon as possible
 type ConsoleLike = {
+  debug: (...args: any[]) => void
   log: (...args: any[]) => void
   warn: (...args: any[]) => void
   error: (...args: any[]) => void
-  debug: (...args: any[]) => void
 }
 
 function createConsole(consoleLike: ConsoleLike = console): ConsoleLike {
@@ -23,7 +23,7 @@ export const _createLogger = (
   maybeCall: (fn: () => void) => void,
   consoleLike: ConsoleLike
 ): Logger => {
-  function _log(level: 'log' | 'warn' | 'error', ...args: any[]) {
+  function _log(level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) {
     maybeCall(() => {
       const consoleMethod = consoleLike[level]
       consoleMethod(prefix, ...args)
@@ -31,6 +31,10 @@ export const _createLogger = (
   }
 
   const logger: Logger = {
+    debug: (...args: any[]) => {
+      _log('debug', ...args)
+    },
+
     info: (...args: any[]) => {
       _log('log', ...args)
     },
