@@ -290,8 +290,8 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
               },
             })
           } else if (part.inlineData) {
-            // Handle audio/media inline data
-            const mimeType = part.inlineData.mimeType || 'audio/pcm'
+            // Handle inline data (images, audio, documents)
+            const mimeType = part.inlineData.mimeType || part.inlineData.mime_type || 'application/octet-stream'
             let data = part.inlineData.data
 
             // Handle binary data (Uint8Array/Buffer -> base64)
@@ -310,11 +310,13 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             // Sanitize base64 data for images and other large inline data
             data = redactBase64DataUrl(data)
 
-            content.push({
-              type: 'audio',
-              mime_type: mimeType,
-              data: data,
-            })
+            if (mimeType.startsWith('audio/')) {
+              content.push({ type: 'audio', mime_type: mimeType, data })
+            } else if (mimeType.startsWith('image/')) {
+              content.push({ type: 'image', inline_data: { mime_type: mimeType, data } })
+            } else {
+              content.push({ type: 'document', inline_data: { mime_type: mimeType, data } })
+            }
           }
         }
 

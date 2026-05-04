@@ -29,8 +29,8 @@ export interface FormattedFunctionCall {
 export interface FormattedImageContent {
   type: 'image'
   image?: string
-  inlineData?: {
-    mimeType: string
+  inline_data?: {
+    mime_type: string
     data: string
   }
 }
@@ -52,7 +52,11 @@ export interface FormattedAudioContent {
  */
 export interface FormattedDocumentContent {
   type: 'document'
-  source: {
+  inline_data?: {
+    mime_type: string
+    data: string
+  }
+  source?: {
     type: 'base64'
     media_type: string
     data: string
