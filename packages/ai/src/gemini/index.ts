@@ -19,6 +19,7 @@ import {
   toContentString,
   sendEventWithErrorToPosthog,
   withPrivacyMode,
+  buildInlineDataBlock,
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
@@ -320,15 +321,7 @@ export class WrappedModels {
       else if (part && typeof part === 'object' && 'inlineData' in part) {
         const inlineData = (part as any).inlineData
         const mimeType = inlineData.mimeType || inlineData.mime_type || 'application/octet-stream'
-        const inline_data = { mime_type: mimeType, data: inlineData.data }
-
-        if (mimeType.startsWith('audio/')) {
-          blocks.push({ type: 'audio', mime_type: mimeType, data: inlineData.data })
-        } else if (mimeType.startsWith('image/')) {
-          blocks.push({ type: 'image', inline_data })
-        } else {
-          blocks.push({ type: 'document', inline_data })
-        }
+        blocks.push(buildInlineDataBlock(mimeType, inlineData.data))
       }
     }
 

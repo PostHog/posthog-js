@@ -369,90 +369,29 @@ describe('Tool Handling Tests', () => {
       ])
     })
 
-    it('should emit image type for image/* mime types', () => {
-      // Long enough that redactBase64DataUrl flags it as raw base64 when multimodal is off.
-      const data = 'A'.repeat(64)
+    // Long enough that redactBase64DataUrl flags it as raw base64 when multimodal is off.
+    const longBase64 = 'A'.repeat(64)
+    const redacted = '[base64 image redacted]'
+
+    it.each([
+      ['image/jpeg', 'image', { mime_type: 'image/jpeg', data: redacted }],
+      ['application/pdf', 'document', { mime_type: 'application/pdf', data: redacted }],
+      [undefined, 'document', { mime_type: 'application/octet-stream', data: redacted }],
+    ])('inlineData with mimeType %s emits type %s with inline_data', (mimeType, expectedType, expectedInlineData) => {
       const response = {
         candidates: [
           {
             content: {
-              parts: [{ inlineData: { mimeType: 'image/jpeg', data } }],
+              parts: [{ inlineData: mimeType ? { mimeType, data: longBase64 } : { data: longBase64 } }],
             },
           },
         ],
       }
 
-      const formatted = formatResponseGemini(response)
-      expect(formatted).toEqual([
+      expect(formatResponseGemini(response)).toEqual([
         {
           role: 'assistant',
-          content: [
-            {
-              type: 'image',
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: '[base64 image redacted]',
-              },
-            },
-          ],
-        },
-      ])
-    })
-
-    it('should emit document type for application/* mime types', () => {
-      const data = 'A'.repeat(64)
-      const response = {
-        candidates: [
-          {
-            content: {
-              parts: [{ inlineData: { mimeType: 'application/pdf', data } }],
-            },
-          },
-        ],
-      }
-
-      const formatted = formatResponseGemini(response)
-      expect(formatted).toEqual([
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'document',
-              inline_data: {
-                mime_type: 'application/pdf',
-                data: '[base64 image redacted]',
-              },
-            },
-          ],
-        },
-      ])
-    })
-
-    it('should default unknown mime types to document, not audio', () => {
-      const data = 'A'.repeat(64)
-      const response = {
-        candidates: [
-          {
-            content: {
-              parts: [{ inlineData: { data } }],
-            },
-          },
-        ],
-      }
-
-      const formatted = formatResponseGemini(response)
-      expect(formatted).toEqual([
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'document',
-              inline_data: {
-                mime_type: 'application/octet-stream',
-                data: '[base64 image redacted]',
-              },
-            },
-          ],
+          content: [{ type: expectedType, inline_data: expectedInlineData }],
         },
       ])
     })

@@ -4,7 +4,14 @@ import AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
 import type { Tool as GeminiTool } from '@google/genai'
-import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
+import type {
+  FormattedMessage,
+  FormattedContent,
+  FormattedAudioContent,
+  FormattedImageContent,
+  FormattedDocumentContent,
+  TokenUsage,
+} from './types'
 import { version } from '../package.json'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
@@ -270,6 +277,19 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
   return output
 }
 
+export const buildInlineDataBlock = (
+  mimeType: string,
+  data: string
+): FormattedAudioContent | FormattedImageContent | FormattedDocumentContent => {
+  if (mimeType.startsWith('audio/')) {
+    return { type: 'audio', mime_type: mimeType, data }
+  }
+  if (mimeType.startsWith('image/')) {
+    return { type: 'image', inline_data: { mime_type: mimeType, data } }
+  }
+  return { type: 'document', inline_data: { mime_type: mimeType, data } }
+}
+
 export const formatResponseGemini = (response: any): FormattedMessage[] => {
   const output: FormattedMessage[] = []
 
@@ -310,13 +330,7 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             // Sanitize base64 data for images and other large inline data
             data = redactBase64DataUrl(data)
 
-            if (mimeType.startsWith('audio/')) {
-              content.push({ type: 'audio', mime_type: mimeType, data })
-            } else if (mimeType.startsWith('image/')) {
-              content.push({ type: 'image', inline_data: { mime_type: mimeType, data } })
-            } else {
-              content.push({ type: 'document', inline_data: { mime_type: mimeType, data } })
-            }
+            content.push(buildInlineDataBlock(mimeType, data))
           }
         }
 
