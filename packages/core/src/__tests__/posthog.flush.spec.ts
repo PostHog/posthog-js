@@ -49,37 +49,28 @@ describe('PostHog Core', () => {
       ])
     })
 
-    it('calls response.body.cancel() after successful flush to consume body', async () => {
-      const mockCancel = jest.fn().mockResolvedValue(undefined)
+    it.each([
+      ['with ReadableStream body', { cancel: jest.fn().mockResolvedValue(undefined) }, true],
+      ['with null body', null, false],
+    ])('consumes response body after flush (%s)', async (_label, body, expectCancel) => {
+      const cancelFn = body?.cancel
 
       mocks.fetch.mockImplementation(async () => {
         return Promise.resolve({
           status: 200,
           text: () => Promise.resolve('ok'),
           json: () => Promise.resolve({ status: 'ok' }),
-          body: { cancel: mockCancel },
+          body,
         })
       })
 
       posthog.capture('test-event-1')
       jest.useRealTimers()
       await expect(posthog.flush()).resolves.not.toThrow()
-      expect(mockCancel).toHaveBeenCalledTimes(1)
-    })
 
-    it('handles null response body gracefully after flush', async () => {
-      mocks.fetch.mockImplementation(async () => {
-        return Promise.resolve({
-          status: 200,
-          text: () => Promise.resolve('ok'),
-          json: () => Promise.resolve({ status: 'ok' }),
-          body: null,
-        })
-      })
-
-      posthog.capture('test-event-1')
-      jest.useRealTimers()
-      await expect(posthog.flush()).resolves.not.toThrow()
+      if (expectCancel) {
+        expect(cancelFn).toHaveBeenCalledTimes(1)
+      }
     })
 
     it.each([400, 500])('responds with an error after retries with %s error', async (status) => {
@@ -229,23 +220,6 @@ describe('PostHog Core', () => {
       posthog.capture('test-event-1')
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
       expect(mocks.fetch).toHaveBeenCalledTimes(1)
-    })
-
-    it('calls response.body.cancel() after a successful flush', async () => {
-      const cancelFn = jest.fn().mockResolvedValue(undefined)
-
-      mocks.fetch.mockImplementation(() => {
-        return Promise.resolve({
-          status: 200,
-          text: () => Promise.resolve('ok'),
-          json: () => Promise.resolve({ status: 'ok' }),
-          body: { cancel: cancelFn },
-        })
-      })
-
-      posthog.capture('test-event-1')
-      await expect(posthog.flush()).resolves.not.toThrow()
-      expect(cancelFn).toHaveBeenCalledTimes(1)
     })
 
     it('should stop at first error', async () => {
