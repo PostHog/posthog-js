@@ -997,7 +997,11 @@ export abstract class PostHogCoreStateless {
     }
 
     try {
-      await this.fetchWithRetry(url, fetchOptions)
+      const response = await this.fetchWithRetry(url, fetchOptions)
+      // Consume the response body to prevent cross-request promise warnings
+      // in runtimes like Cloudflare Workers that enforce body consumption.
+      // See: https://github.com/PostHog/posthog-js/issues/3173
+      await response.body?.cancel()?.catch(() => {})
     } catch (err) {
       this._events.emit('error', err)
     }
@@ -1176,7 +1180,11 @@ export abstract class PostHogCoreStateless {
       }
 
       try {
-        await this.fetchWithRetry(url, fetchOptions, retryOptions)
+        const response = await this.fetchWithRetry(url, fetchOptions, retryOptions)
+        // Consume the response body to prevent cross-request promise warnings
+        // in runtimes like Cloudflare Workers that enforce body consumption.
+        // See: https://github.com/PostHog/posthog-js/issues/3173
+        await response.body?.cancel()?.catch(() => {})
       } catch (err) {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
