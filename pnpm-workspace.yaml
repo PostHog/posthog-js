@@ -52,3 +52,4 @@ supportedArchitectures:
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
+enableGlobalVirtualStore: true
