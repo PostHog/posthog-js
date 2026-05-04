@@ -3,6 +3,7 @@ import type { Logger } from '@posthog/core'
 jest.mock('../../utils/logger', () => {
     const mockLogger: Logger = {
         _log: jest.fn(),
+        debug: jest.fn(),
         critical: jest.fn(),
         uninitializedWarning: jest.fn(),
         info: jest.fn(),

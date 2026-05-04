@@ -566,6 +566,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   private async remoteConfigAsync(): Promise<PostHogRemoteConfig | undefined> {
     await this._initPromise
+    if (this.disabled) {
+      return undefined
+    }
     if (this._remoteConfigResponsePromise) {
       return this._remoteConfigResponsePromise
     }
@@ -578,6 +581,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   protected async flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
     const { sendAnonDistinctId = true, fetchConfig = false, triggerOnRemoteConfig = false } = options ?? {}
     await this._initPromise
+    if (this.disabled) {
+      return undefined
+    }
     if (this._flagsResponsePromise) {
       // Queue the reload request instead of dropping it
       // This ensures that requests with $anon_distinct_id (from identify()) are not lost

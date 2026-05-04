@@ -1,4 +1,5 @@
-import type { CaptureLogOptions, LogSdkContext, LogSeverityLevel } from '@posthog/types'
+import type { CaptureLogOptions, LogSeverityLevel } from '@posthog/types'
+import type { LogSdkContext } from './types'
 import {
   buildOtlpLogRecord,
   buildOtlpLogsPayload,

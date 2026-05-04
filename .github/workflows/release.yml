@@ -393,7 +393,9 @@ jobs:
               uses: actions/upload-artifact@v7
               with:
                   name: posthog-js-dist
-                  path: packages/browser/dist/*.js
+                  path: |
+                      packages/browser/dist/*.js
+                      packages/browser/dist/*.js.map
                   retention-days: 1
                   if-no-files-found: error
 
@@ -471,7 +473,7 @@ jobs:
             # upload step has stable filenames. The runtime CSS loader in the
             # JS bundle expects the literal `toolbar.css`.
             #
-            # Source maps are discarded (we don't ship them to end users).
+            # Toolbar source maps are discarded (we don't ship them to end users).
             - name: Normalize toolbar output filenames
               run: |
                   set -euo pipefail

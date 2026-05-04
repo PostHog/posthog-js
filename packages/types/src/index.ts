@@ -103,5 +103,4 @@ export type {
     OtlpKeyValue,
     OtlpLogRecord,
     OtlpLogsPayload,
-    LogSdkContext,
 } from './capture-log'

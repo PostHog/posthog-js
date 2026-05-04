@@ -485,18 +485,55 @@ class FeatureFlagsPoller {
   ): Promise<FeatureFlagValue> {
     const flagFilters = flag.filters || {}
     const flagConditions = flagFilters.groups || []
+    const flagAggregation = flagFilters.aggregation_group_type_index
+    const { groups, groupProperties } = evaluationContext
     let isInconclusive = false
     let result = undefined
 
     for (const condition of flagConditions) {
       try {
-        if (await this.isConditionMatch(flag, bucketingValue, condition, properties, evaluationContext)) {
+        // Per-condition aggregation overrides only when the condition explicitly
+        // sets its own aggregation_group_type_index (mixed targeting).
+        // When absent, use the properties/bucketing already resolved by the caller.
+        const conditionAggregation =
+          condition.aggregation_group_type_index !== undefined
+            ? condition.aggregation_group_type_index
+            : flagAggregation
+
+        let effectiveProperties = properties
+        let effectiveBucketingValue = bucketingValue
+
+        // Mixed-override path: condition-level aggregation differs from flag-level.
+        // This assumes flag-level aggregation is null/undefined for mixed flags.
+        if (conditionAggregation !== flagAggregation) {
+          if (conditionAggregation !== null && conditionAggregation !== undefined) {
+            const groupName = this.groupTypeMapping[String(conditionAggregation)]
+            if (!groupName || !(groupName in groups)) {
+              this.logMsgIfDebug(() =>
+                console.debug(
+                  `[FEATURE FLAGS] Skipping group condition for flag '${flag.key}': group type index ${conditionAggregation} not available`
+                )
+              )
+              continue
+            }
+            if (!(groupName in groupProperties)) {
+              isInconclusive = true
+              continue
+            }
+            effectiveProperties = groupProperties[groupName]
+            effectiveBucketingValue = groups[groupName]
+          }
+        }
+
+        if (
+          await this.isConditionMatch(flag, effectiveBucketingValue, condition, effectiveProperties, evaluationContext)
+        ) {
           const variantOverride = condition.variant
           const flagVariants = flagFilters.multivariate?.variants || []
           if (variantOverride && flagVariants.some((variant) => variant.key === variantOverride)) {
             result = variantOverride
           } else {
-            result = (await this.getMatchingVariant(flag, bucketingValue)) || true
+            result = (await this.getMatchingVariant(flag, effectiveBucketingValue)) || true
           }
           break
         }

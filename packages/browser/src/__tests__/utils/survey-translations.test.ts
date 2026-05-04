@@ -41,7 +41,7 @@ describe('Survey Translations', () => {
                 browserLanguage: 'fr',
                 storedPersonProperties: { language: 'es' },
                 expectedLanguage: 'de',
-                expectsStoredPropertiesLookup: false,
+                expectsStoredPropertiesLookup: true,
             },
             {
                 name: 'uses person property language when config override is not set',
@@ -257,6 +257,31 @@ describe('Survey Translations', () => {
 
             expect(result.survey.name).toBe('Français Canadien')
             expect(result.language).toBe('fr-CA')
+        })
+
+        it('should apply custom locale keys that are not in a product language list', () => {
+            mockPostHog.config.override_display_language = 'ro-RO'
+            const survey = createBaseSurvey()
+            survey.translations = {
+                'ro-RO': {
+                    name: 'Sondaj de feedback',
+                    thankYouMessageHeader: 'Multumim!',
+                },
+            }
+            survey.questions[0].translations = {
+                'ro-RO': {
+                    question: 'Cat de multumit esti?',
+                    buttonText: 'Trimite',
+                },
+            }
+
+            const result = applySurveyTranslationForUser(survey, mockPostHog)
+
+            expect(result.survey.name).toBe('Sondaj de feedback')
+            expect(result.survey.appearance?.thankYouMessageHeader).toBe('Multumim!')
+            expect(result.survey.questions[0].question).toBe('Cat de multumit esti?')
+            expect(result.survey.questions[0].buttonText).toBe('Trimite')
+            expect(result.language).toBe('ro-RO')
         })
 
         it.each([

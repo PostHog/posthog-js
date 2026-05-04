@@ -24,11 +24,9 @@ import {
   LinkSurveyQuestion,
   RatingSurveyQuestion,
   MultipleSurveyQuestion,
-  getValidationError,
-  getLengthFromRules,
-  getRequirementsHint,
   SurveyValidationType,
 } from '@posthog/core'
+import { getValidationError, getLengthFromRules, getRequirementsHint } from '@posthog/core/surveys'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 

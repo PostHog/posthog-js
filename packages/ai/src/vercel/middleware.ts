@@ -16,6 +16,7 @@ import {
   CostOverride,
   truncate,
   MAX_OUTPUT_SIZE,
+  utf8ByteLength,
   extractAvailableToolCalls,
   toContentString,
   calculateWebSearchCount,
@@ -169,18 +170,26 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
   })
 
   try {
-    // Trim the inputs array until its JSON size fits within MAX_OUTPUT_SIZE
-    const encoder = new TextEncoder()
-    let serialized = JSON.stringify(inputs)
+    // Trim the inputs array until its serialized JSON size fits within MAX_OUTPUT_SIZE.
+    // Pre-compute each message's byte size once so we can shift by accumulated budget
+    // in a single linear pass, instead of re-stringifying the whole array per iteration.
+    const messageSizes = inputs.map((m) => utf8ByteLength(JSON.stringify(m)))
+    // Account for the surrounding `[` `]` plus a comma between each pair of elements.
+    let totalBytes = 2 + Math.max(0, messageSizes.length - 1)
+    for (const size of messageSizes) {
+      totalBytes += size
+    }
     let removedCount = 0
-    // We need to keep track of the initial size of the inputs array because we're going to be mutating it
-    const initialSize = inputs.length
-    for (let i = 0; i < initialSize && encoder.encode(serialized).byteLength > MAX_OUTPUT_SIZE; i++) {
-      inputs.shift()
+    while (totalBytes > MAX_OUTPUT_SIZE && removedCount < messageSizes.length) {
+      totalBytes -= messageSizes[removedCount]
+      // Each removed message past the first also drops the comma that joined it.
+      if (removedCount < messageSizes.length - 1) {
+        totalBytes -= 1
+      }
       removedCount++
-      serialized = JSON.stringify(inputs)
     }
     if (removedCount > 0) {
+      inputs.splice(0, removedCount)
       // Add one placeholder to indicate how many were removed
       inputs.unshift({
         role: 'posthog',

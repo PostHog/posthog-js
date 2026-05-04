@@ -107,8 +107,8 @@ export type {
     OtlpKeyValue,
     OtlpLogRecord,
     OtlpLogsPayload,
-    LogSdkContext,
 } from '@posthog/types'
+export type { LogSdkContext } from '@posthog/core'
 
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
 export type { KnownUnsafeEditableEvent } from '@posthog/core'

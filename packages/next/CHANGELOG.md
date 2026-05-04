@@ -1,5 +1,28 @@
 # @posthog/next
 
+## 0.4.38
+
+### Patch Changes
+
+- Updated dependencies [[`f8bc02f`](https://github.com/PostHog/posthog-js/commit/f8bc02f946b51f27f55f97351ca8d81a1fa54e9d)]:
+    - posthog-node@5.33.0
+
+## 0.4.37
+
+### Patch Changes
+
+- Updated dependencies [[`cf56753`](https://github.com/PostHog/posthog-js/commit/cf56753d775225df2751dee2de7987d4a47fef8c), [`04db756`](https://github.com/PostHog/posthog-js/commit/04db75663208251d1b09c80b09e5d00188e897fd)]:
+    - posthog-js@1.372.6
+    - @posthog/core@1.28.0
+    - posthog-node@5.32.1
+
+## 0.4.36
+
+### Patch Changes
+
+- Updated dependencies [[`70ba8f8`](https://github.com/PostHog/posthog-js/commit/70ba8f84649680a8c5e85b0deae00741075dc21b)]:
+    - posthog-node@5.32.0
+
 ## 0.4.35
 
 ### Patch Changes

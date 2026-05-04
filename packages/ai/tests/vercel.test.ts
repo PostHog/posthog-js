@@ -634,6 +634,40 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       // Input should be null in privacy mode (withPrivacyMode returns null)
       expect(captureCall[0].properties.$ai_input).toBeNull()
     })
+
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])(
+      'should trim oversized prompts and prepend a removal placeholder in %s models',
+      async (_version, createModel) => {
+        const baseModel = createModel('gpt-4')
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: 'test-trim',
+        })
+
+        // Build a prompt whose serialized JSON well exceeds MAX_OUTPUT_SIZE (200kb).
+        // Each message is ~15kb of text, totaling ~1.5MB serialized.
+        const oversizedPrompt = Array.from({ length: 100 }, (_, i) => ({
+          role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: [{ type: 'text' as const, text: 'x'.repeat(15_000) }],
+        }))
+
+        await model.doGenerate({ prompt: oversizedPrompt as any })
+
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+        const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
+        expect(input.length).toBeGreaterThan(0)
+        expect(input[0].role).toBe('posthog')
+        expect(input[0].content).toMatch(/^\[\d+ messages? removed due to size limit\]$/)
+        // Trimmed payload sits just above the 200kb cap because the placeholder
+        // (~100 bytes) is unshifted after the byte-budget loop runs.
+        expect(JSON.stringify(input).length).toBeLessThan(210_000)
+      }
+    )
   })
 
   describe('Anthropic V3 cache token handling', () => {
