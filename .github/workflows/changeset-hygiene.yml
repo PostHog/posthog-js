@@ -1,0 +1,21 @@
+name: 'Changeset hygiene'
+
+on:
+    pull_request:
+        types: [opened, synchronize, reopened]
+
+permissions:
+    contents: read
+    pull-requests: write
+
+concurrency:
+    group: changeset-hygiene-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+jobs:
+    check:
+        # NOTE: pinned to feat/changeset-hygiene for testing — change to @main once merged.
+        uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@feat/changeset-hygiene
+        with:
+            forbidden-major-packages: posthog-js
+            script-ref: feat/changeset-hygiene
