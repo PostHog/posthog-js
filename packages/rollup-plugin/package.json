@@ -21,7 +21,8 @@
     },
     "files": [
         "src",
-        "dist"
+        "dist",
+        "!src/**/*.spec.ts"
     ],
     "dependencies": {
         "@posthog/cli": "catalog:",

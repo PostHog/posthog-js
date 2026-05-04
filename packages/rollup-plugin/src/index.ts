@@ -1,5 +1,5 @@
 import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
-import { PluginConfig, ResolvedPluginConfig, resolveConfig, runSourcemapCli } from '@posthog/plugin-utils'
+import { PluginConfig, resolveConfig, runSourcemapCli } from '@posthog/plugin-utils'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 
@@ -11,9 +11,21 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
     return {
         name: 'posthog-rollup-plugin',
 
+        config() {
+            if (!posthogOptions.sourcemaps.enabled) return
+
+            return {
+                build: {
+                    sourcemap: posthogOptions.sourcemaps.deleteAfterUpload ? 'hidden' : true,
+                },
+            }
+        },
+
         outputOptions: {
             order: 'post',
             handler(options: OutputOptions) {
+                if (!posthogOptions.sourcemaps.enabled) return options
+
                 return {
                     ...options,
                     sourcemap: posthogOptions.sourcemaps.deleteAfterUpload ? 'hidden' : true,
