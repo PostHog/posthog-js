@@ -230,10 +230,8 @@ jobs:
                     # are consumed as `workspace:*` devDependencies of `posthog-js`,
                     # then bundled into the browser SDK at build time (see
                     # `packages/browser/src/entrypoints/{recorder,posthog-recorder}.ts`).
-                    # We deliberately do NOT publish them to npm — their entries
-                    # in `.changeset/config.json` `ignore` ensure no version bumps
-                    # are produced for them either. To deprecate already-published
-                    # versions on npm, run `scripts/deprecate-rrweb-packages.sh`.
+                    # We deliberately do NOT publish them to npm — they are
+                    # omitted from this matrix on purpose.
 
         steps:
             - name: Checkout repository
