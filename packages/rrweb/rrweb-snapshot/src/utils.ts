@@ -415,6 +415,7 @@ const URL_PROTOCOL_MATCH = /^(?:[a-z+]+:)?\/\//i;
 const URL_WWW_MATCH = /^www\..*/i;
 const DATA_URI = /^(data:)([^,]*),(.*)/i;
 export function absolutifyURLs(cssText: string | null, href: string): string {
+  // codeql[js/polynomial-redos] Bounded CSS text; worst case is recorder slowdown, no exploit.
   return (cssText || '').replace(
     URL_IN_CSS_REF,
     (

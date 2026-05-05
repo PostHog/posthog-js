@@ -588,6 +588,7 @@ export class BaseRRText extends BaseRRNode implements IRRText {
   }
 
   public set textContent(textContent: string) {
+    // codeql[js/xss-through-dom] Virtual-DOM data store; never reinterpreted as HTML.
     this.data = textContent;
   }
 
@@ -612,6 +613,7 @@ export class BaseRRComment extends BaseRRNode implements IRRComment {
   }
 
   public set textContent(textContent: string) {
+    // codeql[js/xss-through-dom] Virtual-DOM data store; never reinterpreted as HTML.
     this.data = textContent;
   }
 
@@ -636,6 +638,7 @@ export class BaseRRCDATASection extends BaseRRNode implements IRRCDATASection {
   }
 
   public set textContent(textContent: string) {
+    // codeql[js/xss-through-dom] Virtual-DOM data store; never reinterpreted as HTML.
     this.data = textContent;
   }
 

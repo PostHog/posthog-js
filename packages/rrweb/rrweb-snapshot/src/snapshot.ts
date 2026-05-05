@@ -168,6 +168,7 @@ function getHref(doc: Document, customHref?: string) {
     return customHref;
   }
   // note: using `new URL` is slower. See #1434 or https://jsbench.me/uqlud17rxo/1
+  // codeql[js/xss-through-dom] Detached <a>; only used to resolve URLs via the .href getter.
   a.setAttribute('href', customHref);
   return a.href;
 }
@@ -1107,6 +1108,7 @@ export function serializeNodeWithId(
     (!preserveWhiteSpace &&
       _serializedNode.type === NodeType.Text &&
       !_serializedNode.isStyle &&
+      // codeql[js/polynomial-redos] Bounded DOM text node; worst case is recorder slowdown, no exploit.
       !_serializedNode.textContent.replace(/^\s+|\s+$/gm, '').length)
   ) {
     id = IGNORED_NODE;
