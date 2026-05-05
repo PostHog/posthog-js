@@ -184,16 +184,20 @@ export class CanvasManager {
     const getCanvas = (): HTMLCanvasElement[] => {
       const matchedCanvas: HTMLCanvasElement[] = [];
       const searchCanvas = (haystack: ParentNode) => {
-        haystack.querySelectorAll('canvas').forEach((canvas) => {
-          if (!isBlocked(canvas, blockClass, blockSelector, true)) {
-            matchedCanvas.push(canvas);
-          }
-        });
-        haystack.querySelectorAll('*').forEach((elem) => {
-          if (elem.shadowRoot) {
-            searchCanvas(elem.shadowRoot);
-          }
-        });
+        try {
+          haystack.querySelectorAll('canvas').forEach((canvas) => {
+            if (!isBlocked(canvas, blockClass, blockSelector, true)) {
+              matchedCanvas.push(canvas);
+            }
+          });
+          haystack.querySelectorAll('*').forEach((elem) => {
+            if (elem.shadowRoot) {
+              searchCanvas(elem.shadowRoot);
+            }
+          });
+        } catch {
+          // Don't let traversal errors cancel the rAF loop.
+        }
       };
       searchCanvas(win.document);
       return matchedCanvas;
@@ -230,6 +234,12 @@ export class CanvasManager {
               const context = canvas.getContext(
                 (canvas as ICanvas).__context,
               ) as WebGLRenderingContext | WebGL2RenderingContext | null;
+              // Snapshotting a lost context produces a transparent bitmap
+              // that poisons the worker's fingerprint dedup map; skip it.
+              if (context?.isContextLost?.()) {
+                snapshotInProgressMap.set(id, false);
+                return;
+              }
               if (
                 context?.getContextAttributes()?.preserveDrawingBuffer === false
               ) {
