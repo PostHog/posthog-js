@@ -39,16 +39,33 @@ interface QuestionCommonProps {
 // (Submit button) at the bottom. The ScrollView has flexShrink: 1 so it
 // shrinks to fit when the parent modal is capped at its keyboard-aware
 // maxHeight, keeping Submit visible regardless of survey length.
-function QuestionLayout({ children, footer }: { children: ReactNode; footer: ReactNode }): JSX.Element {
+//
+// When `appearance.disableScrolling` is true, the ScrollView (and its
+// keyboardShouldPersistTaps wiring) is dropped and children render directly
+// inside the container. Overflowing content will be clipped — opt in only
+// for short, single-question surveys.
+export function QuestionLayout({
+  appearance,
+  children,
+  footer,
+}: {
+  appearance: SurveyAppearanceTheme
+  children: ReactNode
+  footer: ReactNode
+}): JSX.Element {
   return (
     <View style={questionLayoutStyles.container}>
-      <ScrollView
-        style={questionLayoutStyles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {children}
-      </ScrollView>
+      {appearance.disableScrolling ? (
+        children
+      ) : (
+        <ScrollView
+          style={questionLayoutStyles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      )}
       {footer}
     </View>
   )
@@ -92,6 +109,7 @@ export function OpenTextQuestion({
 
   return (
     <QuestionLayout
+      appearance={appearance}
       footer={
         <BottomSection
           text={question.buttonText ?? appearance.submitButtonText}
@@ -156,6 +174,7 @@ export function LinkQuestion({
 
   return (
     <QuestionLayout
+      appearance={appearance}
       footer={
         <BottomSection
           text={question.buttonText ?? appearance.submitButtonText ?? 'Submit'}
@@ -189,6 +208,7 @@ export function RatingQuestion({
 
   return (
     <QuestionLayout
+      appearance={appearance}
       footer={
         <BottomSection
           text={question.buttonText ?? appearance.submitButtonText}
@@ -328,6 +348,7 @@ export function MultipleChoiceQuestion({
 
   return (
     <QuestionLayout
+      appearance={appearance}
       footer={
         <BottomSection
           text={question.buttonText ?? appearance.submitButtonText}

@@ -568,6 +568,15 @@ export type SurveyAppearance = {
   placeholder?: string
   shuffleQuestions?: boolean
   surveyPopupDelaySeconds?: number
+  /**
+   * (React Native only) When true, the survey question body renders directly
+   * inside its container instead of being wrapped in a ScrollView. Use this
+   * for short, single-question surveys where the scrollable wrapper causes
+   * UX issues (e.g. iOS bounce, keyboard tap-handling). Caveat: any content
+   * that exceeds the modal's height will be silently clipped.
+   * @default false
+   */
+  disableScrolling?: boolean
   // widget options
   widgetType?: SurveyWidgetType
   widgetSelector?: string
