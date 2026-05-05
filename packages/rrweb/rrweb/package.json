@@ -21,7 +21,7 @@
     "type": "module",
     "repository": {
         "type": "git",
-        "url": "https://github.com/PostHog/posthog-rrweb"
+        "url": "https://github.com/PostHog/posthog-js"
     },
     "main": "./dist/rrweb.umd.cjs",
     "module": "./dist/rrweb.js",
@@ -49,9 +49,9 @@
     "author": "yanzhen@smartx.com",
     "license": "MIT",
     "bugs": {
-        "url": "https://github.com/PostHog/posthog-rrweb/issues"
+        "url": "https://github.com/PostHog/posthog-js/issues"
     },
-    "homepage": "https://github.com/PostHog/posthog-rrweb#readme",
+    "homepage": "https://github.com/PostHog/posthog-js#readme",
     "devDependencies": {
         "@types/dom-mediacapture-transform": "0.1.4",
         "@types/jest-image-snapshot": "^6.1.0",

@@ -18,7 +18,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PostHog/posthog-rrweb.git"
+    "url": "git+https://github.com/PostHog/posthog-js.git"
   },
   "main": "./dist/rrweb-snapshot.cjs",
   "module": "./dist/rrweb-snapshot.js",

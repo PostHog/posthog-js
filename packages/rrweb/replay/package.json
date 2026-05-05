@@ -12,7 +12,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PostHog/posthog-rrweb.git"
+    "url": "git+https://github.com/PostHog/posthog-js.git"
   },
   "license": "MIT",
   "type": "module",
