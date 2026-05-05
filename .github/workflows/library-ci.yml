@@ -226,6 +226,8 @@ jobs:
   rrweb:
     name: rrweb tests
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
         with:
