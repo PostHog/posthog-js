@@ -226,13 +226,14 @@ jobs:
                     - name: '@posthog/rollup-plugin'
                     - name: '@posthog/types'
                     - name: '@posthog/webpack-plugin'
-                    - name: '@posthog/rrweb'
-                    - name: '@posthog/rrweb-types'
-                    - name: '@posthog/rrweb-utils'
-                    - name: '@posthog/rrdom'
-                    - name: '@posthog/rrweb-snapshot'
-                    - name: '@posthog/rrweb-record'
-                    - name: '@posthog/rrweb-plugin-console-record'
+                    # The @posthog/rrweb* packages live in `packages/rrweb/**` and
+                    # are consumed as `workspace:*` devDependencies of `posthog-js`,
+                    # then bundled into the browser SDK at build time (see
+                    # `packages/browser/src/entrypoints/{recorder,posthog-recorder}.ts`).
+                    # We deliberately do NOT publish them to npm — their entries
+                    # in `.changeset/config.json` `ignore` ensure no version bumps
+                    # are produced for them either. To deprecate already-published
+                    # versions on npm, run `scripts/deprecate-rrweb-packages.sh`.
 
         steps:
             - name: Checkout repository

@@ -10,6 +10,13 @@
     "bumpVersionsWithWorkspaceProtocolOnly": true,
     "ignore": [
         "rrdom-nodejs",
+        "@posthog/rrweb",
+        "@posthog/rrweb-types",
+        "@posthog/rrweb-utils",
+        "@posthog/rrdom",
+        "@posthog/rrweb-snapshot",
+        "@posthog/rrweb-record",
+        "@posthog/rrweb-plugin-console-record",
         "@posthog/rrweb-replay",
         "@posthog/rrweb-packer",
         "@posthog/rrweb-all",
