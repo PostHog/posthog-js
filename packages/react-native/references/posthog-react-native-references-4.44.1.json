@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "4.44.2",
+    "version": "4.44.1",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -2330,7 +2330,7 @@
       "name": "PostHogFetchResponse",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    status: number;\n    text: () => Promise<string>;\n    json: () => Promise<any>;\n    headers?: {\n        get(name: string): string | null;\n    };\n    body?: ReadableStream<Uint8Array> | null;\n}"
+      "example": "{\n    status: number;\n    text: () => Promise<string>;\n    json: () => Promise<any>;\n    headers?: {\n        get(name: string): string | null;\n    };\n}"
     },
     {
       "id": "PostHogFlagsResponse",

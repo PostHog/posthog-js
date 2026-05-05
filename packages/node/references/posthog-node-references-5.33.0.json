@@ -2,7 +2,7 @@
   "id": "posthog-node",
   "hogRef": "0.3",
   "info": {
-    "version": "5.33.2",
+    "version": "5.33.0",
     "id": "posthog-node",
     "title": "PostHog Node.js SDK",
     "description": "PostHog Node.js SDK allows you to capture events and send them to PostHog from your Node.js applications.",
@@ -2147,7 +2147,7 @@
       "name": "PostHogFetchResponse",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    status: number;\n    text: () => Promise<string>;\n    json: () => Promise<any>;\n    headers?: {\n        get(name: string): string | null;\n    };\n    body?: ReadableStream<Uint8Array> | null;\n}"
+      "example": "{\n    status: number;\n    text: () => Promise<string>;\n    json: () => Promise<any>;\n    headers?: {\n        get(name: string): string | null;\n    };\n}"
     },
     {
       "id": "PostHogFlagsAndPayloadsResponse",

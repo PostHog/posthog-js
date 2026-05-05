@@ -1,5 +1,12 @@
 # @posthog/rollup-plugin
 
+## 1.4.3
+
+### Patch Changes
+
+- [#3519](https://github.com/PostHog/posthog-js/pull/3519) [`fbeb006`](https://github.com/PostHog/posthog-js/commit/fbeb0061ab9a15eea4fdf077b0eaa5b68af8092b) Thanks [@cat-ph](https://github.com/cat-ph)! - Set Vite build sourcemap config before transform plugins run so uploaded source maps include original sources. The plugin also no longer overrides the `sourcemap` setting when `sourcemaps.enabled` is `false`.
+  (2026-05-04)
+
 ## 1.4.2
 
 ### Patch Changes

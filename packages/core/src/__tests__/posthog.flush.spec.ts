@@ -49,6 +49,30 @@ describe('PostHog Core', () => {
       ])
     })
 
+    it.each([
+      ['with ReadableStream body', { cancel: jest.fn().mockResolvedValue(undefined) }, true],
+      ['with null body', null, false],
+    ])('consumes response body after flush (%s)', async (_label, body, expectCancel) => {
+      const cancelFn = body?.cancel
+
+      mocks.fetch.mockImplementation(async () => {
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body,
+        })
+      })
+
+      posthog.capture('test-event-1')
+      jest.useRealTimers()
+      await expect(posthog.flush()).resolves.not.toThrow()
+
+      if (expectCancel) {
+        expect(cancelFn).toHaveBeenCalledTimes(1)
+      }
+    })
+
     it.each([400, 500])('responds with an error after retries with %s error', async (status) => {
       mocks.fetch.mockImplementation(() => {
         return Promise.resolve({

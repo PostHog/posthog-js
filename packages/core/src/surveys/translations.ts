@@ -1,7 +1,5 @@
-import { SurveyQuestionTranslation, SurveyTranslation } from '../types'
-import { createLogger, isArray, isUndefined } from '../utils'
-
-const logger = createLogger('[SurveyTranslations]')
+import type { Logger, SurveyQuestionTranslation, SurveyTranslation } from '../types'
+import { isArray, isUndefined } from '../utils'
 
 export type DetectSurveyLanguageOptions = {
   overrideLanguage?: unknown
@@ -25,30 +23,29 @@ export function getLanguageFromStoredPersonProperties(storedPersonProperties: un
   return getTrimmedLanguage(storedPersonProperties.language)
 }
 
-export function detectSurveyLanguage({
-  overrideLanguage,
-  storedPersonProperties,
-  locale,
-}: DetectSurveyLanguageOptions): string | null {
+export function detectSurveyLanguage(
+  { overrideLanguage, storedPersonProperties, locale }: DetectSurveyLanguageOptions,
+  logger?: Logger
+): string | null {
   const explicitLanguage = getTrimmedLanguage(overrideLanguage)
   if (explicitLanguage) {
-    logger.info(`Using override display language: ${explicitLanguage}`)
+    logger?.info(`Using override display language: ${explicitLanguage}`)
     return explicitLanguage
   }
 
   const personLanguage = getLanguageFromStoredPersonProperties(storedPersonProperties)
   if (personLanguage) {
-    logger.info(`Using person property language: ${personLanguage}`)
+    logger?.info(`Using person property language: ${personLanguage}`)
     return personLanguage
   }
 
   const detectedLocale = getTrimmedLanguage(locale)
   if (detectedLocale) {
-    logger.info(`Using detected locale: ${detectedLocale}`)
+    logger?.info(`Using detected locale: ${detectedLocale}`)
     return detectedLocale
   }
 
-  logger.info('No user language detected')
+  logger?.info('No user language detected')
   return null
 }
 
@@ -62,7 +59,8 @@ export function getBaseLanguage(languageCode: string): string {
 
 export function findBestTranslationMatch(
   translations: Record<string, unknown> | undefined,
-  targetLanguage: string
+  targetLanguage: string,
+  logger?: Logger
 ): string | null {
   if (!translations || !targetLanguage) {
     return null
@@ -72,7 +70,7 @@ export function findBestTranslationMatch(
 
   const exactMatch = Object.keys(translations).find((key) => normalizeLanguageCode(key) === normalizedTarget)
   if (exactMatch) {
-    logger.debug(`Found exact translation match: ${exactMatch}`)
+    logger?.debug(`Found exact translation match: ${exactMatch}`)
     return exactMatch
   }
 
@@ -80,7 +78,7 @@ export function findBestTranslationMatch(
     const baseLanguage = getBaseLanguage(normalizedTarget)
     const baseMatch = Object.keys(translations).find((key) => normalizeLanguageCode(key) === baseLanguage)
     if (baseMatch) {
-      logger.debug(`Found base language translation match: ${baseMatch} (from ${targetLanguage})`)
+      logger?.debug(`Found base language translation match: ${baseMatch} (from ${targetLanguage})`)
       return baseMatch
     }
   }
@@ -128,9 +126,10 @@ type TranslatableSurvey<TQuestion extends TranslatableSurveyQuestion = Translata
 
 function mergeQuestionTranslation<TQuestion extends TranslatableSurveyQuestion>(
   question: TQuestion,
-  targetLanguage: string
+  targetLanguage: string,
+  logger?: Logger
 ): { question: TQuestion; matchedKey: string | null; hasChanges: boolean } {
-  const translationKey = findBestTranslationMatch(question.translations, targetLanguage)
+  const translationKey = findBestTranslationMatch(question.translations, targetLanguage, logger)
   if (!translationKey) {
     return { question, matchedKey: null, hasChanges: false }
   }
@@ -185,8 +184,8 @@ function mergeQuestionTranslation<TQuestion extends TranslatableSurveyQuestion>(
 export function applySurveyTranslation<
   TQuestion extends TranslatableSurveyQuestion,
   TSurvey extends TranslatableSurvey<TQuestion>,
->(survey: TSurvey, targetLanguage: string): { survey: TSurvey; matchedKey: string | null } {
-  const translationKey = findBestTranslationMatch(survey.translations, targetLanguage)
+>(survey: TSurvey, targetLanguage: string, logger?: Logger): { survey: TSurvey; matchedKey: string | null } {
+  const translationKey = findBestTranslationMatch(survey.translations, targetLanguage, logger)
 
   const translated: TSurvey = { ...survey }
   let hasTranslation = false
@@ -194,7 +193,7 @@ export function applySurveyTranslation<
   if (translationKey) {
     const translation = survey.translations?.[translationKey]
     if (translation) {
-      logger.info(`Applying survey-level translation for language: ${translationKey}`)
+      logger?.info(`Applying survey-level translation for language: ${translationKey}`)
 
       if (!isUndefined(translation.name)) {
         translated.name = translation.name
@@ -222,7 +221,9 @@ export function applySurveyTranslation<
     }
   }
 
-  const translatedResults = survey.questions.map((question) => mergeQuestionTranslation(question, targetLanguage))
+  const translatedResults = survey.questions.map((question) =>
+    mergeQuestionTranslation(question, targetLanguage, logger)
+  )
   const translatedQuestions = translatedResults.map((result) => result.question)
   const anyQuestionTranslated = translatedResults.some((result) => result.hasChanges)
 
@@ -234,7 +235,7 @@ export function applySurveyTranslation<
   if (anyQuestionTranslated) {
     translated.questions = translatedQuestions
     hasTranslation = true
-    logger.info(`Applied question-level translations for language: ${targetLanguage}`)
+    logger?.info(`Applied question-level translations for language: ${targetLanguage}`)
   }
 
   return {

@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rollup-plugin",
-    "version": "1.4.2",
+    "version": "1.4.3",
     "description": "PostHog Rollup plugin",
     "repository": {
         "type": "git",
@@ -21,7 +21,8 @@
     },
     "files": [
         "src",
-        "dist"
+        "dist",
+        "!src/**/*.spec.ts"
     ],
     "dependencies": {
         "@posthog/cli": "catalog:",

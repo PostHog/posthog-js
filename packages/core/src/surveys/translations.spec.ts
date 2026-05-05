@@ -1,11 +1,12 @@
-import { describe, expect, it } from '@jest/globals'
+import { describe, expect, it, jest } from '@jest/globals'
 import {
   applySurveyTranslation,
   detectSurveyLanguage,
   findBestTranslationMatch,
   getLanguageFromStoredPersonProperties,
 } from './translations'
-import { Survey, SurveyQuestionType, SurveyType } from '../types'
+import { SurveyQuestionType, SurveyType } from '../types'
+import type { Logger, Survey } from '../types'
 
 const createBaseSurvey = (): Survey => ({
   id: 'test-survey',
@@ -77,6 +78,31 @@ describe('survey translations', () => {
       expect(getLanguageFromStoredPersonProperties({ language: 'it' })).toBe('it')
       expect(getLanguageFromStoredPersonProperties({ language: '   ' })).toBeNull()
       expect(getLanguageFromStoredPersonProperties({})).toBeNull()
+    })
+
+    it('does not log language detection by default', () => {
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+
+      try {
+        expect(detectSurveyLanguage({ locale: 'en-US' })).toBe('en-US')
+        expect(logSpy).not.toHaveBeenCalled()
+      } finally {
+        logSpy.mockRestore()
+      }
+    })
+
+    it('logs language detection through a provided logger', () => {
+      const logger: Logger = {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        critical: jest.fn(),
+        createLogger: jest.fn(),
+      }
+
+      expect(detectSurveyLanguage({ locale: 'en-US' }, logger)).toBe('en-US')
+      expect(logger.info).toHaveBeenCalledWith('Using detected locale: en-US')
     })
   })
 

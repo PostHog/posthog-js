@@ -4,7 +4,13 @@ import AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
 import type { Tool as GeminiTool } from '@google/genai'
-import type { FormattedMessage, FormattedContent } from './types'
+import type {
+  FormattedMessage,
+  FormattedContent,
+  FormattedAudioContent,
+  FormattedImageContent,
+  FormattedDocumentContent,
+} from './types'
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
@@ -275,6 +281,19 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
   return output
 }
 
+export const buildInlineDataBlock = (
+  mimeType: string,
+  data: string
+): FormattedAudioContent | FormattedImageContent | FormattedDocumentContent => {
+  if (mimeType.startsWith('audio/')) {
+    return { type: 'audio', mime_type: mimeType, data }
+  }
+  if (mimeType.startsWith('image/')) {
+    return { type: 'image', inline_data: { mime_type: mimeType, data } }
+  }
+  return { type: 'document', inline_data: { mime_type: mimeType, data } }
+}
+
 export const formatResponseGemini = (response: any): FormattedMessage[] => {
   const output: FormattedMessage[] = []
 
@@ -295,8 +314,8 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
               },
             })
           } else if (part.inlineData) {
-            // Handle audio/media inline data
-            const mimeType = part.inlineData.mimeType || 'audio/pcm'
+            // Handle inline data (images, audio, documents)
+            const mimeType = part.inlineData.mimeType || part.inlineData.mime_type || 'application/octet-stream'
             let data = part.inlineData.data
 
             // Handle binary data (Uint8Array/Buffer -> base64)
@@ -315,11 +334,7 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             // Sanitize base64 data for images and other large inline data
             data = redactBase64DataUrl(data)
 
-            content.push({
-              type: 'audio',
-              mime_type: mimeType,
-              data: data,
-            })
+            content.push(buildInlineDataBlock(mimeType, data))
           }
         }
 

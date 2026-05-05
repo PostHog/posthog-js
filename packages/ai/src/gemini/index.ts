@@ -17,6 +17,7 @@ import {
   extractPosthogParams,
   toContentString,
   withPrivacyMode,
+  buildInlineDataBlock,
   getModelParams,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
@@ -313,16 +314,8 @@ export class WrappedModels {
       // Handle inlineData (images, audio, PDFs)
       else if (part && typeof part === 'object' && 'inlineData' in part) {
         const inlineData = (part as any).inlineData
-        const mimeType = inlineData.mimeType || inlineData.mime_type || ''
-        const contentType = mimeType.startsWith('image/') ? 'image' : 'document'
-
-        blocks.push({
-          type: contentType,
-          inline_data: {
-            data: inlineData.data,
-            mime_type: mimeType,
-          },
-        } as FormattedContentItem)
+        const mimeType = inlineData.mimeType || inlineData.mime_type || 'application/octet-stream'
+        blocks.push(buildInlineDataBlock(mimeType, inlineData.data))
       }
     }
 

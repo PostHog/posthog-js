@@ -133,6 +133,44 @@ describe('PostHog React Native', () => {
     expect(posthog.getDistinctId()).toEqual('bar')
   })
 
+  it.each([
+    ['missing', undefined as unknown as string],
+    ['empty', ''],
+    ['blank', '   '],
+  ])('should initialize disabled instead of throwing when the api key is %s', async (_case, apiKey) => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      posthog = new PostHog(apiKey, {
+        persistence: 'memory',
+        flushInterval: 0,
+      })
+
+      await posthog.ready()
+
+      expect(posthog.isDisabled).toEqual(true)
+
+      posthog.reloadFeatureFlags()
+      await posthog.reloadFeatureFlagsAsync()
+      await posthog.reloadRemoteConfigAsync()
+      await posthog.getSurveysStateless()
+
+      posthog.setPersistedProperty(PostHogPersistedProperty.Queue, [{ message: { event: 'queued' } }] as any)
+      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [{ record: { body: 'queued' } }] as any)
+      posthog.capture('event')
+      posthog.captureLog({ body: 'log' })
+      await posthog.flush()
+      await posthog.flushLogs()
+
+      expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        "You must pass your PostHog project's api key. The client will be disabled."
+      )
+    } finally {
+      consoleErrorSpy.mockRestore()
+    }
+  })
+
   it('should initialize properly with bootstrap using async storage', async () => {
     posthog = new PostHog('test-token', {
       bootstrap: { distinctId: 'bar' },

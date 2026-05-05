@@ -1,5 +1,26 @@
 # @posthog/core
 
+## 1.28.2
+
+### Patch Changes
+
+- [#3516](https://github.com/PostHog/posthog-js/pull/3516) [`220cd61`](https://github.com/PostHog/posthog-js/commit/220cd61e332ca4982c7bc3b6f740d797ef9e4e7f) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: consume fetch response body to prevent CF Workers runtime warnings
+  (2026-05-04)
+
+- [#3515](https://github.com/PostHog/posthog-js/pull/3515) [`255b273`](https://github.com/PostHog/posthog-js/commit/255b27380658b450d1427d4a478e4d7a4bf773f1) Thanks [@marandaneto](https://github.com/marandaneto)! - Gate survey translation logs behind SDK debug logging to avoid production console spam.
+  (2026-05-04)
+- Updated dependencies []:
+  - @posthog/types@1.372.8
+
+## 1.28.1
+
+### Patch Changes
+
+- [#3512](https://github.com/PostHog/posthog-js/pull/3512) [`8aee3d5`](https://github.com/PostHog/posthog-js/commit/8aee3d55f8e2bf7a14a534c940327d8e08ba64f6) Thanks [@marandaneto](https://github.com/marandaneto)! - Do not crash when the React Native SDK is initialized without an API key; initialize as disabled and log an error instead. Disabled clients now also skip manual reload/flush/survey/log network calls.
+  (2026-05-04)
+- Updated dependencies []:
+  - @posthog/types@1.372.7
+
 ## 1.28.0
 
 ### Minor Changes

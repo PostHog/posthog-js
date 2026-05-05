@@ -368,5 +368,32 @@ describe('Tool Handling Tests', () => {
         },
       ])
     })
+
+    // Long enough that redactBase64DataUrl flags it as raw base64 when multimodal is off.
+    const longBase64 = 'A'.repeat(64)
+    const redacted = '[base64 image redacted]'
+
+    it.each([
+      ['image/jpeg', 'image', { mime_type: 'image/jpeg', data: redacted }],
+      ['application/pdf', 'document', { mime_type: 'application/pdf', data: redacted }],
+      [undefined, 'document', { mime_type: 'application/octet-stream', data: redacted }],
+    ])('inlineData with mimeType %s emits type %s with inline_data', (mimeType, expectedType, expectedInlineData) => {
+      const response = {
+        candidates: [
+          {
+            content: {
+              parts: [{ inlineData: mimeType ? { mimeType, data: longBase64 } : { data: longBase64 } }],
+            },
+          },
+        ],
+      }
+
+      expect(formatResponseGemini(response)).toEqual([
+        {
+          role: 'assistant',
+          content: [{ type: expectedType, inline_data: expectedInlineData }],
+        },
+      ])
+    })
   })
 })

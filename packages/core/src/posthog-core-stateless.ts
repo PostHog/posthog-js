@@ -807,6 +807,10 @@ export abstract class PostHogCoreStateless {
   public async getSurveysStateless(): Promise<SurveyResponse['surveys']> {
     await this._initPromise
 
+    if (this.disabled) {
+      return []
+    }
+
     if (this.disableSurveys === true) {
       this._logger.info('Loading surveys is disabled.')
       return []
@@ -993,7 +997,11 @@ export abstract class PostHogCoreStateless {
     }
 
     try {
-      await this.fetchWithRetry(url, fetchOptions)
+      const response = await this.fetchWithRetry(url, fetchOptions)
+      // Consume the response body to prevent cross-request promise warnings
+      // in runtimes like Cloudflare Workers that enforce body consumption.
+      // See: https://github.com/PostHog/posthog-js/issues/3173
+      await response.body?.cancel()?.catch(() => {})
     } catch (err) {
       this._events.emit('error', err)
     }
@@ -1071,6 +1079,10 @@ export abstract class PostHogCoreStateless {
    * @throws Error
    */
   async flush(): Promise<void> {
+    if (this.disabled) {
+      return
+    }
+
     // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
     // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
     // Use a custom allSettled implementation to avoid issues with patching Promise on RN
@@ -1168,7 +1180,11 @@ export abstract class PostHogCoreStateless {
       }
 
       try {
-        await this.fetchWithRetry(url, fetchOptions, retryOptions)
+        const response = await this.fetchWithRetry(url, fetchOptions, retryOptions)
+        // Consume the response body to prevent cross-request promise warnings
+        // in runtimes like Cloudflare Workers that enforce body consumption.
+        // See: https://github.com/PostHog/posthog-js/issues/3173
+        await response.body?.cancel()?.catch(() => {})
       } catch (err) {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
@@ -1208,6 +1224,10 @@ export abstract class PostHogCoreStateless {
    * shrink `maxBatchRecordsPerPost` and retry the same records.
    */
   async _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
+    if (this.disabled) {
+      return { kind: 'fatal', error: new Error('The client is disabled') }
+    }
+
     const serialized = JSON.stringify(payload)
     const url = `${this.host}/i/v1/logs?token=${encodeURIComponent(this.apiKey)}`
 
@@ -1304,6 +1324,10 @@ export abstract class PostHogCoreStateless {
     await this._initPromise
     let hasTimedOut = false
     this.clearFlushTimer()
+
+    if (this.disabled) {
+      return
+    }
 
     const doShutdown = async (): Promise<void> => {
       try {
