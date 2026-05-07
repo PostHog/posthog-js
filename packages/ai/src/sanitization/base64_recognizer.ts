@@ -1,4 +1,4 @@
-const DATA_URL_PREFIX_RE = /^data:([^;,\s]+);base64,/i
+const DATA_URL_PREFIX_RE = /^data:([^;,\s]+)(?:;[^;,\s]+)*;base64,/i
 const BASE64_ALPHABET_RE = /^[A-Za-z0-9+/_=-]+$/
 
 export type Base64Recognition = { kind: 'data-url'; mediaType: string } | { kind: 'raw' } | { kind: 'none' }

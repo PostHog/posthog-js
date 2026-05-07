@@ -16,42 +16,33 @@ const containsLargeBase64 = (value: unknown): boolean => JSON.stringify(value).i
 
 describe('redactBinaryContent', () => {
   describe('data URLs (always redact, MIME-aware)', () => {
-    it('redacts image data URLs and preserves the specific MIME', () => {
-      expect(redactBinaryContent('data:image/png;base64,iVBORw0KGgo')).toBe(placeholder('image/png'))
-      expect(redactBinaryContent('data:image/jpeg;base64,/9j/abc')).toBe(placeholder('image/jpeg'))
-    })
-
-    it('redacts audio data URLs and preserves the specific MIME', () => {
-      expect(redactBinaryContent('data:audio/wav;base64,UklGR...')).toBe(placeholder('audio/wav'))
-    })
-
-    it('redacts video data URLs and preserves the specific MIME', () => {
-      expect(redactBinaryContent('data:video/mp4;base64,AAAAIGZ...')).toBe(placeholder('video/mp4'))
-    })
-
-    it('redacts application MIME data URLs and preserves the specific subtype', () => {
-      expect(redactBinaryContent('data:application/pdf;base64,JVBER...')).toBe(placeholder('application/pdf'))
+    it.each([
+      ['image/png', 'data:image/png;base64,iVBORw0KGgo'],
+      ['image/jpeg', 'data:image/jpeg;base64,/9j/abc'],
+      ['audio/wav', 'data:audio/wav;base64,UklGR...'],
+      ['video/mp4', 'data:video/mp4;base64,AAAAIGZ...'],
+      ['application/pdf', 'data:application/pdf;base64,JVBER...'],
+    ])('redacts %s data URLs and preserves the specific MIME', (mime, input) => {
+      expect(redactBinaryContent(input)).toBe(placeholder(mime))
     })
 
     it('redacts data URLs even when short', () => {
       expect(redactBinaryContent('data:image/png;base64,A')).toBe(placeholder('image/png'))
     })
+
+    it('redacts data URLs with extra MIME parameters before ;base64', () => {
+      expect(redactBinaryContent('data:audio/L16;codec=pcm;rate=24000;base64,UklGR...')).toBe(placeholder('audio/L16'))
+    })
   })
 
   describe('raw base64 with strong context (length >= 64)', () => {
-    it('redacts when sibling has mediaType', () => {
-      const out = redactBinaryContent({ data: MEDIUM_B64, mediaType: 'image/png' })
-      expect((out as any).data).toBe(placeholder('image/png'))
-    })
-
-    it('redacts when sibling has media_type', () => {
-      const out = redactBinaryContent({ data: MEDIUM_B64, media_type: 'audio/wav' })
-      expect((out as any).data).toBe(placeholder('audio/wav'))
-    })
-
-    it('redacts when sibling has mimeType', () => {
-      const out = redactBinaryContent({ data: MEDIUM_B64, mimeType: 'video/mp4' })
-      expect((out as any).data).toBe(placeholder('video/mp4'))
+    it.each([
+      ['mediaType', 'image/png'],
+      ['media_type', 'audio/wav'],
+      ['mimeType', 'video/mp4'],
+    ])('redacts when sibling has %s', (key, mime) => {
+      const out = redactBinaryContent({ data: MEDIUM_B64, [key]: mime })
+      expect((out as any).data).toBe(placeholder(mime))
     })
 
     it('redacts to family-only placeholder when parent.type only carries the family', () => {
