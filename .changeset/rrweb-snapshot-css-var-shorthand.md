@@ -1,4 +1,5 @@
 ---
+'@posthog/rrweb-snapshot': patch
 'posthog-js': patch
 ---
 
