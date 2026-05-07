@@ -116,7 +116,10 @@ export function escapeImportStatement(rule: CSSImportRule): string {
  * allowed to be empty and are excluded.
  */
 export function hasEmptyShorthandLonghand(css: string): boolean {
-  return /(?:^|[\s;{}])[a-zA-Z][\w-]*\s*:\s*;/.test(css);
+  // The optional leading `-` admits vendor-prefixed longhands
+  // (e.g. `-webkit-mask-image: ;`) while still excluding custom
+  // properties (`--foo: ;`), since the second char must be a letter.
+  return /(?:^|[\s;{}])-?[a-zA-Z][\w-]*\s*:\s*;/.test(css);
 }
 
 export function stringifyStylesheet(s: CSSStyleSheet): string | null {

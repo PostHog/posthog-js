@@ -296,6 +296,8 @@ describe('utils', () => {
         '.x { padding-top: ; padding-bottom: var(--p); }',
       ],
       ['margin-left:;color: red;'],
+      ['-webkit-mask-image: ;'],
+      ['{ -moz-padding-start: ; }'],
     ])('detects corruption in %j', (css) => {
       expect(hasEmptyShorthandLonghand(css)).toBe(true);
     });
