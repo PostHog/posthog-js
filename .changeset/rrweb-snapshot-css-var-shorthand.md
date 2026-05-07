@@ -1,5 +1,6 @@
 ---
 '@posthog/rrweb-snapshot': patch
+'posthog-js': patch
 ---
 
 Preserve `<style>` textContent when the browser's CSSOM serialization would
