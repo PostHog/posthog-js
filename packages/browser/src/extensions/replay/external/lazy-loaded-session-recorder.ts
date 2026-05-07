@@ -1035,6 +1035,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
+        // Defensive: if the parent posthog instance has torn down its sessionManager
+        // (e.g. opt_out_capturing in cookieless_mode "on_reject") we may still receive a
+        // queued/throttled rrweb event after stop. Bail out instead of throwing when the
+        // _sessionManager getter is later accessed.
+        if (!this._instance.sessionManager) {
+            return
+        }
+
         this._processQueuedEvents()
 
         if (!rawEvent || !isObject(rawEvent)) {

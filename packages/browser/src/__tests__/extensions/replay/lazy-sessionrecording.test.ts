@@ -2682,6 +2682,25 @@ describe('Lazy SessionRecording', () => {
             )
             expect(sessionRecording.stopRecording).toHaveBeenCalled()
         })
+
+        it('does not throw on rrweb emit after sessionManager is gone (regression for #58017)', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Simulate opt_out_capturing in cookieless_mode "on_reject":
+            // sessionManager is destroyed and cleared on the parent posthog instance,
+            // but a queued/throttled rrweb event can still fire after stopRecording.
+            ;(posthog as any).sessionManager = undefined
+
+            expect(() =>
+                sessionRecording.onRRwebEmit(createIncrementalSnapshot({ data: { source: 1 } }) as eventWithTime)
+            ).not.toThrow()
+        })
     })
 
     describe('sampling', () => {
