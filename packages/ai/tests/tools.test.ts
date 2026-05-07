@@ -370,8 +370,11 @@ describe('Tool Handling Tests', () => {
     })
 
     // Long enough that redactBase64DataUrl flags it as raw base64 when multimodal is off.
-    const longBase64 = 'A'.repeat(64)
-    const redacted = '[base64 image redacted]'
+    // The redactor uses the weak (1024) threshold here because formatResponseGemini calls
+    // redactBase64DataUrl on the bare string — no parent context, so the placeholder is
+    // the generic '[base64 redacted]' regardless of the surrounding mime_type.
+    const longBase64 = 'A'.repeat(1024)
+    const redacted = '[base64 redacted]'
 
     it.each([
       ['image/jpeg', 'image', { mime_type: 'image/jpeg', data: redacted }],
