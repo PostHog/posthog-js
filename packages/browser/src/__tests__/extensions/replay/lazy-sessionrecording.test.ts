@@ -2700,7 +2700,6 @@ describe('Lazy SessionRecording', () => {
                 sessionRecording.onRRwebEmit(createIncrementalSnapshot({ data: { source: 1 } }) as eventWithTime)
             ).not.toThrow()
             expect(posthog.capture).not.toHaveBeenCalled()
-            expect(posthog.capture).not.toHaveBeenCalled()
         })
     })
 
