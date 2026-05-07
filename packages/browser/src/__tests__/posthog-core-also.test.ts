@@ -82,6 +82,17 @@ describe('posthog core', () => {
             expect(captureData.properties['$event_time_override_system_time']).toEqual(baseUTCDateTime)
         })
 
+        it('captures when uuid is overridden by caller', () => {
+            const customUuid = '0190e0a0-0000-7000-8000-000000000000'
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(
+                eventName,
+                {},
+                { uuid: customUuid }
+            )
+            expect(captureData).toHaveProperty('uuid')
+            expect(captureData.uuid).toEqual(customUuid)
+        })
+
         it('handles recursive objects', () => {
             const props: Record<string, any> = {}
             props.recurse = props
