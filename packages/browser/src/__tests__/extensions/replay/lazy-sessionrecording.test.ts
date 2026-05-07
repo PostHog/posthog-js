@@ -2692,9 +2692,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            // Simulate opt_out_capturing in cookieless_mode "on_reject":
-            // sessionManager is destroyed and cleared on the parent posthog instance,
-            // but a queued/throttled rrweb event can still fire after stopRecording.
+            // simulate sessionManager teardown (cookieless opt-out) before a late rrweb event
             ;(posthog as any).sessionManager = undefined
 
             expect(() =>
