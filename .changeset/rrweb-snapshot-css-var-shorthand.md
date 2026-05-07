@@ -12,4 +12,4 @@ padding-right: ; padding-left: ;`. The previous behavior replaced the
 on replay. We now detect the empty-longhand pattern and keep the original
 textContent in that case. Affects users of any CSS-in-JS framework that
 combines `var()` with shorthands (Chakra UI v3, Panda CSS, Emotion, etc.).
-See rrweb-io/rrweb#1626 / #1567.
+Same class of bug as rrweb-io/rrweb#1667.

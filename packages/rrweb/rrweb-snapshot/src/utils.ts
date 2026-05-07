@@ -111,9 +111,9 @@ export function escapeImportStatement(rule: CSSImportRule): string {
  * browsers store the shorthand's longhands with empty token lists per the
  * CSS Custom Properties spec, and `CSSStyleRule.cssText` re-emits them as
  * `padding-top: ; padding-right: ; padding-left: ;`. That output silently
- * strips the layout from the rule on replay (rrweb-io/rrweb#1626 / #1567).
- * Custom properties (`--foo: ;`) are intentionally allowed to be empty and
- * are excluded.
+ * strips the layout from the rule on replay. Same class of bug as
+ * rrweb-io/rrweb#1667. Custom properties (`--foo: ;`) are intentionally
+ * allowed to be empty and are excluded.
  */
 export function hasEmptyShorthandLonghand(css: string): boolean {
   return /(?:^|[\s;{}])[a-zA-Z][\w-]*\s*:\s*;/.test(css);
