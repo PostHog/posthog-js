@@ -2694,10 +2694,12 @@ describe('Lazy SessionRecording', () => {
 
             // simulate sessionManager teardown (cookieless opt-out) before a late rrweb event
             ;(posthog as any).sessionManager = undefined
+            ;(posthog.capture as jest.Mock).mockClear()
 
             expect(() =>
                 sessionRecording.onRRwebEmit(createIncrementalSnapshot({ data: { source: 1 } }) as eventWithTime)
             ).not.toThrow()
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
     })
 
