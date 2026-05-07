@@ -183,6 +183,27 @@ describe('style elements', () => {
       type: 3,
     });
   });
+
+  it('keeps original textContent when CSSOM emits empty longhands from var() shorthand', () => {
+    // Real browsers serialize `padding: var(--p); padding-bottom: var(--pb)`
+    // as `padding-top: ; padding-right: ; padding-left: ; padding-bottom: var(--pb)`.
+    // jsdom does not reproduce this, so simulate the corruption by mocking cssText.
+    const original =
+      '.card { padding: var(--p); padding-bottom: var(--pb); color: red; }';
+    const styleEl = render(`<style>${original}</style>`);
+    const rule = styleEl.sheet!.cssRules[0];
+    Object.defineProperty(rule, 'cssText', {
+      configurable: true,
+      get: () =>
+        '.card { padding-top: ; padding-right: ; padding-left: ; padding-bottom: var(--pb); color: red; }',
+    });
+    expect(serializeNode(styleEl.childNodes[0])).toMatchObject({
+      isStyle: true,
+      rootId: undefined,
+      textContent: original,
+      type: 3,
+    });
+  });
 });
 
 describe('scrollTop/scrollLeft', () => {
