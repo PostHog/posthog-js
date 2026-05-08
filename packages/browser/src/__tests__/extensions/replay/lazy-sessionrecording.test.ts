@@ -1329,6 +1329,45 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        describe('rotation after persistence is cleared (posthog.reset)', () => {
+            beforeEach(() => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+            })
+
+            it('restarts rrweb on the rotation that follows posthog.reset() when remote config is preserved', () => {
+                // Sanity: the recorder started on remote-config arrival.
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                expect(recordMock).toHaveBeenCalledTimes(1)
+
+                // Simulate posthog.reset() with the fix in place: snapshot the
+                // recording remote config, clear all persistence, then re-register
+                // the snapshotted config. This is exactly what posthog-core.ts does.
+                const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+                expect(preservedConfig).toBeDefined()
+                posthog.persistence?.clear()
+                posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: preservedConfig })
+
+                // resetSessionId() forces a new session id on the next
+                // checkAndGetSessionAndWindowId() call.
+                sessionManager.resetSessionId()
+                sessionId = 'rotated-session-id'
+
+                // An interactive event drives _updateWindowAndSessionIds, which
+                // detects the rotation and calls stop() then start('session_id_changed').
+                _emit(createIncrementalSnapshot({ data: { source: IncrementalSource.MouseInteraction } }))
+
+                // start('session_id_changed') was able to read remote config and
+                // restart rrweb — confirmed by a second record() call.
+                expect(recordMock).toHaveBeenCalledTimes(2)
+            })
+        })
+
         describe('when pageview capture is disabled', () => {
             beforeEach(() => {
                 jest.spyOn(sessionRecording, 'tryAddCustomEvent')
