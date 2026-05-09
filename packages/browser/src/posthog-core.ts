@@ -1090,7 +1090,11 @@ export class PostHog implements PostHogInterface {
                     if (isArray(fn_name)) {
                         capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
                     } else if (isFunction(item)) {
-                        ;(item as any).call(this)
+                        try {
+                            ;(item as any).call(this)
+                        } catch (e) {
+                            logger.error('Error executing queued PostHog call', item, e)
+                        }
                     } else if (isArray(item) && fn_name === 'alias') {
                         alias_calls.push(item)
                     } else if (
@@ -1107,14 +1111,18 @@ export class PostHog implements PostHogInterface {
 
             const execute = function (calls: SnippetArrayItem[], thisArg: any) {
                 eachArray(calls, function (item) {
-                    if (isArray(item[0])) {
-                        // chained call
-                        let caller = thisArg
-                        each(item, function (call) {
-                            caller = caller[call[0]].apply(caller, call.slice(1))
-                        })
-                    } else {
-                        thisArg[item[0]].apply(thisArg, item.slice(1))
+                    try {
+                        if (isArray(item[0])) {
+                            // chained call
+                            let caller = thisArg
+                            each(item, function (call) {
+                                caller = caller[call[0]].apply(caller, call.slice(1))
+                            })
+                        } else {
+                            thisArg[item[0]].apply(thisArg, item.slice(1))
+                        }
+                    } catch (e) {
+                        logger.error('Error executing queued PostHog call', item, e)
                     }
                 })
             }
