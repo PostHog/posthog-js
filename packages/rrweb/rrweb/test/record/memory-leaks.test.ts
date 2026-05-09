@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import record from '../../src/record';
-import { mutationBuffers } from '../../src/record/observer';
+import {
+  findAndRemoveIframeBuffer,
+  mutationBuffers,
+} from '../../src/record/observer';
 import { IframeManager } from '../../src/record/iframe-manager';
 import type { eventWithTime } from '@posthog/rrweb-types';
 import { createMirror } from '@posthog/rrweb-snapshot';
@@ -787,6 +790,24 @@ describe('memory leak prevention', () => {
       expect(mutationBuffers.length).toBe(buffersWithIframes - 3);
 
       stopRecording?.();
+    });
+
+    it('should not throw when mutationBuffers shrinks during iframe cleanup', () => {
+      const iframe = document.createElement('iframe');
+      const nonMatchingBuffer = {
+        bufferBelongsToIframe: () => false,
+        reset: () => {},
+      };
+      const matchingBuffer = {
+        bufferBelongsToIframe: () => true,
+        reset: () => {
+          mutationBuffers.length = 0;
+        },
+      };
+
+      mutationBuffers.push(nonMatchingBuffer as any, matchingBuffer as any);
+
+      expect(() => findAndRemoveIframeBuffer(iframe)).not.toThrow();
     });
 
     it('should cleanup observers via safety net when iframe becomes inaccessible', async () => {

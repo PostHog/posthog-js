@@ -379,7 +379,7 @@ function initViewportResizeObserver(
 export function findAndRemoveIframeBuffer(iframeEl: HTMLIFrameElement) {
   for (let i = mutationBuffers.length - 1; i >= 0; i--) {
     const buf = mutationBuffers[i];
-    if (buf.bufferBelongsToIframe(iframeEl)) {
+    if (buf?.bufferBelongsToIframe(iframeEl)) {
       buf.reset();
       mutationBuffers.splice(i, 1);
     }
