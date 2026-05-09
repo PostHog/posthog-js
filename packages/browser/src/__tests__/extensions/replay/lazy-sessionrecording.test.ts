@@ -410,6 +410,26 @@ describe('Lazy SessionRecording', () => {
                 expect(result?.enabled).toBe(true)
             })
 
+            it('ignores invalid persisted JSON config when checking freshness', () => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: '{not json',
+                })
+
+                expect(sessionRecording['_isRemoteConfigFresh']()).toBe(false)
+                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe('{not json')
+            })
+
+            it('ignores invalid persisted JSON config when reading remote config', () => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: '{not json',
+                })
+
+                const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+
+                expect(result).toBeUndefined()
+                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe('{not json')
+            })
+
             it('trusts stale config once recording has started (long-lived SPA)', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording'].isStarted).toBe(true)
 
