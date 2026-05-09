@@ -1256,7 +1256,7 @@ export class PostHog implements PostHogInterface {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
-        const uuid = uuidv7()
+        const uuid = options?.uuid || uuidv7()
         let data: CaptureResult = {
             uuid,
             event: event_name,
