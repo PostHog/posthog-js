@@ -247,6 +247,30 @@ describe('RemoteConfigLoader', () => {
 
             loader.stop()
         })
+
+        it('skips refresh when no document is available', async () => {
+            try {
+                await jest.isolateModulesAsync(async () => {
+                    jest.doMock('../utils/globals', () => ({
+                        ...jest.requireActual('../utils/globals'),
+                        document: undefined,
+                    }))
+
+                    // Re-import with no globals document to simulate browser extension background contexts.
+                    const { RemoteConfigLoader: NoDocumentRemoteConfigLoader } = await import('../remote-config')
+                    const reloadFeatureFlags = jest.fn()
+
+                    new NoDocumentRemoteConfigLoader({
+                        _shouldDisableFlags: () => false,
+                        reloadFeatureFlags,
+                    } as any).refresh()
+
+                    expect(reloadFeatureFlags).not.toHaveBeenCalled()
+                })
+            } finally {
+                jest.dontMock('../utils/globals')
+            }
+        })
     })
 
     describe('configurable refresh interval', () => {
