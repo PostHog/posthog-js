@@ -10,24 +10,14 @@ import {
 } from '../cookie'
 
 describe('getPostHogCookieName', () => {
-  it('returns correct cookie name for a simple API key', () => {
-    expect(getPostHogCookieName('phc_abc123')).toBe('ph_phc_abc123_posthog')
-  })
-
-  it('sanitizes + in token', () => {
-    expect(getPostHogCookieName('abc+def')).toBe('ph_abcPLdef_posthog')
-  })
-
-  it('sanitizes / in token', () => {
-    expect(getPostHogCookieName('abc/def')).toBe('ph_abcSLdef_posthog')
-  })
-
-  it('sanitizes = in token', () => {
-    expect(getPostHogCookieName('abc=def')).toBe('ph_abcEQdef_posthog')
-  })
-
-  it('sanitizes multiple special characters', () => {
-    expect(getPostHogCookieName('a+b/c=d')).toBe('ph_aPLbSLcEQd_posthog')
+  it.each([
+    ['simple API key', 'phc_abc123', 'ph_phc_abc123_posthog'],
+    ['sanitizes + in token', 'abc+def', 'ph_abcPLdef_posthog'],
+    ['sanitizes / in token', 'abc/def', 'ph_abcSLdef_posthog'],
+    ['sanitizes = in token', 'abc=def', 'ph_abcEQdef_posthog'],
+    ['sanitizes multiple special characters', 'a+b/c=d', 'ph_aPLbSLcEQd_posthog'],
+  ])('%s', (_label, input, expected) => {
+    expect(getPostHogCookieName(input)).toBe(expected)
   })
 })
 
@@ -127,25 +117,17 @@ describe('parsePostHogCookie', () => {
 })
 
 describe('getConsentCookieName', () => {
-  it('returns default name with __ph_opt_in_out_ prefix', () => {
-    expect(getConsentCookieName('phc_abc123')).toBe('__ph_opt_in_out_phc_abc123')
-  })
-
-  it('uses consent_persistence_name when provided', () => {
-    expect(getConsentCookieName('phc_abc123', { consent_persistence_name: 'my_consent' })).toBe('my_consent')
-  })
-
-  it('uses opt_out_capturing_cookie_prefix + apiKey when provided', () => {
-    expect(getConsentCookieName('phc_abc123', { opt_out_capturing_cookie_prefix: 'custom_' })).toBe('custom_phc_abc123')
-  })
-
-  it('prefers consent_persistence_name over opt_out_capturing_cookie_prefix', () => {
-    expect(
-      getConsentCookieName('phc_abc123', {
-        consent_persistence_name: 'my_consent',
-        opt_out_capturing_cookie_prefix: 'custom_',
-      })
-    ).toBe('my_consent')
+  it.each<[string, Parameters<typeof getConsentCookieName>[1] | undefined, string]>([
+    ['default __ph_opt_in_out_ prefix', undefined, '__ph_opt_in_out_phc_abc123'],
+    ['consent_persistence_name overrides default', { consent_persistence_name: 'my_consent' }, 'my_consent'],
+    ['opt_out_capturing_cookie_prefix + apiKey', { opt_out_capturing_cookie_prefix: 'custom_' }, 'custom_phc_abc123'],
+    [
+      'prefers consent_persistence_name over opt_out_capturing_cookie_prefix',
+      { consent_persistence_name: 'my_consent', opt_out_capturing_cookie_prefix: 'custom_' },
+      'my_consent',
+    ],
+  ])('%s', (_label, config, expected) => {
+    expect(getConsentCookieName('phc_abc123', config)).toBe(expected)
   })
 })
 
@@ -241,6 +223,14 @@ describe('cookieStoreFromHeader', () => {
   it('returns undefined for missing cookies', () => {
     const store = cookieStoreFromHeader('foo=bar')
     expect(store.get('missing')).toBeUndefined()
+  })
+
+  it('falls back to the raw value when the encoding is malformed', () => {
+    // `%gg` is not a valid percent-encoded sequence — `decodeURIComponent` would
+    // throw `URIError`. The store should not crash; it should return the raw text.
+    const store = cookieStoreFromHeader('broken=%gg; ok=fine')
+    expect(store.get('broken')).toEqual({ value: '%gg' })
+    expect(store.get('ok')).toEqual({ value: 'fine' })
   })
 
   it('handles empty header', () => {

@@ -21,7 +21,15 @@ export function cookieStoreFromHeader(cookieHeader: string): CookieStore {
     for (const pair of cookieHeader.split(';')) {
       const [key, ...valueParts] = pair.trim().split('=')
       if (key) {
-        cookies[key.trim()] = decodeURIComponent(valueParts.join('=').trim())
+        const raw = valueParts.join('=').trim()
+        // `decodeURIComponent` throws `URIError` on malformed sequences (e.g. `%gg`).
+        // The Cookie header is externally controlled, so fall back to the raw value
+        // rather than crashing the request handler.
+        try {
+          cookies[key.trim()] = decodeURIComponent(raw)
+        } catch {
+          cookies[key.trim()] = raw
+        }
       }
     }
   }
