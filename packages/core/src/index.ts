@@ -24,6 +24,7 @@ export type {
 // packages to type their `captureLog` calls.
 export type { CaptureLogOptions, LogAttributeValue, LogAttributes, LogSeverityLevel } from './logs/types'
 export { uuidv7 } from './vendor/uuidv7'
+export * from './cookie'
 export * from './posthog-core'
 export * from './posthog-core-stateless'
 export * from './tracing-headers'
