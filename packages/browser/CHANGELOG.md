@@ -1,5 +1,27 @@
 # posthog-js
 
+## 1.372.10
+
+### Patch Changes
+
+- [#3544](https://github.com/PostHog/posthog-js/pull/3544) [`d120042`](https://github.com/PostHog/posthog-js/commit/d12004237985bc552423e31e75bb0fa42d0921ca) Thanks [@ksvat](https://github.com/ksvat)! - fix: stop session recording before destroying sessionManager in `opt_out_capturing()` with `cookieless_mode: "on_reject"`. Previously, queued/throttled rrweb events (e.g. mousemove) could fire after the sessionManager was set to `undefined` and throw `[SessionRecording] must be started with a valid sessionManager`. Also adds a defensive early-return in `onRRwebEmit` so any remaining late events bail out instead of throwing.
+  (2026-05-07)
+
+- [#3542](https://github.com/PostHog/posthog-js/pull/3542) [`94a5ba0`](https://github.com/PostHog/posthog-js/commit/94a5ba0cf6d3a0f943517a126a59f52baa77f2fe) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Preserve `<style>` textContent when the browser's CSSOM serialization would
+  emit empty longhands from `var()` inside a shorthand. When a stylesheet has
+  e.g. `padding: var(--p); padding-bottom: var(--pb);`, browsers store the
+  shorthand's longhands with empty token lists per the CSS Custom Properties
+  spec, and `CSSStyleRule.cssText` re-emits them as `padding-top: ;
+padding-right: ; padding-left: ;`. The previous behavior replaced the
+  `<style>` text with that corrupted output, silently dropping layout rules
+  on replay. We now detect the empty-longhand pattern and keep the original
+  textContent in that case. Affects users of any CSS-in-JS framework that
+  combines `var()` with shorthands (Chakra UI v3, Panda CSS, Emotion, etc.).
+  Same class of bug as rrweb-io/rrweb#1667. (2026-05-07)
+- Updated dependencies []:
+    - @posthog/types@1.372.10
+    - @posthog/core@1.28.4
+
 ## 1.372.9
 
 ### Patch Changes

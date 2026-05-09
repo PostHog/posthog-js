@@ -102,6 +102,26 @@ export function escapeImportStatement(rule: CSSImportRule): string {
   return statement.join(' ') + ';';
 }
 
+/**
+ * Detects empty property values produced by browser CSSOM serialization of
+ * shorthands that contain `var()`. When a stylesheet has e.g.
+ *
+ *     .card { padding: var(--p); padding-bottom: var(--pb); }
+ *
+ * browsers store the shorthand's longhands with empty token lists per the
+ * CSS Custom Properties spec, and `CSSStyleRule.cssText` re-emits them as
+ * `padding-top: ; padding-right: ; padding-left: ;`. That output silently
+ * strips the layout from the rule on replay. Same class of bug as
+ * rrweb-io/rrweb#1667. Custom properties (`--foo: ;`) are intentionally
+ * allowed to be empty and are excluded.
+ */
+export function hasEmptyShorthandLonghand(css: string): boolean {
+  // The optional leading `-` admits vendor-prefixed longhands
+  // (e.g. `-webkit-mask-image: ;`) while still excluding custom
+  // properties (`--foo: ;`), since the second char must be a letter.
+  return /(?:^|[\s;{}])-?[a-zA-Z][\w-]*\s*:\s*;/.test(css);
+}
+
 export function stringifyStylesheet(s: CSSStyleSheet): string | null {
   try {
     const rules = s.rules || s.cssRules;

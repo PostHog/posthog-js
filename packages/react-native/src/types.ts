@@ -187,6 +187,18 @@ export type PostHogSessionReplayConfig = {
    */
   captureNetworkTelemetry?: boolean
   /**
+   * Schedule screenshot image capture on a background queue.
+   * iOS only
+   * Experimental support
+   *
+   * Warning: Enabling this option will trigger Main Thread Checker warnings and may
+   * briefly freeze the app the first time a screenshot is captured. Consider disabling
+   * Main Thread Checker in your scheme's run diagnostics when enabling this.
+   *
+   * @default false
+   */
+  screenshotModeBackgroundCapture?: boolean
+  /**
    * Session replay sample rate between 0 and 1
    * Local config has precedence over remote config when both are set.
    * If undefined, sampling is controlled by remote config (when available).

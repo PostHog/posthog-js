@@ -1035,6 +1035,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
+        // late event after sessionManager teardown (e.g. cookieless opt-out) — _sessionManager would throw
+        if (!this._instance.sessionManager) {
+            return
+        }
+
         this._processQueuedEvents()
 
         if (!rawEvent || !isObject(rawEvent)) {

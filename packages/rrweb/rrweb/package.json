@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rrweb",
-    "version": "0.0.62",
+    "version": "0.0.63",
     "description": "record and replay the web",
     "scripts": {
         "retest": "cross-env PUPPETEER_HEADLESS=true pnpm retest:headful",

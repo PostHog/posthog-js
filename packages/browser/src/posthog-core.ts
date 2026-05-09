@@ -3663,12 +3663,13 @@ export class PostHog implements PostHogInterface {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
+            // tear down rrweb observers before sessionManager goes away — late events would throw
+            this.sessionRecording?.stopRecording()
+            this.sessionRecording = undefined
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
-            this.sessionRecording?.stopRecording()
-            this.sessionRecording = undefined
             this._captureInitialPageview()
         }
     }

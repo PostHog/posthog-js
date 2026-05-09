@@ -1,5 +1,20 @@
 # posthog-react-native
 
+## 4.45.0
+
+### Minor Changes
+
+- [#3552](https://github.com/PostHog/posthog-js/pull/3552) [`387ca37`](https://github.com/PostHog/posthog-js/commit/387ca37b25dca3927678643125f2cba25778989d) Thanks [@ioannisj](https://github.com/ioannisj)! - Add support for the experimental iOS session replay option `sessionReplayConfig.screenshotModeBackgroundCapture`
+  (2026-05-09)
+
+## 4.44.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.10
+  - @posthog/core@1.28.4
+
 ## 4.44.3
 
 ### Patch Changes

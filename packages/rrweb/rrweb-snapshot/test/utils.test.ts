@@ -7,6 +7,7 @@ import {
   escapeImportStatement,
   extractFileExtension,
   fixSafariColons,
+  hasEmptyShorthandLonghand,
   isNodeMetaEqual,
   stringifyStylesheet,
 } from '../src/utils';
@@ -283,6 +284,33 @@ describe('utils', () => {
 
       const out3 = fixSafariColons('[data-aa\\:other] { color: red; }');
       expect(out3).toEqual('[data-aa\\:other] { color: red; }');
+    });
+  });
+
+  describe('hasEmptyShorthandLonghand', () => {
+    it.each([
+      ['padding-top: ;'],
+      ['padding-top:;'],
+      ['{ padding-top: ; padding-right: ; padding-left: ; }'],
+      [
+        '.x { padding-top: ; padding-bottom: var(--p); }',
+      ],
+      ['margin-left:;color: red;'],
+      ['-webkit-mask-image: ;'],
+      ['{ -moz-padding-start: ; }'],
+    ])('detects corruption in %j', (css) => {
+      expect(hasEmptyShorthandLonghand(css)).toBe(true);
+    });
+
+    it.each([
+      [''],
+      ['.x { padding: 8px; }'],
+      ['.x { padding: var(--p); padding-bottom: var(--pb); }'],
+      ['.x { content: ""; }'],
+      ['.x { --foo: ; }'],
+      ['.x { --my-prop: ; padding: 8px; }'],
+    ])('does not flag %j', (css) => {
+      expect(hasEmptyShorthandLonghand(css)).toBe(false);
     });
   });
 

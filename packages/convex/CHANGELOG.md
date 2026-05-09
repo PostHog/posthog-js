@@ -1,5 +1,13 @@
 # @posthog/convex
 
+## 0.2.24
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.4
+  - posthog-node@5.33.4
+
 ## 0.2.23
 
 ### Patch Changes

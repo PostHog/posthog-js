@@ -1,5 +1,12 @@
 # @rrweb/record
 
+## 0.0.63
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/rrweb@0.0.63
+
 ## 0.0.62
 
 ### Patch Changes
