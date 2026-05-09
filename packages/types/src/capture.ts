@@ -101,7 +101,7 @@ export interface CaptureOptions {
      * If set, overrides the auto-generated event uuid. Useful for cross-source idempotency
      * (e.g. a server webhook and a browser success page both firing for the same business
      * transaction): emit both events with the same deterministic uuid so PostHog can dedupe
-     * them. See https://github.com/PostHog/posthog/issues/17211.
+     * them.
      */
     uuid?: string
 
