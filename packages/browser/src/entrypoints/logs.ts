@@ -5,7 +5,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources'
 
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isNull, isObject } from '@posthog/core'
+import { isArray, isNull, isObject } from '@posthog/core'
 
 const setupOpenTelemetry = (posthog: PostHog) => {
     const serviceName = posthog.config.logs?.serviceName || 'posthog-browser-logs'
@@ -44,6 +44,61 @@ const setupOpenTelemetry = (posthog: PostHog) => {
 const LOG_BODY_SIZE_LIMIT = 10000
 const LOG_ATTRIBUTES_LIMIT = 50
 
+// This protects console logging from throwing when JSON.stringify hits unreadable properties.
+// The fallback safely copies readable properties and omits unreadable ones.
+// E.g., cross origin windows, exceptions raised in property getter
+const sanitizeForStringify = (value: any, seen = new WeakSet()): any => {
+    if (!isObject(value) && !isArray(value)) {
+        return value
+    }
+
+    if (seen.has(value)) {
+        return '[Circular]'
+    }
+    seen.add(value)
+
+    const result: any = isArray(value) ? [] : {}
+    let keys: string[]
+    try {
+        keys = Object.keys(value)
+    } catch {
+        return undefined
+    }
+    for (const key of keys) {
+        try {
+            result[key] = sanitizeForStringify((value as any)[key], seen)
+        } catch {
+            // omit properties that cannot be read
+        }
+    }
+
+    if (value instanceof Error) {
+        try {
+            result.name = value.name
+        } catch {}
+        try {
+            result.message = value.message
+        } catch {}
+        try {
+            result.stack = value.stack
+        } catch {}
+    }
+
+    return result
+}
+
+const stringifySafely = (value: any, replacer: (_: any, value: any) => any): string | undefined => {
+    try {
+        return JSON.stringify(value, replacer)
+    } catch {
+        try {
+            return JSON.stringify(sanitizeForStringify(value))
+        } catch {
+            return undefined
+        }
+    }
+}
+
 /**
  * Flattens a nested object into a single level dot-notation object.
  * By default limit to 200kB or 50 keys.
@@ -62,25 +117,34 @@ const flattenObject = (
     }
     seen.add(obj)
 
-    for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            const value = obj[key]
-            const newKey = prefix ? `${prefix}.${key}` : key
-
-            if (isObject(value)) {
-                flattenObject(value, newKey, result, keys_limit, size_limit, seen)
-            } else {
-                keys_limit -= 1
-                size_limit -= String(value).length
-                size_limit -= newKey.length
-                if (keys_limit <= 0 || size_limit <= 0) {
-                    result['attributes_truncated'] = true
-                    return
-                } else {
-                    result[newKey] = value
+    try {
+        for (const key in obj) {
+            try {
+                if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+                    continue
                 }
+                const value = obj[key]
+                const newKey = prefix ? `${prefix}.${key}` : key
+
+                if (isObject(value)) {
+                    flattenObject(value, newKey, result, keys_limit, size_limit, seen)
+                } else {
+                    keys_limit -= 1
+                    size_limit -= String(value).length
+                    size_limit -= newKey.length
+                    if (keys_limit <= 0 || size_limit <= 0) {
+                        result['attributes_truncated'] = true
+                        return
+                    } else {
+                        result[newKey] = value
+                    }
+                }
+            } catch {
+                continue
             }
         }
+    } catch {
+        // we'll omit this object's properties considering we can't enumerate them
     }
     return result
 }
@@ -132,7 +196,7 @@ const initializeLogs = (posthog: PostHog) => {
             (originalConsoleLog: any) =>
             (...args: any[]) => {
                 if (args.length > 0) {
-                    let body = args.map((a) => JSON.stringify(a, createReplacer())).join(' ')
+                    let body = args.map((a) => stringifySafely(a, createReplacer())).join(' ')
                     if (body.length > LOG_BODY_SIZE_LIMIT) {
                         body = body.slice(0, LOG_BODY_SIZE_LIMIT) + '...'
                         attributes.body_truncated = 'true'
