@@ -119,24 +119,28 @@ const flattenObject = (
 
     try {
         for (const key in obj) {
-            if (!Object.prototype.hasOwnProperty.call(obj, key)) {
-                continue
-            }
-            const value = obj[key]
-            const newKey = prefix ? `${prefix}.${key}` : key
-
-            if (isObject(value)) {
-                flattenObject(value, newKey, result, keys_limit, size_limit, seen)
-            } else {
-                keys_limit -= 1
-                size_limit -= String(value).length
-                size_limit -= newKey.length
-                if (keys_limit <= 0 || size_limit <= 0) {
-                    result['attributes_truncated'] = true
-                    return
-                } else {
-                    result[newKey] = value
+            try {
+                if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+                    continue
                 }
+                const value = obj[key]
+                const newKey = prefix ? `${prefix}.${key}` : key
+
+                if (isObject(value)) {
+                    flattenObject(value, newKey, result, keys_limit, size_limit, seen)
+                } else {
+                    keys_limit -= 1
+                    size_limit -= String(value).length
+                    size_limit -= newKey.length
+                    if (keys_limit <= 0 || size_limit <= 0) {
+                        result['attributes_truncated'] = true
+                        return
+                    } else {
+                        result[newKey] = value
+                    }
+                }
+            } catch {
+                continue
             }
         }
     } catch {

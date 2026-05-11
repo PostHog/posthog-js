@@ -300,7 +300,7 @@ describe('logs entrypoint', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
-            const objectWithUnreadableProperties: any = { readable: 'value' }
+            const objectWithUnreadableProperties: any = {}
             Object.defineProperty(objectWithUnreadableProperties, 'toJSON', {
                 get() {
                     throw new Error('SecurityError')
@@ -312,6 +312,7 @@ describe('logs entrypoint', () => {
                     throw new Error('SecurityError')
                 },
             })
+            objectWithUnreadableProperties.readable = 'value'
 
             expect(() => assignableWindow.console.log(objectWithUnreadableProperties)).not.toThrow()
 
