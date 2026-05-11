@@ -140,15 +140,9 @@ describe('isOptedOut', () => {
     expect(isOptedOut(makeCookies({}), 'phc_test', { opt_out_capturing_by_default: true })).toBe(true)
   })
 
-  it('returns false when consent cookie is 1 (opted in)', () => {
-    expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: '1' }), 'phc_test')).toBe(false)
-  })
-
-  it('returns true when consent cookie is 0 (opted out)', () => {
-    expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: '0' }), 'phc_test')).toBe(true)
-  })
-
   it.each([
+    ['1', false],
+    ['0', true],
     ['true', false],
     ['yes', false],
     ['false', true],
