@@ -640,6 +640,46 @@ describe('request', () => {
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
 
+        it('falls back to fflate and disables native async gzip after invalid native gzip output', async () => {
+            mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NativeGzipValidationError' })
+
+            isolatedRequestModule.request({
+                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                data: { foo: 'bar' },
+                headers: {},
+                callback: jest.fn(),
+                transport: 'fetch',
+                method: 'POST',
+                compression: isolatedCompression.GZipJS,
+            })
+
+            await flushPromises()
+
+            expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
+
+            mockedIsolatedFetch.mockClear()
+
+            isolatedRequestModule.request({
+                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                data: { foo: 'baz' },
+                headers: {},
+                callback: jest.fn(),
+                transport: 'fetch',
+                method: 'POST',
+                compression: isolatedCompression.GZipJS,
+            })
+
+            await flushPromises()
+
+            expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
+        })
+
         it('starts with native async gzip enabled in a fresh module instance', async () => {
             mockedIsolatedGzipCompress.mockResolvedValueOnce(new Blob(['compressed'], { type: 'text/plain' }))
 

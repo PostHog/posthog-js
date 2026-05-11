@@ -353,6 +353,15 @@ export const request = (_options: RequestWithOptions) => {
                     return
                 }
 
+                if (
+                    error &&
+                    typeof error === 'object' &&
+                    'name' in error &&
+                    error.name === 'NativeGzipValidationError'
+                ) {
+                    nativeAsyncGzipDisabled = true
+                }
+
                 // If async compression fails for another reason, fall back to the synchronous fflate path
                 transportMethod(options)
             })

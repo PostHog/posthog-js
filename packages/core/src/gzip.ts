@@ -11,6 +11,8 @@ export function isGzipSupported(): boolean {
   )
 }
 
+const NATIVE_GZIP_VALIDATION_ERROR = 'NativeGzipValidationError'
+
 export const isNativeAsyncGzipReadError = (error: unknown): boolean => {
   if (!error || typeof error !== 'object') {
     return false
@@ -19,6 +21,72 @@ export const isNativeAsyncGzipReadError = (error: unknown): boolean => {
   const name = 'name' in error ? String(error.name) : ''
 
   return name === 'NotReadableError'
+}
+
+export const isNativeAsyncGzipError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const name = 'name' in error ? String(error.name) : ''
+
+  return isNativeAsyncGzipReadError(error) || name === NATIVE_GZIP_VALIDATION_ERROR
+}
+
+type NativeGzipValidationReason = 'too-short' | 'invalid-header' | 'invalid-crc' | 'invalid-size'
+
+let crc32Table: number[] | undefined
+
+const getCrc32Table = (): number[] => {
+  if (crc32Table) {
+    return crc32Table
+  }
+
+  crc32Table = []
+  for (let i = 0; i < 256; i++) {
+    let crc = i
+    for (let j = 0; j < 8; j++) {
+      crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1
+    }
+    crc32Table[i] = crc >>> 0
+  }
+  return crc32Table
+}
+
+const crc32 = (bytes: Uint8Array): number => {
+  const table = getCrc32Table()
+  let crc = 0xffffffff
+  for (let i = 0; i < bytes.length; i++) {
+    crc = table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8)
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+const throwNativeGzipValidationError = (reason: NativeGzipValidationReason): never => {
+  const error = new Error(`Native gzip produced invalid output: ${reason}`)
+  error.name = NATIVE_GZIP_VALIDATION_ERROR
+  throw error
+}
+
+const validateNativeGzip = async (compressed: Blob, inputBytes: Uint8Array): Promise<void> => {
+  if (compressed.size < 18) {
+    throwNativeGzipValidationError('too-short')
+  }
+
+  const header = new Uint8Array(await compressed.slice(0, 10).arrayBuffer())
+  if (header[0] !== 0x1f || header[1] !== 0x8b || header[2] !== 0x08) {
+    throwNativeGzipValidationError('invalid-header')
+  }
+
+  const trailer = new DataView(await compressed.slice(compressed.size - 8).arrayBuffer())
+  if (trailer.getUint32(0, true) !== crc32(inputBytes)) {
+    throwNativeGzipValidationError('invalid-crc')
+  }
+
+  const inputSize = inputBytes.length >>> 0
+  if (trailer.getUint32(4, true) !== inputSize) {
+    throwNativeGzipValidationError('invalid-size')
+  }
 }
 
 export type GzipCompressOptions = {
@@ -36,11 +104,12 @@ export type GzipCompressOptions = {
  */
 export async function gzipCompress(input: string, isDebug = true, options?: GzipCompressOptions): Promise<Blob | null> {
   try {
+    const inputBytes = new TextEncoder().encode(input)
     const compressedStream = new CompressionStream('gzip')
     const writer = compressedStream.writable.getWriter()
 
     const writePromise = writer
-      .write(new TextEncoder().encode(input))
+      .write(inputBytes)
       .then(() => writer.close())
       .catch(async (err) => {
         try {
@@ -53,6 +122,7 @@ export async function gzipCompress(input: string, isDebug = true, options?: Gzip
     const responsePromise = new Response(compressedStream.readable).blob()
 
     const [compressed] = await Promise.all([responsePromise, writePromise])
+    await validateNativeGzip(compressed, inputBytes)
     return compressed
   } catch (error) {
     if (options?.rethrow) {
