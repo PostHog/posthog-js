@@ -1,5 +1,12 @@
 # posthog-js-lite
 
+## 4.6.21
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.6
+
 ## 4.6.20
 
 ### Patch Changes

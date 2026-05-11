@@ -1,5 +1,12 @@
 # @posthog/nextjs-config
 
+## 1.9.22
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.22
+
 ## 1.9.21
 
 ### Patch Changes

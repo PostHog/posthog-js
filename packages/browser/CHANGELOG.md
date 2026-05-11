@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.373.1
+
+### Patch Changes
+
+- [#3566](https://github.com/PostHog/posthog-js/pull/3566) [`7d027bc`](https://github.com/PostHog/posthog-js/commit/7d027bcfef3f0ffa47bdb31cd41f07784c2f2e7c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Prevent browser log capture from throwing when console arguments contain unreadable properties.
+  (2026-05-11)
+- Updated dependencies []:
+    - @posthog/types@1.373.1
+    - @posthog/core@1.28.6
+
 ## 1.373.0
 
 ### Minor Changes

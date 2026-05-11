@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.33.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.6
+
 ## 5.33.5
 
 ### Patch Changes
