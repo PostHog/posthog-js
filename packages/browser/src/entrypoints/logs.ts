@@ -66,7 +66,7 @@ const sanitizeForStringify = (value: any, seen = new WeakSet()): any => {
     }
     for (const key of keys) {
         try {
-            result[key] = sanitizeForStringify(value[key], seen)
+            result[key] = sanitizeForStringify((value as any)[key], seen)
         } catch {
             // omit properties that cannot be read
         }
