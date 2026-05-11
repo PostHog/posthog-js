@@ -1,5 +1,16 @@
 # @posthog/nuxt
 
+## 1.7.26
+
+### Patch Changes
+
+- [#3560](https://github.com/PostHog/posthog-js/pull/3560) [`4d3f654`](https://github.com/PostHog/posthog-js/commit/4d3f65447db38d1effc44f016218cbe1a1063726) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Vue error capture to report the Nuxt error info string instead of the component instance.
+  (2026-05-11)
+- Updated dependencies [[`4c0c7d9`](https://github.com/PostHog/posthog-js/commit/4c0c7d9f48e6f4f5301f8208285191f62dc8407a), [`3511848`](https://github.com/PostHog/posthog-js/commit/3511848fd03bd77b117dccc6f06237a06d38d618), [`0a835fa`](https://github.com/PostHog/posthog-js/commit/0a835fa1d5db988d508aa023240ab5b4b50f0969)]:
+  - posthog-js@1.373.0
+  - @posthog/core@1.28.5
+  - posthog-node@5.33.5
+
 ## 1.7.25
 
 ### Patch Changes
