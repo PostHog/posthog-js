@@ -99,20 +99,13 @@ describe('parsePostHogCookie', () => {
     expect(result?.sessionId).toBeUndefined()
   })
 
-  it('returns null for empty string', () => {
-    expect(parsePostHogCookie('')).toBeNull()
-  })
-
-  it('returns null for invalid JSON', () => {
-    expect(parsePostHogCookie('not-json')).toBeNull()
-  })
-
-  it('returns null for JSON without distinct_id', () => {
-    expect(parsePostHogCookie(JSON.stringify({ foo: 'bar' }))).toBeNull()
-  })
-
-  it('returns null for null input', () => {
-    expect(parsePostHogCookie(null as unknown as string)).toBeNull()
+  it.each([
+    ['empty string', ''],
+    ['invalid JSON', 'not-json'],
+    ['JSON without distinct_id', JSON.stringify({ foo: 'bar' })],
+    ['null input', null as unknown as string],
+  ])('returns null for %s', (_label, input) => {
+    expect(parsePostHogCookie(input)).toBeNull()
   })
 })
 
@@ -155,14 +148,13 @@ describe('isOptedOut', () => {
     expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: '0' }), 'phc_test')).toBe(true)
   })
 
-  it('returns false for yes-like values (true, yes)', () => {
-    expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: 'true' }), 'phc_test')).toBe(false)
-    expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: 'yes' }), 'phc_test')).toBe(false)
-  })
-
-  it('returns true for no-like values (false, no)', () => {
-    expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: 'false' }), 'phc_test')).toBe(true)
-    expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: 'no' }), 'phc_test')).toBe(true)
+  it.each([
+    ['true', false],
+    ['yes', false],
+    ['false', true],
+    ['no', true],
+  ])('cookie value %s → isOptedOut === %s', (cookieValue, expected) => {
+    expect(isOptedOut(makeCookies({ __ph_opt_in_out_phc_test: cookieValue }), 'phc_test')).toBe(expected)
   })
 
   it('uses custom consent_persistence_name', () => {
