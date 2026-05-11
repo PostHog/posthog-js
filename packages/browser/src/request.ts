@@ -8,7 +8,7 @@ import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } 
 import { gzipSync, strToU8 } from 'fflate'
 
 import { _base64Encode } from './utils/encode-utils'
-import { gzipCompress, isNativeAsyncGzipReadError } from '@posthog/core'
+import { gzipCompress, isNativeAsyncGzipError, isNativeAsyncGzipReadError } from '@posthog/core'
 
 interface RequestWithEncodedBody extends RequestWithOptions {
     _encodedBody?: EncodedBody
@@ -353,12 +353,7 @@ export const request = (_options: RequestWithOptions) => {
                     return
                 }
 
-                if (
-                    error &&
-                    typeof error === 'object' &&
-                    'name' in error &&
-                    error.name === 'NativeGzipValidationError'
-                ) {
+                if (isNativeAsyncGzipError(error)) {
                     nativeAsyncGzipDisabled = true
                 }
 

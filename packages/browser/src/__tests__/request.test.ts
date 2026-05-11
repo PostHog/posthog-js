@@ -594,6 +594,11 @@ describe('request', () => {
             jest.doMock('@posthog/core', () => ({
                 ...jest.requireActual('@posthog/core'),
                 gzipCompress: mockedIsolatedGzipCompress,
+                isNativeAsyncGzipError: (error: unknown) =>
+                    error &&
+                    typeof error === 'object' &&
+                    'name' in error &&
+                    (error.name === 'NotReadableError' || error.name === 'NativeGzipValidationError'),
             }))
 
             isolatedRequestModule = await import('../request')
