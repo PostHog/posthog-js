@@ -190,13 +190,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             return true
         }
 
-        if (isTag(click.node, 'html') || !isElementNode(click.node)) {
-            return true
-        }
-
-        // Walk ancestors so clicks on children of anchors/buttons (e.g. <img> inside <a href>) are
-        // not reported as dead clicks just because hard navigation produces no DOM mutation.
-        if (click.node.closest(autocaptureCompatibleElements.join(','))) {
+        if (
+            isTag(click.node, 'html') ||
+            !isElementNode(click.node) ||
+            click.node.closest(autocaptureCompatibleElements.join(','))
+        ) {
             return true
         }
 
