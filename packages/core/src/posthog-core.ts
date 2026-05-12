@@ -1054,7 +1054,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       if (!overriddenFlags[key]) {
         delete flags[key]
       } else {
-        flags[key] = updateFlagValue(flags[key], overriddenFlags[key])
+        flags[key] = updateFlagValue(flags[key] || { key, enabled: false, variant: undefined, reason: undefined, metadata: undefined }, overriddenFlags[key])
       }
     }
 

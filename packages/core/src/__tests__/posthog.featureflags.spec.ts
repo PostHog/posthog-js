@@ -935,6 +935,25 @@ describe('PostHog Feature Flags v4', () => {
         })
       })
 
+      it('should override flags with variant values for new flags', () => {
+        posthog.overrideFeatureFlag({
+          'new-flag': 'test-variant',
+        })
+
+        const received = posthog.getFeatureFlags()
+        
+        expect(received).toEqual({
+          'feature-1': true,
+          'feature-2': true,
+          'json-payload': true,
+          'feature-variant': 'variant',
+          'new-flag': 'test-variant',
+        })
+
+        // Verify that the actual returned value is the variant, not true
+        expect(posthog.getFeatureFlag('new-flag')).toEqual('test-variant')
+      })
+
       describe('getFeatureFlagResult', () => {
         it('should return correct result for a boolean flag', () => {
           const result = posthog.getFeatureFlagResult('feature-1')
