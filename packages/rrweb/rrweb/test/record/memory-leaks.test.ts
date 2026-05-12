@@ -915,21 +915,23 @@ describe('memory leak prevention', () => {
   // IframeManager must capture the original contentDocument at attach time
   // and release it explicitly on detach.
   describe('IframeManager.attachedDocuments', () => {
-    it('walks the original contentDocument on detach, not the current one', () => {
+    function makeIframeManager() {
       const mirror = createMirror();
-      const mutationCb = vi.fn();
-      const wrappedEmit = vi.fn();
-
       const iframeManager = new IframeManager({
         mirror,
-        mutationCb,
+        mutationCb: vi.fn(),
         stylesheetManager: {
           styleMirror: { generateId: vi.fn(() => 1) },
           adoptStyleSheets: vi.fn(),
         } as any,
         recordCrossOriginIframes: false,
-        wrappedEmit,
+        wrappedEmit: vi.fn(),
       });
+      return { iframeManager, mirror };
+    }
+
+    it('walks the original contentDocument on detach, not the current one', () => {
+      const { iframeManager, mirror } = makeIframeManager();
 
       const iframe = document.createElement('iframe');
       document.body.appendChild(iframe);
@@ -988,20 +990,7 @@ describe('memory leak prevention', () => {
     // attachIframe runs once per load event, so we must accumulate every
     // doc; tracking only the most recent leaks every prior doc.
     it('walks every contentDocument that has been attached, not just the last one', () => {
-      const mirror = createMirror();
-      const mutationCb = vi.fn();
-      const wrappedEmit = vi.fn();
-
-      const iframeManager = new IframeManager({
-        mirror,
-        mutationCb,
-        stylesheetManager: {
-          styleMirror: { generateId: vi.fn(() => 1) },
-          adoptStyleSheets: vi.fn(),
-        } as any,
-        recordCrossOriginIframes: false,
-        wrappedEmit,
-      });
+      const { iframeManager, mirror } = makeIframeManager();
 
       const iframe = document.createElement('iframe');
       document.body.appendChild(iframe);

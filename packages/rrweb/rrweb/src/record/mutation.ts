@@ -255,11 +255,11 @@ export default class MutationBuffer {
     this.shadowDomManager.reset();
     this.canvasManager.reset();
     // Defence in depth: clear doc in case a stale closure still pins the buffer.
-    (this as unknown as { doc: Document | null }).doc = null;
+    this.doc = null as unknown as observerParam['doc'];
   }
 
   public bufferDoc(): Document | null {
-    return (this as unknown as { doc: Document | null }).doc;
+    return this.doc as Document | null;
   }
 
   public destroy() {
