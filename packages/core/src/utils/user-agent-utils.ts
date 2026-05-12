@@ -49,8 +49,7 @@ const GENERIC = 'Generic'
 const GENERIC_MOBILE = GENERIC + ' ' + MOBILE.toLowerCase()
 const GENERIC_TABLET = GENERIC + ' ' + TABLET.toLowerCase()
 const KONQUEROR = 'Konqueror'
-const OCULUS = 'Oculus'
-const OCULUS_BROWSER = OCULUS + ' Browser'
+const OCULUS_BROWSER = 'Oculus Browser'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
