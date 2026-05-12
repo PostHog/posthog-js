@@ -52,7 +52,7 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
-  private flagCallReported: { [key: string]: FeatureFlagValue | undefined } = {}
+  private flagCallReported: { [key: string]: boolean } = {}
   private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
   // internal
@@ -937,9 +937,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const details = this.getFeatureFlagDetails()
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
     const featureFlag = details?.flags[key]
+    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
-    const flagValueChanged = !(key in this.flagCallReported) || this.flagCallReported[key] !== flagValue
-    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && flagValueChanged
 
     if (sendEvent) {
       const errors: string[] = []
@@ -971,7 +970,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const bootstrappedPayload = this.getBootstrappedFeatureFlagPayloads()?.[key]
       const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
 
-      this.flagCallReported[key] = flagValue
+      this.flagCallReported[key] = true
 
       const properties: Record<string, any> = {
         $feature_flag: key,
