@@ -188,6 +188,25 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
             expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].node).toBe(child)
         })
+
+        it('click on a deeply nested element inside an anchor is never a deadclick', () => {
+            const anchor = document.createElement('a')
+            const wrapper = document.createElement('div')
+            const inner = document.createElement('span')
+            const child = document.createElement('img')
+            inner.append(child)
+            wrapper.append(inner)
+            anchor.append(wrapper)
+            document.body.append(anchor)
+
+            triggerMouseEvent(child, 'click')
+            jest.setSystemTime(4000)
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
     })
 
     describe('dead click detection', () => {
