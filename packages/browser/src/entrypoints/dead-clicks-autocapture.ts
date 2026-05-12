@@ -190,6 +190,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             return true
         }
 
+        // closest() does not pierce shadow roots: a click whose target lives in a shadow tree
+        // hosted by an interactive ancestor will not be suppressed here.
         if (
             isTag(click.node, 'html') ||
             !isElementNode(click.node) ||
