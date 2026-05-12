@@ -600,6 +600,16 @@ export function sanitizeValues(obj: any): any {
  * `validationError`). Tracks a `seen` set to guard against circular cause
  * graphs. Non-object inputs are returned as-is.
  *
+ * NOTE: `seen` is shared across the entire traversal rather than scoped to the
+ * current ancestor path. Any object that appears at two distinct locations in
+ * the error structure — a "diamond" reference such as the same `response`
+ * object attached to both `err.response` and `err.cause.response` — will be
+ * serialized the first time it is encountered and replaced with `'[Circular]'`
+ * on subsequent visits, even when no actual cycle exists. This is intentional:
+ * it keeps allocation O(visited) and is correct for the primary use case
+ * (linear `cause` chains). Callers that need exact graph reproduction should
+ * not use this function.
+ *
  * Fixes https://github.com/PostHog/posthog-js/issues/3556
  */
 export function serializeError(err: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
