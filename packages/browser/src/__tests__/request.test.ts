@@ -206,24 +206,62 @@ describe('request', () => {
             })
         })
 
-        it('falls back to JSON if a pre-encoded gzip body is not actually gzip before fetch send', () => {
-            request(
-                createRequest({
-                    method: 'POST',
-                    compression: Compression.GZipJS,
-                    data: { foo: 'bar' },
-                    _encodedBody: {
-                        contentType: 'text/plain',
-                        body: invalidGzipBody(),
-                        estimatedSize: 3,
-                    },
-                } as any)
-            )
+        const invalidPreEncodedGzipRequest = (overrides?: Partial<RequestWithOptions>) =>
+            createRequest({
+                method: 'POST',
+                compression: Compression.GZipJS,
+                data: { foo: 'bar' },
+                _encodedBody: {
+                    contentType: 'text/plain',
+                    body: invalidGzipBody(),
+                    estimatedSize: 3,
+                },
+                ...overrides,
+            } as any)
 
-            expect(mockedFetch.mock.calls[0][0]).not.toContain('compression=gzip-js')
-            expect(mockedFetch.mock.calls[0][1].body).toBe('{"foo":"bar"}')
-            expect((mockedFetch.mock.calls[0][1].headers as Headers).get('Content-Type')).toBe('application/json')
-        })
+        it.each([
+            [
+                'fetch',
+                { transport: 'fetch' as const },
+                () => {
+                    expect(mockedFetch.mock.calls[0][0]).not.toContain('compression=gzip-js')
+                    expect(mockedFetch.mock.calls[0][1].body).toBe('{"foo":"bar"}')
+                    expect((mockedFetch.mock.calls[0][1].headers as Headers).get('Content-Type')).toBe(
+                        'application/json'
+                    )
+                },
+            ],
+            [
+                'XHR',
+                { transport: 'XHR' as const, url: 'https://any.posthog-instance.com/' },
+                () => {
+                    expect(mockedXHR.open.mock.calls[0][1]).not.toContain('compression=gzip-js')
+                    expect(mockedXHR.send.mock.calls[0][0]).toBe('{"foo":"bar"}')
+                    expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
+                },
+            ],
+            [
+                'sendBeacon',
+                { transport: 'sendBeacon' as const, url: 'https://any.posthog-instance.com/' },
+                async () => {
+                    expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).not.toContain('compression=gzip-js')
+                    const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                    expect(blob.type).toBe('application/json')
+                    const result = await new Promise<string>((resolve) => {
+                        const reader = new FileReader()
+                        reader.onload = () => resolve(reader.result as string)
+                        reader.readAsText(blob)
+                    })
+                    expect(result).toBe('{"foo":"bar"}')
+                },
+            ],
+        ])(
+            'falls back to JSON if a pre-encoded gzip body is not actually gzip before %s send',
+            async (_name, overrides, assertTransport) => {
+                request(invalidPreEncodedGzipRequest(overrides))
+                await assertTransport()
+            }
+        )
 
         it('supports nextOptions parameter', async () => {
             request(
@@ -454,26 +492,6 @@ describe('request', () => {
                     'application/x-www-form-urlencoded'
                 )
             })
-
-            it('falls back to JSON if a pre-encoded gzip body is not actually gzip before XHR send', () => {
-                request(
-                    createRequest({
-                        url: 'https://any.posthog-instance.com/',
-                        method: 'POST',
-                        compression: Compression.GZipJS,
-                        data: { foo: 'bar' },
-                        _encodedBody: {
-                            contentType: 'text/plain',
-                            body: invalidGzipBody(),
-                            estimatedSize: 3,
-                        },
-                    } as any)
-                )
-
-                expect(mockedXHR.open.mock.calls[0][1]).not.toContain('compression=gzip-js')
-                expect(mockedXHR.send.mock.calls[0][0]).toBe('{"foo":"bar"}')
-                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
-            })
         })
 
         describe('sendBeacon', () => {
@@ -570,32 +588,6 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).not.toHaveBeenCalled()
-            })
-
-            it('falls back to JSON if a pre-encoded gzip body is not actually gzip before beacon send', async () => {
-                request(
-                    createRequest({
-                        url: 'https://any.posthog-instance.com/',
-                        method: 'POST',
-                        compression: Compression.GZipJS,
-                        data: { foo: 'bar' },
-                        _encodedBody: {
-                            contentType: 'text/plain',
-                            body: invalidGzipBody(),
-                            estimatedSize: 3,
-                        },
-                    } as any)
-                )
-
-                expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).not.toContain('compression=gzip-js')
-                const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                expect(blob.type).toBe('application/json')
-                const result = await new Promise<string>((resolve) => {
-                    const reader = new FileReader()
-                    reader.onload = () => resolve(reader.result as string)
-                    reader.readAsText(blob)
-                })
-                expect(result).toBe('{"foo":"bar"}')
             })
 
             it.each([
