@@ -1,4 +1,11 @@
-import { isGzipSupported, gzipCompress, isNativeAsyncGzipError, isNativeAsyncGzipReadError } from '@/gzip'
+import {
+  isGzipSupported,
+  gzipCompress,
+  isGzipData,
+  isGzipRequest,
+  isNativeAsyncGzipError,
+  isNativeAsyncGzipReadError,
+} from '@/gzip'
 import { gzip } from 'node:zlib'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
@@ -67,6 +74,24 @@ describe('gzip', () => {
       } finally {
         restoreDependency()
       }
+    })
+  })
+  describe('isGzipData', () => {
+    it('checks for the gzip magic header in ArrayBuffer and ArrayBufferView bodies', () => {
+      expect(isGzipData(new Uint8Array([0x1f, 0x8b]).buffer)).toBe(true)
+      expect(isGzipData(new Uint8Array([0, 0x1f, 0x8b]).subarray(1))).toBe(true)
+      expect(isGzipData(new Uint8Array([0, 1, 2]).buffer)).toBe(false)
+      expect(isGzipData('not gzip')).toBe(false)
+      expect(isGzipData(new Blob([new Uint8Array([0x1f, 0x8b])]))).toBe(false)
+    })
+  })
+  describe('isGzipRequest', () => {
+    it('detects gzip compression from request options and URL params', () => {
+      expect(isGzipRequest('gzip-js')).toBe(true)
+      expect(isGzipRequest(undefined, 'gzip-js')).toBe(true)
+      expect(isGzipRequest(undefined, 'gzip')).toBe(true)
+      expect(isGzipRequest('base64', 'base64')).toBe(false)
+      expect(isGzipRequest(undefined, undefined)).toBe(false)
     })
   })
   describe('isNativeAsyncGzipReadError', () => {
