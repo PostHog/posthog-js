@@ -220,6 +220,7 @@ jobs:
                     - name: '@posthog/react'
                     - name: '@posthog/ai'
                     - name: '@posthog/convex'
+                    - name: '@posthog/next'
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'
                     - name: '@posthog/plugin-utils'

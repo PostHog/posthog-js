@@ -1,5 +1,20 @@
 # rrweb
 
+## 0.0.64
+
+### Patch Changes
+
+- [#3558](https://github.com/PostHog/posthog-js/pull/3558) [`3d93020`](https://github.com/PostHog/posthog-js/commit/3d93020ead535e16c04d92e29c71a0805c5d760f) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix iframe mutation buffer cleanup when iframe pagehide events overlap.
+  (2026-05-11)
+
+## 0.0.63
+
+### Patch Changes
+
+- Updated dependencies [[`94a5ba0`](https://github.com/PostHog/posthog-js/commit/94a5ba0cf6d3a0f943517a126a59f52baa77f2fe)]:
+    - @posthog/rrweb-snapshot@0.0.62
+    - @posthog/rrdom@0.0.62
+
 ## 0.0.62
 
 ### Patch Changes

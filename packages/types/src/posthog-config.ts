@@ -1350,7 +1350,7 @@ export interface PostHogConfig {
      * - **Disabled (0)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
      *   Use this if you control flag updates manually or have infrequent flag changes.
      *
-     * Note: Refreshes are automatically skipped when the browser tab is hidden.
+     * Note: Refreshes are automatically skipped when the browser tab is hidden or no document is available.
      *
      * @default 300000 (5 minutes)
      */

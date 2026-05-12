@@ -1,5 +1,47 @@
 # @posthog/core
 
+## 1.29.0
+
+### Minor Changes
+
+- [#3599](https://github.com/PostHog/posthog-js/pull/3599) [`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Expose UUID and cookie helpers from `@posthog/core` and `posthog-node` for users managing distinct_id outside the browser SDK (e.g. Lambda functions handing out cross-domain redirects). The helpers were already implemented in `@posthog/next` — this change lifts them to core so all SDKs can re-use them. `@posthog/next` now re-exports the same surface from `@posthog/core` to keep existing consumers working without churn. Closes #2143.
+  (2026-05-12)
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.373.3
+
+## 1.28.7
+
+### Patch Changes
+
+- [#3568](https://github.com/PostHog/posthog-js/pull/3568) [`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate native gzip output before sending requests and fall back when CompressionStream returns malformed data.
+  (2026-05-11)
+- Updated dependencies []:
+  - @posthog/types@1.373.2
+
+## 1.28.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.373.1
+
+## 1.28.5
+
+### Patch Changes
+
+- Updated dependencies [[`4c0c7d9`](https://github.com/PostHog/posthog-js/commit/4c0c7d9f48e6f4f5301f8208285191f62dc8407a), [`0a835fa`](https://github.com/PostHog/posthog-js/commit/0a835fa1d5db988d508aa023240ab5b4b50f0969)]:
+  - @posthog/types@1.373.0
+
+## 1.28.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.10
+
 ## 1.28.3
 
 ### Patch Changes

@@ -1,5 +1,73 @@
 # posthog-js
 
+## 1.373.3
+
+### Patch Changes
+
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+    - @posthog/core@1.29.0
+    - @posthog/types@1.373.3
+
+## 1.373.2
+
+### Patch Changes
+
+- [#3568](https://github.com/PostHog/posthog-js/pull/3568) [`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate native gzip output before sending requests and fall back when CompressionStream returns malformed data.
+  (2026-05-11)
+- Updated dependencies [[`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77)]:
+    - @posthog/core@1.28.7
+    - @posthog/types@1.373.2
+
+## 1.373.1
+
+### Patch Changes
+
+- [#3566](https://github.com/PostHog/posthog-js/pull/3566) [`7d027bc`](https://github.com/PostHog/posthog-js/commit/7d027bcfef3f0ffa47bdb31cd41f07784c2f2e7c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Prevent browser log capture from throwing when console arguments contain unreadable properties.
+  (2026-05-11)
+- Updated dependencies []:
+    - @posthog/types@1.373.1
+    - @posthog/core@1.28.6
+
+## 1.373.0
+
+### Minor Changes
+
+- [#3547](https://github.com/PostHog/posthog-js/pull/3547) [`4c0c7d9`](https://github.com/PostHog/posthog-js/commit/4c0c7d9f48e6f4f5301f8208285191f62dc8407a) Thanks [@williamchong](https://github.com/williamchong)! - `capture()` now accepts an optional `uuid` on `CaptureOptions`.
+  (2026-05-11)
+
+### Patch Changes
+
+- [#3561](https://github.com/PostHog/posthog-js/pull/3561) [`3511848`](https://github.com/PostHog/posthog-js/commit/3511848fd03bd77b117dccc6f06237a06d38d618) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle invalid persisted session replay config JSON gracefully
+  (2026-05-11)
+
+- [#3559](https://github.com/PostHog/posthog-js/pull/3559) [`0a835fa`](https://github.com/PostHog/posthog-js/commit/0a835fa1d5db988d508aa023240ab5b4b50f0969) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip remote config background refreshes when no document is available.
+  (2026-05-11)
+- Updated dependencies [[`4c0c7d9`](https://github.com/PostHog/posthog-js/commit/4c0c7d9f48e6f4f5301f8208285191f62dc8407a), [`0a835fa`](https://github.com/PostHog/posthog-js/commit/0a835fa1d5db988d508aa023240ab5b4b50f0969)]:
+    - @posthog/types@1.373.0
+    - @posthog/core@1.28.5
+
+## 1.372.10
+
+### Patch Changes
+
+- [#3544](https://github.com/PostHog/posthog-js/pull/3544) [`d120042`](https://github.com/PostHog/posthog-js/commit/d12004237985bc552423e31e75bb0fa42d0921ca) Thanks [@ksvat](https://github.com/ksvat)! - fix: stop session recording before destroying sessionManager in `opt_out_capturing()` with `cookieless_mode: "on_reject"`. Previously, queued/throttled rrweb events (e.g. mousemove) could fire after the sessionManager was set to `undefined` and throw `[SessionRecording] must be started with a valid sessionManager`. Also adds a defensive early-return in `onRRwebEmit` so any remaining late events bail out instead of throwing.
+  (2026-05-07)
+
+- [#3542](https://github.com/PostHog/posthog-js/pull/3542) [`94a5ba0`](https://github.com/PostHog/posthog-js/commit/94a5ba0cf6d3a0f943517a126a59f52baa77f2fe) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Preserve `<style>` textContent when the browser's CSSOM serialization would
+  emit empty longhands from `var()` inside a shorthand. When a stylesheet has
+  e.g. `padding: var(--p); padding-bottom: var(--pb);`, browsers store the
+  shorthand's longhands with empty token lists per the CSS Custom Properties
+  spec, and `CSSStyleRule.cssText` re-emits them as `padding-top: ;
+padding-right: ; padding-left: ;`. The previous behavior replaced the
+  `<style>` text with that corrupted output, silently dropping layout rules
+  on replay. We now detect the empty-longhand pattern and keep the original
+  textContent in that case. Affects users of any CSS-in-JS framework that
+  combines `var()` with shorthands (Chakra UI v3, Panda CSS, Emotion, etc.).
+  Same class of bug as rrweb-io/rrweb#1667. (2026-05-07)
+- Updated dependencies []:
+    - @posthog/types@1.372.10
+    - @posthog/core@1.28.4
+
 ## 1.372.9
 
 ### Patch Changes

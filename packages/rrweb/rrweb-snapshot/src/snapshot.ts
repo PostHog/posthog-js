@@ -25,6 +25,7 @@ import {
   maskInputValue,
   isNativeShadowDom,
   stringifyStylesheet,
+  hasEmptyShorthandLonghand,
   getInputType,
   toLowerCase,
   extractFileExtension,
@@ -550,7 +551,15 @@ function serializeTextNode(
         // to _only_ include the current rule(s) added by the text node.
         // So we'll be conservative and keep textContent as-is.
       } else if ((parent as HTMLStyleElement).sheet?.cssRules) {
-        text = stringifyStylesheet((parent as HTMLStyleElement).sheet!);
+        const stringified = stringifyStylesheet(
+          (parent as HTMLStyleElement).sheet!,
+        );
+        // Browsers serialize shorthand-with-var() as empty longhands, which
+        // silently drops layout rules on replay. Keep the original textContent
+        // when stringifyStylesheet would emit that corruption.
+        if (stringified && !hasEmptyShorthandLonghand(stringified)) {
+          text = stringified;
+        }
       }
     } catch (err) {
       console.warn(

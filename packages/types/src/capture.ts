@@ -98,6 +98,14 @@ export interface CaptureOptions {
     timestamp?: Date
 
     /**
+     * If set, overrides the auto-generated event uuid. Useful for cross-source idempotency
+     * (e.g. a server webhook and a browser success page both firing for the same business
+     * transaction): emit both events with the same deterministic uuid so PostHog can dedupe
+     * them.
+     */
+    uuid?: string
+
+    /**
      * Internal flag set by captureException() / sendExceptionEvent() to indicate this $exception
      * event originated from the proper exception capture path. Used to warn users who call
      * capture('$exception') directly.

@@ -1,5 +1,52 @@
 # posthog-ai
 
+## 7.18.5
+
+### Patch Changes
+
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+  - @posthog/core@1.29.0
+  - posthog-node@5.34.0
+
+## 7.18.4
+
+### Patch Changes
+
+- Updated dependencies [[`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77)]:
+  - @posthog/core@1.28.7
+  - posthog-node@5.33.7
+
+## 7.18.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.6
+  - posthog-node@5.33.6
+
+## 7.18.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.5
+  - posthog-node@5.33.5
+
+## 7.18.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.4
+  - posthog-node@5.33.4
+
+## 7.18.0
+
+### Minor Changes
+
+- [#3539](https://github.com/PostHog/posthog-js/pull/3539) [`6b23fd3`](https://github.com/PostHog/posthog-js/commit/6b23fd39d0c6458be72c861fa704bc7b8ec3bc23) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Added a new generic binary payload sanitizer to catch more edge cases
+  (2026-05-07)
+
 ## 7.17.5
 
 ### Patch Changes

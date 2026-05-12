@@ -1,5 +1,19 @@
 # @rrweb/rrweb-plugin-console-record
 
+## 0.0.64
+
+### Patch Changes
+
+- Updated dependencies [[`3d93020`](https://github.com/PostHog/posthog-js/commit/3d93020ead535e16c04d92e29c71a0805c5d760f)]:
+    - @posthog/rrweb@0.0.64
+
+## 0.0.63
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/rrweb@0.0.63
+
 ## 0.0.62
 
 ### Patch Changes

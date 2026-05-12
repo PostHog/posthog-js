@@ -743,7 +743,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (!persistedConfig) {
             return undefined
         }
-        const parsedConfig = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+        let parsedConfig: SessionRecordingPersistedConfig
+        try {
+            parsedConfig = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+        } catch (e) {
+            // Do not unregister here: the SDK only registers structured configs, and this read path should
+            // ignore corrupt legacy/external values without mutating persistence.
+            logger.warn('persisted remote config for session recording is invalid and will be ignored', e)
+            return undefined
+        }
 
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
@@ -1035,6 +1043,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
+        // late event after sessionManager teardown (e.g. cookieless opt-out) — _sessionManager would throw
+        if (!this._instance.sessionManager) {
+            return
+        }
+
         this._processQueuedEvents()
 
         if (!rawEvent || !isObject(rawEvent)) {

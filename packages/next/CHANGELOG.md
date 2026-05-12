@@ -1,5 +1,72 @@
 # @posthog/next
 
+## 0.4.48
+
+### Patch Changes
+
+- [#3599](https://github.com/PostHog/posthog-js/pull/3599) [`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Expose UUID and cookie helpers from `@posthog/core` and `posthog-node` for users managing distinct_id outside the browser SDK (e.g. Lambda functions handing out cross-domain redirects). The helpers were already implemented in `@posthog/next` — this change lifts them to core so all SDKs can re-use them. `@posthog/next` now re-exports the same surface from `@posthog/core` to keep existing consumers working without churn. Closes #2143.
+  (2026-05-12)
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+    - @posthog/core@1.29.0
+    - posthog-node@5.34.0
+    - posthog-js@1.373.3
+
+## 0.4.47
+
+### Patch Changes
+
+- Updated dependencies [[`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77)]:
+    - posthog-js@1.373.2
+    - @posthog/core@1.28.7
+    - posthog-node@5.33.7
+
+## 0.4.46
+
+### Patch Changes
+
+- Updated dependencies [[`7d027bc`](https://github.com/PostHog/posthog-js/commit/7d027bcfef3f0ffa47bdb31cd41f07784c2f2e7c)]:
+    - posthog-js@1.373.1
+    - @posthog/core@1.28.6
+    - posthog-node@5.33.6
+
+## 0.4.45
+
+### Patch Changes
+
+- Updated dependencies [[`4c0c7d9`](https://github.com/PostHog/posthog-js/commit/4c0c7d9f48e6f4f5301f8208285191f62dc8407a), [`3511848`](https://github.com/PostHog/posthog-js/commit/3511848fd03bd77b117dccc6f06237a06d38d618), [`0a835fa`](https://github.com/PostHog/posthog-js/commit/0a835fa1d5db988d508aa023240ab5b4b50f0969)]:
+    - posthog-js@1.373.0
+    - @posthog/core@1.28.5
+    - posthog-node@5.33.5
+
+## 0.4.44
+
+### Patch Changes
+
+- Updated dependencies [[`d120042`](https://github.com/PostHog/posthog-js/commit/d12004237985bc552423e31e75bb0fa42d0921ca), [`94a5ba0`](https://github.com/PostHog/posthog-js/commit/94a5ba0cf6d3a0f943517a126a59f52baa77f2fe)]:
+    - posthog-js@1.372.10
+    - @posthog/core@1.28.4
+    - posthog-node@5.33.4
+
+## 0.4.43
+
+### Patch Changes
+
+- [#3543](https://github.com/PostHog/posthog-js/pull/3543) [`ece3097`](https://github.com/PostHog/posthog-js/commit/ece3097bea5d2cfeeaff0c02bb61e6f58c188013) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Publish `@posthog/next` from the release workflow so npm catches up with the versions already recorded in the changelog.
+  (2026-05-07)
+
+## 0.4.42
+
+### Patch Changes
+
+- [#3533](https://github.com/PostHog/posthog-js/pull/3533) [`eb546b4`](https://github.com/PostHog/posthog-js/commit/eb546b48bcc08d6e702e2eb30c8ae1005ea00739) Thanks [@brandonhines-mialabs](https://github.com/brandonhines-mialabs)! - Fix `@posthog/next/pages` packaging so the documented Pages Router setup builds without a `server-only` import error.
+
+    The `./pages` subpath previously had no per-runtime `exports` conditions, so any module importing from `@posthog/next/pages` (e.g. `pages/_app.tsx`) transitively pulled in `'server-only'` and `posthog-node`. Next.js rejects `'server-only'` from client modules before tree-shaking can drop the unused re-exports, breaking `next build`. The barrel is now split per runtime:
+    - `browser` → `./dist/pages.client.js` — `PostHogProvider`, `PostHogPageView`
+    - `edge-light` / `edge` / `worker` → `./dist/pages.edge.js` — `postHogMiddleware`, `PostHogPageView`, `DEFAULT_INGEST_PATH`
+    - `react-server` / `default` → `./dist/pages.js` — full surface including `getServerSidePostHog` and `getPostHog`
+
+    Existing imports (`from '@posthog/next/pages'`) keep working unchanged; the resolver picks the right barrel per runtime. (2026-05-06)
+
 ## 0.4.41
 
 ### Patch Changes

@@ -273,7 +273,15 @@ export class SessionRecording implements Extension {
         if (!persistedConfig) {
             return false
         }
-        const config = typeof persistedConfig === 'object' ? persistedConfig : JSON.parse(persistedConfig)
+        let config: SessionRecordingPersistedConfig
+        try {
+            config = typeof persistedConfig === 'object' ? persistedConfig : JSON.parse(persistedConfig)
+        } catch (e) {
+            // Do not unregister here: the SDK only registers structured configs, and this read path should
+            // ignore corrupt legacy/external values without mutating persistence.
+            logger.warn('persisted remote config for session recording is invalid and will be ignored', e)
+            return false
+        }
         // default to now so that configs persisted by older SDK versions
         // (which never set cache_timestamp) are treated as fresh
         const cacheTimestamp = config.cache_timestamp ?? Date.now()

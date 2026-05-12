@@ -70,14 +70,20 @@ describe('posthog core', () => {
             expect(captureData.timestamp).toEqual(baseUTCDateTime)
         })
 
-        it('captures when time is overriden by caller', () => {
+        it.each([
+            { field: 'timestamp', value: new Date(2020, 0, 2, 12, 34) },
+            { field: 'uuid', value: '0190e0a0-0000-7000-8000-000000000000' },
+        ] as const)('captures when $field is overridden by caller', ({ field, value }) => {
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, { [field]: value })
+            expect(captureData[field]).toEqual(value)
+        })
+
+        it('records override-tracking properties when timestamp is overridden', () => {
             const captureData = posthogWith(defaultConfig, defaultOverrides).capture(
                 eventName,
                 {},
                 { timestamp: new Date(2020, 0, 2, 12, 34) }
             )
-            expect(captureData).toHaveProperty('timestamp')
-            expect(captureData.timestamp).toEqual(new Date(2020, 0, 2, 12, 34))
             expect(captureData.properties['$event_time_override_provided']).toEqual(true)
             expect(captureData.properties['$event_time_override_system_time']).toEqual(baseUTCDateTime)
         })

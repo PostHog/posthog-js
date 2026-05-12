@@ -90,7 +90,7 @@ export class RemoteConfigLoader {
      * is a no-op when flags are disabled. This avoids an unnecessary network round-trip.
      */
     refresh(): void {
-        if (this._instance._shouldDisableFlags() || document?.visibilityState === 'hidden') {
+        if (this._instance._shouldDisableFlags() || !document || document.visibilityState === 'hidden') {
             return
         }
 

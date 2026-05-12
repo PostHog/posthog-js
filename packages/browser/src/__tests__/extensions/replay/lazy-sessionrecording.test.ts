@@ -410,6 +410,26 @@ describe('Lazy SessionRecording', () => {
                 expect(result?.enabled).toBe(true)
             })
 
+            it('ignores invalid persisted JSON config when checking freshness', () => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: '{not json',
+                })
+
+                expect(sessionRecording['_isRemoteConfigFresh']()).toBe(false)
+                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe('{not json')
+            })
+
+            it('ignores invalid persisted JSON config when reading remote config', () => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: '{not json',
+                })
+
+                const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
+
+                expect(result).toBeUndefined()
+                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe('{not json')
+            })
+
             it('trusts stale config once recording has started (long-lived SPA)', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording'].isStarted).toBe(true)
 
@@ -2681,6 +2701,25 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             expect(sessionRecording.stopRecording).toHaveBeenCalled()
+        })
+
+        it('does not throw on rrweb emit after sessionManager is gone (regression for #58017)', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // simulate sessionManager teardown (cookieless opt-out) before a late rrweb event
+            ;(posthog as any).sessionManager = undefined
+            ;(posthog.capture as jest.Mock).mockClear()
+
+            expect(() =>
+                sessionRecording.onRRwebEmit(createIncrementalSnapshot({ data: { source: 1 } }) as eventWithTime)
+            ).not.toThrow()
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
     })
 
