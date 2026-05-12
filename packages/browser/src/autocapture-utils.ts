@@ -97,6 +97,7 @@ export function getEventTarget(e: Event): Element | null {
 }
 
 export const autocaptureCompatibleElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+export const autocaptureCompatibleElementsSelector = autocaptureCompatibleElements.join(',')
 
 /*
  if there is no config, then all elements are allowed

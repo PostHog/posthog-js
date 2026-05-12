@@ -1,7 +1,7 @@
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
-import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
+import { autocaptureCompatibleElementsSelector, getEventTarget } from '../autocapture-utils'
 import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
@@ -193,7 +193,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         if (
             isTag(click.node, 'html') ||
             !isElementNode(click.node) ||
-            click.node.closest(autocaptureCompatibleElements.join(','))
+            click.node.closest(autocaptureCompatibleElementsSelector)
         ) {
             return true
         }
