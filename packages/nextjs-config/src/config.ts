@@ -22,7 +22,15 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
   // upload. Detect that by checking on the next tick whether Next.js (or any
   // outer wrapper) actually invoked our returned function. If not, warn so the
   // user knows to move `withPostHogConfig` to be the outermost wrapper.
+  //
+  // Known false-positive: if `next.config.js` is imported outside the Next.js
+  // build pipeline (e.g. a Jest/Vitest test that imports the config for
+  // assertions, or a custom script that reads it directly), `nextConfigFn` is
+  // never invoked and this warning will fire after the timeout. That's
+  // acceptable here — the warning is informational, not fatal — and the
+  // alternative (an opt-out flag) adds API surface for an edge case.
   // See https://github.com/PostHog/posthog-js/issues/3572
+  const INVOCATION_TIMEOUT_MS = 5000
   let invoked = false
   const nextConfigFn = async (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => {
     invoked = true
@@ -55,11 +63,9 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
             'See https://github.com/PostHog/posthog-js/issues/3572'
         )
       }
-    }, 5000)
+    }, INVOCATION_TIMEOUT_MS)
     // Allow the Node process to exit normally even if our timer is pending.
-    if (typeof timer === 'object' && timer && typeof (timer as { unref?: () => void }).unref === 'function') {
-      ;(timer as { unref: () => void }).unref()
-    }
+    ;(timer as unknown as { unref?: () => void }).unref?.()
   }
 
   return nextConfigFn
