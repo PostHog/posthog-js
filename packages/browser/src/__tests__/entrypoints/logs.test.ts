@@ -295,6 +295,39 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should omit unreadable properties when logging', () => {
+            const originalConsoleLog = assignableWindow.console.log as jest.Mock
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const objectWithUnreadableProperties: any = {}
+            Object.defineProperty(objectWithUnreadableProperties, 'toJSON', {
+                get() {
+                    throw new Error('SecurityError')
+                },
+            })
+            Object.defineProperty(objectWithUnreadableProperties, 'unreadable', {
+                enumerable: true,
+                get() {
+                    throw new Error('SecurityError')
+                },
+            })
+            objectWithUnreadableProperties.readable = 'value'
+
+            expect(() => assignableWindow.console.log(objectWithUnreadableProperties)).not.toThrow()
+
+            expect(originalConsoleLog).toHaveBeenCalledWith(objectWithUnreadableProperties)
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: '{"readable":"value"}',
+                    attributes: expect.objectContaining({
+                        readable: 'value',
+                    }),
+                })
+            )
+            expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty('unreadable')
+        })
+
         it('should not add attributes_truncated when within limits', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)

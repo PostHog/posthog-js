@@ -1,4 +1,4 @@
-import { isGzipSupported, gzipCompress, isNativeAsyncGzipReadError } from '@/gzip'
+import { isGzipSupported, gzipCompress, isNativeAsyncGzipError, isNativeAsyncGzipReadError } from '@/gzip'
 import { gzip } from 'node:zlib'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
@@ -72,11 +72,19 @@ describe('gzip', () => {
   describe('isNativeAsyncGzipReadError', () => {
     it('returns true for NotReadableError', () => {
       expect(isNativeAsyncGzipReadError({ name: 'NotReadableError' })).toBe(true)
+      expect(isNativeAsyncGzipError({ name: 'NotReadableError' })).toBe(true)
+    })
+
+    it('returns true for native gzip validation errors', () => {
+      expect(isNativeAsyncGzipReadError({ name: 'NativeGzipValidationError' })).toBe(false)
+      expect(isNativeAsyncGzipError({ name: 'NativeGzipValidationError' })).toBe(true)
     })
 
     it('returns false for other errors', () => {
       expect(isNativeAsyncGzipReadError({ name: 'TypeError' })).toBe(false)
+      expect(isNativeAsyncGzipError({ name: 'TypeError' })).toBe(false)
       expect(isNativeAsyncGzipReadError(null)).toBe(false)
+      expect(isNativeAsyncGzipError(null)).toBe(false)
     })
   })
   describe('gzipCompress', () => {
@@ -121,6 +129,35 @@ describe('gzip', () => {
       try {
         await expect(gzipCompress(API_TEST_INPUT, false, { rethrow: true })).rejects.toBe(writeError)
         expect(abort).toHaveBeenCalledWith(writeError)
+      } finally {
+        ;(globalThis as any).CompressionStream = CompressionStream
+      }
+    })
+
+    it('rejects malformed native gzip output when no stream error is thrown', async () => {
+      const CompressionStream = globalThis.CompressionStream
+
+      ;(globalThis as any).CompressionStream = jest.fn(() => ({
+        writable: {
+          getWriter: () => ({
+            write: jest.fn(() => Promise.resolve()),
+            close: jest.fn(() => Promise.resolve()),
+            abort: jest.fn(() => Promise.resolve()),
+          }),
+        },
+        readable: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array([1, 2, 3, 4]))
+            controller.close()
+          },
+        }),
+      }))
+
+      try {
+        await expect(gzipCompress(API_TEST_INPUT, false, { rethrow: true })).rejects.toHaveProperty(
+          'name',
+          'NativeGzipValidationError'
+        )
       } finally {
         ;(globalThis as any).CompressionStream = CompressionStream
       }
