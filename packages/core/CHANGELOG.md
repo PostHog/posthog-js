@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.29.1
+
+### Patch Changes
+
+- [#3602](https://github.com/PostHog/posthog-js/pull/3602) [`4b895bf`](https://github.com/PostHog/posthog-js/commit/4b895bf0151f24c0b72e8ce4cae47906795b29b8) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate gzip request bodies at the browser send boundary and fall back to JSON if the outgoing body is not gzip data.
+  (2026-05-12)
+- Updated dependencies []:
+  - @posthog/types@1.373.4
+
 ## 1.29.0
 
 ### Minor Changes
