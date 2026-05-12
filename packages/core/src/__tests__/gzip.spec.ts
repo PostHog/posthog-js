@@ -77,21 +77,25 @@ describe('gzip', () => {
     })
   })
   describe('isGzipData', () => {
-    it('checks for the gzip magic header in ArrayBuffer and ArrayBufferView bodies', () => {
-      expect(isGzipData(new Uint8Array([0x1f, 0x8b]).buffer)).toBe(true)
-      expect(isGzipData(new Uint8Array([0, 0x1f, 0x8b]).subarray(1))).toBe(true)
-      expect(isGzipData(new Uint8Array([0, 1, 2]).buffer)).toBe(false)
-      expect(isGzipData('not gzip')).toBe(false)
-      expect(isGzipData(new Blob([new Uint8Array([0x1f, 0x8b])]))).toBe(false)
+    it.each([
+      ['ArrayBuffer with gzip magic', new Uint8Array([0x1f, 0x8b]).buffer, true],
+      ['ArrayBufferView with gzip magic', new Uint8Array([0, 0x1f, 0x8b]).subarray(1), true],
+      ['ArrayBuffer without gzip magic', new Uint8Array([0, 1, 2]).buffer, false],
+      ['string body', 'not gzip', false],
+      ['Blob body', new Blob([new Uint8Array([0x1f, 0x8b])]), false],
+    ])('returns %s => %s', (_name, input, expected) => {
+      expect(isGzipData(input)).toBe(expected)
     })
   })
   describe('isGzipRequest', () => {
-    it('detects gzip compression from request options and URL params', () => {
-      expect(isGzipRequest('gzip-js')).toBe(true)
-      expect(isGzipRequest(undefined, 'gzip-js')).toBe(true)
-      expect(isGzipRequest(undefined, 'gzip')).toBe(true)
-      expect(isGzipRequest('base64', 'base64')).toBe(false)
-      expect(isGzipRequest(undefined, undefined)).toBe(false)
+    it.each([
+      ['option gzip-js', 'gzip-js', undefined, true],
+      ['url gzip-js', undefined, 'gzip-js', true],
+      ['url gzip', undefined, 'gzip', true],
+      ['base64', 'base64', 'base64', false],
+      ['no compression', undefined, undefined, false],
+    ])('returns %s => %s', (_name, compression, urlCompression, expected) => {
+      expect(isGzipRequest(compression, urlCompression)).toBe(expected)
     })
   })
   describe('isNativeAsyncGzipReadError', () => {
