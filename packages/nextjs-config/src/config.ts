@@ -6,6 +6,11 @@ type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextCo
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
 type UserProvidedConfig = NextConfig | NextFuncConfig | NextAsyncConfig
 
+// How long after `withPostHogConfig` returns we wait before deciding that
+// Next.js (or an outer wrapper) never invoked our config function. See the
+// comment inside `withPostHogConfig` for the full reasoning.
+const INVOCATION_TIMEOUT_MS = 5000
+
 export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogConfig: PluginConfig): NextConfig {
   const resolvedConfig = resolveConfig(posthogConfig)
   const sourceMapEnabled = resolvedConfig.sourcemaps.enabled
@@ -30,7 +35,6 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
   // acceptable here — the warning is informational, not fatal — and the
   // alternative (an opt-out flag) adds API surface for an edge case.
   // See https://github.com/PostHog/posthog-js/issues/3572
-  const INVOCATION_TIMEOUT_MS = 5000
   let invoked = false
   const nextConfigFn = async (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => {
     invoked = true
