@@ -1631,12 +1631,6 @@
       "path": "src/extensions/context/types.ts"
     },
     {
-      "id": "CookieStore",
-      "name": "CookieStore",
-      "properties": [],
-      "path": "../core/src/cookie.ts"
-    },
-    {
       "id": "EndBranching",
       "name": "EndBranching",
       "properties": [],
@@ -2105,29 +2099,6 @@
       "properties": [],
       "path": "../core/src/types.ts",
       "example": "{\n    uuid?: string;\n    timestamp?: Date;\n    disableGeoip?: boolean;\n    _originatedFromCaptureException?: boolean;\n}"
-    },
-    {
-      "id": "PostHogCookieState",
-      "name": "PostHogCookieState",
-      "properties": [
-        {
-          "type": "string",
-          "name": "deviceId"
-        },
-        {
-          "type": "string",
-          "name": "distinctId"
-        },
-        {
-          "type": "boolean",
-          "name": "isIdentified"
-        },
-        {
-          "type": "string",
-          "name": "sessionId"
-        }
-      ],
-      "path": "../core/src/cookie.ts"
     },
     {
       "id": "PostHogCoreOptions",
