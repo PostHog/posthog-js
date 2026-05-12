@@ -3,7 +3,9 @@ import PostHogOpenAI from '../src/openai'
 import openaiModule from 'openai'
 import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
-import { flushPromises } from './test-utils'
+import { flushPromises, installAPIPromiseShim } from './test-utils'
+
+installAPIPromiseShim()
 import { version } from '../package.json'
 
 // Test-specific helper interface for async iteration

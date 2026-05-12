@@ -4,7 +4,9 @@ import PostHogAnthropic from '../src/anthropic'
 import PostHogGemini from '../src/gemini'
 import { LangChainCallbackHandler } from '../src/langchain/callbacks'
 import { withTracing } from '../src/index'
-import { flushPromises } from './test-utils'
+import { flushPromises, installAPIPromiseShim } from './test-utils'
+
+installAPIPromiseShim()
 import openaiModule from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
 

@@ -46,6 +46,10 @@ interface MonitoringOpenAIConfig extends ClientOptions {
 
 type RequestOptions = Record<string, unknown>
 
+const captureInBackground = (work: () => Promise<unknown>): void => {
+  void work().catch(() => {})
+}
+
 export class PostHogOpenAI extends OpenAIOrignal {
   private readonly phClient: PostHog
   public chat: WrappedChat
@@ -112,7 +116,7 @@ export class WrappedCompletions extends Completions {
     const parentPromise = super.create(openAIParams, options)
 
     if (openAIParams.stream) {
-      return parentPromise.then((value) => {
+      return parentPromise._thenUnwrap((value, _props) => {
         if ('tee' in value) {
           const [stream1, stream2] = value.tee()
           ;(async () => {
@@ -301,12 +305,12 @@ export class WrappedCompletions extends Completions {
           return stream2
         }
         return value
-      }) as APIPromise<Stream<ChatCompletionChunk>>
+      })
     } else {
-      const wrappedPromise = parentPromise.then(
-        async (result) => {
-          if ('choices' in result) {
-            const latency = (Date.now() - startTime) / 1000
+      const wrappedPromise = parentPromise._thenUnwrap((result, _props) => {
+        if ('choices' in result) {
+          const latency = (Date.now() - startTime) / 1000
+          captureInBackground(async () => {
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
             const formattedOutput = formatResponseOpenAI(result)
             await captureAiGeneration(this.phClient, {
@@ -330,10 +334,13 @@ export class WrappedCompletions extends Completions {
               stopReason: result.choices[0]?.finish_reason ?? undefined,
               tools: availableTools,
             })
-          }
-          return result
-        },
-        async (error: unknown) => {
+          })
+        }
+        return result
+      })
+
+      captureInBackground(() =>
+        wrappedPromise.catch(async (error: unknown) => {
           const httpStatus =
             error && typeof error === 'object' && 'status' in error
               ? ((error as { status?: number }).status ?? 500)
@@ -355,9 +362,8 @@ export class WrappedCompletions extends Completions {
             },
             error,
           })
-          throw error
-        }
-      ) as APIPromise<ChatCompletion>
+        })
+      )
 
       return wrappedPromise
     }
@@ -403,7 +409,7 @@ export class WrappedResponses extends Responses {
     const parentPromise = super.create(openAIParams, options)
 
     if (openAIParams.stream) {
-      return parentPromise.then((value) => {
+      return parentPromise._thenUnwrap((value, _props) => {
         if ('tee' in value && typeof value.tee === 'function') {
           const [stream1, stream2] = value.tee()
           ;(async () => {
@@ -517,12 +523,12 @@ export class WrappedResponses extends Responses {
           return stream2
         }
         return value
-      }) as APIPromise<Stream<OpenAIOrignal.Responses.ResponseStreamEvent>>
+      })
     } else {
-      const wrappedPromise = parentPromise.then(
-        async (result) => {
-          if ('output' in result) {
-            const latency = (Date.now() - startTime) / 1000
+      const wrappedPromise = parentPromise._thenUnwrap((result, _props) => {
+        if ('output' in result) {
+          const latency = (Date.now() - startTime) / 1000
+          captureInBackground(async () => {
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
             const formattedOutput = formatResponseOpenAI({ output: result.output })
             await captureAiGeneration(this.phClient, {
@@ -546,10 +552,13 @@ export class WrappedResponses extends Responses {
               stopReason: result.status ?? undefined,
               tools: availableTools,
             })
-          }
-          return result
-        },
-        async (error: unknown) => {
+          })
+        }
+        return result
+      })
+
+      captureInBackground(() =>
+        wrappedPromise.catch(async (error: unknown) => {
           const httpStatus =
             error && typeof error === 'object' && 'status' in error
               ? ((error as { status?: number }).status ?? 500)
@@ -571,9 +580,8 @@ export class WrappedResponses extends Responses {
             },
             error,
           })
-          throw error
-        }
-      ) as APIPromise<OpenAIOrignal.Responses.Response>
+        })
+      )
 
       return wrappedPromise
     }
@@ -594,9 +602,9 @@ export class WrappedResponses extends Responses {
     try {
       const parentPromise = super.parse(openAIParams, options)
 
-      const wrappedPromise = parentPromise.then(
-        async (result) => {
-          const latency = (Date.now() - startTime) / 1000
+      const wrappedPromise = parentPromise._thenUnwrap((result, _props) => {
+        const latency = (Date.now() - startTime) / 1000
+        captureInBackground(async () => {
           await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model ?? result.model,
@@ -616,9 +624,12 @@ export class WrappedResponses extends Responses {
             },
             stopReason: result.status ?? undefined,
           })
-          return result
-        },
-        async (error: Error) => {
+        })
+        return result
+      })
+
+      captureInBackground(() =>
+        wrappedPromise.catch(async (error: Error) => {
           await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
@@ -634,8 +645,7 @@ export class WrappedResponses extends Responses {
             },
             error,
           })
-          throw error
-        }
+        })
       )
 
       return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
@@ -665,9 +675,9 @@ export class WrappedEmbeddings extends Embeddings {
 
     const parentPromise = super.create(openAIParams, options)
 
-    const wrappedPromise = parentPromise.then(
-      async (result) => {
-        const latency = (Date.now() - startTime) / 1000
+    const wrappedPromise = parentPromise._thenUnwrap((result, _props) => {
+      const latency = (Date.now() - startTime) / 1000
+      captureInBackground(async () => {
         await captureAiGeneration(this.phClient, {
           ...posthogParams,
           eventType: AIEvent.Embedding,
@@ -684,9 +694,12 @@ export class WrappedEmbeddings extends Embeddings {
             rawUsage: result.usage,
           },
         })
-        return result
-      },
-      async (error: unknown) => {
+      })
+      return result
+    })
+
+    captureInBackground(() =>
+      wrappedPromise.catch(async (error: unknown) => {
         const httpStatus =
           error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
 
@@ -706,9 +719,8 @@ export class WrappedEmbeddings extends Embeddings {
           },
           error,
         })
-        throw error
-      }
-    ) as APIPromise<CreateEmbeddingResponse>
+      })
+    )
 
     return wrappedPromise
   }
@@ -803,7 +815,7 @@ export class WrappedTranscriptions extends Transcriptions {
       : super.create(openAIParams, options)
 
     if (openAIParams.stream) {
-      return parentPromise.then((value) => {
+      return parentPromise._thenUnwrap((value, _props) => {
         if ('tee' in value && typeof (value as any).tee === 'function') {
           const [stream1, stream2] = (value as any).tee()
           ;(async () => {
@@ -876,12 +888,12 @@ export class WrappedTranscriptions extends Transcriptions {
           return stream2
         }
         return value
-      }) as APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>
+      })
     } else {
-      const wrappedPromise = parentPromise.then(
-        async (result) => {
-          if ('text' in result) {
-            const latency = (Date.now() - startTime) / 1000
+      const wrappedPromise = parentPromise._thenUnwrap((result, _props) => {
+        if (result && 'text' in result) {
+          const latency = (Date.now() - startTime) / 1000
+          captureInBackground(async () => {
             await captureAiGeneration(this.phClient, {
               ...posthogParams,
               model: openAIParams.model,
@@ -898,10 +910,13 @@ export class WrappedTranscriptions extends Transcriptions {
                 rawUsage: result.usage,
               },
             })
-            return result
-          }
-        },
-        async (error: unknown) => {
+          })
+        }
+        return result
+      })
+
+      captureInBackground(() =>
+        wrappedPromise.catch(async (error: unknown) => {
           await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: openAIParams.model,
@@ -917,9 +932,8 @@ export class WrappedTranscriptions extends Transcriptions {
             },
             error,
           })
-          throw error
-        }
-      ) as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>
+        })
+      )
 
       return wrappedPromise
     }

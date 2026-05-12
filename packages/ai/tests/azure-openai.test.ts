@@ -1,6 +1,9 @@
 import { PostHog } from 'posthog-node'
 import { PostHogAzureOpenAI } from '../src/openai/azure'
 import openaiModule from 'openai'
+import { installAPIPromiseShim } from './test-utils'
+
+installAPIPromiseShim()
 
 let mockAzureEmbeddingResponse: any = {}
 
