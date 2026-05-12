@@ -168,9 +168,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 document.body.append(ancestor)
 
                 triggerMouseEvent(child, 'click')
-                jest.setSystemTime(4000)
-
-                lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
                 expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
                 expect(fakeInstance.capture).not.toHaveBeenCalled()
@@ -200,9 +197,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             document.body.append(anchor)
 
             triggerMouseEvent(child, 'click')
-            jest.setSystemTime(4000)
-
-            lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).not.toHaveBeenCalled()
