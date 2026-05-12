@@ -1,5 +1,13 @@
 # posthog-ai
 
+## 7.18.5
+
+### Patch Changes
+
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+  - @posthog/core@1.29.0
+  - posthog-node@5.34.0
+
 ## 7.18.4
 
 ### Patch Changes
