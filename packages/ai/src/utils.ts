@@ -591,6 +591,53 @@ export function sanitizeValues(obj: any): any {
   return jsonSafe
 }
 
+/**
+ * Convert an unknown thrown value into a JSON-serializable representation that
+ * preserves Error fields the engine marks non-enumerable (`name`, `message`,
+ * `stack`, `cause`), so they survive `JSON.stringify` for storage on
+ * `$ai_error`. Recurses into the `cause` chain and into any own enumerable
+ * properties (e.g. SDK-attached fields like `status`, `response`,
+ * `validationError`). Tracks a `seen` set to guard against circular cause
+ * graphs. Non-object inputs are returned as-is.
+ *
+ * Fixes https://github.com/PostHog/posthog-js/issues/3556
+ */
+export function serializeError(err: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
+  if (err === null || (typeof err !== 'object' && typeof err !== 'function')) {
+    return err
+  }
+  if (seen.has(err as object)) {
+    return '[Circular]'
+  }
+  seen.add(err as object)
+  if (err instanceof Error) {
+    const obj: Record<string, unknown> = {
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+    }
+    if ('cause' in err && (err as { cause?: unknown }).cause !== undefined) {
+      obj.cause = serializeError((err as { cause: unknown }).cause, seen)
+    }
+    // Pick up own enumerable properties added by SDKs (statusCode, response, ...).
+    for (const key of Object.keys(err)) {
+      if (!(key in obj)) {
+        obj[key] = serializeError((err as Record<string, unknown>)[key], seen)
+      }
+    }
+    return obj
+  }
+  if (Array.isArray(err)) {
+    return err.map((v) => serializeError(v, seen))
+  }
+  // Plain object — recurse so nested Errors (e.g. inside `validationError`) are unwrapped too.
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(err as Record<string, unknown>)) {
+    out[k] = serializeError(v, seen)
+  }
+  return out
+}
+
 const POSTHOG_PARAMS_MAP: Record<keyof MonitoringParams, string> = {
   posthogDistinctId: 'distinctId',
   posthogTraceId: 'traceId',

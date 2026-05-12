@@ -143,6 +143,43 @@ describe('captureAiGeneration', () => {
     expect(properties.$ai_http_status).toBe(expected)
   })
 
+  // https://github.com/PostHog/posthog-js/issues/3556
+  it('serializes the message, stack, and cause chain of an Error onto $ai_error', async () => {
+    const client = buildClient()
+    const root = new Error('zod validation failed')
+    const middle = Object.assign(new Error('type validation'), { cause: root })
+    const top = Object.assign(new Error('gateway responded with error'), {
+      name: 'GatewayResponseError',
+      statusCode: 500,
+      cause: middle,
+    })
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, error: top })
+
+    const properties = lastCaptureProperties(client)
+    const parsed = JSON.parse(properties.$ai_error as string)
+    expect(parsed.name).toBe('GatewayResponseError')
+    expect(parsed.message).toBe('gateway responded with error')
+    expect(parsed.statusCode).toBe(500)
+    expect(typeof parsed.stack).toBe('string')
+    expect(parsed.cause.message).toBe('type validation')
+    expect(parsed.cause.cause.message).toBe('zod validation failed')
+  })
+
+  it('marks circular cause chains instead of recursing forever on $ai_error', async () => {
+    const client = buildClient()
+    const a = new Error('a')
+    const b = Object.assign(new Error('b'), { cause: a })
+    ;(a as { cause?: unknown }).cause = b
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, error: a })
+
+    const parsed = JSON.parse(lastCaptureProperties(client).$ai_error as string)
+    expect(parsed.message).toBe('a')
+    expect(parsed.cause.message).toBe('b')
+    expect(parsed.cause.cause).toBe('[Circular]')
+  })
+
   it('mutates the original error in place when autocapture is enabled, so callers can re-throw safely', async () => {
     const client = buildClient({ enableExceptionAutocapture: true })
     const error = new Error('boom')

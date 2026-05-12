@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
-import { AIEvent, CostOverride, getTokensSource, sanitizeValues, withPrivacyMode } from './utils'
+import { AIEvent, CostOverride, getTokensSource, sanitizeValues, serializeError, withPrivacyMode } from './utils'
 
 type AnthropicTool = AnthropicOriginal.Tool
 
@@ -115,7 +115,12 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
 
     errorData = {
       $ai_is_error: true,
-      $ai_error: sanitizeValues(JSON.stringify(options.error)),
+      // JSON.stringify on an Error instance drops `message`, `stack`, and the
+      // `cause` chain because those fields are non-enumerable, which made
+      // `$ai_error` show up as an empty-ish blob on the dashboard. Normalize
+      // Errors to plain objects first so the fields survive serialization.
+      // See https://github.com/PostHog/posthog-js/issues/3556
+      $ai_error: sanitizeValues(JSON.stringify(serializeError(options.error))),
       $exception_event_id: exceptionId,
     }
   }
