@@ -33,7 +33,6 @@ describe('PostHogPageView', () => {
 
     it('includes search params in the captured URL', () => {
         mockSearchParams = new URLSearchParams('q=hello&page=2')
-        window.history.pushState({}, '', '/initial?q=hello&page=2')
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
             $current_url: 'http://localhost/initial?q=hello&page=2',
@@ -45,7 +44,6 @@ describe('PostHogPageView', () => {
         expect(mockCapture).toHaveBeenCalledTimes(1)
 
         mockPathname = '/new-page'
-        window.history.pushState({}, '', '/new-page')
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(2)
         expect(mockCapture).toHaveBeenLastCalledWith('$pageview', {

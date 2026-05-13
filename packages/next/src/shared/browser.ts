@@ -1,7 +1,7 @@
-export function getCurrentUrl(): string | undefined {
-    if (typeof window === 'undefined' || !window.location.href) {
+export function getCurrentUrl(path: string): string | undefined {
+    if (typeof window === 'undefined') {
         return undefined
     }
 
-    return window.location.href
+    return `${window.location.origin}${path}`
 }

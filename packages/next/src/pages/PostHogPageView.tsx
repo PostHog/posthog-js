@@ -31,7 +31,7 @@ export function PostHogPageView() {
     const posthog = usePostHog()
 
     useEffect(() => {
-        const currentUrl = getCurrentUrl()
+        const currentUrl = getCurrentUrl(router.asPath)
         if (!posthog || !router.isReady || !currentUrl) {
             return
         }

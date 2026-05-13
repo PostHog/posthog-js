@@ -30,7 +30,6 @@ describe('Pages PostHogPageView', () => {
 
     it('includes query params and hash fragments from asPath', () => {
         mockRouter = { asPath: '/search?q=hello&page=2#section', isReady: true }
-        window.history.pushState({}, '', '/search?q=hello&page=2#section')
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
             $current_url: 'http://localhost/search?q=hello&page=2#section',

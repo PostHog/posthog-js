@@ -47,7 +47,8 @@ function PageViewTracker() {
     const posthog = usePostHog()
 
     useEffect(() => {
-        const currentUrl = getCurrentUrl()
+        const search = searchParams.toString()
+        const currentUrl = getCurrentUrl(search ? `${pathname}?${search}` : pathname)
         if (!posthog || !currentUrl) {
             return
         }
