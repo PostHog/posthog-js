@@ -50,7 +50,7 @@ describe('package.json#exports routing', () => {
         expect(pages.edge).toBe('./dist/pages.edge.js')
         expect(pages.worker).toBe('./dist/pages.edge.js')
         expect(pages['react-server']).toBe('./dist/pages.js')
-        expect(pages.default).toBe('./dist/pages.js')
+        expect(pages.default).toBe('./dist/pages.client.js')
     })
 
     it('. (root entry) keeps the existing per-runtime split intact', () => {
