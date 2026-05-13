@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation.js'
 import { usePostHog } from '@posthog/react'
+import { getCurrentUrl } from '../shared/browser.js'
 
 /**
  * Tracks pageviews on route change in Next.js App Router.
@@ -46,17 +47,12 @@ function PageViewTracker() {
     const posthog = usePostHog()
 
     useEffect(() => {
-        if (!posthog) {
+        const currentUrl = getCurrentUrl()
+        if (!posthog || !currentUrl) {
             return
         }
 
-        let url = pathname
-        const search = searchParams.toString()
-        if (search) {
-            url = `${pathname}?${search}`
-        }
-
-        posthog.capture('$pageview', { $current_url: url })
+        posthog.capture('$pageview', { $current_url: currentUrl })
     }, [pathname, searchParams, posthog])
 
     return null

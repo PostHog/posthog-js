@@ -21,20 +21,22 @@ describe('PostHogPageView', () => {
         mockUsePostHog.mockClear()
         mockPathname = '/initial'
         mockSearchParams = new URLSearchParams()
+        window.history.pushState({}, '', '/initial')
     })
 
     it('captures a $pageview event on mount', () => {
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: '/initial',
+            $current_url: 'http://localhost/initial',
         })
     })
 
     it('includes search params in the captured URL', () => {
         mockSearchParams = new URLSearchParams('q=hello&page=2')
+        window.history.pushState({}, '', '/initial?q=hello&page=2')
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: '/initial?q=hello&page=2',
+            $current_url: 'http://localhost/initial?q=hello&page=2',
         })
     })
 
@@ -43,10 +45,11 @@ describe('PostHogPageView', () => {
         expect(mockCapture).toHaveBeenCalledTimes(1)
 
         mockPathname = '/new-page'
+        window.history.pushState({}, '', '/new-page')
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(2)
         expect(mockCapture).toHaveBeenLastCalledWith('$pageview', {
-            $current_url: '/new-page',
+            $current_url: 'http://localhost/new-page',
         })
     })
 
