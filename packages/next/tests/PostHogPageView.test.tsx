@@ -21,7 +21,6 @@ describe('PostHogPageView', () => {
         mockUsePostHog.mockClear()
         mockPathname = '/initial'
         mockSearchParams = new URLSearchParams()
-        window.history.pushState({}, '', '/initial')
     })
 
     it('captures a $pageview event on mount', () => {

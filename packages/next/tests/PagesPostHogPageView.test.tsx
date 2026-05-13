@@ -18,7 +18,6 @@ describe('Pages PostHogPageView', () => {
         mockCapture.mockClear()
         mockUsePostHog.mockClear()
         mockRouter = { asPath: '/initial', isReady: true }
-        window.history.pushState({}, '', '/initial')
     })
 
     it('captures a $pageview event on mount', () => {
@@ -41,7 +40,6 @@ describe('Pages PostHogPageView', () => {
         expect(mockCapture).toHaveBeenCalledTimes(1)
 
         mockRouter = { asPath: '/new-page', isReady: true }
-        window.history.pushState({}, '', '/new-page')
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(2)
         expect(mockCapture).toHaveBeenLastCalledWith('$pageview', {
