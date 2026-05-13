@@ -7,5 +7,7 @@
     "target": "ES6",
     "skipLibCheck": true,
     "lib": ["DOM"]
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["tests/**/*"]
 }

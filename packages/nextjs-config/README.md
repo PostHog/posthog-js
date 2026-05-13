@@ -28,6 +28,26 @@ export default withPostHogConfig(nextConfig, {
 })
 ```
 
+## Combining with other Next.js config wrappers
+
+`withPostHogConfig` returns a function-form Next.js config. Some other wrappers
+(e.g. `next-intl`, `next-mdx`) do not correctly forward function-form configs,
+which would silently drop PostHog's webpack/compiler hooks — no source maps
+would be generated or uploaded, and no errors would appear.
+
+To avoid this, make `withPostHogConfig` the **outermost** wrapper:
+
+```typescript
+// ✅ Correct: withPostHogConfig is the outermost wrapper
+export default withPostHogConfig(withNextIntl(nextConfig), { ... })
+
+// ❌ Incorrect: another wrapper around withPostHogConfig may silently drop it
+export default withNextIntl(withPostHogConfig(nextConfig, { ... }))
+```
+
+If the inner config function is never invoked during a build,
+`@posthog/nextjs-config` will emit a warning at process exit pointing this out.
+
 ## Questions?
 
 ### [Check out our community page.](https://posthog.com/posts)

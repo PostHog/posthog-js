@@ -6,6 +6,28 @@ type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextCo
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
 type UserProvidedConfig = NextConfig | NextFuncConfig | NextAsyncConfig
 
+let invocationTrackingRegistered = false
+let innerConfigInvoked = false
+
+function registerInvocationCheck(): void {
+  if (invocationTrackingRegistered) {
+    return
+  }
+  invocationTrackingRegistered = true
+  process.on('exit', () => {
+    if (!innerConfigInvoked) {
+      console.warn(
+        '[@posthog/nextjs-config] withPostHogConfig was called, but its inner Next.js config function was never invoked. ' +
+          'This usually means another Next.js config wrapper (e.g. withNextIntl, withMDX) is being applied around withPostHogConfig ' +
+          'and is not forwarding the function-form config that withPostHogConfig returns. ' +
+          'As a result, no source maps were generated or uploaded. ' +
+          'Fix: make withPostHogConfig the OUTERMOST wrapper, e.g. ' +
+          '`export default withPostHogConfig(withNextIntl(nextConfig), { ... })`.'
+      )
+    }
+  })
+}
+
 export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogConfig: PluginConfig): NextConfig {
   const resolvedConfig = resolveConfig(posthogConfig)
   const sourceMapEnabled = resolvedConfig.sourcemaps.enabled
@@ -14,7 +36,11 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
   if (turbopackEnabled && !isCompilerHookSupported) {
     console.warn('[@posthog/nextjs-config] Turbopack support is only available with next version >= 15.4.1')
   }
+  if (sourceMapEnabled) {
+    registerInvocationCheck()
+  }
   return async (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => {
+    innerConfigInvoked = true
     const {
       webpack: userWebPackConfig,
       compiler: userCompilerConfig,
