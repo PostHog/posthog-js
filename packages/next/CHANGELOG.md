@@ -1,5 +1,12 @@
 # @posthog/next
 
+## 0.4.50
+
+### Patch Changes
+
+- [#3608](https://github.com/PostHog/posthog-js/pull/3608) [`afb0ae8`](https://github.com/PostHog/posthog-js/commit/afb0ae8f1f8ddb901bc0963ca4d567f0ebf4353d) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Next.js pageview tracking to send absolute current URLs
+  (2026-05-13)
+
 ## 0.4.49
 
 ### Patch Changes
