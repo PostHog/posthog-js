@@ -801,8 +801,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
               flags: { ...currentFlagDetails?.flags, ...filteredFlags },
             }
           }
+          // Merge server flags with bootstrap flags, giving bootstrap precedence
+          const bootstrapFlags = this.getBootstrappedFeatureFlagDetails()?.flags ?? {}
+          const finalFlags = {
+            ...newFeatureFlagDetails.flags,
+            ...bootstrapFlags,
+          }
+
           this.setKnownFeatureFlagDetails({
-            flags: newFeatureFlagDetails.flags,
+            flags: finalFlags,
             requestId: res.requestId,
             evaluatedAt: res.evaluatedAt,
             errorsWhileComputingFlags: res.errorsWhileComputingFlags,
