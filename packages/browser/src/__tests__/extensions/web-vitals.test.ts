@@ -6,7 +6,7 @@ import { PostHog } from '../../posthog-core'
 import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
-import { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_ALLOWED_METRICS } from '../../constants'
+import { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_ALLOWED_METRICS, COOKIELESS_MODE_FLAG_PROPERTY } from '../../constants'
 
 jest.useFakeTimers()
 
@@ -241,6 +241,91 @@ describe('web vitals', () => {
             })
         }
     )
+
+    describe('cookieless_mode (no SessionIdManager)', () => {
+        const expectedEmittedWebVitalsCookieless = (name: string) => ({
+            $current_url: 'http://localhost/',
+            timestamp: expect.any(Number),
+            name: name,
+            value: 123.45,
+            extra: 'property',
+        })
+
+        beforeEach(async () => {
+            beforeSendMock.mockClear()
+            onLCPCallback = undefined
+            onCLSCallback = undefined
+            onFCPCallback = undefined
+            onINPCallback = undefined
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+                cookieless_mode: 'always',
+                capture_performance: { web_vitals: true, web_vitals_allowed_metrics: ['CLS', 'FCP'] },
+                capture_pageview: false,
+            })
+
+            expect(posthog.sessionManager).toBeUndefined()
+
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                    onLCP: (cb: any) => {
+                        onLCPCallback = cb
+                    },
+                    onCLS: (cb: any) => {
+                        onCLSCallback = cb
+                    },
+                    onFCP: (cb: any) => {
+                        onFCPCallback = cb
+                    },
+                    onINP: (cb: any) => {
+                        onINPCallback = cb
+                    },
+                }
+                callback()
+            })
+
+            assignableWindow.__PosthogExtensions__ = {}
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                capturePerformance: { web_vitals: true },
+            } as unknown as FlagsResponse)
+
+            expect(posthog.webVitalsAutocapture!.allowedMetrics).toEqual(['CLS', 'FCP'])
+        })
+
+        it('emits web vitals without nested $session_id or $window_id; sets $cookieless_mode on payload', async () => {
+            onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
+            onFCPCallback?.({ name: 'FCP', value: 123.45, extra: 'property' })
+
+            expect(beforeSendMock).toBeCalledTimes(1)
+
+            const payload = beforeSendMock.mock.calls[0][0]
+            expect(payload.event).toBe('$web_vitals')
+            expect(payload.properties[COOKIELESS_MODE_FLAG_PROPERTY]).toBe(true)
+            expect(payload.properties.$web_vitals_CLS_event).toEqual(expectedEmittedWebVitalsCookieless('CLS'))
+            expect(payload.properties.$web_vitals_FCP_event).toEqual(expectedEmittedWebVitalsCookieless('FCP'))
+            expect(payload.properties.$web_vitals_CLS_event).not.toHaveProperty('$session_id')
+            expect(payload.properties.$web_vitals_CLS_event).not.toHaveProperty('$window_id')
+            expect(payload.properties.$web_vitals_FCP_event).not.toHaveProperty('$session_id')
+            expect(payload.properties.$web_vitals_FCP_event).not.toHaveProperty('$window_id')
+        })
+
+        it('emits on delayed flush without nested session ids when only one metric is captured', async () => {
+            onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
+
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(beforeSendMock).toBeCalledTimes(1)
+            const payload = beforeSendMock.mock.calls[0][0]
+            expect(payload.event).toBe('$web_vitals')
+            expect(payload.properties[COOKIELESS_MODE_FLAG_PROPERTY]).toBe(true)
+            expect(payload.properties.$web_vitals_CLS_event).not.toHaveProperty('$session_id')
+            expect(payload.properties.$web_vitals_CLS_event).not.toHaveProperty('$window_id')
+        })
+    })
 
     describe('web_vitals_attribution config', () => {
         it.each([
