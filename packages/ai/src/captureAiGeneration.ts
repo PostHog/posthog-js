@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
+import { serializeError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, sanitizeValues, withPrivacyMode } from './utils'
 
 type AnthropicTool = AnthropicOriginal.Tool
@@ -115,7 +116,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
 
     errorData = {
       $ai_is_error: true,
-      $ai_error: sanitizeValues(JSON.stringify(options.error)),
+      $ai_error: JSON.stringify(sanitizeValues(serializeError(options.error))),
       $exception_event_id: exceptionId,
     }
   }
