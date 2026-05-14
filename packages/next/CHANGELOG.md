@@ -1,5 +1,12 @@
 # @posthog/next
 
+## 0.4.51
+
+### Patch Changes
+
+- [#3549](https://github.com/PostHog/posthog-js/pull/3549) [`77ee9df`](https://github.com/PostHog/posthog-js/commit/77ee9df6a36dcc968516d1698d830b8368cf64ab) Thanks [@brandonhines-mialabs](https://github.com/brandonhines-mialabs)! - Fix `@posthog/next/pages` default export condition to resolve to the client barrel (`pages.client.js`) instead of the server barrel (`pages.js`), matching the behavior of the root `"."` export. This prevents bundlers that don't match a more specific condition from pulling in `server-only` and `posthog-node` unnecessarily.
+  (2026-05-14)
+
 ## 0.4.50
 
 ### Patch Changes
