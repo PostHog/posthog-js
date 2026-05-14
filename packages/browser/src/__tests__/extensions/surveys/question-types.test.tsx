@@ -302,7 +302,7 @@ describe('OpenTextQuestion', () => {
         expect(parentKeyDownHandler).not.toHaveBeenCalled()
     })
 
-    it('submits on Cmd/Ctrl+Enter when input is valid', () => {
+    it('does not submit on plain Enter (textarea inserts newline)', () => {
         const onSubmit = jest.fn()
         const { container } = render(
             <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={{ ...openTextQuestion, optional: true }} />
@@ -312,16 +312,28 @@ describe('OpenTextQuestion', () => {
         if (!textarea) throw new Error('Textarea not found')
 
         fireEvent.input(textarea, { target: { value: 'Hello world' } })
-
-        // Plain Enter should not submit (default textarea behaviour: newline).
         fireEvent.keyDown(textarea, { key: 'Enter' })
+
         expect(onSubmit).not.toHaveBeenCalled()
+    })
 
-        fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    it.each([
+        ['metaKey', { metaKey: true }],
+        ['ctrlKey', { ctrlKey: true }],
+    ])('submits on Enter+%s when input is valid', (_label, modifier) => {
+        const onSubmit = jest.fn()
+        const { container } = render(
+            <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={{ ...openTextQuestion, optional: true }} />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        fireEvent.input(textarea, { target: { value: 'Hello world' } })
+        fireEvent.keyDown(textarea, { key: 'Enter', ...modifier })
+
         expect(onSubmit).toHaveBeenCalledWith('Hello world')
-
-        fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
-        expect(onSubmit).toHaveBeenCalledTimes(2)
+        expect(onSubmit).toHaveBeenCalledTimes(1)
     })
 
     it('does not submit on Cmd/Ctrl+Enter when validation fails', () => {
