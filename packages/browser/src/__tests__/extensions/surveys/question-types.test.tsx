@@ -73,6 +73,21 @@ describe('MultipleChoiceQuestion', () => {
             expect(baseProps.onSubmit).toHaveBeenCalledWith('Purple')
         })
 
+        it('submits open-ended choice on Enter key', () => {
+            const onSubmit = jest.fn()
+            const { getByText, container } = render(
+                <MultipleChoiceQuestion {...baseProps} onSubmit={onSubmit} question={singleChoiceQuestion} />
+            )
+
+            fireEvent.click(getByText('Other:'))
+
+            const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
+            fireEvent.input(openInput, { target: { value: 'Purple' } })
+            fireEvent.keyDown(openInput, { key: 'Enter' })
+
+            expect(onSubmit).toHaveBeenCalledWith('Purple')
+        })
+
         it('focuses on open-ended input when selecting the option', () => {
             const { container, getByText } = render(
                 <MultipleChoiceQuestion {...baseProps} question={singleChoiceQuestion} />
@@ -287,7 +302,41 @@ describe('OpenTextQuestion', () => {
         expect(parentKeyDownHandler).not.toHaveBeenCalled()
     })
 
-    // Add other tests for OpenTextQuestion if needed...
+    it('submits on Cmd/Ctrl+Enter when input is valid', () => {
+        const onSubmit = jest.fn()
+        const { container } = render(
+            <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={{ ...openTextQuestion, optional: true }} />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        fireEvent.input(textarea, { target: { value: 'Hello world' } })
+
+        // Plain Enter should not submit (default textarea behaviour: newline).
+        fireEvent.keyDown(textarea, { key: 'Enter' })
+        expect(onSubmit).not.toHaveBeenCalled()
+
+        fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+        expect(onSubmit).toHaveBeenCalledWith('Hello world')
+
+        fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+        expect(onSubmit).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not submit on Cmd/Ctrl+Enter when validation fails', () => {
+        const onSubmit = jest.fn()
+        const { container } = render(
+            <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={openTextQuestion} />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        // Required question, empty input → invalid.
+        fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+        expect(onSubmit).not.toHaveBeenCalled()
+    })
 })
 
 describe('RatingQuestion', () => {
