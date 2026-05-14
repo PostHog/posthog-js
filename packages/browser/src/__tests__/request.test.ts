@@ -469,10 +469,30 @@ describe('request', () => {
                    "
             `)
 
+                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'text/plain')
+                expect(mockedXHR.setRequestHeader).not.toHaveBeenCalledWith('Content-Encoding', 'gzip')
                 expect(mockedXHR.setRequestHeader).not.toHaveBeenCalledWith(
                     'Content-Type',
                     'application/x-www-form-urlencoded'
                 )
+            })
+
+            it('should use HTTP content encoding for gzip when requested', async () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        compression: Compression.GZipJS,
+                        _compressionEncoding: 'content-encoding',
+                        data: { foo: 'bar' },
+                    } as any)
+                )
+
+                expect(mockedXHR.open.mock.calls[0][1]).not.toContain('compression=gzip-js')
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                expect(mockedXHR.send.mock.calls[0][0]).toBeInstanceOf(ArrayBuffer)
+                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
+                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Encoding', 'gzip')
             })
 
             it('converts bigint properties to string without throwing', () => {

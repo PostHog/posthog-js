@@ -26,6 +26,8 @@ export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
 const CONTENT_TYPE_PLAIN = 'text/plain'
 const CONTENT_TYPE_JSON = 'application/json'
 const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
+const CONTENT_ENCODING_GZIP = 'gzip'
+export const COMPRESSION_ENCODING_CONTENT_ENCODING = 'content-encoding'
 const SIXTY_FOUR_KILOBYTES = 64 * 1024
 /*
  fetch will fail if we request keepalive with a body greater than 64kb
@@ -53,6 +55,7 @@ const removeURLParam = (url: string, param: string): string => {
 
 type EncodedBody = {
     contentType: string
+    contentEncoding?: string
     body: string | BlobPart | ArrayBuffer
     estimatedSize: number
 }
@@ -60,6 +63,10 @@ type EncodedBody = {
 type EncodedRequest = {
     url: string
     encodedBody?: EncodedBody
+}
+
+const useHTTPContentEncoding = (options: RequestWithEncodedBody): boolean => {
+    return options._compressionEncoding === COMPRESSION_ENCODING_CONTENT_ENCODING
 }
 
 /**
@@ -115,8 +122,10 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(jsonStringify(data)), { mtime: 0 })
+        const useContentEncoding = useHTTPContentEncoding(options)
         return {
-            contentType: CONTENT_TYPE_PLAIN,
+            contentType: useContentEncoding ? CONTENT_TYPE_JSON : CONTENT_TYPE_PLAIN,
+            contentEncoding: useContentEncoding ? CONTENT_ENCODING_GZIP : undefined,
             body: gzipData.buffer.slice(gzipData.byteOffset, gzipData.byteOffset + gzipData.byteLength) as ArrayBuffer,
             estimatedSize: gzipData.byteLength,
         }
@@ -183,7 +192,8 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
     return {
         ...options,
         _encodedBody: {
-            contentType: CONTENT_TYPE_PLAIN,
+            contentType: useHTTPContentEncoding(options) ? CONTENT_TYPE_JSON : CONTENT_TYPE_PLAIN,
+            contentEncoding: useHTTPContentEncoding(options) ? CONTENT_ENCODING_GZIP : undefined,
             body,
             estimatedSize: body.byteLength,
         },
@@ -194,7 +204,7 @@ const xhr = (options: RequestWithOptions) => {
     const req = new XMLHttpRequest!()
     const { url, encodedBody } = encodePostDataSafely(options)
     req.open(options.method || 'GET', url, true)
-    const { contentType, body } = encodedBody ?? {}
+    const { contentType, contentEncoding, body } = encodedBody ?? {}
 
     each(options.headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
@@ -202,6 +212,10 @@ const xhr = (options: RequestWithOptions) => {
 
     if (contentType) {
         req.setRequestHeader('Content-Type', contentType)
+    }
+
+    if (contentEncoding) {
+        req.setRequestHeader('Content-Encoding', contentEncoding)
     }
 
     if (options.timeout) {
@@ -235,7 +249,7 @@ const xhr = (options: RequestWithOptions) => {
 
 const _fetch = (options: RequestWithOptions) => {
     const { url, encodedBody } = encodePostDataSafely(options)
-    const { contentType, body, estimatedSize } = encodedBody ?? {}
+    const { contentType, contentEncoding, body, estimatedSize } = encodedBody ?? {}
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
@@ -245,6 +259,10 @@ const _fetch = (options: RequestWithOptions) => {
 
     if (contentType) {
         headers.append('Content-Type', contentType)
+    }
+
+    if (contentEncoding) {
+        headers.append('Content-Encoding', contentEncoding)
     }
 
     let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
@@ -323,11 +341,11 @@ const _sendBeacon = (options: RequestWithOptions) => {
     }
 }
 
-const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
+const buildRequestURL = (url: string, options: RequestWithEncodedBody): string => {
     return extendURLParams(url, {
         _: new Date().getTime().toString(),
         ver: Config.JS_SDK_VERSION,
-        compression,
+        compression: useHTTPContentEncoding(options) ? undefined : options.compression,
     })
 }
 
@@ -364,26 +382,29 @@ export const request = (_options: RequestWithOptions) => {
     const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
 
-    options.url = buildRequestURL(options.url, options.compression)
-
-    const transport = options.transport ?? 'fetch'
+    const requestedTransport = options.transport ?? 'fetch'
 
     const availableTransports = AVAILABLE_TRANSPORTS.filter(
         (t) => !options.disableTransport || !t.transport || !options.disableTransport.includes(t.transport)
     )
 
-    const transportMethod =
-        find(availableTransports, (t) => t.transport === transport)?.method ?? availableTransports[0].method
+    const transport = find(availableTransports, (t) => t.transport === requestedTransport) ?? availableTransports[0]
+    const transportMethod = transport?.method
 
     if (!transportMethod) {
         throw new Error('No available transport method')
     }
 
+    if (transport.transport === 'sendBeacon') {
+        options._compressionEncoding = undefined
+    }
+    options.url = buildRequestURL(options.url, options)
+
     // For non-sendBeacon transports, use async native CompressionStream when available
     // to avoid blocking the main thread with fflate's synchronous gzip (which can take 300ms+).
     // sendBeacon must remain synchronous as it's used during page unload.
     if (
-        transport !== 'sendBeacon' &&
+        transport.transport !== 'sendBeacon' &&
         options.data &&
         options.compression === Compression.GZipJS &&
         !!CompressionStream &&
@@ -396,10 +417,14 @@ export const request = (_options: RequestWithOptions) => {
             .catch((error) => {
                 if (isNativeAsyncGzipReadError(error)) {
                     nativeAsyncGzipDisabled = true
-                    transportMethod({
+                    const uncompressedOptions = {
                         ...options,
                         compression: undefined,
-                        url: buildRequestURL(_options.url, undefined),
+                        _compressionEncoding: undefined,
+                    }
+                    transportMethod({
+                        ...uncompressedOptions,
+                        url: buildRequestURL(_options.url, uncompressedOptions),
                     })
                     return
                 }

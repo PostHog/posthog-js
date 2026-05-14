@@ -146,7 +146,7 @@ describe('Exception Observer', () => {
 
             expect(sendRequestSpy).toHaveBeenCalled()
             const request = sendRequestSpy.mock.calls[0][0]
-            expect(request.url).toBe('http://localhost/e/?ip=0')
+            expect(request.url).toBe('http://localhost/e/')
             expect(request.data).toMatchObject({
                 event: '$exception',
                 properties: {

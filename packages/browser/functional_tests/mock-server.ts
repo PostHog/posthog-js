@@ -5,6 +5,7 @@ import { setupServer } from 'msw/node'
 import { RestContext } from 'msw'
 import { RestRequest } from 'msw'
 import { decompressSync, strFromU8 } from 'fflate'
+import { isArray } from '@posthog/core'
 
 // the request bodies in a store that we can inspect within tests.
 const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/flags/': any[] } = {
@@ -16,25 +17,32 @@ const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/flags/': any[] } = 
 const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
     let body = req.body
 
-    if (typeof body === 'string') {
-        try {
-            const b64Encoded = req.url.href.includes('compression=base64')
-            const gzipCompressed = req.url.href.includes('compression=gzip-js')
+    try {
+        const b64Encoded = req.url.href.includes('compression=base64')
+        const gzipCompressed =
+            req.url.href.includes('compression=gzip-js') || req.headers.get('content-encoding') === 'gzip'
+        if (gzipCompressed) {
+            const data = new Uint8Array(req._body)
+            const decoded = strFromU8(decompressSync(data))
+            body = JSON.parse(decoded)
+        } else if (typeof body === 'string') {
             if (b64Encoded) {
                 body = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
-            } else if (gzipCompressed) {
-                const data = new Uint8Array(req._body)
-                const decoded = strFromU8(decompressSync(data))
-                body = JSON.parse(decoded)
+            } else if (body[0] === '{' || body[0] === '[') {
+                body = JSON.parse(body)
             } else {
                 body = JSON.parse(decodeURIComponent(body.split('=')[1]))
             }
-        } catch {
-            return res(ctx.status(500))
         }
+    } catch {
+        return res(ctx.status(500))
     }
 
-    capturedRequests[group] = [...(capturedRequests[group] || []), body]
+    if (group === '/batch/' && body && typeof body === 'object' && isArray(body.batch)) {
+        capturedRequests['/e/'] = [...capturedRequests['/e/'], ...body.batch]
+    } else {
+        capturedRequests[group] = [...(capturedRequests[group] || []), body]
+    }
 
     return res(ctx.json({}))
 }
@@ -42,6 +50,9 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
 const server = setupServer(
     rest.post('http://localhost/e/', (req, res, ctx) => {
         return handleRequest('/e/')(req, res, ctx)
+    }),
+    rest.post('http://localhost/batch/', (req, res, ctx) => {
+        return handleRequest('/batch/')(req, res, ctx)
     }),
     rest.post('http://localhost/engage/', (req, res, ctx) => {
         return handleRequest('/engage/')(req, res, ctx)

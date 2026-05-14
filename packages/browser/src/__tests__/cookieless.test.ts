@@ -374,13 +374,13 @@ describe('cookieless', () => {
 
             posthog.opt_in_capturing()
             expect(mockedFetch).toBeCalledTimes(3) // flags + opt in + pageview
-            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$opt_in')
-            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).event).toEqual('$pageview')
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).batch[0].event).toEqual('$opt_in')
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].event).toEqual('$pageview')
 
             posthog.capture('custom event')
             jest.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
             expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
-            expect(JSON.parse(mockedFetch.mock.calls[3][1].body)[0].event).toEqual('custom event')
+            expect(JSON.parse(mockedFetch.mock.calls[3][1].body).batch[0].event).toEqual('custom event')
         })
     })
 })

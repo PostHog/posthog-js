@@ -6,8 +6,9 @@ import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import { PostHogConfig, RemoteConfig } from '../types'
+import { Compression, PostHogConfig, RemoteConfig } from '../types'
 import { PostHog } from '../posthog-core'
+import * as requestModule from '../request'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
@@ -349,6 +350,49 @@ describe('posthog core', () => {
                     url: 'https://app.posthog.com/s/',
                 })
             )
+        })
+
+        it('sends non-beacon analytics requests to /batch/ with HTTP gzip semantics', () => {
+            const requestSpy = jest.spyOn(requestModule, 'request').mockImplementation(jest.fn())
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false })
+            posthog._onRemoteConfig({ supportedCompression: [Compression.GZipJS] } as RemoteConfig)
+            requestSpy.mockClear()
+
+            posthog.capture('event-name', { foo: 'bar', length: 0 })
+
+            expect(requestSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/batch/?ip=0',
+                    compression: Compression.GZipJS,
+                    _compressionEncoding: 'content-encoding',
+                    data: expect.objectContaining({
+                        api_key: 'testtoken',
+                        sent_at: '2020-01-01T00:00:00.000Z',
+                        batch: [expect.objectContaining({ event: 'event-name' })],
+                    }),
+                })
+            )
+            requestSpy.mockRestore()
+        })
+
+        it('keeps sendBeacon analytics requests on the legacy /e/ protocol', () => {
+            const requestSpy = jest.spyOn(requestModule, 'request').mockImplementation(jest.fn())
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false })
+            posthog._onRemoteConfig({ supportedCompression: [Compression.GZipJS] } as RemoteConfig)
+            requestSpy.mockClear()
+
+            posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport: 'sendBeacon' } as any)
+
+            expect(requestSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/e/?ip=0',
+                    compression: Compression.GZipJS,
+                    data: expect.objectContaining({ event: 'event-name' }),
+                    transport: 'sendBeacon',
+                })
+            )
+            expect(requestSpy.mock.calls[0][0]).not.toHaveProperty('_compressionEncoding')
+            requestSpy.mockRestore()
         })
 
         it('does not allow you to set complex current url', () => {

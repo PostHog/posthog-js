@@ -192,6 +192,11 @@ export interface RequestWithOptions {
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     disableXHRCredentials?: boolean
     compression?: Compression | 'best-available'
+    /**
+     * Internal: when set, gzip is signaled using the standard HTTP
+     * Content-Encoding header instead of PostHog's legacy query-param protocol.
+     */
+    _compressionEncoding?: 'content-encoding'
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions

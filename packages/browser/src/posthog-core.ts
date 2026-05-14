@@ -38,7 +38,7 @@ import {
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
-import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { COMPRESSION_ENCODING_CONTENT_ENCODING, extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
@@ -108,6 +108,7 @@ import {
     isEmptyObject,
     isObject,
     isBoolean,
+    currentISOTime,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -157,6 +158,8 @@ const instances: Record<string, PostHog> = {}
 // Proxy (e.g., TikTok's in-app browser) wraps window.posthog and converts method
 // calls into push() calls, which would otherwise cause infinite recursion.
 let _executeArrayDepth = 0
+
+const COMPRESSION_BEST_AVAILABLE = 'best-available'
 
 const __NOOP = () => {}
 const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless_mode="always" and will be ignored'
@@ -1010,7 +1013,9 @@ export class PostHog implements PostHogInterface {
         this._retryQueue?.unload()
     }
 
-    _send_request(options: QueuedRequestWithOptions): void {
+    _send_request(_options: QueuedRequestWithOptions): void {
+        const options = { ..._options }
+
         if (!this.__loaded) {
             return
         }
@@ -1025,6 +1030,22 @@ export class PostHog implements PostHogInterface {
         }
 
         options.transport = options.transport || this.config.api_transport
+        options.compression =
+            options.compression === COMPRESSION_BEST_AVAILABLE ? this.compression : options.compression
+
+        const isAnalyticsRequest = options.url === this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
+        if (isAnalyticsRequest && options.transport !== 'sendBeacon' && options.data) {
+            options.url = this.requestRouter.endpointFor('api', '/batch/')
+            options.data = {
+                api_key: this.config.token,
+                batch: isArray(options.data) ? options.data : [options.data],
+                sent_at: currentISOTime(),
+            }
+            options._compressionEncoding =
+                options.compression === Compression.GZipJS ? COMPRESSION_ENCODING_CONTENT_ENCODING : undefined
+            options.compression = options.compression === Compression.GZipJS ? Compression.GZipJS : undefined
+        }
+
         options.url = extendURLParams(options.url, {
             // Whether to detect ip info or not
             ip: this.config.ip ? 1 : 0,
@@ -1033,7 +1054,6 @@ export class PostHog implements PostHogInterface {
             ...this.config.request_headers,
             ...options.headers,
         }
-        options.compression = options.compression === 'best-available' ? this.compression : options.compression
         options.disableXHRCredentials = this.config.__preview_disable_xhr_credentials
         if (this.config.__preview_disable_beacon) {
             options.disableTransport = ['sendBeacon']
@@ -1362,8 +1382,9 @@ export class PostHog implements PostHogInterface {
             method: 'POST',
             url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
             data,
-            compression: 'best-available',
+            compression: COMPRESSION_BEST_AVAILABLE,
             batchKey: options?._batchKey,
+            transport: options?.transport,
         }
 
         if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
