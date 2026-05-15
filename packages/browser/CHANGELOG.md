@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.373.5
+
+### Patch Changes
+
+- [#3613](https://github.com/PostHog/posthog-js/pull/3613) [`221973e`](https://github.com/PostHog/posthog-js/commit/221973e4a2a50196ffb5c45c468f3de812ed82cf) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Surveys: submit open text questions with Cmd/Ctrl+Enter. The textarea still inserts a newline on plain Enter (native behaviour), matching the convention used by Slack, GitHub, Discord, and ChatGPT for multi-line inputs. Single-line "Other:" inputs continue to submit on plain Enter as before.
+  (2026-05-15)
+- Updated dependencies []:
+    - @posthog/types@1.373.5
+    - @posthog/core@1.29.2
+
 ## 1.373.4
 
 ### Patch Changes
