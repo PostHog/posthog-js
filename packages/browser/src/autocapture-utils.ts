@@ -187,6 +187,24 @@ function shouldIgnoreByContent(
     })
 }
 
+// dead click capture does not run through autocapture's ph-no-capture check,
+// so we include it here so that ph-no-capture also suppresses dead click capture
+const DEFAULT_DEAD_CLICK_IGNORE_LIST = ['.ph-no-deadclick', '.ph-no-capture']
+export function shouldCaptureDeadClick(el: Element | null, _config: PostHogConfig['capture_dead_clicks']) {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return false
+    }
+
+    const selectorIgnoreList = isBoolean(_config)
+        ? DEFAULT_DEAD_CLICK_IGNORE_LIST
+        : (_config?.css_selector_ignorelist ?? DEFAULT_DEAD_CLICK_IGNORE_LIST)
+
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+
+    // we don't capture if we match the ignore list
+    return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
+}
+
 // autocapture check will already filter for ph-no-capture,
 // but we include it here to protect against future changes accidentally removing that check
 const DEFAULT_RAGE_CLICK_IGNORE_LIST = ['.ph-no-rageclick', '.ph-no-capture']

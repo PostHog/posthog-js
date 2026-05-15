@@ -158,6 +158,61 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
+
+        it('ignores clicks on elements with the ph-no-deadclick class', () => {
+            const el = document.createElement('div')
+            el.className = 'ph-no-deadclick'
+            document.body.append(el)
+
+            triggerMouseEvent(el, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('ignores clicks on parents with the ph-no-deadclick class', () => {
+            const parent = document.createElement('div')
+            parent.className = 'ph-no-deadclick'
+            const child = document.createElement('div')
+            parent.appendChild(child)
+            document.body.append(parent)
+
+            triggerMouseEvent(child, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('ignores clicks on elements with the ph-no-capture class', () => {
+            const el = document.createElement('div')
+            el.className = 'ph-no-capture'
+            document.body.append(el)
+
+            triggerMouseEvent(el, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('respects a custom css_selector_ignorelist', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            const customIgnore = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
+                css_selector_ignorelist: ['.custom-no-deadclick'],
+            })
+            customIgnore.start(document)
+
+            const ignored = document.createElement('div')
+            ignored.className = 'custom-no-deadclick'
+            document.body.append(ignored)
+
+            const notIgnoredWhenCustom = document.createElement('div')
+            notIgnoredWhenCustom.className = 'ph-no-deadclick'
+            document.body.append(notIgnoredWhenCustom)
+
+            triggerMouseEvent(ignored, 'click')
+            triggerMouseEvent(notIgnoredWhenCustom, 'click')
+
+            // only the explicitly ignored element should be filtered out
+            expect(customIgnore['_clicks'].map((c) => (c.node as Element).className)).toEqual(['ph-no-deadclick'])
+            customIgnore.stop()
+        })
     })
 
     describe('dead click detection', () => {

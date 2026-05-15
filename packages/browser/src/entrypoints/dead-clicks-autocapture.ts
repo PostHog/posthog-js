@@ -1,7 +1,7 @@
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
-import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
+import { autocaptureCompatibleElements, getEventTarget, shouldCaptureDeadClick } from '../autocapture-utils'
 import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
@@ -35,7 +35,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastVisibilityChange: number | undefined
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
-    private _config: Required<DeadClicksAutoCaptureConfig>
+    private _config: Required<Omit<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>> &
+        Pick<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>
     private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
 
     private _defaultConfig = (defaultOnCapture: (click: DeadClickCandidate, properties: Properties) => void) => ({
@@ -47,7 +48,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         __onCapture: defaultOnCapture,
     })
 
-    private _asRequiredConfig(providedConfig?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
+    private _asRequiredConfig(
+        providedConfig?: DeadClicksAutoCaptureConfig
+    ): Required<Omit<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>> &
+        Pick<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'> {
         const defaultConfig = this._defaultConfig(providedConfig?.__onCapture || this._captureDeadClick.bind(this))
         return {
             element_attribute_ignorelist:
@@ -58,6 +62,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? defaultConfig.mutation_threshold_ms,
             capture_clicks_with_modifier_keys:
                 providedConfig?.capture_clicks_with_modifier_keys ?? defaultConfig.capture_clicks_with_modifier_keys,
+            css_selector_ignorelist: providedConfig?.css_selector_ignorelist,
             __onCapture: defaultConfig.__onCapture,
         }
     }
@@ -195,6 +200,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             !isElementNode(click.node) ||
             autocaptureCompatibleElements.includes(click.node.tagName.toLowerCase())
         ) {
+            return true
+        }
+
+        if (!shouldCaptureDeadClick(click.node, { css_selector_ignorelist: this._config.css_selector_ignorelist })) {
             return true
         }
 
