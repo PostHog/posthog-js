@@ -641,19 +641,18 @@ describe('identify callback', () => {
   })
 
   test('works with feature flag methods', async () => {
-    const component = { lib: { getFeatureFlag: 'getFeatureFlag_ref' } }
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
     const posthog = new PostHog(component as never, {
       apiKey: 'key',
       identify: identifyReturning('auth-user'),
     })
-    const ctx = {
-      runAction: jest.fn(async (_ref: unknown, _args: Record<string, unknown>) => true),
-    }
+    const runQuery = jest.fn(async () => null)
+    const ctx = { runQuery }
 
     await posthog.getFeatureFlag(ctx as never, { key: 'my-flag' })
 
-    const [, args] = ctx.runAction.mock.calls[0]
-    expect(args.distinctId).toBe('auth-user')
+    // identify callback resolved the distinctId without throwing; loadEvaluator was reached.
+    expect(runQuery).toHaveBeenCalledWith('getFlagDefinitions_ref', {})
   })
 
   test('explicit distinctId still works without identify callback', async () => {

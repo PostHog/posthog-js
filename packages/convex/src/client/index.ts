@@ -1,19 +1,27 @@
 import type { Scheduler } from 'convex/server'
 import type { ComponentApi } from '../component/_generated/component.js'
+import {
+  type FeatureFlagResult,
+  type FeatureFlagValue,
+  type FlagDefinitions,
+  type JsonType,
+  LocalFeatureFlagEvaluator,
+} from './feature-flags/index.js'
 
 /** Context with a scheduler — available in mutations and actions. */
 type SchedulerCtx = { scheduler: Scheduler }
 
-/** Context with runAction — available in actions only. */
-type ActionCtx = { runAction: (reference: any, args: any) => Promise<any> }
+/** Context with runQuery — available in queries, mutations, and actions. */
+type RunQueryCtx = { runQuery: (reference: any, args: any) => Promise<any> }
 
 type FeatureFlagOptions = {
   groups?: Record<string, string>
-  personProperties?: Record<string, string>
-  groupProperties?: Record<string, Record<string, string>>
-  sendFeatureFlagEvents?: boolean
+  personProperties?: Record<string, any>
+  groupProperties?: Record<string, Record<string, any>>
   disableGeoip?: boolean
 }
+
+type AllFlagsOptions = FeatureFlagOptions & { flagKeys?: string[] }
 
 const DEFAULT_HOST = 'https://us.i.posthog.com'
 
@@ -26,12 +34,7 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_HOST
 }
 
-export type FeatureFlagResult = {
-  key: string
-  enabled: boolean
-  variant: string | null
-  payload: unknown
-}
+export type { FeatureFlagResult, FeatureFlagValue, JsonType }
 
 export type PostHogEvent = {
   event: string
@@ -116,6 +119,21 @@ export class PostHog {
       if (!result) return null
     }
     return result
+  }
+
+  private async loadEvaluator(ctx: RunQueryCtx): Promise<LocalFeatureFlagEvaluator | null> {
+    const row = (await ctx.runQuery(this.component.lib.getFlagDefinitions, {})) as
+      | { data: string; fetchedAt: number; etag?: string }
+      | null
+    if (!row) return null
+    let parsed: FlagDefinitions
+    try {
+      parsed = JSON.parse(row.data) as FlagDefinitions
+    } catch (e) {
+      console.warn('[PostHog] Failed to parse cached flag definitions; treating as unavailable.', e)
+      return null
+    }
+    return new LocalFeatureFlagEvaluator(parsed)
   }
 
   // --- Fire-and-forget methods (work in mutations and actions) ---
@@ -271,104 +289,120 @@ export class PostHog {
     })
   }
 
-  // --- Feature flag methods (require action context) ---
+  // --- Feature flag methods (locally evaluated; work in queries, mutations, and actions) ---
+  //
+  // All feature flag methods evaluate flags locally against the definitions cached by the
+  // component's cron. They return `undefined`/`null` when:
+  //   - flag definitions haven't been fetched yet (POSTHOG_PERSONAL_API_KEY missing, or cron
+  //     hasn't run for the first time);
+  //   - the flag uses features incompatible with local evaluation (experience continuity,
+  //     static cohorts, properties not provided).
 
   async getFeatureFlag(
-    ctx: ActionCtx,
+    ctx: RunQueryCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
-  ): Promise<boolean | string | null> {
+  ): Promise<FeatureFlagValue | undefined> {
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
-    return await ctx.runAction(this.component.lib.getFeatureFlag, {
-      apiKey: this.apiKey,
-      host: this.host,
-      ...args,
+    const evaluator = await this.loadEvaluator(ctx)
+    if (!evaluator) return undefined
+    return await evaluator.getFeatureFlag(
+      args.key,
       distinctId,
-    })
+      args.groups ?? {},
+      args.personProperties ?? {},
+      args.groupProperties ?? {}
+    )
   }
 
   async isFeatureEnabled(
-    ctx: ActionCtx,
+    ctx: RunQueryCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
-  ): Promise<boolean | null> {
-    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
-    return await ctx.runAction(this.component.lib.isFeatureEnabled, {
-      apiKey: this.apiKey,
-      host: this.host,
-      ...args,
-      distinctId,
-    })
+  ): Promise<boolean | undefined> {
+    const value = await this.getFeatureFlag(ctx, args)
+    if (value === undefined) return undefined
+    return value !== false && value !== null
   }
 
   async getFeatureFlagPayload(
-    ctx: ActionCtx,
+    ctx: RunQueryCtx,
     args: {
       key: string
       distinctId?: string
       matchValue?: boolean | string
     } & FeatureFlagOptions
-  ): Promise<unknown> {
+  ): Promise<JsonType | null> {
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
-    return await ctx.runAction(this.component.lib.getFeatureFlagPayload, {
-      apiKey: this.apiKey,
-      host: this.host,
-      ...args,
+    const evaluator = await this.loadEvaluator(ctx)
+    if (!evaluator) return null
+    return await evaluator.getFeatureFlagPayload(
+      args.key,
       distinctId,
-    })
+      args.matchValue,
+      args.groups ?? {},
+      args.personProperties ?? {},
+      args.groupProperties ?? {}
+    )
   }
 
   async getFeatureFlagResult(
-    ctx: ActionCtx,
+    ctx: RunQueryCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
-  ): Promise<FeatureFlagResult | null> {
+  ): Promise<FeatureFlagResult | undefined> {
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
-    return await ctx.runAction(this.component.lib.getFeatureFlagResult, {
-      apiKey: this.apiKey,
-      host: this.host,
-      ...args,
+    const evaluator = await this.loadEvaluator(ctx)
+    if (!evaluator) return undefined
+    const result = await evaluator.getFeatureFlagResult(
+      args.key,
       distinctId,
-    })
+      args.groups ?? {},
+      args.personProperties ?? {},
+      args.groupProperties ?? {}
+    )
+    if (!result || result.value === false) {
+      if (!result) return undefined
+      return { key: args.key, enabled: false, variant: null, payload: result.payload ?? null }
+    }
+    return {
+      key: args.key,
+      enabled: true,
+      variant: typeof result.value === 'string' ? result.value : null,
+      payload: result.payload ?? null,
+    }
   }
 
   async getAllFlags(
-    ctx: ActionCtx,
-    args: {
-      distinctId?: string
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      disableGeoip?: boolean
-      flagKeys?: string[]
-    }
-  ): Promise<Record<string, boolean | string>> {
+    ctx: RunQueryCtx,
+    args: { distinctId?: string } & AllFlagsOptions
+  ): Promise<Record<string, FeatureFlagValue>> {
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
-    return await ctx.runAction(this.component.lib.getAllFlags, {
-      apiKey: this.apiKey,
-      host: this.host,
-      ...args,
+    const evaluator = await this.loadEvaluator(ctx)
+    if (!evaluator) return {}
+    const { featureFlags } = await evaluator.getAllFlagsAndPayloads(
       distinctId,
-    })
+      args.groups ?? {},
+      args.personProperties ?? {},
+      args.groupProperties ?? {},
+      args.flagKeys
+    )
+    return featureFlags
   }
 
   async getAllFlagsAndPayloads(
-    ctx: ActionCtx,
-    args: {
-      distinctId?: string
-      groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
-      disableGeoip?: boolean
-      flagKeys?: string[]
-    }
+    ctx: RunQueryCtx,
+    args: { distinctId?: string } & AllFlagsOptions
   ): Promise<{
-    featureFlags: Record<string, boolean | string>
-    featureFlagPayloads: Record<string, unknown>
+    featureFlags: Record<string, FeatureFlagValue>
+    featureFlagPayloads: Record<string, JsonType>
   }> {
     const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
-    return await ctx.runAction(this.component.lib.getAllFlagsAndPayloads, {
-      apiKey: this.apiKey,
-      host: this.host,
-      ...args,
+    const evaluator = await this.loadEvaluator(ctx)
+    if (!evaluator) return { featureFlags: {}, featureFlagPayloads: {} }
+    return await evaluator.getAllFlagsAndPayloads(
       distinctId,
-    })
+      args.groups ?? {},
+      args.personProperties ?? {},
+      args.groupProperties ?? {},
+      args.flagKeys
+    )
   }
 }

@@ -106,83 +106,16 @@ export declare const components: {
         },
         any
       >;
-      getAllFlags: FunctionReference<
-        "action",
+      getFlagDefinitions: FunctionReference<
+        "query",
         "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          flagKeys?: Array<string>;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          personProperties?: any;
-        },
-        any
+        {},
+        { data: string; etag?: string; fetchedAt: number } | null
       >;
-      getAllFlagsAndPayloads: FunctionReference<
+      refreshFlagDefinitions: FunctionReference<
         "action",
         "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          flagKeys?: Array<string>;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          personProperties?: any;
-        },
-        any
-      >;
-      getFeatureFlag: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          key: string;
-          personProperties?: any;
-          sendFeatureFlagEvents?: boolean;
-        },
-        any
-      >;
-      getFeatureFlagPayload: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          key: string;
-          matchValue?: string | boolean;
-          personProperties?: any;
-          sendFeatureFlagEvents?: boolean;
-        },
-        any
-      >;
-      getFeatureFlagResult: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          key: string;
-          personProperties?: any;
-          sendFeatureFlagEvents?: boolean;
-        },
+        {},
         any
       >;
       groupIdentify: FunctionReference<
@@ -208,22 +141,6 @@ export declare const components: {
           distinctId: string;
           host: string;
           properties?: string;
-        },
-        any
-      >;
-      isFeatureEnabled: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          key: string;
-          personProperties?: any;
-          sendFeatureFlagEvents?: boolean;
         },
         any
       >;

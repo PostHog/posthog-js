@@ -1,5 +1,5 @@
 import { posthog } from './posthog.js'
-import { action, mutation } from './_generated/server.js'
+import { mutation, query } from './_generated/server.js'
 import { v } from 'convex/values'
 
 // --- Fire-and-forget methods (mutations) ---
@@ -132,7 +132,6 @@ const featureFlagArgs = {
     groups: v.optional(v.any()),
     personProperties: v.optional(v.any()),
     groupProperties: v.optional(v.any()),
-    sendFeatureFlagEvents: v.optional(v.boolean()),
     disableGeoip: v.optional(v.boolean()),
 }
 
@@ -140,19 +139,17 @@ function featureFlagOptions(args: {
     groups?: unknown
     personProperties?: unknown
     groupProperties?: unknown
-    sendFeatureFlagEvents?: boolean
     disableGeoip?: boolean
 }) {
     return {
         groups: args.groups as Record<string, string> | undefined,
         personProperties: args.personProperties as Record<string, string> | undefined,
         groupProperties: args.groupProperties as Record<string, Record<string, string>> | undefined,
-        sendFeatureFlagEvents: args.sendFeatureFlagEvents,
         disableGeoip: args.disableGeoip,
     }
 }
 
-export const testGetFeatureFlag = action({
+export const testGetFeatureFlag = query({
     args: featureFlagArgs,
     handler: async (ctx, args) => {
         const value = await posthog.getFeatureFlag(ctx, {
@@ -160,11 +157,11 @@ export const testGetFeatureFlag = action({
             distinctId: args.distinctId,
             ...featureFlagOptions(args),
         })
-        return { flagKey: args.flagKey, value }
+        return { flagKey: args.flagKey, value: value ?? null }
     },
 })
 
-export const testIsFeatureEnabled = action({
+export const testIsFeatureEnabled = query({
     args: featureFlagArgs,
     handler: async (ctx, args) => {
         const enabled = await posthog.isFeatureEnabled(ctx, {
@@ -172,11 +169,11 @@ export const testIsFeatureEnabled = action({
             distinctId: args.distinctId,
             ...featureFlagOptions(args),
         })
-        return { flagKey: args.flagKey, enabled }
+        return { flagKey: args.flagKey, enabled: enabled ?? null }
     },
 })
 
-export const testGetFeatureFlagPayload = action({
+export const testGetFeatureFlagPayload = query({
     args: {
         ...featureFlagArgs,
         matchValue: v.optional(v.union(v.boolean(), v.string())),
@@ -192,7 +189,7 @@ export const testGetFeatureFlagPayload = action({
     },
 })
 
-export const testGetFeatureFlagResult = action({
+export const testGetFeatureFlagResult = query({
     args: featureFlagArgs,
     handler: async (ctx, args) => {
         const result = await posthog.getFeatureFlagResult(ctx, {
@@ -200,11 +197,11 @@ export const testGetFeatureFlagResult = action({
             distinctId: args.distinctId,
             ...featureFlagOptions(args),
         })
-        return { flagKey: args.flagKey, result }
+        return { flagKey: args.flagKey, result: result ?? null }
     },
 })
 
-export const testGetAllFlags = action({
+export const testGetAllFlags = query({
     args: {
         distinctId: v.optional(v.string()),
         groups: v.optional(v.any()),
@@ -226,7 +223,7 @@ export const testGetAllFlags = action({
     },
 })
 
-export const testGetAllFlagsAndPayloads = action({
+export const testGetAllFlagsAndPayloads = query({
     args: {
         distinctId: v.optional(v.string()),
         groups: v.optional(v.any()),

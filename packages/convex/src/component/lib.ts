@@ -1,6 +1,6 @@
-import type { FeatureFlagValue, JsonType } from '@posthog/core'
 import { PostHog } from 'posthog-node/edge'
-import { action } from './_generated/server.js'
+import { action, internalAction, internalMutation, internalQuery, query } from './_generated/server.js'
+import { internal } from './_generated/api.js'
 import { v } from 'convex/values'
 
 function createClient(apiKey: string, host: string) {
@@ -128,143 +128,142 @@ export const captureException = action({
   },
 })
 
-// Feature flag actions — these return values and must be called via ctx.runAction
+// --- Feature flag local evaluation ---
+//
+// Feature flag definitions are fetched periodically by `refreshFlagDefinitions` (scheduled via
+// crons.ts) and stored in the `flagDefinitions` table. Clients read them via `getFlagDefinitions`
+// and evaluate flags locally — there is no per-call action for flag evaluation.
 
-const featureFlagArgs = {
-  apiKey: v.string(),
-  host: v.string(),
-  key: v.string(),
-  distinctId: v.string(),
-  groups: v.optional(v.any()),
-  personProperties: v.optional(v.any()),
-  groupProperties: v.optional(v.any()),
-  sendFeatureFlagEvents: v.optional(v.boolean()),
-  disableGeoip: v.optional(v.boolean()),
+const DEFAULT_HOST = 'https://us.i.posthog.com'
+
+function trimEnvValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
-function featureFlagOptions(args: {
-  groups?: Record<string, string>
-  personProperties?: Record<string, string>
-  groupProperties?: Record<string, Record<string, string>>
-  sendFeatureFlagEvents?: boolean
-  disableGeoip?: boolean
-}) {
-  return {
-    groups: args.groups,
-    personProperties: args.personProperties,
-    groupProperties: args.groupProperties,
-    sendFeatureFlagEvents: args.sendFeatureFlagEvents,
-    disableGeoip: args.disableGeoip,
-  }
-}
-
-export const getFeatureFlag = action({
-  args: featureFlagArgs,
-  handler: async (_ctx, args): Promise<FeatureFlagValue | null> => {
-    const client = createClient(args.apiKey, args.host)
-    const result = await client.getFeatureFlag(args.key, args.distinctId, featureFlagOptions(args))
-    await client.shutdown()
-    return result ?? null
+/**
+ * Returns the latest cached flag definitions, or `null` if none have been fetched yet.
+ *
+ * The `data` field is a JSON-stringified `FlagDefinitions` object (see `client/feature-flags/types.ts`).
+ */
+export const getFlagDefinitions = query({
+  args: {},
+  handler: async (ctx) => {
+    const row = await ctx.db.query('flagDefinitions').order('desc').first()
+    if (!row) return null
+    return { data: row.data, fetchedAt: row.fetchedAt, etag: row.etag }
   },
 })
 
-export const isFeatureEnabled = action({
-  args: featureFlagArgs,
-  handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host)
-    const result = await client.isFeatureEnabled(args.key, args.distinctId, featureFlagOptions(args))
-    await client.shutdown()
-    return result ?? null
-  },
-})
-
-export const getFeatureFlagPayload = action({
-  args: {
-    ...featureFlagArgs,
-    matchValue: v.optional(v.union(v.string(), v.boolean())),
-  },
-  handler: async (_ctx, args): Promise<JsonType> => {
-    const client = createClient(args.apiKey, args.host)
-    const result = await client.getFeatureFlagPayload(
-      args.key,
-      args.distinctId,
-      args.matchValue,
-      featureFlagOptions(args)
-    )
-    await client.shutdown()
-    return result ?? null
-  },
-})
-
-export const getFeatureFlagResult = action({
-  args: featureFlagArgs,
-  handler: async (
-    _ctx,
-    args
-  ): Promise<{
-    key: string
-    enabled: boolean
-    variant: string | null
-    payload: JsonType | null
-  } | null> => {
-    const client = createClient(args.apiKey, args.host)
-    const result = await client.getFeatureFlagResult(args.key, args.distinctId, featureFlagOptions(args))
-    await client.shutdown()
-    if (!result) return null
-    return {
-      key: result.key,
-      enabled: result.enabled,
-      variant: result.variant ?? null,
-      payload: result.payload ?? null,
+export const _setFlagDefinitions = internalMutation({
+  args: { data: v.string(), etag: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query('flagDefinitions').first()
+    const next = { data: args.data, fetchedAt: Date.now(), etag: args.etag }
+    if (existing) {
+      await ctx.db.replace(existing._id, next)
+    } else {
+      await ctx.db.insert('flagDefinitions', next)
     }
   },
 })
 
-const allFlagsArgs = {
-  apiKey: v.string(),
-  host: v.string(),
-  distinctId: v.string(),
-  groups: v.optional(v.any()),
-  personProperties: v.optional(v.any()),
-  groupProperties: v.optional(v.any()),
-  disableGeoip: v.optional(v.boolean()),
-  flagKeys: v.optional(v.array(v.string())),
-}
-
-export const getAllFlags = action({
-  args: allFlagsArgs,
-  handler: async (_ctx, args): Promise<Record<string, FeatureFlagValue>> => {
-    const client = createClient(args.apiKey, args.host)
-    const result = await client.getAllFlags(args.distinctId, {
-      groups: args.groups,
-      personProperties: args.personProperties,
-      groupProperties: args.groupProperties,
-      disableGeoip: args.disableGeoip,
-      flagKeys: args.flagKeys,
-    })
-    await client.shutdown()
-    return result
+export const _getCurrentEtag = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const row = await ctx.db.query('flagDefinitions').first()
+    return row?.etag
   },
 })
 
-export const getAllFlagsAndPayloads = action({
-  args: allFlagsArgs,
-  handler: async (
-    _ctx,
-    args
-  ): Promise<{
-    featureFlags?: Record<string, FeatureFlagValue>
-    featureFlagPayloads?: Record<string, JsonType>
-  }> => {
-    const client = createClient(args.apiKey, args.host)
-    const result = await client.getAllFlagsAndPayloads(args.distinctId, {
-      groups: args.groups,
-      personProperties: args.personProperties,
-      groupProperties: args.groupProperties,
-      disableGeoip: args.disableGeoip,
-      flagKeys: args.flagKeys,
+/**
+ * Fetches flag definitions from PostHog's local-evaluation endpoint and stores them in the
+ * `flagDefinitions` table. Driven by the cron scheduler in `crons.ts`.
+ *
+ * Reads configuration from Convex deployment environment variables:
+ *   - `POSTHOG_API_KEY` (project key) — required
+ *   - `POSTHOG_PERSONAL_API_KEY` — required; local eval is disabled if missing
+ *   - `POSTHOG_HOST` — optional, defaults to `https://us.i.posthog.com`
+ */
+export const refreshFlagDefinitions = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const projectApiKey = trimEnvValue(process.env.POSTHOG_API_KEY)
+    const personalApiKey = trimEnvValue(process.env.POSTHOG_PERSONAL_API_KEY)
+    const host = trimEnvValue(process.env.POSTHOG_HOST) || DEFAULT_HOST
+
+    if (!projectApiKey || !personalApiKey) {
+      // Local evaluation requires both keys. Silently skip rather than churning errors —
+      // the user may simply not have opted in to local evaluation.
+      return { status: 'skipped' as const, reason: 'missing-keys' as const }
+    }
+
+    const etag = await ctx.runQuery(internal.lib._getCurrentEtag, {})
+
+    const url = `${host.replace(/\/$/, '')}/flags/definitions?token=${projectApiKey}&send_cohorts`
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${personalApiKey}`,
+    }
+    if (etag) headers['If-None-Match'] = etag
+
+    let response: Response
+    try {
+      response = await fetch(url, { method: 'GET', headers })
+    } catch (err) {
+      console.warn('[PostHog] Failed to fetch flag definitions:', err)
+      return { status: 'error' as const, reason: 'fetch-failed' as const }
+    }
+
+    if (response.status === 304) {
+      return { status: 'unchanged' as const }
+    }
+    if (response.status === 401 || response.status === 403) {
+      console.warn(
+        `[PostHog] Flag definitions fetch failed with ${response.status}. ` +
+          `Check that POSTHOG_PERSONAL_API_KEY is a valid personal API key with read access to feature flags.`
+      )
+      return { status: 'error' as const, reason: 'auth' as const }
+    }
+    if (response.status === 402) {
+      console.warn('[PostHog] Feature flags quota limit exceeded — disabling local evaluation.')
+      await ctx.runMutation(internal.lib._setFlagDefinitions, {
+        data: JSON.stringify({ flags: [], groupTypeMapping: {}, cohorts: {} }),
+        etag: undefined,
+      })
+      return { status: 'error' as const, reason: 'quota' as const }
+    }
+    if (response.status === 429) {
+      console.warn('[PostHog] Rate limited while fetching flag definitions.')
+      return { status: 'error' as const, reason: 'rate-limited' as const }
+    }
+    if (response.status !== 200) {
+      console.warn(`[PostHog] Unexpected status ${response.status} fetching flag definitions.`)
+      return { status: 'error' as const, reason: 'unexpected-status' as const }
+    }
+
+    let body: { flags?: unknown; group_type_mapping?: unknown; cohorts?: unknown }
+    try {
+      body = (await response.json()) as typeof body
+    } catch (err) {
+      console.warn('[PostHog] Failed to parse flag definitions response:', err)
+      return { status: 'error' as const, reason: 'parse-failed' as const }
+    }
+    if (!('flags' in body)) {
+      console.warn('[PostHog] Flag definitions response missing `flags` field.')
+      return { status: 'error' as const, reason: 'invalid-shape' as const }
+    }
+
+    const data = JSON.stringify({
+      flags: body.flags ?? [],
+      groupTypeMapping: body.group_type_mapping ?? {},
+      cohorts: body.cohorts ?? {},
     })
-    await client.shutdown()
-    return result
+
+    await ctx.runMutation(internal.lib._setFlagDefinitions, {
+      data,
+      etag: response.headers.get('ETag') ?? undefined,
+    })
+
+    return { status: 'updated' as const }
   },
 })

@@ -1,5 +1,5 @@
 import './App.css'
-import { useAction, useMutation } from 'convex/react'
+import { useAction, useConvex, useMutation } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 
@@ -131,12 +131,20 @@ function App() {
     const aiSdkTracedA = useAction(api.aiSdk.withTracing.generate)
     const aiSdkOtelA = useAction(api.aiSdk.openTelemetry.generate)
 
-    const getFeatureFlagA = useAction(api.example.testGetFeatureFlag)
-    const isFeatureEnabledA = useAction(api.example.testIsFeatureEnabled)
-    const getPayloadA = useAction(api.example.testGetFeatureFlagPayload)
-    const getResultA = useAction(api.example.testGetFeatureFlagResult)
-    const getAllFlagsA = useAction(api.example.testGetAllFlags)
-    const getAllPayloadsA = useAction(api.example.testGetAllFlagsAndPayloads)
+    // Feature flag methods are queries (locally evaluated) — invoke them on-demand via the convex client.
+    const convex = useConvex()
+    const getFeatureFlagA = (args: Parameters<typeof convex.query<typeof api.example.testGetFeatureFlag>>[1]) =>
+        convex.query(api.example.testGetFeatureFlag, args)
+    const isFeatureEnabledA = (args: Parameters<typeof convex.query<typeof api.example.testIsFeatureEnabled>>[1]) =>
+        convex.query(api.example.testIsFeatureEnabled, args)
+    const getPayloadA = (args: Parameters<typeof convex.query<typeof api.example.testGetFeatureFlagPayload>>[1]) =>
+        convex.query(api.example.testGetFeatureFlagPayload, args)
+    const getResultA = (args: Parameters<typeof convex.query<typeof api.example.testGetFeatureFlagResult>>[1]) =>
+        convex.query(api.example.testGetFeatureFlagResult, args)
+    const getAllFlagsA = (args: Parameters<typeof convex.query<typeof api.example.testGetAllFlags>>[1]) =>
+        convex.query(api.example.testGetAllFlags, args)
+    const getAllPayloadsA = (args: Parameters<typeof convex.query<typeof api.example.testGetAllFlagsAndPayloads>>[1]) =>
+        convex.query(api.example.testGetAllFlagsAndPayloads, args)
 
     const run = async (label: string, fn: () => Promise<unknown>) => {
         setBtnStatus((s) => ({ ...s, [label]: 'loading' }))

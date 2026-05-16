@@ -12,12 +12,9 @@
   <a href="https://www.npmjs.com/package/@posthog/convex"><img src="https://badge.fury.io/js/@posthog%2Fconvex.svg" alt="npm version"></a>
 </p>
 
-> [!WARNING]
-> This package is in alpha and under active development. APIs may change between releases.
-
 ## 🦔 What is this?
 
-The official [PostHog](https://posthog.com) component for [Convex](https://convex.dev). Capture events, identify users, manage groups, and evaluate feature flags — all from your mutations and actions.
+The official [PostHog](https://posthog.com) component for [Convex](https://convex.dev). Capture events, identify users, manage groups, and evaluate feature flags — all from your queries, mutations, and actions.
 
 Found a bug? Feature request? [File it here](https://github.com/PostHog/posthog-js/issues).
 
@@ -48,6 +45,14 @@ Set your PostHog API key and host:
 npx convex env set POSTHOG_API_KEY phc_your_project_api_key
 npx convex env set POSTHOG_HOST https://us.i.posthog.com
 ```
+
+To enable local feature flag evaluation, also set a [personal API key](https://posthog.com/docs/api#how-to-obtain-a-personal-api-key) with read access to feature flags:
+
+```sh
+npx convex env set POSTHOG_PERSONAL_API_KEY phx_your_personal_api_key
+```
+
+With `POSTHOG_PERSONAL_API_KEY` set, the component polls PostHog every minute for the latest flag definitions and caches them in a Convex table — feature flag methods then evaluate flags locally without a per-call network round-trip.
 
 Create a `convex/posthog.ts` file to initialize the client:
 
@@ -147,7 +152,9 @@ All of the above methods schedule the PostHog API call asynchronously via `ctx.s
 
 ## 🚩 Feature Flags
 
-Feature flag methods evaluate flags by calling the PostHog API and returning the result. They require an **action** context (they use `ctx.runAction` internally).
+Feature flags are evaluated **locally** against definitions that the component refreshes from PostHog on a one-minute cron. They work in **queries, mutations, and actions** — no per-call network round-trip — and benefit from Convex's reactivity: a query that reads a flag automatically re-runs when the flag definition changes.
+
+Set `POSTHOG_PERSONAL_API_KEY` (see the Quick Start) to enable local evaluation. Without it, all feature flag methods return `null`/`undefined`.
 
 ### getFeatureFlag
 
@@ -155,10 +162,10 @@ Get a flag's value.
 
 ```ts
 import { posthog } from "./posthog";
-import { action } from "./_generated/server";
+import { query } from "./_generated/server";
 import { v } from "convex/values";
 
-export const getDiscount = action({
+export const getDiscount = query({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
     const flag = await posthog.getFeatureFlag(ctx, {
@@ -231,7 +238,16 @@ const { featureFlags, featureFlagPayloads } =
   });
 ```
 
-All feature flag methods accept optional `groups`, `personProperties`, `groupProperties`, `sendFeatureFlagEvents`, and `disableGeoip` options. `getAllFlags` and `getAllFlagsAndPayloads` also accept `flagKeys` to filter which flags to evaluate.
+All feature flag methods accept optional `groups`, `personProperties`, `groupProperties`, and `disableGeoip` options. `getAllFlags` and `getAllFlagsAndPayloads` also accept `flagKeys` to filter which flags to evaluate.
+
+### When local evaluation can't determine a value
+
+Local evaluation returns `undefined` (or an empty result for the all-flags methods) when:
+
+- `POSTHOG_PERSONAL_API_KEY` is not set, or the cron has not run for the first time;
+- the flag uses [experience continuity](https://posthog.com/docs/feature-flags/creating-feature-flags#persisting-feature-flags-across-authentication-steps);
+- the flag targets a static cohort whose membership lives only on the server;
+- the flag references person or group properties that weren't passed in.
 
 ## 📦 Example
 
