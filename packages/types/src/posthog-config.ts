@@ -289,6 +289,20 @@ export type DeadClicksAutoCaptureConfig = {
     capture_clicks_with_modifier_keys?: boolean
 
     /**
+     * List of CSS selectors to ignore dead clicks on
+     * e.g. ['.my-download-link']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > a > svg
+     * and ignore list config `['[download]']`
+     * we will ignore the dead click if the click-target or its parents has any download attribute
+     *
+     * Nothing is ignored when there's an empty ignorelist, e.g. []
+     * If no ignorelist is set, we default to ignoring .ph-no-deadclick and .ph-no-capture
+     * A custom ignorelist fully replaces the default — include .ph-no-capture if you want it to suppress dead-click capture as well
+     */
+    css_selector_ignorelist?: string[]
+
+    /**
      * Allows setting behavior for when a dead click is captured.
      * For e.g. to support capture to heatmaps
      *
@@ -1443,6 +1457,8 @@ export interface PostHogConfig {
 
     /**
      * Determines whether to capture dead clicks.
+     *
+     * by default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent
      *
      * @see {DeadClicksAutoCaptureConfig}
      * @default undefined
