@@ -278,6 +278,21 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
     return { parentIsUsefulElement, targetElementList }
 }
 
+// dead-click skips a click only when the click target is — or is inside — an <a>.
+// Anchors navigate / download / open a new window via the browser, and we have no
+// observable signal for those actions (no DOM mutation, no scroll). For every other
+// element (button, input, select, textarea, label, custom JS-handled divs, etc.) we
+// rely on the existing mutation / scroll / selection / visibility observers — if the
+// app's JS handler ran, those catch the effect; if it didn't, dead-click correctly
+// surfaces the bug. A click on a broken <button> with no handler should still flag.
+export function shouldSkipDeadClick(el: Element | null): boolean {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return false
+    }
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+    return targetElementList.some((node) => isTag(node, 'a'))
+}
+
 /*
  * Check whether a DOM event should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.

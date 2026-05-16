@@ -1,7 +1,6 @@
 import { PostHog } from '../../posthog-core'
 import LazyLoadedDeadClicksAutocapture from '../../entrypoints/dead-clicks-autocapture'
 import { assignableWindow, document } from '../../utils/globals'
-import { autocaptureCompatibleElements } from '../../autocapture-utils'
 
 // need to fake the timer before jsdom inits
 jest.useFakeTimers()
@@ -147,16 +146,102 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
         })
 
-        it.each(autocaptureCompatibleElements)('click on %s node is never a deadclick', (element) => {
-            const el = document.createElement(element)
-            document.body.append(el)
-            triggerMouseEvent(el, 'click')
+        it('click on an anchor is never a deadclick', () => {
+            const anchor = document.createElement('a')
+            anchor.setAttribute('href', '/some/file.pdf')
+            document.body.append(anchor)
+            triggerMouseEvent(anchor, 'click')
             jest.setSystemTime(4000)
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('click on a child of an anchor is never a deadclick', () => {
+            const anchor = document.createElement('a')
+            anchor.setAttribute('href', '/some/file.pdf')
+            const child = document.createElement('span')
+            anchor.appendChild(child)
+            document.body.append(anchor)
+
+            triggerMouseEvent(child, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('click on a deeply nested child of an anchor is never a deadclick', () => {
+            const anchor = document.createElement('a')
+            anchor.setAttribute('href', '/some/file.pdf')
+            const wrapper = document.createElement('div')
+            const icon = document.createElement('svg')
+            wrapper.appendChild(icon)
+            anchor.appendChild(wrapper)
+            document.body.append(anchor)
+
+            triggerMouseEvent(icon, 'click')
+            jest.setSystemTime(4000)
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('click on a child of an anchor inside a shadow root is never a deadclick', () => {
+            const host = document.createElement('div')
+            const shadowRoot = host.attachShadow({ mode: 'open' })
+            const anchor = document.createElement('a')
+            anchor.setAttribute('href', '/some/file.pdf')
+            const child = document.createElement('span')
+            anchor.appendChild(child)
+            shadowRoot.appendChild(anchor)
+            document.body.append(host)
+
+            triggerMouseEvent(child, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        // buttons, inputs, selects, textareas, labels, forms all rely on app JS handlers
+        // (or browser-native side effects we can observe via mutation/scroll/selection).
+        // If the handler ran, our observers catch the effect; if it didn't, dead-click
+        // correctly surfaces the bug. A click on a broken <button> with no handler
+        // should still flag — that's exactly the case we want to catch.
+        it.each(['button', 'input', 'select', 'textarea', 'label', 'form'])(
+            'click on a %s is still a candidate',
+            (tag) => {
+                const el = document.createElement(tag)
+                document.body.append(el)
+
+                triggerMouseEvent(el, 'click')
+
+                expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            }
+        )
+
+        it.each(['button', 'input', 'select', 'textarea', 'label', 'form'])(
+            'click on a child of a %s is still a candidate',
+            (ancestorTag) => {
+                const ancestor = document.createElement(ancestorTag)
+                const child = document.createElement('span')
+                ancestor.appendChild(child)
+                document.body.append(ancestor)
+
+                triggerMouseEvent(child, 'click')
+
+                expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            }
+        )
+
+        it('click on a non-interactive element with no interactive ancestor is still a candidate', () => {
+            const div = document.createElement('div')
+            document.body.append(div)
+
+            triggerMouseEvent(div, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
         })
 
         it.each(['ph-no-deadclick', 'ph-no-capture'])('ignores clicks on elements with the %s class', (className) => {
