@@ -25,14 +25,16 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { survey, surveyLanguage, appearance, onShow, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
   const [responses, setResponses] = useState<SurveyResponses>({})
-  const onClose = useCallback(() => props.onClose(isSurveySent, responses), [isSurveySent, props, responses])
+  const [isVisible, setIsVisible] = useState(true)
+  const onClose = useCallback(() => {
+    setIsVisible(false)
+    props.onClose(isSurveySent, responses)
+  }, [isSurveySent, props, responses])
   const insets = useOptionalSafeAreaInsets()
   const { height: windowHeight } = useWindowDimensions()
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const { vertical, horizontal } = resolveSurveyAlignment(appearance.position)
   const isBottom = vertical === 'flex-end'
-
-  const [isVisible] = useState(true)
 
   const shouldShowConfirmation = isSurveySent && appearance.thankYouMessageHeader
 
@@ -88,7 +90,18 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                 <View style={styles.topIconContainer}>
                   <Cancel onPress={onClose} appearance={appearance} />
                 </View>
-                {!shouldShowConfirmation ? (
+                {isSurveySent ? (
+                  shouldShowConfirmation ? (
+                    <ConfirmationMessage
+                      appearance={appearance}
+                      header={appearance.thankYouMessageHeader}
+                      description={appearance.thankYouMessageDescription}
+                      contentType={appearance.thankYouMessageDescriptionContentType}
+                      onClose={onClose}
+                      isModal={true}
+                    />
+                  ) : null
+                ) : (
                   <Questions
                     survey={survey}
                     surveyLanguage={surveyLanguage}
@@ -96,15 +109,6 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                     responses={responses}
                     onResponsesChange={setResponses}
                     onSubmit={() => setIsSurveySent(true)}
-                  />
-                ) : (
-                  <ConfirmationMessage
-                    appearance={appearance}
-                    header={appearance.thankYouMessageHeader}
-                    description={appearance.thankYouMessageDescription}
-                    contentType={appearance.thankYouMessageDescriptionContentType}
-                    onClose={onClose}
-                    isModal={true}
                   />
                 )}
               </View>

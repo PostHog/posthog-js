@@ -1,0 +1,196 @@
+/** @jest-environment jsdom */
+import React from 'react'
+import { act, fireEvent, render, cleanup } from '@testing-library/react'
+import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
+
+// Minimal react-native shim — jest-expo's full preset chain pulls in
+// TurboModule code that explodes under jsdom. We only need a handful of
+// primitives here, all rendering as plain divs so children appear in the DOM.
+jest.mock('react-native', () => {
+  const RealReact = jest.requireActual('react')
+  const Box = RealReact.forwardRef(({ children, testID, onTouchStart, ...rest }: any, ref: any) =>
+    RealReact.createElement('div', { ref, 'data-testid': testID, onMouseDown: onTouchStart, ...rest }, children)
+  )
+  const Pressable = RealReact.forwardRef(({ children, testID, onPress, ...rest }: any, ref: any) =>
+    RealReact.createElement('div', { ref, 'data-testid': testID, onClick: onPress, ...rest }, children)
+  )
+  return {
+    View: Box,
+    Modal: Box,
+    KeyboardAvoidingView: Box,
+    Pressable,
+    TouchableOpacity: Pressable,
+    Text: Box,
+    Keyboard: { dismiss: jest.fn(), addListener: () => ({ remove: jest.fn() }) },
+    Platform: { OS: 'ios', select: (o: any) => o.ios },
+    StyleSheet: {
+      create: (s: any) => s,
+      flatten: (s: any) => s,
+      absoluteFill: {},
+    },
+    useWindowDimensions: () => ({ width: 375, height: 800 }),
+  }
+})
+
+// Stub Questions / ConfirmationMessage / Cancel so we can assert exactly
+// which path SurveyModal is rendering, and trigger the submit/close callbacks.
+jest.mock('../src/surveys/components/Surveys', () => {
+  const RealReact = jest.requireActual('react')
+  return {
+    Questions: ({ onSubmit }: { onSubmit: () => void }) =>
+      RealReact.createElement('div', { 'data-testid': 'questions-stub', onClick: onSubmit }, 'QUESTIONS_RENDERED'),
+    sendSurveyShownEvent: jest.fn(),
+    dismissedSurveyEvent: jest.fn(),
+    sendSurveyEvent: jest.fn(),
+  }
+})
+
+jest.mock('../src/surveys/components/ConfirmationMessage', () => {
+  const RealReact = jest.requireActual('react')
+  return {
+    ConfirmationMessage: ({ header }: { header: string }) =>
+      RealReact.createElement('div', { 'data-testid': 'confirmation-stub' }, header),
+  }
+})
+
+jest.mock('../src/surveys/components/Cancel', () => {
+  const RealReact = jest.requireActual('react')
+  return {
+    Cancel: ({ onPress }: { onPress: () => void }) =>
+      RealReact.createElement('div', { 'data-testid': 'cancel-stub', onClick: onPress }, 'X'),
+  }
+})
+
+import { SurveyModal } from '../src/surveys/components/SurveyModal'
+import { defaultSurveyAppearance, SurveyAppearanceTheme } from '../src/surveys/surveys-utils'
+
+const baseSurvey: Survey = {
+  id: 'test-survey',
+  name: 'Test Survey',
+  type: SurveyType.Popover,
+  questions: [
+    {
+      id: 'q1',
+      type: SurveyQuestionType.Open,
+      question: 'What do you think?',
+      originalQuestionIndex: 0,
+    },
+  ],
+}
+
+const appearanceWithThankYou: SurveyAppearanceTheme = {
+  ...defaultSurveyAppearance,
+  thankYouMessageHeader: 'Thanks!',
+}
+
+const appearanceWithoutThankYou: SurveyAppearanceTheme = {
+  ...defaultSurveyAppearance,
+  thankYouMessageHeader: '',
+}
+
+describe('SurveyModal close behavior', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('does not flash Questions when appearance loses thankYouMessageHeader after submit', () => {
+    const onClose = jest.fn()
+    const { queryByTestId, getByTestId, rerender } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithThankYou}
+        onShow={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    // Sanity: Questions is rendered initially.
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+
+    // Drive isSurveySent=true via the stubbed Questions submit.
+    act(() => {
+      fireEvent.click(getByTestId('questions-stub'))
+    })
+
+    // Confirmation now showing.
+    expect(queryByTestId('confirmation-stub')).not.toBeNull()
+    expect(queryByTestId('questions-stub')).toBeNull()
+
+    // Parent provider clears activeSurvey on close — surveyAppearance recomputes
+    // to defaults without thankYouMessageHeader. Simulate that rerender.
+    rerender(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithoutThankYou}
+        onShow={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    // BUG: shouldShowConfirmation flips false, so Questions remounts with Q1.
+    // After the fix the conditional branches on isSurveySent first → null.
+    expect(queryByTestId('questions-stub')).toBeNull()
+  })
+
+  it('hides content immediately when the cancel button is pressed', () => {
+    const onClose = jest.fn()
+    const { queryByTestId, getByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithThankYou}
+        onShow={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+
+    act(() => {
+      fireEvent.click(getByTestId('cancel-stub'))
+    })
+
+    // After setIsVisible(false), the component returns null on its next
+    // render — Questions is gone from the DOM immediately.
+    expect(queryByTestId('questions-stub')).toBeNull()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('hides content before the parent unmounts (race with parent)', () => {
+    // This simulates the real-world flow: parent unmounts SurveyModal in
+    // the same event that SurveyModal calls setIsVisible(false). Under
+    // React 18 batching, the parent's update can win and SurveyModal
+    // never gets to commit its null render. If that happens, Questions
+    // is still in the tree at the moment the modal disappears, which is
+    // what the user sees during the fade-out.
+    const Wrapper = () => {
+      const [show, setShow] = React.useState(true)
+      if (!show) return <div data-testid="parent-unmounted" />
+      return (
+        <SurveyModal
+          survey={baseSurvey}
+          surveyLanguage={null}
+          appearance={appearanceWithThankYou}
+          onShow={() => {}}
+          onClose={() => setShow(false)}
+        />
+      )
+    }
+    const { queryByTestId, getByTestId } = render(<Wrapper />)
+
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+
+    act(() => {
+      fireEvent.click(getByTestId('cancel-stub'))
+    })
+
+    // Parent has unmounted SurveyModal entirely.
+    expect(queryByTestId('parent-unmounted')).not.toBeNull()
+    // Questions must NOT have been rendered in any commit between the
+    // click and the unmount — i.e. no last-frame Q1 for the native modal
+    // to fade out with.
+    expect(queryByTestId('questions-stub')).toBeNull()
+  })
+})
