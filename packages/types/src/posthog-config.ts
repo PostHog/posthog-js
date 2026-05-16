@@ -297,8 +297,8 @@ export type DeadClicksAutoCaptureConfig = {
      * we will ignore the dead click if the click-target or its parents has any download attribute
      *
      * Nothing is ignored when there's an empty ignorelist, e.g. []
-     * If no ignorelist is set, we default to ignoring .ph-no-deadclick
-     * If an element has .ph-no-capture, it will always be ignored by dead click and autocapture
+     * If no ignorelist is set, we default to ignoring .ph-no-deadclick and .ph-no-capture
+     * A custom ignorelist fully replaces the default — include .ph-no-capture if you want it to suppress dead-click capture as well
      */
     css_selector_ignorelist?: string[]
 

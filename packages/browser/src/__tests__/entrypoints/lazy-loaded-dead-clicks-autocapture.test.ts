@@ -159,9 +159,9 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
-        it('ignores clicks on elements with the ph-no-deadclick class', () => {
+        it.each(['ph-no-deadclick', 'ph-no-capture'])('ignores clicks on elements with the %s class', (className) => {
             const el = document.createElement('div')
-            el.className = 'ph-no-deadclick'
+            el.className = className
             document.body.append(el)
 
             triggerMouseEvent(el, 'click')
@@ -177,16 +177,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             document.body.append(parent)
 
             triggerMouseEvent(child, 'click')
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-        })
-
-        it('ignores clicks on elements with the ph-no-capture class', () => {
-            const el = document.createElement('div')
-            el.className = 'ph-no-capture'
-            document.body.append(el)
-
-            triggerMouseEvent(el, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         })
