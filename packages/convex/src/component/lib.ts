@@ -1,6 +1,6 @@
 import { PostHog } from 'posthog-node/edge'
-import { action, internalAction, internalMutation, internalQuery, query } from './_generated/server.js'
-import { internal } from './_generated/api.js'
+import { action, internalMutation, internalQuery, query } from './_generated/server.js'
+import { api, internal } from './_generated/api.js'
 import { v } from 'convex/values'
 
 /**
@@ -161,17 +161,89 @@ export const captureException = action({
   },
 })
 
+// --- Feature flag remote evaluation ---
+//
+// These actions hit PostHog's `/flags` endpoint directly via `posthog-node`. Use them when
+// local evaluation isn't available (no personal API key) or can't reach a verdict (experience
+// continuity flags, static cohorts, properties you don't have in your server context). They
+// require an action context — that's the trade for not needing flag definitions cached upfront.
+
+const remoteFlagsArgs = {
+  apiKey: v.string(),
+  host: v.string(),
+  distinctId: v.string(),
+  groups: v.optional(v.any()),
+  personProperties: v.optional(v.any()),
+  groupProperties: v.optional(v.any()),
+  disableGeoip: v.optional(v.boolean()),
+  flagKeys: v.optional(v.array(v.string())),
+}
+
+function remoteFlagsOptions(args: {
+  groups?: unknown
+  personProperties?: unknown
+  groupProperties?: unknown
+  disableGeoip?: boolean
+  flagKeys?: string[]
+}) {
+  return {
+    groups: args.groups as Record<string, string> | undefined,
+    personProperties: args.personProperties as Record<string, any> | undefined,
+    groupProperties: args.groupProperties as Record<string, Record<string, any>> | undefined,
+    disableGeoip: args.disableGeoip,
+    flagKeys: args.flagKeys,
+    onlyEvaluateLocally: false,
+  }
+}
+
+export const evaluateFlag = action({
+  args: { ...remoteFlagsArgs, key: v.string() },
+  handler: async (_ctx, args) => {
+    const client = getClient(args.apiKey, args.host)
+    const snapshot = await client.evaluateFlags(args.distinctId, remoteFlagsOptions(args))
+    const value = snapshot.getFlag(args.key)
+    return value ?? null
+  },
+})
+
+export const evaluateFlagPayload = action({
+  args: { ...remoteFlagsArgs, key: v.string() },
+  handler: async (_ctx, args) => {
+    const client = getClient(args.apiKey, args.host)
+    const snapshot = await client.evaluateFlags(args.distinctId, remoteFlagsOptions(args))
+    const payload = snapshot.getFlagPayload(args.key)
+    return payload ?? null
+  },
+})
+
+export const evaluateAllFlags = action({
+  args: remoteFlagsArgs,
+  handler: async (_ctx, args) => {
+    const client = getClient(args.apiKey, args.host)
+    const snapshot = await client.evaluateFlags(args.distinctId, remoteFlagsOptions(args))
+    const featureFlags: Record<string, unknown> = {}
+    const featureFlagPayloads: Record<string, unknown> = {}
+    for (const key of snapshot.keys) {
+      const value = snapshot.getFlag(key)
+      if (value !== undefined) featureFlags[key] = value
+      const payload = snapshot.getFlagPayload(key)
+      if (payload !== undefined) featureFlagPayloads[key] = payload
+    }
+    return { featureFlags, featureFlagPayloads }
+  },
+})
+
 // --- Feature flag local evaluation ---
 //
-// Feature flag definitions are fetched periodically by `refreshFlagDefinitions` (scheduled via
-// crons.ts) and stored in the `flagDefinitions` table. Clients read them via `getFlagDefinitions`
-// and evaluate flags locally — there is no per-call action for flag evaluation.
-
-const DEFAULT_HOST = 'https://us.i.posthog.com'
-
-function trimEnvValue(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
+// Feature flag definitions are fetched on demand by `refreshFlagDefinitions` and stored in the
+// `flagDefinitions` table. Clients read them via `getFlagDefinitions` and evaluate flags locally
+// — there is no per-call action for flag evaluation.
+//
+// The action takes credentials as args (rather than reading `process.env`) because Convex
+// components run in an isolated env namespace and don't inherit the parent app's environment
+// variables. The user's app schedules the refresh cron themselves and passes the credentials
+// through — usually via `posthog.refreshFlagDefinitions(ctx)` on the client class, which forwards
+// the keys it was constructed with.
 
 /**
  * Returns the latest cached flag definitions, or `null` if none have been fetched yet.
@@ -210,41 +282,71 @@ export const _getCurrentEtag = internalQuery({
 
 /**
  * Fetches flag definitions from PostHog's local-evaluation endpoint and stores them in the
- * `flagDefinitions` table. Driven by the cron scheduler in `crons.ts`.
+ * `flagDefinitions` table. Called by the consumer app's own cron — they pass in the keys via the
+ * `PostHog` client class which knows them already.
  *
- * Reads configuration from Convex deployment environment variables:
- *   - `POSTHOG_API_KEY` (project key) — required
- *   - `POSTHOG_PERSONAL_API_KEY` — required; local eval is disabled if missing
- *   - `POSTHOG_HOST` — optional, defaults to `https://us.i.posthog.com`
+ * Args:
+ *   - `apiKey` — the project API key (`phc_…`)
+ *   - `personalApiKey` — a feature flags secure API key (`phs_…`, recommended) or personal API
+ *     key (`phx_…`) with feature-flag read access; local eval is disabled if missing
+ *   - `host` — optional, defaults to `https://us.i.posthog.com`
  */
-export const refreshFlagDefinitions = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    const projectApiKey = trimEnvValue(process.env.POSTHOG_API_KEY)
-    const personalApiKey = trimEnvValue(process.env.POSTHOG_PERSONAL_API_KEY)
-    const host = trimEnvValue(process.env.POSTHOG_HOST) || DEFAULT_HOST
+export const refreshFlagDefinitions = action({
+  args: {
+    apiKey: v.string(),
+    personalApiKey: v.string(),
+    host: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const projectApiKey = args.apiKey.trim()
+    const personalApiKey = args.personalApiKey.trim()
+    const host = (args.host?.trim() || '').replace(/\/$/, '') || 'https://us.i.posthog.com'
 
     if (!projectApiKey || !personalApiKey) {
-      // Local evaluation requires both keys. Silently skip rather than churning errors —
-      // the user may simply not have opted in to local evaluation.
+      // Local evaluation requires both keys. Return a status rather than throwing so the caller
+      // (typically a cron) can surface it cleanly.
       return { status: 'skipped' as const, reason: 'missing-keys' as const }
     }
 
     const etag = await ctx.runQuery(internal.lib._getCurrentEtag, {})
 
-    const url = `${host.replace(/\/$/, '')}/flags/definitions?token=${projectApiKey}&send_cohorts`
+    const url = `${host}/flags/definitions?token=${projectApiKey}&send_cohorts`
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${personalApiKey}`,
     }
     if (etag) headers['If-None-Match'] = etag
 
+    // PostHog's `/flags/definitions` endpoint sits behind a warm-on-demand cache. The first
+    // call after a flag is created — or any time the cache evicts — comes back as a 503 with
+    // "Required data not found in cache. … Please try again later." Retry transient 5xx (and
+    // 429s, since rate limiting on a one-minute cron is similarly worth waiting out) with
+    // bounded exponential backoff so a single cold-cache hit doesn't make callers wait a full
+    // cron tick.
+    const RETRY_DELAYS_MS = [1500, 3000, 6000]
     let response: Response
-    try {
-      response = await fetch(url, { method: 'GET', headers })
-    } catch (err) {
-      console.warn('[PostHog] Failed to fetch flag definitions:', err)
-      return { status: 'error' as const, reason: 'fetch-failed' as const }
+    let attempt = 0
+    while (true) {
+      try {
+        response = await fetch(url, { method: 'GET', headers })
+      } catch (err) {
+        console.warn('[PostHog] Failed to fetch flag definitions:', err)
+        return { status: 'error' as const, reason: 'fetch-failed' as const }
+      }
+      const transient = response.status === 429 || (response.status >= 500 && response.status < 600)
+      if (!transient || attempt >= RETRY_DELAYS_MS.length) break
+      const wait = RETRY_DELAYS_MS[attempt]
+      attempt++
+      // Drain the body so the connection can be reused.
+      try {
+        await response.text()
+      } catch {
+        // ignore
+      }
+      console.warn(
+        `[PostHog] Flag definitions fetch returned ${response.status}; retrying in ${wait}ms (attempt ${attempt}/${RETRY_DELAYS_MS.length}).`
+      )
+      await new Promise((r) => setTimeout(r, wait))
     }
 
     if (response.status === 304) {
@@ -253,7 +355,7 @@ export const refreshFlagDefinitions = internalAction({
     if (response.status === 401 || response.status === 403) {
       console.warn(
         `[PostHog] Flag definitions fetch failed with ${response.status}. ` +
-          `Check that POSTHOG_PERSONAL_API_KEY is a valid personal API key with read access to feature flags.`
+          `Check that the personal/feature-flags-secure API key has read access to feature flags.`
       )
       return { status: 'error' as const, reason: 'auth' as const }
     }
@@ -266,11 +368,60 @@ export const refreshFlagDefinitions = internalAction({
       return { status: 'error' as const, reason: 'quota' as const }
     }
     if (response.status === 429) {
-      console.warn('[PostHog] Rate limited while fetching flag definitions.')
+      console.warn('[PostHog] Rate limited while fetching flag definitions (after retries).')
       return { status: 'error' as const, reason: 'rate-limited' as const }
     }
     if (response.status !== 200) {
-      console.warn(`[PostHog] Unexpected status ${response.status} fetching flag definitions.`)
+      let bodyText = '<no body>'
+      try {
+        bodyText = (await response.text()).slice(0, 500)
+      } catch {
+        // ignore — body wasn't readable
+      }
+      // PostHog returns 503 with `Required data not found in cache` for two indistinguishable
+      // cases: (a) the project has zero flag definitions configured, and (b) the warm-on-demand
+      // cache evicted and hasn't repopulated yet. We can't tell which, so we treat them the same
+      // way: if we have no existing defs cached, persist an empty snapshot so eval methods can
+      // resolve flag lookups to `undefined` cleanly and the UI stops looking broken. If we
+      // already had defs cached, leave them alone — last-known-good beats a flap.
+      const looksCacheCold =
+        response.status === 503 && bodyText.toLowerCase().includes('required data not found in cache')
+      if (looksCacheCold) {
+        const existing = await ctx.runQuery(api.lib.getFlagDefinitions, {})
+        const STALE_AFTER_MS = 5 * 60 * 1000
+        if (existing === null) {
+          // No prior cache — write an empty snapshot so subsequent reads are deterministic and
+          // the UI shows "no flags" instead of "loading".
+          await ctx.runMutation(internal.lib._setFlagDefinitions, {
+            data: JSON.stringify({ flags: [], groupTypeMapping: {}, cohorts: {} }),
+            etag: undefined,
+          })
+          console.info(
+            "[PostHog] No flag definitions returned (project may have no flags yet, or PostHog's cache is warming). Cached an empty snapshot."
+          )
+          return { status: 'empty' as const }
+        }
+        if (Date.now() - existing.fetchedAt > STALE_AFTER_MS) {
+          // We had cached defs but haven't successfully refreshed them in a while — could be that
+          // every flag was deleted upstream and PostHog now responds with "no flags in cache" 503s.
+          // Replace with an empty snapshot rather than serving stale data indefinitely.
+          await ctx.runMutation(internal.lib._setFlagDefinitions, {
+            data: JSON.stringify({ flags: [], groupTypeMapping: {}, cohorts: {} }),
+            etag: undefined,
+          })
+          console.info(
+            '[PostHog] Cached flag definitions are >5 minutes stale and PostHog reports an empty cache. Replaced with an empty snapshot.'
+          )
+          return { status: 'empty' as const }
+        }
+        // Recent cached defs — keep them while PostHog's cache potentially warms back up.
+        return { status: 'stale' as const }
+      }
+
+      console.warn(
+        `[PostHog] Unexpected status ${response.status} fetching flag definitions from ${url.replace(projectApiKey, '<token>')}. ` +
+          `Response body: ${bodyText}`
+      )
       return { status: 'error' as const, reason: 'unexpected-status' as const }
     }
 

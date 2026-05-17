@@ -1,6 +1,6 @@
 {
   "name": "@posthog/convex",
-  "description": "Send analytics events to PostHog from your Convex backend.",
+  "description": "Capture analytics events, track exceptions, and evaluate feature flags with PostHog from your Convex backend.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PostHog/posthog-js.git",

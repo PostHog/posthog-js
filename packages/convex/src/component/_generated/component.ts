@@ -70,6 +70,56 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         any,
         Name
       >;
+      evaluateAllFlags: FunctionReference<
+        "action",
+        "internal",
+        {
+          apiKey: string;
+          disableGeoip?: boolean;
+          distinctId: string;
+          flagKeys?: Array<string>;
+          groupProperties?: any;
+          groups?: any;
+          host: string;
+          personProperties?: any;
+        },
+        any,
+        Name
+      >;
+      evaluateFlag: FunctionReference<
+        "action",
+        "internal",
+        {
+          apiKey: string;
+          disableGeoip?: boolean;
+          distinctId: string;
+          flagKeys?: Array<string>;
+          groupProperties?: any;
+          groups?: any;
+          host: string;
+          key: string;
+          personProperties?: any;
+        },
+        any,
+        Name
+      >;
+      evaluateFlagPayload: FunctionReference<
+        "action",
+        "internal",
+        {
+          apiKey: string;
+          disableGeoip?: boolean;
+          distinctId: string;
+          flagKeys?: Array<string>;
+          groupProperties?: any;
+          groups?: any;
+          host: string;
+          key: string;
+          personProperties?: any;
+        },
+        any,
+        Name
+      >;
       getFlagDefinitions: FunctionReference<"query", "internal", {}, any, Name>;
       groupIdentify: FunctionReference<
         "action",
@@ -96,6 +146,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           host: string;
           properties?: string;
         },
+        any,
+        Name
+      >;
+      refreshFlagDefinitions: FunctionReference<
+        "action",
+        "internal",
+        { apiKey: string; host?: string; personalApiKey: string },
         any,
         Name
       >;

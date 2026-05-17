@@ -77,8 +77,12 @@ export function normalizeError(error: unknown): {
   return { message: String(error) }
 }
 
+/** Context with runAction — available in actions. Used by `refreshFlagDefinitions`. */
+type RunActionCtx = { runAction: (reference: any, args: any) => Promise<any> }
+
 export class PostHog {
   private apiKey: string
+  private personalApiKey: string
   private host: string
   private beforeSend?: BeforeSendFn | BeforeSendFn[]
   private identifyFn?: IdentifyFn
@@ -87,15 +91,38 @@ export class PostHog {
     public component: ComponentApi,
     options?: {
       apiKey?: string
+      /**
+       * Either a [feature flags secure API key](https://posthog.com/docs/feature-flags/local-evaluation#step-1-find-your-feature-flags-secure-api-key)
+       * (`phs_…`, recommended) or a personal API key (`phx_…`) with feature-flag read access.
+       * Required for local feature flag evaluation; defaults to `process.env.POSTHOG_PERSONAL_API_KEY`.
+       * The keys are captured at construction time and passed into the component when you call
+       * `refreshFlagDefinitions(ctx)` — Convex components can't read parent env vars themselves.
+       */
+      personalApiKey?: string
       host?: string
       beforeSend?: BeforeSendFn | BeforeSendFn[]
       identify?: IdentifyFn
     }
   ) {
     this.apiKey = normalizeApiKey(options?.apiKey ?? process.env.POSTHOG_API_KEY)
+    this.personalApiKey = normalizeApiKey(options?.personalApiKey ?? process.env.POSTHOG_PERSONAL_API_KEY)
     this.host = normalizeHost(options?.host ?? process.env.POSTHOG_HOST)
     this.beforeSend = options?.beforeSend
     this.identifyFn = options?.identify
+  }
+
+  /**
+   * Trigger a refresh of the cached feature flag definitions. Must be called from an action
+   * context (typically a cron handler) — the component fetches `/flags/definitions` and writes
+   * the result to its singleton table. Returns the component's status object so callers can log
+   * misconfiguration without throwing.
+   */
+  async refreshFlagDefinitions(ctx: RunActionCtx): Promise<unknown> {
+    return await ctx.runAction(this.component.lib.refreshFlagDefinitions, {
+      apiKey: this.apiKey,
+      personalApiKey: this.personalApiKey,
+      host: this.host,
+    })
   }
 
   private async resolveDistinctId(ctx: unknown, argsDistinctId?: string): Promise<string> {
@@ -413,5 +440,82 @@ export class PostHog {
       args.groupProperties ?? {},
       args.flagKeys
     )
+  }
+
+  // --- Remote feature flag evaluation (action context) ---
+  //
+  // For flags that can't be evaluated locally — experience continuity, static cohorts, the
+  // `is_not_set` operator, properties you can't pass in — or when you haven't configured a
+  // personal API key. These hit PostHog's `/flags` endpoint via a component action, so they
+  // require an action ctx and incur a per-call network round trip.
+
+  /**
+   * Evaluate a single flag remotely against PostHog's `/flags` endpoint. Action context only.
+   * Returns the flag value, or `null` if the flag doesn't exist.
+   */
+  async evaluateFlag(
+    ctx: RunActionCtx,
+    args: { key: string; distinctId?: string } & FeatureFlagOptions
+  ): Promise<FeatureFlagValue | null> {
+    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
+    return (await ctx.runAction(this.component.lib.evaluateFlag, {
+      apiKey: this.apiKey,
+      host: this.host,
+      key: args.key,
+      distinctId,
+      groups: args.groups,
+      personProperties: args.personProperties,
+      groupProperties: args.groupProperties,
+      disableGeoip: args.disableGeoip,
+    })) as FeatureFlagValue | null
+  }
+
+  /**
+   * Evaluate a single flag's payload remotely against PostHog's `/flags` endpoint. Action context
+   * only. Returns the payload, or `null` if the flag doesn't match or has no payload configured.
+   */
+  async evaluateFlagPayload(
+    ctx: RunActionCtx,
+    args: { key: string; distinctId?: string } & FeatureFlagOptions
+  ): Promise<JsonType | null> {
+    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
+    return (await ctx.runAction(this.component.lib.evaluateFlagPayload, {
+      apiKey: this.apiKey,
+      host: this.host,
+      key: args.key,
+      distinctId,
+      groups: args.groups,
+      personProperties: args.personProperties,
+      groupProperties: args.groupProperties,
+      disableGeoip: args.disableGeoip,
+    })) as JsonType | null
+  }
+
+  /**
+   * Evaluate every flag for the user remotely in one `/flags` request. Action context only.
+   * Returns both `featureFlags` (key → value) and `featureFlagPayloads` (key → payload). Use
+   * `flagKeys` to scope the request to a specific subset.
+   */
+  async evaluateAllFlags(
+    ctx: RunActionCtx,
+    args: { distinctId?: string } & AllFlagsOptions
+  ): Promise<{
+    featureFlags: Record<string, FeatureFlagValue>
+    featureFlagPayloads: Record<string, JsonType>
+  }> {
+    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
+    return (await ctx.runAction(this.component.lib.evaluateAllFlags, {
+      apiKey: this.apiKey,
+      host: this.host,
+      distinctId,
+      groups: args.groups,
+      personProperties: args.personProperties,
+      groupProperties: args.groupProperties,
+      disableGeoip: args.disableGeoip,
+      flagKeys: args.flagKeys,
+    })) as {
+      featureFlags: Record<string, FeatureFlagValue>
+      featureFlagPayloads: Record<string, JsonType>
+    }
   }
 }

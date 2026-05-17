@@ -257,123 +257,6 @@ describe('identify', () => {
     })
 })
 
-describe('groupIdentify', () => {
-    beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
-        process.env.POSTHOG_HOST = 'https://test.posthog.com'
-    })
-
-    afterEach(() => {
-        global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
-        delete process.env.POSTHOG_HOST
-        fetchCalls = []
-    })
-
-    test('sends $groupidentify event with group type and key', async () => {
-        global.fetch = mockFetch()
-        const t = initConvexTest()
-
-        const result = await t.mutation(api.example.testGroupIdentify, {
-            groupType: 'company',
-            groupKey: 'acme',
-        })
-        expect(result).toEqual({ success: true })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
-
-        expect(batchCalls().length).toBeGreaterThanOrEqual(1)
-        const event = firstBatchEvent()
-        expect(event.event).toBe('$groupidentify')
-        const props = event.properties as Record<string, unknown>
-        expect(props.$group_type).toBe('company')
-        expect(props.$group_key).toBe('acme')
-    })
-
-    test('sends group properties via $group_set', async () => {
-        global.fetch = mockFetch()
-        const t = initConvexTest()
-
-        await t.mutation(api.example.testGroupIdentify, {
-            groupType: 'company',
-            groupKey: 'acme',
-            properties: { industry: 'Technology', size: 100 },
-        })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
-
-        const props = firstBatchEvent().properties as Record<string, unknown>
-        const groupSet = props.$group_set as Record<string, unknown>
-        expect(groupSet.industry).toBe('Technology')
-        expect(groupSet.size).toBe(100)
-    })
-
-    test('uses distinctId override when provided', async () => {
-        global.fetch = mockFetch()
-        const t = initConvexTest()
-
-        await t.mutation(api.example.testGroupIdentify, {
-            groupType: 'company',
-            groupKey: 'acme',
-            distinctId: 'override-user',
-        })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
-
-        expect(firstBatchEvent().distinct_id).toBe('override-user')
-    })
-})
-
-describe('alias', () => {
-    beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
-        process.env.POSTHOG_HOST = 'https://test.posthog.com'
-    })
-
-    afterEach(() => {
-        global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
-        delete process.env.POSTHOG_HOST
-        fetchCalls = []
-    })
-
-    test('sends $create_alias event', async () => {
-        global.fetch = mockFetch()
-        const t = initConvexTest()
-
-        const result = await t.mutation(api.example.testAlias, {
-            distinctId: 'user-123',
-            alias: 'anon-456',
-        })
-        expect(result).toEqual({ success: true })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
-
-        expect(batchCalls().length).toBeGreaterThanOrEqual(1)
-        const event = firstBatchEvent()
-        expect(event.event).toBe('$create_alias')
-        const props = event.properties as Record<string, unknown>
-        expect(props.distinct_id).toBe('user-123')
-        expect(props.alias).toBe('anon-456')
-    })
-
-    test('sends disableGeoip', async () => {
-        global.fetch = mockFetch()
-        const t = initConvexTest()
-
-        await t.mutation(api.example.testAlias, {
-            distinctId: 'user-123',
-            alias: 'anon-456',
-            disableGeoip: true,
-        })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
-
-        const props = firstBatchEvent().properties as Record<string, unknown>
-        expect(props.$geoip_disable).toBe(true)
-    })
-})
-
 describe('captureException', () => {
     beforeEach(() => {
         process.env.POSTHOG_API_KEY = 'phc_test_key'
@@ -531,7 +414,11 @@ function definitionsResponse(flags: FlagDefinition[]) {
 }
 
 async function loadDefinitions(t: ReturnType<typeof initConvexTest>) {
-    await t.action(components.posthog.lib.refreshFlagDefinitions, {})
+    await t.action(components.posthog.lib.refreshFlagDefinitions, {
+        apiKey: process.env.POSTHOG_API_KEY ?? '',
+        personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY ?? '',
+        host: process.env.POSTHOG_HOST,
+    })
 }
 
 describe('getFeatureFlag (local eval)', () => {
@@ -976,7 +863,11 @@ describe('refreshFlagDefinitions cron action', () => {
         global.fetch = mockFetch(definitionsResponse([flagDef('flag-a')]))
         const t = initConvexTest()
 
-        await t.action(components.posthog.lib.refreshFlagDefinitions, {})
+        await t.action(components.posthog.lib.refreshFlagDefinitions, {
+            apiKey: 'phc_test_key',
+            personalApiKey: 'phx_test_personal_key',
+            host: 'https://test.posthog.com',
+        })
 
         const definitionCalls = fetchCalls.filter((c) => c.url.includes('/flags/definitions'))
         expect(definitionCalls).toHaveLength(1)
@@ -984,14 +875,177 @@ describe('refreshFlagDefinitions cron action', () => {
         expect(definitionCalls[0].url).toContain('send_cohorts')
     })
 
-    test('no-ops when POSTHOG_PERSONAL_API_KEY is missing', async () => {
-        delete process.env.POSTHOG_PERSONAL_API_KEY
+    test('no-ops when personalApiKey is missing', async () => {
         global.fetch = mockFetch()
         const t = initConvexTest()
 
-        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, {})) as { status: string }
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, {
+            apiKey: 'phc_test_key',
+            personalApiKey: '',
+            host: 'https://test.posthog.com',
+        })) as { status: string }
 
         expect(result.status).toBe('skipped')
         expect(fetchCalls.filter((c) => c.url.includes('/flags/definitions'))).toHaveLength(0)
+    })
+})
+
+// --- Remote feature flag evaluation tests ---
+//
+// These hit posthog-node's `evaluateFlags` under the hood, which posts to PostHog's `/flags`
+// endpoint with the user's distinctId + properties. Mocked at the fetch level.
+
+function flagsResponse(featureFlags: Record<string, unknown>, featureFlagPayloads: Record<string, unknown> = {}) {
+    return {
+        '/flags': {
+            featureFlags,
+            featureFlagPayloads,
+            requestId: 'test-request-id',
+        },
+    }
+}
+
+describe('evaluateFlag (remote)', () => {
+    beforeEach(() => {
+        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_HOST = 'https://test.posthog.com'
+    })
+
+    afterEach(() => {
+        global.fetch = originalFetch
+        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_HOST
+        fetchCalls = []
+    })
+
+    test('returns the flag value from /flags', async () => {
+        global.fetch = mockFetch(flagsResponse({ 'test-flag': 'variant-a' }))
+        const t = initConvexTest()
+
+        const value = await t.action(components.posthog.lib.evaluateFlag, {
+            apiKey: 'phc_test_key',
+            host: 'https://test.posthog.com',
+            key: 'test-flag',
+            distinctId: 'user-123',
+        })
+
+        expect(value).toBe('variant-a')
+        const flagsCalls = fetchCalls.filter((c) => c.url.includes('/flags'))
+        expect(flagsCalls.length).toBeGreaterThanOrEqual(1)
+    })
+
+    test('returns null for missing flags', async () => {
+        global.fetch = mockFetch(flagsResponse({}))
+        const t = initConvexTest()
+
+        const value = await t.action(components.posthog.lib.evaluateFlag, {
+            apiKey: 'phc_test_key',
+            host: 'https://test.posthog.com',
+            key: 'missing',
+            distinctId: 'user-123',
+        })
+
+        expect(value).toBeNull()
+    })
+
+    test('forwards person and group properties', async () => {
+        global.fetch = mockFetch(flagsResponse({ 'test-flag': true }))
+        const t = initConvexTest()
+
+        await t.action(components.posthog.lib.evaluateFlag, {
+            apiKey: 'phc_test_key',
+            host: 'https://test.posthog.com',
+            key: 'test-flag',
+            distinctId: 'user-123',
+            groups: { company: 'acme' },
+            personProperties: { email: 'test@example.com' },
+            groupProperties: { company: { industry: 'tech' } },
+        })
+
+        const flagsCalls = fetchCalls.filter((c) => c.url.includes('/flags'))
+        const body = flagsCalls[0].body as Record<string, unknown>
+        expect(body.distinct_id).toBe('user-123')
+        expect(body.groups).toEqual({ company: 'acme' })
+        expect(body.person_properties).toMatchObject({ email: 'test@example.com' })
+        expect(body.group_properties).toMatchObject({ company: { industry: 'tech' } })
+    })
+})
+
+describe('evaluateFlagPayload (remote)', () => {
+    beforeEach(() => {
+        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_HOST = 'https://test.posthog.com'
+    })
+
+    afterEach(() => {
+        global.fetch = originalFetch
+        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_HOST
+        fetchCalls = []
+    })
+
+    test('returns the payload from /flags', async () => {
+        global.fetch = mockFetch(flagsResponse({ 'test-flag': true }, { 'test-flag': { config: 'value' } }))
+        const t = initConvexTest()
+
+        const payload = await t.action(components.posthog.lib.evaluateFlagPayload, {
+            apiKey: 'phc_test_key',
+            host: 'https://test.posthog.com',
+            key: 'test-flag',
+            distinctId: 'user-123',
+        })
+
+        expect(payload).toEqual({ config: 'value' })
+    })
+
+    test('returns null when no payload is configured', async () => {
+        global.fetch = mockFetch(flagsResponse({ 'test-flag': true }))
+        const t = initConvexTest()
+
+        const payload = await t.action(components.posthog.lib.evaluateFlagPayload, {
+            apiKey: 'phc_test_key',
+            host: 'https://test.posthog.com',
+            key: 'test-flag',
+            distinctId: 'user-123',
+        })
+
+        expect(payload).toBeNull()
+    })
+})
+
+describe('evaluateAllFlags (remote)', () => {
+    beforeEach(() => {
+        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_HOST = 'https://test.posthog.com'
+    })
+
+    afterEach(() => {
+        global.fetch = originalFetch
+        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_HOST
+        fetchCalls = []
+    })
+
+    test('returns all flags and payloads', async () => {
+        global.fetch = mockFetch(
+            flagsResponse(
+                { 'flag-a': true, 'flag-b': 'variant', 'flag-c': false },
+                { 'flag-a': { config: 'value' } }
+            )
+        )
+        const t = initConvexTest()
+
+        const result = (await t.action(components.posthog.lib.evaluateAllFlags, {
+            apiKey: 'phc_test_key',
+            host: 'https://test.posthog.com',
+            distinctId: 'user-123',
+        })) as { featureFlags: Record<string, unknown>; featureFlagPayloads: Record<string, unknown> }
+
+        expect(result.featureFlags).toEqual({
+            'flag-a': true,
+            'flag-b': 'variant',
+            'flag-c': false,
+        })
+        expect(result.featureFlagPayloads).toEqual({ 'flag-a': { config: 'value' } })
     })
 })

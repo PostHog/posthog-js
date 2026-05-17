@@ -39,39 +39,62 @@ app.use(posthog);
 export default app;
 ```
 
-Set your PostHog API key and host:
+Set your PostHog credentials on your Convex deployment:
 
 ```sh
 npx convex env set POSTHOG_API_KEY phc_your_project_api_key
 npx convex env set POSTHOG_HOST https://us.i.posthog.com
 ```
 
-To enable local feature flag evaluation, also set a [personal API key](https://posthog.com/docs/api#how-to-obtain-a-personal-api-key) with read access to feature flags:
+To enable local feature flag evaluation, also set a [feature flags secure API key](https://posthog.com/docs/feature-flags/local-evaluation#step-1-find-your-feature-flags-secure-api-key) (`phs_…`) with read access to feature flags:
 
 ```sh
-npx convex env set POSTHOG_PERSONAL_API_KEY phx_your_personal_api_key
+npx convex env set POSTHOG_PERSONAL_API_KEY phs_your_feature_flags_secure_api_key
 ```
 
-With `POSTHOG_PERSONAL_API_KEY` set, the component polls PostHog every minute for the latest flag definitions and caches them in a Convex table — feature flag methods then evaluate flags locally without a per-call network round-trip.
+> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward.
 
-Create a `convex/posthog.ts` file to initialize the client:
+Create a `convex/posthog.ts` file to initialize the client. Convex components run in an isolated env namespace and can't see your app's `process.env`, so read the keys here in your app's context and pass them through:
 
 ```ts
 // convex/posthog.ts
 import { PostHog } from "@posthog/convex";
 import { components } from "./_generated/api";
 
-export const posthog = new PostHog(components.posthog);
-```
-
-You can also pass the API key and host explicitly:
-
-```ts
 export const posthog = new PostHog(components.posthog, {
-  apiKey: "phc_...",
-  host: "https://eu.i.posthog.com",
+  apiKey: process.env.POSTHOG_API_KEY,
+  personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
+  host: process.env.POSTHOG_HOST,
 });
 ```
+
+Schedule a cron in your own `convex/crons.ts` that refreshes the flag definitions on whatever interval suits you. The client class captures the keys you passed in `posthog.ts` and forwards them automatically:
+
+```ts
+// convex/crons.ts
+import { cronJobs } from "convex/server";
+import { internalAction } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { posthog } from "./posthog";
+
+export const refreshPosthogFlags = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    await posthog.refreshFlagDefinitions(ctx);
+  },
+});
+
+const crons = cronJobs();
+crons.interval(
+  "refresh posthog feature flag definitions",
+  { minutes: 1 },
+  internal.crons.refreshPosthogFlags
+);
+
+export default crons;
+```
+
+That's the whole setup — feature flag methods will start returning live values on the next cron tick, or you can call `posthog.refreshFlagDefinitions(ctx)` from an action whenever you want an immediate refresh.
 
 ## 📊 Capturing Events
 
@@ -148,13 +171,33 @@ await posthog.alias(ctx, {
 });
 ```
 
+### captureException
+
+Send an exception to PostHog's error tracking pipeline. Accepts an `Error`, a string, or any object with a `message` field.
+
+```ts
+try {
+  await chargeCard(...);
+} catch (error) {
+  await posthog.captureException(ctx, {
+    error,
+    distinctId: "user_123",
+    additionalProperties: { plan: "pro" },
+  });
+  throw error;
+}
+```
+
 All of the above methods schedule the PostHog API call asynchronously via `ctx.scheduler.runAfter`, so they return immediately without blocking your mutation or action.
 
 ## 🚩 Feature Flags
 
-Feature flags are evaluated **locally** against definitions that the component refreshes from PostHog on a one-minute cron. They work in **queries, mutations, and actions** — no per-call network round-trip — and benefit from Convex's reactivity: a query that reads a flag automatically re-runs when the flag definition changes.
+Two evaluation paths, pick the one that fits the flag:
 
-Set `POSTHOG_PERSONAL_API_KEY` (see the Quick Start) to enable local evaluation. Without it, all feature flag methods return `null`/`undefined`.
+- **Local** (`getFeatureFlag`, `isFeatureEnabled`, …) — evaluates against definitions cached by the cron. Works in **queries, mutations, and actions**, no per-call network round-trip, reactive (a query reading a flag re-runs when definitions change). Requires `POSTHOG_PERSONAL_API_KEY`. Can't handle every flag — see [the limitations](#local-evaluation--limitations) below.
+- **Remote** (`evaluateFlag`, `evaluateFlagPayload`, `evaluateAllFlags`) — hits PostHog's `/flags` endpoint directly. Action-context only, no `personalApiKey` needed, handles every flag.
+
+The local methods are documented first; remote is at the bottom of this section.
 
 ### getFeatureFlag
 
@@ -240,14 +283,55 @@ const { featureFlags, featureFlagPayloads } =
 
 All feature flag methods accept optional `groups`, `personProperties`, `groupProperties`, and `disableGeoip` options. `getAllFlags` and `getAllFlagsAndPayloads` also accept `flagKeys` to filter which flags to evaluate.
 
-### When local evaluation can't determine a value
+### Local evaluation — limitations
 
-Local evaluation returns `undefined` (or an empty result for the all-flags methods) when:
+Local eval can't reach a verdict for every flag, and for those this component will return `null`. The cases:
 
-- `POSTHOG_PERSONAL_API_KEY` is not set, or the cron has not run for the first time;
-- the flag uses [experience continuity](https://posthog.com/docs/feature-flags/creating-feature-flags#persisting-feature-flags-across-authentication-steps);
-- the flag targets a static cohort whose membership lives only on the server;
-- the flag references person or group properties that weren't passed in.
+- **Experience continuity flags.** Flags with [persist across authentication steps](https://posthog.com/docs/feature-flags/creating-feature-flags#persisting-feature-flags-across-authentication-steps) need server-side anon→identified tracking and aren't included in local eval.
+- **Static cohorts.** Cohort membership for static cohorts lives only on the server.
+- **Properties not passed in.** Local eval can only see what you give it. If a flag targets `email` or `$browser_version` and you don't pass those in `personProperties`, it can't resolve.
+- **The `is_not_set` operator.** Local eval can't prove a property is absent — it only sees what you provide.
+- **Cohorts that don't fit the local-eval shape.** Cohorts with variant overrides, non-person properties, more than one cohort in the same flag definition, nested AND/OR filters, or grouped with other conditions can't be translated for local eval. See [the PostHog docs](https://posthog.com/docs/feature-flags/local-evaluation#dynamic-cohort-restrictions) for the full list.
+
+There are also reasons you might *not want* local eval at all, even when it's possible:
+
+- **Low-traffic projects.** PostHog bills each `/flags/definitions` poll as 10 flag-request equivalents. For projects that evaluate fewer flags than that per polling interval, remote evaluation is cheaper.
+- **Need-it-now changes.** Local eval accepts up to one polling interval of staleness (default 1 minute with our cron). For flags that must flip in well under that, you want remote eval.
+- **No personal API key.** If you don't want to set `POSTHOG_PERSONAL_API_KEY`, the local methods aren't useful — there's nothing for them to read.
+
+For any of those, use the remote-eval methods below instead.
+
+### Remote evaluation
+
+Sibling methods that hit PostHog's `/flags` endpoint directly. They require an **action** context (each call is a network round trip) and don't need `personalApiKey`. They handle every case local eval can't.
+
+```ts
+import { posthog } from "./posthog";
+import { action } from "./_generated/server";
+import { v } from "convex/values";
+
+export const getContinuityFlag = action({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const value = await posthog.evaluateFlag(ctx, {
+      key: "my-experience-continuity-flag",
+      distinctId: args.userId,
+      personProperties: { plan: "pro" },
+    });
+    return value;
+  },
+});
+```
+
+Three methods:
+
+| Method | Returns |
+| --- | --- |
+| `posthog.evaluateFlag(ctx, args)` | `FeatureFlagValue \| null` |
+| `posthog.evaluateFlagPayload(ctx, args)` | `JsonType \| null` |
+| `posthog.evaluateAllFlags(ctx, args)` | `{ featureFlags, featureFlagPayloads }` |
+
+Same option shape as the local methods (`groups`, `personProperties`, `groupProperties`, `disableGeoip`, `flagKeys` on the all-flags variant). Pick local when the flag is suitable and the cost of `/flags/definitions` polling is justified; pick remote when it isn't.
 
 ## 📦 Example
 
