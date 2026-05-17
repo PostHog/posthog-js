@@ -20,6 +20,7 @@
     "analytics"
   ],
   "scripts": {
+    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/component/version.ts",
     "build": "tsc --project ./tsconfig.build.json",
     "build:codegen": "npx convex codegen --component-dir ./src/component && pnpm build",
     "clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",

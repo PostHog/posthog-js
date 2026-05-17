@@ -1,7 +1,22 @@
-import { PostHog } from 'posthog-node/edge'
+import { PostHog as PostHogEdge } from 'posthog-node/edge'
 import { action, internalMutation, internalQuery, query } from './_generated/server.js'
 import { api, internal } from './_generated/api.js'
 import { v } from 'convex/values'
+import { version } from './version.js'
+
+/**
+ * Brand events sent through this component as `posthog-convex` rather than `posthog-edge` in the
+ * `$lib` / `$lib_version` properties — makes them filterable in PostHog and lets us attribute
+ * issues to the integration vs. raw `posthog-node` usage.
+ */
+class PostHog extends PostHogEdge {
+  getLibraryId(): string {
+    return 'posthog-convex'
+  }
+  getLibraryVersion(): string {
+    return version
+  }
+}
 
 /**
  * Cache PostHog clients across action invocations within the same Convex isolate.
