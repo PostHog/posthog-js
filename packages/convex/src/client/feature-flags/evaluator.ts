@@ -188,10 +188,13 @@ export class LocalFeatureFlagEvaluator {
   ): Promise<FeatureFlagValue> {
     const { distinctId, groups, personProperties, groupProperties } = ctx
 
+    // Order matters: an inactive flag is always false regardless of continuity. Checking
+    // `ensure_experience_continuity` first would cause a disabled-but-continuity flag to come
+    // back as undefined instead of the correct `false`.
+    if (!flag.active) return false
     if (flag.ensure_experience_continuity) {
       throw new InconclusiveMatchError('Flag has experience continuity enabled')
     }
-    if (!flag.active) return false
 
     const flagFilters = flag.filters || {}
     const aggregation_group_type_index = flagFilters.aggregation_group_type_index

@@ -52,6 +52,22 @@ describe('matchProperty — is_not_set', () => {
   })
 })
 
+describe('matchProperty — is_set', () => {
+  test('returns true when the property is present with a non-null value', () => {
+    expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: 'pro' })).toBe(true)
+  })
+
+  test('returns true when the property is present with a null value', () => {
+    // `is_set` is about key presence, not value. Pre-fix, the null guard short-circuited and
+    // returned false here.
+    expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: null })).toBe(true)
+  })
+
+  test('throws InconclusiveMatchError when the property is absent', () => {
+    expect(() => matchProperty({ key: 'plan', value: '', operator: 'is_set' }, {})).toThrow(InconclusiveMatchError)
+  })
+})
+
 describe('matchProperty — error cases', () => {
   test('throws InconclusiveMatchError when key is absent for non-is_not_set operators', () => {
     expect(() => matchProperty(prop('exact', 'x'), {})).toThrow(InconclusiveMatchError)

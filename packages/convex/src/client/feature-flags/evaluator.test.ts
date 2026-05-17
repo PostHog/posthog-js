@@ -86,6 +86,15 @@ describe('LocalFeatureFlagEvaluator', () => {
     expect(await evaluator.getFeatureFlag('continuity', 'user')).toBeUndefined()
   })
 
+  test('returns false for an inactive flag even when continuity is enabled', async () => {
+    // Inactive should short-circuit before the continuity check — otherwise a disabled flag
+    // with continuity on would come back as undefined.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([makeFlag('off-continuity', { active: false, ensure_experience_continuity: true })])
+    )
+    expect(await evaluator.getFeatureFlag('off-continuity', 'user')).toBe(false)
+  })
+
   test('respects rollout percentages deterministically', async () => {
     // 0% rollout — never matches.
     const evaluator = new LocalFeatureFlagEvaluator(

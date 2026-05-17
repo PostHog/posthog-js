@@ -1,6 +1,9 @@
 import type { FlagProperty, FlagPropertyValue, PropertyGroup } from './types.js'
 
-const NULL_VALUES_ALLOWED_OPERATORS = ['is_not']
+// Operators that should still run their switch case when the property value is null/undefined.
+// `is_not` may legitimately compare against null; `is_set` only cares about key presence and
+// must not be short-circuited by the null guard below.
+const NULL_VALUES_ALLOWED_OPERATORS = ['is_not', 'is_set']
 
 export class InconclusiveMatchError extends Error {
   constructor(message: string) {
