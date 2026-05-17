@@ -2754,15 +2754,15 @@ describe('match properties', () => {
     const property_e = { key: 'key', value: '30', operator: 'lt' }
     expect(matchProperty(property_e, { key: '29' })).toBe(true)
 
-    // # depending on the type of override, we adjust type comparison
-    expect(matchProperty(property_e, { key: '100' })).toBe(true)
+    // # When both sides parse as numbers, comparison is numeric regardless of override type.
+    expect(matchProperty(property_e, { key: '100' })).toBe(false)
     expect(matchProperty(property_e, { key: 100 })).toBe(false)
 
     const property_f = { key: 'key', value: '123aloha', operator: 'gt' }
     expect(matchProperty(property_f, { key: '123' })).toBe(false)
     expect(matchProperty(property_f, { key: 122 })).toBe(false)
 
-    // # this turns into a string comparison
+    // # `parseFloat('123aloha') === 123`, so 129 > 123 numerically.
     expect(matchProperty(property_f, { key: 129 })).toBe(true)
   })
 
