@@ -18,17 +18,30 @@ let mockOpenAiParsedResponse: ParsedResponse<any> = {} as ParsedResponse<any>
 let mockOpenAiEmbeddingResponse: any = {}
 let mockStreamChunks: ChatCompletionChunk[] = []
 
-jest.mock('posthog-node', () => {
-  return {
-    PostHog: jest.fn().mockImplementation(() => {
-      return {
-        capture: jest.fn(),
-        captureImmediate: jest.fn(),
-        privacy_mode: false,
-      }
-    }),
-  }
-})
+jest.mock(
+  'posthog-node',
+  () => {
+    return {
+      PostHog: jest.fn().mockImplementation(() => {
+        return {
+          capture: jest.fn(),
+          captureImmediate: jest.fn(),
+          privacy_mode: false,
+        }
+      }),
+    }
+  },
+  { virtual: true }
+)
+
+jest.mock(
+  '@posthog/core',
+  () => ({
+    uuidv7: jest.fn(() => 'uuid-v7'),
+    ErrorTracking: {},
+  }),
+  { virtual: true }
+)
 
 jest.mock('openai', () => {
   // Mock Completions class – `create` is declared on the prototype so that
@@ -137,6 +150,26 @@ const createMockAsyncIterator = <T>(chunks: T[]): MockAsyncIterator<T> => {
       }
     },
   }
+}
+
+const createMockAPIPromise = <T>(
+  data: T,
+  withResponseData: unknown = { stale: true }
+): Promise<T> & { asResponse: jest.Mock; withResponse: jest.Mock } => {
+  const response = new Response(JSON.stringify(data), {
+    headers: {
+      'x-ratelimit-remaining-requests': '42',
+    },
+    status: 200,
+  })
+  return Object.assign(Promise.resolve(data), {
+    asResponse: jest.fn().mockResolvedValue(response),
+    withResponse: jest.fn().mockResolvedValue({
+      data: withResponseData,
+      response,
+      request_id: 'req_test',
+    }),
+  })
 }
 
 /**
@@ -270,17 +303,12 @@ describe('PostHogOpenAI - Jest test suite', () => {
   })
 
   beforeEach(() => {
-    // Skip all tests if no API key is present
-    if (!process.env.OPENAI_API_KEY) {
-      return
-    }
-
     jest.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
     client = new PostHogOpenAI({
-      apiKey: process.env.OPENAI_API_KEY || '',
+      apiKey: process.env.OPENAI_API_KEY || 'test-api-key',
       posthog: mockPostHogClient as any,
     })
 
@@ -394,19 +422,21 @@ describe('PostHogOpenAI - Jest test suite', () => {
             .fn()
             .mockReturnValue([createMockAsyncIterator(mockStreamChunks), createMockAsyncIterator(mockStreamChunks)]),
         }
-        return Promise.resolve(mockStream)
+        return createMockAPIPromise(mockStream)
       }
-      return Promise.resolve(mockOpenAiChatResponse)
+      return createMockAPIPromise(mockOpenAiChatResponse)
     })
 
     // Mock the Responses.prototype.parse method that super.parse() will call
     const ResponsesMock: any = openaiModule.Responses
-    ResponsesMock.prototype.parse = jest.fn().mockResolvedValue(mockOpenAiParsedResponse)
-    ResponsesMock.prototype.create = jest.fn().mockResolvedValue(mockOpenAiParsedResponse)
+    ResponsesMock.prototype.parse = jest.fn().mockImplementation(() => createMockAPIPromise(mockOpenAiParsedResponse))
+    ResponsesMock.prototype.create = jest.fn().mockImplementation(() => createMockAPIPromise(mockOpenAiParsedResponse))
 
     // Mock the Embeddings class
     const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
-    EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockOpenAiEmbeddingResponse)
+    EmbeddingsMock.prototype.create = jest
+      .fn()
+      .mockImplementation(() => createMockAPIPromise(mockOpenAiEmbeddingResponse))
   })
 
   // Conditionally run tests based on API key availability
@@ -459,6 +489,26 @@ describe('PostHogOpenAI - Jest test suite', () => {
       system_fingerprint: 'fp_test123',
       request_id: 'req_test-request-id',
     })
+  })
+
+  test('chat completions create preserves OpenAI APIPromise helpers', async () => {
+    const promise = client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(typeof promise.asResponse).toBe('function')
+    expect(typeof promise.withResponse).toBe('function')
+
+    const rawResponse = await promise.asResponse()
+    const { data, response, request_id } = await promise.withResponse()
+
+    expect(rawResponse.headers.get('x-ratelimit-remaining-requests')).toBe('42')
+    expect(response.headers.get('x-ratelimit-remaining-requests')).toBe('42')
+    expect(request_id).toBe('req_test')
+    expect(data).toEqual(mockOpenAiChatResponse)
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
   })
 
   conditionalTest('groups', async () => {
@@ -643,6 +693,24 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$ai_completion_id']).toBe('test-parsed-response-id')
     // Responses API has no system_fingerprint, so only request_id is reported.
     expect(properties['$ai_provider_metadata']).toEqual({ request_id: 'req_test-parsed-request-id' })
+  })
+
+  test('responses create preserves OpenAI APIPromise helpers', async () => {
+    const promise = client.responses.create({
+      model: 'gpt-4o-2024-08-06',
+      input: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(typeof promise.asResponse).toBe('function')
+    expect(typeof promise.withResponse).toBe('function')
+
+    const { data, response, request_id } = await promise.withResponse()
+
+    expect(response.headers.get('x-ratelimit-remaining-requests')).toBe('42')
+    expect(request_id).toBe('req_test')
+    expect(data).toEqual(mockOpenAiParsedResponse)
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
   })
 
   conditionalTest('responses parse with instructions parameter', async () => {
