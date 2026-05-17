@@ -249,4 +249,39 @@ describe('LocalFeatureFlagEvaluator', () => {
     )
     expect(matched).toBe(true)
   })
+
+  test('returns undefined when a cohort references a flag dependency we cannot evaluate', async () => {
+    // Cohort property groups can contain flag-type properties, but we don't evaluate flag
+    // dependencies inside cohort groups locally. Skipping them silently would let an AND group
+    // whose other props all pass return true (incorrectly granting cohort membership). The
+    // evaluator should bail out to undefined instead.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions(
+        [
+          makeFlag('cohort-flag', {
+            filters: {
+              groups: [
+                {
+                  properties: [{ key: 'id', value: 'cohort-with-flag-dep', operator: 'in', type: 'cohort' }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
+          }),
+        ],
+        {
+          cohorts: {
+            'cohort-with-flag-dep': {
+              type: 'AND',
+              values: [
+                { key: 'plan', value: 'pro', operator: 'exact', type: 'person' },
+                { key: 'other-flag', value: true, type: 'flag' },
+              ],
+            },
+          },
+        }
+      )
+    )
+    expect(await evaluator.getFeatureFlag('cohort-flag', 'user', {}, { plan: 'pro' })).toBeUndefined()
+  })
 })

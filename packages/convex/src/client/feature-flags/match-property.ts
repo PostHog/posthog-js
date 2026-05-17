@@ -310,6 +310,11 @@ export function matchPropertyGroup(
                 `Skipping condition with dependency on flag '${prop.key || 'unknown'}'`
             )
           }
+          // Mark the group as inconclusive so we don't silently grant cohort membership in an AND
+          // group whose missing flag dependency would have evaluated to false (or deny it in an OR
+          // group whose flag dependency would have matched). Falls through to the
+          // InconclusiveMatchError throw at the end of the loop.
+          errorMatchingLocally = true
           continue
         } else {
           matches = matchProperty(prop, propertyValues)
