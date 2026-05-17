@@ -394,8 +394,8 @@ export class PostHog {
       args.personProperties ?? {},
       args.groupProperties ?? {}
     )
-    if (!result || result.value === false) {
-      if (!result) return undefined
+    if (!result) return undefined
+    if (result.value === false) {
       return { key: args.key, enabled: false, variant: null, payload: result.payload ?? null }
     }
     return {
