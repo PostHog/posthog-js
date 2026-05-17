@@ -3,8 +3,25 @@ import { action, internalAction, internalMutation, internalQuery, query } from '
 import { internal } from './_generated/api.js'
 import { v } from 'convex/values'
 
-function createClient(apiKey: string, host: string) {
-  return new PostHog(apiKey, { host, flushAt: 1, flushInterval: 0 })
+/**
+ * Cache PostHog clients across action invocations within the same Convex isolate.
+ *
+ * Convex reuses JS isolates between invocations, so module-level state survives. Constructing
+ * a fresh client per call (and tearing it down with `shutdown()`) is wasted work — the client
+ * carries no per-invocation state once `flush()` has drained its queue.
+ *
+ * Keyed by `apiKey|host` to support the rare case of multiple credentials sharing one isolate.
+ */
+const clientCache = new Map<string, PostHog>()
+
+function getClient(apiKey: string, host: string): PostHog {
+  const key = `${apiKey}|${host}`
+  let client = clientCache.get(key)
+  if (!client) {
+    client = new PostHog(apiKey, { host, flushAt: 1, flushInterval: 0 })
+    clientCache.set(key, client)
+  }
+  return client
 }
 
 /** Properties are JSON-serialized to bypass Convex's restriction on `$`-prefixed field names. */
@@ -32,8 +49,8 @@ export const capture = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host)
-    client.capture({
+    const client = getClient(args.apiKey, args.host)
+    await client.captureImmediate({
       distinctId: args.distinctId,
       event: args.event,
       properties: parseProperties(args.properties),
@@ -43,7 +60,6 @@ export const capture = action({
       uuid: args.uuid,
       disableGeoip: args.disableGeoip,
     })
-    await client.shutdown()
   },
 })
 
@@ -56,13 +72,27 @@ export const identify = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host)
-    client.identify({
+    const client = getClient(args.apiKey, args.host)
+    // posthog-node's `identifyImmediate` is missing an `await` on `identifyStatelessImmediate`
+    // (packages/node/src/client.ts:674), so the returned promise resolves before the event hits
+    // the wire. We sidestep that by composing the `$identify` event the same way `identifyImmediate`
+    // does and routing it through `captureImmediate`, which awaits correctly.
+    const properties = parseProperties(args.properties) ?? {}
+    const { $set, $set_once, $anon_distinct_id, ...rest } = properties as {
+      $set?: Record<string, unknown>
+      $set_once?: Record<string, unknown>
+      $anon_distinct_id?: string
+    } & Record<string, unknown>
+    await client.captureImmediate({
       distinctId: args.distinctId,
-      properties: parseProperties(args.properties),
+      event: '$identify',
+      properties: {
+        $set: $set ?? rest,
+        $set_once: $set_once ?? {},
+        $anon_distinct_id,
+      },
       disableGeoip: args.disableGeoip,
     })
-    await client.shutdown()
   },
 })
 
@@ -77,15 +107,20 @@ export const groupIdentify = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host)
-    client.groupIdentify({
-      groupType: args.groupType,
-      groupKey: args.groupKey,
-      properties: parseProperties(args.properties),
-      distinctId: args.distinctId,
+    const client = getClient(args.apiKey, args.host)
+    // posthog-node doesn't expose a `groupIdentifyImmediate`, so we send the same `$groupidentify`
+    // event via `captureImmediate` to keep parity with capture/identify/alias/captureException —
+    // resolve when the network call completes, without resorting to shutdown().
+    await client.captureImmediate({
+      distinctId: args.distinctId || `$${args.groupType}_${args.groupKey}`,
+      event: '$groupidentify',
+      properties: {
+        $group_type: args.groupType,
+        $group_key: args.groupKey,
+        $group_set: parseProperties(args.properties) ?? {},
+      },
       disableGeoip: args.disableGeoip,
     })
-    await client.shutdown()
   },
 })
 
@@ -98,13 +133,12 @@ export const alias = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host)
-    client.alias({
+    const client = getClient(args.apiKey, args.host)
+    await client.aliasImmediate({
       distinctId: args.distinctId,
       alias: args.alias,
       disableGeoip: args.disableGeoip,
     })
-    await client.shutdown()
   },
 })
 
@@ -119,12 +153,11 @@ export const captureException = action({
     additionalProperties: v.optional(v.string()),
   },
   handler: async (_ctx, args) => {
-    const client = createClient(args.apiKey, args.host)
+    const client = getClient(args.apiKey, args.host)
     const error = new Error(args.errorMessage)
     if (args.errorName) error.name = args.errorName
     if (args.errorStack) error.stack = args.errorStack
-    client.captureException(error, args.distinctId, parseProperties(args.additionalProperties))
-    await client.shutdown()
+    await client.captureExceptionImmediate(error, args.distinctId, parseProperties(args.additionalProperties))
   },
 })
 
