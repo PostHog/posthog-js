@@ -8,16 +8,21 @@
 }
 
 :root {
+    color-scheme: dark light;
+
     /* Warm-dark palette — leans into PostHog's hedgehog warmth without going amber. */
     --bg-0: #0a0a0b;
     --bg-1: #131214;
     --bg-2: #1b1a1d;
     --bg-3: #26242a;
     --bg-glass: rgba(27, 26, 29, 0.6);
+    --bg-section-fade: rgba(19, 18, 20, 0.6);
 
     --line-faint: rgba(255, 255, 255, 0.04);
     --line: rgba(255, 255, 255, 0.08);
     --line-strong: rgba(255, 255, 255, 0.14);
+
+    --hover-overlay: rgba(255, 255, 255, 0.02);
 
     --text-0: #f4f3f5;
     --text-1: #c8c6cb;
@@ -34,6 +39,15 @@
     --bad: #f87171;
     --null: #a78bfa;
 
+    /* Status text colors — overridden in light mode for legibility on a pale surface. */
+    --good-text: #b3f0c5;
+    --bad-text: #fda4a4;
+    --null-text: #c4b5fd;
+    --warm-text: #ffba90;
+
+    /* Select chevron — encoded SVG, stroke colour swaps with the theme. */
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' fill='none' stroke='%238d8a92' stroke-width='1.5'/%3E%3C/svg%3E");
+
     --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
     --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', monospace;
 
@@ -42,6 +56,41 @@
     --radius-pill: 999px;
 
     --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --bg-0: #fafaf8;
+        --bg-1: #ffffff;
+        --bg-2: #f3f2f0;
+        --bg-3: #e6e4e1;
+        --bg-glass: rgba(255, 255, 255, 0.7);
+        --bg-section-fade: rgba(243, 242, 240, 0.7);
+
+        --line-faint: rgba(17, 16, 19, 0.06);
+        --line: rgba(17, 16, 19, 0.1);
+        --line-strong: rgba(17, 16, 19, 0.18);
+
+        --hover-overlay: rgba(17, 16, 19, 0.03);
+
+        --text-0: #14131a;
+        --text-1: #2f2d34;
+        --text-2: #5b585e;
+        --text-3: #8d8a92;
+
+        --accent-soft: rgba(245, 78, 0, 0.12);
+        --accent-faint: rgba(245, 78, 0, 0.06);
+        --accent-bright: #d94400;
+
+        --good-text: #15803d;
+        --bad-text: #b91c1c;
+        --null-text: #6d28d9;
+        --warm-text: #b34500;
+
+        --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' fill='none' stroke='%235b585e' stroke-width='1.5'/%3E%3C/svg%3E");
+
+        --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 12px 32px -16px rgba(17, 16, 19, 0.18);
+    }
 }
 
 html,
@@ -167,13 +216,13 @@ body {
 .status-pill--on {
     background: rgba(74, 222, 128, 0.06);
     border-color: rgba(74, 222, 128, 0.25);
-    color: #b3f0c5;
+    color: var(--good-text);
 }
 
 .status-pill--off {
     background: rgba(245, 78, 0, 0.06);
     border-color: rgba(245, 78, 0, 0.3);
-    color: #ffba90;
+    color: var(--warm-text);
 }
 
 .status-dot {
@@ -253,7 +302,7 @@ body {
 }
 
 .section--open {
-    background: linear-gradient(180deg, var(--bg-1) 0%, rgba(19, 18, 20, 0.6) 100%);
+    background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-section-fade) 100%);
     border-color: var(--line-strong);
 }
 
@@ -275,7 +324,7 @@ body {
 }
 
 .section-head:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--hover-overlay);
 }
 
 .section-num {
@@ -462,7 +511,7 @@ textarea {
 select {
     cursor: pointer;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' fill='none' stroke='%238d8a92' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-image: var(--select-chevron);
     background-repeat: no-repeat;
     background-position: right 0.6rem center;
     padding-right: 1.85rem;
@@ -556,14 +605,14 @@ select {
 .btn--success {
     background: rgba(74, 222, 128, 0.18);
     border-color: rgba(74, 222, 128, 0.5);
-    color: #b3f0c5;
+    color: var(--good-text);
     animation: btn-flash 400ms ease-out;
 }
 
 .btn--error {
     background: rgba(248, 113, 113, 0.18);
     border-color: rgba(248, 113, 113, 0.5);
-    color: #fda4a4;
+    color: var(--bad-text);
     animation: btn-flash 400ms ease-out;
 }
 
@@ -801,19 +850,19 @@ select {
 .pill--on {
     background: rgba(74, 222, 128, 0.1);
     border-color: rgba(74, 222, 128, 0.4);
-    color: #b3f0c5;
+    color: var(--good-text);
 }
 
 .pill--off {
     background: rgba(248, 113, 113, 0.08);
     border-color: rgba(248, 113, 113, 0.3);
-    color: #fda4a4;
+    color: var(--bad-text);
 }
 
 .pill--null {
     background: rgba(167, 139, 250, 0.08);
     border-color: rgba(167, 139, 250, 0.3);
-    color: #c4b5fd;
+    color: var(--null-text);
 }
 
 .pill--variant {
