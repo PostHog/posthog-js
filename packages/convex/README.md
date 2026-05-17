@@ -54,7 +54,7 @@ npx convex env set POSTHOG_PERSONAL_API_KEY phs_your_feature_flags_secure_api_ke
 
 > Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward.
 
-Create a `convex/posthog.ts` file to initialize the client. Convex components run in an isolated env namespace and can't see your app's `process.env`, so read the keys here in your app's context and pass them through:
+Create a `convex/posthog.ts` file to initialize the client. Read the keys from `process.env` and pass them to the constructor — the client captures them and forwards them to component actions as needed:
 
 ```ts
 // convex/posthog.ts

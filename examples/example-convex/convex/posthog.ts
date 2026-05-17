@@ -1,10 +1,8 @@
 import { PostHog } from '@posthog/convex'
 import { components } from './_generated/api'
 
-// Read all three keys here, in the parent-app context, where `process.env` is populated.
-// The PostHog component itself runs in an isolated env namespace and can't see these — the client
-// captures them at construction time and forwards them whenever a component action needs them
-// (e.g. inside `posthog.refreshFlagDefinitions(ctx)` from `crons.ts`).
+// Configure once with your project credentials. The client captures these and forwards them to
+// any component action that needs them — including the cron defined in `crons.ts`.
 export const posthog = new PostHog(components.posthog, {
     apiKey: process.env.POSTHOG_API_KEY,
     personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,

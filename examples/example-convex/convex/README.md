@@ -5,9 +5,8 @@ Demonstrates every surface of the `@posthog/convex` component end-to-end.
 ## Files
 
 - `convex.config.ts` — Registers the PostHog component.
-- `posthog.ts` — Initialises the `PostHog` client, reading API keys from the parent app's
-  `process.env` and passing them through (the component itself runs in an isolated env namespace
-  and can't see them).
+- `posthog.ts` — Initialises the `PostHog` client, reading API keys from `process.env` and passing
+  them to the constructor. The client forwards them to component actions as needed.
 - `crons.ts` — A one-minute cron that calls `posthog.refreshFlagDefinitions(ctx)`. The component
   no longer ships its own cron in v1 — you own the schedule.
 - `example.ts` — Public mutations/queries/actions used by the demo UI to fire each method:

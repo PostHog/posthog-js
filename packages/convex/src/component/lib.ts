@@ -239,11 +239,9 @@ export const evaluateAllFlags = action({
 // `flagDefinitions` table. Clients read them via `getFlagDefinitions` and evaluate flags locally
 // — there is no per-call action for flag evaluation.
 //
-// The action takes credentials as args (rather than reading `process.env`) because Convex
-// components run in an isolated env namespace and don't inherit the parent app's environment
-// variables. The user's app schedules the refresh cron themselves and passes the credentials
-// through — usually via `posthog.refreshFlagDefinitions(ctx)` on the client class, which forwards
-// the keys it was constructed with.
+// The action takes credentials as args. The consumer's app schedules the refresh cron and passes
+// them in — typically via `posthog.refreshFlagDefinitions(ctx)` on the client class, which
+// forwards the keys it was constructed with.
 
 /**
  * Returns the latest cached flag definitions, or `null` if none have been fetched yet.

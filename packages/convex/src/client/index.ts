@@ -95,8 +95,8 @@ export class PostHog {
        * Either a [feature flags secure API key](https://posthog.com/docs/feature-flags/local-evaluation#step-1-find-your-feature-flags-secure-api-key)
        * (`phs_…`, recommended) or a personal API key (`phx_…`) with feature-flag read access.
        * Required for local feature flag evaluation; defaults to `process.env.POSTHOG_PERSONAL_API_KEY`.
-       * The keys are captured at construction time and passed into the component when you call
-       * `refreshFlagDefinitions(ctx)` — Convex components can't read parent env vars themselves.
+       * The key is captured at construction time and forwarded to the component whenever you call
+       * `refreshFlagDefinitions(ctx)`.
        */
       personalApiKey?: string
       host?: string

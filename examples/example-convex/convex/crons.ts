@@ -6,10 +6,9 @@ import { posthog } from './posthog.js'
 /**
  * Refresh PostHog feature flag definitions every minute.
  *
- * The PostHog component can't read your app's env vars (Convex components run in an isolated env
- * namespace), so the cron lives here in your app where `process.env.POSTHOG_*` is available. The
- * client class captured the keys at construction time in `posthog.ts` and forwards them through
- * `refreshFlagDefinitions`.
+ * `posthog.refreshFlagDefinitions(ctx)` forwards the credentials configured in `posthog.ts` to
+ * the component's refresh action. Adjust the interval to taste — every minute is a reasonable
+ * default for most projects.
  */
 export const refreshPosthogFlags = internalAction({
     args: {},
