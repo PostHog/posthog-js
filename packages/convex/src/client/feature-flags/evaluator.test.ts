@@ -160,18 +160,23 @@ describe('LocalFeatureFlagEvaluator', () => {
   })
 
   test('getAllFlagsAndPayloads filters by flagKeys', async () => {
-    const evaluator = new LocalFeatureFlagEvaluator(
-      definitions([makeFlag('a'), makeFlag('b'), makeFlag('c')])
-    )
+    const evaluator = new LocalFeatureFlagEvaluator(definitions([makeFlag('a'), makeFlag('b'), makeFlag('c')]))
     const result = await evaluator.getAllFlagsAndPayloads('user', {}, {}, {}, ['a', 'c'])
     expect(Object.keys(result.featureFlags).sort()).toEqual(['a', 'c'])
   })
 
   test('group flag returns false when group not provided', async () => {
     const evaluator = new LocalFeatureFlagEvaluator(
-      definitions([makeFlag('grp', { filters: { aggregation_group_type_index: 0, groups: [{ properties: [], rollout_percentage: 100 }] } })], {
-        groupTypeMapping: { '0': 'organization' },
-      })
+      definitions(
+        [
+          makeFlag('grp', {
+            filters: { aggregation_group_type_index: 0, groups: [{ properties: [], rollout_percentage: 100 }] },
+          }),
+        ],
+        {
+          groupTypeMapping: { '0': 'organization' },
+        }
+      )
     )
     expect(await evaluator.getFeatureFlag('grp', 'user', {})).toBe(false)
   })
@@ -183,9 +188,7 @@ describe('LocalFeatureFlagEvaluator', () => {
           filters: {
             groups: [
               {
-                properties: [
-                  { key: 'plan', value: 'pro', operator: 'exact', type: 'person', negation: true },
-                ],
+                properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person', negation: true }],
                 rollout_percentage: 100,
               },
             ],

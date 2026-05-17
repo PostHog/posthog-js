@@ -10,6 +10,9 @@ import type {
 import { hashSHA1 } from './crypto.js'
 import { InconclusiveMatchError, RequiresServerEvaluation, matchCohort, matchProperty } from './match-property.js'
 
+// Matches posthog-node's hashing constant exactly; the value is larger than Number.MAX_SAFE_INTEGER
+// by design and we don't want the no-loss-of-precision rule to coerce it to a different number.
+// eslint-disable-next-line no-loss-of-precision
 const LONG_SCALE = 0xfffffffffffffff
 
 async function _hash(key: string, bucketingValue: string, salt: string = ''): Promise<number> {
@@ -79,7 +82,9 @@ export class LocalFeatureFlagEvaluator {
     } catch (e) {
       if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
         this.logMsgIfDebug(() =>
-          console.debug(`[FEATURE FLAGS] ${(e as Error).name} when computing flag locally: ${key}: ${(e as Error).message}`)
+          console.debug(
+            `[FEATURE FLAGS] ${(e as Error).name} when computing flag locally: ${key}: ${(e as Error).message}`
+          )
         )
         return undefined
       }
@@ -103,7 +108,9 @@ export class LocalFeatureFlagEvaluator {
     } catch (e) {
       if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
         this.logMsgIfDebug(() =>
-          console.debug(`[FEATURE FLAGS] ${(e as Error).name} when computing flag locally: ${key}: ${(e as Error).message}`)
+          console.debug(
+            `[FEATURE FLAGS] ${(e as Error).name} when computing flag locally: ${key}: ${(e as Error).message}`
+          )
         )
         return undefined
       }
@@ -178,7 +185,8 @@ export class LocalFeatureFlagEvaluator {
     ctx: FeatureFlagEvaluationContext,
     options: { matchValue?: FeatureFlagValue } = {}
   ): Promise<EvaluationResult> {
-    const flagValue = options.matchValue !== undefined ? options.matchValue : await this.computeFlagValueLocally(flag, ctx)
+    const flagValue =
+      options.matchValue !== undefined ? options.matchValue : await this.computeFlagValueLocally(flag, ctx)
     return { value: flagValue, payload: this.getPayloadForValue(flag.key, flagValue) }
   }
 

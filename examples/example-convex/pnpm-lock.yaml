@@ -723,7 +723,7 @@ packages:
         optional: true
 
   '@posthog/convex@file:../../target/posthog-convex.tgz':
-    resolution: {integrity: sha512-SK2zIBIm5oh7z5G6jWtm1DC8HRZtkJTug4GBqmy+lYEZ6L/GBJyTxLOYBvnAwVvBHzbvRB/dL39ewyRx17LF3g==, tarball: file:../../target/posthog-convex.tgz}
+    resolution: {integrity: sha512-MbF3e+c1MoBjln7O36EIIeWZxIYmaRF51DF9gcFeTMia6FN4HdvwM+UgV1I6JqvFrmPIR1PjBK0+Q2ZJ9hJhSg==, tarball: file:../../target/posthog-convex.tgz}
     version: 1.0.0
     peerDependencies:
       convex: ^1.31.7

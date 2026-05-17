@@ -64,7 +64,6 @@
     "posthog-node": "workspace:*"
   },
   "devDependencies": {
-    "@convex-dev/eslint-plugin": "^1.1.1",
     "@edge-runtime/vm": "^5.0.0",
     "@jest/globals": "^29.7.0",
     "@types/node": "^24.10.12",

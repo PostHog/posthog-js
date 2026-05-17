@@ -122,9 +122,11 @@ export class PostHog {
   }
 
   private async loadEvaluator(ctx: RunQueryCtx): Promise<LocalFeatureFlagEvaluator | null> {
-    const row = (await ctx.runQuery(this.component.lib.getFlagDefinitions, {})) as
-      | { data: string; fetchedAt: number; etag?: string }
-      | null
+    const row = (await ctx.runQuery(this.component.lib.getFlagDefinitions, {})) as {
+      data: string
+      fetchedAt: number
+      etag?: string
+    } | null
     if (!row) return null
     let parsed: FlagDefinitions
     try {
