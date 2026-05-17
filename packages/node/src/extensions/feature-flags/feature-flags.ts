@@ -9,7 +9,10 @@ const SIXTY_SECONDS = 60 * 1000
 // eslint-disable-next-line
 const LONG_SCALE = 0xfffffffffffffff
 
-const NULL_VALUES_ALLOWED_OPERATORS = ['is_not']
+// Operators that should still run their switch case when the property value is null/undefined.
+// `is_not` may legitimately compare against null; `is_set` only cares about key presence and
+// must not be short-circuited by the null guard in `matchProperty`.
+const NULL_VALUES_ALLOWED_OPERATORS = ['is_not', 'is_set']
 class ClientError extends Error {
   constructor(message: string) {
     super()
@@ -276,12 +279,15 @@ class FeatureFlagsPoller {
   ): Promise<FeatureFlagValue> {
     const { distinctId, groups, personProperties, groupProperties } = evaluationContext
 
-    if (flag.ensure_experience_continuity) {
-      throw new InconclusiveMatchError('Flag has experience continuity enabled')
-    }
-
+    // Order matters: an inactive flag is always false regardless of continuity. Checking
+    // `ensure_experience_continuity` first would cause a disabled-but-continuity flag to come
+    // back as undefined instead of the correct `false`.
     if (!flag.active) {
       return false
+    }
+
+    if (flag.ensure_experience_continuity) {
+      throw new InconclusiveMatchError('Flag has experience continuity enabled')
     }
 
     const flagFilters = flag.filters || {}
@@ -1257,6 +1263,11 @@ function matchPropertyGroup(
                 `Skipping condition with dependency on flag '${prop.key || 'unknown'}'`
             )
           }
+          // Mark the group as inconclusive so we don't silently grant cohort membership in an AND
+          // group whose missing flag dependency would have evaluated to false (or deny it in an OR
+          // group whose flag dependency would have matched). Falls through to the
+          // InconclusiveMatchError throw at the end of the loop.
+          errorMatchingLocally = true
           continue
         } else {
           matches = matchProperty(prop, propertyValues)
