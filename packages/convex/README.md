@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="@posthog/convex" src="https://raw.githubusercontent.com/PostHog/posthog/master/frontend/public/hedgehog/heart-hog.png" width="200">
+  <img alt="@posthog/convex" src="https://res.cloudinary.com/dmukukwp6/image/upload/q_auto,f_auto/posthog_convex_c017c269f8.png" width="200">
 </p>
 
 <h1 align="center">@posthog/convex</h1>
