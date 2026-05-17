@@ -845,10 +845,15 @@ describe('getAllFlagsAndPayloads (local eval)', () => {
 })
 
 describe('refreshFlagDefinitions cron action', () => {
+    // The retry loop awaits `setTimeout`s — with the default jest fakeTimers config those never
+    // fire and the action hangs. Switch to real timers for this block and cut the backoff down
+    // to 1ms via the env override so the retry-heavy tests stay snappy.
     beforeEach(() => {
+        jest.useRealTimers()
         process.env.POSTHOG_API_KEY = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
+        process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE = '1'
     })
 
     afterEach(() => {
@@ -856,18 +861,44 @@ describe('refreshFlagDefinitions cron action', () => {
         delete process.env.POSTHOG_API_KEY
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
+        delete process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE
         fetchCalls = []
+        jest.useFakeTimers()
     })
+
+    const credentials = {
+        apiKey: 'phc_test_key',
+        personalApiKey: 'phx_test_personal_key',
+        host: 'https://test.posthog.com',
+    }
+
+    /** Builds a fetch mock whose responses are picked per call from the supplied sequence. */
+    function sequencedFetch(
+        responses: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>
+    ) {
+        fetchCalls = []
+        let i = 0
+        // Statuses where the spec forbids a body (Response constructor throws on non-null body).
+        const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304])
+        return jest.fn(async (url: string | URL) => {
+            fetchCalls.push({ url: url.toString(), body: undefined })
+            const r = responses[Math.min(i, responses.length - 1)]
+            i++
+            const payload =
+                NULL_BODY_STATUSES.has(r.status) || r.body === undefined
+                    ? null
+                    : typeof r.body === 'string'
+                      ? r.body
+                      : JSON.stringify(r.body)
+            return new Response(payload, { status: r.status, headers: r.headers ?? {} })
+        }) as unknown as typeof fetch
+    }
 
     test('hits /flags/definitions with personal API key', async () => {
         global.fetch = mockFetch(definitionsResponse([flagDef('flag-a')]))
         const t = initConvexTest()
 
-        await t.action(components.posthog.lib.refreshFlagDefinitions, {
-            apiKey: 'phc_test_key',
-            personalApiKey: 'phx_test_personal_key',
-            host: 'https://test.posthog.com',
-        })
+        await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)
 
         const definitionCalls = fetchCalls.filter((c) => c.url.includes('/flags/definitions'))
         expect(definitionCalls).toHaveLength(1)
@@ -887,6 +918,110 @@ describe('refreshFlagDefinitions cron action', () => {
 
         expect(result.status).toBe('skipped')
         expect(fetchCalls.filter((c) => c.url.includes('/flags/definitions'))).toHaveLength(0)
+    })
+
+    test('retries transient 5xx and persists on eventual 200', async () => {
+        // First two calls flap as 502/503, third succeeds — definitions still land in the cache.
+        const flag = flagDef('flag-a')
+        global.fetch = sequencedFetch([
+            { status: 502 },
+            { status: 503 },
+            {
+                status: 200,
+                body: { flags: [flag], group_type_mapping: {}, cohorts: {} },
+                headers: { ETag: 'W/"fresh"' },
+            },
+        ])
+        const t = initConvexTest()
+
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+            status: string
+        }
+
+        expect(result.status).toBe('updated')
+        expect(fetchCalls.filter((c) => c.url.includes('/flags/definitions'))).toHaveLength(3)
+    })
+
+    test('503 cold-cache with no prior cache writes an empty snapshot', async () => {
+        global.fetch = sequencedFetch([
+            { status: 503, body: 'Required data not found in cache. This is likely a temporary issue.' },
+        ])
+        const t = initConvexTest()
+
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+            status: string
+        }
+
+        expect(result.status).toBe('empty')
+        // Subsequent reads see the empty snapshot rather than null.
+        const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
+        expect(row).not.toBeNull()
+        expect(JSON.parse(row!.data)).toEqual({ flags: [], groupTypeMapping: {}, cohorts: {} })
+    })
+
+    test('503 cold-cache with a fresh prior cache keeps the existing snapshot', async () => {
+        // Seed the cache with real defs.
+        const t = initConvexTest()
+        global.fetch = mockFetch(definitionsResponse([flagDef('seed')]))
+        await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)
+
+        // Now PostHog flaps cold-cache 503s. Cache is < 5min old so we keep what we have.
+        global.fetch = sequencedFetch([
+            { status: 503, body: 'Required data not found in cache.' },
+        ])
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+            status: string
+        }
+
+        expect(result.status).toBe('stale')
+        const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
+        expect(JSON.parse(row!.data).flags).toHaveLength(1)
+    })
+
+    test('503 cold-cache with a stale (>5min) prior cache replaces with empty', async () => {
+        // Fake `Date.now` only — leave `setTimeout`/`setImmediate` real so the retry loop's
+        // `await new Promise(r => setTimeout(r, …))` still resolves.
+        jest.useFakeTimers({ doNotFake: ['setTimeout', 'setImmediate', 'queueMicrotask'] })
+        try {
+            const t = initConvexTest()
+            global.fetch = mockFetch(definitionsResponse([flagDef('seed')]))
+            await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)
+
+            // Jump 6 minutes forward; the cached defs now count as stale.
+            jest.setSystemTime(new Date(Date.now() + 6 * 60 * 1000))
+
+            global.fetch = sequencedFetch([
+                { status: 503, body: 'Required data not found in cache.' },
+            ])
+            const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+                status: string
+            }
+
+            expect(result.status).toBe('empty')
+            const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
+            expect(JSON.parse(row!.data).flags).toHaveLength(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    test('304 not-modified leaves the existing snapshot in place', async () => {
+        // Seed.
+        const t = initConvexTest()
+        global.fetch = mockFetch({
+            '/flags/definitions': { flags: [flagDef('seed')], group_type_mapping: {}, cohorts: {} },
+        })
+        await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)
+
+        // Now PostHog returns 304 — no body, just the not-modified status.
+        global.fetch = sequencedFetch([{ status: 304 }])
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+            status: string
+        }
+
+        expect(result.status).toBe('unchanged')
+        const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
+        expect(JSON.parse(row!.data).flags).toHaveLength(1)
     })
 })
 

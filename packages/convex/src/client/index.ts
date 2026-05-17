@@ -254,7 +254,10 @@ export class PostHog {
       groupType: args.groupType,
       groupKey: args.groupKey,
       properties: result.properties ? JSON.stringify(result.properties) : undefined,
-      distinctId: args.distinctId,
+      // Use the post-beforeSend distinctId so any mutation (redaction, remapping) is honoured.
+      // Fall back to undefined when the result is the empty placeholder so we don't ship "" to
+      // the component (which would then send `distinct_id: ""` for a group identify).
+      distinctId: result.distinctId || undefined,
       disableGeoip: args.disableGeoip,
     })
   }

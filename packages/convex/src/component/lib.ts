@@ -335,8 +335,11 @@ export const refreshFlagDefinitions = action({
     // "Required data not found in cache. … Please try again later." Retry transient 5xx (and
     // 429s, since rate limiting on a one-minute cron is similarly worth waiting out) with
     // bounded exponential backoff so a single cold-cache hit doesn't make callers wait a full
-    // cron tick.
-    const RETRY_DELAYS_MS = [1500, 3000, 6000]
+    // cron tick. Tests override the delays via env var to keep retry-heavy cases snappy.
+    const testOverride = Number(process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE)
+    const RETRY_DELAYS_MS = Number.isFinite(testOverride) && testOverride >= 0
+      ? [testOverride, testOverride, testOverride]
+      : [1500, 3000, 6000]
     let response: Response
     let attempt = 0
     while (true) {
