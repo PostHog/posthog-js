@@ -337,9 +337,10 @@ export const refreshFlagDefinitions = action({
     // bounded exponential backoff so a single cold-cache hit doesn't make callers wait a full
     // cron tick. Tests override the delays via env var to keep retry-heavy cases snappy.
     const testOverride = Number(process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE)
-    const RETRY_DELAYS_MS = Number.isFinite(testOverride) && testOverride >= 0
-      ? [testOverride, testOverride, testOverride]
-      : [1500, 3000, 6000]
+    const RETRY_DELAYS_MS =
+      Number.isFinite(testOverride) && testOverride >= 0
+        ? [testOverride, testOverride, testOverride]
+        : [1500, 3000, 6000]
     let response: Response
     let attempt = 0
     while (true) {
