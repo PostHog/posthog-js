@@ -333,13 +333,20 @@ export class PostHog {
       matchValue?: boolean | string
     } & FeatureFlagOptions
   ): Promise<JsonType | null> {
-    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     const evaluator = await this.loadEvaluator(ctx)
     if (!evaluator) return null
+    // When a caller supplies `matchValue` the payload lookup doesn't need a distinctId — it's a
+    // pure key+value lookup. Defer resolution until we actually need it, so callers using the
+    // "look up payload for a flag value I already evaluated" pattern don't have to configure an
+    // identify callback or pass a distinctId they don't have.
+    if (args.matchValue !== undefined) {
+      return evaluator.getFeatureFlagPayload(args.key, '', args.matchValue)
+    }
+    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
     return await evaluator.getFeatureFlagPayload(
       args.key,
       distinctId,
-      args.matchValue,
+      undefined,
       args.groups ?? {},
       args.personProperties ?? {},
       args.groupProperties ?? {}

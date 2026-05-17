@@ -78,6 +78,40 @@ describe('PostHog client', () => {
     expect(typeof posthog.getAllFlags).toBe('function')
     expect(typeof posthog.getAllFlagsAndPayloads).toBe('function')
   })
+
+  test('getFeatureFlagPayload with matchValue does not require a distinctId', async () => {
+    // The matchValue path is a pure key+value payload lookup; resolving a distinctId would
+    // force callers to configure an identify callback or pass an ID they don't have.
+    const definitions = JSON.stringify({
+      flags: [
+        {
+          id: 1,
+          name: 'flag',
+          key: 'flag',
+          deleted: false,
+          active: true,
+          rollout_percentage: null,
+          ensure_experience_continuity: false,
+          experiment_set: [],
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 0 }],
+            multivariate: { variants: [{ key: 'red', rollout_percentage: 100 }] },
+            payloads: { red: 'red-payload' },
+          },
+        },
+      ],
+      groupTypeMapping: {},
+      cohorts: {},
+    })
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = {
+      runQuery: jest.fn(async () => ({ data: definitions, fetchedAt: Date.now() })),
+    }
+
+    const payload = await posthog.getFeatureFlagPayload(ctx as never, { key: 'flag', matchValue: 'red' })
+    expect(payload).toBe('red-payload')
+  })
 })
 
 describe('normalizeError', () => {
