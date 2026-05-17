@@ -408,6 +408,9 @@ export class LocalFeatureFlagEvaluator {
         } else {
           matches = matchProperty(prop, properties, warn)
         }
+        // `matchPropertyGroup` (cohort path) inverts on `negation`; the top-level flag condition
+        // path needs to do the same or any negated property on a flag-level filter quietly passes.
+        if (prop.negation) matches = !matches
         if (!matches) return false
       }
       if (rolloutPercentage == undefined) return true

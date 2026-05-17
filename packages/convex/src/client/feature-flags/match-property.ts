@@ -131,9 +131,12 @@ export function matchProperty(
   const operator = property.operator || 'exact'
 
   if (!(key in propertyValues)) {
+    // When the property is genuinely absent we can answer `is_not_set` locally — no need to
+    // bail out as inconclusive and force the flag to return undefined.
+    if (operator === 'is_not_set') return true
     throw new InconclusiveMatchError(`Property ${key} not found in propertyValues`)
   } else if (operator === 'is_not_set') {
-    throw new InconclusiveMatchError(`Operator is_not_set is not supported`)
+    return false
   }
 
   const overrideValue = propertyValues[key]
@@ -176,19 +179,20 @@ export function matchProperty(
     case 'gte':
     case 'lt':
     case 'lte': {
-      let parsedValue = typeof value === 'number' ? value : null
-      if (typeof value === 'string') {
-        try {
-          parsedValue = parseFloat(value)
-        } catch {
-          // pass
-        }
-      }
-      if (parsedValue != null && overrideValue != null) {
-        if (typeof overrideValue === 'string') {
-          return compare(overrideValue, String(value), operator)
-        }
-        return compare(overrideValue, parsedValue, operator)
+      // Try a numeric comparison first; only fall back to lexicographic when one side genuinely
+      // isn't a number. `parseFloat` returns NaN for non-numeric strings, so `Number.isFinite`
+      // is the right guard — `NaN != null` would slip through and produce nonsense comparisons
+      // like `NaN > 5`. Likewise, when a person property arrives as the string `"10"` we want
+      // `"10" > "9"` to evaluate numerically (true), not lexicographically (false).
+      const parsedValue = typeof value === 'number' ? value : parseFloat(String(value))
+      const parsedOverride =
+        typeof overrideValue === 'number'
+          ? overrideValue
+          : overrideValue != null
+            ? parseFloat(String(overrideValue))
+            : NaN
+      if (Number.isFinite(parsedValue) && Number.isFinite(parsedOverride)) {
+        return compare(parsedOverride, parsedValue, operator)
       }
       return compare(String(overrideValue), String(value), operator)
     }

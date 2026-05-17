@@ -167,6 +167,48 @@ describe('LocalFeatureFlagEvaluator', () => {
     expect(await evaluator.getFeatureFlag('grp', 'user', {})).toBe(false)
   })
 
+  test('inverts a condition property when negation is set', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('not-pro', {
+          filters: {
+            groups: [
+              {
+                properties: [
+                  { key: 'plan', value: 'pro', operator: 'exact', type: 'person', negation: true },
+                ],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlag('not-pro', 'user', {}, { plan: 'pro' })).toBe(false)
+    expect(await evaluator.getFeatureFlag('not-pro', 'user', {}, { plan: 'free' })).toBe(true)
+  })
+
+  test('is_not_set condition resolves locally without forcing inconclusive', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('only-anon', {
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'email', value: '', operator: 'is_not_set', type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        }),
+      ])
+    )
+    // Key absent → property is_not_set is true → flag matches.
+    expect(await evaluator.getFeatureFlag('only-anon', 'user', {}, {})).toBe(true)
+    // Key present → property IS set → flag does not match.
+    expect(await evaluator.getFeatureFlag('only-anon', 'user', {}, { email: 'a@b.com' })).toBe(false)
+  })
+
   test('group flag matches on group properties', async () => {
     const evaluator = new LocalFeatureFlagEvaluator(
       definitions(
