@@ -26,11 +26,12 @@ npx convex env set POSTHOG_HOST https://us.i.posthog.com   # optional, US defaul
 
 ## What you'll see
 
-- **Sections 01–05** capture analytics events (verify them in your PostHog activity feed).
-- **Section 06** has two rows of buttons — local-eval methods (query context, reactive) and
+- **Sections 01–03** capture analytics events (verify them in your PostHog activity feed).
+- **Section 04** has two rows of buttons — local-eval methods (query context, reactive) and
   remote-eval methods (action context, per-call `/flags` request).
-- **Section 07** captures `$ai_generation` events through `@posthog/ai` using three different
-  tracing approaches. See [LLM analytics for Convex](https://posthog.com/docs/llm-analytics/installation/convex).
+- **Section 05** captures `$ai_generation` events through `@posthog/ai`, defaulting to
+  OpenTelemetry with manual capture as the alternative. See
+  [LLM analytics for Convex](https://posthog.com/docs/llm-analytics/installation/convex).
 - The right column shows the local evaluation cache state plus a live, reactive view of flag
   values for the current Distinct ID — change a flag in PostHog and the row flashes when the cron
   picks it up.
