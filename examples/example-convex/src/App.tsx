@@ -131,7 +131,7 @@ function App() {
 
     // 7. AI Generation
     const [aiLibrary, setAiLibrary] = useState<'agent' | 'ai-sdk'>('agent')
-    const [aiCapture, setAiCapture] = useState<'manual' | 'withTracing' | 'otel'>('manual')
+    const [aiCapture, setAiCapture] = useState<'otel' | 'manual'>('otel')
     const [aiPrompt, setAiPrompt] = useState('What is PostHog?')
 
     // Log + result state
@@ -157,10 +157,8 @@ function App() {
     const refreshFlagsA = useAction(api.example.refreshFlags)
 
     const agentManualA = useAction(api.convexAgent.manualCapture.generate)
-    const agentTracedA = useAction(api.convexAgent.withTracing.generate)
     const agentOtelA = useAction(api.convexAgent.openTelemetry.generate)
     const aiSdkManualA = useAction(api.aiSdk.manualCapture.generate)
-    const aiSdkTracedA = useAction(api.aiSdk.withTracing.generate)
     const aiSdkOtelA = useAction(api.aiSdk.openTelemetry.generate)
 
     const convex = useConvex()
@@ -642,8 +640,9 @@ function App() {
                     {/* 5. AI Generation */}
                     <Section num="05" title="AI generation" subtitle="@posthog/ai · action context">
                         <p className="section-lede">
-                            Captures <code>$ai_generation</code> events using the selected library and tracing approach.
-                            See{' '}
+                            Captures <code>$ai_generation</code> events. OpenTelemetry is the recommended path — it
+                            slots in alongside any other OTel instrumentation you already have. Manual capture is the
+                            escape hatch for cases where you can't add OTel. See{' '}
                             <a href="https://posthog.com/docs/llm-analytics/installation/convex">
                                 LLM analytics for Convex
                             </a>{' '}
@@ -664,9 +663,8 @@ function App() {
                                     value={aiCapture}
                                     onChange={(e) => setAiCapture(e.target.value as typeof aiCapture)}
                                 >
+                                    <option value="otel">OpenTelemetry (recommended)</option>
                                     <option value="manual">Manual capture</option>
-                                    <option value="withTracing">@posthog/ai withTracing</option>
-                                    <option value="otel">OpenTelemetry</option>
                                 </select>
                             </Field>
                             <Field label="Prompt" wide>
@@ -680,10 +678,8 @@ function App() {
                                     const args = { prompt: aiPrompt, distinctId }
                                     const actions = {
                                         'agent-manual': agentManualA,
-                                        'agent-withTracing': agentTracedA,
                                         'agent-otel': agentOtelA,
                                         'ai-sdk-manual': aiSdkManualA,
-                                        'ai-sdk-withTracing': aiSdkTracedA,
                                         'ai-sdk-otel': aiSdkOtelA,
                                     }
                                     const action = actions[`${aiLibrary}-${aiCapture}`]
