@@ -188,6 +188,8 @@ try {
 }
 ```
 
+If you'd rather have **every** uncaught error from your Convex deployment forwarded to PostHog automatically — including ones you didn't explicitly wrap — wire up Convex's first-party PostHog exception reporting integration from the Convex dashboard. Setup lives at [docs.convex.dev/production/integrations/exception-reporting#configuring-posthog-error-tracking](https://docs.convex.dev/production/integrations/exception-reporting#configuring-posthog-error-tracking). Use `captureException` here for cases where you want explicit control (e.g. attaching custom `additionalProperties`); use the Convex-side integration for catch-all coverage.
+
 All of the above methods schedule the PostHog API call asynchronously via `ctx.scheduler.runAfter`, so they return immediately without blocking your mutation or action.
 
 ## 🚩 Feature Flags

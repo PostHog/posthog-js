@@ -394,7 +394,13 @@ function App() {
                     {/* 3. Capture Exception */}
                     <Section num="03" title="Capture exception" subtitle="captureException() · mutation context">
                         <p className="section-lede">
-                            Sends an Error / string / object to PostHog's error tracking pipeline.
+                            Sends an Error / string / object to PostHog's error tracking pipeline. For automatic
+                            capture of every uncaught error in your Convex deployment, set up{' '}
+                            <a href="https://docs.convex.dev/production/integrations/exception-reporting#configuring-posthog-error-tracking">
+                                Convex's first-party PostHog integration
+                            </a>{' '}
+                            on the Convex dashboard — this method is for cases where you want to attach explicit
+                            properties or fire from non-error paths.
                         </p>
                         <div className="field-grid">
                             <Field label="Error message">
