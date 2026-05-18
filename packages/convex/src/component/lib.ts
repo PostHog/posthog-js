@@ -215,7 +215,12 @@ export const evaluateFlag = action({
   args: { ...remoteFlagsArgs, key: v.string() },
   handler: async (_ctx, args) => {
     const client = getClient(args.apiKey, args.host)
-    const snapshot = await client.evaluateFlags(args.distinctId, remoteFlagsOptions(args))
+    // Scope the request to just the flag the caller asked about — otherwise PostHog evaluates
+    // every flag in the project on every call. Honour an explicit `flagKeys` override when given.
+    const snapshot = await client.evaluateFlags(args.distinctId, {
+      ...remoteFlagsOptions(args),
+      flagKeys: args.flagKeys ?? [args.key],
+    })
     const value = snapshot.getFlag(args.key)
     return value ?? null
   },
@@ -225,7 +230,10 @@ export const evaluateFlagPayload = action({
   args: { ...remoteFlagsArgs, key: v.string() },
   handler: async (_ctx, args) => {
     const client = getClient(args.apiKey, args.host)
-    const snapshot = await client.evaluateFlags(args.distinctId, remoteFlagsOptions(args))
+    const snapshot = await client.evaluateFlags(args.distinctId, {
+      ...remoteFlagsOptions(args),
+      flagKeys: args.flagKeys ?? [args.key],
+    })
     const payload = snapshot.getFlagPayload(args.key)
     return payload ?? null
   },
@@ -272,10 +280,15 @@ export const getFlagDefinitions = query({
   },
 })
 
+// All three queries against `flagDefinitions` use `.order('desc').first()` so they all see the
+// same row even if a stray duplicate ever lands in the table. Without consistent ordering,
+// `_setFlagDefinitions` could upsert against an older row than the one `getFlagDefinitions`
+// returns, leaving the row callers actually read perpetually stale.
+
 export const _setFlagDefinitions = internalMutation({
   args: { data: v.string(), etag: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const existing = await ctx.db.query('flagDefinitions').first()
+    const existing = await ctx.db.query('flagDefinitions').order('desc').first()
     const next = { data: args.data, fetchedAt: Date.now(), etag: args.etag }
     if (existing) {
       await ctx.db.replace(existing._id, next)
@@ -288,7 +301,7 @@ export const _setFlagDefinitions = internalMutation({
 export const _getCurrentEtag = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const row = await ctx.db.query('flagDefinitions').first()
+    const row = await ctx.db.query('flagDefinitions').order('desc').first()
     return row?.etag
   },
 })

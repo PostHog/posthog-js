@@ -1,6 +1,7 @@
 import { describe, expect, test, jest } from '@jest/globals'
 import { PostHog, normalizeError } from './index.js'
 import type { BeforeSendFn, IdentifyFn } from './index.js'
+import { LocalFeatureFlagEvaluator } from './feature-flags/index.js'
 
 function mockSchedulerCtx() {
   return {
@@ -675,18 +676,32 @@ describe('identify callback', () => {
   })
 
   test('works with feature flag methods', async () => {
-    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
-    const posthog = new PostHog(component as never, {
-      apiKey: 'key',
-      identify: identifyReturning('auth-user'),
-    })
-    const runQuery = jest.fn(async () => null)
-    const ctx = { runQuery }
+    // Spy on the evaluator's `getFeatureFlag` so we can assert that the distinctId resolved by
+    // the identify callback ('auth-user') is the one actually forwarded to evaluation.
+    const evalSpy = jest.spyOn(LocalFeatureFlagEvaluator.prototype, 'getFeatureFlag').mockResolvedValue(true)
+    try {
+      const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+      const posthog = new PostHog(component as never, {
+        apiKey: 'key',
+        identify: identifyReturning('auth-user'),
+      })
+      // Stub real-looking flag definitions so `loadEvaluator` returns an instance.
+      const definitions = {
+        data: JSON.stringify({ flags: [], groupTypeMapping: {}, cohorts: {} }),
+        fetchedAt: Date.now(),
+      }
+      const runQuery = jest.fn(async () => definitions)
+      const ctx = { runQuery }
 
-    await posthog.getFeatureFlag(ctx as never, { key: 'my-flag' })
+      await posthog.getFeatureFlag(ctx as never, { key: 'my-flag' })
 
-    // identify callback resolved the distinctId without throwing; loadEvaluator was reached.
-    expect(runQuery).toHaveBeenCalledWith('getFlagDefinitions_ref', {})
+      expect(runQuery).toHaveBeenCalledWith('getFlagDefinitions_ref', {})
+      // The evaluator's getFeatureFlag(key, distinctId, groups, personProps, groupProps) — assert
+      // we pass the auth-resolved id straight through.
+      expect(evalSpy).toHaveBeenCalledWith('my-flag', 'auth-user', {}, {}, {})
+    } finally {
+      evalSpy.mockRestore()
+    }
   })
 
   test('explicit distinctId still works without identify callback', async () => {
