@@ -187,6 +187,24 @@ function shouldIgnoreByContent(
     })
 }
 
+// dead click capture does not run through autocapture's ph-no-capture check,
+// so we include it here so that ph-no-capture also suppresses dead click capture
+const DEFAULT_DEAD_CLICK_IGNORE_LIST = ['.ph-no-deadclick', '.ph-no-capture']
+export function shouldCaptureDeadClick(el: Element | null, _config: PostHogConfig['capture_dead_clicks']) {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return false
+    }
+
+    const selectorIgnoreList = isBoolean(_config)
+        ? DEFAULT_DEAD_CLICK_IGNORE_LIST
+        : (_config?.css_selector_ignorelist ?? DEFAULT_DEAD_CLICK_IGNORE_LIST)
+
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+
+    // we don't capture if we match the ignore list
+    return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
+}
+
 // autocapture check will already filter for ph-no-capture,
 // but we include it here to protect against future changes accidentally removing that check
 const DEFAULT_RAGE_CLICK_IGNORE_LIST = ['.ph-no-rageclick', '.ph-no-capture']
@@ -258,6 +276,21 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
         curEl = parentNode
     }
     return { parentIsUsefulElement, targetElementList }
+}
+
+// dead-click skips a click only when the click target is — or is inside — an <a>.
+// Anchors navigate / download / open a new window via the browser, and we have no
+// observable signal for those actions (no DOM mutation, no scroll). For every other
+// element (button, input, select, textarea, label, custom JS-handled divs, etc.) we
+// rely on the existing mutation / scroll / selection / visibility observers — if the
+// app's JS handler ran, those catch the effect; if it didn't, dead-click correctly
+// surfaces the bug. A click on a broken <button> with no handler should still flag.
+export function shouldSkipDeadClick(el: Element | null): boolean {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return false
+    }
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+    return targetElementList.some((node) => isTag(node, 'a'))
 }
 
 /*

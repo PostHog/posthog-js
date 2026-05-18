@@ -1364,6 +1364,7 @@ export class PostHog implements PostHogInterface {
             data,
             compression: 'best-available',
             batchKey: options?._batchKey,
+            transport: options?.transport,
         }
 
         if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {

@@ -1,5 +1,57 @@
 # @posthog/next
 
+## 0.4.53
+
+### Patch Changes
+
+- Updated dependencies [[`3c0a09f`](https://github.com/PostHog/posthog-js/commit/3c0a09f05ab768b94b5518a3109e44a5c9f33c70), [`594ea11`](https://github.com/PostHog/posthog-js/commit/594ea1146045d49080f6dfd951b037c13278e975)]:
+    - posthog-js@1.374.0
+    - @posthog/core@1.29.3
+    - posthog-node@5.34.3
+
+## 0.4.52
+
+### Patch Changes
+
+- Updated dependencies [[`221973e`](https://github.com/PostHog/posthog-js/commit/221973e4a2a50196ffb5c45c468f3de812ed82cf)]:
+    - posthog-js@1.373.5
+    - @posthog/core@1.29.2
+    - posthog-node@5.34.2
+
+## 0.4.51
+
+### Patch Changes
+
+- [#3549](https://github.com/PostHog/posthog-js/pull/3549) [`77ee9df`](https://github.com/PostHog/posthog-js/commit/77ee9df6a36dcc968516d1698d830b8368cf64ab) Thanks [@brandonhines-mialabs](https://github.com/brandonhines-mialabs)! - Fix `@posthog/next/pages` default export condition to resolve to the client barrel (`pages.client.js`) instead of the server barrel (`pages.js`), matching the behavior of the root `"."` export. This prevents bundlers that don't match a more specific condition from pulling in `server-only` and `posthog-node` unnecessarily.
+  (2026-05-14)
+
+## 0.4.50
+
+### Patch Changes
+
+- [#3608](https://github.com/PostHog/posthog-js/pull/3608) [`afb0ae8`](https://github.com/PostHog/posthog-js/commit/afb0ae8f1f8ddb901bc0963ca4d567f0ebf4353d) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Next.js pageview tracking to send absolute current URLs
+  (2026-05-13)
+
+## 0.4.49
+
+### Patch Changes
+
+- Updated dependencies [[`4b895bf`](https://github.com/PostHog/posthog-js/commit/4b895bf0151f24c0b72e8ce4cae47906795b29b8)]:
+    - @posthog/core@1.29.1
+    - posthog-js@1.373.4
+    - posthog-node@5.34.1
+
+## 0.4.48
+
+### Patch Changes
+
+- [#3599](https://github.com/PostHog/posthog-js/pull/3599) [`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Expose UUID and cookie helpers from `@posthog/core` and `posthog-node` for users managing distinct_id outside the browser SDK (e.g. Lambda functions handing out cross-domain redirects). The helpers were already implemented in `@posthog/next` — this change lifts them to core so all SDKs can re-use them. `@posthog/next` now re-exports the same surface from `@posthog/core` to keep existing consumers working without churn. Closes #2143.
+  (2026-05-12)
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+    - @posthog/core@1.29.0
+    - posthog-node@5.34.0
+    - posthog-js@1.373.3
+
 ## 0.4.47
 
 ### Patch Changes

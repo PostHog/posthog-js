@@ -1,14 +1,20 @@
 import { each, find } from './utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
-import { formDataToQuery } from './utils/request-utils'
+import { formDataToQuery, getQueryParam } from './utils/request-utils'
 
 import { logger } from './utils/logger'
 import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 import { _base64Encode } from './utils/encode-utils'
-import { gzipCompress, isNativeAsyncGzipError, isNativeAsyncGzipReadError } from '@posthog/core'
+import {
+    gzipCompress,
+    isGzipData,
+    isGzipRequest,
+    isNativeAsyncGzipError,
+    isNativeAsyncGzipReadError,
+} from '@posthog/core'
 
 interface RequestWithEncodedBody extends RequestWithOptions {
     _encodedBody?: EncodedBody
@@ -29,10 +35,31 @@ const SIXTY_FOUR_KILOBYTES = 64 * 1024
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
 let nativeAsyncGzipDisabled = false
 
+const removeURLParam = (url: string, param: string): string => {
+    const [urlWithoutHash, hash] = url.split('#')
+    const [baseUrl, search] = urlWithoutHash.split('?')
+
+    if (!search) {
+        return url
+    }
+
+    const updatedSearch = search
+        .split('&')
+        .filter((pair) => pair.split('=')[0] !== param)
+        .join('&')
+
+    return `${baseUrl}${updatedSearch ? `?${updatedSearch}` : ''}${hash ? `#${hash}` : ''}`
+}
+
 type EncodedBody = {
     contentType: string
     body: string | BlobPart | ArrayBuffer
     estimatedSize: number
+}
+
+type EncodedRequest = {
+    url: string
+    encodedBody?: EncodedBody
 }
 
 /**
@@ -114,6 +141,29 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
     }
 }
 
+const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
+    const encodedBody = encodePostData(options)
+
+    if (
+        !encodedBody ||
+        !isGzipRequest(options.compression, getQueryParam(options.url, 'compression')) ||
+        isGzipData(encodedBody.body)
+    ) {
+        return { url: options.url, encodedBody }
+    }
+
+    nativeAsyncGzipDisabled = true
+
+    return {
+        url: removeURLParam(options.url, 'compression'),
+        encodedBody: encodePostData({
+            ...options,
+            compression: undefined,
+            _encodedBody: undefined,
+        }),
+    }
+}
+
 /**
  * Pre-encode the request body using async native CompressionStream.
  * This avoids blocking the main thread with fflate's synchronous gzip,
@@ -142,8 +192,9 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
 
 const xhr = (options: RequestWithOptions) => {
     const req = new XMLHttpRequest!()
-    req.open(options.method || 'GET', options.url, true)
-    const { contentType, body } = encodePostData(options) ?? {}
+    const { url, encodedBody } = encodePostDataSafely(options)
+    req.open(options.method || 'GET', url, true)
+    const { contentType, body } = encodedBody ?? {}
 
     each(options.headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
@@ -183,7 +234,8 @@ const xhr = (options: RequestWithOptions) => {
 }
 
 const _fetch = (options: RequestWithOptions) => {
-    const { contentType, body, estimatedSize } = encodePostData(options) ?? {}
+    const { url, encodedBody } = encodePostDataSafely(options)
+    const { contentType, body, estimatedSize } = encodedBody ?? {}
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
@@ -195,7 +247,6 @@ const _fetch = (options: RequestWithOptions) => {
         headers.append('Content-Type', contentType)
     }
 
-    const url = options.url
     let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
 
     if (AbortController) {
@@ -252,12 +303,12 @@ const _sendBeacon = (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
-    const url = extendURLParams(options.url, {
-        beacon: '1',
-    })
-
     try {
-        const { contentType, body } = encodePostData(options) ?? {}
+        const { url: safeUrl, encodedBody } = encodePostDataSafely(options)
+        const url = extendURLParams(safeUrl, {
+            beacon: '1',
+        })
+        const { contentType, body } = encodedBody ?? {}
         if (!body) {
             return
         }
