@@ -21,9 +21,7 @@ export type SurveyModalProps = {
 // edges. Insets already keep it clear of the status bar and home indicator.
 const VIEWPORT_BUFFER = 0
 
-// Matches RN Modal's fade animation duration on Android, where Modal has no
-// onDismiss callback. On iOS we use Modal.onDismiss to know exactly when the
-// fade finishes.
+// Matches RN Modal's fade animation duration (Android only).
 const MODAL_FADE_DURATION_MS = 250
 
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
@@ -31,14 +29,9 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const [isSurveySent, setIsSurveySent] = useState(false)
   const [responses, setResponses] = useState<SurveyResponses>({})
   const [isVisible, setIsVisible] = useState(true)
-  // Two-step hide works around RN Fabric's UIKit snapshot recycling:
+  // Two-step hide for RN Fabric snapshot recycling — see
   // https://github.com/facebook/react-native/issues/48245
-  // RN reuses the previous Modal's snapshot for the first paint of the next
-  // presentation. Unmounting children before dismissing the Modal makes that
-  // snapshot blank, so the next survey opens without flashing prior content.
   const [contentMounted, setContentMounted] = useState(true)
-  // Guard refs so the close sequence runs exactly once even if onClose fires
-  // multiple times rapidly (hardware back button + cancel tap, double-tap, etc.).
   const isClosingRef = useRef(false)
   const closeNotifiedRef = useRef(false)
   const notifyParentClosed = useCallback(() => {
@@ -49,14 +42,10 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const onClose = useCallback(() => {
     if (isClosingRef.current) return
     isClosingRef.current = true
-    // Step 1: unmount children — Modal renders blank for at least one frame.
     setContentMounted(false)
-    // Step 2: on the next frame, dismiss the (now-blank) Modal. The snapshot
-    // RN reuses for the next presentation will be of the blank Modal.
     requestAnimationFrame(() => {
       setIsVisible(false)
-      // Android has no Modal.onDismiss — schedule the parent notification
-      // to match the fade duration so the modal animates out cleanly.
+      // Android Modal has no onDismiss; wait the fade duration before notifying.
       if (Platform.OS !== 'ios') {
         setTimeout(notifyParentClosed, MODAL_FADE_DURATION_MS)
       }
