@@ -362,7 +362,7 @@ describe('posthog core', () => {
 
             expect(requestSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    url: 'https://us.i.posthog.com/batch/?ip=0',
+                    url: 'https://us.i.posthog.com/batch/',
                     compression: Compression.GZipJS,
                     _useContentEncoding: true,
                     data: expect.objectContaining({
@@ -389,7 +389,7 @@ describe('posthog core', () => {
 
             expect(requestSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    url: 'https://us.i.posthog.com/batch/?retry_count=1&ip=0',
+                    url: 'https://us.i.posthog.com/batch/',
                     compression: Compression.GZipJS,
                     _useContentEncoding: true,
                     data: expect.objectContaining({

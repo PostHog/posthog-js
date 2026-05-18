@@ -1035,8 +1035,10 @@ export class PostHog implements PostHogInterface {
 
         const analyticsEndpoint = this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
         const isAnalyticsRequest = options.url === analyticsEndpoint || options.url.startsWith(`${analyticsEndpoint}?`)
+        let isBatchAnalyticsRequest = false
         if (isAnalyticsRequest && options.transport !== 'sendBeacon' && options.data) {
-            options.url = options.url.replace(analyticsEndpoint, this.requestRouter.endpointFor('api', '/batch/'))
+            options.url = this.requestRouter.endpointFor('api', '/batch/')
+            isBatchAnalyticsRequest = true
             options.data = {
                 api_key: this.config.token,
                 batch: isArray(options.data) ? options.data : [options.data],
@@ -1046,10 +1048,12 @@ export class PostHog implements PostHogInterface {
             options.compression = options.compression === Compression.GZipJS ? options.compression : undefined
         }
 
-        options.url = extendURLParams(options.url, {
-            // Whether to detect ip info or not
-            ip: this.config.ip ? 1 : 0,
-        })
+        if (!isBatchAnalyticsRequest) {
+            options.url = extendURLParams(options.url, {
+                // Whether to detect ip info or not
+                ip: this.config.ip ? 1 : 0,
+            })
+        }
         options.headers = {
             ...this.config.request_headers,
             ...options.headers,
