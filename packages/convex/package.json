@@ -1,6 +1,6 @@
 {
   "name": "@posthog/convex",
-  "description": "Send analytics events to PostHog from your Convex backend.",
+  "description": "Capture analytics events, track exceptions, and evaluate feature flags with PostHog from your Convex backend.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PostHog/posthog-js.git",
@@ -20,6 +20,7 @@
     "analytics"
   ],
   "scripts": {
+    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/component/version.ts",
     "build": "tsc --project ./tsconfig.build.json",
     "build:codegen": "npx convex codegen --component-dir ./src/component && pnpm build",
     "clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",
@@ -64,7 +65,6 @@
     "posthog-node": "workspace:*"
   },
   "devDependencies": {
-    "@convex-dev/eslint-plugin": "^1.1.1",
     "@edge-runtime/vm": "^5.0.0",
     "@jest/globals": "^29.7.0",
     "@types/node": "^24.10.12",
