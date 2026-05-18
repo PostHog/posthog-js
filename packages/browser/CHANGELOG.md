@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.374.1
+
+### Patch Changes
+
+- [#3627](https://github.com/PostHog/posthog-js/pull/3627) [`07a0f5f`](https://github.com/PostHog/posthog-js/commit/07a0f5f7a25f9867047dd6c633b881f45caef72c) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect transport overrides passed to posthog.capture.
+  (2026-05-18)
+- Updated dependencies []:
+    - @posthog/types@1.374.1
+    - @posthog/core@1.29.4
+
 ## 1.374.0
 
 ### Minor Changes
