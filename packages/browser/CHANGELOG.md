@@ -1,5 +1,30 @@
 # posthog-js
 
+## 1.374.0
+
+### Minor Changes
+
+- [#3620](https://github.com/PostHog/posthog-js/pull/3620) [`594ea11`](https://github.com/PostHog/posthog-js/commit/594ea1146045d49080f6dfd951b037c13278e975) Thanks [@pauldambra](https://github.com/pauldambra)! - Dead clicks: add a `.ph-no-deadclick` CSS class (and `capture_dead_clicks.css_selector_ignorelist` config option) to exclude specific elements from dead-click detection without affecting autocapture, session replay, or heatmaps. Mirrors the existing `.ph-no-rageclick` pattern.
+  (2026-05-18)
+
+### Patch Changes
+
+- [#3621](https://github.com/PostHog/posthog-js/pull/3621) [`3c0a09f`](https://github.com/PostHog/posthog-js/commit/3c0a09f05ab768b94b5518a3109e44a5c9f33c70) Thanks [@pauldambra](https://github.com/pauldambra)! - Dead clicks: a click on an `<a>` (or any element inside an `<a>`, including across shadow DOM) is no longer flagged as a dead click — the browser navigates / downloads / opens a new window and we can't observe that. Reuses autocapture's existing DOM walker for the ancestor walk. Direct clicks on `<button>`, `<input>`, `<select>`, `<textarea>`, `<label>`, and `<form>` (previously all skipped) are now eligible for dead-click detection: if their JS handler ran, the existing mutation / scroll / selection observers see the effect; if it didn't, dead-click correctly surfaces the bug. A broken `<button>` with no handler, or an `<svg>` icon inside one, will now flag — which is exactly the dead-click case we want to catch.
+  (2026-05-18)
+- Updated dependencies [[`594ea11`](https://github.com/PostHog/posthog-js/commit/594ea1146045d49080f6dfd951b037c13278e975)]:
+    - @posthog/types@1.374.0
+    - @posthog/core@1.29.3
+
+## 1.373.5
+
+### Patch Changes
+
+- [#3613](https://github.com/PostHog/posthog-js/pull/3613) [`221973e`](https://github.com/PostHog/posthog-js/commit/221973e4a2a50196ffb5c45c468f3de812ed82cf) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Surveys: submit open text questions with Cmd/Ctrl+Enter. The textarea still inserts a newline on plain Enter (native behaviour), matching the convention used by Slack, GitHub, Discord, and ChatGPT for multi-line inputs. Single-line "Other:" inputs continue to submit on plain Enter as before.
+  (2026-05-15)
+- Updated dependencies []:
+    - @posthog/types@1.373.5
+    - @posthog/core@1.29.2
+
 ## 1.373.4
 
 ### Patch Changes

@@ -1,5 +1,30 @@
 # @posthog/next
 
+## 0.4.53
+
+### Patch Changes
+
+- Updated dependencies [[`3c0a09f`](https://github.com/PostHog/posthog-js/commit/3c0a09f05ab768b94b5518a3109e44a5c9f33c70), [`594ea11`](https://github.com/PostHog/posthog-js/commit/594ea1146045d49080f6dfd951b037c13278e975)]:
+    - posthog-js@1.374.0
+    - @posthog/core@1.29.3
+    - posthog-node@5.34.3
+
+## 0.4.52
+
+### Patch Changes
+
+- Updated dependencies [[`221973e`](https://github.com/PostHog/posthog-js/commit/221973e4a2a50196ffb5c45c468f3de812ed82cf)]:
+    - posthog-js@1.373.5
+    - @posthog/core@1.29.2
+    - posthog-node@5.34.2
+
+## 0.4.51
+
+### Patch Changes
+
+- [#3549](https://github.com/PostHog/posthog-js/pull/3549) [`77ee9df`](https://github.com/PostHog/posthog-js/commit/77ee9df6a36dcc968516d1698d830b8368cf64ab) Thanks [@brandonhines-mialabs](https://github.com/brandonhines-mialabs)! - Fix `@posthog/next/pages` default export condition to resolve to the client barrel (`pages.client.js`) instead of the server barrel (`pages.js`), matching the behavior of the root `"."` export. This prevents bundlers that don't match a more specific condition from pulling in `server-only` and `posthog-node` unnecessarily.
+  (2026-05-14)
+
 ## 0.4.50
 
 ### Patch Changes
