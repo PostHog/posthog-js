@@ -128,6 +128,12 @@ export type SurveyAppearanceTheme = Omit<
 > & {
   textColor?: string
   inputTextColor?: string
+  /**
+   * When true, tapping the dimmed area outside the survey modal dismisses it
+   * (same outcome as tapping the X). Default false because accidental
+   * dismissals can lose unsent responses.
+   */
+  closeOnBackdropPress?: boolean
 }
 export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   backgroundColor: defaultBackgroundColor,

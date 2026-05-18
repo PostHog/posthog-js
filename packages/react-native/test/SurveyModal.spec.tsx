@@ -8,11 +8,29 @@ import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 // primitives here, all rendering as plain divs so children appear in the DOM.
 jest.mock('react-native', () => {
   const RealReact = jest.requireActual('react')
-  const Box = RealReact.forwardRef(({ children, testID, onTouchStart, ...rest }: any, ref: any) =>
-    RealReact.createElement('div', { ref, 'data-testid': testID, onMouseDown: onTouchStart, ...rest }, children)
+  const Box = RealReact.forwardRef(
+    ({ children, testID, onTouchStart, onStartShouldSetResponder, ...rest }: any, ref: any) => {
+      // onStartShouldSetResponder() === true mirrors RN's responder system claiming
+      // the touch; we approximate that in jsdom by stopping click propagation so
+      // an inner View shields ancestors (e.g. a Pressable backdrop) from the event.
+      const onClick = onStartShouldSetResponder ? (e: any) => e.stopPropagation() : undefined
+      return RealReact.createElement(
+        'div',
+        { ref, 'data-testid': testID, onMouseDown: onTouchStart, onClick, ...rest },
+        children
+      )
+    }
   )
-  const Pressable = RealReact.forwardRef(({ children, testID, onPress, ...rest }: any, ref: any) =>
-    RealReact.createElement('div', { ref, 'data-testid': testID, onClick: onPress, ...rest }, children)
+  // Flatten RN-style arrays into a single inline-style object so jsdom can
+  // expose them via element.style (e.g. for backgroundColor assertions).
+  const flatten = (s: any): any =>
+    Array.isArray(s) ? Object.assign({}, ...s.filter(Boolean).map(flatten)) : (s ?? undefined)
+  const Pressable = RealReact.forwardRef(({ children, testID, onPress, style, ...rest }: any, ref: any) =>
+    RealReact.createElement(
+      'div',
+      { ref, 'data-testid': testID, onClick: onPress, style: flatten(style), ...rest },
+      children
+    )
   )
   return {
     View: Box,
@@ -90,6 +108,12 @@ const appearanceWithoutThankYou: SurveyAppearanceTheme = {
   thankYouMessageHeader: '',
 }
 
+const appearanceWithBackdropClose: SurveyAppearanceTheme = {
+  ...defaultSurveyAppearance,
+  thankYouMessageHeader: 'Thanks!',
+  closeOnBackdropPress: true,
+}
+
 // Mount SurveyModal with the standard test fixture. Returns the rendered
 // result plus the onClose spy so tests can assert against either.
 const renderSurveyModal = (onClose: jest.Mock = jest.fn()) => {
@@ -155,6 +179,63 @@ describe('SurveyModal close behavior', () => {
     // BUG: shouldShowConfirmation flips false, so Questions remounts with Q1.
     // After the fix the conditional branches on isSurveySent first → null.
     expect(queryByTestId('questions-stub')).toBeNull()
+  })
+
+  it('closes when the backdrop is tapped if closeOnBackdropPress is true', () => {
+    const onClose = jest.fn()
+    const { getByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithBackdropClose}
+        onShow={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    act(() => {
+      fireEvent.click(getByTestId('survey-modal-backdrop'))
+    })
+    act(() => {
+      jest.runAllTimers()
+    })
+
+    expect(onClose).toHaveBeenCalledWith(false, {})
+  })
+
+  it('does NOT close on backdrop tap by default (closeOnBackdropPress omitted)', () => {
+    const { getByTestId, onClose } = renderSurveyModal()
+
+    act(() => {
+      fireEvent.click(getByTestId('survey-modal-backdrop'))
+    })
+    act(() => {
+      jest.runAllTimers()
+    })
+
+    // Default behavior: backdrop tap only dismisses the keyboard, not the survey.
+    // Prevents accidental dismissals that lose unsent responses.
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('does not close when a tap lands inside the modal content', () => {
+    const { getByTestId, onClose } = renderSurveyModal()
+
+    // A tap on Questions itself fires onSubmit (drives isSurveySent),
+    // but it must NOT bubble up and trigger the backdrop close.
+    act(() => {
+      fireEvent.click(getByTestId('questions-stub'))
+    })
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('renders a dark semi-transparent backdrop behind the modal', () => {
+    const { getByTestId } = renderSurveyModal()
+
+    const backdrop = getByTestId('survey-modal-backdrop')
+    // jsdom serializes any rgba/rgb value into a string on .style.backgroundColor.
+    expect(backdrop.style.backgroundColor).toMatch(/rgba?\(/)
   })
 
   it('hides content immediately when the cancel button is pressed', () => {

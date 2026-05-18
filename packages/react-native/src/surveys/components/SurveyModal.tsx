@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native'
 
 import { Cancel } from './Cancel'
 import { ConfirmationMessage } from './ConfirmationMessage'
@@ -94,10 +103,22 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
     >
       {contentMounted && (
         <KeyboardAvoidingView behavior={keyboardBehavior} style={styles.fill}>
-          <View style={[styles.fill, { justifyContent: vertical }]} onTouchStart={Keyboard.dismiss}>
+          <Pressable
+            testID="survey-modal-backdrop"
+            style={[styles.fill, styles.backdrop, { justifyContent: vertical }]}
+            onPress={() => {
+              // Always dismiss the keyboard so users can tap-outside to lower it
+              // even when backdrop-close is disabled.
+              Keyboard.dismiss()
+              if (appearance.closeOnBackdropPress) {
+                onClose()
+              }
+            }}
+          >
             <View style={[styles.modalRow, { justifyContent: horizontal }]}>
               <View style={styles.modalContent} pointerEvents="box-none">
                 <View
+                  onStartShouldSetResponder={() => true}
                   style={[
                     styles.modalContentInner,
                     {
@@ -139,7 +160,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                 </View>
               </View>
             </View>
-          </View>
+          </Pressable>
         </KeyboardAvoidingView>
       )}
     </Modal>
@@ -149,6 +170,9 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
 const styles = StyleSheet.create({
   fill: {
     flex: 1,
+  },
+  backdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalRow: {
     flexDirection: 'row',
