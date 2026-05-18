@@ -293,7 +293,6 @@ Local eval can't reach a verdict for every flag, and for those this component wi
 - **Experience continuity flags.** Flags with [persist across authentication steps](https://posthog.com/docs/feature-flags/creating-feature-flags#persisting-feature-flags-across-authentication-steps) need server-side anon→identified tracking and aren't included in local eval.
 - **Static cohorts.** Cohort membership for static cohorts lives only on the server.
 - **Properties not passed in.** Local eval can only see what you give it. If a flag targets `email` or `$browser_version` and you don't pass those in `personProperties`, it can't resolve.
-- **The `is_not_set` operator.** Local eval can't prove a property is absent — it only sees what you provide.
 - **Cohorts that don't fit the local-eval shape.** Cohorts with variant overrides, non-person properties, more than one cohort in the same flag definition, nested AND/OR filters, or grouped with other conditions can't be translated for local eval. See [the PostHog docs](https://posthog.com/docs/feature-flags/local-evaluation#dynamic-cohort-restrictions) for the full list.
 
 There are also reasons you might *not want* local eval at all, even when it's possible:

@@ -450,10 +450,10 @@ export class PostHog {
 
   // --- Remote feature flag evaluation (action context) ---
   //
-  // For flags that can't be evaluated locally — experience continuity, static cohorts, the
-  // `is_not_set` operator, properties you can't pass in — or when you haven't configured a
-  // personal API key. These hit PostHog's `/flags` endpoint via a component action, so they
-  // require an action ctx and incur a per-call network round trip.
+  // For flags that can't be evaluated locally — experience continuity, static cohorts,
+  // properties you can't pass in — or when you haven't configured a personal API key. These
+  // hit PostHog's `/flags` endpoint via a component action, so they require an action ctx and
+  // incur a per-call network round trip.
 
   /**
    * Evaluate a single flag remotely against PostHog's `/flags` endpoint. Action context only.
