@@ -538,8 +538,15 @@ export interface SessionRecordingOptions {
     compress_events?: boolean
 
     /**
-     * ADVANCED: alters the threshold before a recording considers a user has become idle.
-     * Normally only altered alongside changes to session_idle_timeout_ms.
+     * ADVANCED: Controls when session recording considers the user idle.
+     *
+     * If no replay user interaction occurs for this many milliseconds, the recorder marks the recording idle,
+     * emits a `sessionIdle` replay marker, flushes buffered replay events, and drops most subsequent replay
+     * events until user activity resumes. If activity resumes before `session_idle_timeout_seconds`, recording
+     * continues under the same `$session_id`.
+     *
+     * This does not control `$session_id` rotation. Session rotation is controlled by `session_idle_timeout_seconds`,
+     * so this value should usually be lower than `session_idle_timeout_seconds * 1000`.
      *
      * @default 1000 * 60 * 5 (5 minutes)
      */
@@ -1167,8 +1174,16 @@ export interface PostHogConfig {
     error_tracking: ErrorTrackingOptions
 
     /**
-     * Determines the session idle timeout in seconds.
-     * Any new event that's happened after this timeout will create a new session.
+     * Controls when the SDK rotates the PostHog `$session_id` after inactivity.
+     *
+     * If no non-read-only event updates session activity for this many seconds, the next activity event starts a
+     * new session with a new `$session_id` and `$window_id`. The SDK may also proactively reset the stored session
+     * after the timeout while the page is idle, so the next activity creates a new session.
+     *
+     * Session recording has a separate idle threshold: `session_recording.session_idle_threshold_ms`. That setting
+     * only controls when replay capture is considered idle; it does not rotate `$session_id`.
+     *
+     * Must be between 60 seconds and 10 hours. Values outside this range are clamped.
      *
      * @default 30 * 60 -- 30 minutes
      */
