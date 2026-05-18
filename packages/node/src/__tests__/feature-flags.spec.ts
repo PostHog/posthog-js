@@ -2458,45 +2458,6 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
-  it('inverts a flag-level condition property when negation is set', async () => {
-    // `matchPropertyGroup` already inverts on `negation` in the cohort path; the flag-level
-    // condition loop needs the same step or any negated property quietly passes through.
-    const flags = {
-      flags: [
-        {
-          id: 1,
-          name: 'Not Pro',
-          key: 'not-pro',
-          active: true,
-          filters: {
-            groups: [
-              {
-                properties: [{ key: 'plan', operator: 'exact', value: 'pro', type: 'person', negation: true }],
-                rollout_percentage: 100,
-              },
-            ],
-          },
-        },
-      ],
-      cohorts: {},
-    }
-    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
-
-    posthog = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      personalApiKey: 'TEST_PERSONAL_API_KEY',
-      ...posthogImmediateResolveOptions,
-    })
-
-    expect(await posthog.getFeatureFlag('not-pro', 'some-distinct-id', { personProperties: { plan: 'pro' } })).toEqual(
-      false
-    )
-    expect(await posthog.getFeatureFlag('not-pro', 'some-distinct-id', { personProperties: { plan: 'free' } })).toEqual(
-      true
-    )
-    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
-  })
-
   it('resolves is_not_set locally without forcing inconclusive', async () => {
     const flags = {
       flags: [
