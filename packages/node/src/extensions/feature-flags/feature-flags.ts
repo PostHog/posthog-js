@@ -585,7 +585,9 @@ class FeatureFlagsPoller {
         let matches = false
 
         if (propertyType === 'cohort') {
-          matches = matchCohort(prop, properties, this.cohorts, this.debugMode)
+          matches = await matchCohort(prop, properties, this.cohorts, this.debugMode, (depProp) =>
+            this.evaluateFlagDependency(depProp, properties, evaluationContext)
+          )
         } else if (propertyType === 'flag') {
           matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
         } else {
@@ -1178,25 +1180,29 @@ function checkCohortExists(cohortId: string, cohortProperties: FeatureFlagsPolle
   }
 }
 
-function matchCohort(
+type FlagDependencyEvaluator = (prop: FlagProperty) => Promise<boolean>
+
+async function matchCohort(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
   cohortProperties: FeatureFlagsPoller['cohorts'],
-  debugMode: boolean = false
-): boolean {
+  debugMode: boolean = false,
+  flagDependencyEvaluator?: FlagDependencyEvaluator
+): Promise<boolean> {
   const cohortId = String(property.value)
   checkCohortExists(cohortId, cohortProperties)
 
   const propertyGroup = cohortProperties[cohortId]
-  return matchPropertyGroup(propertyGroup, propertyValues, cohortProperties, debugMode)
+  return matchPropertyGroup(propertyGroup, propertyValues, cohortProperties, debugMode, flagDependencyEvaluator)
 }
 
-function matchPropertyGroup(
+async function matchPropertyGroup(
   propertyGroup: PropertyGroup,
   propertyValues: Record<string, any>,
   cohortProperties: FeatureFlagsPoller['cohorts'],
-  debugMode: boolean = false
-): boolean {
+  debugMode: boolean = false,
+  flagDependencyEvaluator?: FlagDependencyEvaluator
+): Promise<boolean> {
   if (!propertyGroup) {
     return true
   }
@@ -1215,7 +1221,13 @@ function matchPropertyGroup(
     // a nested property group
     for (const prop of properties as PropertyGroup[]) {
       try {
-        const matches = matchPropertyGroup(prop, propertyValues, cohortProperties, debugMode)
+        const matches = await matchPropertyGroup(
+          prop,
+          propertyValues,
+          cohortProperties,
+          debugMode,
+          flagDependencyEvaluator
+        )
         if (propertyGroupType === 'AND') {
           if (!matches) {
             return false
@@ -1251,20 +1263,14 @@ function matchPropertyGroup(
       try {
         let matches: boolean
         if (prop.type === 'cohort') {
-          matches = matchCohort(prop, propertyValues, cohortProperties, debugMode)
+          matches = await matchCohort(prop, propertyValues, cohortProperties, debugMode, flagDependencyEvaluator)
         } else if (prop.type === 'flag') {
-          if (debugMode) {
-            console.warn(
-              `[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ` +
-                `Skipping condition with dependency on flag '${prop.key || 'unknown'}'`
+          if (!flagDependencyEvaluator) {
+            throw new InconclusiveMatchError(
+              `Flag dependency '${prop.key || 'unknown'}' cannot be evaluated without a flag dependency evaluator`
             )
           }
-          // Mark the group as inconclusive so we don't silently grant cohort membership in an AND
-          // group whose missing flag dependency would have evaluated to false (or deny it in an OR
-          // group whose flag dependency would have matched). Falls through to the
-          // InconclusiveMatchError throw at the end of the loop.
-          errorMatchingLocally = true
-          continue
+          matches = await flagDependencyEvaluator(prop)
         } else {
           matches = matchProperty(prop, propertyValues)
         }

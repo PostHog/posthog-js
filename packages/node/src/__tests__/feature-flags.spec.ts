@@ -2527,10 +2527,10 @@ describe('local evaluation', () => {
   })
 
   it('returns undefined when a cohort references a flag dependency we cannot evaluate', async () => {
-    // Cohort property groups can contain flag-type properties, but `matchPropertyGroup` does not
-    // evaluate flag dependencies inside cohort groups locally. Skipping them silently would let
-    // an AND group whose other props all pass return true, incorrectly granting cohort
-    // membership. The evaluator should bail out to undefined instead.
+    // Cohort property groups can contain flag-type properties. When the flag prop carries no
+    // `dependency_chain` (or the dependency is otherwise unresolvable), the evaluator throws
+    // InconclusiveMatchError rather than silently granting cohort membership, and the flag
+    // resolves to undefined.
     const flags = {
       flags: [
         {
@@ -2572,6 +2572,74 @@ describe('local evaluation', () => {
         onlyEvaluateLocally: true,
       })
     ).toBeUndefined()
+  })
+
+  it('resolves a cohort referencing a flag dependency locally when dependency_chain is present', async () => {
+    // When the cohort's flag property carries a valid `dependency_chain`, the cohort path now
+    // evaluates it via `evaluateFlagDependency` instead of marking the group inconclusive. The
+    // dependent flag must be active and locally evaluable; its result feeds the cohort match.
+    const flags = {
+      flags: [
+        {
+          id: 2,
+          name: 'Other flag',
+          key: 'other-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+        {
+          id: 1,
+          name: 'Cohort flag dep',
+          key: 'cohort-flag-dep',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 1, type: 'cohort' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '1': {
+          type: 'AND',
+          values: [
+            { key: 'plan', value: 'pro', operator: 'exact', type: 'person' },
+            { key: 'other-flag', value: true, type: 'flag', dependency_chain: ['other-flag'] },
+          ],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
+        personProperties: { plan: 'pro' },
+        onlyEvaluateLocally: true,
+      })
+    ).toBe(true)
+
+    expect(
+      await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
+        personProperties: { plan: 'free' },
+        onlyEvaluateLocally: true,
+      })
+    ).toBe(false)
   })
 })
 
