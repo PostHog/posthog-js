@@ -118,6 +118,12 @@ export class LocalFeatureFlagEvaluator {
     }
   }
 
+  /**
+   * Returns the payload for a flag value, or `null` when the flag is unknown / evaluated to a
+   * non-matching value / has no payload configured. Returns `undefined` when the flag couldn't
+   * be evaluated locally — mirroring `getFeatureFlag` so callers can tell apart "no payload"
+   * from "eval unavailable".
+   */
   async getFeatureFlagPayload(
     key: string,
     distinctId: string,
@@ -125,7 +131,7 @@ export class LocalFeatureFlagEvaluator {
     groups: Record<string, string> = {},
     personProperties: Record<string, any> = {},
     groupProperties: Record<string, Record<string, any>> = {}
-  ): Promise<JsonType | null> {
+  ): Promise<JsonType | null | undefined> {
     const flag = this.flagsByKey[key]
     if (flag === undefined) return null
 
@@ -134,7 +140,8 @@ export class LocalFeatureFlagEvaluator {
     }
 
     const result = await this.getFeatureFlagResult(key, distinctId, groups, personProperties, groupProperties)
-    return result?.payload ?? null
+    if (result === undefined) return undefined
+    return result.payload
   }
 
   async getAllFlagsAndPayloads(

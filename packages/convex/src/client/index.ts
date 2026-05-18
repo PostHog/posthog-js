@@ -324,11 +324,12 @@ export class PostHog {
   // --- Feature flag methods (locally evaluated; work in queries, mutations, and actions) ---
   //
   // All feature flag methods evaluate flags locally against the definitions cached by the
-  // component's cron. They return `undefined`/`null` when:
-  //   - flag definitions haven't been fetched yet (POSTHOG_PERSONAL_API_KEY missing, or cron
-  //     hasn't run for the first time);
-  //   - the flag uses features incompatible with local evaluation (experience continuity,
-  //     static cohorts, properties not provided).
+  // component's cron. `undefined` signals that the eval couldn't reach a verdict — either
+  // definitions haven't been fetched yet (POSTHOG_PERSONAL_API_KEY missing, or the cron hasn't
+  // run for the first time), or the flag uses features incompatible with local evaluation
+  // (experience continuity, static cohorts, properties not provided). For payload methods,
+  // `null` is reserved for the case where the flag was evaluated but matched no payload — so
+  // callers can distinguish "no payload" from "eval unavailable".
 
   async getFeatureFlag(
     ctx: RunQueryCtx,
@@ -362,9 +363,12 @@ export class PostHog {
       distinctId?: string
       matchValue?: boolean | string
     } & FeatureFlagOptions
-  ): Promise<JsonType | null> {
+  ): Promise<JsonType | null | undefined> {
     const evaluator = await this.loadEvaluator(ctx)
-    if (!evaluator) return null
+    // `undefined` means we couldn't evaluate (no definitions cached, or the evaluator returned
+    // inconclusive). `null` means we did evaluate and there's no payload — distinguishing the
+    // two lets callers handle the "definitions not loaded yet" case explicitly.
+    if (!evaluator) return undefined
     // When a caller supplies `matchValue` the payload lookup doesn't need a distinctId — it's a
     // pure key+value lookup. Defer resolution until we actually need it, so callers using the
     // "look up payload for a flag value I already evaluated" pattern don't have to configure an
