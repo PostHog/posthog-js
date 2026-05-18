@@ -546,7 +546,7 @@ export interface SessionRecordingOptions {
      * continues under the same `$session_id`.
      *
      * This does not control `$session_id` rotation. Session rotation is controlled by `session_idle_timeout_seconds`,
-     * so this value should usually be lower than `session_idle_timeout_seconds * 1000`.
+     * so this value should be lower than `session_idle_timeout_seconds * 1000`.
      *
      * @default 1000 * 60 * 5 (5 minutes)
      */
@@ -1174,10 +1174,10 @@ export interface PostHogConfig {
     error_tracking: ErrorTrackingOptions
 
     /**
-     * Controls when the SDK rotates the PostHog `$session_id` after inactivity.
+     * Controls when the SDK rotates the `$session_id` after inactivity.
      *
-     * If no non-read-only event updates session activity for this many seconds, the next activity event starts a
-     * new session with a new `$session_id` and `$window_id`. The SDK may also proactively reset the stored session
+     * If no event updates session activity for this many seconds, the next activity event starts a
+     * new session with a new `$session_id` (and `$window_id`). The SDK may also proactively reset the stored session
      * after the timeout while the page is idle, so the next activity creates a new session.
      *
      * Session recording has a separate idle threshold: `session_recording.session_idle_threshold_ms`. That setting
