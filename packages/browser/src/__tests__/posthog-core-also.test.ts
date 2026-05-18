@@ -351,6 +351,21 @@ describe('posthog core', () => {
             )
         })
 
+        it.each(['XHR', 'fetch', 'sendBeacon'] as const)(
+            'passes the %s transport override to the request',
+            (transport) => {
+                const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+                posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
+
+                expect(posthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        transport,
+                    })
+                )
+            }
+        )
+
         it('does not allow you to set complex current url', () => {
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             const captureResult = posthog.capture('event-name', { $current_url: new URL('https://app.posthog.com/s/') })
