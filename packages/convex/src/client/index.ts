@@ -398,7 +398,10 @@ export class PostHog {
       args.groupProperties ?? {}
     )
     if (!result) return undefined
-    if (result.value === false) {
+    // `null` isn't in `FeatureFlagValue`'s declared type but the evaluator handles it defensively
+    // in several places (payload lookup, flag-dependency cache). Treat it as a disabled value
+    // here so a stray `null` can't slip through as `enabled: true, variant: null`.
+    if (result.value === false || result.value === null) {
       return { key: args.key, enabled: false, variant: null, payload: result.payload ?? null }
     }
     return {
