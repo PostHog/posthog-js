@@ -193,10 +193,10 @@ export interface RequestWithOptions {
     disableXHRCredentials?: boolean
     compression?: Compression | 'best-available'
     /**
-     * Internal: when set, gzip is signaled using the standard HTTP
+     * Internal: when true, gzip is signaled using the standard HTTP
      * Content-Encoding header instead of PostHog's legacy query-param protocol.
      */
-    _compressionEncoding?: 'content-encoding'
+    _useContentEncoding?: boolean
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions

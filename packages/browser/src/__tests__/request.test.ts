@@ -483,7 +483,7 @@ describe('request', () => {
                         url: 'https://any.posthog-instance.com/',
                         method: 'POST',
                         compression: Compression.GZipJS,
-                        _compressionEncoding: 'content-encoding',
+                        _useContentEncoding: true,
                         data: { foo: 'bar' },
                     } as any)
                 )

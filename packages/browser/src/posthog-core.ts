@@ -38,7 +38,7 @@ import {
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
-import { COMPRESSION_ENCODING_CONTENT_ENCODING, extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
@@ -1033,17 +1033,17 @@ export class PostHog implements PostHogInterface {
         options.compression =
             options.compression === COMPRESSION_BEST_AVAILABLE ? this.compression : options.compression
 
-        const isAnalyticsRequest = options.url === this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
+        const analyticsEndpoint = this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
+        const isAnalyticsRequest = options.url === analyticsEndpoint || options.url.startsWith(`${analyticsEndpoint}?`)
         if (isAnalyticsRequest && options.transport !== 'sendBeacon' && options.data) {
-            options.url = this.requestRouter.endpointFor('api', '/batch/')
+            options.url = options.url.replace(analyticsEndpoint, this.requestRouter.endpointFor('api', '/batch/'))
             options.data = {
                 api_key: this.config.token,
                 batch: isArray(options.data) ? options.data : [options.data],
                 sent_at: currentISOTime(),
             }
-            options._compressionEncoding =
-                options.compression === Compression.GZipJS ? COMPRESSION_ENCODING_CONTENT_ENCODING : undefined
-            options.compression = options.compression === Compression.GZipJS ? Compression.GZipJS : undefined
+            options._useContentEncoding = options.compression === Compression.GZipJS
+            options.compression = options.compression === Compression.GZipJS ? options.compression : undefined
         }
 
         options.url = extendURLParams(options.url, {

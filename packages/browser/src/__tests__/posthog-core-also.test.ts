@@ -364,10 +364,36 @@ describe('posthog core', () => {
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/batch/?ip=0',
                     compression: Compression.GZipJS,
-                    _compressionEncoding: 'content-encoding',
+                    _useContentEncoding: true,
                     data: expect.objectContaining({
                         api_key: 'testtoken',
                         sent_at: '2020-01-01T00:00:00.000Z',
+                        batch: [expect.objectContaining({ event: 'event-name' })],
+                    }),
+                })
+            )
+            requestSpy.mockRestore()
+        })
+
+        it('sends retried analytics requests with query params to /batch/', () => {
+            const requestSpy = jest.spyOn(requestModule, 'request').mockImplementation(jest.fn())
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false })
+            posthog._onRemoteConfig({ supportedCompression: [Compression.GZipJS] } as RemoteConfig)
+            requestSpy.mockClear()
+
+            posthog._send_request({
+                url: 'https://us.i.posthog.com/e/?retry_count=1',
+                data: { event: 'event-name' },
+                compression: Compression.GZipJS,
+            })
+
+            expect(requestSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/batch/?retry_count=1&ip=0',
+                    compression: Compression.GZipJS,
+                    _useContentEncoding: true,
+                    data: expect.objectContaining({
+                        api_key: 'testtoken',
                         batch: [expect.objectContaining({ event: 'event-name' })],
                     }),
                 })
@@ -391,7 +417,7 @@ describe('posthog core', () => {
                     transport: 'sendBeacon',
                 })
             )
-            expect(requestSpy.mock.calls[0][0]).not.toHaveProperty('_compressionEncoding')
+            expect(requestSpy.mock.calls[0][0]).not.toHaveProperty('_useContentEncoding')
             requestSpy.mockRestore()
         })
 

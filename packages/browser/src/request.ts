@@ -27,7 +27,6 @@ const CONTENT_TYPE_PLAIN = 'text/plain'
 const CONTENT_TYPE_JSON = 'application/json'
 const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
 const CONTENT_ENCODING_GZIP = 'gzip'
-export const COMPRESSION_ENCODING_CONTENT_ENCODING = 'content-encoding'
 const SIXTY_FOUR_KILOBYTES = 64 * 1024
 /*
  fetch will fail if we request keepalive with a body greater than 64kb
@@ -66,7 +65,7 @@ type EncodedRequest = {
 }
 
 const useHTTPContentEncoding = (options: RequestWithEncodedBody): boolean => {
-    return options._compressionEncoding === COMPRESSION_ENCODING_CONTENT_ENCODING
+    return !!options._useContentEncoding
 }
 
 /**
@@ -396,7 +395,7 @@ export const request = (_options: RequestWithOptions) => {
     }
 
     if (transport.transport === 'sendBeacon') {
-        options._compressionEncoding = undefined
+        options._useContentEncoding = undefined
     }
     options.url = buildRequestURL(options.url, options)
 
@@ -420,7 +419,7 @@ export const request = (_options: RequestWithOptions) => {
                     const uncompressedOptions = {
                         ...options,
                         compression: undefined,
-                        _compressionEncoding: undefined,
+                        _useContentEncoding: undefined,
                     }
                     transportMethod({
                         ...uncompressedOptions,
