@@ -22,7 +22,9 @@ jest.mock('react-native', () => {
     TouchableOpacity: Pressable,
     Text: Box,
     Keyboard: { dismiss: jest.fn(), addListener: () => ({ remove: jest.fn() }) },
-    Platform: { OS: 'ios', select: (o: any) => o.ios },
+    // Use Android so the timer-based close-notification path runs (iOS would
+    // rely on Modal.onDismiss, which the mocked Modal cannot fire).
+    Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },
     StyleSheet: {
       create: (s: any) => s,
       flatten: (s: any) => s,
@@ -152,19 +154,22 @@ describe('SurveyModal close behavior', () => {
       fireEvent.click(getByTestId('cancel-stub'))
     })
 
-    // After setIsVisible(false), the component returns null on its next
-    // render — Questions is gone from the DOM immediately.
+    // Content unmounts on the very next render — blank Modal before fade.
     expect(queryByTestId('questions-stub')).toBeNull()
+    // Parent notification is deferred until the fade completes.
+    expect(onClose).not.toHaveBeenCalled()
+
+    act(() => {
+      jest.runAllTimers()
+    })
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('hides content before the parent unmounts (race with parent)', () => {
-    // This simulates the real-world flow: parent unmounts SurveyModal in
-    // the same event that SurveyModal calls setIsVisible(false). Under
-    // React 18 batching, the parent's update can win and SurveyModal
-    // never gets to commit its null render. If that happens, Questions
-    // is still in the tree at the moment the modal disappears, which is
-    // what the user sees during the fade-out.
+  it('defers parent unmount until the fade completes', () => {
+    // The two-step hide unmounts children immediately but delays the parent's
+    // onClose until the fade duration elapses (Android timer / iOS onDismiss),
+    // so the Modal animates out cleanly with blank children before the parent
+    // tears it down.
     const Wrapper = () => {
       const [show, setShow] = React.useState(true)
       if (!show) return <div data-testid="parent-unmounted" />
@@ -180,17 +185,44 @@ describe('SurveyModal close behavior', () => {
     }
     const { queryByTestId, getByTestId } = render(<Wrapper />)
 
-    expect(queryByTestId('questions-stub')).not.toBeNull()
-
     act(() => {
       fireEvent.click(getByTestId('cancel-stub'))
     })
 
-    // Parent has unmounted SurveyModal entirely.
-    expect(queryByTestId('parent-unmounted')).not.toBeNull()
-    // Questions must NOT have been rendered in any commit between the
-    // click and the unmount — i.e. no last-frame Q1 for the native modal
-    // to fade out with.
+    // Two-step hide: content gone, but parent still rendering SurveyModal
+    // because onClose is deferred until the fade completes.
     expect(queryByTestId('questions-stub')).toBeNull()
+    expect(queryByTestId('parent-unmounted')).toBeNull()
+
+    act(() => {
+      jest.runAllTimers()
+    })
+
+    // After the fade duration, the parent's onClose fires and it unmounts.
+    expect(queryByTestId('parent-unmounted')).not.toBeNull()
+  })
+
+  it('notifies the parent only once even if close is pressed multiple times', () => {
+    const onClose = jest.fn()
+    const { getByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithThankYou}
+        onShow={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    act(() => {
+      fireEvent.click(getByTestId('cancel-stub'))
+      fireEvent.click(getByTestId('cancel-stub'))
+      fireEvent.click(getByTestId('cancel-stub'))
+    })
+    act(() => {
+      jest.runAllTimers()
+    })
+
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

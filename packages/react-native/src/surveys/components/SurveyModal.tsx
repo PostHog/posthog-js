@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
 
 import { Cancel } from './Cancel'
@@ -21,15 +21,47 @@ export type SurveyModalProps = {
 // edges. Insets already keep it clear of the status bar and home indicator.
 const VIEWPORT_BUFFER = 0
 
+// Matches RN Modal's fade animation duration on Android, where Modal has no
+// onDismiss callback. On iOS we use Modal.onDismiss to know exactly when the
+// fade finishes.
+const MODAL_FADE_DURATION_MS = 250
+
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { survey, surveyLanguage, appearance, onShow, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
   const [responses, setResponses] = useState<SurveyResponses>({})
   const [isVisible, setIsVisible] = useState(true)
-  const onClose = useCallback(() => {
-    setIsVisible(false)
+  // Two-step hide works around RN Fabric's UIKit snapshot recycling:
+  // https://github.com/facebook/react-native/issues/48245
+  // RN reuses the previous Modal's snapshot for the first paint of the next
+  // presentation. Unmounting children before dismissing the Modal makes that
+  // snapshot blank, so the next survey opens without flashing prior content.
+  const [contentMounted, setContentMounted] = useState(true)
+  // Guard refs so the close sequence runs exactly once even if onClose fires
+  // multiple times rapidly (hardware back button + cancel tap, double-tap, etc.).
+  const isClosingRef = useRef(false)
+  const closeNotifiedRef = useRef(false)
+  const notifyParentClosed = useCallback(() => {
+    if (closeNotifiedRef.current) return
+    closeNotifiedRef.current = true
     props.onClose(isSurveySent, responses)
   }, [isSurveySent, props, responses])
+  const onClose = useCallback(() => {
+    if (isClosingRef.current) return
+    isClosingRef.current = true
+    // Step 1: unmount children — Modal renders blank for at least one frame.
+    setContentMounted(false)
+    // Step 2: on the next frame, dismiss the (now-blank) Modal. The snapshot
+    // RN reuses for the next presentation will be of the blank Modal.
+    requestAnimationFrame(() => {
+      setIsVisible(false)
+      // Android has no Modal.onDismiss — schedule the parent notification
+      // to match the fade duration so the modal animates out cleanly.
+      if (Platform.OS !== 'ios') {
+        setTimeout(notifyParentClosed, MODAL_FADE_DURATION_MS)
+      }
+    })
+  }, [notifyParentClosed])
   const insets = useOptionalSafeAreaInsets()
   const { height: windowHeight } = useWindowDimensions()
   const [keyboardHeight, setKeyboardHeight] = useState(0)
@@ -58,64 +90,69 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
     }
   }, [])
 
-  if (!isVisible) {
-    return null
-  }
-
   const maxModalHeight = Math.max(windowHeight - keyboardHeight - insets.top - insets.bottom - VIEWPORT_BUFFER, 200)
 
   const keyboardBehavior = Platform.OS === 'ios' ? 'padding' : androidKeyboardBehavior
 
   return (
-    <Modal animationType="fade" transparent onRequestClose={onClose} statusBarTranslucent={true}>
-      <KeyboardAvoidingView behavior={keyboardBehavior} style={styles.fill}>
-        <View style={[styles.fill, { justifyContent: vertical }]} onTouchStart={Keyboard.dismiss}>
-          <View style={[styles.modalRow, { justifyContent: horizontal }]}>
-            <View style={styles.modalContent} pointerEvents="box-none">
-              <View
-                style={[
-                  styles.modalContentInner,
-                  {
-                    borderColor: appearance.borderColor,
-                    backgroundColor: appearance.backgroundColor,
-                    marginTop: vertical === 'flex-start' ? insets.top + 10 : 0,
-                    // When keyboard is up, sit flush against it (no extra gap).
-                    // When keyboard is down, leave room for the home indicator.
-                    marginBottom: isBottom ? (keyboardHeight > 0 ? 0 : insets.bottom + 10) : 0,
-                    marginHorizontal: 10,
-                    maxHeight: maxModalHeight,
-                  },
-                ]}
-              >
-                <View style={styles.topIconContainer}>
-                  <Cancel onPress={onClose} appearance={appearance} />
-                </View>
-                {isSurveySent ? (
-                  shouldShowConfirmation ? (
-                    <ConfirmationMessage
+    <Modal
+      visible={isVisible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}
+      onDismiss={Platform.OS === 'ios' ? notifyParentClosed : undefined}
+      statusBarTranslucent={true}
+    >
+      {contentMounted && (
+        <KeyboardAvoidingView behavior={keyboardBehavior} style={styles.fill}>
+          <View style={[styles.fill, { justifyContent: vertical }]} onTouchStart={Keyboard.dismiss}>
+            <View style={[styles.modalRow, { justifyContent: horizontal }]}>
+              <View style={styles.modalContent} pointerEvents="box-none">
+                <View
+                  style={[
+                    styles.modalContentInner,
+                    {
+                      borderColor: appearance.borderColor,
+                      backgroundColor: appearance.backgroundColor,
+                      marginTop: vertical === 'flex-start' ? insets.top + 10 : 0,
+                      // When keyboard is up, sit flush against it (no extra gap).
+                      // When keyboard is down, leave room for the home indicator.
+                      marginBottom: isBottom ? (keyboardHeight > 0 ? 0 : insets.bottom + 10) : 0,
+                      marginHorizontal: 10,
+                      maxHeight: maxModalHeight,
+                    },
+                  ]}
+                >
+                  <View style={styles.topIconContainer}>
+                    <Cancel onPress={onClose} appearance={appearance} />
+                  </View>
+                  {isSurveySent ? (
+                    shouldShowConfirmation ? (
+                      <ConfirmationMessage
+                        appearance={appearance}
+                        header={appearance.thankYouMessageHeader}
+                        description={appearance.thankYouMessageDescription}
+                        contentType={appearance.thankYouMessageDescriptionContentType}
+                        onClose={onClose}
+                        isModal={true}
+                      />
+                    ) : null
+                  ) : (
+                    <Questions
+                      survey={survey}
+                      surveyLanguage={surveyLanguage}
                       appearance={appearance}
-                      header={appearance.thankYouMessageHeader}
-                      description={appearance.thankYouMessageDescription}
-                      contentType={appearance.thankYouMessageDescriptionContentType}
-                      onClose={onClose}
-                      isModal={true}
+                      responses={responses}
+                      onResponsesChange={setResponses}
+                      onSubmit={() => setIsSurveySent(true)}
                     />
-                  ) : null
-                ) : (
-                  <Questions
-                    survey={survey}
-                    surveyLanguage={surveyLanguage}
-                    appearance={appearance}
-                    responses={responses}
-                    onResponsesChange={setResponses}
-                    onSubmit={() => setIsSurveySent(true)}
-                  />
-                )}
+                  )}
+                </View>
               </View>
             </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      )}
     </Modal>
   )
 }
