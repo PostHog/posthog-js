@@ -90,6 +90,27 @@ const appearanceWithoutThankYou: SurveyAppearanceTheme = {
   thankYouMessageHeader: '',
 }
 
+// Mount SurveyModal with the standard test fixture. Returns the rendered
+// result plus the onClose spy so tests can assert against either.
+const renderSurveyModal = (onClose: jest.Mock = jest.fn()) => {
+  const result = render(
+    <SurveyModal
+      survey={baseSurvey}
+      surveyLanguage={null}
+      appearance={appearanceWithThankYou}
+      onShow={() => {}}
+      onClose={onClose}
+    />
+  )
+  return { ...result, onClose }
+}
+
+const clickCancel = (getByTestId: (id: string) => HTMLElement) => {
+  act(() => {
+    fireEvent.click(getByTestId('cancel-stub'))
+  })
+}
+
 describe('SurveyModal close behavior', () => {
   afterEach(() => {
     cleanup()
@@ -137,22 +158,10 @@ describe('SurveyModal close behavior', () => {
   })
 
   it('hides content immediately when the cancel button is pressed', () => {
-    const onClose = jest.fn()
-    const { queryByTestId, getByTestId } = render(
-      <SurveyModal
-        survey={baseSurvey}
-        surveyLanguage={null}
-        appearance={appearanceWithThankYou}
-        onShow={() => {}}
-        onClose={onClose}
-      />
-    )
-
+    const { queryByTestId, getByTestId, onClose } = renderSurveyModal()
     expect(queryByTestId('questions-stub')).not.toBeNull()
 
-    act(() => {
-      fireEvent.click(getByTestId('cancel-stub'))
-    })
+    clickCancel(getByTestId)
 
     // Content unmounts on the very next render — blank Modal before fade.
     expect(queryByTestId('questions-stub')).toBeNull()
@@ -185,9 +194,7 @@ describe('SurveyModal close behavior', () => {
     }
     const { queryByTestId, getByTestId } = render(<Wrapper />)
 
-    act(() => {
-      fireEvent.click(getByTestId('cancel-stub'))
-    })
+    clickCancel(getByTestId)
 
     // Two-step hide: content gone, but parent still rendering SurveyModal
     // because onClose is deferred until the fade completes.
@@ -203,16 +210,7 @@ describe('SurveyModal close behavior', () => {
   })
 
   it('notifies the parent only once even if close is pressed multiple times', () => {
-    const onClose = jest.fn()
-    const { getByTestId } = render(
-      <SurveyModal
-        survey={baseSurvey}
-        surveyLanguage={null}
-        appearance={appearanceWithThankYou}
-        onShow={() => {}}
-        onClose={onClose}
-      />
-    )
+    const { getByTestId, onClose } = renderSurveyModal()
 
     act(() => {
       fireEvent.click(getByTestId('cancel-stub'))

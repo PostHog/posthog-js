@@ -25,7 +25,7 @@ const VIEWPORT_BUFFER = 0
 const MODAL_FADE_DURATION_MS = 250
 
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
-  const { survey, surveyLanguage, appearance, onShow, androidKeyboardBehavior = 'height' } = props
+  const { survey, surveyLanguage, appearance, onShow, onClose: onCloseProp, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
   const [responses, setResponses] = useState<SurveyResponses>({})
   const [isVisible, setIsVisible] = useState(true)
@@ -37,8 +37,8 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const notifyParentClosed = useCallback(() => {
     if (closeNotifiedRef.current) return
     closeNotifiedRef.current = true
-    props.onClose(isSurveySent, responses)
-  }, [isSurveySent, props, responses])
+    onCloseProp(isSurveySent, responses)
+  }, [isSurveySent, onCloseProp, responses])
   const onClose = useCallback(() => {
     if (isClosingRef.current) return
     isClosingRef.current = true
