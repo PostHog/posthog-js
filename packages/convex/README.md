@@ -295,6 +295,20 @@ Local eval can't reach a verdict for every flag, and for those this component wi
 - **Properties not passed in.** Local eval can only see what you give it. If a flag targets `email` or `$browser_version` and you don't pass those in `personProperties`, it can't resolve.
 - **Cohorts that don't fit the local-eval shape.** Cohorts with variant overrides, non-person properties, more than one cohort in the same flag definition, nested AND/OR filters, or grouped with other conditions can't be translated for local eval. See [the PostHog docs](https://posthog.com/docs/feature-flags/local-evaluation#dynamic-cohort-restrictions) for the full list.
 
+Local eval doesn't fire `$feature_flag_called` events. PostHog Experiments counts exposures off these — `posthog-node` emits them automatically on every local eval, but this component can't do the same: Convex queries are pure functions, so they can't schedule a `capture` from inside the eval path without breaking Convex's contract. If you're running an experiment against a locally-evaluated flag, fire one manually from a mutation or action:
+
+```ts
+await posthog.capture(ctx, {
+  event: "$feature_flag_called",
+  distinctId: userId,
+  properties: {
+    $feature_flag: "flag-key",
+    $feature_flag_response: value,
+    locally_evaluated: true,
+  },
+});
+```
+
 There are also reasons you might *not want* local eval at all, even when it's possible:
 
 - **Low-traffic projects.** PostHog bills each `/flags/definitions` poll as 10 flag-request equivalents. For projects that evaluate fewer flags than that per polling interval, remote evaluation is cheaper.
