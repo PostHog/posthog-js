@@ -1174,14 +1174,14 @@ export interface PostHogConfig {
     error_tracking: ErrorTrackingOptions
 
     /**
-     * Controls when the SDK rotates the `$session_id` after inactivity.
+     * Determines the session idle timeout in seconds.
      *
-     * If no event updates session activity for this many seconds, the next activity event starts a
+     * If no events are captured for this many seconds, the next event starts a
      * new session with a new `$session_id` (and `$window_id`). The SDK may also proactively reset the stored session
-     * after the timeout while the page is idle, so the next activity creates a new session.
+     * after the timeout while the page is idle, so the next event creates a new session.
      *
      * Session recording has a separate idle threshold: `session_recording.session_idle_threshold_ms`. That setting
-     * only controls when replay capture is considered idle; it does not rotate `$session_id`.
+     * only controls when the user is considered idle, it does not rotate `$session_id`.
      *
      * Must be between 60 seconds and 10 hours. Values outside this range are clamped.
      *
