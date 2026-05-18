@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.45.8
+
+### Patch Changes
+
+- [#3629](https://github.com/PostHog/posthog-js/pull/3629) [`9920e8b`](https://github.com/PostHog/posthog-js/commit/9920e8be5323ceaab60a097dab82656d9f1b6076) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - React Native surveys: closing a survey from Q2+ or the Thank You screen no longer flashes the first question during the fade-out. Opening another survey shortly after closing one no longer flashes the previous survey's content for the first frame on iOS — survey content unmounts one frame before the Modal dismisses so the UIKit snapshot the OS recycles is blank.
+  (2026-05-18)
+
 ## 4.45.7
 
 ### Patch Changes
