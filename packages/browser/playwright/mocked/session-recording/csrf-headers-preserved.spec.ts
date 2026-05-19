@@ -2,6 +2,17 @@ import { test, expect } from '../utils/posthog-playwright-test-base'
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page, BrowserContext, Request } from '@playwright/test'
 import { csrfHeaderCases } from '../../../src/__tests__/extensions/replay/external/test_data/header-cases'
+import { readFileSync } from 'fs'
+import { resolve as resolvePath } from 'path'
+
+// axios is NOT a dep of posthog-js — the bundle is vendored as a test
+// fixture so we can exercise the reporter's exact runtime (axios ^0.18,
+// which uses the XMLHttpRequest adapter in the browser). Vendoring keeps
+// axios out of package.json and the production lockfile.
+const axiosBundleSrc = readFileSync(
+    resolvePath(__dirname, 'test_fixtures/axios-0.18.1.min.js'),
+    'utf8'
+)
 
 // Reproduces the user report that PostHog network recording strips CSRF
 // headers from the actual outgoing request. The fix invariant: enabling
@@ -70,7 +81,7 @@ async function captureRequestHeaders(
     {
         method,
         csrfHeaders,
-    }: { method: 'fetch' | 'xhr'; csrfHeaders: ReadonlyArray<readonly [string, string]> }
+    }: { method: 'fetch' | 'xhr' | 'axios'; csrfHeaders: ReadonlyArray<readonly [string, string]> }
 ): Promise<Record<string, string>> {
     // CORS-compliant response so the browser's preflight succeeds and
     // the actual POST is sent (otherwise we'd only ever capture the
@@ -139,7 +150,7 @@ async function captureRequestHeaders(
                 }),
             { d: DOMAIN, entries: headerEntries }
         )
-    } else {
+    } else if (method === 'xhr') {
         await page.evaluate(
             ({ d, entries }) =>
                 new Promise<void>((resolve) => {
@@ -152,6 +163,24 @@ async function captureRequestHeaders(
                 }),
             { d: DOMAIN, entries: headerEntries }
         )
+    } else {
+        // axios 0.18: UMD bundle exposes window.axios. Internally it
+        // uses the XMLHttpRequest adapter — the prototype.open patch
+        // installed by PostHog should still see all setRequestHeader
+        // calls axios makes on the request instance.
+        await page.addScriptTag({ content: axiosBundleSrc })
+        await page.waitForFunction(() => typeof (window as any).axios !== 'undefined')
+        await page.evaluate(
+            async ({ d, entries }) => {
+                const axios = (window as any).axios
+                await axios.post(
+                    `https://${d}/api/internal/surveys`,
+                    { name: 'Untitled' },
+                    { headers: { 'content-type': 'application/json', ...Object.fromEntries(entries) } }
+                )
+            },
+            { d: DOMAIN, entries: headerEntries }
+        )
     }
 
     const request = await requestPromise
@@ -160,7 +189,7 @@ async function captureRequestHeaders(
 
 test.describe('CSRF headers survive PostHog network wrappers', () => {
     for (const scenario of scenarios) {
-        for (const method of ['fetch', 'xhr'] as const) {
+        for (const method of ['fetch', 'xhr', 'axios'] as const) {
             test(`${scenario.name} | ${method} | all CSRF headers reach the server unchanged`, async ({
                 page,
                 context,
