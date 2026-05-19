@@ -12,6 +12,14 @@ class MockPerformanceObserver {
     disconnect() {}
 }
 
+// network-plugin reads XHR request bodies via `_tryReadXHRBody`, which
+// does `body instanceof Document` to detect HTML form submissions.
+// Node lacks the `Document` global so `instanceof` throws. Provide an
+// empty stand-in — no real HTMLDocument flows through these tests.
+if (typeof (global as any).Document === 'undefined') {
+    ;(global as any).Document = class {}
+}
+
 type SetHeaderCall = { header: string; value: string }
 type CapturedCb = { requests: CapturedNetworkRequest[] }
 
@@ -179,19 +187,50 @@ describe('xhr wrapper', () => {
     })
 
     describe('does not modify what the underlying send() receives', () => {
-        it('forwards the original body to underlying send', async () => {
+        // XMLHttpRequestBodyInit per MDN:
+        //   Document | Blob | BufferSource | FormData | URLSearchParams | string | null
+        // Parameterising mirrors the coverage shape in
+        // fetch-wrapper-invariants.test.ts.
+        const bodyCases: Array<[string, () => any]> = [
+            ['JSON string', () => '{"name":"Untitled","surveyType":"ClassicForm","visibility":"Mine"}'],
+            ['plain text', () => 'plain text body'],
+            ['empty string', () => ''],
+            ['URL encoded', () => 'foo=bar&baz=qux'],
+            ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
+            ['ArrayBuffer', () => new TextEncoder().encode('buffer content').buffer],
+            ['Uint8Array', () => new Uint8Array([1, 2, 3])],
+            [
+                'URLSearchParams',
+                () => new URLSearchParams({ foo: 'bar', baz: 'qux' }),
+            ],
+            [
+                'FormData',
+                () => {
+                    const fd = new FormData()
+                    fd.append('key', 'value')
+                    return fd
+                },
+            ],
+            ['null', () => null],
+        ]
+
+        it.each(bodyCases)('forwards %s body to underlying send unchanged', async (_label, makeBody) => {
             const { MockXMLHttpRequest, sendCalls, cbInvocations, cleanup } = setupWrappedXhrWithSafety()
 
             const xhr = new MockXMLHttpRequest()
             xhr.open('POST', 'https://example.com/api/internal/surveys')
             xhr.setRequestHeader('content-type', 'application/json')
-            const body = '{"name":"Untitled","surveyType":"ClassicForm","visibility":"Mine"}'
+            const body = makeBody()
             xhr.send(body)
 
             await triggerDoneAndFlush(xhr, cbInvocations)
             cleanup()
 
-            expect(sendCalls).toEqual([body])
+            // The underlying send must receive the EXACT same body
+            // reference — copying it would change FormData boundaries,
+            // exhaust a stream, or break ArrayBuffer transfer semantics.
+            expect(sendCalls).toHaveLength(1)
+            expect(sendCalls[0]).toBe(body)
         })
     })
 

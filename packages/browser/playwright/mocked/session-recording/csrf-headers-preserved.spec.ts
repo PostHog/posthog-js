@@ -69,9 +69,8 @@ async function captureRequestHeaders(
     scenario: Scenario,
     {
         method,
-        csrfHeader,
-        csrfValue,
-    }: { method: 'fetch' | 'xhr'; csrfHeader: string; csrfValue: string }
+        csrfHeaders,
+    }: { method: 'fetch' | 'xhr'; csrfHeaders: ReadonlyArray<readonly [string, string]> }
 ): Promise<Record<string, string>> {
     // CORS-compliant response so the browser's preflight succeeds and
     // the actual POST is sent (otherwise we'd only ever capture the
@@ -121,31 +120,37 @@ async function captureRequestHeaders(
         (req) => req.url().startsWith(`https://${DOMAIN}`) && req.method() === 'POST'
     )
 
+    // Set ALL csrf headers on the single probe request — one round-trip
+    // exercises every header at once, keeping cross-browser fan-out
+    // affordable while still catching a regression on any individual
+    // header name.
+    const headerEntries = csrfHeaders.map(([h, v]) => [h, v] as [string, string])
+
     if (method === 'fetch') {
         await page.evaluate(
-            ({ d, header, value }) =>
+            ({ d, entries }) =>
                 fetch(`https://${d}/api/internal/surveys`, {
                     method: 'POST',
                     headers: {
                         'content-type': 'application/json',
-                        [header]: value,
+                        ...Object.fromEntries(entries),
                     },
                     body: JSON.stringify({ name: 'Untitled' }),
                 }),
-            { d: DOMAIN, header: csrfHeader, value: csrfValue }
+            { d: DOMAIN, entries: headerEntries }
         )
     } else {
         await page.evaluate(
-            ({ d, header, value }) =>
+            ({ d, entries }) =>
                 new Promise<void>((resolve) => {
                     const xhr = new XMLHttpRequest()
                     xhr.open('POST', `https://${d}/api/internal/surveys`)
                     xhr.setRequestHeader('content-type', 'application/json')
-                    xhr.setRequestHeader(header, value)
+                    for (const [h, v] of entries) xhr.setRequestHeader(h, v)
                     xhr.onloadend = () => resolve()
                     xhr.send(JSON.stringify({ name: 'Untitled' }))
                 }),
-            { d: DOMAIN, header: csrfHeader, value: csrfValue }
+            { d: DOMAIN, entries: headerEntries }
         )
     }
 
@@ -156,26 +161,25 @@ async function captureRequestHeaders(
 test.describe('CSRF headers survive PostHog network wrappers', () => {
     for (const scenario of scenarios) {
         for (const method of ['fetch', 'xhr'] as const) {
-            for (const [header, value] of csrfHeaderCases) {
-                test(`${scenario.name} | ${method} | ${header} reaches the server unchanged`, async ({
-                    page,
-                    context,
-                }) => {
-                    const headers = await captureRequestHeaders(page, context, scenario, {
-                        method,
-                        csrfHeader: header,
-                        csrfValue: value,
-                    })
+            test(`${scenario.name} | ${method} | all CSRF headers reach the server unchanged`, async ({
+                page,
+                context,
+            }) => {
+                const headers = await captureRequestHeaders(page, context, scenario, {
+                    method,
+                    csrfHeaders: csrfHeaderCases,
+                })
 
-                    // Playwright lowercases header names in request.headers(),
-                    // so look up case-insensitively in case the shared fixture
-                    // is ever extended with capitalised header names.
+                // Playwright lowercases header names in request.headers(),
+                // so look up case-insensitively in case the shared fixture
+                // is ever extended with capitalised header names.
+                for (const [header, value] of csrfHeaderCases) {
                     const found = Object.entries(headers).find(
                         ([k]) => k.toLowerCase() === header.toLowerCase()
                     )
-                    expect(found?.[1]).toBe(value)
-                })
-            }
+                    expect(found?.[1], `${header} should be ${value}, got ${found?.[1]}`).toBe(value)
+                }
+            })
         }
     }
 })
