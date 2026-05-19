@@ -327,6 +327,29 @@ describe('posthog core', () => {
             )
         })
 
+        it('sends legacy analytics payload shape when remote config selects a legacy endpoint', () => {
+            const requestSpy = jest.spyOn(requestModule, 'request').mockImplementation(jest.fn())
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false })
+            posthog._onRemoteConfig({
+                analytics: { endpoint: '/i/v0/e/' },
+                supportedCompression: [Compression.GZipJS],
+            } as RemoteConfig)
+            requestSpy.mockClear()
+
+            posthog.capture('event-name', { foo: 'bar', length: 0 })
+
+            expect(requestSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/i/v0/e/',
+                    compression: Compression.GZipJS,
+                    data: expect.objectContaining({ event: 'event-name' }),
+                })
+            )
+            expect(requestSpy.mock.calls[0][0]).not.toHaveProperty('_useContentEncoding')
+            expect(requestSpy.mock.calls[0][0]).not.toHaveProperty('_skipTimestampQueryParam')
+            requestSpy.mockRestore()
+        })
+
         it('sends payloads to overriden endpoint if given', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 

@@ -1033,10 +1033,10 @@ export class PostHog implements PostHogInterface {
         options.compression =
             options.compression === COMPRESSION_BEST_AVAILABLE ? this.compression : options.compression
 
-        const analyticsEndpoint = this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
-        const isAnalyticsRequest = options.url === analyticsEndpoint || options.url.startsWith(`${analyticsEndpoint}?`)
-        if (isAnalyticsRequest && options.data) {
-            options.url = this.requestRouter.endpointFor('api', '/batch/')
+        const batchEndpoint = this.requestRouter.endpointFor('api', '/batch/')
+        const isBatchAnalyticsRequest = options.url === batchEndpoint || options.url.startsWith(`${batchEndpoint}?`)
+        if (isBatchAnalyticsRequest && options.data) {
+            options.url = batchEndpoint
             options.data = {
                 api_key: this.config.token,
                 batch: isArray(options.data) ? options.data : [options.data],
