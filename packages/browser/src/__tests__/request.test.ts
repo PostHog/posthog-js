@@ -614,6 +614,24 @@ describe('request', () => {
                 )
             })
 
+            it('uses query-param compression for sendBeacon when content encoding is requested', () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/batch/',
+                        method: 'POST',
+                        compression: Compression.GZipJS,
+                        data: { foo: 'bar' },
+                        _useContentEncoding: true,
+                        _skipTimestampQueryParam: true,
+                    } as any)
+                )
+
+                expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                    'https://any.posthog-instance.com/batch/?ver=1.23.45&compression=gzip-js&beacon=1',
+                    expect.any(Blob)
+                )
+            })
+
             it('should not call sendBeacon when body is undefined', () => {
                 request(
                     createRequest({

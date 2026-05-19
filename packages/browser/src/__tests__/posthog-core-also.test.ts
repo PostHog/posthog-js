@@ -436,7 +436,6 @@ describe('posthog core', () => {
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/batch/',
                     compression: Compression.GZipJS,
-                    _useContentEncoding: true,
                     data: expect.objectContaining({
                         api_key: 'testtoken',
                         batch: [expect.objectContaining({ event: 'event-name' })],
