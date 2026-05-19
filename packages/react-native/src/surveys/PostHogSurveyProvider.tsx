@@ -76,9 +76,9 @@ export type PostHogSurveyProviderProps = {
 
   /**
    * The keyboard avoiding behavior for the survey modal (KeyboardAvoidingView), applied only to Android devices.
-   * - 'padding': Adds padding to avoid keyboard (recommended)
-   * - 'height': Resizes the view height (default, for legacy - may cause flickering on some Android devices)
-   * @default 'height'
+   * - 'padding': Adds padding to avoid keyboard (default, recommended — avoids layout thrashing while typing)
+   * - 'height': Resizes the view height (legacy — may cause flickering on some Android devices)
+   * @default 'padding'
    */
   androidKeyboardBehavior?: 'padding' | 'height'
 
@@ -90,7 +90,7 @@ export type PostHogSurveyProviderProps = {
 export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.Element {
   const posthogFromHook = usePostHog()
   const posthog = props.client ?? posthogFromHook
-  const { seenSurveys, setSeenSurvey, setLastSeenSurveyDate } = useSurveyStorage()
+  const { seenSurveys, setSeenSurvey, lastSeenSurveyDate, setLastSeenSurveyDate } = useSurveyStorage()
   const [surveys, setSurveys] = useState<Survey[]>([])
   const [activeSurvey, setActiveSurvey] = useState<Survey | undefined>(undefined)
   const activatedSurveys = useActivatedSurveys(posthog, surveys)
@@ -117,8 +117,8 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       surveys,
       flags ?? {},
       seenSurveys,
-      activatedSurveys
-      // lastSeenSurveyDate
+      activatedSurveys,
+      lastSeenSurveyDate
     )
 
     const popoverSurveys = activeSurveys.filter((survey: Survey) => survey.type === SurveyType.Popover)
@@ -128,7 +128,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     if (popoverSurveys.length > 0) {
       setActiveSurvey(popoverSurveys[0])
     }
-  }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys])
+  }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys, lastSeenSurveyDate])
 
   const translatedActiveSurvey = useMemo(() => {
     return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog) : undefined
@@ -188,6 +188,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
         {props.children}
         {shouldShowModal && (
           <SurveyModal
+            key={activeContext.survey.id}
             appearance={surveyAppearance}
             androidKeyboardBehavior={props.androidKeyboardBehavior}
             {...activeContext}

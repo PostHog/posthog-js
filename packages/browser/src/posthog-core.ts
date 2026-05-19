@@ -2200,12 +2200,17 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * Although we recommend using popover surveys and display conditions,
-     * if you want to show surveys programmatically without setting up all
-     * the extra logic needed for API surveys, you can render surveys
-     * programmatically with the renderSurvey method.
+     * Render a survey inline into the provided HTML container without applying
+     * any of the dashboard display conditions (URL, delay, wait period, etc.).
+     * This is the simplest programmatic entry point for embedding a survey in
+     * a page you already control.
      *
-     * This takes a survey ID and an HTML selector to render an unstyled survey.
+     * For popover surveys, conditional gating, or rendering inline with the
+     * full eligibility check, prefer {@link displaySurvey} — it supports both
+     * inline and popover rendering and is a strict superset of this method.
+     *
+     * `renderSurvey` is retained as a stable, narrow API for inline-only
+     * use cases; it is not slated for removal.
      *
      * {@label Surveys}
      *
@@ -2213,8 +2218,6 @@ export class PostHog implements PostHogInterface {
      * ```js
      * posthog.renderSurvey(coolSurveyID, '#survey-container')
      * ```
-     *
-     * @deprecated Use displaySurvey instead - it's more complete and also supports popover surveys.
      *
      * @public
      *

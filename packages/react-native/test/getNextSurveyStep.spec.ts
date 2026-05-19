@@ -32,6 +32,25 @@ describe('getNextSurveyStep', () => {
       const result = getNextSurveyStep(survey, 0, 'some response')
       expect(result).toBe(SurveyQuestionBranchingType.End)
     })
+
+    it('should advance from open to rating then End for a two-question open\u2192rating flow', () => {
+      // Regression: a two-question (open text \u2192 1\u201310 rating) survey with no
+      // explicit branching must traverse Q1 \u2192 Q2 \u2192 End so the rating answer
+      // is captured before the survey closes (Zendesk #58005).
+      const survey = createBasicSurvey([
+        { type: SurveyQuestionType.Open, question: 'How was it?' },
+        { type: SurveyQuestionType.Rating, question: 'Rate 1\u201310', scale: 10 },
+      ])
+
+      // Q1 (open): must advance to Q2 rather than End.
+      const afterOpen = getNextSurveyStep(survey, 0, 'a free-form answer')
+      expect(afterOpen).toBe(1)
+
+      // Q2 (rating, last question, no branching): must End so the final
+      // response is included in the `survey sent` event.
+      const afterRating = getNextSurveyStep(survey, 1, 8)
+      expect(afterRating).toBe(SurveyQuestionBranchingType.End)
+    })
   })
 
   describe('End branching', () => {

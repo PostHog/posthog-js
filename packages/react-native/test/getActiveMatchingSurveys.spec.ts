@@ -356,6 +356,69 @@ describe('getActiveMatchingSurveys', () => {
     })
   })
 
+  describe('seenSurveyWaitPeriodInDays', () => {
+    it('should exclude surveys when within the wait period after last seen', () => {
+      const twoDaysAgo = new Date()
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+      const surveys = [
+        createMockSurvey({
+          id: 'wait-period-survey',
+          conditions: {
+            seenSurveyWaitPeriodInDays: 7,
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, [], mockActivatedSurveys, twoDaysAgo)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should include surveys when wait period has elapsed since last seen', () => {
+      const tenDaysAgo = new Date()
+      tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
+      const surveys = [
+        createMockSurvey({
+          id: 'wait-period-elapsed',
+          conditions: {
+            seenSurveyWaitPeriodInDays: 7,
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, [], mockActivatedSurveys, tenDaysAgo)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('wait-period-elapsed')
+    })
+
+    it('should include surveys when lastSeenSurveyDate is undefined', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'never-seen',
+          conditions: {
+            seenSurveyWaitPeriodInDays: 7,
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, [], mockActivatedSurveys, undefined)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('never-seen')
+    })
+
+    it('should ignore wait period when seenSurveyWaitPeriodInDays is not set', () => {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+      const surveys = [createMockSurvey({ id: 'no-wait-period', conditions: {} })]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, [], mockActivatedSurveys, oneHourAgo)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('no-wait-period')
+    })
+  })
+
   describe('Linked flag filtering', () => {
     it('should include surveys when linked flag is true', () => {
       const surveys = [
