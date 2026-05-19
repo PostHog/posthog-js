@@ -18,7 +18,7 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk } from './utils'
+import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -120,6 +120,8 @@ export class WrappedCompletions extends Completions {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
+              let completionIdFromResponse: string | undefined
+              let systemFingerprintFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let stopReason: string | undefined
               let usage: {
@@ -146,9 +148,15 @@ export class WrappedCompletions extends Completions {
               let rawUsageData: unknown
 
               for await (const chunk of stream1) {
-                // Extract model from chunk (Chat Completions chunks have model field)
+                // Extract model and completion metadata from chunk (Chat Completions chunks carry these fields)
                 if (!modelFromResponse && chunk.model) {
                   modelFromResponse = chunk.model
+                }
+                if (!completionIdFromResponse && chunk.id) {
+                  completionIdFromResponse = chunk.id
+                }
+                if (systemFingerprintFromResponse === undefined && chunk.system_fingerprint) {
+                  systemFingerprintFromResponse = chunk.system_fingerprint
                 }
 
                 const choice = chunk?.choices?.[0]
@@ -279,6 +287,8 @@ export class WrappedCompletions extends Completions {
                 },
                 stopReason,
                 tools: availableTools,
+                completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
               })
             } catch (error: unknown) {
               await captureAiGeneration(this.phClient, {
@@ -329,6 +339,11 @@ export class WrappedCompletions extends Completions {
               },
               stopReason: result.choices[0]?.finish_reason ?? undefined,
               tools: availableTools,
+              completionId: result.id,
+              providerMetadata: buildProviderMetadata({
+                systemFingerprint: result.system_fingerprint,
+                requestId: extractRequestId(result),
+              }),
             })
           }
           return result
@@ -410,6 +425,7 @@ export class WrappedResponses extends Responses {
             try {
               let finalContent: unknown[] = []
               let modelFromResponse: string | undefined
+              let completionIdFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let stopReason: string | undefined
               let usage: {
@@ -432,9 +448,12 @@ export class WrappedResponses extends Responses {
                 }
 
                 if ('response' in chunk && chunk.response) {
-                  // Extract model from response object in chunk (for stored prompts)
+                  // Extract model and completion ID from the response object in the chunk (for stored prompts)
                   if (!modelFromResponse && chunk.response.model) {
                     modelFromResponse = chunk.response.model
+                  }
+                  if (!completionIdFromResponse && chunk.response.id) {
+                    completionIdFromResponse = chunk.response.id
                   }
 
                   const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
@@ -493,6 +512,7 @@ export class WrappedResponses extends Responses {
                 },
                 stopReason,
                 tools: availableTools,
+                completionId: completionIdFromResponse,
               })
             } catch (error: unknown) {
               await captureAiGeneration(this.phClient, {
@@ -545,6 +565,8 @@ export class WrappedResponses extends Responses {
               },
               stopReason: result.status ?? undefined,
               tools: availableTools,
+              completionId: result.id,
+              providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
             })
           }
           return result
@@ -615,6 +637,8 @@ export class WrappedResponses extends Responses {
               rawUsage: result.usage,
             },
             stopReason: result.status ?? undefined,
+            completionId: result.id,
+            providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
           })
           return result
         },

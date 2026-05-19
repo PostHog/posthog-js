@@ -60,6 +60,21 @@ export interface CaptureAiGenerationOptions {
 
   tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
   stopReason?: string
+
+  /**
+   * Provider-assigned ID for the generation (e.g. OpenAI's `chatcmpl-…` /
+   * `resp_…`). Maps to `$ai_completion_id`. Response IDs generalize across
+   * providers, so this lives in the shared schema rather than under
+   * `providerMetadata`.
+   */
+  completionId?: string
+  /**
+   * Provider-specific response metadata that has no place in the shared,
+   * provider-agnostic `$ai_*` schema (e.g. OpenAI's `system_fingerprint` and
+   * `request_id`). Maps to `$ai_provider_metadata`; omitted when empty.
+   */
+  providerMetadata?: Record<string, unknown>
+
   /** When set, the event is captured as an error. */
   error?: unknown
 
@@ -161,6 +176,10 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     ...(options.distinctId ? {} : { $process_person_profile: false }),
     ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
     ...(options.tools ? { $ai_tools: options.tools } : {}),
+    ...(options.completionId ? { $ai_completion_id: options.completionId } : {}),
+    ...(options.providerMetadata && Object.keys(options.providerMetadata).length > 0
+      ? { $ai_provider_metadata: options.providerMetadata }
+      : {}),
     ...errorData,
     ...costOverrideData,
   }
