@@ -197,6 +197,11 @@ export interface RequestWithOptions {
      * Content-Encoding header instead of PostHog's legacy query-param protocol.
      */
     _useContentEncoding?: boolean
+    /**
+     * Internal: when true, skips the `_` query parameter because the request body
+     * already carries equivalent timestamp metadata.
+     */
+    _skipTimestampQueryParam?: boolean
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions

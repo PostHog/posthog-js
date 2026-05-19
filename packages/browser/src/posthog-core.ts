@@ -1043,6 +1043,9 @@ export class PostHog implements PostHogInterface {
                 sent_at: currentISOTime(),
             }
             options._useContentEncoding = options.compression === Compression.GZipJS
+            // /batch/ carries sent_at in the JSON body. The backend prefers that value over the legacy `_`
+            // query param, so don't send redundant cache-buster timestamp metadata for analytics batches.
+            options._skipTimestampQueryParam = true
             options.compression = options.compression === Compression.GZipJS ? options.compression : undefined
         }
 

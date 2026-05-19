@@ -342,7 +342,7 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
 const buildRequestURL = (url: string, options: RequestWithEncodedBody): string => {
     return extendURLParams(url, {
-        _: new Date().getTime().toString(),
+        _: options._skipTimestampQueryParam ? undefined : new Date().getTime().toString(),
         ver: Config.JS_SDK_VERSION,
         compression: useHTTPContentEncoding(options) ? undefined : options.compression,
     })

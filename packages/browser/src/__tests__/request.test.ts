@@ -598,6 +598,22 @@ describe('request', () => {
             `)
             })
 
+            it('should omit timestamp query param when requested', () => {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data: { foo: 'bar' },
+                        _skipTimestampQueryParam: true,
+                    } as any)
+                )
+
+                expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                    'https://any.posthog-instance.com/?ver=1.23.45&beacon=1',
+                    expect.any(Blob)
+                )
+            })
+
             it('should not call sendBeacon when body is undefined', () => {
                 request(
                     createRequest({
