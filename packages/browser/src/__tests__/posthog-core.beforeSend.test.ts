@@ -72,7 +72,8 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
+            transport: undefined,
+            url: 'https://us.i.posthog.com/batch/',
         })
     })
 
@@ -108,7 +109,8 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData[0],
             method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
+            transport: undefined,
+            url: 'https://us.i.posthog.com/batch/',
         })
     })
 
@@ -130,7 +132,8 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
+            transport: undefined,
+            url: 'https://us.i.posthog.com/batch/',
         })
     })
 
@@ -152,7 +155,8 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
+            transport: undefined,
+            url: 'https://us.i.posthog.com/batch/',
         })
         expect(mockLogger.warn).toHaveBeenCalledWith(
             `Event '${eventName}' has no properties after beforeSend function, this is likely an error.`
