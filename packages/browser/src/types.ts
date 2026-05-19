@@ -314,7 +314,10 @@ export interface RemoteConfig {
     capturePerformance?: boolean | PerformanceCaptureConfig
 
     /**
-     * Whether we should use a custom endpoint for analytics
+     * Whether we should use a custom endpoint for analytics.
+     *
+     * The SDK defaults to `/batch/`, but remote config may currently return
+     * `/i/v0/e/` for legacy analytics ingestion.
      *
      * @default { endpoint: "/batch" }
      */
