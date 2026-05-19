@@ -134,7 +134,7 @@ export function shouldRecordBody({
     function isBlobURL(url: string | URL | RequestInfo) {
         try {
             if (typeof url === 'string') {
-                return url.startsWith('blob:')
+                return url.indexOf('blob:') === 0
             }
             if (url instanceof URL) {
                 return url.protocol === 'blob:'
@@ -476,7 +476,9 @@ function _checkForCannotReadResponseBody({
     // `get` and `has` are case-insensitive
     // but return the header value with the casing that was supplied
     const contentType = r.headers.get('Content-Type')?.toLowerCase()
-    const contentTypeIsDenied = contentTypePrefixDenyList.some((prefix) => contentType?.startsWith(prefix))
+    const contentTypeIsDenied = contentTypePrefixDenyList.some(
+        (prefix) => !!contentType && contentType.indexOf(prefix) === 0
+    )
     if (contentType && contentTypeIsDenied) {
         return `Content-Type ${contentType} is not supported`
     }

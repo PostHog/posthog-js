@@ -556,7 +556,7 @@ export class SurveyManager {
             return true
         }
         const isFeatureEnabled = !!this._posthog.featureFlags?.isFeatureEnabled(flagKey, {
-            send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
+            send_event: flagKey.indexOf(SURVEY_TARGETING_FLAG_PREFIX) !== 0,
         })
         let flagVariantCheck = true
         if (flagVariant) {

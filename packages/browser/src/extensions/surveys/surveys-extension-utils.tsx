@@ -306,7 +306,7 @@ function nameToHex(name: string) {
 }
 
 export function hex2rgb(c: string): string {
-    if (c.startsWith('#')) {
+    if (c.indexOf('#') === 0) {
         let hexColor = c.replace(/^#/, '')
         // Handle 3-character shorthand (e.g., #111 -> #111111, #abc -> #aabbcc)
         if (/^[0-9A-Fa-f]{3}$/.test(hexColor)) {
@@ -337,7 +337,7 @@ export function getContrastingTextColor(color: string = defaultSurveyAppearance.
     if (color[0] === '#') {
         rgb = hex2rgb(color)
     }
-    if (color.startsWith('rgb')) {
+    if (color.indexOf('rgb') === 0) {
         rgb = color
     }
     // otherwise it's a color name

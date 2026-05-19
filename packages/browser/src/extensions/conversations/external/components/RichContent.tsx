@@ -46,10 +46,10 @@ function sanitizeUrl(url: string): string | undefined {
 
     // Block dangerous protocols
     if (
-        normalizedForCheck.startsWith('javascript:') ||
-        normalizedForCheck.startsWith('vbscript:') ||
-        normalizedForCheck.startsWith('data:') ||
-        normalizedForCheck.startsWith('file:')
+        normalizedForCheck.indexOf('javascript:') === 0 ||
+        normalizedForCheck.indexOf('vbscript:') === 0 ||
+        normalizedForCheck.indexOf('data:') === 0 ||
+        normalizedForCheck.indexOf('file:') === 0
     ) {
         return undefined
     }
@@ -57,14 +57,14 @@ function sanitizeUrl(url: string): string | undefined {
     // Allow relative URLs (check against trimmed URL, not normalized)
     // Note: We explicitly check for '//' first to block protocol-relative URLs (e.g., //evil.com)
     // which could be used to load content from attacker-controlled domains
-    if (trimmedUrl.startsWith('//')) {
+    if (trimmedUrl.indexOf('//') === 0) {
         return undefined
     }
     if (
-        trimmedUrl.startsWith('/') ||
-        trimmedUrl.startsWith('./') ||
-        trimmedUrl.startsWith('../') ||
-        trimmedUrl.startsWith('#')
+        trimmedUrl.indexOf('/') === 0 ||
+        trimmedUrl.indexOf('./') === 0 ||
+        trimmedUrl.indexOf('../') === 0 ||
+        trimmedUrl.indexOf('#') === 0
     ) {
         return trimmedUrl
     }
@@ -72,10 +72,10 @@ function sanitizeUrl(url: string): string | undefined {
     // Allow safe absolute URLs
     const lowerUrl = trimmedUrl.toLowerCase()
     if (
-        lowerUrl.startsWith('http://') ||
-        lowerUrl.startsWith('https://') ||
-        lowerUrl.startsWith('mailto:') ||
-        lowerUrl.startsWith('tel:')
+        lowerUrl.indexOf('http://') === 0 ||
+        lowerUrl.indexOf('https://') === 0 ||
+        lowerUrl.indexOf('mailto:') === 0 ||
+        lowerUrl.indexOf('tel:') === 0
     ) {
         return trimmedUrl
     }

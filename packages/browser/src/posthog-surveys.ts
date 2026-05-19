@@ -77,7 +77,7 @@ export class PostHogSurveys implements Extension {
         const surveyKeys = []
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i)
-            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
+            if (key && (key.indexOf(SURVEY_SEEN_PREFIX) === 0 || key.indexOf(SURVEY_IN_PROGRESS_PREFIX) === 0)) {
                 surveyKeys.push(key)
             }
         }

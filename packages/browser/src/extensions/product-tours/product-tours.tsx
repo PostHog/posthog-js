@@ -969,7 +969,7 @@ export class ProductTourManager {
             return true
         }
         const isFeatureEnabled = !!this._instance.featureFlags?.isFeatureEnabled(flagKey, {
-            send_event: !flagKey.startsWith(PRODUCT_TOUR_TARGETING_FLAG_PREFIX),
+            send_event: flagKey.indexOf(PRODUCT_TOUR_TARGETING_FLAG_PREFIX) !== 0,
         })
         let flagVariantCheck = true
         if (flagVariant) {
@@ -1132,10 +1132,11 @@ export class ProductTourManager {
         for (let i = 0; i < storage.length; i++) {
             const key = storage.key(i)
             if (
-                key?.startsWith(TOUR_SHOWN_KEY_PREFIX) ||
-                key?.startsWith(TOUR_COMPLETED_KEY_PREFIX) ||
-                key?.startsWith(TOUR_DISMISSED_KEY_PREFIX) ||
-                key?.startsWith(LAST_SEEN_TOUR_DATE_KEY_PREFIX)
+                key &&
+                (key.indexOf(TOUR_SHOWN_KEY_PREFIX) === 0 ||
+                    key.indexOf(TOUR_COMPLETED_KEY_PREFIX) === 0 ||
+                    key.indexOf(TOUR_DISMISSED_KEY_PREFIX) === 0 ||
+                    key.indexOf(LAST_SEEN_TOUR_DATE_KEY_PREFIX) === 0)
             ) {
                 keysToRemove.push(key)
             }

@@ -236,7 +236,7 @@ export class PostHogExceptions implements Extension {
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
         const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
-        return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
+        return frames.some((f) => f.filename && f.filename.indexOf('chrome-extension://') === 0)
     }
 
     private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {

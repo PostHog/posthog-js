@@ -36,7 +36,7 @@ export function isCurrentDomainAllowed(domains: string[] | undefined): boolean {
             return false
         }
 
-        if (allowedHostname.startsWith('*.')) {
+        if (allowedHostname.indexOf('*.') === 0) {
             const pattern = allowedHostname.slice(2)
             return currentHostname.endsWith(`.${pattern}`) || currentHostname === pattern
         }
