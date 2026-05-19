@@ -255,4 +255,181 @@ describe('fetch wrapper', () => {
         expect(capturedInit?.method).toBe('PUT')
         expect(capturedInit?.headers).toEqual({ 'X-Custom': 'value' })
     })
+
+    // Reproduces a user report that the wrapper strips CSRF headers from the
+    // actual outgoing request. The wrapper redacts them from the *recording*
+    // via HEADER_DENY_LIST, but that must never leak back into the live
+    // request the browser sends to the server.
+    describe('does not strip headers from the actual outgoing request', () => {
+        const headerCases = [
+            ['x-csrf-token', 'r_lIDFH3NdoomvNNKK5SWHg3KFOpWvnARWDvvi_TbwY'],
+            ['x-csrftoken', 'django-style-csrf'],
+            ['x-xsrf-token', 'angular-style-xsrf'],
+            ['authorization', 'Bearer abc123'],
+            ['x-api-key', 'sk-test-1234'],
+            ['cache-control', 'no-cache'],
+            ['pragma', 'no-cache'],
+        ] as const
+
+        it.each(headerCases)('preserves %s on downstream Request when set via init.headers plain object', async (name, value) => {
+            let downstream: Request | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                downstream = input as Request
+                return new Response('ok')
+            })
+
+            await wrappedFetch('https://example.com/api/internal/surveys', {
+                method: 'POST',
+                headers: { [name]: value, 'content-type': 'application/json' },
+                body: '{}',
+            })
+            cleanup()
+
+            expect(downstream!.headers.get(name)).toBe(value)
+        })
+
+        it.each(headerCases)('preserves %s on downstream Request when set via Headers instance', async (name, value) => {
+            let downstream: Request | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                downstream = input as Request
+                return new Response('ok')
+            })
+
+            const headers = new Headers()
+            headers.append(name, value)
+            headers.append('content-type', 'application/json')
+
+            await wrappedFetch('https://example.com/api/internal/surveys', {
+                method: 'POST',
+                headers,
+                body: '{}',
+            })
+            cleanup()
+
+            expect(downstream!.headers.get(name)).toBe(value)
+        })
+
+        it.each(headerCases)('preserves %s on downstream Request when set on a Request input', async (name, value) => {
+            let downstream: Request | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                downstream = input as Request
+                return new Response('ok')
+            })
+
+            const inputRequest = new Request('https://example.com/api/internal/surveys', {
+                method: 'POST',
+                headers: { [name]: value, 'content-type': 'application/json' },
+                body: '{}',
+            })
+
+            await wrappedFetch(inputRequest)
+            cleanup()
+
+            expect(downstream!.headers.get(name)).toBe(value)
+        })
+    })
+
+    // The real product applies BOTH the network-plugin wrapper and the
+    // tracing-headers wrapper to window.fetch (when __add_tracing_headers
+    // is configured). They wrap independently, so whichever loads second
+    // ends up calling the other. This block reproduces both orders and
+    // asserts that a user-supplied CSRF header still reaches the
+    // underlying fetch — and that the tracing headers are also added.
+    describe('double wrap (network-plugin + tracing-headers)', () => {
+        // Mirrors packages/browser/src/entrypoints/tracing-headers.ts:patchFetch.
+        // Inlined because the real function patches the global window.fetch and
+        // we need an isolated wrapper around the downstream of our choice.
+        function applyTracingHeadersWrapper(
+            originalFetch: typeof fetch,
+            hostnames: string[],
+            distinctId: string,
+            sessionId: string,
+            windowId: string
+        ): typeof fetch {
+            return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
+                const req = new Request(url, init)
+                let reqHostname: string
+                try {
+                    reqHostname = new URL(req.url).hostname
+                } catch {
+                    return originalFetch(req)
+                }
+                if (hostnames.includes(reqHostname)) {
+                    req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
+                    req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
+                    req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
+                }
+                return originalFetch(req)
+            }
+        }
+
+        const csrfHeaderCases = [
+            ['x-csrf-token', 'r_lIDFH3NdoomvNNKK5SWHg3KFOpWvnARWDvvi_TbwY'],
+            ['x-csrftoken', 'django-style-csrf'],
+            ['x-xsrf-token', 'angular-style-xsrf'],
+        ] as const
+
+        describe('order: network-plugin wraps first, tracing-headers wraps second (outer)', () => {
+            it.each(csrfHeaderCases)('preserves %s and adds tracing headers', async (name, value) => {
+                let downstream: Request | undefined
+                const { wrappedFetch: innerWrapped, cleanup } = setupWrappedFetch(
+                    async (input: RequestInfo | URL) => {
+                        downstream = input as Request
+                        return new Response('ok')
+                    }
+                )
+
+                const doublyWrapped = applyTracingHeadersWrapper(
+                    innerWrapped,
+                    ['example.com'],
+                    'distinct-abc',
+                    'session-abc',
+                    'window-abc'
+                )
+
+                await doublyWrapped('https://example.com/api/internal/surveys', {
+                    method: 'POST',
+                    headers: { [name]: value, 'content-type': 'application/json' },
+                    body: '{}',
+                })
+                cleanup()
+
+                expect(downstream!.headers.get(name)).toBe(value)
+                expect(downstream!.headers.get('x-posthog-distinct-id')).toBe('distinct-abc')
+                expect(downstream!.headers.get('x-posthog-session-id')).toBe('session-abc')
+                expect(downstream!.headers.get('x-posthog-window-id')).toBe('window-abc')
+            })
+        })
+
+        describe('order: tracing-headers wraps first (inner), network-plugin wraps second (outer)', () => {
+            it.each(csrfHeaderCases)('preserves %s and adds tracing headers', async (name, value) => {
+                let downstream: Request | undefined
+
+                const innerTraced = applyTracingHeadersWrapper(
+                    async (input: RequestInfo | URL) => {
+                        downstream = input as Request
+                        return new Response('ok')
+                    },
+                    ['example.com'],
+                    'distinct-xyz',
+                    'session-xyz',
+                    'window-xyz'
+                )
+
+                const { wrappedFetch: doublyWrapped, cleanup } = setupWrappedFetch(innerTraced)
+
+                await doublyWrapped('https://example.com/api/internal/surveys', {
+                    method: 'POST',
+                    headers: { [name]: value, 'content-type': 'application/json' },
+                    body: '{}',
+                })
+                cleanup()
+
+                expect(downstream!.headers.get(name)).toBe(value)
+                expect(downstream!.headers.get('x-posthog-distinct-id')).toBe('distinct-xyz')
+                expect(downstream!.headers.get('x-posthog-session-id')).toBe('session-xyz')
+                expect(downstream!.headers.get('x-posthog-window-id')).toBe('window-xyz')
+            })
+        })
+    })
 })
