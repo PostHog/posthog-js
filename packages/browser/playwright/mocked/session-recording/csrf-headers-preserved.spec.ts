@@ -170,6 +170,15 @@ async function captureRequestHeaders(
         // calls axios makes on the request instance.
         await page.addScriptTag({ content: axiosBundleSrc })
         await page.waitForFunction(() => typeof (window as any).axios !== 'undefined')
+
+        // Sanity check that we're really exercising axios, not e.g.
+        // falling through to a fetch polyfill.
+        const axiosIsBeingUsed = await page.evaluate(() => {
+            const a = (window as any).axios
+            return typeof a === 'function' && typeof a.post === 'function' && !!a.defaults?.adapter
+        })
+        expect(axiosIsBeingUsed).toBe(true)
+
         await page.evaluate(
             async ({ d, entries }) => {
                 const axios = (window as any).axios
