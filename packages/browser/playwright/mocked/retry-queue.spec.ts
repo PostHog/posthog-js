@@ -16,7 +16,7 @@ test.describe('retry queue', () => {
         let successSeen = false
 
         // Mock the capture endpoint to fail initially, then succeed
-        await context.route('**/e/**', async (route) => {
+        await context.route(/\/batch\//, async (route) => {
             const request = route.request()
             captureRequests.push(request)
 
@@ -85,7 +85,7 @@ test.describe('retry queue', () => {
         const captureRequests: Request[] = []
 
         // Mock the capture endpoint to always fail
-        await context.route('**/e/**', async (route) => {
+        await context.route(/\/batch\//, async (route) => {
             captureRequests.push(route.request())
             await route.fulfill({
                 status: 500,
@@ -131,7 +131,7 @@ test.describe('retry queue', () => {
 
         // Mock the capture endpoint to fail initially
         let shouldSucceed = false
-        await context.route('**/e/**', async (route) => {
+        await context.route(/\/batch\//, async (route) => {
             captureRequests.push(route.request())
             if (shouldSucceed) {
                 await route.fulfill({

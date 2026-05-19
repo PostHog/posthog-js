@@ -43,7 +43,7 @@ test.describe('event capture', () => {
         const captureRequests: Request[] = []
 
         page.on('request', (request) => {
-            if (request.url().includes('/e/') && request.method() === 'POST') {
+            if (request.url().includes('/batch/') && request.method() === 'POST') {
                 captureRequests.push(request)
             }
         })
@@ -55,14 +55,16 @@ test.describe('event capture', () => {
         await pollUntilCondition(page, () => captureRequests.length > 0)
         expect(captureRequests.length).toEqual(1)
         const captureRequest = captureRequests[0]
-        expect(captureRequest.headers()['content-type']).toEqual('text/plain')
-        expect(captureRequest.url()).toMatch(/gzip/)
+        expect(captureRequest.headers()['content-type']).toEqual('application/json')
+        expect(captureRequest.headers()['content-encoding']).toEqual('gzip')
+        expect(captureRequest.url()).not.toContain('compression')
         // webkit doesn't allow us to read the body for some reason
         // see e.g. https://github.com/microsoft/playwright/issues/6479
         if (browserName !== 'webkit') {
             const payload = getGzipEncodedPayloady(captureRequest)
-            expect(payload.event).toEqual('$pageview')
-            expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
+            expect(payload.api_key).toEqual('test token')
+            expect(payload.batch[0].event).toEqual('$pageview')
+            expect(Object.keys(payload.batch[0].properties).length).toBeGreaterThan(0)
         }
     })
 

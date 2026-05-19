@@ -102,7 +102,7 @@ export const test = base.extend<{
     },
     mockStaticAssets: [
         async ({ context, staticOverrides }, use) => {
-            void context.route('**/e/*', (route) => {
+            void context.route(/\/(?:e|batch)\//, (route) => {
                 route.fulfill({
                     status: 200,
                     contentType: 'application/json',

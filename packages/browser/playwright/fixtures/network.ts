@@ -113,7 +113,7 @@ export class NetworkPage {
     }
 
     async mockIngestion() {
-        await this.page.route('**/e/**', async (route) => {
+        await this.page.route(/\/(?:e|batch)\//, async (route) => {
             await route.fulfill({
                 headers: { loaded: 'mock captured' },
                 json: {},

@@ -89,7 +89,7 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
         })
 
         // Mock the capture endpoint
-        void context.route('**/e/*', (route) => {
+        void context.route(/\/(?:e|batch)\//, (route) => {
             route.fulfill({
                 status: 200,
                 contentType: 'application/json',
