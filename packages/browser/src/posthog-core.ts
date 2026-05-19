@@ -1036,7 +1036,7 @@ export class PostHog implements PostHogInterface {
         const analyticsEndpoint = this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
         const isAnalyticsRequest = options.url === analyticsEndpoint || options.url.startsWith(`${analyticsEndpoint}?`)
         let isBatchAnalyticsRequest = false
-        if (isAnalyticsRequest && options.transport !== 'sendBeacon' && options.data) {
+        if (isAnalyticsRequest && options.data) {
             options.url = this.requestRouter.endpointFor('api', '/batch/')
             isBatchAnalyticsRequest = true
             options.data = {

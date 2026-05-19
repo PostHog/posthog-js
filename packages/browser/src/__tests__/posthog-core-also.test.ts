@@ -401,7 +401,7 @@ describe('posthog core', () => {
             requestSpy.mockRestore()
         })
 
-        it('keeps sendBeacon analytics requests on the legacy /e/ protocol', () => {
+        it('sends sendBeacon analytics requests to /batch/', () => {
             const requestSpy = jest.spyOn(requestModule, 'request').mockImplementation(jest.fn())
             const posthog = posthogWith({ ...defaultConfig, request_batching: false })
             posthog._onRemoteConfig({ supportedCompression: [Compression.GZipJS] } as RemoteConfig)
@@ -411,13 +411,16 @@ describe('posthog core', () => {
 
             expect(requestSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    url: 'https://us.i.posthog.com/e/?ip=0',
+                    url: 'https://us.i.posthog.com/batch/',
                     compression: Compression.GZipJS,
-                    data: expect.objectContaining({ event: 'event-name' }),
+                    _useContentEncoding: true,
+                    data: expect.objectContaining({
+                        api_key: 'testtoken',
+                        batch: [expect.objectContaining({ event: 'event-name' })],
+                    }),
                     transport: 'sendBeacon',
                 })
             )
-            expect(requestSpy.mock.calls[0][0]).not.toHaveProperty('_useContentEncoding')
             requestSpy.mockRestore()
         })
 
