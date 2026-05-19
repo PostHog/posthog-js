@@ -31,6 +31,12 @@ import type { Extension } from './extensions/types'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
+// Cap how far back we walk siblings when computing `nth_child` / `nth_of_type`.
+// Virtualised tables and long lists can have thousands of siblings, and the walk
+// is done once per ancestor of the click target, so the cost multiplies fast.
+// Past this depth the position value is rarely useful for grouping anyway.
+const MAX_SIBLING_WALK = 100
+
 const logger = createLogger('[AutoCapture]')
 
 function limitText(length: number, text: string): string {
@@ -130,6 +136,9 @@ export function getPropertiesFromElement(
         nthChild++
         if (currentElem.tagName === elem.tagName) {
             nthOfType++
+        }
+        if (nthChild >= MAX_SIBLING_WALK) {
+            break
         }
     }
     props['nth_child'] = nthChild

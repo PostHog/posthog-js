@@ -14,8 +14,10 @@ import {
     getElementsChainString,
     getClassNames,
     makeSafeText,
+    shouldCaptureDeadClick,
+    shouldCaptureRageclick,
 } from '../autocapture-utils'
-import { document } from '../utils/globals'
+import { document, window } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
 import { AutocaptureConfig } from '../types'
 
@@ -320,6 +322,69 @@ describe(`Autocapture utility functions`, () => {
                     shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), autoCaptureConfig as AutocaptureConfig)
                 ).toBe(shouldCapture)
             })
+        })
+    })
+
+    describe('ancestor walk avoids unnecessary getComputedStyle calls', () => {
+        // `window.getComputedStyle` forces a synchronous style/layout recalc and is the
+        // single biggest cost on click-heavy pages. This block locks in the fast paths.
+
+        function buildNestedDivTree(depth: number): { leaf: Element; root: Element } {
+            let parent = document!.createElement('div')
+            const root = parent
+            let leaf: Element = parent
+            for (let i = 0; i < depth; i++) {
+                const child = document!.createElement('div')
+                parent.appendChild(child)
+                parent = child
+                leaf = child
+            }
+            document!.body.appendChild(root)
+            return { leaf, root }
+        }
+
+        let getComputedStyleSpy: jest.SpyInstance
+
+        beforeEach(() => {
+            getComputedStyleSpy = jest.spyOn(window!, 'getComputedStyle')
+        })
+
+        afterEach(() => {
+            getComputedStyleSpy.mockRestore()
+        })
+
+        it('shouldCaptureDeadClick does not call getComputedStyle on ancestors', () => {
+            const { leaf } = buildNestedDivTree(20)
+            shouldCaptureDeadClick(leaf, true)
+            expect(getComputedStyleSpy).not.toHaveBeenCalled()
+        })
+
+        it('shouldCaptureRageclick does not call getComputedStyle on ancestors', () => {
+            const { leaf } = buildNestedDivTree(20)
+            shouldCaptureRageclick(leaf, true)
+            expect(getComputedStyleSpy).not.toHaveBeenCalled()
+        })
+
+        it('shouldCaptureDomEvent stops calling getComputedStyle once a useful parent is found', () => {
+            // Construct: <button><div>...20 nested divs...<leaf></leaf>...</div></button>
+            // Without short-circuit we'd call getComputedStyle on every <div> ancestor
+            // up to <body>. With the fix we should stop once we hit the <button>.
+            const button = document!.createElement('button')
+            const { leaf, root } = buildNestedDivTree(20)
+            root.parentNode!.removeChild(root)
+            button.appendChild(root)
+            document!.body.appendChild(button)
+
+            shouldCaptureDomEvent(leaf, makeMouseEvent({}))
+
+            // Walk visits leaf -> 20 div ancestors -> button. We only need to call
+            // getComputedStyle on the immediate click target plus the div ancestors
+            // we visit BEFORE reaching the button. Anything beyond the button should
+            // be skipped because parentIsUsefulElement is already true.
+            //
+            // The exact count here is implementation-defined, but it must be strictly
+            // less than (1 target + 20 divs + 1 button) = 22, the pre-fix cost.
+            expect(getComputedStyleSpy.mock.calls.length).toBeLessThan(22)
         })
     })
 

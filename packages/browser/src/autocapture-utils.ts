@@ -199,7 +199,7 @@ export function shouldCaptureDeadClick(el: Element | null, _config: PostHogConfi
         ? DEFAULT_DEAD_CLICK_IGNORE_LIST
         : (_config?.css_selector_ignorelist ?? DEFAULT_DEAD_CLICK_IGNORE_LIST)
 
-    const { targetElementList } = getElementAndParentsForElement(el, false)
+    const { targetElementList } = getElementAndParentsForElement(el, false, false)
 
     // we don't capture if we match the ignore list
     return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
@@ -229,7 +229,7 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     }
 
     // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
-    const { targetElementList } = getElementAndParentsForElement(el, false)
+    const { targetElementList } = getElementAndParentsForElement(el, false, false)
     const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
         safeText: getSafeText(element).toLowerCase(),
         ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
@@ -247,7 +247,14 @@ const cannotCheckForAutocapture = (el: Element | null) => {
     return !el || isTag(el, 'html') || !isElementNode(el)
 }
 
-const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false | true | undefined) => {
+// `window.getComputedStyle` forces a synchronous style/layout recalc and is the
+// hottest cost in this walk on click-heavy pages — skip it as soon as we've already
+// found a useful ancestor, or when the caller doesn't read `parentIsUsefulElement`.
+const getElementAndParentsForElement = (
+    el: Element,
+    captureOnAnyElement: false | true | undefined,
+    checkParentIsUseful: boolean = true
+) => {
     if (!window || cannotCheckForAutocapture(el)) {
         return { parentIsUsefulElement: false, targetElementList: [] }
     }
@@ -263,12 +270,14 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
         }
         const parentNode = getParentElement(curEl)
         if (!parentNode) break
-        if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
-            parentIsUsefulElement = true
-        } else {
-            const compStyles = window.getComputedStyle(parentNode)
-            if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
+        if (checkParentIsUseful && !parentIsUsefulElement) {
+            if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
                 parentIsUsefulElement = true
+            } else {
+                const compStyles = window.getComputedStyle(parentNode)
+                if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
+                    parentIsUsefulElement = true
+                }
             }
         }
 
@@ -289,7 +298,7 @@ export function shouldSkipDeadClick(el: Element | null): boolean {
     if (!window || cannotCheckForAutocapture(el)) {
         return false
     }
-    const { targetElementList } = getElementAndParentsForElement(el, false)
+    const { targetElementList } = getElementAndParentsForElement(el, false, false)
     return targetElementList.some((node) => isTag(node, 'a'))
 }
 

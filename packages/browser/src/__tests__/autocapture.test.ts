@@ -190,6 +190,26 @@ describe('Autocapture system', () => {
             expect(props['nth_child']).toBe(7)
         })
 
+        it('caps nth-child / nth-of-type so virtualised lists do not block the main thread', () => {
+            // Virtualised tables and long lists can have hundreds of sibling rows.
+            // Walking every previous sibling on every ancestor of the click target
+            // multiplied across autocapture + heatmaps + dead-click handlers used to
+            // cause 10-second click lag on real customer pages. Cap the walk.
+            const parent = document.createElement('div')
+            for (let i = 0; i < 500; i++) {
+                parent.appendChild(document.createElement('div'))
+            }
+            const last = parent.lastElementChild as Element
+
+            const props = getPropertiesFromElement(last, false, false, undefined)
+
+            // The cap is an implementation detail, but it must be smaller than the
+            // 500 siblings we built so the walk does not run the full length.
+            expect(props['nth_child']).toBeLessThan(500)
+            // And it must report a finite, positive position rather than the true index.
+            expect(props['nth_child']).toBeGreaterThan(1)
+        })
+
         it('should filter out Angular content attributes', () => {
             const angularDiv = document.createElement('div')
             angularDiv.setAttribute('_ngcontent-dpm-c448', '')
