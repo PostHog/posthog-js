@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import snapshot, {
   _isBlockedElement,
   DEFAULT_MAX_DEPTH,
+  transformAttribute,
   wasMaxDepthReached,
   resetMaxDepthState,
   serializeNodeWithId,
@@ -507,5 +508,79 @@ describe('maxDepth', () => {
     warnSpy.mockClear();
     serializeWithMaxDepth(root, 5);
     expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('link href capture across SPA navigations', () => {
+  function makeLinkWithSheet(
+    rawAttr: string,
+    sheetHref: string | null,
+  ): HTMLLinkElement {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', rawAttr);
+    Object.defineProperty(link, 'sheet', {
+      configurable: true,
+      get: () =>
+        sheetHref === null
+          ? null
+          : ({
+              href: sheetHref,
+              cssRules: [],
+            } as unknown as CSSStyleSheet),
+    });
+    return link;
+  }
+
+  it('prefers link.sheet.href over the detached-anchor resolution', () => {
+    const link = makeLinkWithSheet(
+      '../../_app/auth.css',
+      'http://localhost/_app/auth.css',
+    );
+
+    const result = transformAttribute(
+      document,
+      'link',
+      'href',
+      '../../_app/auth.css',
+      link,
+    );
+
+    expect(result).toBe('http://localhost/_app/auth.css');
+  });
+
+  it('falls back to detached-anchor resolution when the sheet has not loaded', () => {
+    const link = makeLinkWithSheet('../../_app/auth.css', null);
+
+    const result = transformAttribute(
+      document,
+      'link',
+      'href',
+      '../../_app/auth.css',
+      link,
+    );
+
+    expect(result).not.toBeNull();
+    expect(typeof result).toBe('string');
+  });
+
+  it('does not divert non-link tags through the sheet branch', () => {
+    const anchor = document.createElement('a');
+    anchor.setAttribute('href', '/elsewhere');
+    Object.defineProperty(anchor, 'sheet', {
+      configurable: true,
+      get: () =>
+        ({ href: 'should-not-be-used' } as unknown as CSSStyleSheet),
+    });
+
+    const result = transformAttribute(
+      document,
+      'a',
+      'href',
+      '/elsewhere',
+      anchor,
+    );
+
+    expect(result).not.toBe('should-not-be-used');
   });
 });
