@@ -6,7 +6,11 @@ import { PostHog } from '../../posthog-core'
 import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
-import { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_ALLOWED_METRICS, COOKIELESS_MODE_FLAG_PROPERTY } from '../../constants'
+import {
+    WEB_VITALS_ENABLED_SERVER_SIDE,
+    WEB_VITALS_ALLOWED_METRICS,
+    COOKIELESS_MODE_FLAG_PROPERTY,
+} from '../../constants'
 
 jest.useFakeTimers()
 
