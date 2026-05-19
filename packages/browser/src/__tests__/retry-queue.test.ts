@@ -100,25 +100,7 @@ describe('RetryQueue', () => {
         // clears queue
         expect(retryQueue.length).toEqual(0)
         expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
-        // Check the retry count is added
-        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
-            '/e?retry_count=1',
-            '/e?retry_count=1',
-            '/e?retry_count=1',
-            '/e?retry_count=1',
-        ])
-    })
-
-    it('adds the retry_count to the url', () => {
-        enqueueRequests()
-        fastForwardTimeAndRunTimer(3500)
-
-        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
-            '/e?retry_count=1',
-            '/e?retry_count=1',
-            '/e?retry_count=1',
-            '/e?retry_count=1',
-        ])
+        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual(['/e', '/e', '/e', '/e'])
     })
 
     it('tries to send requests via beacon on unload', () => {

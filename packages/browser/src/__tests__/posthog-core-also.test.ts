@@ -398,32 +398,6 @@ describe('posthog core', () => {
             requestSpy.mockRestore()
         })
 
-        it('sends retried analytics requests with query params to /batch/', () => {
-            const requestSpy = jest.spyOn(requestModule, 'request').mockImplementation(jest.fn())
-            const posthog = posthogWith({ ...defaultConfig, request_batching: false })
-            posthog._onRemoteConfig({ supportedCompression: [Compression.GZipJS] } as RemoteConfig)
-            requestSpy.mockClear()
-
-            posthog._send_request({
-                url: 'https://us.i.posthog.com/batch/?retry_count=1',
-                data: { event: 'event-name' },
-                compression: Compression.GZipJS,
-            })
-
-            expect(requestSpy).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    url: 'https://us.i.posthog.com/batch/',
-                    compression: Compression.GZipJS,
-                    _useContentEncoding: true,
-                    data: expect.objectContaining({
-                        api_key: 'testtoken',
-                        batch: [expect.objectContaining({ event: 'event-name' })],
-                    }),
-                })
-            )
-            requestSpy.mockRestore()
-        })
-
         it('sends sendBeacon analytics requests to /batch/', () => {
             const requestSpy = jest.spyOn(requestModule, 'request').mockImplementation(jest.fn())
             const posthog = posthogWith({ ...defaultConfig, request_batching: false })

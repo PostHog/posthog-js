@@ -50,28 +50,8 @@ test.describe('retry queue', () => {
             expect(successSeen).toBe(true)
         }).toPass({ timeout: 50000 })
 
-        // Check that we got multiple requests
-        expect(captureRequests.length).toBeGreaterThanOrEqual(3)
-
-        // Verify the first request had no retry_count
-        const firstRequest = captureRequests[0]
-        expect(firstRequest.url()).not.toContain('retry_count')
-
-        // Verify retry_count increments
-        const retryCountMatches = captureRequests
-            .map((req) => {
-                const match = req.url().match(/retry_count=(\d+)/)
-                return match ? parseInt(match[1]) : null
-            })
-            .filter((count) => count !== null)
-
-        // Should see incrementing retry counts
-        expect(retryCountMatches.length).toBeGreaterThanOrEqual(2)
-        expect(retryCountMatches).toContain(1)
-        expect(retryCountMatches).toContain(2)
-        // Verify counts are actually incrementing (not stuck at 1)
-        const uniqueCounts = Array.from(new Set(retryCountMatches))
-        expect(uniqueCounts.length).toBeGreaterThan(1)
+        // Check that we retried the failed requests before succeeding
+        expect(captureRequests.length).toBeGreaterThanOrEqual(maxErrorResponses + 1)
 
         // After success, record the count and verify no more requests arrive
         const requestCountAfterSuccess = captureRequests.length
@@ -80,7 +60,7 @@ test.describe('retry queue', () => {
         }).toPass({ timeout: 5000 })
     })
 
-    test('stops retrying after 10 attempts', async ({ page, context }) => {
+    test('retries failed capture requests without unbounded attempts', async ({ page, context }) => {
         test.setTimeout(60000)
         const captureRequests: Request[] = []
 
@@ -107,23 +87,9 @@ test.describe('retry queue', () => {
         // We'll wait long enough to see at least 3-4 retries
         await page.waitForTimeout(25000)
 
-        // Extract all retry counts
-        const retryCountMatches = captureRequests
-            .map((req) => {
-                const match = req.url().match(/retry_count=(\d+)/)
-                return match ? parseInt(match[1]) : null
-            })
-            .filter((count) => count !== null)
-            .sort((a, b) => a! - b!)
-
-        // Should have some retries but not exceed 10
-        expect(retryCountMatches.length).toBeGreaterThan(0)
-        const maxRetryCount = Math.max(...(retryCountMatches as number[]))
-        expect(maxRetryCount).toBeLessThanOrEqual(10)
-
-        // Verify counts are incrementing
-        expect(retryCountMatches).toContain(1)
-        expect(retryCountMatches).toContain(2)
+        // Should have some retries but not exceed the initial attempt + 10 retries
+        expect(captureRequests.length).toBeGreaterThan(1)
+        expect(captureRequests.length).toBeLessThanOrEqual(11)
     })
 
     test('immediately retries when coming back online', async ({ page, context }) => {

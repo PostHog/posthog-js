@@ -79,13 +79,10 @@ global.XMLHttpRequest = function() {
                         }
                     }
 
-                    const urlObj = new URL(requestUrl, 'http://dummy')
-                    const retryCount = parseInt(urlObj.searchParams.get('retry_count') || '0', 10)
-
                     state.requestsMade.push({
                         timestamp_ms: Date.now(),
                         status_code: xhr.status,
-                        retry_attempt: retryCount,
+                        retry_attempt: 0,
                         event_count: events.length,
                         uuid_list: events.map(e => e.uuid).filter(Boolean),
                     })
@@ -153,14 +150,10 @@ global.fetch = async (url, options) => {
                 // Note: Blob bodies (gzipped data) are not parsed
             }
 
-            // Extract retry count from URL if present
-            const urlObj = new URL(url)
-            const retryCount = parseInt(urlObj.searchParams.get('retry_count') || '0', 10)
-
             state.requestsMade.push({
                 timestamp_ms: Date.now(),
                 status_code: response.status,
-                retry_attempt: retryCount,
+                retry_attempt: 0,
                 event_count: events.length,
                 uuid_list: events.map(e => e.uuid).filter(Boolean),
             })
