@@ -311,7 +311,7 @@ export interface RemoteConfig {
     /**
      * Whether we should use a custom endpoint for analytics
      *
-     * @default { endpoint: "/e" }
+     * @default { endpoint: "/batch" }
      */
     analytics?: {
         endpoint?: string

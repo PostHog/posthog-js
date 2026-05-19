@@ -302,14 +302,14 @@ describe('posthog core', () => {
             expect(captureResult.properties).toEqual(expect.objectContaining({ foo: 'bar', length: 0 }))
         })
 
-        it('sends payloads to /e/ by default', () => {
+        it('sends payloads to /batch/ by default', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    url: 'https://us.i.posthog.com/e/',
+                    url: 'https://us.i.posthog.com/batch/',
                 })
             )
         })
@@ -382,7 +382,7 @@ describe('posthog core', () => {
             requestSpy.mockClear()
 
             posthog._send_request({
-                url: 'https://us.i.posthog.com/e/?retry_count=1',
+                url: 'https://us.i.posthog.com/batch/?retry_count=1',
                 data: { event: 'event-name' },
                 compression: Compression.GZipJS,
             })
@@ -474,12 +474,12 @@ describe('posthog core', () => {
             expect(posthog.compression).toEqual(undefined)
         })
 
-        it('defaults to /e if no endpoint is given', () => {
+        it('defaults to /batch if no endpoint is given', () => {
             const posthog = posthogWith({})
 
             posthog._onRemoteConfig({} as RemoteConfig)
 
-            expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
+            expect(posthog.analyticsDefaultEndpoint).toEqual('/batch/')
         })
 
         it('uses the specified analytics endpoint if given', () => {
