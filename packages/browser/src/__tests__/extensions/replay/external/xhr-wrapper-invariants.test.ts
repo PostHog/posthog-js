@@ -3,8 +3,8 @@
  */
 
 import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
-import { NetworkRecordOptions } from '../../../../types'
-import { csrfHeaderCases, sensitiveHeaderCases } from './header-cases'
+import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
+import { csrfHeaderCases, sensitiveHeaderCases } from './test_data/header-cases'
 
 class MockPerformanceObserver {
     static supportedEntryTypes = ['resource']
@@ -13,6 +13,7 @@ class MockPerformanceObserver {
 }
 
 type SetHeaderCall = { header: string; value: string }
+type CapturedCb = { requests: CapturedNetworkRequest[] }
 
 function createMockXhrClass(setHeaderCalls: SetHeaderCall[], sendCalls: unknown[]) {
     return class {
@@ -47,16 +48,40 @@ function createMockXhrClass(setHeaderCalls: SetHeaderCall[], sendCalls: unknown[
     }
 }
 
+// Synthetic PerformanceResourceTiming entry returned by getEntriesByName.
+// network-plugin.ts:getRequestPerformanceEntry retries with setTimeout
+// until it finds one — returning one immediately keeps the cb path
+// synchronous-ish and avoids fake-timer juggling.
+function fakeResourceTimingEntry(url: string): any {
+    return {
+        entryType: 'resource',
+        initiatorType: 'xmlhttprequest',
+        name: url,
+        startTime: 0,
+        responseEnd: 1,
+        toJSON: () => ({ name: url, entryType: 'resource', initiatorType: 'xmlhttprequest' }),
+    }
+}
+
 function setupWrappedXhr() {
     const setHeaderCalls: SetHeaderCall[] = []
     const sendCalls: unknown[] = []
+    const cbInvocations: CapturedCb[] = []
 
     ;(global as any).PerformanceObserver = MockPerformanceObserver
 
     const MockXMLHttpRequest = createMockXhrClass(setHeaderCalls, sendCalls)
 
+    // performance.now() must be 0 (or close to it) — getRequestPerformanceEntry
+    // filters entries by `entry.startTime >= start`, where `start` is
+    // performance.now() at xhr.send() time. Our synthetic entry has
+    // startTime=0, so a real timestamp from Date.now() would always fail.
+    let perfClock = 0
     const mockWindow = {
-        performance: { now: () => Date.now(), getEntriesByName: () => [] },
+        performance: {
+            now: () => perfClock++,
+            getEntriesByName: (url: string) => [fakeResourceTimingEntry(url)],
+        },
         PerformanceObserver: MockPerformanceObserver,
         XMLHttpRequest: MockXMLHttpRequest,
     } as any
@@ -65,13 +90,17 @@ function setupWrappedXhr() {
         recordHeaders: true,
         recordBody: true,
     } as Partial<NetworkRecordOptions> as NetworkRecordOptions)
-    const cleanup = plugin.observer(() => {}, mockWindow, {
-        recordHeaders: true,
-        recordBody: true,
-        initiatorTypes: ['xmlhttprequest'],
-    } as any)
+    const cleanup = plugin.observer(
+        (data: CapturedCb) => cbInvocations.push(data),
+        mockWindow,
+        {
+            recordHeaders: true,
+            recordBody: true,
+            initiatorTypes: ['xmlhttprequest'],
+        } as any
+    )
 
-    return { mockWindow, MockXMLHttpRequest, setHeaderCalls, sendCalls, cleanup }
+    return { mockWindow, MockXMLHttpRequest, setHeaderCalls, sendCalls, cbInvocations, cleanup }
 }
 
 // getRecordNetworkPlugin holds a module-level singleton
@@ -93,32 +122,65 @@ function setupWrappedXhrWithSafety(): ReturnType<typeof setupWrappedXhr> {
     return { ...result, cleanup: wrappedCleanup }
 }
 
+// Drive the XHR to DONE so the network-plugin's readystatechange
+// listener fires and ultimately calls the recording cb. Returns the
+// first captured cb payload — null if no cb fired within the budget.
+async function triggerDoneAndFlush(xhr: any, cbInvocations: CapturedCb[]): Promise<CapturedCb | null> {
+    xhr.readyState = xhr.DONE
+    xhr.status = 200
+    const listeners = xhr.listeners.get('readystatechange') || []
+    listeners.forEach((listener: any) => listener())
+    // network-plugin awaits a Promise chain (getRequestPerformanceEntry
+    // resolves synchronously now that getEntriesByName returns an entry,
+    // but the .then() still defers to a microtask). Flush microtasks.
+    for (let i = 0; i < 5 && cbInvocations.length === 0; i++) {
+        await Promise.resolve()
+    }
+    return cbInvocations[0] ?? null
+}
+
 describe('xhr wrapper', () => {
-    beforeEach(() => jest.useFakeTimers())
+    // Note: NO jest.useFakeTimers here — the recording cb path goes
+    // through real microtasks and Promise.resolve flushes. Fake timers
+    // would freeze the promise chain.
     afterEach(() => {
         while (pendingCleanups.length) pendingCleanups.pop()!()
-        jest.useRealTimers()
     })
 
     describe('does not strip headers from the actual outgoing request', () => {
-        it.each(sensitiveHeaderCases)('forwards %s to the underlying XMLHttpRequest.setRequestHeader', (name, value) => {
-            const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhrWithSafety()
+        it.each(sensitiveHeaderCases)(
+            'forwards %s to the underlying XMLHttpRequest.setRequestHeader AND captures it for the recording',
+            async (name, value) => {
+                const { MockXMLHttpRequest, setHeaderCalls, cbInvocations, cleanup } = setupWrappedXhrWithSafety()
 
-            const xhr = new MockXMLHttpRequest()
-            xhr.open('POST', 'https://example.com/api/internal/surveys')
-            xhr.setRequestHeader(name, value)
+                const xhr = new MockXMLHttpRequest()
+                xhr.open('POST', 'https://example.com/api/internal/surveys')
+                xhr.setRequestHeader(name, value)
+                xhr.send('{}')
 
-            cleanup()
+                const captured = await triggerDoneAndFlush(xhr, cbInvocations)
+                cleanup()
 
-            expect(setHeaderCalls).toEqual(
-                expect.arrayContaining([{ header: name, value }])
-            )
-        })
+                // Outgoing-side: the wrapper forwarded to the real
+                // setRequestHeader, so the underlying XHR has the header.
+                // This alone is not load-bearing — the mock pushes
+                // unconditionally — so we also assert the recording side.
+                expect(setHeaderCalls).toEqual(expect.arrayContaining([{ header: name, value }]))
+
+                // Recording-side: the wrapper recorded the header into
+                // the network request payload that PostHog emits. If
+                // this assertion holds, the wrapper definitely ran.
+                expect(captured).not.toBeNull()
+                expect(captured!.requests[0].requestHeaders).toEqual(
+                    expect.objectContaining({ [name]: value })
+                )
+            }
+        )
     })
 
     describe('does not modify what the underlying send() receives', () => {
-        it('forwards the original body to underlying send', () => {
-            const { MockXMLHttpRequest, sendCalls, cleanup } = setupWrappedXhrWithSafety()
+        it('forwards the original body to underlying send', async () => {
+            const { MockXMLHttpRequest, sendCalls, cbInvocations, cleanup } = setupWrappedXhrWithSafety()
 
             const xhr = new MockXMLHttpRequest()
             xhr.open('POST', 'https://example.com/api/internal/surveys')
@@ -126,68 +188,159 @@ describe('xhr wrapper', () => {
             const body = '{"name":"Untitled","surveyType":"ClassicForm","visibility":"Mine"}'
             xhr.send(body)
 
+            await triggerDoneAndFlush(xhr, cbInvocations)
             cleanup()
 
             expect(sendCalls).toEqual([body])
         })
     })
 
-    // Both the network-plugin wrapper and the tracing-headers wrapper patch
-    // XMLHttpRequest.prototype.open. In the product they're both applied
-    // when __add_tracing_headers is configured alongside session recording.
-    // Each open patch ALSO patches setRequestHeader on the instance, so
-    // setRequestHeader can end up double-wrapped. The user-supplied header
-    // must still reach the underlying XHR.
-    describe('double wrap (network-plugin + tracing-headers-style setRequestHeader patch)', () => {
-        // Wraps an instance's setRequestHeader the same way both wrappers do:
-        // replace with a function that records, then forwards to the previous one.
-        function wrapInstanceSetRequestHeader(
-            xhr: { setRequestHeader: (h: string, v: string) => void },
-            sink: SetHeaderCall[]
-        ) {
-            const previous = xhr.setRequestHeader.bind(xhr)
-            xhr.setRequestHeader = (header: string, value: string) => {
-                sink.push({ header, value })
-                return previous(header, value)
+    // Production tracing-headers patchXHR (entrypoints/tracing-headers.ts:54)
+    // patches XMLHttpRequest.prototype.open and does NOT touch
+    // setRequestHeader. When session recording also runs, the two
+    // open-patches stack on the prototype. If this fails, a wrapper is
+    // replacing prototype.open without delegating to the previous one.
+    describe('double wrap (network-plugin + tracing-headers-style prototype.open patch)', () => {
+        // Mirrors entrypoints/tracing-headers.ts:patchXHR. Patches
+        // prototype.open in-place; returns a restore function.
+        function patchPrototypeOpenWithTracingHeadersStyle(
+            XHRClass: any,
+            hostnames: string[],
+            distinctId: string
+        ): () => void {
+            const originalOpen = XHRClass.prototype.open
+            XHRClass.prototype.open = function (
+                method: string,
+                url: string | URL,
+                async = true,
+                username?: string | null,
+                password?: string | null
+            ) {
+                const xhr = this
+                // Production code creates a throw-away Request to compute
+                // tracing-header values. We just snapshot whether this
+                // wrapper ran by attaching a flag to the xhr instance.
+                const reqUrl = typeof url === 'string' ? url : url.toString()
+                let reqHostname: string | undefined
+                try {
+                    reqHostname = new URL(reqUrl).hostname
+                } catch {
+                    /* invalid URL — production also falls through */
+                }
+                if (reqHostname && hostnames.includes(reqHostname)) {
+                    xhr.__tracingHeadersWrapperRan = { distinctId, url: reqUrl }
+                }
+                return originalOpen.call(xhr, method, reqUrl, async, username, password)
+            }
+            return () => {
+                XHRClass.prototype.open = originalOpen
             }
         }
 
         it.each(csrfHeaderCases)(
-            'forwards %s through both layers when an outer wrapper patches setRequestHeader after open',
-            (name, value) => {
-                const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhrWithSafety()
-                const outerCalls: SetHeaderCall[] = []
+            'inner=network-plugin, outer=tracing-headers — preserves %s and both wrappers run',
+            async (name, value) => {
+                const { MockXMLHttpRequest, setHeaderCalls, cbInvocations, cleanup } = setupWrappedXhrWithSafety()
 
-                const xhr = new MockXMLHttpRequest()
-                xhr.open('POST', 'https://example.com/api/internal/surveys')
+                // network-plugin already patched the prototype. Stack the
+                // tracing-headers-style patch on top.
+                const restoreTracing = patchPrototypeOpenWithTracingHeadersStyle(
+                    MockXMLHttpRequest,
+                    ['example.com'],
+                    'distinct-abc'
+                )
 
-                wrapInstanceSetRequestHeader(xhr, outerCalls)
+                try {
+                    const xhr = new MockXMLHttpRequest()
+                    xhr.open('POST', 'https://example.com/api/internal/surveys')
+                    xhr.setRequestHeader(name, value)
+                    xhr.send('{}')
 
-                xhr.setRequestHeader(name, value)
+                    const captured = await triggerDoneAndFlush(xhr, cbInvocations)
+                    cleanup()
 
-                cleanup()
+                    // Outer wrapper ran (set the marker on the xhr).
+                    expect((xhr as any).__tracingHeadersWrapperRan).toEqual({
+                        distinctId: 'distinct-abc',
+                        url: 'https://example.com/api/internal/surveys',
+                    })
 
-                expect(outerCalls).toEqual([{ header: name, value }])
-                expect(setHeaderCalls).toEqual(expect.arrayContaining([{ header: name, value }]))
+                    // Inner wrapper ran (recorded the header into cb payload).
+                    expect(captured!.requests[0].requestHeaders).toEqual(
+                        expect.objectContaining({ [name]: value })
+                    )
+
+                    // The real underlying setRequestHeader was invoked with
+                    // the user's CSRF header — header reaches the XHR
+                    // through both layers without being stripped.
+                    expect(setHeaderCalls).toEqual(expect.arrayContaining([{ header: name, value }]))
+                } finally {
+                    restoreTracing()
+                }
             }
         )
 
         it.each(csrfHeaderCases)(
-            'forwards %s through both layers when an inner wrapper patches setRequestHeader before open',
-            (name, value) => {
-                const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhrWithSafety()
-                const innerCalls: SetHeaderCall[] = []
+            'inner=tracing-headers, outer=network-plugin — preserves %s and both wrappers run',
+            async (name, value) => {
+                // Set up a fresh class WITHOUT the network-plugin patch yet,
+                // patch tracing-headers-style first, then attach
+                // network-plugin on top via setupWrappedXhr (which patches
+                // prototype.open via plugin.observer).
+                const setHeaderCallsLocal: SetHeaderCall[] = []
+                const sendCallsLocal: unknown[] = []
+                const MockXMLHttpRequest = createMockXhrClass(setHeaderCallsLocal, sendCallsLocal)
+                const restoreTracing = patchPrototypeOpenWithTracingHeadersStyle(
+                    MockXMLHttpRequest,
+                    ['example.com'],
+                    'distinct-xyz'
+                )
 
-                const xhr = new MockXMLHttpRequest()
-                wrapInstanceSetRequestHeader(xhr, innerCalls)
-                xhr.open('POST', 'https://example.com/api/internal/surveys')
+                ;(global as any).PerformanceObserver = MockPerformanceObserver
+                let perfClockLocal = 0
+                const mockWindow = {
+                    performance: {
+                        now: () => perfClockLocal++,
+                        getEntriesByName: (url: string) => [fakeResourceTimingEntry(url)],
+                    },
+                    PerformanceObserver: MockPerformanceObserver,
+                    XMLHttpRequest: MockXMLHttpRequest,
+                } as any
+                const cbInvocations: CapturedCb[] = []
+                const plugin = getRecordNetworkPlugin({
+                    recordHeaders: true,
+                    recordBody: true,
+                } as Partial<NetworkRecordOptions> as NetworkRecordOptions)
+                const pluginCleanup = plugin.observer(
+                    (data: CapturedCb) => cbInvocations.push(data),
+                    mockWindow,
+                    {
+                        recordHeaders: true,
+                        recordBody: true,
+                        initiatorTypes: ['xmlhttprequest'],
+                    } as any
+                )
 
-                xhr.setRequestHeader(name, value)
+                try {
+                    const xhr = new MockXMLHttpRequest()
+                    xhr.open('POST', 'https://example.com/api/internal/surveys')
+                    xhr.setRequestHeader(name, value)
+                    xhr.send('{}')
 
-                cleanup()
+                    const captured = await triggerDoneAndFlush(xhr, cbInvocations)
 
-                expect(innerCalls).toEqual([{ header: name, value }])
-                expect(setHeaderCalls).toEqual(expect.arrayContaining([{ header: name, value }]))
+                    expect((xhr as any).__tracingHeadersWrapperRan).toEqual({
+                        distinctId: 'distinct-xyz',
+                        url: 'https://example.com/api/internal/surveys',
+                    })
+                    expect(captured!.requests[0].requestHeaders).toEqual(
+                        expect.objectContaining({ [name]: value })
+                    )
+                    expect(setHeaderCallsLocal).toEqual(expect.arrayContaining([{ header: name, value }]))
+                } finally {
+                    pluginCleanup()
+                    restoreTracing()
+                }
             }
         )
     })

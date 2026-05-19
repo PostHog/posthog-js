@@ -1,7 +1,7 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page, BrowserContext, Request } from '@playwright/test'
-import { csrfHeaderCases } from '../../../src/__tests__/extensions/replay/external/header-cases'
+import { csrfHeaderCases } from '../../../src/__tests__/extensions/replay/external/test_data/header-cases'
 
 // Reproduces the user report that PostHog network recording strips CSRF
 // headers from the actual outgoing request. The fix invariant: enabling

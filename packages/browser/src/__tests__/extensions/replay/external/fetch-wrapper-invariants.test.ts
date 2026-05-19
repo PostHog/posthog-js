@@ -4,7 +4,7 @@
 
 import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
 import { NetworkRecordOptions } from '../../../../types'
-import { csrfHeaderCases, sensitiveHeaderCases, unaffectedHeaderCases } from './header-cases'
+import { csrfHeaderCases, sensitiveHeaderCases, unaffectedHeaderCases } from './test_data/header-cases'
 
 function expectNotToThrow(promise: Promise<Response>) {
     // We're testing that the wrapper doesn't cause body-consumption errors like:
