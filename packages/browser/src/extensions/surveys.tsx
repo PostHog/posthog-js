@@ -1308,9 +1308,9 @@ export function Questions({
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
+        const newVisitedIndices = [...visitedIndices, displayQuestionIndex]
 
         if (!isSurveyCompleted) {
-            const newVisitedIndices = [...visitedIndices, displayQuestionIndex]
             setVisitedIndices(newVisitedIndices)
             setCurrentQuestionIndex(nextStep)
             setInProgressSurveyState(survey, {
@@ -1325,8 +1325,19 @@ export function Questions({
         // If partial responses are enabled, send the survey sent event with with the responses,
         // otherwise only send the event when the survey is completed
         if (survey.enable_partial_responses || isSurveyCompleted) {
+            // Only emit responses for questions actually on the path the user took. This prunes
+            // ghost answers from branches the user abandoned by backing up and choosing differently.
+            const visitedResponseKeys = new Set(
+                newVisitedIndices
+                    .map((i) => surveyQuestions[i]?.id)
+                    .filter((id): id is string => !!id)
+                    .map((id) => getSurveyResponseKey(id))
+            )
+            const responsesOnPath = Object.fromEntries(
+                Object.entries(newResponses).filter(([key]) => visitedResponseKeys.has(key))
+            )
             sendSurveyEvent({
-                responses: newResponses,
+                responses: responsesOnPath,
                 survey,
                 surveySubmissionId,
                 isSurveyCompleted,

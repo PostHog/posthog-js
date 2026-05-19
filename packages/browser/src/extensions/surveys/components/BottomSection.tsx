@@ -29,41 +29,37 @@ export function BottomSection({
 }) {
     const { isPreviewMode } = useContext(SurveyContext)
     const showBackButton = !!canGoBack && !!onBack
+    const submitButton = !skipSubmitButton && (
+        <button
+            className="form-submit"
+            disabled={submitDisabled}
+            aria-label="Submit survey"
+            type="button"
+            onClick={() => {
+                if (link) {
+                    window?.open(link)
+                }
+                if (isPreviewMode) {
+                    onPreviewSubmit?.()
+                } else {
+                    onSubmit()
+                }
+            }}
+        >
+            {text}
+        </button>
+    )
     return (
         <div className="bottom-section">
-            {(showBackButton || !skipSubmitButton) && (
-                <div className={`form-buttons${showBackButton ? ' form-buttons-with-back' : ''}`}>
-                    {showBackButton && (
-                        <button
-                            className="form-back"
-                            type="button"
-                            aria-label="Go to previous question"
-                            onClick={onBack}
-                        >
-                            {appearance.backButtonText || 'Back'}
-                        </button>
-                    )}
-                    {!skipSubmitButton && (
-                        <button
-                            className="form-submit"
-                            disabled={submitDisabled}
-                            aria-label="Submit survey"
-                            type="button"
-                            onClick={() => {
-                                if (link) {
-                                    window?.open(link)
-                                }
-                                if (isPreviewMode) {
-                                    onPreviewSubmit?.()
-                                } else {
-                                    onSubmit()
-                                }
-                            }}
-                        >
-                            {text}
-                        </button>
-                    )}
+            {showBackButton ? (
+                <div className="form-buttons form-buttons-with-back">
+                    <button className="form-back" type="button" aria-label="Go to previous question" onClick={onBack}>
+                        {appearance.backButtonText || 'Back'}
+                    </button>
+                    {submitButton}
                 </div>
+            ) : (
+                submitButton
             )}
             {!appearance.whiteLabel && <PostHogLogo urlParams={{ utm_source: 'survey-footer' }} />}
         </div>

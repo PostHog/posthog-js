@@ -13,6 +13,8 @@ jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
     dismissedSurveyEvent: jest.fn(),
 }))
 
+const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as jest.Mock
+
 jest.mock('../../../uuidv7')
 
 const mockPosthog = {
@@ -75,14 +77,14 @@ describe('Surveys: back button', () => {
         expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
     })
 
-    test('back button is hidden when allowGoBack is not set', () => {
+    test('back button is hidden when allowGoBack is not set', async () => {
         const survey = { ...baseSurvey, appearance: { ...baseSurvey.appearance, allowGoBack: false } }
         render(<SurveyPopup survey={survey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
 
-        expect(screen.getByText('Question 2')).toBeVisible()
+        await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
         expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
     })
 
@@ -180,6 +182,64 @@ describe('Surveys: back button', () => {
 
         expect(screen.getByText('Question 2')).toBeVisible()
         expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
+    })
+
+    test('prunes responses from abandoned branches when path changes after backing up', async () => {
+        const branchedSurvey: Survey = {
+            ...baseSurvey,
+            enable_partial_responses: true,
+            questions: [
+                {
+                    type: SurveyQuestionType.SingleChoice,
+                    question: 'Question 1',
+                    id: 'q1',
+                    choices: ['a', 'b'],
+                    // choice index 0 ('a') -> Q2; choice index 1 ('b') -> Q3
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { 0: 1, 1: 2 },
+                    },
+                } as any,
+                { type: SurveyQuestionType.Open, question: 'Question 2', id: 'q2' },
+                { type: SurveyQuestionType.Open, question: 'Question 3', id: 'q3' },
+            ],
+        }
+
+        render(
+            <SurveyPopup
+                survey={branchedSurvey}
+                removeSurveyFromFocus={jest.fn()}
+                isPopup
+                posthog={mockPosthog as any}
+            />
+        )
+
+        // Q1: pick 'a' -> routes to Q2
+        fireEvent.click(screen.getByLabelText('a'))
+        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
+
+        // Answer Q2, advance to Q3 so a response is recorded for q2.
+        fireEvent.input(screen.getByRole('textbox'), { target: { value: 'q2 answer' } })
+        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        await waitFor(() => expect(screen.getByText('Question 3')).toBeVisible())
+
+        // Back twice to Q1.
+        fireEvent.click(screen.getByRole('button', { name: /go to previous question/i }))
+        await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
+        fireEvent.click(screen.getByRole('button', { name: /go to previous question/i }))
+        await waitFor(() => expect(screen.getByText('Question 1')).toBeVisible())
+
+        // Now switch answer to 'b' which routes to Q3 (skipping Q2 entirely).
+        fireEvent.click(screen.getByLabelText('b'))
+        mockedSendSurveyEvent.mockClear()
+        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        await waitFor(() => expect(screen.getByText('Question 3')).toBeVisible())
+
+        // The emitted responses should only contain Q1's answer — not the stale Q2 answer.
+        const lastCall = mockedSendSurveyEvent.mock.calls.at(-1)![0]
+        expect(lastCall.responses).toEqual({ $survey_response_q1: 'b' })
+        expect(lastCall.responses).not.toHaveProperty('$survey_response_q2')
     })
 
     test('uses custom backButtonText from appearance', async () => {
