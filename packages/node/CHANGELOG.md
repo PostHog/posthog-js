@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.34.6
+
+### Patch Changes
+
+- [#3623](https://github.com/PostHog/posthog-js/pull/3623) [`e119eec`](https://github.com/PostHog/posthog-js/commit/e119eec0e4eaa3d6501d87cb745f25bbf247dcf7) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Fix six edge cases in local feature flag evaluation. `gt`/`gte`/`lt`/`lte` now compare numerically when both sides parse as finite numbers — previously a string override like `"10"` against numeric value `9` slipped into lexicographic comparison and returned false, and `parseFloat`'s NaN return value leaked through the old `!= null` guard. `is_not_set` now resolves locally — true when the property key is absent, false when present — instead of always throwing `InconclusiveMatchError` and forcing the flag to return undefined. Flag-level condition properties with `negation: true` are now correctly inverted, matching the existing cohort-path behavior in `matchPropertyGroup`. An inactive flag (`active: false`) now short-circuits to false even when `ensure_experience_continuity: true` — previously it threw `InconclusiveMatchError` and resolved to undefined. `is_set` now returns true for properties whose value is `null` or `undefined` as long as the key is present — `is_set` is about key presence, not value. Cohort property groups containing a flag-type property no longer silently skip the dependency; the cohort eval is now marked inconclusive so the flag returns undefined instead of a wrong definitive answer.
+  (2026-05-19)
+
 ## 5.34.5
 
 ### Patch Changes
