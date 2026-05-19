@@ -103,12 +103,14 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
         if ('tee' in value) {
           const [stream1, stream2] = value.tee()
           ;(async () => {
+            // Hoisted so the catch block can surface whatever was accumulated
+            // from the streamed chunks before the failure.
+            let completionIdFromResponse: string | undefined
+            let systemFingerprintFromResponse: string | undefined
             try {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
-              let completionIdFromResponse: string | undefined
-              let systemFingerprintFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -263,6 +265,11 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
+                // If the stream fails mid-flight, surface whatever completion
+                // metadata the consumed chunks already provided so the error
+                // event can still be correlated to OpenAI's Logs dashboard.
+                completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
                 error: error,
               })
               throw error
@@ -378,10 +385,12 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         if ('tee' in value && typeof (value as any).tee === 'function') {
           const [stream1, stream2] = (value as any).tee()
           ;(async () => {
+            // Hoisted so the catch block can surface the completion ID that
+            // was accumulated from the streamed chunks before the failure.
+            let completionIdFromResponse: string | undefined
             try {
               let finalContent: any[] = []
               let modelFromResponse: string | undefined
-              let completionIdFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -453,6 +462,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
+                // Surface the completion ID from any chunks consumed before
+                // the stream failed so the error event remains correlatable.
+                completionId: completionIdFromResponse,
                 error: error,
               })
               throw error

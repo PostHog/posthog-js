@@ -116,12 +116,14 @@ export class WrappedCompletions extends Completions {
         if ('tee' in value) {
           const [stream1, stream2] = value.tee()
           ;(async () => {
+            // Hoisted so the catch block can surface whatever was accumulated
+            // from the streamed chunks before the failure.
+            let completionIdFromResponse: string | undefined
+            let systemFingerprintFromResponse: string | undefined
             try {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
-              let completionIdFromResponse: string | undefined
-              let systemFingerprintFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let stopReason: string | undefined
               let usage: {
@@ -301,6 +303,11 @@ export class WrappedCompletions extends Completions {
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
+                // If the stream fails mid-flight, surface whatever completion
+                // metadata the consumed chunks already provided so the error
+                // event can still be correlated to OpenAI's Logs dashboard.
+                completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
                 error,
               })
               throw error
@@ -422,10 +429,12 @@ export class WrappedResponses extends Responses {
         if ('tee' in value && typeof value.tee === 'function') {
           const [stream1, stream2] = value.tee()
           ;(async () => {
+            // Hoisted so the catch block can surface the completion ID that
+            // was accumulated from the streamed chunks before the failure.
+            let completionIdFromResponse: string | undefined
             try {
               let finalContent: unknown[] = []
               let modelFromResponse: string | undefined
-              let completionIdFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let stopReason: string | undefined
               let usage: {
@@ -528,6 +537,9 @@ export class WrappedResponses extends Responses {
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
+                // Surface the completion ID from any chunks consumed before
+                // the stream failed so the error event remains correlatable.
+                completionId: completionIdFromResponse,
                 error,
               })
               throw error
