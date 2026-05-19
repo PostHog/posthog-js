@@ -1,6 +1,7 @@
 import { describe, expect, test, jest } from '@jest/globals'
 import { PostHog, normalizeError } from './index.js'
 import type { BeforeSendFn, IdentifyFn } from './index.js'
+import { LocalFeatureFlagEvaluator } from './feature-flags/index.js'
 
 function mockSchedulerCtx() {
   return {
@@ -77,6 +78,40 @@ describe('PostHog client', () => {
     expect(typeof posthog.getFeatureFlagResult).toBe('function')
     expect(typeof posthog.getAllFlags).toBe('function')
     expect(typeof posthog.getAllFlagsAndPayloads).toBe('function')
+  })
+
+  test('getFeatureFlagPayload with matchValue does not require a distinctId', async () => {
+    // The matchValue path is a pure key+value payload lookup; resolving a distinctId would
+    // force callers to configure an identify callback or pass an ID they don't have.
+    const definitions = JSON.stringify({
+      flags: [
+        {
+          id: 1,
+          name: 'flag',
+          key: 'flag',
+          deleted: false,
+          active: true,
+          rollout_percentage: null,
+          ensure_experience_continuity: false,
+          experiment_set: [],
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 0 }],
+            multivariate: { variants: [{ key: 'red', rollout_percentage: 100 }] },
+            payloads: { red: 'red-payload' },
+          },
+        },
+      ],
+      groupTypeMapping: {},
+      cohorts: {},
+    })
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const ctx = {
+      runQuery: jest.fn(async () => ({ data: definitions, fetchedAt: Date.now() })),
+    }
+
+    const payload = await posthog.getFeatureFlagPayload(ctx as never, { key: 'flag', matchValue: 'red' })
+    expect(payload).toBe('red-payload')
   })
 })
 
@@ -641,19 +676,32 @@ describe('identify callback', () => {
   })
 
   test('works with feature flag methods', async () => {
-    const component = { lib: { getFeatureFlag: 'getFeatureFlag_ref' } }
-    const posthog = new PostHog(component as never, {
-      apiKey: 'key',
-      identify: identifyReturning('auth-user'),
-    })
-    const ctx = {
-      runAction: jest.fn(async (_ref: unknown, _args: Record<string, unknown>) => true),
+    // Spy on the evaluator's `getFeatureFlag` so we can assert that the distinctId resolved by
+    // the identify callback ('auth-user') is the one actually forwarded to evaluation.
+    const evalSpy = jest.spyOn(LocalFeatureFlagEvaluator.prototype, 'getFeatureFlag').mockResolvedValue(true)
+    try {
+      const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+      const posthog = new PostHog(component as never, {
+        apiKey: 'key',
+        identify: identifyReturning('auth-user'),
+      })
+      // Stub real-looking flag definitions so `loadEvaluator` returns an instance.
+      const definitions = {
+        data: JSON.stringify({ flags: [], groupTypeMapping: {}, cohorts: {} }),
+        fetchedAt: Date.now(),
+      }
+      const runQuery = jest.fn(async () => definitions)
+      const ctx = { runQuery }
+
+      await posthog.getFeatureFlag(ctx as never, { key: 'my-flag' })
+
+      expect(runQuery).toHaveBeenCalledWith('getFlagDefinitions_ref', {})
+      // The evaluator's getFeatureFlag(key, distinctId, groups, personProps, groupProps) — assert
+      // we pass the auth-resolved id straight through.
+      expect(evalSpy).toHaveBeenCalledWith('my-flag', 'auth-user', {}, {}, {})
+    } finally {
+      evalSpy.mockRestore()
     }
-
-    await posthog.getFeatureFlag(ctx as never, { key: 'my-flag' })
-
-    const [, args] = ctx.runAction.mock.calls[0]
-    expect(args.distinctId).toBe('auth-user')
   })
 
   test('explicit distinctId still works without identify callback', async () => {

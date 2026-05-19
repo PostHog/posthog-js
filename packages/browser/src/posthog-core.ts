@@ -19,6 +19,7 @@ import {
     PEOPLE_DISTINCT_ID_KEY,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
+    SESSION_RECORDING_REMOTE_CONFIG,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
     COOKIELESS_ALWAYS,
@@ -2774,9 +2775,21 @@ export class PostHog implements PostHogInterface {
             return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property(DEVICE_ID)
+        // Snapshot the session-recording remote config before clearing persistence.
+        // It's server-defined config (sample rate, masking, canvas, triggers, …),
+        // not user state, and must survive reset(). Otherwise start('session_id_changed')
+        // bails on the next session rotation: rrweb is torn down with no replacement
+        // and the new session opens with no FullSnapshot until the next periodic
+        // checkout (~5 min later).
+        const recordingRemoteConfig = this.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
+
+        if (!isUndefined(recordingRemoteConfig)) {
+            this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
+        }
         this.surveys?.reset()
         // Stop the refresh interval before resetting flags — featureFlags.reset() clears
         // the debouncer, so if the order were reversed a pending refresh could fire after reset.

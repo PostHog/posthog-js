@@ -1,5 +1,36 @@
 # posthog-js
 
+## 1.374.2
+
+### Patch Changes
+
+- [#3550](https://github.com/PostHog/posthog-js/pull/3550) [`df91995`](https://github.com/PostHog/posthog-js/commit/df919950f298741980ed302828736cbf6785b1eb) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Preserve session-recording remote config across `posthog.reset()`.
+
+    `posthog.reset()` was clearing the entire persistence store, which wiped
+    `$session_recording_remote_config` along with user state. On the next session
+    rotation triggered by the reset, `start('session_id_changed')` would early-return
+    because the remote config was missing — leaving rrweb torn down and the new
+    session opening with no Meta + FullSnapshot until the next periodic 5-minute
+    checkout.
+
+    This affected any flow where an app calls `posthog.reset()` mid-session
+    (e.g. on sign-out / sign-in) and was particularly visible on Flutter Web
+    recordings that depend on a fresh FullSnapshot to anchor the CanvasKit DOM. (2026-05-18)
+
+- Updated dependencies []:
+    - @posthog/types@1.374.2
+    - @posthog/core@1.29.5
+
+## 1.374.1
+
+### Patch Changes
+
+- [#3627](https://github.com/PostHog/posthog-js/pull/3627) [`07a0f5f`](https://github.com/PostHog/posthog-js/commit/07a0f5f7a25f9867047dd6c633b881f45caef72c) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect transport overrides passed to posthog.capture.
+  (2026-05-18)
+- Updated dependencies []:
+    - @posthog/types@1.374.1
+    - @posthog/core@1.29.4
+
 ## 1.374.0
 
 ### Minor Changes
