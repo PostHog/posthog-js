@@ -4,6 +4,7 @@
 
 import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
 import { NetworkRecordOptions } from '../../../../types'
+import { csrfHeaderCases, sensitiveHeaderCases, unaffectedHeaderCases } from './header-cases'
 
 function expectNotToThrow(promise: Promise<Response>) {
     // We're testing that the wrapper doesn't cause body-consumption errors like:
@@ -256,22 +257,13 @@ describe('fetch wrapper', () => {
         expect(capturedInit?.headers).toEqual({ 'X-Custom': 'value' })
     })
 
-    // Reproduces a user report that the wrapper strips CSRF headers from the
-    // actual outgoing request. The wrapper redacts them from the *recording*
-    // via HEADER_DENY_LIST, but that must never leak back into the live
+    // Reproduces a user report that the wrapper strips deny-listed headers
+    // (CSRF tokens, authorization, api keys) from the actual outgoing
+    // request. The wrapper redacts them from the *recording* via
+    // HEADER_DENY_LIST, but that must never leak back into the live
     // request the browser sends to the server.
-    describe('does not strip headers from the actual outgoing request', () => {
-        const headerCases = [
-            ['x-csrf-token', 'r_lIDFH3NdoomvNNKK5SWHg3KFOpWvnARWDvvi_TbwY'],
-            ['x-csrftoken', 'django-style-csrf'],
-            ['x-xsrf-token', 'angular-style-xsrf'],
-            ['authorization', 'Bearer abc123'],
-            ['x-api-key', 'sk-test-1234'],
-            ['cache-control', 'no-cache'],
-            ['pragma', 'no-cache'],
-        ] as const
-
-        it.each(headerCases)('preserves %s on downstream Request when set via init.headers plain object', async (name, value) => {
+    describe('does not strip deny-listed headers from the actual outgoing request', () => {
+        it.each(sensitiveHeaderCases)('preserves %s on downstream Request when set via init.headers plain object', async (name, value) => {
             let downstream: Request | undefined
             const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
                 downstream = input as Request
@@ -288,7 +280,7 @@ describe('fetch wrapper', () => {
             expect(downstream!.headers.get(name)).toBe(value)
         })
 
-        it.each(headerCases)('preserves %s on downstream Request when set via Headers instance', async (name, value) => {
+        it.each(sensitiveHeaderCases)('preserves %s on downstream Request when set via Headers instance', async (name, value) => {
             let downstream: Request | undefined
             const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
                 downstream = input as Request
@@ -309,7 +301,7 @@ describe('fetch wrapper', () => {
             expect(downstream!.headers.get(name)).toBe(value)
         })
 
-        it.each(headerCases)('preserves %s on downstream Request when set on a Request input', async (name, value) => {
+        it.each(sensitiveHeaderCases)('preserves %s on downstream Request when set on a Request input', async (name, value) => {
             let downstream: Request | undefined
             const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
                 downstream = input as Request
@@ -323,6 +315,28 @@ describe('fetch wrapper', () => {
             })
 
             await wrappedFetch(inputRequest)
+            cleanup()
+
+            expect(downstream!.headers.get(name)).toBe(value)
+        })
+    })
+
+    // Smoke check that the wrapper doesn't accidentally strip ordinary
+    // (non-deny-listed) headers either. NOT load-bearing for the
+    // deny-list bug — these are guaranteed to pass for trivial reasons.
+    describe('does not strip ordinary headers from the actual outgoing request', () => {
+        it.each(unaffectedHeaderCases)('preserves %s on downstream Request', async (name, value) => {
+            let downstream: Request | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                downstream = input as Request
+                return new Response('ok')
+            })
+
+            await wrappedFetch('https://example.com/api/internal/surveys', {
+                method: 'POST',
+                headers: { [name]: value, 'content-type': 'application/json' },
+                body: '{}',
+            })
             cleanup()
 
             expect(downstream!.headers.get(name)).toBe(value)
@@ -362,12 +376,6 @@ describe('fetch wrapper', () => {
                 return originalFetch(req)
             }
         }
-
-        const csrfHeaderCases = [
-            ['x-csrf-token', 'r_lIDFH3NdoomvNNKK5SWHg3KFOpWvnARWDvvi_TbwY'],
-            ['x-csrftoken', 'django-style-csrf'],
-            ['x-xsrf-token', 'angular-style-xsrf'],
-        ] as const
 
         describe('order: network-plugin wraps first, tracing-headers wraps second (outer)', () => {
             it.each(csrfHeaderCases)('preserves %s and adds tracing headers', async (name, value) => {

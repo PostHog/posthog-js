@@ -4,6 +4,7 @@
 
 import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
 import { NetworkRecordOptions } from '../../../../types'
+import { csrfHeaderCases, sensitiveHeaderCases } from './header-cases'
 
 class MockPerformanceObserver {
     static supportedEntryTypes = ['resource']
@@ -73,23 +74,35 @@ function setupWrappedXhr() {
     return { mockWindow, MockXMLHttpRequest, setHeaderCalls, sendCalls, cleanup }
 }
 
+// getRecordNetworkPlugin holds a module-level singleton
+// (initialisedHandler in network-plugin.ts). Every test must call
+// cleanup() so the next test can re-initialise — without an afterEach
+// safety net, a test that throws before its own cleanup() would leave
+// the next test with a no-op wrapper and trivially-passing assertions.
+// Wraps cleanup so it is idempotent and registered for the safety net.
+const pendingCleanups: Array<() => void> = []
+function setupWrappedXhrWithSafety(): ReturnType<typeof setupWrappedXhr> {
+    const result = setupWrappedXhr()
+    let called = false
+    const wrappedCleanup = () => {
+        if (called) return
+        called = true
+        result.cleanup()
+    }
+    pendingCleanups.push(wrappedCleanup)
+    return { ...result, cleanup: wrappedCleanup }
+}
+
 describe('xhr wrapper', () => {
     beforeEach(() => jest.useFakeTimers())
-    afterEach(() => jest.useRealTimers())
+    afterEach(() => {
+        while (pendingCleanups.length) pendingCleanups.pop()!()
+        jest.useRealTimers()
+    })
 
     describe('does not strip headers from the actual outgoing request', () => {
-        const headerCases = [
-            ['x-csrf-token', 'r_lIDFH3NdoomvNNKK5SWHg3KFOpWvnARWDvvi_TbwY'],
-            ['x-csrftoken', 'django-style-csrf'],
-            ['x-xsrf-token', 'angular-style-xsrf'],
-            ['authorization', 'Bearer abc123'],
-            ['x-api-key', 'sk-test-1234'],
-            ['cache-control', 'no-cache'],
-            ['pragma', 'no-cache'],
-        ] as const
-
-        it.each(headerCases)('forwards %s to the underlying XMLHttpRequest.setRequestHeader', (name, value) => {
-            const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhr()
+        it.each(sensitiveHeaderCases)('forwards %s to the underlying XMLHttpRequest.setRequestHeader', (name, value) => {
+            const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhrWithSafety()
 
             const xhr = new MockXMLHttpRequest()
             xhr.open('POST', 'https://example.com/api/internal/surveys')
@@ -105,7 +118,7 @@ describe('xhr wrapper', () => {
 
     describe('does not modify what the underlying send() receives', () => {
         it('forwards the original body to underlying send', () => {
-            const { MockXMLHttpRequest, sendCalls, cleanup } = setupWrappedXhr()
+            const { MockXMLHttpRequest, sendCalls, cleanup } = setupWrappedXhrWithSafety()
 
             const xhr = new MockXMLHttpRequest()
             xhr.open('POST', 'https://example.com/api/internal/surveys')
@@ -139,16 +152,10 @@ describe('xhr wrapper', () => {
             }
         }
 
-        const csrfHeaderCases = [
-            ['x-csrf-token', 'r_lIDFH3NdoomvNNKK5SWHg3KFOpWvnARWDvvi_TbwY'],
-            ['x-csrftoken', 'django-style-csrf'],
-            ['x-xsrf-token', 'angular-style-xsrf'],
-        ] as const
-
         it.each(csrfHeaderCases)(
             'forwards %s through both layers when an outer wrapper patches setRequestHeader after open',
             (name, value) => {
-                const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhr()
+                const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhrWithSafety()
                 const outerCalls: SetHeaderCall[] = []
 
                 const xhr = new MockXMLHttpRequest()
@@ -168,7 +175,7 @@ describe('xhr wrapper', () => {
         it.each(csrfHeaderCases)(
             'forwards %s through both layers when an inner wrapper patches setRequestHeader before open',
             (name, value) => {
-                const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhr()
+                const { MockXMLHttpRequest, setHeaderCalls, cleanup } = setupWrappedXhrWithSafety()
                 const innerCalls: SetHeaderCall[] = []
 
                 const xhr = new MockXMLHttpRequest()

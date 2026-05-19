@@ -1,6 +1,7 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page, BrowserContext, Request } from '@playwright/test'
+import { csrfHeaderCases } from '../../../src/__tests__/extensions/replay/external/header-cases'
 
 // Reproduces the user report that PostHog network recording strips CSRF
 // headers from the actual outgoing request. The fix invariant: enabling
@@ -8,6 +9,9 @@ import { Page, BrowserContext, Request } from '@playwright/test'
 // wrap fetch/XHR) must NEVER cause user-supplied request headers to go
 // missing from what the browser actually sends to the server.
 
+// __add_tracing_headers matches by exact hostname (entrypoints/tracing-headers.ts
+// addTracingHeaders). The URL path is irrelevant for that match — a flake here
+// almost certainly means the wrapper readiness wait fired too early, not the URL.
 const DOMAIN = 'example.com'
 
 type Scenario = {
@@ -69,18 +73,7 @@ async function captureRequestHeaders(
         csrfValue,
     }: { method: 'fetch' | 'xhr'; csrfHeader: string; csrfValue: string }
 ): Promise<Record<string, string>> {
-    let capturedHeaders: Record<string, string> = {}
-
-    page.on('request', (request: Request) => {
-        if (request.url().startsWith(`https://${DOMAIN}`)) {
-            capturedHeaders = request.headers()
-        }
-    })
-
     await context.route(`**/${DOMAIN}/**`, (route) => {
-        void route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
-    })
-    await context.route(`https://${DOMAIN}/`, (route) => {
         void route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
     })
 
@@ -95,6 +88,25 @@ async function captureRequestHeaders(
     )
 
     await page.waitForFunction(() => (window as any).posthog?.__loaded === true)
+
+    // Wait for whichever wrappers this scenario enables to actually be
+    // installed before triggering the request. Without this the test
+    // could fire its fetch/XHR before the patch lands and pass trivially
+    // (false negative — no wrapper ever ran).
+    if (scenario.options?.__add_tracing_headers) {
+        await page.waitForFunction(
+            () => !!(window as any).__PosthogExtensions__?.tracingHeadersPatchFns
+        )
+    }
+    if (scenario.flagsResponseOverrides?.sessionRecording) {
+        await waitForSessionRecordingToStart(page)
+    }
+
+    // Wait for the actual outgoing request and read its headers from the
+    // request object directly. Replaces a sleep-based assertion and
+    // tolerates a small race where the request fires before the
+    // page.on('request') handler binds.
+    const requestPromise = page.waitForRequest((req) => req.url().startsWith(`https://${DOMAIN}`))
 
     if (method === 'fetch') {
         await page.evaluate(
@@ -124,20 +136,14 @@ async function captureRequestHeaders(
         )
     }
 
-    await page.waitForTimeout(500)
-    return capturedHeaders
+    const request = await requestPromise
+    return request.headers()
 }
 
 test.describe('CSRF headers survive PostHog network wrappers', () => {
-    const csrfHeaders = [
-        { header: 'x-csrf-token', value: 'r_lIDFH3NdoomvNNKK5SWHg3KFOpWvnARWDvvi_TbwY' },
-        { header: 'x-csrftoken', value: 'django-style-csrf' },
-        { header: 'x-xsrf-token', value: 'angular-style-xsrf' },
-    ]
-
     for (const scenario of scenarios) {
         for (const method of ['fetch', 'xhr'] as const) {
-            for (const { header, value } of csrfHeaders) {
+            for (const [header, value] of csrfHeaderCases) {
                 test(`${scenario.name} | ${method} | ${header} reaches the server unchanged`, async ({
                     page,
                     context,
@@ -148,7 +154,13 @@ test.describe('CSRF headers survive PostHog network wrappers', () => {
                         csrfValue: value,
                     })
 
-                    expect(headers[header]).toBe(value)
+                    // Playwright lowercases header names in request.headers(),
+                    // so look up case-insensitively in case the shared fixture
+                    // is ever extended with capitalised header names.
+                    const found = Object.entries(headers).find(
+                        ([k]) => k.toLowerCase() === header.toLowerCase()
+                    )
+                    expect(found?.[1]).toBe(value)
                 })
             }
         }
