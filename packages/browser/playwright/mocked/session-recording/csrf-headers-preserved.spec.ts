@@ -73,8 +73,20 @@ async function captureRequestHeaders(
         csrfValue,
     }: { method: 'fetch' | 'xhr'; csrfHeader: string; csrfValue: string }
 ): Promise<Record<string, string>> {
+    // CORS-compliant response so the browser's preflight succeeds and
+    // the actual POST is sent (otherwise we'd only ever capture the
+    // OPTIONS preflight, which never carries the custom CSRF header).
     await context.route(`**/${DOMAIN}/**`, (route) => {
-        void route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
+        void route.fulfill({
+            status: 200,
+            contentType: 'text/plain',
+            body: 'ok',
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+                'Access-Control-Allow-Headers': '*',
+            },
+        })
     })
 
     await start(
@@ -102,11 +114,12 @@ async function captureRequestHeaders(
         await waitForSessionRecordingToStart(page)
     }
 
-    // Wait for the actual outgoing request and read its headers from the
-    // request object directly. Replaces a sleep-based assertion and
-    // tolerates a small race where the request fires before the
-    // page.on('request') handler binds.
-    const requestPromise = page.waitForRequest((req) => req.url().startsWith(`https://${DOMAIN}`))
+    // Wait for the actual POST (not the OPTIONS preflight) and read its
+    // headers directly. Replaces a sleep-based assertion and tolerates a
+    // small race where the request fires before any handler binds.
+    const requestPromise = page.waitForRequest(
+        (req) => req.url().startsWith(`https://${DOMAIN}`) && req.method() === 'POST'
+    )
 
     if (method === 'fetch') {
         await page.evaluate(
