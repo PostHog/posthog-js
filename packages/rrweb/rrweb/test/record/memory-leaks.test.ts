@@ -1220,7 +1220,10 @@ describe('memory leak prevention', () => {
       c2.appendChild(iframe);
       await new Promise((r) => setTimeout(r, 50));
 
-      // Move must not have spliced any per-iframe MutationBuffer entries.
+      // Reparent must not splice any per-iframe MutationBuffer entries.
+      // (The count can grow because the add side re-serializes the iframe
+      // and `attachIframe` registers a fresh observer alongside the kept
+      // old one; that's a known limitation, separate from this leak.)
       expect(mutationBuffers.length).toBeGreaterThanOrEqual(buffersBeforeMove);
 
       stopRecording?.();

@@ -183,9 +183,12 @@ function record<T = eventWithTime>(
   // Set per id — one iframe id can collect several cleanups across loads.
   const iframeObserverCleanups = new Map<number, Set<listenerHandler>>();
 
-  // Forward-declared; assigned inside the try{} block where `handlers` is in scope.
-  let runAndDetachIframeCleanup: (iframeId: number) => void = () => {};
-  let cleanupDetachedIframeObservers: () => void = () => {};
+  // Forward-declared; assigned inside the try{} block where `handlers` is
+  // in scope. Optional-typed so a premature call is a no-op rather than a
+  // silently-swallowed cleanup — the try-block runs synchronously after the
+  // managers are constructed, but the types make that invariant explicit.
+  let runAndDetachIframeCleanup: ((iframeId: number) => void) | undefined;
+  let cleanupDetachedIframeObservers: (() => void) | undefined;
 
   const eventProcessor = (e: eventWithTime): T => {
     for (const plugin of plugins || []) {
@@ -279,14 +282,16 @@ function record<T = eventWithTime>(
           iframeManager.forgetIframeId(id);
           return;
         }
-        runAndDetachIframeCleanup(id);
+        runAndDetachIframeCleanup?.(id);
         iframeManager.removeIframeById(id);
       });
 
       // Catch iframes removed inside a removed subtree (only the ancestor's
-      // id appears in m.removes).
+      // id appears in m.removes). Disconnect observers before iframeManager
+      // releases the buffers, matching the order of the direct-remove path
+      // above so a queued mutation can't land on a freed buffer.
+      cleanupDetachedIframeObservers?.();
       iframeManager.cleanupDetachedIframes();
-      cleanupDetachedIframeObservers();
     }
 
     wrappedEmit({
@@ -499,15 +504,15 @@ function record<T = eventWithTime>(
       for (const [iframeId] of iframeObserverCleanups) {
         const iframe = mirror.getNode(iframeId) as HTMLIFrameElement | null;
         if (!iframe) {
-          runAndDetachIframeCleanup(iframeId);
+          runAndDetachIframeCleanup?.(iframeId);
           continue;
         }
         try {
           if (!iframe.contentDocument || !iframe.contentDocument.defaultView) {
-            runAndDetachIframeCleanup(iframeId);
+            runAndDetachIframeCleanup?.(iframeId);
           }
         } catch {
-          runAndDetachIframeCleanup(iframeId);
+          runAndDetachIframeCleanup?.(iframeId);
         }
       }
     };
@@ -670,7 +675,7 @@ function record<T = eventWithTime>(
 
     iframeManager.addPageHideListener((iframeEl) => {
       const iframeId = mirror.getId(iframeEl);
-      runAndDetachIframeCleanup(iframeId);
+      runAndDetachIframeCleanup?.(iframeId);
       findAndRemoveIframeBuffer(iframeEl);
     });
 

@@ -200,6 +200,14 @@ export class IframeManager {
     callSafely(() => {
       const pageHideWindow = iframeEl.contentWindow;
       if (!pageHideWindow) return;
+      let bucket = this.pageHideHandlers.get(iframeEl);
+      // Reparented / re-attached iframes call attachIframe again on the same
+      // Window; skip if we already registered a handler for it.
+      if (bucket) {
+        for (const entry of bucket) {
+          if (entry.win === pageHideWindow) return;
+        }
+      }
       const handler = () => {
         this.pageHideListener?.(iframeEl);
         if (iframeEl.contentDocument) {
@@ -210,7 +218,6 @@ export class IframeManager {
         }
       };
       pageHideWindow.addEventListener('pagehide', handler);
-      let bucket = this.pageHideHandlers.get(iframeEl);
       if (!bucket) {
         bucket = new Set();
         this.pageHideHandlers.set(iframeEl, bucket);

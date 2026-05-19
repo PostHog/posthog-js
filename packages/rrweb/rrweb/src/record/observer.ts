@@ -386,9 +386,8 @@ export function findAndRemoveIframeBuffer(
     const buf = mutationBuffers[i];
     if (!buf) continue;
     let match = buf.bufferBelongsToIframe(iframeEl);
-    if (!match && knownDocs) {
-      const bufDoc = buf.bufferDoc();
-      if (bufDoc && knownDocs.has(bufDoc)) match = true;
+    if (!match && knownDocs && knownDocs.has(buf.bufferDoc())) {
+      match = true;
     }
     if (match) {
       buf.reset();

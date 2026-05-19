@@ -359,35 +359,38 @@ function onceIframeLoaded(
     return noop;
   }
 
+  // Re-fire on any later load so iframe.src navigations get their fresh
+  // contentDocument serialized too. Used by both branches below.
+  const onSubsequentLoad = () => listener();
+
   if (readyState !== 'complete') {
     let fired = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const onLoad = () => {
+    const fireOnce = () => {
       if (fired) return;
       fired = true;
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
       }
-      iframeEl.removeEventListener('load', onLoad);
+      iframeEl.removeEventListener('load', onInitialLoad);
+      iframeEl.addEventListener('load', onSubsequentLoad);
       listener();
     };
-    timer = setTimeout(() => {
-      if (fired) return;
-      fired = true;
-      timer = null;
-      iframeEl.removeEventListener('load', onLoad);
-      listener();
-    }, iframeLoadTimeout);
-    iframeEl.addEventListener('load', onLoad);
+    const onInitialLoad = () => fireOnce();
+    timer = setTimeout(fireOnce, iframeLoadTimeout);
+    iframeEl.addEventListener('load', onInitialLoad);
     return () => {
-      if (fired) return;
-      fired = true;
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
       }
-      iframeEl.removeEventListener('load', onLoad);
+      if (fired) {
+        iframeEl.removeEventListener('load', onSubsequentLoad);
+      } else {
+        fired = true;
+        iframeEl.removeEventListener('load', onInitialLoad);
+      }
     };
   }
 
@@ -401,7 +404,6 @@ function onceIframeLoaded(
   } catch {
     return noop;
   }
-  const onSubsequentLoad = () => listener();
   if (
     winLocationHref !== blankUrl ||
     iframeEl.src === blankUrl ||
