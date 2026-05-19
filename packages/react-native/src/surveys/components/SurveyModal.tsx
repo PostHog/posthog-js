@@ -25,7 +25,14 @@ const VIEWPORT_BUFFER = 0
 const MODAL_FADE_DURATION_MS = 250
 
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
-  const { survey, surveyLanguage, appearance, onShow, onClose: onCloseProp, androidKeyboardBehavior = 'padding' } = props
+  const {
+    survey,
+    surveyLanguage,
+    appearance,
+    onShow,
+    onClose: onCloseProp,
+    androidKeyboardBehavior = 'padding',
+  } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
   const [responses, setResponses] = useState<SurveyResponses>({})
   const [isVisible, setIsVisible] = useState(true)
