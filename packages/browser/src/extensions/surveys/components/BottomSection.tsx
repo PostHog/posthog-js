@@ -14,6 +14,8 @@ export function BottomSection({
     link,
     onPreviewSubmit,
     skipSubmitButton,
+    canGoBack,
+    onBack,
 }: {
     text: string
     submitDisabled: boolean
@@ -22,29 +24,46 @@ export function BottomSection({
     link?: string | null
     onPreviewSubmit?: () => void
     skipSubmitButton?: boolean
+    canGoBack?: boolean
+    onBack?: () => void
 }) {
     const { isPreviewMode } = useContext(SurveyContext)
+    const showBackButton = !!canGoBack && !!onBack
     return (
         <div className="bottom-section">
-            {!skipSubmitButton && (
-                <button
-                    className="form-submit"
-                    disabled={submitDisabled}
-                    aria-label="Submit survey"
-                    type="button"
-                    onClick={() => {
-                        if (link) {
-                            window?.open(link)
-                        }
-                        if (isPreviewMode) {
-                            onPreviewSubmit?.()
-                        } else {
-                            onSubmit()
-                        }
-                    }}
-                >
-                    {text}
-                </button>
+            {(showBackButton || !skipSubmitButton) && (
+                <div className={`form-buttons${showBackButton ? ' form-buttons-with-back' : ''}`}>
+                    {showBackButton && (
+                        <button
+                            className="form-back"
+                            type="button"
+                            aria-label="Go to previous question"
+                            onClick={onBack}
+                        >
+                            {appearance.backButtonText || 'Back'}
+                        </button>
+                    )}
+                    {!skipSubmitButton && (
+                        <button
+                            className="form-submit"
+                            disabled={submitDisabled}
+                            aria-label="Submit survey"
+                            type="button"
+                            onClick={() => {
+                                if (link) {
+                                    window?.open(link)
+                                }
+                                if (isPreviewMode) {
+                                    onPreviewSubmit?.()
+                                } else {
+                                    onSubmit()
+                                }
+                            }}
+                        >
+                            {text}
+                        </button>
+                    )}
+                </div>
             )}
             {!appearance.whiteLabel && <PostHogLogo urlParams={{ utm_source: 'survey-footer' }} />}
         </div>

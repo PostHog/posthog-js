@@ -568,6 +568,10 @@ export type SurveyAppearance = {
   placeholder?: string
   shuffleQuestions?: boolean
   surveyPopupDelaySeconds?: number
+  // Show a "Back" button on questions after the first, allowing respondents to return to a previously visited question. Defaults to false.
+  allowGoBack?: boolean
+  // Optional override for the back button label.
+  backButtonText?: string
   // widget options
   widgetType?: SurveyWidgetType
   widgetSelector?: string

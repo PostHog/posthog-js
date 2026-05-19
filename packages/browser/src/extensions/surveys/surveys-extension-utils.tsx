@@ -689,6 +689,9 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
 interface InProgressSurveyState {
     surveySubmissionId: string
     lastQuestionIndex: number
+    // Indices the respondent has visited, in order, excluding the current one. Pushed on next, popped on back.
+    // Optional for backwards compat with state persisted before the back-navigation feature.
+    visitedIndices?: number[]
     responses: SurveyResponses
     surveyLanguage?: string | null
 }

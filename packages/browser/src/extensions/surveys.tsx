@@ -1269,6 +1269,10 @@ export function Questions({
         const inProgressSurveyData = getInProgressSurveyState(survey)
         return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
     })
+    const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        return inProgressSurveyData?.visitedIndices ?? []
+    })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
     // Sync preview state
@@ -1306,11 +1310,14 @@ export function Questions({
         const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
 
         if (!isSurveyCompleted) {
+            const newVisitedIndices = [...visitedIndices, displayQuestionIndex]
+            setVisitedIndices(newVisitedIndices)
             setCurrentQuestionIndex(nextStep)
             setInProgressSurveyState(survey, {
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
                 lastQuestionIndex: nextStep,
+                visitedIndices: newVisitedIndices,
                 surveyLanguage,
             })
         }
@@ -1329,6 +1336,25 @@ export function Questions({
             })
         }
     }
+
+    const onBackButtonClick = () => {
+        if (visitedIndices.length === 0) {
+            return
+        }
+        const previousIndex = visitedIndices[visitedIndices.length - 1]
+        const newVisitedIndices = visitedIndices.slice(0, -1)
+        setVisitedIndices(newVisitedIndices)
+        setCurrentQuestionIndex(previousIndex)
+        setInProgressSurveyState(survey, {
+            surveySubmissionId,
+            responses: questionsResponses,
+            lastQuestionIndex: previousIndex,
+            visitedIndices: newVisitedIndices,
+            surveyLanguage,
+        })
+    }
+
+    const canGoBack = !!survey.appearance?.allowGoBack && visitedIndices.length > 0 && !isPreviewMode
 
     const currentQuestion = surveyQuestions.at(currentQuestionIndex)
 
@@ -1363,6 +1389,8 @@ export function Questions({
                     initialValue: currentQuestion.id
                         ? questionsResponses[getSurveyResponseKey(currentQuestion.id)]
                         : undefined,
+                    canGoBack,
+                    onBack: onBackButtonClick,
                 })}
             </div>
         </form>
@@ -1490,6 +1518,8 @@ const getQuestionComponent = ({
     onSubmit,
     onPreviewSubmit,
     initialValue,
+    canGoBack,
+    onBack,
 }: GetQuestionComponentProps): JSX.Element | null => {
     const baseProps = {
         forceDisableHtml,
@@ -1502,6 +1532,8 @@ const getQuestionComponent = ({
         },
         initialValue,
         displayQuestionIndex,
+        canGoBack,
+        onBack,
     }
 
     switch (question.type) {
