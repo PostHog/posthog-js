@@ -134,7 +134,73 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         jest.resetModules()
     })
 
-    it('uses async native gzip when supported and preserves queued event order', async () => {
+    it.each([
+        {
+            name: 'async native gzip',
+            gzipSupported: true,
+            content: 'async snapshot',
+            shouldCallGzipCompress: true,
+            shouldQueueCustomEvent: true,
+        },
+        {
+            name: 'synchronous fflate fallback',
+            gzipSupported: false,
+            content: 'sync snapshot',
+            shouldCallGzipCompress: false,
+            shouldQueueCustomEvent: false,
+        },
+    ])('compresses full snapshots with $name', async (testCase) => {
+        let releaseCompression: () => void = () => {}
+        const compressionGate = new Promise<void>((resolve) => {
+            releaseCompression = resolve
+        })
+        const gzipCompress = jest.fn(async (input: string) => {
+            await compressionGate
+            return new Blob([gzipSync(strToU8(input))])
+        })
+
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: testCase.gzipSupported,
+            gzipCompress,
+        })
+
+        emit(createFullSnapshot({ content: testCase.content }))
+        if (testCase.shouldQueueCustomEvent) {
+            emit(createCustomSnapshot())
+            expect(posthog.capture).not.toHaveBeenCalled()
+        }
+
+        if (testCase.shouldCallGzipCompress) {
+            expect(gzipCompress).toHaveBeenCalledWith(
+                JSON.stringify({ content: testCase.content }),
+                expect.any(Boolean),
+                {
+                    rethrow: true,
+                }
+            )
+            releaseCompression()
+            await lazyLoadedSessionRecording['_compressionQueue']
+        } else {
+            expect(gzipCompress).not.toHaveBeenCalled()
+        }
+
+        lazyLoadedSessionRecording['_flushBuffer']()
+
+        const expectedSnapshotData = [expect.objectContaining({ type: 2, cv: '2024-10', data: expect.any(String) })]
+        if (testCase.shouldQueueCustomEvent) {
+            expectedSnapshotData.push(createCustomSnapshot() as any)
+        }
+
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$snapshot',
+            expect.objectContaining({
+                $snapshot_data: expectedSnapshotData,
+            }),
+            expect.any(Object)
+        )
+    })
+
+    it('flushes in-flight async compression before stop teardown', async () => {
         let releaseCompression: () => void = () => {}
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
@@ -149,34 +215,15 @@ describe('LazyLoadedSessionRecording compression paths', () => {
             gzipCompress,
         })
 
-        emit(createFullSnapshot({ content: 'async snapshot' }))
-        emit(createCustomSnapshot())
+        emit(createFullSnapshot({ content: 'stop waits for compression' }))
+        lazyLoadedSessionRecording.stop()
 
-        expect(gzipCompress).toHaveBeenCalledWith(JSON.stringify({ content: 'async snapshot' }), expect.any(Boolean), {
-            rethrow: true,
-        })
         expect(posthog.capture).not.toHaveBeenCalled()
 
         releaseCompression()
         await lazyLoadedSessionRecording['_compressionQueue']
-        lazyLoadedSessionRecording['_flushBuffer']()
+        await Promise.resolve()
 
-        const snapshotData = posthog.capture.mock.calls[0][1].$snapshot_data
-        expect(snapshotData).toEqual([
-            expect.objectContaining({ type: 2, cv: '2024-10', data: expect.any(String) }),
-            createCustomSnapshot(),
-        ])
-    })
-
-    it('keeps the synchronous fflate path when native gzip is unsupported', async () => {
-        const { emit, posthog, lazyLoadedSessionRecording, gzipCompress } = await setupLazyLoadedSessionRecording({
-            gzipSupported: false,
-        })
-
-        emit(createFullSnapshot({ content: 'sync snapshot' }))
-        lazyLoadedSessionRecording['_flushBuffer']()
-
-        expect(gzipCompress).not.toHaveBeenCalled()
         expect(posthog.capture).toHaveBeenCalledWith(
             '$snapshot',
             expect.objectContaining({

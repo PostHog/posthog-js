@@ -206,11 +206,7 @@ function gzipToString(data: unknown): string {
 async function gzipToStringAsync(data: unknown): Promise<string> {
     const serializedData = JSON.stringify(data)
     const compressed = await gzipCompress(serializedData, Config.DEBUG, { rethrow: true })
-    if (!compressed) {
-        return gzipStringToString(serializedData)
-    }
-
-    return strFromU8(new Uint8Array(await compressed.arrayBuffer()), true)
+    return strFromU8(new Uint8Array(await compressed!.arrayBuffer()), true)
 }
 
 let _gzippedEmptyArray: string | undefined
@@ -496,6 +492,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _compressionQueue?: Promise<void>
     private _queuedCompressionEvents: number = 0
     private _compressionQueueGeneration: number = 0
+    private _isStoppingAfterCompression: boolean = false
 
     private _removePageViewCaptureHook: (() => void) | undefined = undefined
 
@@ -1149,6 +1146,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._compressionQueueGeneration += 1
         this._queuedCompressionEvents = 0
         this._compressionQueue = undefined
+        this._isStoppingAfterCompression = false
 
         // Clear any queued rrweb events to prevent memory leaks from closures
         this._queuedRRWebEvents = []
@@ -1157,7 +1155,46 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._stopRrweb = undefined
     }
 
+    private _stopAfterCompressionQueueDrains(): boolean {
+        if (!this._compressionQueue || this._queuedCompressionEvents === 0) {
+            return false
+        }
+        if (this._isStoppingAfterCompression) {
+            return true
+        }
+
+        this._isStoppingAfterCompression = true
+        const generation = this._compressionQueueGeneration
+        this._clearFlushBufferTimer()
+        this._compressionQueue
+            .catch(() => undefined)
+            .then(() => {
+                if (generation !== this._compressionQueueGeneration) {
+                    return
+                }
+
+                this._isStoppingAfterCompression = false
+                this._flushBuffer()
+                this._clearBuffer()
+                this._teardown()
+                logger.info('stopped')
+            })
+            .catch(() => {
+                // Keep stop() best-effort. Compression errors are handled per event,
+                // but never let an unexpected queue failure block teardown.
+                this._isStoppingAfterCompression = false
+                this._teardown()
+                logger.info('stopped')
+            })
+
+        return true
+    }
+
     stop() {
+        if (this._stopAfterCompressionQueueDrains()) {
+            return
+        }
+
         this._flushBuffer()
         this._clearBuffer()
         this._teardown()
