@@ -32,11 +32,14 @@ import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
 import {
     clampToRange,
+    gzipCompress,
     isArray,
     isBoolean,
     isFunction,
+    isGzipSupported,
     isNull,
     isNullish,
+    isNativeAsyncGzipError,
     isNumber,
     isObject,
     isString,
@@ -192,11 +195,28 @@ export type compressedEventWithTime = compressedEvent & {
     cv: '2024-10'
 }
 
+function gzipStringToString(serializedData: string): string {
+    return strFromU8(gzipSync(strToU8(serializedData)), true)
+}
+
 function gzipToString(data: unknown): string {
-    return strFromU8(gzipSync(strToU8(JSON.stringify(data))), true)
+    return gzipStringToString(JSON.stringify(data))
+}
+
+async function gzipToStringAsync(data: unknown): Promise<string> {
+    const serializedData = JSON.stringify(data)
+    const compressed = await gzipCompress(serializedData, Config.DEBUG, { rethrow: true })
+    if (!compressed) {
+        return gzipStringToString(serializedData)
+    }
+
+    return strFromU8(new Uint8Array(await compressed.arrayBuffer()), true)
 }
 
 let _gzippedEmptyArray: string | undefined
+let _gzippedEmptyArrayPromise: Promise<string> | undefined
+const _isNativeAsyncSessionRecordingGzipSupported = typeof globalThis !== 'undefined' && isGzipSupported()
+let _nativeAsyncSessionRecordingGzipDisabled = false
 
 function gzipField(data: unknown): string {
     if (isArray(data) && data.length === 0) {
@@ -204,6 +224,87 @@ function gzipField(data: unknown): string {
         return _gzippedEmptyArray
     }
     return gzipToString(data)
+}
+
+async function gzipFieldAsync(data: unknown): Promise<string> {
+    if (isArray(data) && data.length === 0) {
+        if (_gzippedEmptyArray) {
+            return _gzippedEmptyArray
+        }
+        _gzippedEmptyArrayPromise =
+            _gzippedEmptyArrayPromise ??
+            gzipToStringAsync([])
+                .then((compressed) => {
+                    _gzippedEmptyArray = compressed
+                    return compressed
+                })
+                .catch((error) => {
+                    _gzippedEmptyArray = undefined
+                    _gzippedEmptyArrayPromise = undefined
+                    throw error
+                })
+        return _gzippedEmptyArrayPromise
+    }
+    return gzipToStringAsync(data)
+}
+
+function shouldCompressEvent(event: eventWithTime): boolean {
+    return (
+        event.type === EventType.FullSnapshot ||
+        (event.type === EventType.IncrementalSnapshot &&
+            (event.data.source === IncrementalSource.Mutation ||
+                event.data.source === IncrementalSource.StyleSheetRule))
+    )
+}
+
+function shouldUseNativeAsyncSessionRecordingGzip(event: eventWithTime): boolean {
+    return (
+        _isNativeAsyncSessionRecordingGzipSupported &&
+        !_nativeAsyncSessionRecordingGzipDisabled &&
+        shouldCompressEvent(event)
+    )
+}
+
+type CompressedEventResult = { event: eventWithTime | compressedEventWithTime; size: number }
+
+type CompressedMutationFields = Pick<
+    compressedIncrementalSnapshotEvent['data'],
+    'texts' | 'attributes' | 'removes' | 'adds'
+>
+type CompressedStyleFields = Pick<compressedIncrementalStyleSnapshotEvent['data'], 'adds' | 'removes'>
+
+function compressedResult(event: compressedEventWithTime): CompressedEventResult {
+    return { event, size: estimateCompressedEventSize(event) }
+}
+
+function buildCompressedFullSnapshotEvent(event: eventWithTime, data: string): compressedEventWithTime {
+    return {
+        ...event,
+        data,
+        cv: '2024-10' as const,
+    } as compressedEventWithTime
+}
+
+function buildCompressedMutationEvent(event: eventWithTime, fields: CompressedMutationFields): compressedEventWithTime {
+    return {
+        ...event,
+        cv: '2024-10' as const,
+        data: {
+            ...(event.data as Record<string, unknown>),
+            ...fields,
+        },
+    } as compressedEventWithTime
+}
+
+function buildCompressedStyleEvent(event: eventWithTime, fields: CompressedStyleFields): compressedEventWithTime {
+    return {
+        ...event,
+        cv: '2024-10' as const,
+        data: {
+            ...(event.data as Record<string, unknown>),
+            ...fields,
+        },
+    } as compressedEventWithTime
 }
 
 /**
@@ -215,44 +316,62 @@ function gzipField(data: unknown): string {
  * returns the compressed event and its estimated JSON size,
  * avoiding a redundant JSON.stringify for size estimation
  */
-function compressEvent(event: eventWithTime): { event: eventWithTime | compressedEventWithTime; size: number } {
+function compressEventSync(event: eventWithTime): CompressedEventResult {
     try {
         if (event.type === EventType.FullSnapshot) {
-            const compressed = {
-                ...event,
-                data: gzipToString(event.data),
-                cv: '2024-10' as const,
-            }
-            return { event: compressed, size: estimateCompressedEventSize(compressed) }
+            return compressedResult(buildCompressedFullSnapshotEvent(event, gzipToString(event.data)))
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
-            const compressed = {
-                ...event,
-                cv: '2024-10' as const,
-                data: {
-                    ...event.data,
+            return compressedResult(
+                buildCompressedMutationEvent(event, {
                     texts: gzipField(event.data.texts),
                     attributes: gzipField(event.data.attributes),
                     removes: gzipField(event.data.removes),
                     adds: gzipField(event.data.adds),
-                },
-            }
-            return { event: compressed, size: estimateCompressedEventSize(compressed) }
+                })
+            )
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
-            const compressed = {
-                ...event,
-                cv: '2024-10' as const,
-                data: {
-                    ...event.data,
+            return compressedResult(
+                buildCompressedStyleEvent(event, {
                     adds: event.data.adds ? gzipToString(event.data.adds) : undefined,
                     removes: event.data.removes ? gzipToString(event.data.removes) : undefined,
-                },
-            }
-            return { event: compressed, size: estimateCompressedEventSize(compressed) }
+                })
+            )
         }
     } catch (e) {
         logger.error('could not compress event - will use uncompressed event', e)
+    }
+    return { event, size: estimateSize(event) }
+}
+
+async function compressEventAsync(event: eventWithTime): Promise<CompressedEventResult> {
+    try {
+        if (event.type === EventType.FullSnapshot) {
+            return compressedResult(buildCompressedFullSnapshotEvent(event, await gzipToStringAsync(event.data)))
+        }
+        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
+            const [texts, attributes, removes, adds] = await Promise.all([
+                gzipFieldAsync(event.data.texts),
+                gzipFieldAsync(event.data.attributes),
+                gzipFieldAsync(event.data.removes),
+                gzipFieldAsync(event.data.adds),
+            ])
+            return compressedResult(buildCompressedMutationEvent(event, { texts, attributes, removes, adds }))
+        }
+        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
+            const [adds, removes] = await Promise.all([
+                event.data.adds ? gzipToStringAsync(event.data.adds) : undefined,
+                event.data.removes ? gzipToStringAsync(event.data.removes) : undefined,
+            ])
+            return compressedResult(buildCompressedStyleEvent(event, { adds, removes }))
+        }
+    } catch (e) {
+        if (isNativeAsyncGzipError(e)) {
+            _nativeAsyncSessionRecordingGzipDisabled = true
+        }
+        logger.error('could not compress event asynchronously - trying synchronous compression', e)
+        return compressEventSync(event)
     }
     return { event, size: estimateSize(event) }
 }
@@ -374,6 +493,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushBufferTimer?: any
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private _buffer: SnapshotBuffer
+    private _compressionQueue?: Promise<void>
+    private _queuedCompressionEvents: number = 0
+    private _compressionQueueGeneration: number = 0
 
     private _removePageViewCaptureHook: (() => void) | undefined = undefined
 
@@ -1022,6 +1144,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._mutationThrottler?.stop()
 
+        // Invalidate any in-flight async compression work so it does not capture events
+        // after stop()/discard() has cleared the buffer or after a future restart.
+        this._compressionQueueGeneration += 1
+        this._queuedCompressionEvents = 0
+        this._compressionQueue = undefined
+
         // Clear any queued rrweb events to prevent memory leaks from closures
         this._queuedRRWebEvents = []
 
@@ -1040,6 +1168,65 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._clearBuffer()
         this._teardown()
         logger.info('discarded')
+    }
+
+    private _captureProcessedEvent(
+        event: eventWithTime,
+        eventToSend: eventWithTime | compressedEventWithTime,
+        size: number,
+        targetSessionId: string,
+        targetWindowId: string
+    ) {
+        const properties = {
+            $snapshot_bytes: size,
+            $snapshot_data: eventToSend,
+            $session_id: targetSessionId,
+            $window_id: targetWindowId,
+        }
+
+        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
+            this._maxDepthExceeded = true
+        }
+
+        if (this.status === DISABLED) {
+            this._clearBuffer()
+            return
+        }
+
+        this._captureSnapshotBuffered(properties)
+    }
+
+    private _enqueueCompression(
+        event: eventWithTime,
+        compressionEnabled: boolean,
+        targetSessionId: string,
+        targetWindowId: string
+    ) {
+        const generation = this._compressionQueueGeneration
+        this._queuedCompressionEvents += 1
+        const processEvent = async () => {
+            try {
+                const { event: eventToSend, size } = compressionEnabled
+                    ? shouldUseNativeAsyncSessionRecordingGzip(event)
+                        ? await compressEventAsync(event)
+                        : compressEventSync(event)
+                    : { event, size: estimateSize(event) }
+
+                if (generation !== this._compressionQueueGeneration) {
+                    return
+                }
+
+                this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
+            } finally {
+                if (generation === this._compressionQueueGeneration) {
+                    this._queuedCompressionEvents = Math.max(0, this._queuedCompressionEvents - 1)
+                }
+            }
+        }
+
+        this._compressionQueue = this._compressionQueue
+            ? this._compressionQueue.catch(() => undefined).then(processEvent)
+            : processEvent()
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
@@ -1164,28 +1351,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        const { event: eventToSend, size } =
-            (this._instance.config.session_recording.compress_events ?? true)
-                ? compressEvent(event)
-                : { event, size: estimateSize(event) }
+        const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
 
-        const properties = {
-            $snapshot_bytes: size,
-            $snapshot_data: eventToSend,
-            $session_id: targetSessionId,
-            $window_id: targetWindowId,
-        }
-
-        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
-            this._maxDepthExceeded = true
-        }
-
-        if (this.status === DISABLED) {
-            this._clearBuffer()
+        if (
+            this._queuedCompressionEvents > 0 ||
+            (compressionEnabled && shouldUseNativeAsyncSessionRecordingGzip(event))
+        ) {
+            this._enqueueCompression(event, compressionEnabled, targetSessionId, targetWindowId)
             return
         }
 
-        this._captureSnapshotBuffered(properties)
+        const { event: eventToSend, size } = compressionEnabled
+            ? compressEventSync(event)
+            : { event, size: estimateSize(event) }
+        this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
     }
 
     get status(): SessionRecordingStatus {
