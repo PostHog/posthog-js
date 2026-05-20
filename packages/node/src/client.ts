@@ -671,7 +671,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+    await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
   }
 
   /**
