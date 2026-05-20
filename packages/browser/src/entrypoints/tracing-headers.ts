@@ -7,6 +7,7 @@ import { isArray } from '@posthog/core'
 const SESSION_ID_HEADER = 'X-POSTHOG-SESSION-ID'
 const WINDOW_ID_HEADER = 'X-POSTHOG-WINDOW-ID'
 const DISTINCT_ID_HEADER = 'X-POSTHOG-DISTINCT-ID'
+const TRACING_HEADERS = [SESSION_ID_HEADER, WINDOW_ID_HEADER, DISTINCT_ID_HEADER]
 
 const addTracingHeaders = (
     hostnames: string[],
@@ -82,9 +83,8 @@ const patchXHR = (hostnames: string[], distinctId: string, sessionManager?: Sess
                 addTracingHeaders(hostnames, distinctId, sessionManager, req)
 
                 const result = originalOpen.call(xhr, method, req.url, async, username, password)
-                const tracingHeaders = [SESSION_ID_HEADER, WINDOW_ID_HEADER, DISTINCT_ID_HEADER]
 
-                tracingHeaders.forEach((header) => {
+                TRACING_HEADERS.forEach((header) => {
                     const value = req.headers.get(header)
                     if (value) {
                         xhr.setRequestHeader(header, value)

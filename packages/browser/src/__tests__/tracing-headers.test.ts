@@ -46,43 +46,53 @@ describe('tracing headers', () => {
         checkAndGetSessionAndWindowId: jest.fn(() => ({ sessionId: 'session-id', windowId: 'window-id' })),
     }
 
-    it('adds tracing headers to matching XHR requests', () => {
+    test.each([
+        {
+            name: 'adds tracing headers to matching XHR requests',
+            url: 'https://example.com/path',
+            distinctId: 'distinct-id',
+            expectedHeaders: [
+                ['X-POSTHOG-SESSION-ID', 'session-id'],
+                ['X-POSTHOG-WINDOW-ID', 'window-id'],
+                ['X-POSTHOG-DISTINCT-ID', 'distinct-id'],
+            ],
+            absentHeaders: [],
+        },
+        {
+            name: 'does not add tracing headers to non-matching XHR requests',
+            url: 'https://other.example/path',
+            distinctId: 'distinct-id',
+            expectedHeaders: [],
+            absentHeaders: [
+                ['X-POSTHOG-SESSION-ID', 'session-id'],
+                ['X-POSTHOG-WINDOW-ID', 'window-id'],
+                ['X-POSTHOG-DISTINCT-ID', 'distinct-id'],
+            ],
+        },
+        {
+            name: 'does not add the distinct ID header to XHR requests when cookieless mode is active',
+            url: 'https://example.com/path',
+            distinctId: COOKIELESS_SENTINEL_VALUE,
+            expectedHeaders: [
+                ['X-POSTHOG-SESSION-ID', 'session-id'],
+                ['X-POSTHOG-WINDOW-ID', 'window-id'],
+            ],
+            absentHeaders: [['X-POSTHOG-DISTINCT-ID', 'distinct-id']],
+        },
+    ])('$name', ({ url, distinctId, expectedHeaders, absentHeaders }) => {
         const setRequestHeaderSpy = jest
             .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
             .mockImplementation(() => {})
-        restoreXHRPatch = patchFns._patchXHR(['example.com'], 'distinct-id', sessionManager as any)
+        restoreXHRPatch = patchFns._patchXHR(['example.com'], distinctId, sessionManager as any)
 
         const xhr = new XMLHttpRequest()
-        xhr.open('GET', 'https://example.com/path')
+        xhr.open('GET', url)
 
-        expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-SESSION-ID', 'session-id')
-        expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-WINDOW-ID', 'window-id')
-        expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-DISTINCT-ID', 'distinct-id')
-    })
-
-    it('does not add tracing headers to non-matching XHR requests', () => {
-        const setRequestHeaderSpy = jest
-            .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
-            .mockImplementation(() => {})
-        restoreXHRPatch = patchFns._patchXHR(['example.com'], 'distinct-id', sessionManager as any)
-
-        const xhr = new XMLHttpRequest()
-        xhr.open('GET', 'https://other.example/path')
-
-        expect(setRequestHeaderSpy).not.toHaveBeenCalled()
-    })
-
-    it('does not add the distinct ID header to XHR requests when cookieless mode is active', () => {
-        const setRequestHeaderSpy = jest
-            .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
-            .mockImplementation(() => {})
-        restoreXHRPatch = patchFns._patchXHR(['example.com'], COOKIELESS_SENTINEL_VALUE, sessionManager as any)
-
-        const xhr = new XMLHttpRequest()
-        xhr.open('GET', 'https://example.com/path')
-
-        expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-SESSION-ID', 'session-id')
-        expect(setRequestHeaderSpy).toHaveBeenCalledWith('X-POSTHOG-WINDOW-ID', 'window-id')
-        expect(setRequestHeaderSpy).not.toHaveBeenCalledWith('X-POSTHOG-DISTINCT-ID', expect.anything())
+        expectedHeaders.forEach(([header, value]) => {
+            expect(setRequestHeaderSpy).toHaveBeenCalledWith(header, value)
+        })
+        absentHeaders.forEach(([header, value]) => {
+            expect(setRequestHeaderSpy).not.toHaveBeenCalledWith(header, value)
+        })
     })
 })
