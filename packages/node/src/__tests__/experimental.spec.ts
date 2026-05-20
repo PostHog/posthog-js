@@ -1,38 +1,28 @@
-import {
-  getPostHogNodeExperimentalWarningGlobal,
-  POSTHOG_NODE_EXPERIMENTAL_DEPRECATION_WARNING,
-  POSTHOG_NODE_EXPERIMENTAL_WARNING_KEY,
-} from '../experimental-deprecation'
-
-const resetExperimentalWarning = (): void => {
-  delete getPostHogNodeExperimentalWarningGlobal()[POSTHOG_NODE_EXPERIMENTAL_WARNING_KEY]
-}
+const deprecationWarning =
+  "[PostHog] `posthog-node/experimental` is deprecated. Use `import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'` instead."
 
 describe('experimental entrypoint', () => {
   let warnSpy: jest.SpyInstance
 
   beforeEach(() => {
     jest.resetModules()
-    resetExperimentalWarning()
     warnSpy = jest.spyOn(console, 'warn').mockImplementation()
   })
 
   afterEach(() => {
     warnSpy.mockRestore()
-    resetExperimentalWarning()
   })
 
-  it('warns and exposes placeholder named exports for backwards compatibility', async () => {
+  it('warns when runtime importing the deprecated entrypoint', async () => {
     const experimental = await import('../experimental')
 
-    expect(warnSpy).toHaveBeenCalledWith(POSTHOG_NODE_EXPERIMENTAL_DEPRECATION_WARNING)
-    expect(experimental.FlagDefinitionCacheData).toBeUndefined()
-    expect(experimental.FlagDefinitionCacheProvider).toBeUndefined()
+    expect(warnSpy).toHaveBeenCalledWith(deprecationWarning)
+    expect('FlagDefinitionCacheData' in experimental).toBe(false)
+    expect('FlagDefinitionCacheProvider' in experimental).toBe(false)
   })
 
-  it('only warns once globally', async () => {
+  it('uses the module cache for repeat imports', async () => {
     await import('../experimental')
-    jest.resetModules()
     await import('../experimental')
 
     expect(warnSpy).toHaveBeenCalledTimes(1)
