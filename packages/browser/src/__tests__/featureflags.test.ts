@@ -1076,6 +1076,90 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
         })
 
+        it('should call /flags with flag_keys when configured', () => {
+            instance.config.flag_keys = ['beta-feature', 'checkout-redesign']
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.flag_keys).toEqual([
+                'beta-feature',
+                'checkout-redesign',
+            ])
+        })
+
+        it('should call /flags with empty flag_keys when configured as an empty array', () => {
+            instance.config.flag_keys = []
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.flag_keys).toEqual([])
+        })
+
+        it('should filter invalid flag_keys before sending', () => {
+            const errorSpy = jest.spyOn(window.console, 'error').mockImplementation()
+            instance.config.flag_keys = ['beta-feature', '', null as any, 'checkout-redesign', '   ']
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.flag_keys).toEqual([
+                'beta-feature',
+                'checkout-redesign',
+            ])
+
+            errorSpy.mockRestore()
+        })
+
+        it('should not include flag_keys when configured with an invalid non-array value', () => {
+            const errorSpy = jest.spyOn(window.console, 'error').mockImplementation()
+            instance.config.flag_keys = 'beta-feature' as any
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('flag_keys')
+
+            errorSpy.mockRestore()
+        })
+
+        it('should replace existing flags with the flag_keys response', () => {
+            const requestedFlagDetail = {
+                key: 'checkout-redesign',
+                enabled: true,
+                variant: undefined,
+                reason: { code: 'condition_match', condition_index: 0, description: undefined },
+                metadata: { id: 42, version: 1, payload: undefined, description: undefined },
+            }
+            instance.config.flag_keys = ['checkout-redesign']
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        flags: {
+                            'checkout-redesign': requestedFlagDetail,
+                        },
+                    },
+                })
+            )
+
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance.persistence.props.$enabled_feature_flags).toEqual({
+                'checkout-redesign': true,
+            })
+        })
+
+        it('should not include flag_keys when not configured', () => {
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('flag_keys')
+        })
+
         it('should not include evaluation_contexts when not configured', () => {
             featureFlags.reloadFeatureFlags()
             jest.runOnlyPendingTimers()
@@ -3099,6 +3183,62 @@ describe('getRemoteConfigPayload', () => {
                 }),
             })
         )
+    })
+
+    it('should include flag_keys when configured', () => {
+        instance.config.flag_keys = ['remote-config-flag']
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                    flag_keys: ['remote-config-flag'],
+                }),
+            })
+        )
+    })
+
+    it('should include empty flag_keys when configured as an empty array', () => {
+        instance.config.flag_keys = []
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                    flag_keys: [],
+                }),
+            })
+        )
+    })
+
+    it('should not include flag_keys when not configured', () => {
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                }),
+            })
+        )
+
+        expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('flag_keys')
     })
 
     it('should not include evaluation_contexts when not configured', () => {
