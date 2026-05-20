@@ -4,6 +4,10 @@ import { assignableWindow, window } from '../utils/globals'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import { isArray } from '@posthog/core'
 
+const SESSION_ID_HEADER = 'X-POSTHOG-SESSION-ID'
+const WINDOW_ID_HEADER = 'X-POSTHOG-WINDOW-ID'
+const DISTINCT_ID_HEADER = 'X-POSTHOG-DISTINCT-ID'
+
 const addTracingHeaders = (
     hostnames: string[],
     distinctId: string,
@@ -27,11 +31,11 @@ const addTracingHeaders = (
 
     if (sessionManager) {
         const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
-        req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
-        req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
+        req.headers.set(SESSION_ID_HEADER, sessionId)
+        req.headers.set(WINDOW_ID_HEADER, windowId)
     }
     if (distinctId !== COOKIELESS_SENTINEL_VALUE) {
-        req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
+        req.headers.set(DISTINCT_ID_HEADER, distinctId)
     }
 }
 
@@ -77,7 +81,17 @@ const patchXHR = (hostnames: string[], distinctId: string, sessionManager?: Sess
 
                 addTracingHeaders(hostnames, distinctId, sessionManager, req)
 
-                return originalOpen.call(xhr, method, req.url, async, username, password)
+                const result = originalOpen.call(xhr, method, req.url, async, username, password)
+                const tracingHeaders = [SESSION_ID_HEADER, WINDOW_ID_HEADER, DISTINCT_ID_HEADER]
+
+                tracingHeaders.forEach((header) => {
+                    const value = req.headers.get(header)
+                    if (value) {
+                        xhr.setRequestHeader(header, value)
+                    }
+                })
+
+                return result
             }
         }
     )
