@@ -3645,30 +3645,31 @@ describe('semver operators', () => {
       )
     })
 
-    it('rejects leading zeros in override values across operators', () => {
-      // Per semver 2.0.0 §2, numeric identifiers MUST NOT include leading zeros.
-      for (const bad of ['01.2.3', '1.02.3', '1.2.03', '1.07.3', '001.2.3']) {
-        expect(() =>
-          matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: bad })
-        ).toThrow(InconclusiveMatchError)
-      }
+    // Per semver 2.0.0 §2, numeric identifiers MUST NOT include leading zeros.
+    it.each(['01.2.3', '1.02.3', '1.2.03', '1.07.3', '001.2.3'])('rejects leading-zero override value %p', (bad) => {
+      expect(() => matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: bad })).toThrow(
+        InconclusiveMatchError
+      )
     })
 
-    it('rejects leading zeros in flag values across range operators', () => {
+    it.each<[string]>([
+      ['semver_eq'],
+      ['semver_neq'],
+      ['semver_gt'],
+      ['semver_gte'],
+      ['semver_lt'],
+      ['semver_lte'],
+      ['semver_tilde'],
+      ['semver_caret'],
+    ])('rejects leading-zero flag value for %s', (operator) => {
+      expect(() => matchProperty({ key: 'version', value: '1.07.3', operator }, { version: '1.8.0' })).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
+    it.each(['01.*', '1.07.*'])('rejects leading-zero wildcard pattern %p', (pattern) => {
       expect(() =>
-        matchProperty({ key: 'version', value: '1.07.3', operator: 'semver_gt' }, { version: '1.8.0' })
-      ).toThrow(InconclusiveMatchError)
-      expect(() =>
-        matchProperty({ key: 'version', value: '01.2.3', operator: 'semver_caret' }, { version: '1.2.3' })
-      ).toThrow(InconclusiveMatchError)
-      expect(() =>
-        matchProperty({ key: 'version', value: '1.02.3', operator: 'semver_tilde' }, { version: '1.2.3' })
-      ).toThrow(InconclusiveMatchError)
-      expect(() =>
-        matchProperty({ key: 'version', value: '01.*', operator: 'semver_wildcard' }, { version: '1.2.3' })
-      ).toThrow(InconclusiveMatchError)
-      expect(() =>
-        matchProperty({ key: 'version', value: '1.07.*', operator: 'semver_wildcard' }, { version: '1.7.3' })
+        matchProperty({ key: 'version', value: pattern, operator: 'semver_wildcard' }, { version: '1.2.3' })
       ).toThrow(InconclusiveMatchError)
     })
 
