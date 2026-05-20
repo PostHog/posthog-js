@@ -1,11 +1,11 @@
-const experimentalWarningKey = '__posthogNodeExperimentalImportWarningShown'
-const deprecationWarning =
-  "[PostHog] `posthog-node/experimental` is deprecated. Use `import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'` instead."
+import {
+  getPostHogNodeExperimentalWarningGlobal,
+  POSTHOG_NODE_EXPERIMENTAL_DEPRECATION_WARNING,
+  POSTHOG_NODE_EXPERIMENTAL_WARNING_KEY,
+} from '../experimental-deprecation'
 
 const resetExperimentalWarning = (): void => {
-  delete (globalThis as typeof globalThis & { __posthogNodeExperimentalImportWarningShown?: boolean })[
-    experimentalWarningKey
-  ]
+  delete getPostHogNodeExperimentalWarningGlobal()[POSTHOG_NODE_EXPERIMENTAL_WARNING_KEY]
 }
 
 describe('experimental entrypoint', () => {
@@ -25,7 +25,7 @@ describe('experimental entrypoint', () => {
   it('warns and exposes placeholder named exports for backwards compatibility', async () => {
     const experimental = await import('../experimental')
 
-    expect(warnSpy).toHaveBeenCalledWith(deprecationWarning)
+    expect(warnSpy).toHaveBeenCalledWith(POSTHOG_NODE_EXPERIMENTAL_DEPRECATION_WARNING)
     expect(experimental.FlagDefinitionCacheData).toBeUndefined()
     expect(experimental.FlagDefinitionCacheProvider).toBeUndefined()
   })

@@ -8,21 +8,22 @@
  * @experimental
  */
 
+import {
+  getPostHogNodeExperimentalWarningGlobal,
+  POSTHOG_NODE_EXPERIMENTAL_DEPRECATION_WARNING,
+  POSTHOG_NODE_EXPERIMENTAL_WARNING_KEY,
+} from './experimental-deprecation'
 import type {
   FlagDefinitionCacheData as FlagDefinitionCacheDataType,
   FlagDefinitionCacheProvider as FlagDefinitionCacheProviderType,
 } from './extensions/feature-flags/cache'
 
-const globalWithPostHogExperimentalWarning = globalThis as typeof globalThis & {
-  __posthogNodeExperimentalImportWarningShown?: boolean
-}
+const globalWithPostHogExperimentalWarning = getPostHogNodeExperimentalWarningGlobal()
 
-if (!globalWithPostHogExperimentalWarning.__posthogNodeExperimentalImportWarningShown) {
-  globalWithPostHogExperimentalWarning.__posthogNodeExperimentalImportWarningShown = true
+if (!globalWithPostHogExperimentalWarning[POSTHOG_NODE_EXPERIMENTAL_WARNING_KEY]) {
+  globalWithPostHogExperimentalWarning[POSTHOG_NODE_EXPERIMENTAL_WARNING_KEY] = true
   // eslint-disable-next-line no-console
-  console.warn(
-    "[PostHog] `posthog-node/experimental` is deprecated. Use `import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'` instead."
-  )
+  console.warn(POSTHOG_NODE_EXPERIMENTAL_DEPRECATION_WARNING)
 }
 
 /**
@@ -32,6 +33,10 @@ export type FlagDefinitionCacheData = FlagDefinitionCacheDataType
 
 /**
  * Runtime placeholder for backwards-compatible named imports from `posthog-node/experimental`.
+ *
+ * This intentionally shares a name with the type alias above: the type alias preserves
+ * existing TypeScript users, while this value export lets runtime named imports load
+ * the module and receive the deprecation warning.
  *
  * @deprecated `FlagDefinitionCacheData` is a type-only API. Use `import type { FlagDefinitionCacheData } from 'posthog-node'` instead.
  */
@@ -44,6 +49,10 @@ export type FlagDefinitionCacheProvider = FlagDefinitionCacheProviderType
 
 /**
  * Runtime placeholder for backwards-compatible named imports from `posthog-node/experimental`.
+ *
+ * This intentionally shares a name with the type alias above: the type alias preserves
+ * existing TypeScript users, while this value export lets runtime named imports load
+ * the module and receive the deprecation warning.
  *
  * @deprecated `FlagDefinitionCacheProvider` is a type-only API. Use `import type { FlagDefinitionCacheProvider } from 'posthog-node'` instead.
  */
