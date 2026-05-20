@@ -49,6 +49,7 @@ const GENERIC = 'Generic'
 const GENERIC_MOBILE = GENERIC + ' ' + MOBILE.toLowerCase()
 const GENERIC_TABLET = GENERIC + ' ' + TABLET.toLowerCase()
 const KONQUEROR = 'Konqueror'
+const OCULUS_BROWSER = 'Oculus Browser'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
@@ -100,6 +101,13 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
   } else if (includes(user_agent, 'IE' + MOBILE) || includes(user_agent, 'WPDesktop')) {
     return INTERNET_EXPLORER_MOBILE
   }
+  // Oculus Browser (Meta Quest) is Chromium-based, so its UA includes
+  // `OculusBrowser` alongside `Chrome` (and sometimes `SamsungBrowser`).
+  // We must check for it before those, otherwise it would be misdetected.
+  // See https://github.com/PostHog/posthog-js/issues/3574
+  else if (includes(user_agent, 'OculusBrowser')) {
+    return OCULUS_BROWSER
+  }
   // https://developer.samsung.com/internet/user-agent-string-format
   else if (includes(user_agent, SAMSUNG_BROWSER)) {
     return SAMSUNG_INTERNET
@@ -150,6 +158,7 @@ const versionRegexes: Record<string, RegExp[]> = {
   [BLACKBERRY]: [new RegExp(BLACKBERRY + ' ' + BROWSER_VERSION_REGEX_SUFFIX), DEFAULT_BROWSER_VERSION_REGEX],
   [ANDROID_MOBILE]: [new RegExp('android\\s' + BROWSER_VERSION_REGEX_SUFFIX, 'i')],
   [SAMSUNG_INTERNET]: [new RegExp(SAMSUNG_BROWSER + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [OCULUS_BROWSER]: [new RegExp('OculusBrowser\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [INTERNET_EXPLORER]: [new RegExp('(rv:|MSIE )' + BROWSER_VERSION_REGEX_SUFFIX)],
   Mozilla: [new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],
 }
