@@ -3291,8 +3291,14 @@ describe('semver parsing', () => {
     expect(parseSemver('1.2.3.4.5.6')).toEqual([1, 2, 3])
   })
 
-  it('handles leading zeros', () => {
-    expect(parseSemver('01.02.03')).toEqual([1, 2, 3])
+  it('rejects leading zeros per semver 2.0.0 §2', () => {
+    expect(() => parseSemver('01.02.03')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1.07.3')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('001.2.3')).toThrow(InconclusiveMatchError)
+    // Literal "0" components remain valid.
+    expect(parseSemver('0.1.0')).toEqual([0, 1, 0])
+    expect(parseSemver('1.0.0')).toEqual([1, 0, 0])
+    expect(parseSemver('0.0.0')).toEqual([0, 0, 0])
   })
 
   it('throws on invalid input', () => {
@@ -3639,10 +3645,37 @@ describe('semver operators', () => {
       )
     })
 
-    it('handles leading zeros', () => {
-      expect(matchProperty({ key: 'version', value: '01.02.03', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
-        true
-      )
+    it('rejects leading zeros in override values across operators', () => {
+      // Per semver 2.0.0 §2, numeric identifiers MUST NOT include leading zeros.
+      for (const bad of ['01.2.3', '1.02.3', '1.2.03', '1.07.3', '001.2.3']) {
+        expect(() =>
+          matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: bad })
+        ).toThrow(InconclusiveMatchError)
+      }
+    })
+
+    it('rejects leading zeros in flag values across range operators', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.07.3', operator: 'semver_gt' }, { version: '1.8.0' })
+      ).toThrow(InconclusiveMatchError)
+      expect(() =>
+        matchProperty({ key: 'version', value: '01.2.3', operator: 'semver_caret' }, { version: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.02.3', operator: 'semver_tilde' }, { version: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+      expect(() =>
+        matchProperty({ key: 'version', value: '01.*', operator: 'semver_wildcard' }, { version: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.07.*', operator: 'semver_wildcard' }, { version: '1.7.3' })
+      ).toThrow(InconclusiveMatchError)
+    })
+
+    it('still accepts literal zero components', () => {
+      expect(matchProperty({ key: 'version', value: '0.1.0', operator: 'semver_eq' }, { version: '0.1.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_eq' }, { version: '1.0.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '0.0.0', operator: 'semver_eq' }, { version: '0.0.0' })).toBe(true)
     })
 
     it('handles 4-part versions', () => {
