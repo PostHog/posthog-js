@@ -8,6 +8,7 @@ import {
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
+import { isUndefined } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 import { SimpleEventEmitter } from '../utils/simple-event-emitter'
@@ -1094,7 +1095,7 @@ describe('featureflags', () => {
             ['not configured', undefined, undefined, 0],
         ])('should handle flag_keys when %s', (_description, configuredFlagKeys, expectedFlagKeys, expectedErrors) => {
             const errorSpy = jest.spyOn(window.console, 'error').mockImplementation()
-            if (configuredFlagKeys !== undefined) {
+            if (!isUndefined(configuredFlagKeys)) {
                 instance.config.flag_keys = configuredFlagKeys as any
             }
 
@@ -1102,7 +1103,7 @@ describe('featureflags', () => {
             jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            if (expectedFlagKeys === undefined) {
+            if (isUndefined(expectedFlagKeys)) {
                 expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('flag_keys')
             } else {
                 expect(instance._send_request.mock.calls[0][0].data.flag_keys).toEqual(expectedFlagKeys)
@@ -3187,7 +3188,7 @@ describe('getRemoteConfigPayload', () => {
         ['configured as an empty array', [], []],
         ['not configured', undefined, undefined],
     ])('should handle flag_keys when %s', (_description, configuredFlagKeys, expectedFlagKeys) => {
-        if (configuredFlagKeys !== undefined) {
+        if (!isUndefined(configuredFlagKeys)) {
             instance.config.flag_keys = configuredFlagKeys as any
         }
 
@@ -3205,7 +3206,7 @@ describe('getRemoteConfigPayload', () => {
             })
         )
 
-        if (expectedFlagKeys === undefined) {
+        if (isUndefined(expectedFlagKeys)) {
             expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('flag_keys')
         } else {
             expect(instance._send_request.mock.calls[0][0].data.flag_keys).toEqual(expectedFlagKeys)
