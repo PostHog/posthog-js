@@ -32,7 +32,7 @@ function createMockXhrClass(setHeaderCalls: SetHeaderCall[], sendCalls: unknown[
         response = ''
         responseText = ''
 
-        open(_method: string, _url: string) {}
+        open() {}
         send(body: unknown) {
             sendCalls.push(body)
         }
@@ -98,15 +98,11 @@ function setupWrappedXhr() {
         recordHeaders: true,
         recordBody: true,
     } as Partial<NetworkRecordOptions> as NetworkRecordOptions)
-    const cleanup = plugin.observer(
-        (data: CapturedCb) => cbInvocations.push(data),
-        mockWindow,
-        {
-            recordHeaders: true,
-            recordBody: true,
-            initiatorTypes: ['xmlhttprequest'],
-        } as any
-    )
+    const cleanup = plugin.observer((data: CapturedCb) => cbInvocations.push(data), mockWindow, {
+        recordHeaders: true,
+        recordBody: true,
+        initiatorTypes: ['xmlhttprequest'],
+    } as any)
 
     return { mockWindow, MockXMLHttpRequest, setHeaderCalls, sendCalls, cbInvocations, cleanup }
 }
@@ -179,9 +175,7 @@ describe('xhr wrapper', () => {
                 // the network request payload that PostHog emits. If
                 // this assertion holds, the wrapper definitely ran.
                 expect(captured).not.toBeNull()
-                expect(captured!.requests[0].requestHeaders).toEqual(
-                    expect.objectContaining({ [name]: value })
-                )
+                expect(captured!.requests[0].requestHeaders).toEqual(expect.objectContaining({ [name]: value }))
             }
         )
     })
@@ -199,10 +193,7 @@ describe('xhr wrapper', () => {
             ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
             ['ArrayBuffer', () => new TextEncoder().encode('buffer content').buffer],
             ['Uint8Array', () => new Uint8Array([1, 2, 3])],
-            [
-                'URLSearchParams',
-                () => new URLSearchParams({ foo: 'bar', baz: 'qux' }),
-            ],
+            ['URLSearchParams', () => new URLSearchParams({ foo: 'bar', baz: 'qux' })],
             [
                 'FormData',
                 () => {
@@ -305,9 +296,7 @@ describe('xhr wrapper', () => {
                     })
 
                     // Inner wrapper ran (recorded the header into cb payload).
-                    expect(captured!.requests[0].requestHeaders).toEqual(
-                        expect.objectContaining({ [name]: value })
-                    )
+                    expect(captured!.requests[0].requestHeaders).toEqual(expect.objectContaining({ [name]: value }))
 
                     // The real underlying setRequestHeader was invoked with
                     // the user's CSRF header — header reaches the XHR
@@ -350,15 +339,11 @@ describe('xhr wrapper', () => {
                     recordHeaders: true,
                     recordBody: true,
                 } as Partial<NetworkRecordOptions> as NetworkRecordOptions)
-                const pluginCleanup = plugin.observer(
-                    (data: CapturedCb) => cbInvocations.push(data),
-                    mockWindow,
-                    {
-                        recordHeaders: true,
-                        recordBody: true,
-                        initiatorTypes: ['xmlhttprequest'],
-                    } as any
-                )
+                const pluginCleanup = plugin.observer((data: CapturedCb) => cbInvocations.push(data), mockWindow, {
+                    recordHeaders: true,
+                    recordBody: true,
+                    initiatorTypes: ['xmlhttprequest'],
+                } as any)
 
                 try {
                     const xhr = new MockXMLHttpRequest()
@@ -372,9 +357,7 @@ describe('xhr wrapper', () => {
                         distinctId: 'distinct-xyz',
                         url: 'https://example.com/api/internal/surveys',
                     })
-                    expect(captured!.requests[0].requestHeaders).toEqual(
-                        expect.objectContaining({ [name]: value })
-                    )
+                    expect(captured!.requests[0].requestHeaders).toEqual(expect.objectContaining({ [name]: value }))
                     expect(setHeaderCallsLocal).toEqual(expect.arrayContaining([{ header: name, value }]))
                 } finally {
                     pluginCleanup()

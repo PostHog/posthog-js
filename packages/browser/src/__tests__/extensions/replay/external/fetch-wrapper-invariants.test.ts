@@ -300,21 +300,18 @@ describe('fetch wrapper', () => {
             supplyMechanisms.map((m) => [m.label, name, value, m.invoke] as const)
         )
 
-        it.each(cases)(
-            'via %s: preserves %s on downstream Request',
-            async (_label, name, value, invoke) => {
-                let downstream: Request | undefined
-                const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
-                    downstream = input as Request
-                    return new Response('ok')
-                })
+        it.each(cases)('via %s: preserves %s on downstream Request', async (_label, name, value, invoke) => {
+            let downstream: Request | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                downstream = input as Request
+                return new Response('ok')
+            })
 
-                await invoke(wrappedFetch, name, value)
-                cleanup()
+            await invoke(wrappedFetch, name, value)
+            cleanup()
 
-                expect(downstream!.headers.get(name)).toBe(value)
-            }
-        )
+            expect(downstream!.headers.get(name)).toBe(value)
+        })
     })
 
     // Smoke check that the wrapper doesn't accidentally strip ordinary
@@ -384,12 +381,10 @@ describe('fetch wrapper', () => {
         describe('order: network-plugin wraps first, tracing-headers wraps second (outer)', () => {
             it.each(csrfHeaderCases)('preserves %s and adds tracing headers', async (name, value) => {
                 let downstream: Request | undefined
-                const { wrappedFetch: innerWrapped, cleanup } = setupWrappedFetch(
-                    async (input: RequestInfo | URL) => {
-                        downstream = input as Request
-                        return new Response('ok')
-                    }
-                )
+                const { wrappedFetch: innerWrapped, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                    downstream = input as Request
+                    return new Response('ok')
+                })
 
                 const doublyWrapped = applyTracingHeadersWrapper(
                     innerWrapped,

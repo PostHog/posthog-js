@@ -99,5 +99,5 @@ module.exports = {
             },
         },
     ],
-    ignorePatterns: ['./playground/error-tracking/**/*'],
+    ignorePatterns: ['./playground/error-tracking/**/*', '**/test_fixtures/**'],
 }

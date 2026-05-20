@@ -1,6 +1,6 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
-import { Page, BrowserContext, Request } from '@playwright/test'
+import { Page, BrowserContext } from '@playwright/test'
 import { csrfHeaderCases } from '../../../src/__tests__/extensions/replay/external/test_data/header-cases'
 import { readFileSync } from 'fs'
 import { resolve as resolvePath } from 'path'
@@ -9,10 +9,7 @@ import { resolve as resolvePath } from 'path'
 // fixture so we can exercise the reporter's exact runtime (axios ^0.18,
 // which uses the XMLHttpRequest adapter in the browser). Vendoring keeps
 // axios out of package.json and the production lockfile.
-const axiosBundleSrc = readFileSync(
-    resolvePath(__dirname, 'test_fixtures/axios-0.18.1.min.js'),
-    'utf8'
-)
+const axiosBundleSrc = readFileSync(resolvePath(__dirname, 'test_fixtures/axios-0.18.1.min.js'), 'utf8')
 
 // Reproduces the user report that PostHog network recording strips CSRF
 // headers from the actual outgoing request. The fix invariant: enabling
@@ -116,9 +113,7 @@ async function captureRequestHeaders(
     // could fire its fetch/XHR before the patch lands and pass trivially
     // (false negative — no wrapper ever ran).
     if (scenario.options?.__add_tracing_headers) {
-        await page.waitForFunction(
-            () => !!(window as any).__PosthogExtensions__?.tracingHeadersPatchFns
-        )
+        await page.waitForFunction(() => !!(window as any).__PosthogExtensions__?.tracingHeadersPatchFns)
     }
     if (scenario.flagsResponseOverrides?.sessionRecording) {
         await waitForSessionRecordingToStart(page)
@@ -175,6 +170,7 @@ async function captureRequestHeaders(
         // falling through to a fetch polyfill.
         const axiosIsBeingUsed = await page.evaluate(() => {
             const a = (window as any).axios
+            // eslint-disable-next-line posthog-js/no-direct-function-check
             return typeof a === 'function' && typeof a.post === 'function' && !!a.defaults?.adapter
         })
         expect(axiosIsBeingUsed).toBe(true)
@@ -212,9 +208,7 @@ test.describe('CSRF headers survive PostHog network wrappers', () => {
                 // so look up case-insensitively in case the shared fixture
                 // is ever extended with capitalised header names.
                 for (const [header, value] of csrfHeaderCases) {
-                    const found = Object.entries(headers).find(
-                        ([k]) => k.toLowerCase() === header.toLowerCase()
-                    )
+                    const found = Object.entries(headers).find(([k]) => k.toLowerCase() === header.toLowerCase())
                     expect(found?.[1], `${header} should be ${value}, got ${found?.[1]}`).toBe(value)
                 }
             })
