@@ -1,5 +1,12 @@
 # posthog-js-lite
 
+## 4.6.29
+
+### Patch Changes
+
+- Updated dependencies [[`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/core@1.29.6
+
 ## 4.6.28
 
 ### Patch Changes

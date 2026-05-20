@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.29.6
+
+### Patch Changes
+
+- [#3581](https://github.com/PostHog/posthog-js/pull/3581) [`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587) Thanks [@Ashut0sh-mishra](https://github.com/Ashut0sh-mishra)! - Detect Oculus Browser (Meta Quest headsets) correctly instead of falling back to Chrome
+  (2026-05-20)
+- Updated dependencies [[`557b893`](https://github.com/PostHog/posthog-js/commit/557b8934aa0b990184e0376fb1fc28433ad336c6)]:
+  - @posthog/types@1.374.3
+
 ## 1.29.5
 
 ### Patch Changes
