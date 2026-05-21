@@ -236,6 +236,28 @@ describe('PostHog Node.js', () => {
       ])
     })
 
+    it('should await the network request when identifyImmediate is awaited', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+      await posthog.identifyImmediate({ distinctId: '123', properties: { foo: 'bar' } })
+
+      // Without awaiting the underlying request, the batch endpoint would not have been hit yet
+      // (regression guard for the missing-await bug in identifyImmediate).
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toMatchObject([
+        {
+          distinct_id: '123',
+          event: '$identify',
+          properties: {
+            $set: {
+              foo: 'bar',
+            },
+            $geoip_disable: true,
+          },
+        },
+      ])
+    })
+
     it('should allow overriding timestamp', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.capture({ event: 'custom-time', distinctId: '123', timestamp: new Date('2021-02-03') })

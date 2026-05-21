@@ -1,5 +1,12 @@
 # @rrweb/replay
 
+## 0.0.23
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/rrweb@0.0.65
+
 ## 0.0.22
 
 ### Patch Changes

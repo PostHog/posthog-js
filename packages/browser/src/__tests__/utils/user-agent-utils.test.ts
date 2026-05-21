@@ -205,6 +205,25 @@ describe('user-agent-utils', () => {
                 expectedVersion: 28.0,
                 expectedBrowser: 'Chrome',
             },
+            {
+                // see https://github.com/PostHog/posthog-js/issues/3574
+                // Oculus Browser is Chromium-based, so its UA includes both
+                // `OculusBrowser` and `Chrome` (and on newer headsets also `SamsungBrowser`).
+                name: 'Oculus Browser on Quest 2',
+                userAgent:
+                    'Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/27.0.0.4.7.391926553 SamsungBrowser/4.0 Chrome/100.0.4896.58 VR Safari/537.36',
+                vendor: '',
+                expectedVersion: 27.0,
+                expectedBrowser: 'Oculus Browser',
+            },
+            {
+                name: 'Oculus Browser on Quest 3 (no SamsungBrowser segment)',
+                userAgent:
+                    'Mozilla/5.0 (Linux; Android 12; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/30.0.0.5.10 Chrome/119.0.6045.193 VR Safari/537.36',
+                vendor: '',
+                expectedVersion: 30.0,
+                expectedBrowser: 'Oculus Browser',
+            },
         ]
 
         test.each(browserTestcases)('browser version %s', ({ userAgent, vendor, expectedVersion }) => {

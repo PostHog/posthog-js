@@ -1,5 +1,92 @@
 # @posthog/convex
 
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [[`12ef3f6`](https://github.com/PostHog/posthog-js/commit/12ef3f63d18831b8ceffe7e81cea07d0c8a392a7)]:
+  - posthog-node@5.34.8
+
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/core@1.29.6
+  - posthog-node@5.34.7
+
+## 1.0.0
+
+### Major Changes
+
+- [#3622](https://github.com/PostHog/posthog-js/pull/3622) [`a1a668e`](https://github.com/PostHog/posthog-js/commit/a1a668eab2f8b668f9e24fcfe039ea70237e56e8) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Feature flags are now evaluated **locally** in the Convex runtime instead of via a per-call action to PostHog. Your app schedules a cron that calls `posthog.refreshFlagDefinitions(ctx)` on whatever interval suits you; the component fetches `/flags/definitions`, caches the result in a Convex table, and feature flag methods read from that cache and evaluate flags in-process. Methods work in queries (not just actions) and benefit from Convex's reactivity — a query reading a flag re-runs automatically when definitions change.
+
+  **Setup:** pass the keys through `new PostHog(components.posthog, { apiKey, personalApiKey, host })` in your `convex/posthog.ts`. Convex components run in an isolated env namespace, so the client captures the keys at construction time and forwards them to the component when `refreshFlagDefinitions(ctx)` is called. Add a `convex/crons.ts` that schedules `posthog.refreshFlagDefinitions(ctx)` — see the README for the exact shape.
+
+  Two evaluation paths in this release. Pick the one that fits the flag:
+  - **Local** (`getFeatureFlag`, `isFeatureEnabled`, `getFeatureFlagPayload`, `getFeatureFlagResult`, `getAllFlags`, `getAllFlagsAndPayloads`) — query/mutation/action context, no per-call round trip, reactive. Requires `personalApiKey`. Returns `null`/`undefined` when local eval can't reach a verdict (experience continuity, static cohorts, the `is_not_set` operator, or properties you don't pass in).
+  - **Remote** (`evaluateFlag`, `evaluateFlagPayload`, `evaluateAllFlags`) — action context only. Hits PostHog's `/flags` endpoint directly via `posthog-node`'s `evaluateFlags`. No `personalApiKey` needed. Handles every flag.
+
+  **Breaking changes** in this major release:
+  - Feature flag methods (`getFeatureFlag`, `isFeatureEnabled`, `getFeatureFlagPayload`, `getFeatureFlagResult`, `getAllFlags`, `getAllFlagsAndPayloads`) now accept any context with `runQuery` (queries, mutations, or actions) instead of requiring an action context.
+  - Methods return `undefined` (or empty objects for the all-flags methods) when local evaluation can't reach a verdict. They no longer fall back to a server `/flags` request.
+  - The `sendFeatureFlagEvents` option has been removed; with local evaluation there is no server-side `/flags` call to emit those events.
+  - The component now declares a `flagDefinitions` table — re-deploy the component to apply the schema change.
+  - The component no longer ships its own cron. Consumers schedule the refresh themselves via `convex/crons.ts`, which makes the polling interval explicit and gives the parent app's env vars a way to reach the action. (2026-05-19)
+
+### Patch Changes
+
+- Updated dependencies [[`e119eec`](https://github.com/PostHog/posthog-js/commit/e119eec0e4eaa3d6501d87cb745f25bbf247dcf7)]:
+  - posthog-node@5.34.6
+
+## 0.2.33
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.5
+  - posthog-node@5.34.5
+
+## 0.2.32
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.4
+  - posthog-node@5.34.4
+
+## 0.2.31
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.3
+  - posthog-node@5.34.3
+
+## 0.2.30
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.2
+  - posthog-node@5.34.2
+
+## 0.2.29
+
+### Patch Changes
+
+- Updated dependencies [[`4b895bf`](https://github.com/PostHog/posthog-js/commit/4b895bf0151f24c0b72e8ce4cae47906795b29b8)]:
+  - @posthog/core@1.29.1
+  - posthog-node@5.34.1
+
+## 0.2.28
+
+### Patch Changes
+
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+  - @posthog/core@1.29.0
+  - posthog-node@5.34.0
+
 ## 0.2.27
 
 ### Patch Changes
