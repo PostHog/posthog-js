@@ -175,23 +175,47 @@ describe('evaluateFlags', () => {
       expect(flagCalled).toHaveLength(1)
     })
 
-    it('fires separate $feature_flag_called events for the same flag+variant under different group contexts', async () => {
-      mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
-
+    it('fires separate $feature_flag_called events for the same flag+value under different group contexts', async () => {
       const flags1 = await posthog.evaluateFlags('user-1', { groups: { company: 'org-a' } })
       flags1.isEnabled('boolean-flag')
 
       const flags2 = await posthog.evaluateFlags('user-1', { groups: { company: 'org-b' } })
       flags2.isEnabled('boolean-flag')
 
-      // Same user, same flag, same variant but different group — both must fire.
+      // Same user, same flag, same value but different group — both must fire.
       await waitForPromises()
       const flagCalled = captures.filter(
         (m) => m.event === '$feature_flag_called' && m.properties.$feature_flag === 'boolean-flag'
       )
       expect(flagCalled).toHaveLength(2)
-      expect(flagCalled[0].properties.$groups).toEqual({ company: 'org-a' })
-      expect(flagCalled[1].properties.$groups).toEqual({ company: 'org-b' })
+      expect(flagCalled.map((m) => m.properties.$groups.company).sort()).toEqual(['org-a', 'org-b'])
+    })
+
+    it('dedupes $feature_flag_called events for the same flag+value under the same group context', async () => {
+      const flags1 = await posthog.evaluateFlags('user-1', { groups: { company: 'org-a' } })
+      flags1.isEnabled('boolean-flag')
+
+      const flags2 = await posthog.evaluateFlags('user-1', { groups: { company: 'org-a' } })
+      flags2.isEnabled('boolean-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.filter(
+        (m) => m.event === '$feature_flag_called' && m.properties.$feature_flag === 'boolean-flag'
+      )
+      expect(flagCalled).toHaveLength(1)
+    })
+
+    it('treats group entries as order-independent when deduping $feature_flag_called events', async () => {
+      const flags1 = await posthog.evaluateFlags('user-1', { groups: { company: 'a', team: 'b' } })
+      flags1.isEnabled('boolean-flag')
+
+      const flags2 = await posthog.evaluateFlags('user-1', { groups: { team: 'b', company: 'a' } })
+      flags2.isEnabled('boolean-flag')
+
+      await waitForPromises()
+      expect(
+        captures.filter((m) => m.event === '$feature_flag_called' && m.properties.$feature_flag === 'boolean-flag')
+      ).toHaveLength(1)
     })
 
     it('getFlagPayload returns parsed payload without firing an event', async () => {

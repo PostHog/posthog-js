@@ -941,7 +941,7 @@ describe('PostHog Feature Flags v4', () => {
         })
 
         const received = posthog.getFeatureFlags()
-        
+
         expect(received).toEqual({
           'feature-1': true,
           'feature-2': true,
@@ -1668,11 +1668,11 @@ describe('PostHog Feature Flags v4', () => {
           flushAt: 1,
           bootstrap: {
             distinctId: 'test-user',
-            featureFlags: { 
-              'multivariate-flag': 'variant'  // Bootstrap with variant
+            featureFlags: {
+              'multivariate-flag': 'variant',
             },
             featureFlagPayloads: {
-              'multivariate-flag': { some: 'payload' }
+              'multivariate-flag': { some: 'payload' },
             },
           },
         },
@@ -1688,7 +1688,7 @@ describe('PostHog Feature Flags v4', () => {
                       'multivariate-flag': {
                         key: 'multivariate-flag',
                         enabled: true,
-                        variant: undefined,  // Server responds with undefined variant (boolean flag)
+                        variant: undefined,
                         reason: {
                           code: 'matched_condition',
                           description: 'matched condition set 1',
@@ -1720,50 +1720,24 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     it('should preserve bootstrap variant when server returns boolean flag', () => {
-      // Before server call, should return bootstrap value
       expect(posthog.getFeatureFlag('multivariate-flag')).toEqual('variant')
-      
-      // Reload flags from server
       posthog.reloadFeatureFlags()
-      
-      // After server call, should still return variant, not true
       expect(posthog.getFeatureFlag('multivariate-flag')).toEqual('variant')
-    })
-
-    it('bootstrap flags should take precedence over server flags with same name', () => {
-      // This test verifies the fix for the bootstrap override issue
-      
-      // Initially the bootstrap value should be correct
-      expect(posthog.getFeatureFlag('multivariate-flag')).toEqual('variant')
-      
-      // Simulate what happens when the server responds with a flag that has the same name
-      // but different value than the bootstrap flag. This is the core issue - server flags
-      // were overriding bootstrap flags when they should preserve bootstrap values.
-      posthog.reloadFeatureFlags()
-      
-      // After the fix, bootstrap values should take precedence
-      expect(posthog.getFeatureFlag('multivariate-flag')).toEqual('variant')
-      
-      // The server flag was { enabled: true, variant: undefined } which would normally return 'true',
-      // but the bootstrap value 'variant' should win
     })
 
     it('should send feature_flag_called with bootstrap value', async () => {
-      // Reload flags from server first
       posthog.reloadFeatureFlags()
-      
-      // Call feature flag
       expect(posthog.getFeatureFlag('multivariate-flag')).toEqual('variant')
-      
+
       await waitForPromises()
-      
+
       expect(parseBody(mocks.fetch.mock.calls[mocks.fetch.mock.calls.length - 1])).toMatchObject({
         batch: [
           {
             event: '$feature_flag_called',
             properties: {
               $feature_flag: 'multivariate-flag',
-              $feature_flag_response: 'variant',  // Should be variant, not true
+              $feature_flag_response: 'variant',
               $feature_flag_bootstrapped_response: 'variant',
             },
           },
