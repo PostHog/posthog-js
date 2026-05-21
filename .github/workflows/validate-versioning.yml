@@ -6,7 +6,7 @@ permissions:
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -22,10 +22,11 @@ jobs:
         with:
           fetch-depth: 0
         
-      - name: Check for major version bumps
+      - name: Check for versioning issues
         id: check-major
         env:
           BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           # Get only added changeset files in this PR
           changesets=$(git diff --name-only --diff-filter=A "origin/${BASE_REF}...HEAD" | grep '^\.changeset/.*\.md$' | grep -v 'README.md' || true)
@@ -33,6 +34,8 @@ jobs:
           if [ -z "$changesets" ]; then
             echo "No new changesets found in this PR"
             echo "no_changesets=true" >> $GITHUB_OUTPUT
+            echo "major_bump_found=false" >> $GITHUB_OUTPUT
+            echo "title_mismatch_found=false" >> $GITHUB_OUTPUT
 
             exit 0
           fi
@@ -44,6 +47,9 @@ jobs:
           # Check each new changeset for major version bumps to posthog-js
           major_found=false
           major_file=""
+          title_mismatch_found=false
+          title_mismatch_files=""
+          pr_type=$(printf '%s' "$PR_TITLE" | sed -nE 's/^([a-zA-Z]+)(\([^)]+\))?(!)?:.*/\1/p' | tr '[:upper:]' '[:lower:]')
           
           for changeset in $changesets; do
             echo "Checking $changeset"
@@ -54,17 +60,39 @@ jobs:
               echo "The 'posthog-js' package is autoloaded by clients and must not have breaking changes."
               major_found=true
               major_file="$changeset"
-              break
+            fi
+
+            # A fix PR should use patch changesets. If it needs a minor bump,
+            # the PR title should be feat:/chore:/etc. instead of fix:.
+            if [ "$pr_type" = "fix" ] && grep -Eq "^[[:space:]]*['\"]?[^:'\"]+['\"]?:[[:space:]]*minor[[:space:]]*$" "$changeset"; then
+              echo "❌ Error: fix PR title with minor changeset detected in $changeset"
+              title_mismatch_found=true
+              title_mismatch_files="${title_mismatch_files}${changeset}"$'\n'
             fi
           done
           
           if [ "$major_found" = "true" ]; then
             echo "major_bump_found=true" >> $GITHUB_OUTPUT
             echo "changeset_file=$major_file" >> $GITHUB_OUTPUT
-            exit 1
           else
             echo "✅ No major version bumps found for 'posthog-js' in new changesets"
             echo "major_bump_found=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ "$title_mismatch_found" = "true" ]; then
+            echo "title_mismatch_found=true" >> $GITHUB_OUTPUT
+            {
+              echo "title_mismatch_files<<EOF"
+              printf '%s' "$title_mismatch_files"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
+          else
+            echo "✅ PR title and changeset bump levels look consistent"
+            echo "title_mismatch_found=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ "$major_found" = "true" ] || [ "$title_mismatch_found" = "true" ]; then
+            exit 1
           fi
       
       - name: Remove outdated comments
@@ -73,6 +101,7 @@ jobs:
         env:
           NO_CHANGESETS: ${{ steps.check-major.outputs.no_changesets }}
           MAJOR_BUMP_FOUND: ${{ steps.check-major.outputs.major_bump_found }}
+          TITLE_MISMATCH_FOUND: ${{ steps.check-major.outputs.title_mismatch_found }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -84,6 +113,7 @@ jobs:
             
             const noChangesetFound = process.env.NO_CHANGESETS === 'true';
             const majorBumpFound = process.env.MAJOR_BUMP_FOUND === 'true';
+            const titleMismatchFound = process.env.TITLE_MISMATCH_FOUND === 'true';
             
             // If there ARE changesets now, remove the "no changeset" comment
             if (!noChangesetFound) {
@@ -116,6 +146,23 @@ jobs:
                   comment_id: majorBumpComment.id
                 });
                 console.log('Removed outdated "Major Version Bump" comment');
+              }
+            }
+
+            // If the PR title and changesets match now, remove the mismatch comment
+            if (!titleMismatchFound) {
+              const titleMismatchComment = comments.find(comment => 
+                comment.user.type === 'Bot' && 
+                comment.body.includes('Changeset Bump Does Not Match PR Title')
+              );
+              
+              if (titleMismatchComment) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: titleMismatchComment.id
+                });
+                console.log('Removed outdated "Changeset Bump Does Not Match PR Title" comment');
               }
             }
       
@@ -175,6 +222,63 @@ jobs:
               });
             }
       
+      - name: Comment about PR title and changeset mismatch
+        if: failure() && steps.check-major.outputs.title_mismatch_found == 'true'
+        uses: actions/github-script@v7
+        env:
+          TITLE_MISMATCH_FILES: ${{ steps.check-major.outputs.title_mismatch_files }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const files = process.env.TITLE_MISMATCH_FILES
+              .split('\n')
+              .filter(Boolean)
+              .map((file) => `- \`${file}\``)
+              .join('\n');
+            const comment = `## ⚠️ Changeset Bump Does Not Match PR Title
+
+            This PR title uses the \`fix\` Conventional Commit type, but it contains a **minor** changeset:
+
+            ${files}
+
+            ### Why is this blocked?
+            A \`fix:\` PR should generally release a \`patch\` version. A \`minor\` changeset suggests new functionality, so the PR title should usually start with \`feat:\` instead.
+
+            ### What should you do?
+            - If this is a bug fix, change the changeset bump from \`minor\` to \`patch\`
+            - If this intentionally adds new functionality, change the PR title from \`${process.env.PR_TITLE}\` to a \`feat:\` title`;
+            
+            // Check if we already commented
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Changeset Bump Does Not Match PR Title')
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
       - name: Comment about missing changeset
         if: always() && steps.check-major.outputs.no_changesets == 'true'
         uses: actions/github-script@v7
