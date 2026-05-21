@@ -1,7 +1,7 @@
 import React from 'react'
 import type { PostHogConfig, BootstrapConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
-import { NEXTJS_CLIENT_DEFAULTS, normalizeConfigValue, resolveHostOrDefault } from '../shared/config.js'
+import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
 
 export interface PagesPostHogProviderProps {
     /**
@@ -37,10 +37,8 @@ export interface PagesPostHogProviderProps {
 let apiKeyWarned = false
 
 export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, bootstrap, children }: PagesPostHogProviderProps) {
-    const apiKey = normalizeConfigValue(apiKeyProp) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_KEY)
+    const apiKey = resolveApiKey(apiKeyProp)
     if (!apiKey) {
-        // eslint-disable-next-line no-console
-        console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
         return <>{children}</>
     }
 

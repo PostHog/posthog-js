@@ -163,12 +163,20 @@ describe('getPostHog', () => {
         })
     })
 
-    it('throws when no apiKey provided and env var missing', async () => {
+    it('warns and returns a disabled client when no apiKey provided and env var missing', async () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
 
-        await expect(getPostHog()).rejects.toThrow(
-            '[PostHog Next.js] apiKey is required. Either pass it explicitly or set the NEXT_PUBLIC_POSTHOG_KEY environment variable.'
-        )
+        const client = await getPostHog()
+
+        expect(client).toBeDefined()
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith('', {
+            host: 'https://us.i.posthog.com',
+        })
+        expect(cookies).not.toHaveBeenCalled()
+        expect(headers).not.toHaveBeenCalled()
+        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        warnSpy.mockRestore()
     })
 
     it('passes host from options to getOrCreateNodeClient', async () => {

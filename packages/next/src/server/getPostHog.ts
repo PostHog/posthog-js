@@ -37,7 +37,12 @@ export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptio
     const resolvedApiKey = resolveApiKey(apiKey)
     const host = resolveHostOrDefault(options?.host)
     const resolvedOptions = { ...options, host }
-    const client = await getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
+    const client = await getOrCreateNodeClient(resolvedApiKey ?? '', resolvedOptions)
+
+    if (!resolvedApiKey) {
+        return client
+    }
+
     const cookieStore = await cookies()
 
     if (isOptedOut(cookieStore, resolvedApiKey)) {
