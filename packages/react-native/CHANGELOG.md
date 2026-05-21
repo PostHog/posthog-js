@@ -1,5 +1,13 @@
 # posthog-react-native
 
+## 4.45.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.4
+  - @posthog/core@1.29.7
+
 ## 4.45.11
 
 ### Patch Changes
