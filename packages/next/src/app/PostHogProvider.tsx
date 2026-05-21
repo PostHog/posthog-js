@@ -5,7 +5,7 @@ import type { BootstrapConfig } from '../client/ClientPostHogProvider.js'
 import { cookies } from 'next/headers.js'
 import type { PostHogOptions } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/nodeClientCache.js'
-import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
+import { NEXTJS_CLIENT_DEFAULTS, normalizeConfigValue, resolveHostOrDefault } from '../shared/config.js'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
 
 type AllFlagsOptions = {
@@ -74,7 +74,13 @@ export async function PostHogProvider({
     bootstrapFlags,
     children,
 }: PostHogProviderProps) {
-    const apiKey = resolveApiKey(apiKeyProp)
+    const apiKey = normalizeConfigValue(apiKeyProp) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_KEY)
+    if (!apiKey) {
+        // eslint-disable-next-line no-console
+        console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        return <>{children}</>
+    }
+
     if (!apiKey.startsWith('phc_')) {
         // eslint-disable-next-line no-console
         console.warn(
