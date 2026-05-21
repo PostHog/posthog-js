@@ -25,7 +25,7 @@ export function normalizeConfigValue(value?: unknown): string | undefined {
     return normalizedValue || undefined
 }
 
-export function resolveApiKey(apiKey?: string): string | undefined {
+export function resolveApiKey(apiKey?: unknown): string | undefined {
     const resolved = normalizeConfigValue(apiKey) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_KEY)
     if (!resolved) {
         // eslint-disable-next-line no-console
@@ -34,11 +34,11 @@ export function resolveApiKey(apiKey?: string): string | undefined {
     return resolved
 }
 
-export function resolveHost(host?: string): string | undefined {
+export function resolveHost(host?: unknown): string | undefined {
     return normalizeConfigValue(host) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_HOST)
 }
 
-export function resolveHostOrDefault(host?: string): string {
+export function resolveHostOrDefault(host?: unknown): string {
     return resolveHost(host) ?? DEFAULT_API_HOST
 }
 
