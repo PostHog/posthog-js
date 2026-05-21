@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-rrweb-types",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point exposing the @posthog/rrweb-types fork bundled inside posthog-js. Not published independently \u2014 lives inside the posthog-js tarball so consumers can `import 'posthog-js/rrweb-types'`.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/rrweb-types"
+    },
+    "main": "../dist/rrweb-types.js",
+    "module": "../dist/rrweb-types.js",
+    "types": "../dist/rrweb-types.d.ts"
+}

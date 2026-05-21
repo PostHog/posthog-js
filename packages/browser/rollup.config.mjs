@@ -386,11 +386,37 @@ const entrypointTargets = entrypoints.map((file) => {
     }
 })
 
+// Entrypoints whose .d.ts output should inline the types of upstream packages
+// they re-export, so consumers don't need a runtime dependency on the upstream
+// package just to resolve types. The rrweb subpath entrypoints do `export *
+// from '@posthog/rrweb*'`; without respectExternal: true the dts plugin would
+// preserve those external re-exports and consumers (e.g. PostHog/posthog
+// after dropping its direct @posthog/rrweb-types dep) would fail to find them.
+const inlineExternalTypesEntries = new Set([
+    'extension-bundles.es.ts',
+    'rrweb.es.ts',
+    'rrweb-types.es.ts',
+    'rrweb-plugin-console-record.es.ts',
+])
+
+// Entries that pull in @posthog/rrdom transitively (via @posthog/rrweb). rrdom's
+// shipped index.d.ts references the local alias `RRNodeType` (from
+// `import { NodeType as RRNodeType }`) in const initialiser positions but
+// never re-declares it, so once rollup-plugin-dts inlines those classes the
+// `RRNodeType.X` value references resolve to nothing. The alias was always
+// just `NodeType` from @posthog/rrweb-types — which dts inlines as a real
+// `declare enum NodeType` — so we resolve the alias in place to keep the
+// bundled .d.ts strict-mode clean for consumers without skipLibCheck.
+const rewriteRrdomNodeTypeAlias = (file) =>
+    file === 'rrweb.es.ts' || file === 'rrweb-types.es.ts'
+
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         const isExtensionBundles = file === 'extension-bundles.es.ts'
+        const inlineExternalTypes = inlineExternalTypesEntries.has(file)
+        const rewriteRrdomAlias = rewriteRrdomNodeTypeAlias(file)
         /** @type {import('rollup').RollupOptions} */
         return {
             input: source,
@@ -408,7 +434,7 @@ const typeTargets = entrypoints
                 json(),
                 dts({
                     exclude: [],
-                    ...(isExtensionBundles ? { respectExternal: true } : {}),
+                    ...(inlineExternalTypes ? { respectExternal: true } : {}),
                 }),
                 // dts preserves the tsc-era path (e.g. './module.slim.es') but the
                 // output has been renamed to module.slim.d.ts — fix the reference.
@@ -418,6 +444,19 @@ const typeTargets = entrypoints
                               name: 'fix-dts-external-paths',
                               renderChunk(code) {
                                   return code.replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                              },
+                          },
+                      ]
+                    : []),
+                ...(rewriteRrdomAlias
+                    ? [
+                          {
+                              name: 'resolve-rrdom-rrnodetype-alias',
+                              renderChunk(code) {
+                                  // Only rewrite value references (`RRNodeType.X`) to NodeType.X.
+                                  // The property *name* `RRNodeType` (e.g. `readonly RRNodeType =`)
+                                  // is part of the rrdom public API and must stay.
+                                  return code.replace(/\bRRNodeType\./g, 'NodeType.')
                               },
                           },
                       ]
