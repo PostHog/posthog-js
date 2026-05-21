@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   test-browser-sdk:
-    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@main
+    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@1b56b38f46ac563ab2d5d7a8021740e8633a560b
     with:
       adapter-dockerfile: compliance/browser/Dockerfile
       adapter-context: .

@@ -9,7 +9,7 @@ on:
 
 jobs:
     call-flags-project:
-        uses: PostHog/.github/.github/workflows/flags-project-board.yml@main
+        uses: PostHog/.github/.github/workflows/flags-project-board.yml@d2e7c952fef6a22b2210bcffc70bec71abeeba03
         with:
             pr_number: ${{ github.event.pull_request.number }}
             pr_node_id: ${{ github.event.pull_request.node_id }}
