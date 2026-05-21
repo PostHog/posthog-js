@@ -132,4 +132,22 @@ describe('publishCustomEvent', () => {
 
     await capture.stop()
   })
+
+  it('still emits when enableTracing is false (custom events are explicit, not auto-captured)', async () => {
+    // `enableTracing` gates auto-captured events (tool calls, listings, identify).
+    // A `publishCustomEvent` call is by definition user-initiated and should not
+    // be silently swallowed when the host opts out of auto-capture.
+    const server = makeMockLowLevelServer()
+    track(server, { apiKey: 'phc_test', enableTracing: false })
+
+    const capture = new EventCapture()
+    await capture.start()
+
+    await publishCustomEvent(server, { resourceName: 'explicit-event' })
+
+    expect(capture.getEvents()).toHaveLength(1)
+    expect(capture.getEvents()[0].resourceName).toBe('explicit-event')
+
+    await capture.stop()
+  })
 })

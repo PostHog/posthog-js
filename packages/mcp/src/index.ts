@@ -48,7 +48,7 @@ function track<TServer>(server: TServer, options: MCPAnalyticsOptions = {}): TSe
 
     const existingData = getServerTrackingData(lowLevelServer)
     if (existingData) {
-      log('[SESSION DEBUG] track() - Server already being tracked, skipping initialization')
+      log('track() - Server already being tracked, skipping initialization')
       return validatedServer as TServer
     }
 

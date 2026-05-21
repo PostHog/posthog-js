@@ -18,11 +18,12 @@ import { publishEvent } from './publish'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
-import { getServerTrackingData, handleIdentify, resolveEventProperties } from './internal'
+import { getServerTrackingData, handleIdentify } from './internal'
 import { log } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { getServerSessionId } from './session'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor, handleReportMissing } from './tools'
+import { applyResolvedMetadata, getContextArgument, getEventDuration, isToolResultError } from './tracing-helpers'
 
 type MCPRequestHandler = NonNullable<
   MCPServerLike['_requestHandlers'] extends Map<string, infer THandler> ? THandler : never
@@ -33,10 +34,6 @@ type MCPServerWithCapabilities = MCPServerLike & {
   _capabilities?: {
     tools?: unknown
   }
-}
-
-function isToolResultError(result: unknown): boolean {
-  return !!result && typeof result === 'object' && 'isError' in result && result.isError === true
 }
 
 const listToolsTracingSetup = new WeakMap<MCPServerLike, boolean>()
@@ -170,8 +167,7 @@ async function getTracedToolsList(
   }
 }
 
-export function setupInitializeTracing(highLevelServer: HighLevelMCPServerLike): void {
-  const server = highLevelServer.server
+export function setupInitializeTracing(server: MCPServerLike): void {
   const handlers = server._requestHandlers
   const originalInitializeHandler = handlers.get('initialize')
 
@@ -198,10 +194,7 @@ export function setupInitializeTracing(highLevelServer: HighLevelMCPServerLike):
         redactionFn: data.options.redactSensitiveInformation,
       }
 
-      const resolvedProperties = await resolveEventProperties(data, request, extra)
-      if (resolvedProperties) {
-        event.properties = resolvedProperties
-      }
+      await applyResolvedMetadata(event, data, request, extra)
 
       const result = await originalInitializeHandler(request, extra)
       event.response = result
@@ -213,46 +206,9 @@ export function setupInitializeTracing(highLevelServer: HighLevelMCPServerLike):
 
 export function setupToolCallTracing(server: MCPServerLike): void {
   try {
-    const handlers = server._requestHandlers
+    setupInitializeTracing(server)
 
-    const originalCallToolHandler = handlers.get('tools/call')
-    const originalInitializeHandler = handlers.get('initialize')
-
-    if (originalInitializeHandler) {
-      server.setRequestHandler(InitializeRequestSchema, async (request, extra) => {
-        const data = getServerTrackingData(server)
-        if (!data) {
-          log(
-            'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called track(server, options) before using tool calls.'
-          )
-          return await originalInitializeHandler(request, extra)
-        }
-
-        const sessionId = getServerSessionId(server, extra)
-
-        await handleIdentify(server, data, request, extra)
-
-        const event: UnredactedEvent = {
-          sessionId,
-          resourceName: request.params?.name || 'Unknown Tool Name',
-          eventType: MCPAnalyticsEventType.mcpInitialize,
-          parameters: buildCapturedMcpParameters(request),
-          timestamp: new Date(),
-          redactionFn: data.options.redactSensitiveInformation,
-        }
-
-        const resolvedProperties = await resolveEventProperties(data, request, extra)
-        if (resolvedProperties) {
-          event.properties = resolvedProperties
-        }
-
-        const result = await originalInitializeHandler(request, extra)
-        event.response = result
-        publishEvent(server, event)
-        return result
-      })
-    }
-
+    const originalCallToolHandler = server._requestHandlers.get('tools/call')
     server.setRequestHandler(
       CallToolRequestSchema,
       async (request, extra) => await handleToolCallRequest(server, originalCallToolHandler, request, extra)
@@ -360,27 +316,6 @@ async function executeToolCall(
   event.duration = getEventDuration(event) || undefined
   publishEvent(server, event)
   throw new Error(`Unknown tool: ${request.params?.name || 'unknown'}`)
-}
-
-async function applyResolvedMetadata(
-  event: UnredactedEvent,
-  data: NonNullable<ReturnType<typeof getServerTrackingData>>,
-  request: MCPRequest,
-  extra: MCPRequestExtra
-): Promise<void> {
-  const resolvedProperties = await resolveEventProperties(data, request, extra)
-  if (resolvedProperties) {
-    event.properties = resolvedProperties
-  }
-}
-
-function getContextArgument(request: MCPRequest): string | undefined {
-  const context = request.params?.arguments?.context
-  return typeof context === 'string' ? context : undefined
-}
-
-function getEventDuration(event: UnredactedEvent): number {
-  return event.timestamp ? Date.now() - event.timestamp.getTime() : 0
 }
 
 export function cacheToolDescriptions(cache: Map<string, string>, tools: ListToolsResult['tools'] | undefined): void {

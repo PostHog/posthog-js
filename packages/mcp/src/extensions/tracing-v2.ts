@@ -18,13 +18,14 @@ import { publishEvent } from './publish'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
-import { getServerTrackingData, handleIdentify, resolveEventProperties } from './internal'
+import { getServerTrackingData, handleIdentify } from './internal'
 import { log } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { createWrappedTool, getLiteralValue, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { getServerSessionId } from './session'
 import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
 import { setupInitializeTracing, setupListToolsTracing } from './tracing'
+import { applyResolvedMetadata, getContextArgument, isToolResultError } from './tracing-helpers'
 
 type MCPRequestHandler = NonNullable<
   MCPServerLike['_requestHandlers'] extends Map<string, infer THandler> ? THandler : never
@@ -38,10 +39,6 @@ const MCP_ANALYTICS_PROCESSED = Symbol('__posthog_mcp_analytics_processed__')
 
 type ProcessedRegisteredTool = RegisteredTool & {
   [MCP_ANALYTICS_PROCESSED]?: boolean
-}
-
-function isToolResultError(result: unknown): boolean {
-  return !!result && typeof result === 'object' && 'isError' in result && result.isError === true
 }
 
 function isCallbackUpdate(value: unknown): value is { callback: unknown } {
@@ -315,18 +312,6 @@ async function initializeToolCallEvent(
   }
 }
 
-async function applyResolvedMetadata(
-  event: UnredactedEvent,
-  data: NonNullable<ReturnType<typeof getServerTrackingData>>,
-  request: MCPRequest,
-  extra: MCPRequestExtra
-): Promise<void> {
-  const resolvedProperties = await resolveEventProperties(data, request, extra)
-  if (resolvedProperties) {
-    event.properties = resolvedProperties
-  }
-}
-
 function executeReportMissingTool(
   server: MCPServerLike,
   request: MCPRequest,
@@ -387,11 +372,6 @@ async function executeOriginalTool(
   }
 }
 
-function getContextArgument(request: MCPRequest): string | undefined {
-  const context = request.params?.arguments?.context
-  return typeof context === 'string' ? context : undefined
-}
-
 function publishSuccessfulToolEvent(
   server: MCPServerLike,
   tracing: ToolCallTracing,
@@ -449,7 +429,7 @@ export function setupTracking(server: HighLevelMCPServerLike): void {
 
     setupToolsCallHandlerWrapping(server)
 
-    setupInitializeTracing(server)
+    setupInitializeTracing(server.server)
 
     server._registeredTools = addTracingToToolRegistry(server._registeredTools, server)
 

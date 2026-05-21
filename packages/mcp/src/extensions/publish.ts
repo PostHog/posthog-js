@@ -7,8 +7,13 @@ import { getSessionInfo } from './session'
 /**
  * Materializes an `UnredactedEvent` against the server's tracking data + session info,
  * then hands it to the configured `PostHogMCP` client for the redact/sanitize/truncate
- * pipeline and capture. No-ops if tracing is disabled, the server isn't tracked, or no
- * client is attached.
+ * pipeline and capture. No-ops if the server isn't tracked, no client is attached, or
+ * `enableTracing` is false for an auto-captured event.
+ *
+ * `enableTracing: false` is the master switch for **auto-captured** events (tool calls,
+ * tool listings, initialize, identify). User-initiated `publishCustomEvent()` calls land
+ * here with `eventType: custom` and bypass that gate — disabling auto-capture should not
+ * silently swallow events the host application explicitly chose to emit.
  */
 export function publishEvent(server: MCPServerLike, eventInput: UnredactedEvent): void {
   const data = getServerTrackingData(server)
@@ -17,7 +22,8 @@ export function publishEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     return
   }
 
-  if (!data.options.enableTracing) {
+  const isCustomEvent = eventInput.eventType === MCPAnalyticsEventType.custom
+  if (!isCustomEvent && !data.options.enableTracing) {
     return
   }
 
