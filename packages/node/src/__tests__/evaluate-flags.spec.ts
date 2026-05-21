@@ -175,6 +175,25 @@ describe('evaluateFlags', () => {
       expect(flagCalled).toHaveLength(1)
     })
 
+    it('fires separate $feature_flag_called events for the same flag+variant under different group contexts', async () => {
+      mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+
+      const flags1 = await posthog.evaluateFlags('user-1', { groups: { company: 'org-a' } })
+      flags1.isEnabled('boolean-flag')
+
+      const flags2 = await posthog.evaluateFlags('user-1', { groups: { company: 'org-b' } })
+      flags2.isEnabled('boolean-flag')
+
+      // Same user, same flag, same variant but different group — both must fire.
+      await waitForPromises()
+      const flagCalled = captures.filter(
+        (m) => m.event === '$feature_flag_called' && m.properties.$feature_flag === 'boolean-flag'
+      )
+      expect(flagCalled).toHaveLength(2)
+      expect(flagCalled[0].properties.$groups).toEqual({ company: 'org-a' })
+      expect(flagCalled[1].properties.$groups).toEqual({ company: 'org-b' })
+    })
+
     it('getFlagPayload returns parsed payload without firing an event', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
