@@ -5,7 +5,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources'
 
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isArray, isNull, isObject } from '@posthog/core'
+import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
 
 const setupOpenTelemetry = (posthog: PostHog) => {
     const serviceName = posthog.config.logs?.serviceName || 'posthog-browser-logs'
@@ -44,58 +44,176 @@ const setupOpenTelemetry = (posthog: PostHog) => {
 const LOG_BODY_SIZE_LIMIT = 10000
 const LOG_ATTRIBUTES_LIMIT = 50
 
-// This protects console logging from throwing when JSON.stringify hits unreadable properties.
-// The fallback safely copies readable properties and omits unreadable ones.
-// E.g., cross origin windows, exceptions raised in property getter
-const sanitizeForStringify = (value: any, seen = new WeakSet()): any => {
+type StringifyBudget = {
+    remaining: number
+    truncated: boolean
+}
+
+const appendWithLimit = (parts: string[], text: string, budget: StringifyBudget): boolean => {
+    if (budget.remaining <= 0) {
+        budget.truncated = true
+        return false
+    }
+
+    if (text.length <= budget.remaining) {
+        parts.push(text)
+        budget.remaining -= text.length
+        return true
+    }
+
+    parts.push(text.slice(0, budget.remaining))
+    budget.remaining = 0
+    budget.truncated = true
+    return false
+}
+
+const stringifyStringWithLimit = (value: string, parts: string[], budget: StringifyBudget): boolean => {
+    if (value.length + 2 <= budget.remaining) {
+        return appendWithLimit(parts, JSON.stringify(value), budget)
+    }
+
+    budget.truncated = true
+    return appendWithLimit(parts, JSON.stringify(value.slice(0, budget.remaining)), budget)
+}
+
+const isJSONSerializablePrimitive = (value: any): boolean =>
+    typeof value !== 'undefined' &&
+    typeof value !== 'function' &&
+    typeof value !== 'symbol' &&
+    typeof value !== 'bigint'
+
+const stringifyValueWithLimit = (
+    value: any,
+    parts: string[],
+    budget: StringifyBudget,
+    seen: WeakSet<object>,
+    inArray = false
+): boolean => {
+    if (!isJSONSerializablePrimitive(value)) {
+        return inArray ? appendWithLimit(parts, 'null', budget) : true
+    }
+
+    if (isNull(value) || isNumber(value) || isBoolean(value)) {
+        return appendWithLimit(parts, JSON.stringify(value), budget)
+    }
+
+    if (typeof value === 'string') {
+        return stringifyStringWithLimit(value, parts, budget)
+    }
+
     if (!isObject(value) && !isArray(value)) {
-        return value
+        return appendWithLimit(parts, JSON.stringify(value), budget)
+    }
+
+    try {
+        const toJSON = value.toJSON
+        if (isFunction(toJSON)) {
+            return stringifyValueWithLimit(toJSON.call(value), parts, budget, seen, inArray)
+        }
+    } catch {
+        // If toJSON can't be read or throws, fall through to safe property enumeration.
     }
 
     if (seen.has(value)) {
-        return '[Circular]'
+        return stringifyStringWithLimit('[Circular]', parts, budget)
     }
     seen.add(value)
 
-    const result: any = isArray(value) ? [] : {}
-    let keys: string[]
-    try {
-        keys = Object.keys(value)
-    } catch {
-        return undefined
-    }
-    for (const key of keys) {
-        try {
-            result[key] = sanitizeForStringify((value as any)[key], seen)
-        } catch {
-            // omit properties that cannot be read
-        }
-    }
-
     if (value instanceof Error) {
+        const errorObject: Record<string, any> = {}
         try {
-            result.name = value.name
+            for (const key in value) {
+                if (Object.prototype.hasOwnProperty.call(value, key)) {
+                    errorObject[key] = value[key as keyof Error]
+                }
+            }
         } catch {}
         try {
-            result.message = value.message
+            errorObject.name = value.name
         } catch {}
         try {
-            result.stack = value.stack
+            errorObject.message = value.message
         } catch {}
+        try {
+            errorObject.stack = value.stack
+        } catch {}
+        return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray)
     }
 
-    return result
+    if (isArray(value)) {
+        if (!appendWithLimit(parts, '[', budget)) {
+            return false
+        }
+        for (let i = 0; i < value.length; i++) {
+            if (i > 0 && !appendWithLimit(parts, ',', budget)) {
+                return false
+            }
+            let item
+            try {
+                item = value[i]
+            } catch {
+                item = undefined
+            }
+            if (!stringifyValueWithLimit(item, parts, budget, seen, true)) {
+                return false
+            }
+        }
+        return appendWithLimit(parts, ']', budget)
+    }
+
+    if (!appendWithLimit(parts, '{', budget)) {
+        return false
+    }
+    let isFirst = true
+    try {
+        for (const key in value) {
+            if (!Object.prototype.hasOwnProperty.call(value, key)) {
+                continue
+            }
+
+            let propertyValue
+            try {
+                propertyValue = value[key]
+            } catch {
+                continue
+            }
+            if (!isJSONSerializablePrimitive(propertyValue)) {
+                continue
+            }
+
+            if (!isFirst && !appendWithLimit(parts, ',', budget)) {
+                return false
+            }
+            isFirst = false
+
+            if (!appendWithLimit(parts, `${JSON.stringify(key)}:`, budget)) {
+                return false
+            }
+            if (!stringifyValueWithLimit(propertyValue, parts, budget, seen, false)) {
+                return false
+            }
+        }
+    } catch {
+        // we'll omit this object's properties considering we can't enumerate them
+    }
+    return appendWithLimit(parts, '}', budget)
 }
 
-const stringifySafely = (value: any, replacer: (_: any, value: any) => any): string | undefined => {
-    try {
-        return JSON.stringify(value, replacer)
-    } catch {
-        try {
-            return JSON.stringify(sanitizeForStringify(value))
-        } catch {
-            return undefined
+const stringifyArgsSafely = (args: any[], sizeLimit: number): { body: string; truncated: boolean } => {
+    const parts: string[] = []
+    const budget = { remaining: sizeLimit, truncated: false }
+    for (let i = 0; i < args.length; i++) {
+        if (i > 0 && !appendWithLimit(parts, ' ', budget)) {
+            break
         }
+        if (!stringifyValueWithLimit(args[i], parts, budget, new WeakSet<object>())) {
+            break
+        }
+    }
+
+    return {
+        body: parts.join('') + (budget.truncated ? '...' : ''),
+        truncated: budget.truncated,
     }
 }
 
@@ -172,33 +290,12 @@ const initializeLogs = (posthog: PostHog) => {
     }
 
     for (const level of ['debug', 'log', 'warn', 'error', 'info'] as ('debug' | 'log' | 'warn' | 'error' | 'info')[]) {
-        const createReplacer = () => {
-            const seen = new WeakSet()
-            return (_: any, value: any) => {
-                if (value instanceof Error) {
-                    return {
-                        ...value,
-                        name: value.name,
-                        message: value.message,
-                        stack: value.stack,
-                    }
-                }
-                if (typeof value === 'object' && !isNull(value)) {
-                    if (seen.has(value)) {
-                        return '[Circular]'
-                    }
-                    seen.add(value)
-                }
-                return value
-            }
-        }
         const logWrapper =
             (originalConsoleLog: any) =>
             (...args: any[]) => {
                 if (args.length > 0) {
-                    let body = args.map((a) => stringifySafely(a, createReplacer())).join(' ')
-                    if (body.length > LOG_BODY_SIZE_LIMIT) {
-                        body = body.slice(0, LOG_BODY_SIZE_LIMIT) + '...'
+                    const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
+                    if (truncated) {
                         attributes.body_truncated = 'true'
                     }
                     logger.emit({
