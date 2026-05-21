@@ -2,7 +2,7 @@
     "name": "posthog-js-rrweb-types",
     "version": "1.0.0",
     "private": true,
-    "description": "Subpath entry point exposing the @posthog/rrweb-types fork bundled inside posthog-js. Not published independently \u2014 lives inside the posthog-js tarball so consumers can `import 'posthog-js/rrweb-types'`.",
+    "description": "Subpath entry point exposing the @posthog/rrweb-types fork bundled inside posthog-js. Not published independently \u2014 lives inside the posthog-js tarball so consumers can `import 'posthog-js/rrweb-types'`. ESM-only: `module` and `main` both point at the ES bundle because every realistic consumer is a bundler (esbuild, webpack, vite, rollup) that picks `module` over `main`. Pure-Node `require()` is unsupported.",
     "repository": {
         "type": "git",
         "url": "https://github.com/PostHog/posthog-js",

@@ -407,8 +407,11 @@ const inlineExternalTypesEntries = new Set([
 // just `NodeType` from @posthog/rrweb-types — which dts inlines as a real
 // `declare enum NodeType` — so we resolve the alias in place to keep the
 // bundled .d.ts strict-mode clean for consumers without skipLibCheck.
-const rewriteRrdomNodeTypeAlias = (file) =>
-    file === 'rrweb.es.ts' || file === 'rrweb-types.es.ts'
+//
+// Only rrweb.es.ts is in scope today — rrweb-types and rrweb-plugin-console-record
+// are leaf packages that don't reach rrdom. If a future subpath entrypoint starts
+// pulling in rrdom, add it here.
+const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
 
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))

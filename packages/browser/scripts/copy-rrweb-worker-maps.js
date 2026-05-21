@@ -36,10 +36,16 @@ if (!fs.existsSync(RRWEB_DIST)) {
 const mapFiles = fs.readdirSync(RRWEB_DIST).filter((file) => file.startsWith('image-bitmap-data-url-worker-') && file.endsWith('.js.map'))
 
 if (mapFiles.length === 0) {
-    console.warn(
-        'warn: no image-bitmap-data-url-worker-*.js.map files found in @posthog/rrweb dist — has the worker filename hash changed?'
+    // Fail the build rather than silently shipping a tarball without the sourcemap.
+    // Downstream consumers (PostHog/posthog frontend) reference this map via a
+    // sourceMappingURL comment baked into our rrweb bundle; a missing file there
+    // surfaces as an unrelated build error far from this postbuild step.
+    console.error(
+        'error: no image-bitmap-data-url-worker-*.js.map files found in @posthog/rrweb dist — ' +
+            'has the worker filename hash changed or the worker been removed upstream? ' +
+            'Either fix this script or remove the sourceMappingURL reference in rrweb.'
     )
-    process.exit(0)
+    process.exit(1)
 }
 
 for (const file of mapFiles) {
