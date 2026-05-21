@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
-// Postbuild: copy @posthog/rrweb's image-bitmap-data-url-worker-*.js.map files into
-// packages/browser/dist/ so the sourceMappingURL embedded in our bundled rrweb.js resolves
-// for downstream consumers (e.g. PostHog/posthog's frontend) that no longer depend on
-// @posthog/rrweb directly.
+// Postbuild: copy rrweb's image-bitmap-data-url-worker-*.js.map into dist/ so the
+// sourceMappingURL in our bundled rrweb.js resolves for downstream consumers.
 
 const fs = require('fs')
 const path = require('path')

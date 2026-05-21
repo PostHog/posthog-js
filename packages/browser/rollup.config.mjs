@@ -386,8 +386,8 @@ const entrypointTargets = entrypoints.map((file) => {
     }
 })
 
-// Entries whose .d.ts must inline upstream types via `respectExternal`, so consumers
-// don't need a runtime dep on the re-exported package just to resolve types.
+// Entries whose .d.ts must inline upstream types (respectExternal: true) so
+// consumers don't need a runtime dep on the re-exported package to resolve them.
 const inlineExternalTypesEntries = new Set([
     'extension-bundles.es.ts',
     'rrweb.es.ts',
@@ -395,9 +395,8 @@ const inlineExternalTypesEntries = new Set([
     'rrweb-plugin-console-record.es.ts',
 ])
 
-// rrdom's index.d.ts uses `RRNodeType.X` value references against a local
-// alias that dts inlining never re-declares, so we rewrite them back to
-// `NodeType.X`. Only entries that transitively pull in rrdom need this.
+// rrdom's dts drops the local `RRNodeType` alias declaration; the renderChunk
+// below rewrites value references back to `NodeType.`. Only rrweb pulls in rrdom.
 const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
 
 const typeTargets = entrypoints
@@ -443,9 +442,7 @@ const typeTargets = entrypoints
                           {
                               name: 'resolve-rrdom-rrnodetype-alias',
                               renderChunk(code) {
-                                  // Only rewrite value references (`RRNodeType.X`) to NodeType.X.
-                                  // The property *name* `RRNodeType` (e.g. `readonly RRNodeType =`)
-                                  // is part of the rrdom public API and must stay.
+                                  // Value uses only; the property name `RRNodeType` (rrdom public API) must stay.
                                   return code.replace(/\bRRNodeType\./g, 'NodeType.')
                               },
                           },
