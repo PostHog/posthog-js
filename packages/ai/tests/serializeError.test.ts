@@ -1,4 +1,4 @@
-import { serializeError } from '../src/serializeError'
+import { serializeError, stringifyError } from '../src/serializeError'
 
 interface SerializedShape {
   name: string
@@ -88,5 +88,41 @@ describe('serializeError', () => {
     expect(validation.message).toBe('type validation failed')
     expect(zod.name).toBe('ZodError')
     expect(zod.message).toBe('expected object, received undefined')
+  })
+})
+
+describe('stringifyError', () => {
+  it('round-trips a normal error', () => {
+    const result = JSON.parse(stringifyError(new Error('boom')))
+    expect(result.name).toBe('Error')
+    expect(result.message).toBe('boom')
+  })
+
+  it('sanitises lone UTF-16 surrogates in messages', () => {
+    const result = JSON.parse(stringifyError(new Error('bad \uD800 surrogate')))
+    expect(result.message).not.toContain('\uD800')
+  })
+
+  it('falls back to name and message when the value contains a circular reference', () => {
+    const error: Error & { ref?: unknown } = new Error('cycle')
+    const container: Record<string, unknown> = { error }
+    container.self = container
+    error.ref = container
+
+    const result = JSON.parse(stringifyError(error))
+    expect(result).toEqual({ name: 'Error', message: 'cycle' })
+  })
+
+  it('falls back to name and message when the value contains a BigInt', () => {
+    const error = Object.assign(new Error('big'), { code: 1n })
+    const result = JSON.parse(stringifyError(error))
+    expect(result).toEqual({ name: 'Error', message: 'big' })
+  })
+
+  it('falls back to a string message when the original is not an Error', () => {
+    const value: Record<string, unknown> = { description: 'cyclic value' }
+    value.self = value
+    const result = JSON.parse(stringifyError(value))
+    expect(result).toEqual({ message: String(value) })
   })
 })

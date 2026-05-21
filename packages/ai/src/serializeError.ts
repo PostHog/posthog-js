@@ -1,3 +1,5 @@
+import { sanitizeValues } from './utils'
+
 const DEFAULT_MAX_DEPTH = 3
 const MAX_STACK_LINES = 20
 
@@ -23,6 +25,17 @@ export function serializeError(value: unknown, depth = DEFAULT_MAX_DEPTH): unkno
     return value.map((item) => serializeError(item, depth - 1))
   }
   return value
+}
+
+export function stringifyError(error: unknown): string {
+  try {
+    return JSON.stringify(sanitizeValues(serializeError(error)))
+  } catch {
+    if (error instanceof Error) {
+      return JSON.stringify({ name: error.name, message: error.message })
+    }
+    return JSON.stringify({ message: String(error) })
+  }
 }
 
 function truncateStack(stack: string | undefined): string | undefined {
