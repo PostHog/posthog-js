@@ -14,4 +14,4 @@ concurrency:
 
 jobs:
   check:
-    uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@main
+    uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@d2e7c952fef6a22b2210bcffc70bec71abeeba03
