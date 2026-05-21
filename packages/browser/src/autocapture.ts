@@ -17,7 +17,7 @@ import {
 } from './autocapture-utils'
 
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
+import { AutocaptureConfig, EventName, Properties, RageclickConfig, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
@@ -316,6 +316,10 @@ export class Autocapture implements Extension {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
+        if (response.rageclick) {
+            this._applyRemoteRageclickConfig(response.rageclick)
+        }
+
         // NOTE: Unlike other extensions (heatmaps, web-vitals, etc.), we intentionally
         // DO NOT guard against missing autocapture_opt_out key here. Autocapture uses
         // a "wait for server, then enable unless explicitly opted out" model:
@@ -331,6 +335,26 @@ export class Autocapture implements Extension {
         // store this in-memory in case persistence is disabled
         this._isDisabledServerSide = !!response['autocapture_opt_out']
         this.startIfEnabled()
+    }
+
+    // Merge remote rage click tuning onto the detector. Client config wins
+    // per-field; `rageclick: false` locally is never overridden by the server.
+    private _applyRemoteRageclickConfig(remote: NonNullable<RemoteConfig['rageclick']>): void {
+        const local = this.instance.config.rageclick
+
+        if (local === false) {
+            return
+        }
+
+        const localObj: RageclickConfig = isObject(local) ? local : {}
+        const merged: RageclickConfig = {
+            ...localObj,
+            threshold_px: localObj.threshold_px ?? remote.threshold_px,
+            timeout_ms: localObj.timeout_ms ?? remote.timeout_ms,
+            click_count: localObj.click_count ?? remote.click_count,
+        }
+
+        this.rageclicks.updateConfig(merged)
     }
 
     public setElementSelectors(selectors: Set<string>): void {

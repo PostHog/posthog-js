@@ -276,6 +276,19 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
 }
 
 /**
+ * Server-tunable subset of {@link RageclickConfig}. Element/content ignore lists
+ * are client-only since they reference app-specific selectors and copy.
+ */
+export interface RageclickRemoteConfig {
+    /** @see RageclickConfig.threshold_px */
+    threshold_px?: number
+    /** @see RageclickConfig.timeout_ms */
+    timeout_ms?: number
+    /** @see RageclickConfig.click_count */
+    click_count?: number
+}
+
+/**
  * Remote configuration for the PostHog instance
  *
  * All of these settings can be configured directly in your PostHog instance
@@ -394,6 +407,11 @@ export interface RemoteConfig {
      * Whether to capture dead clicks
      */
     captureDeadClicks?: boolean
+
+    /**
+     * Rage click detector sensitivity tuning
+     */
+    rageclick?: RageclickRemoteConfig
 
     /**
      * Indicates if the team has any flags enabled (if not we don't need to load them)

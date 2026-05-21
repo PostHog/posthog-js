@@ -128,4 +128,42 @@ describe('RageClick()', () => {
             expect(result).toBe(false)
         })
     })
+
+    describe('updateConfig (used by remote config)', () => {
+        it('applies new thresholds and resets in-flight click history', () => {
+            instance = new RageClick(true)
+            // Two clicks under the default 3-click threshold; not yet a rage click.
+            instance.isRageClick(0, 0, 10)
+            instance.isRageClick(5, 5, 20)
+
+            instance.updateConfig({ click_count: 5 })
+
+            // Without the buffer reset, the two previous clicks plus three more would
+            // trigger; with the reset we need a full 5 clicks under the new config.
+            expect(instance.isRageClick(5, 5, 30)).toBe(false)
+            expect(instance.isRageClick(5, 5, 40)).toBe(false)
+            expect(instance.isRageClick(5, 5, 50)).toBe(false)
+            expect(instance.isRageClick(5, 5, 60)).toBe(false)
+            expect(instance.isRageClick(5, 5, 70)).toBe(true)
+        })
+
+        it('falls back to defaults when fields are omitted', () => {
+            instance = new RageClick({ threshold_px: 1, timeout_ms: 1, click_count: 2 })
+            instance.updateConfig({})
+
+            // Three clicks within default 30px / 1000ms triggers default rage click.
+            expect(instance.isRageClick(0, 0, 0)).toBe(false)
+            expect(instance.isRageClick(0, 0, 100)).toBe(false)
+            expect(instance.isRageClick(0, 0, 200)).toBe(true)
+        })
+
+        it('disables detection when called with false', () => {
+            instance = new RageClick(true)
+            instance.updateConfig(false)
+
+            expect(instance.isRageClick(0, 0, 0)).toBe(false)
+            expect(instance.isRageClick(0, 0, 100)).toBe(false)
+            expect(instance.isRageClick(0, 0, 200)).toBe(false)
+        })
+    })
 })

@@ -566,6 +566,153 @@ describe('Autocapture system', () => {
             )
         })
 
+        describe('when rageclick sensitivity is delivered via remote config', () => {
+            const fireClicks = (
+                target: Autocapture,
+                el: Element,
+                clicks: { clientX: number; clientY: number; timestamp: number }[]
+            ) => {
+                for (const click of clicks) {
+                    const fakeEvent = makeMouseEvent({
+                        target: el,
+                        clientX: click.clientX,
+                        clientY: click.clientY,
+                    })
+                    Object.defineProperty(fakeEvent, 'timeStamp', { value: click.timestamp })
+                    Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+                    target['_captureEvent'](fakeEvent)
+                }
+            }
+
+            // Three clicks tightly clustered in space and time. Under defaults (3 / 30px / 1000ms)
+            // this is a rage click; under a stricter remote config it should not be.
+            const tightCluster = [
+                { clientX: 5, clientY: 5, timestamp: 0 },
+                { clientX: 5, clientY: 5, timestamp: 100 },
+                { clientX: 5, clientY: 5, timestamp: 200 },
+            ]
+
+            it('applies remote rageclick tunables when no client-side object config is set', async () => {
+                // Customer pushes a stricter `click_count: 5` from the PostHog UI.
+                autocapture.onRemoteConfig({ rageclick: { click_count: 5 } } as FlagsResponse)
+
+                const el = document.createElement('button')
+                document.body.appendChild(el)
+                fireClicks(autocapture, el, tightCluster)
+
+                expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([
+                    '$autocapture',
+                    '$autocapture',
+                    '$autocapture',
+                ])
+
+                document.body.removeChild(el)
+            })
+
+            it('client-side object config takes precedence over remote per-field', async () => {
+                // Local pins click_count = 2; remote tries to relax it to 5. Local wins.
+                const customPosthog = await createPosthogInstance(uuidv7(), {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    autocapture: true,
+                    before_send: beforeSendMock,
+                    rageclick: { click_count: 2 },
+                })
+
+                if (isUndefined(customPosthog.autocapture)) {
+                    throw new Error('helping TS by confirming this is created by now')
+                }
+                const customAutocapture = customPosthog.autocapture
+                customAutocapture.onRemoteConfig({ rageclick: { click_count: 5 } } as FlagsResponse)
+
+                const el = document.createElement('button')
+                document.body.appendChild(el)
+                fireClicks(customAutocapture, el, [
+                    { clientX: 5, clientY: 5, timestamp: 0 },
+                    { clientX: 5, clientY: 5, timestamp: 100 },
+                ])
+
+                expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([
+                    '$autocapture',
+                    '$rageclick',
+                    '$autocapture',
+                ])
+
+                document.body.removeChild(el)
+            })
+
+            it('remote fills in fields the client did not pin', async () => {
+                // Local pins threshold_px only; remote provides a stricter click_count.
+                const customPosthog = await createPosthogInstance(uuidv7(), {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    autocapture: true,
+                    before_send: beforeSendMock,
+                    rageclick: { threshold_px: 50 },
+                })
+
+                if (isUndefined(customPosthog.autocapture)) {
+                    throw new Error('helping TS by confirming this is created by now')
+                }
+                const customAutocapture = customPosthog.autocapture
+                customAutocapture.onRemoteConfig({ rageclick: { click_count: 5 } } as FlagsResponse)
+
+                const el = document.createElement('button')
+                document.body.appendChild(el)
+                // 3 clicks within 50px (local threshold), but click_count remote-set to 5 → no rage click.
+                fireClicks(customAutocapture, el, tightCluster)
+
+                expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([
+                    '$autocapture',
+                    '$autocapture',
+                    '$autocapture',
+                ])
+
+                document.body.removeChild(el)
+            })
+
+            it('remote config does not re-enable a locally disabled detector', async () => {
+                const customPosthog = await createPosthogInstance(uuidv7(), {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    autocapture: true,
+                    before_send: beforeSendMock,
+                    rageclick: false,
+                })
+
+                if (isUndefined(customPosthog.autocapture)) {
+                    throw new Error('helping TS by confirming this is created by now')
+                }
+                const customAutocapture = customPosthog.autocapture
+                customAutocapture.onRemoteConfig({
+                    rageclick: { click_count: 2 },
+                } as FlagsResponse)
+
+                const el = document.createElement('button')
+                document.body.appendChild(el)
+                fireClicks(customAutocapture, el, [
+                    { clientX: 5, clientY: 5, timestamp: 0 },
+                    { clientX: 5, clientY: 5, timestamp: 100 },
+                    { clientX: 5, clientY: 5, timestamp: 200 },
+                ])
+
+                expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([
+                    '$autocapture',
+                    '$autocapture',
+                    '$autocapture',
+                ])
+
+                document.body.removeChild(el)
+            })
+
+            it('absent rageclick on the remote config leaves detector untouched', () => {
+                const updateConfigSpy = jest.spyOn(autocapture.rageclicks, 'updateConfig')
+                autocapture.onRemoteConfig({} as FlagsResponse)
+                expect(updateConfigSpy).not.toHaveBeenCalled()
+                updateConfigSpy.mockRestore()
+            })
+        })
+
         describe('clipboard autocapture', () => {
             let elTarget: HTMLDivElement
 

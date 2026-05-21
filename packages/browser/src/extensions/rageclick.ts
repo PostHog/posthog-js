@@ -18,6 +18,18 @@ export default class RageClick {
     disabled: boolean
 
     constructor(rageclickConfig: RageclickConfig | boolean) {
+        this.clicks = []
+        this.disabled = false
+        this.thresholdPx = DEFAULT_THRESHOLD_PX
+        this.timeoutMs = DEFAULT_TIMEOUT_MS
+        this.clickCount = DEFAULT_CLICK_COUNT
+
+        this.updateConfig(rageclickConfig)
+    }
+
+    // Apply (possibly remote) config and reset the in-flight click buffer so
+    // stale clicks don't fire against the new thresholds.
+    updateConfig(rageclickConfig: RageclickConfig | boolean): void {
         this.disabled = rageclickConfig === false
         const conf = isObject(rageclickConfig) ? rageclickConfig : {}
 
