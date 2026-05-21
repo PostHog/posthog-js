@@ -94,11 +94,12 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         }
 
         let emit: (event: any) => void = () => {}
+        const stopRrweb = jest.fn()
         assignableWindow.__PosthogExtensions__ = {
             rrweb: {
                 record: jest.fn(({ emit: rrwebEmit }) => {
                     emit = rrwebEmit
-                    return () => {}
+                    return stopRrweb
                 }),
                 version: 'fake',
                 wasMaxDepthReached: jest.fn(() => false),
@@ -118,6 +119,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         context.emit = emit
         context.posthog = posthog
         context.lazyLoadedSessionRecording = lazyLoadedSessionRecording
+        context.stopRrweb = stopRrweb
     })
 
     return {
@@ -125,6 +127,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         emit: context.emit as (event: any) => void,
         posthog: context.posthog,
         lazyLoadedSessionRecording: context.lazyLoadedSessionRecording,
+        stopRrweb: context.stopRrweb as jest.Mock,
     }
 }
 
@@ -210,7 +213,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
             return new Blob([gzipSync(strToU8(input))])
         })
 
-        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+        const { emit, posthog, lazyLoadedSessionRecording, stopRrweb } = await setupLazyLoadedSessionRecording({
             gzipSupported: true,
             gzipCompress,
         })
@@ -218,6 +221,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         emit(createFullSnapshot({ content: 'stop waits for compression' }))
         lazyLoadedSessionRecording.stop()
 
+        expect(stopRrweb).toHaveBeenCalled()
         expect(posthog.capture).not.toHaveBeenCalled()
 
         releaseCompression()
@@ -231,5 +235,36 @@ describe('LazyLoadedSessionRecording compression paths', () => {
             }),
             expect.any(Object)
         )
+    })
+
+    it('synchronously drains pending async compression on beforeunload', async () => {
+        let releaseCompression: () => void = () => {}
+        const compressionGate = new Promise<void>((resolve) => {
+            releaseCompression = resolve
+        })
+        const gzipCompress = jest.fn(async (input: string) => {
+            await compressionGate
+            return new Blob([gzipSync(strToU8(input))])
+        })
+
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+            gzipCompress,
+        })
+
+        emit(createFullSnapshot({ content: 'beforeunload sync drain' }))
+        lazyLoadedSessionRecording['_onBeforeUnload']()
+
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$snapshot',
+            expect.objectContaining({
+                $snapshot_data: [expect.objectContaining({ type: 2, cv: '2024-10', data: expect.any(String) })],
+            }),
+            expect.any(Object)
+        )
+
+        releaseCompression()
+        await lazyLoadedSessionRecording['_compressionQueue']
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 })

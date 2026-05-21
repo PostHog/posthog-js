@@ -114,6 +114,16 @@ interface QueuedRRWebEvent {
     enqueuedAt: number
 }
 
+interface QueuedCompressionEvent {
+    event: eventWithTime
+    compressionEnabled: boolean
+    targetSessionId: string
+    targetWindowId: string
+    generation: number
+    processed: boolean
+    counted: boolean
+}
+
 interface SessionIdlePayload {
     eventTimestamp: number
     lastActivityTimestamp: number
@@ -490,6 +500,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private _buffer: SnapshotBuffer
     private _compressionQueue?: Promise<void>
+    private _pendingCompressionEvents: QueuedCompressionEvent[] = []
     private _queuedCompressionEvents: number = 0
     private _compressionQueueGeneration: number = 0
     private _isStoppingAfterCompression: boolean = false
@@ -1139,14 +1150,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._strategy?.stop()
 
-        this._mutationThrottler?.stop()
+        this._stopRecordingProducers()
 
         // Invalidate any in-flight async compression work so it does not capture events
         // after stop()/discard() has cleared the buffer or after a future restart.
         this._compressionQueueGeneration += 1
+        this._pendingCompressionEvents = []
         this._queuedCompressionEvents = 0
         this._compressionQueue = undefined
         this._isStoppingAfterCompression = false
+    }
+
+    private _stopRecordingProducers() {
+        this._mutationThrottler?.stop()
 
         // Clear any queued rrweb events to prevent memory leaks from closures
         this._queuedRRWebEvents = []
@@ -1166,6 +1182,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._isStoppingAfterCompression = true
         const generation = this._compressionQueueGeneration
         this._clearFlushBufferTimer()
+        // Stop rrweb synchronously so it cannot keep producing events while we wait
+        // for the compression queue to drain and flush the already queued events.
+        this._stopRecordingProducers()
         this._compressionQueue
             .catch(() => undefined)
             .then(() => {
@@ -1233,31 +1252,85 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._captureSnapshotBuffered(properties)
     }
 
+    private _finishQueuedCompressionEvent(queuedEvent: QueuedCompressionEvent) {
+        if (queuedEvent.counted && queuedEvent.generation === this._compressionQueueGeneration) {
+            this._queuedCompressionEvents = Math.max(0, this._queuedCompressionEvents - 1)
+        }
+        queuedEvent.counted = false
+        this._pendingCompressionEvents = this._pendingCompressionEvents.filter((x) => x !== queuedEvent)
+    }
+
+    private _captureQueuedCompressionEvent(
+        queuedEvent: QueuedCompressionEvent,
+        eventToSend: eventWithTime | compressedEventWithTime,
+        size: number
+    ) {
+        if (queuedEvent.processed || queuedEvent.generation !== this._compressionQueueGeneration) {
+            return
+        }
+
+        queuedEvent.processed = true
+        this._captureProcessedEvent(
+            queuedEvent.event,
+            eventToSend,
+            size,
+            queuedEvent.targetSessionId,
+            queuedEvent.targetWindowId
+        )
+    }
+
+    private _processQueuedCompressionEventSync(queuedEvent: QueuedCompressionEvent) {
+        try {
+            const { event: eventToSend, size } = queuedEvent.compressionEnabled
+                ? compressEventSync(queuedEvent.event)
+                : { event: queuedEvent.event, size: estimateSize(queuedEvent.event) }
+
+            this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
+        } finally {
+            this._finishQueuedCompressionEvent(queuedEvent)
+        }
+    }
+
+    private _drainCompressionQueueSync() {
+        const queuedEvents = [...this._pendingCompressionEvents]
+        queuedEvents.forEach((queuedEvent) => {
+            this._processQueuedCompressionEventSync(queuedEvent)
+        })
+    }
+
     private _enqueueCompression(
         event: eventWithTime,
         compressionEnabled: boolean,
         targetSessionId: string,
         targetWindowId: string
     ) {
-        const generation = this._compressionQueueGeneration
+        const queuedEvent: QueuedCompressionEvent = {
+            event,
+            compressionEnabled,
+            targetSessionId,
+            targetWindowId,
+            generation: this._compressionQueueGeneration,
+            processed: false,
+            counted: true,
+        }
+        this._pendingCompressionEvents.push(queuedEvent)
         this._queuedCompressionEvents += 1
+
         const processEvent = async () => {
             try {
+                if (queuedEvent.processed) {
+                    return
+                }
+
                 const { event: eventToSend, size } = compressionEnabled
                     ? shouldUseNativeAsyncSessionRecordingGzip(event)
                         ? await compressEventAsync(event)
                         : compressEventSync(event)
                     : { event, size: estimateSize(event) }
 
-                if (generation !== this._compressionQueueGeneration) {
-                    return
-                }
-
-                this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
+                this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
             } finally {
-                if (generation === this._compressionQueueGeneration) {
-                    this._queuedCompressionEvents = Math.max(0, this._queuedCompressionEvents - 1)
-                }
+                this._finishQueuedCompressionEvent(queuedEvent)
             }
         }
 
@@ -1651,6 +1724,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // beforeunload cannot wait for async CompressionStream work. Synchronously
+        // compress any queued events so sendBeacon can include them in this flush.
+        this._drainCompressionQueueSync()
         this._flushBuffer()
     }
 
