@@ -177,6 +177,34 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should not read object properties after the body size limit is reached', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const getterAfterLimit = jest.fn(() => {
+                throw new Error('should not be read')
+            })
+            const objectWithUnreadPropertyAfterLimit: any = {
+                largeKey: 'x'.repeat(10001),
+            }
+            Object.defineProperty(objectWithUnreadPropertyAfterLimit, 'unreadAfterLimit', {
+                enumerable: true,
+                get: getterAfterLimit,
+            })
+
+            expect(() => assignableWindow.console.log(objectWithUnreadPropertyAfterLimit)).not.toThrow()
+
+            expect(getterAfterLimit).not.toHaveBeenCalled()
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'),
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
         it('should not truncate log body when within size limit', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
