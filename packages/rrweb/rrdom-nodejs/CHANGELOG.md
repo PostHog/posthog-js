@@ -1,5 +1,12 @@
 # rrdom-nodejs
 
+## 0.0.2
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/rrdom@0.0.63
+
 ## 0.0.1
 
 ### Patch Changes
