@@ -1,26 +1,9 @@
 #!/usr/bin/env node
 
-/**
- * Post-build step: copy the `image-bitmap-data-url-worker-*.js.map` files
- * from the @posthog/rrweb workspace package into packages/browser/dist/.
- *
- * Why this exists:
- *   - @posthog/rrweb inlines its image-bitmap web worker as a string and
- *     embeds a `//# sourceMappingURL=image-bitmap-data-url-worker-*.js.map`
- *     comment pointing at a sibling file.
- *   - When rollup bundles @posthog/rrweb into our dist/rrweb.js (and into
- *     dist/recorder.js etc. for the existing recorder entries) that
- *     sourcemap reference comes along for the ride.
- *   - Downstream consumers (notably PostHog/posthog's frontend build) need
- *     the map file to be reachable next to the JS, otherwise their static
- *     asset pipeline fails on the missing sourcemap.
- *
- * Until this change posthog grabbed the map straight from
- * `node_modules/@posthog/rrweb/dist`. After the rrweb fork is consumed
- * through `posthog-js/rrweb` (and the `@posthog/rrweb` direct dep is
- * dropped) that path no longer exists, so we have to ship the map file
- * from here.
- */
+// Postbuild: copy @posthog/rrweb's image-bitmap-data-url-worker-*.js.map files into
+// packages/browser/dist/ so the sourceMappingURL embedded in our bundled rrweb.js resolves
+// for downstream consumers (e.g. PostHog/posthog's frontend) that no longer depend on
+// @posthog/rrweb directly.
 
 const fs = require('fs')
 const path = require('path')
@@ -36,15 +19,8 @@ if (!fs.existsSync(RRWEB_DIST)) {
 const mapFiles = fs.readdirSync(RRWEB_DIST).filter((file) => file.startsWith('image-bitmap-data-url-worker-') && file.endsWith('.js.map'))
 
 if (mapFiles.length === 0) {
-    // Fail the build rather than silently shipping a tarball without the sourcemap.
-    // Downstream consumers (PostHog/posthog frontend) reference this map via a
-    // sourceMappingURL comment baked into our rrweb bundle; a missing file there
-    // surfaces as an unrelated build error far from this postbuild step.
-    console.error(
-        'error: no image-bitmap-data-url-worker-*.js.map files found in @posthog/rrweb dist — ' +
-            'has the worker filename hash changed or the worker been removed upstream? ' +
-            'Either fix this script or remove the sourceMappingURL reference in rrweb.'
-    )
+    // Fail loudly rather than silently shipping without the sourcemap.
+    console.error('error: no image-bitmap-data-url-worker-*.js.map files found in @posthog/rrweb dist')
     process.exit(1)
 }
 

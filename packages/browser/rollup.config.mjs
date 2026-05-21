@@ -386,12 +386,8 @@ const entrypointTargets = entrypoints.map((file) => {
     }
 })
 
-// Entrypoints whose .d.ts output should inline the types of upstream packages
-// they re-export, so consumers don't need a runtime dependency on the upstream
-// package just to resolve types. The rrweb subpath entrypoints do `export *
-// from '@posthog/rrweb*'`; without respectExternal: true the dts plugin would
-// preserve those external re-exports and consumers (e.g. PostHog/posthog
-// after dropping its direct @posthog/rrweb-types dep) would fail to find them.
+// Entries whose .d.ts must inline upstream types via `respectExternal`, so consumers
+// don't need a runtime dep on the re-exported package just to resolve types.
 const inlineExternalTypesEntries = new Set([
     'extension-bundles.es.ts',
     'rrweb.es.ts',
@@ -399,18 +395,9 @@ const inlineExternalTypesEntries = new Set([
     'rrweb-plugin-console-record.es.ts',
 ])
 
-// Entries that pull in @posthog/rrdom transitively (via @posthog/rrweb). rrdom's
-// shipped index.d.ts references the local alias `RRNodeType` (from
-// `import { NodeType as RRNodeType }`) in const initialiser positions but
-// never re-declares it, so once rollup-plugin-dts inlines those classes the
-// `RRNodeType.X` value references resolve to nothing. The alias was always
-// just `NodeType` from @posthog/rrweb-types — which dts inlines as a real
-// `declare enum NodeType` — so we resolve the alias in place to keep the
-// bundled .d.ts strict-mode clean for consumers without skipLibCheck.
-//
-// Only rrweb.es.ts is in scope today — rrweb-types and rrweb-plugin-console-record
-// are leaf packages that don't reach rrdom. If a future subpath entrypoint starts
-// pulling in rrdom, add it here.
+// rrdom's index.d.ts uses `RRNodeType.X` value references against a local
+// alias that dts inlining never re-declares, so we rewrite them back to
+// `NodeType.X`. Only entries that transitively pull in rrdom need this.
 const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
 
 const typeTargets = entrypoints
