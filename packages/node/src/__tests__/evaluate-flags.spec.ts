@@ -176,8 +176,6 @@ describe('evaluateFlags', () => {
     })
 
     it('fires separate $feature_flag_called events for the same flag+variant under different group contexts', async () => {
-      mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
-
       const flags1 = await posthog.evaluateFlags('user-1', { groups: { company: 'org-a' } })
       flags1.isEnabled('boolean-flag')
 
@@ -190,8 +188,34 @@ describe('evaluateFlags', () => {
         (m) => m.event === '$feature_flag_called' && m.properties.$feature_flag === 'boolean-flag'
       )
       expect(flagCalled).toHaveLength(2)
-      expect(flagCalled[0].properties.$groups).toEqual({ company: 'org-a' })
-      expect(flagCalled[1].properties.$groups).toEqual({ company: 'org-b' })
+      const groupsCaptured = flagCalled.map((m) => m.properties.$groups)
+      expect(groupsCaptured).toEqual(expect.arrayContaining([{ company: 'org-a' }, { company: 'org-b' }]))
+    })
+
+    it('dedupes $feature_flag_called events across repeated access under the same group context', async () => {
+      const flags = await posthog.evaluateFlags('user-1', { groups: { company: 'org-a' } })
+      flags.isEnabled('boolean-flag')
+      flags.isEnabled('boolean-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.filter(
+        (m) => m.event === '$feature_flag_called' && m.properties.$feature_flag === 'boolean-flag'
+      )
+      expect(flagCalled).toHaveLength(1)
+    })
+
+    it('dedupes $feature_flag_called events when the same groups are passed in different key order', async () => {
+      const flags1 = await posthog.evaluateFlags('user-1', { groups: { company: 'org-a', team: 'red' } })
+      flags1.isEnabled('boolean-flag')
+
+      const flags2 = await posthog.evaluateFlags('user-1', { groups: { team: 'red', company: 'org-a' } })
+      flags2.isEnabled('boolean-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.filter(
+        (m) => m.event === '$feature_flag_called' && m.properties.$feature_flag === 'boolean-flag'
+      )
+      expect(flagCalled).toHaveLength(1)
     })
 
     it('getFlagPayload returns parsed payload without firing an event', async () => {

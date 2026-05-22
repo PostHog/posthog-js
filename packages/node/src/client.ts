@@ -1757,12 +1757,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   protected _captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void {
     const { distinctId, key, response, groups, disableGeoip, properties } = params
-    const groupSuffix = groups
-      ? `_${Object.entries(groups)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([type, groupKey]) => `${type}:${groupKey}`)
-          .join(',')}`
-      : ''
+    const groupSuffix =
+      groups && Object.keys(groups).length > 0
+        ? `_${JSON.stringify(Object.fromEntries(Object.entries(groups).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))))}`
+        : ''
     const featureFlagReportedKey = `${key}_${response}${groupSuffix}`
 
     if (
