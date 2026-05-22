@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.35.0
+
+### Minor Changes
+
+- [#3642](https://github.com/PostHog/posthog-js/pull/3642) [`18ea8b5`](https://github.com/PostHog/posthog-js/commit/18ea8b53f608607075c93bc18b29be8dfd41eb3f) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Promote feature flag definition cache provider types to the main `posthog-node` export and deprecate `posthog-node/experimental` imports.
+  (2026-05-21)
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.8
+
 ## 5.34.10
 
 ### Patch Changes

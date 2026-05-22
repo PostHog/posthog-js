@@ -3,6 +3,7 @@ export * from './extensions/express'
 export * from './types'
 
 export { FeatureFlagEvaluations } from './feature-flag-evaluations'
+export type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 // Re-export FeatureFlagError from core for backwards compatibility.
 // These were originally defined in posthog-node and moved to core for reuse across SDKs.

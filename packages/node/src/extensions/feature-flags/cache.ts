@@ -15,8 +15,6 @@ export interface FlagDefinitionCacheData {
 }
 
 /**
- * @experimental This API is experimental and may change in minor versions.
- *
  * Provider interface for caching feature flag definitions.
  *
  * Implementations can use this to control when flag definitions are fetched
@@ -30,7 +28,7 @@ export interface FlagDefinitionCacheData {
  *
  * @example
  * ```typescript
- * import { FlagDefinitionCacheProvider } from 'posthog-node/experimental'
+ * import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'
  *
  * class RedisFlagCache implements FlagDefinitionCacheProvider {
  *   constructor(private redis: Redis, private teamKey: string) { }
