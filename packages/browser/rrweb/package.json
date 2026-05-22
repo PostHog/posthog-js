@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-rrweb",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point exposing the @posthog/rrweb fork bundled inside posthog-js. ESM-only; consumed by bundlers via the `module` field.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/rrweb"
+    },
+    "main": "../dist/rrweb.js",
+    "module": "../dist/rrweb.js",
+    "types": "../dist/rrweb.d.ts"
+}
