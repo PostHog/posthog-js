@@ -4,7 +4,7 @@ import * as globals from '../utils/globals'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'
-import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
+import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
 import { PostHog } from '../posthog-core'
@@ -350,6 +350,21 @@ describe('posthog core', () => {
                 })
             )
         })
+
+        it.each(['XHR', 'fetch', 'sendBeacon'] as const)(
+            'passes the %s transport override to the request',
+            (transport) => {
+                const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+                posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
+
+                expect(posthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        transport,
+                    })
+                )
+            }
+        )
 
         it('does not allow you to set complex current url', () => {
             const posthog = posthogWith(defaultConfig, defaultOverrides)
@@ -1406,6 +1421,43 @@ describe('posthog core', () => {
 
                 expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
             })
+        })
+    })
+
+    describe('reset()', () => {
+        it('preserves session-recording remote config across reset()', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+            // Simulate the recording remote config landing in persistence,
+            // as RemoteConfigLoader would do after a /decide round trip.
+            const remoteConfig = {
+                cache_timestamp: Date.now(),
+                enabled: true,
+                endpoint: '/s/',
+                sampleRate: 0.5,
+                masking: { maskAllInputs: true },
+                canvasRecording: { enabled: true, fps: 4, quality: '0.6' },
+            }
+            posthog.persistence!.register({ [SESSION_RECORDING_REMOTE_CONFIG]: remoteConfig })
+
+            // And some user state that *should* be cleared.
+            posthog.persistence!.register({ some_user_prop: 'should-be-gone' })
+
+            posthog.reset()
+
+            // Recording remote config survives — without this, start('session_id_changed')
+            // bails on the next session rotation and the new session opens with no FullSnapshot.
+            expect(posthog.persistence!.props[SESSION_RECORDING_REMOTE_CONFIG]).toEqual(remoteConfig)
+
+            // User state is still cleared.
+            expect(posthog.persistence!.props['some_user_prop']).toBeUndefined()
+        })
+
+        it('does not crash when no recording remote config has been stored', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+            expect(() => posthog.reset()).not.toThrow()
+            expect(posthog.persistence!.props[SESSION_RECORDING_REMOTE_CONFIG]).toBeUndefined()
         })
     })
 

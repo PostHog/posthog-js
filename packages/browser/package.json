@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.373.2",
+    "version": "1.376.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "engineering@posthog.com",
@@ -12,7 +12,7 @@
         "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
         "dev": "tsc -b && NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -cw",
         "build": "tsc -b && rollup -c",
-        "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js",
+        "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js && node scripts/copy-rrweb-worker-maps.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
@@ -52,7 +52,10 @@
         "react/dist/**",
         "react/package.json",
         "react/surveys/package.json",
-        "react/slim/package.json"
+        "react/slim/package.json",
+        "rrweb/package.json",
+        "rrweb-types/package.json",
+        "rrweb-plugin-console-record/package.json"
     ],
     "dependencies": {
         "@opentelemetry/api": "^1.9.0",
@@ -81,6 +84,7 @@
         "@jridgewell/sourcemap-codec": "^1.5.5",
         "@playwright/test": "^1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
+        "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-plugin-console-record": "workspace:*",
         "@posthog/rrweb-record": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",

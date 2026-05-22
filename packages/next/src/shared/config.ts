@@ -18,28 +18,27 @@ export type PostHogServerConfig = PostHogOptions
  * Resolves the PostHog API key from an explicit value or the
  * `NEXT_PUBLIC_POSTHOG_KEY` environment variable.
  *
- * Throws if neither is available.
+ * Warns and returns undefined if neither is available.
  */
 export function normalizeConfigValue(value?: unknown): string | undefined {
     const normalizedValue = typeof value === 'string' ? value.trim() : ''
     return normalizedValue || undefined
 }
 
-export function resolveApiKey(apiKey?: string): string {
+export function resolveApiKey(apiKey?: unknown): string | undefined {
     const resolved = normalizeConfigValue(apiKey) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_KEY)
     if (!resolved) {
-        throw new Error(
-            '[PostHog Next.js] apiKey is required. Either pass it explicitly or set the NEXT_PUBLIC_POSTHOG_KEY environment variable.'
-        )
+        // eslint-disable-next-line no-console
+        console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
     }
     return resolved
 }
 
-export function resolveHost(host?: string): string | undefined {
+export function resolveHost(host?: unknown): string | undefined {
     return normalizeConfigValue(host) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_HOST)
 }
 
-export function resolveHostOrDefault(host?: string): string {
+export function resolveHostOrDefault(host?: unknown): string {
     return resolveHost(host) ?? DEFAULT_API_HOST
 }
 

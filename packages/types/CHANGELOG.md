@@ -1,5 +1,40 @@
 # @posthog/types
 
+## 1.376.0
+
+## 1.375.0
+
+### Minor Changes
+
+- [#3641](https://github.com/PostHog/posthog-js/pull/3641) [`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `flag_keys` config to restrict browser feature flag remote evaluation to specific flag keys.
+  (2026-05-21)
+
+## 1.374.4
+
+## 1.374.3
+
+### Patch Changes
+
+- [#3607](https://github.com/PostHog/posthog-js/pull/3607) [`557b893`](https://github.com/PostHog/posthog-js/commit/557b8934aa0b990184e0376fb1fc28433ad336c6) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Enable $web_vitals reporting when cookieless mode is enabled
+  (2026-05-20)
+
+## 1.374.2
+
+## 1.374.1
+
+## 1.374.0
+
+### Minor Changes
+
+- [#3620](https://github.com/PostHog/posthog-js/pull/3620) [`594ea11`](https://github.com/PostHog/posthog-js/commit/594ea1146045d49080f6dfd951b037c13278e975) Thanks [@pauldambra](https://github.com/pauldambra)! - Dead clicks: add a `.ph-no-deadclick` CSS class (and `capture_dead_clicks.css_selector_ignorelist` config option) to exclude specific elements from dead-click detection without affecting autocapture, session replay, or heatmaps. Mirrors the existing `.ph-no-rageclick` pattern.
+  (2026-05-18)
+
+## 1.373.5
+
+## 1.373.4
+
+## 1.373.3
+
 ## 1.373.2
 
 ## 1.373.1

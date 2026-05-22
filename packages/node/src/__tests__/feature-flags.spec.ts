@@ -2457,6 +2457,190 @@ describe('local evaluation', () => {
     // Should NOT have called the /flags API (only /decide for initial load)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
+
+  it('resolves is_not_set locally without forcing inconclusive', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Anonymous only',
+          key: 'only-anon',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'email', operator: 'is_not_set', value: '', type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {},
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Key absent → property is_not_set is true → flag matches.
+    expect(await posthog.getFeatureFlag('only-anon', 'some-distinct-id', { personProperties: {} })).toEqual(true)
+    // Key present → property IS set → flag does not match.
+    expect(
+      await posthog.getFeatureFlag('only-anon', 'some-distinct-id', { personProperties: { email: 'a@b.com' } })
+    ).toEqual(false)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('returns false for an inactive flag even when continuity is enabled', async () => {
+    // Inactive must short-circuit before the continuity check — otherwise a disabled flag with
+    // `ensure_experience_continuity: true` falls through to InconclusiveMatchError and resolves
+    // to undefined instead of the correct `false`.
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Off Continuity',
+          key: 'off-continuity',
+          active: false,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+      cohorts: {},
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('off-continuity', 'some-distinct-id')).toEqual(false)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('returns undefined when a cohort references a flag dependency we cannot evaluate', async () => {
+    // Cohort property groups can contain flag-type properties. When the flag prop carries no
+    // `dependency_chain` (or the dependency is otherwise unresolvable), the evaluator throws
+    // InconclusiveMatchError rather than silently granting cohort membership, and the flag
+    // resolves to undefined.
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Cohort flag dep',
+          key: 'cohort-flag-dep',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 1, type: 'cohort' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '1': {
+          type: 'AND',
+          values: [
+            { key: 'plan', value: 'pro', operator: 'exact', type: 'person' },
+            { key: 'other-flag', value: true, type: 'flag' },
+          ],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
+        personProperties: { plan: 'pro' },
+        onlyEvaluateLocally: true,
+      })
+    ).toBeUndefined()
+  })
+
+  it('resolves a cohort referencing a flag dependency locally when dependency_chain is present', async () => {
+    // When the cohort's flag property carries a valid `dependency_chain`, the cohort path now
+    // evaluates it via `evaluateFlagDependency` instead of marking the group inconclusive. The
+    // dependent flag must be active and locally evaluable; its result feeds the cohort match.
+    const flags = {
+      flags: [
+        {
+          id: 2,
+          name: 'Other flag',
+          key: 'other-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+        {
+          id: 1,
+          name: 'Cohort flag dep',
+          key: 'cohort-flag-dep',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 1, type: 'cohort' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '1': {
+          type: 'AND',
+          values: [
+            { key: 'plan', value: 'pro', operator: 'exact', type: 'person' },
+            { key: 'other-flag', value: true, type: 'flag', dependency_chain: ['other-flag'] },
+          ],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
+        personProperties: { plan: 'pro' },
+        onlyEvaluateLocally: true,
+      })
+    ).toBe(true)
+
+    expect(
+      await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
+        personProperties: { plan: 'free' },
+        onlyEvaluateLocally: true,
+      })
+    ).toBe(false)
+  })
 })
 
 describe('getFeatureFlag', () => {
@@ -2639,7 +2823,8 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'value' })).toBe(true)
     expect(matchProperty(property_a, { key: 'value2' })).toBe(true)
     expect(matchProperty(property_a, { key: '' })).toBe(true)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    // # `is_set` is about key presence — an explicitly-set undefined value still counts.
+    expect(matchProperty(property_a, { key: undefined })).toBe(true)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
@@ -2754,15 +2939,15 @@ describe('match properties', () => {
     const property_e = { key: 'key', value: '30', operator: 'lt' }
     expect(matchProperty(property_e, { key: '29' })).toBe(true)
 
-    // # depending on the type of override, we adjust type comparison
-    expect(matchProperty(property_e, { key: '100' })).toBe(true)
+    // # When both sides parse as numbers, comparison is numeric regardless of override type.
+    expect(matchProperty(property_e, { key: '100' })).toBe(false)
     expect(matchProperty(property_e, { key: 100 })).toBe(false)
 
     const property_f = { key: 'key', value: '123aloha', operator: 'gt' }
     expect(matchProperty(property_f, { key: '123' })).toBe(false)
     expect(matchProperty(property_f, { key: 122 })).toBe(false)
 
-    // # this turns into a string comparison
+    // # `parseFloat('123aloha') === 123`, so 129 > 123 numerically.
     expect(matchProperty(property_f, { key: 129 })).toBe(true)
   })
 
@@ -2880,8 +3065,9 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
     const property_b = { key: 'key', value: 'null', operator: 'is_set' }
-    expect(matchProperty(property_b, { key: null })).toBe(false)
-    expect(matchProperty(property_b, { key: undefined })).toBe(false)
+    // # `is_set` is about key presence, not value — a key explicitly set to null/undefined still counts.
+    expect(matchProperty(property_b, { key: null })).toBe(true)
+    expect(matchProperty(property_b, { key: undefined })).toBe(true)
     expect(matchProperty(property_b, { key: 'null' })).toBe(true)
 
     const property_c = { key: 'key', value: 'undefined', operator: 'icontains' }
@@ -2933,8 +3119,9 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
     const property_b = { key: 'key', value: 'null', operator: 'is_set' }
-    expect(matchProperty(property_b, { key: null })).toBe(false)
-    expect(matchProperty(property_b, { key: undefined })).toBe(false)
+    // # `is_set` is about key presence, not value — a key explicitly set to null/undefined still counts.
+    expect(matchProperty(property_b, { key: null })).toBe(true)
+    expect(matchProperty(property_b, { key: undefined })).toBe(true)
     expect(matchProperty(property_b, { key: 'null' })).toBe(true)
 
     const property_c = { key: 'key', value: 'app.posthog.com', operator: 'icontains' }
@@ -2992,6 +3179,81 @@ describe('match properties', () => {
       new InconclusiveMatchError('Unknown operator: is_unknown')
     )
   })
+
+  describe('numeric comparison edge cases', () => {
+    // Pre-fix, `parseFloat` was wrapped in a try/catch (it returns NaN rather than throwing)
+    // and a string override fell into `compare(overrideValue, String(value), operator)` —
+    // a lexicographic comparison. These cases lock in the numeric-when-numeric behavior.
+    it.each([
+      // string override vs numeric value — must compare numerically, not lexicographically.
+      { op: 'gt', value: 9, override: '10', expected: true },
+      { op: 'gt', value: 100, override: '90', expected: false },
+      { op: 'gte', value: 10, override: '10', expected: true },
+      { op: 'lt', value: 9, override: '10', expected: false },
+      { op: 'lte', value: 10, override: '10', expected: true },
+      // number override vs string value
+      { op: 'gt', value: '9', override: 10, expected: true },
+      { op: 'lt', value: '10', override: 9, expected: true },
+      // number-on-number sanity
+      { op: 'gt', value: 5, override: 6, expected: true },
+      { op: 'lt', value: 5, override: 6, expected: false },
+    ])('$op $value vs $override -> $expected', ({ op, value, override, expected }) => {
+      expect(matchProperty({ key: 'k', value, operator: op }, { k: override })).toBe(expected)
+    })
+
+    it('falls back to lexicographic comparison when neither side is numeric', () => {
+      expect(matchProperty({ key: 'k', value: 'b', operator: 'gt' }, { k: 'c' })).toBe(true)
+      expect(matchProperty({ key: 'k', value: 'b', operator: 'lt' }, { k: 'a' })).toBe(true)
+    })
+
+    it('does not leak NaN comparisons when value is a non-numeric string', () => {
+      // Pre-fix: `parseFloat('abc') = NaN`, `NaN != null` was true, comparisons silently returned
+      // false. Now we fall back to lexicographic comparison so the result is meaningful.
+      expect(matchProperty({ key: 'k', value: 'abc', operator: 'gt' }, { k: 'abd' })).toBe(true)
+      expect(matchProperty({ key: 'k', value: 'abc', operator: 'lt' }, { k: 'abb' })).toBe(true)
+    })
+  })
+
+  describe('is_not_set', () => {
+    it('returns true when the property is absent', () => {
+      expect(matchProperty({ key: 'missing', value: 'whatever', operator: 'is_not_set' }, {})).toBe(true)
+    })
+
+    it('returns false when the property is present', () => {
+      expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: 'pro' })).toBe(false)
+    })
+
+    it('treats a null-valued property as still set (returns false)', () => {
+      // `null` counts as present in propertyValues; only genuinely missing keys read as "not set".
+      expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: null })).toBe(false)
+    })
+
+    it('still throws InconclusiveMatchError when key is absent for other operators', () => {
+      expect(() => matchProperty({ key: 'k', value: 'x', operator: 'exact' }, {})).toThrow(InconclusiveMatchError)
+    })
+  })
+
+  describe('is_set with null/undefined values', () => {
+    // Pre-fix, `NULL_VALUES_ALLOWED_OPERATORS = ['is_not']` excluded `is_set`, so the null guard
+    // returned false (and warned) before the switch could reach the `case 'is_set'` branch.
+    // `is_set` is about key presence, not value.
+    it('returns true when the property value is null', () => {
+      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: null })).toBe(true)
+    })
+
+    it('returns true when the property value is undefined but the key is present', () => {
+      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: undefined })).toBe(true)
+    })
+
+    it('returns true for a normal value', () => {
+      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: 'pro' })).toBe(true)
+    })
+
+    it('throws InconclusiveMatchError when the key is absent', () => {
+      // Key not in propertyValues — we cant tell locally whether the server has it.
+      expect(() => matchProperty({ key: 'plan', value: '', operator: 'is_set' }, {})).toThrow(InconclusiveMatchError)
+    })
+  })
 })
 
 describe('semver parsing', () => {
@@ -3029,8 +3291,14 @@ describe('semver parsing', () => {
     expect(parseSemver('1.2.3.4.5.6')).toEqual([1, 2, 3])
   })
 
-  it('handles leading zeros', () => {
-    expect(parseSemver('01.02.03')).toEqual([1, 2, 3])
+  it('rejects leading zeros per semver 2.0.0 §2', () => {
+    expect(() => parseSemver('01.02.03')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1.07.3')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('001.2.3')).toThrow(InconclusiveMatchError)
+    // Literal "0" components remain valid.
+    expect(parseSemver('0.1.0')).toEqual([0, 1, 0])
+    expect(parseSemver('1.0.0')).toEqual([1, 0, 0])
+    expect(parseSemver('0.0.0')).toEqual([0, 0, 0])
   })
 
   it('throws on invalid input', () => {
@@ -3377,10 +3645,38 @@ describe('semver operators', () => {
       )
     })
 
-    it('handles leading zeros', () => {
-      expect(matchProperty({ key: 'version', value: '01.02.03', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
-        true
+    // Per semver 2.0.0 §2, numeric identifiers MUST NOT include leading zeros.
+    it.each(['01.2.3', '1.02.3', '1.2.03', '1.07.3', '001.2.3'])('rejects leading-zero override value %p', (bad) => {
+      expect(() => matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: bad })).toThrow(
+        InconclusiveMatchError
       )
+    })
+
+    it.each<[string]>([
+      ['semver_eq'],
+      ['semver_neq'],
+      ['semver_gt'],
+      ['semver_gte'],
+      ['semver_lt'],
+      ['semver_lte'],
+      ['semver_tilde'],
+      ['semver_caret'],
+    ])('rejects leading-zero flag value for %s', (operator) => {
+      expect(() => matchProperty({ key: 'version', value: '1.07.3', operator }, { version: '1.8.0' })).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
+    it.each(['01.*', '1.07.*'])('rejects leading-zero wildcard pattern %p', (pattern) => {
+      expect(() =>
+        matchProperty({ key: 'version', value: pattern, operator: 'semver_wildcard' }, { version: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+    })
+
+    it('still accepts literal zero components', () => {
+      expect(matchProperty({ key: 'version', value: '0.1.0', operator: 'semver_eq' }, { version: '0.1.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_eq' }, { version: '1.0.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '0.0.0', operator: 'semver_eq' }, { version: '0.0.0' })).toBe(true)
     })
 
     it('handles 4-part versions', () => {

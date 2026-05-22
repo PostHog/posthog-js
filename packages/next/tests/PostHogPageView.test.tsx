@@ -26,7 +26,7 @@ describe('PostHogPageView', () => {
     it('captures a $pageview event on mount', () => {
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: '/initial',
+            $current_url: 'http://localhost/initial',
         })
     })
 
@@ -34,7 +34,7 @@ describe('PostHogPageView', () => {
         mockSearchParams = new URLSearchParams('q=hello&page=2')
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: '/initial?q=hello&page=2',
+            $current_url: 'http://localhost/initial?q=hello&page=2',
         })
     })
 
@@ -46,7 +46,7 @@ describe('PostHogPageView', () => {
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(2)
         expect(mockCapture).toHaveBeenLastCalledWith('$pageview', {
-            $current_url: '/new-page',
+            $current_url: 'http://localhost/new-page',
         })
     })
 

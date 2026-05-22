@@ -191,6 +191,13 @@ export function transformAttribute(
     name === 'src' ||
     (name === 'href' && !(tagName === 'use' && value[0] === '#'))
   ) {
+    // Prefer the loaded sheet's href — survives baseURI changes from SPA pushState.
+    if (tagName === 'link' && element) {
+      const sheetHref = (element as HTMLLinkElement).sheet?.href;
+      if (sheetHref) {
+        return sheetHref;
+      }
+    }
     // href starts with a # is an id pointer for svg
     const transformedValue = absoluteToDoc(doc, value);
 
@@ -655,25 +662,29 @@ function serializeElementNode(
   }
   // remote css
   if (tagName === 'link' && inlineStylesheet) {
-    //TODO: maybe replace this `.styleSheets` with original one
-    const href: string | undefined = hrefFrom(n);
-    if (href) {
-      let stylesheet = findStylesheet(doc, href);
-      if (!stylesheet && href.includes('.css')) {
-        const rootDomain = window.location.origin;
-        const stylesheetPath = href.replace(window.location.href, '');
-        const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
-        stylesheet = findStylesheet(doc, potentialStylesheetHref);
+    // Direct sheet reference survives baseURI drift; href lookup is the fallback.
+    let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
+      .sheet;
+    if (!stylesheet) {
+      const href: string | undefined = hrefFrom(n);
+      if (href) {
+        stylesheet = findStylesheet(doc, href);
+        if (!stylesheet && href.includes('.css')) {
+          const rootDomain = window.location.origin;
+          const stylesheetPath = href.replace(window.location.href, '');
+          const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
+          stylesheet = findStylesheet(doc, potentialStylesheetHref);
+        }
       }
-      let cssText: string | null = null;
-      if (stylesheet) {
-        cssText = stringifyStylesheet(stylesheet);
-      }
-      if (cssText) {
-        delete attributes.rel;
-        delete attributes.href;
-        attributes._cssText = cssText;
-      }
+    }
+    let cssText: string | null = null;
+    if (stylesheet) {
+      cssText = stringifyStylesheet(stylesheet);
+    }
+    if (cssText) {
+      delete attributes.rel;
+      delete attributes.href;
+      attributes._cssText = cssText;
     }
   }
   // dynamic stylesheet

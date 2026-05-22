@@ -142,9 +142,13 @@ export function postHogMiddleware(config: PostHogMiddlewareOptions = {}) {
             return rewriteToPostHog(request, proxyConfig)
         }
 
+        const response = config.response ?? NextResponse.next()
+        if (!apiKey) {
+            return response
+        }
+
         const cookieName = getPostHogCookieName(apiKey)
         const state = readPostHogCookie(request.cookies, apiKey)
-        const response = config.response ?? NextResponse.next()
 
         const shouldSeed = config.seedAnonymousCookie ?? true
         const optedOut = isOptedOut(request.cookies, apiKey, {

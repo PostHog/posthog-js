@@ -1,3 +1,5 @@
+import { Compression } from './types'
+
 /**
  * Older browsers and some runtimes don't support this yet
  * This API (as of 2025-05-07) is not available on React Native.
@@ -12,6 +14,29 @@ export function isGzipSupported(): boolean {
 }
 
 const NATIVE_GZIP_VALIDATION_ERROR = 'NativeGzipValidationError'
+const GZIP_MAGIC_FIRST_BYTE = 0x1f
+const GZIP_MAGIC_SECOND_BYTE = 0x8b
+const GZIP_DEFLATE_METHOD = 0x08
+
+const hasGzipMagic = (bytes: Uint8Array): boolean => {
+  return bytes.length >= 2 && bytes[0] === GZIP_MAGIC_FIRST_BYTE && bytes[1] === GZIP_MAGIC_SECOND_BYTE
+}
+
+export const isGzipData = (body: unknown): boolean => {
+  if (body instanceof ArrayBuffer) {
+    return hasGzipMagic(new Uint8Array(body))
+  }
+
+  if (ArrayBuffer.isView(body)) {
+    return hasGzipMagic(new Uint8Array(body.buffer, body.byteOffset, body.byteLength))
+  }
+
+  return false
+}
+
+export const isGzipRequest = (compression?: unknown, urlCompression?: unknown): boolean => {
+  return compression === Compression.GZipJS || urlCompression === Compression.GZipJS || urlCompression === 'gzip'
+}
 
 export const isNativeAsyncGzipReadError = (error: unknown): boolean => {
   if (!error || typeof error !== 'object') {
@@ -74,7 +99,7 @@ const validateNativeGzip = async (compressed: Blob, inputBytes: Uint8Array): Pro
   }
 
   const header = new Uint8Array(await compressed.slice(0, 10).arrayBuffer())
-  if (header[0] !== 0x1f || header[1] !== 0x8b || header[2] !== 0x08) {
+  if (!hasGzipMagic(header) || header[2] !== GZIP_DEFLATE_METHOD) {
     throwNativeGzipValidationError('invalid-header')
   }
 

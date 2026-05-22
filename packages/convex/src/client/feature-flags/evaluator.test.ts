@@ -1,0 +1,401 @@
+import { describe, test, expect } from '@jest/globals'
+import { LocalFeatureFlagEvaluator } from './evaluator.js'
+import type { FlagDefinitions, PostHogFeatureFlag } from './types.js'
+
+function definitions(flags: PostHogFeatureFlag[], extra: Partial<FlagDefinitions> = {}): FlagDefinitions {
+  return {
+    flags,
+    groupTypeMapping: extra.groupTypeMapping ?? {},
+    cohorts: extra.cohorts ?? {},
+  }
+}
+
+function makeFlag(key: string, overrides: Partial<PostHogFeatureFlag> = {}): PostHogFeatureFlag {
+  return {
+    id: 1,
+    name: key,
+    key,
+    deleted: false,
+    active: true,
+    rollout_percentage: null,
+    ensure_experience_continuity: false,
+    experiment_set: [],
+    filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+    ...overrides,
+  }
+}
+
+describe('LocalFeatureFlagEvaluator', () => {
+  test('returns undefined for unknown flag keys', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(definitions([]))
+    expect(await evaluator.getFeatureFlag('missing', 'user')).toBeUndefined()
+  })
+
+  test('returns false for inactive flags', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(definitions([makeFlag('off', { active: false })]))
+    expect(await evaluator.getFeatureFlag('off', 'user')).toBe(false)
+  })
+
+  test('returns true for fully-rolled-out boolean flag', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(definitions([makeFlag('on')]))
+    expect(await evaluator.getFeatureFlag('on', 'user')).toBe(true)
+  })
+
+  test('matches person properties (exact)', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('pp-flag', {
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlag('pp-flag', 'user', {}, { plan: 'pro' })).toBe(true)
+    expect(await evaluator.getFeatureFlag('pp-flag', 'user', {}, { plan: 'free' })).toBe(false)
+  })
+
+  test('returns variant key for multivariate flags', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('mv', {
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100, variant: 'pink' }],
+            multivariate: {
+              variants: [
+                { key: 'pink', rollout_percentage: 100 },
+                { key: 'blue', rollout_percentage: 0 },
+              ],
+            },
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlag('mv', 'user')).toBe('pink')
+  })
+
+  test('returns undefined when flag requires experience continuity', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([makeFlag('continuity', { ensure_experience_continuity: true })])
+    )
+    expect(await evaluator.getFeatureFlag('continuity', 'user')).toBeUndefined()
+  })
+
+  test('returns false for an inactive flag even when continuity is enabled', async () => {
+    // Inactive should short-circuit before the continuity check — otherwise a disabled flag
+    // with continuity on would come back as undefined.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([makeFlag('off-continuity', { active: false, ensure_experience_continuity: true })])
+    )
+    expect(await evaluator.getFeatureFlag('off-continuity', 'user')).toBe(false)
+  })
+
+  test('respects rollout percentages deterministically', async () => {
+    // 0% rollout — never matches.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([makeFlag('rollout-0', { filters: { groups: [{ properties: [], rollout_percentage: 0 }] } })])
+    )
+    expect(await evaluator.getFeatureFlag('rollout-0', 'user-123')).toBe(false)
+  })
+
+  test('hashing is stable across users — same input yields same output', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([makeFlag('half', { filters: { groups: [{ properties: [], rollout_percentage: 50 }] } })])
+    )
+    const a = await evaluator.getFeatureFlag('half', 'stable-distinct-id')
+    const b = await evaluator.getFeatureFlag('half', 'stable-distinct-id')
+    expect(a).toBe(b)
+  })
+
+  test('returns payload for matching flag value', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('with-payload', {
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+            payloads: { true: JSON.stringify({ feature: 'x' }) },
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlagPayload('with-payload', 'user', undefined)).toEqual({ feature: 'x' })
+  })
+
+  test('getFeatureFlagPayload honours matchValue without re-evaluating', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('mv', {
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 0 }],
+            multivariate: { variants: [{ key: 'red', rollout_percentage: 100 }] },
+            payloads: { red: 'red-payload' },
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlagPayload('mv', 'user', 'red')).toBe('red-payload')
+  })
+
+  test('getAllFlagsAndPayloads returns all flags', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('a'),
+        makeFlag('b', { active: false }),
+        makeFlag('c', {
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+            payloads: { true: JSON.stringify({ k: 'v' }) },
+          },
+        }),
+      ])
+    )
+    const result = await evaluator.getAllFlagsAndPayloads('user')
+    expect(result.featureFlags).toEqual({ a: true, b: false, c: true })
+    expect(result.featureFlagPayloads).toEqual({ c: { k: 'v' } })
+  })
+
+  test('getAllFlagsAndPayloads filters by flagKeys', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(definitions([makeFlag('a'), makeFlag('b'), makeFlag('c')]))
+    const result = await evaluator.getAllFlagsAndPayloads('user', {}, {}, {}, ['a', 'c'])
+    expect(Object.keys(result.featureFlags).sort()).toEqual(['a', 'c'])
+  })
+
+  test('group flag returns false when group not provided', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions(
+        [
+          makeFlag('grp', {
+            filters: { aggregation_group_type_index: 0, groups: [{ properties: [], rollout_percentage: 100 }] },
+          }),
+        ],
+        {
+          groupTypeMapping: { '0': 'organization' },
+        }
+      )
+    )
+    expect(await evaluator.getFeatureFlag('grp', 'user', {})).toBe(false)
+  })
+
+  test('inverts a condition property when negation is set', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('not-pro', {
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person', negation: true }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlag('not-pro', 'user', {}, { plan: 'pro' })).toBe(false)
+    expect(await evaluator.getFeatureFlag('not-pro', 'user', {}, { plan: 'free' })).toBe(true)
+  })
+
+  test('is_not_set condition resolves locally without forcing inconclusive', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('only-anon', {
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'email', value: '', operator: 'is_not_set', type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        }),
+      ])
+    )
+    // Key absent → property is_not_set is true → flag matches.
+    expect(await evaluator.getFeatureFlag('only-anon', 'user', {}, {})).toBe(true)
+    // Key present → property IS set → flag does not match.
+    expect(await evaluator.getFeatureFlag('only-anon', 'user', {}, { email: 'a@b.com' })).toBe(false)
+  })
+
+  test('group flag matches on group properties', async () => {
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions(
+        [
+          makeFlag('grp', {
+            filters: {
+              aggregation_group_type_index: 0,
+              groups: [
+                {
+                  properties: [{ key: 'plan', value: 'enterprise', operator: 'exact', type: 'group' }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
+          }),
+        ],
+        { groupTypeMapping: { '0': 'organization' } }
+      )
+    )
+    const matched = await evaluator.getFeatureFlag(
+      'grp',
+      'user',
+      { organization: 'acme' },
+      {},
+      { organization: { plan: 'enterprise' } }
+    )
+    expect(matched).toBe(true)
+  })
+
+  test('assigns multivariate variants by hash when the condition has no variant override', async () => {
+    // The variant-override path (condition.variant set) is exercised elsewhere — this one walks
+    // the hash-into-buckets fallback that `getMatchingVariant` runs when the condition matches
+    // but no override is configured. Two 50/50 variants, two distinct ids picked because their
+    // hashes land in different buckets — verifies both halves of the lookup table fire and that
+    // the result is stable for the same input.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('split', {
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+            multivariate: {
+              variants: [
+                { key: 'left', rollout_percentage: 50 },
+                { key: 'right', rollout_percentage: 50 },
+              ],
+            },
+          },
+        }),
+      ])
+    )
+    const variants = new Set<unknown>()
+    for (const id of ['alice', 'bob', 'carol', 'dave', 'eve', 'frank']) {
+      const value = await evaluator.getFeatureFlag('split', id)
+      expect(['left', 'right']).toContain(value)
+      variants.add(value)
+      // Same distinct id → same variant.
+      expect(await evaluator.getFeatureFlag('split', id)).toBe(value)
+    }
+    // The cohort of test ids is big enough that the hash must produce both variants — otherwise
+    // we're only covering one half of the lookup table.
+    expect(variants).toEqual(new Set(['left', 'right']))
+  })
+
+  test('getAllFlagsAndPayloads returns only conclusive flags when some are inconclusive', async () => {
+    // A flag that throws InconclusiveMatchError (experience continuity here) should be omitted
+    // from the result entirely — not surface as `undefined`. The remaining flags evaluate
+    // independently, including their payloads.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('on'),
+        makeFlag('off', { active: false }),
+        makeFlag('continuity', { ensure_experience_continuity: true }),
+        makeFlag('with-payload', {
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+            payloads: { true: JSON.stringify({ feature: 'x' }) },
+          },
+        }),
+      ])
+    )
+    const result = await evaluator.getAllFlagsAndPayloads('user')
+    expect(result.featureFlags).toEqual({ on: true, off: false, 'with-payload': true })
+    expect('continuity' in result.featureFlags).toBe(false)
+    expect(result.featureFlagPayloads).toEqual({ 'with-payload': { feature: 'x' } })
+  })
+
+  test('buckets on $device_id when bucketing_identifier is device_id', async () => {
+    // Two distinct ids share the same device id → they must bucket to the same value. A third
+    // device id known to land on the other side of the 50% line proves the hash actually keys
+    // off device_id rather than the distinctId.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('device-bucketed', {
+          bucketing_identifier: 'device_id',
+          filters: { groups: [{ properties: [], rollout_percentage: 50 }] },
+        }),
+      ])
+    )
+    const a = await evaluator.getFeatureFlag('device-bucketed', 'distinct-a', {}, { $device_id: 'shared-device' })
+    const b = await evaluator.getFeatureFlag('device-bucketed', 'distinct-b', {}, { $device_id: 'shared-device' })
+    expect(a).toBe(b)
+    const variants = new Set<unknown>()
+    for (const deviceId of ['dev-1', 'dev-2', 'dev-3', 'dev-4', 'dev-5', 'dev-6', 'dev-7', 'dev-8']) {
+      variants.add(await evaluator.getFeatureFlag('device-bucketed', 'distinct', {}, { $device_id: deviceId }))
+    }
+    // The 50% rollout combined with distinct device ids must produce both verdicts — otherwise
+    // we're not actually keying on the device id.
+    expect(variants).toEqual(new Set([true, false]))
+  })
+
+  test('returns undefined when bucketing on device_id without a $device_id property', async () => {
+    // No $device_id → can't bucket → must bubble up as inconclusive rather than falling back to
+    // distinctId, otherwise we'd silently disagree with the server's verdict.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('device-bucketed', {
+          bucketing_identifier: 'device_id',
+          filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlag('device-bucketed', 'user', {}, {})).toBeUndefined()
+    expect(await evaluator.getFeatureFlag('device-bucketed', 'user', {}, { $device_id: null })).toBeUndefined()
+    expect(await evaluator.getFeatureFlag('device-bucketed', 'user', {}, { $device_id: '' })).toBeUndefined()
+  })
+
+  test('getFeatureFlagPayload returns undefined when eval is inconclusive', async () => {
+    // Distinguishes "no payload" (null) from "couldn't evaluate" (undefined) — matches the
+    // signal `getFeatureFlag` and `getFeatureFlagResult` already give for the same case.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions([
+        makeFlag('continuity', {
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+            payloads: { true: JSON.stringify({ feature: 'x' }) },
+          },
+        }),
+      ])
+    )
+    expect(await evaluator.getFeatureFlagPayload('continuity', 'user', undefined)).toBeUndefined()
+  })
+
+  test('returns undefined when a cohort references a flag dependency we cannot evaluate', async () => {
+    // Cohort property groups can contain flag-type properties, but we don't evaluate flag
+    // dependencies inside cohort groups locally. Skipping them silently would let an AND group
+    // whose other props all pass return true (incorrectly granting cohort membership). The
+    // evaluator should bail out to undefined instead.
+    const evaluator = new LocalFeatureFlagEvaluator(
+      definitions(
+        [
+          makeFlag('cohort-flag', {
+            filters: {
+              groups: [
+                {
+                  properties: [{ key: 'id', value: 'cohort-with-flag-dep', operator: 'in', type: 'cohort' }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
+          }),
+        ],
+        {
+          cohorts: {
+            'cohort-with-flag-dep': {
+              type: 'AND',
+              values: [
+                { key: 'plan', value: 'pro', operator: 'exact', type: 'person' },
+                { key: 'other-flag', value: true, type: 'flag' },
+              ],
+            },
+          },
+        }
+      )
+    )
+    expect(await evaluator.getFeatureFlag('cohort-flag', 'user', {}, { plan: 'pro' })).toBeUndefined()
+  })
+})

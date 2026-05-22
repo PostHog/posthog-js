@@ -36,7 +36,11 @@ export async function getServerSidePostHog(
     const resolvedApiKey = resolveApiKey(apiKey)
     const host = resolveHostOrDefault(options?.host)
     const resolvedOptions = { ...options, host }
-    const client = await getOrCreateNodeClient(resolvedApiKey, resolvedOptions)
+    const client = await getOrCreateNodeClient(resolvedApiKey ?? '', resolvedOptions)
+
+    if (!resolvedApiKey) {
+        return client
+    }
 
     const cookieStore = cookieStoreFromHeader(ctx.req.headers.cookie || '')
 

@@ -1,5 +1,92 @@
 # posthog-react-native
 
+## 4.45.14
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+  - @posthog/types@1.376.0
+
+## 4.45.13
+
+### Patch Changes
+
+- Updated dependencies [[`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d)]:
+  - @posthog/types@1.375.0
+  - @posthog/core@1.29.8
+
+## 4.45.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.4
+  - @posthog/core@1.29.7
+
+## 4.45.11
+
+### Patch Changes
+
+- Updated dependencies [[`557b893`](https://github.com/PostHog/posthog-js/commit/557b8934aa0b990184e0376fb1fc28433ad336c6), [`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/types@1.374.3
+  - @posthog/core@1.29.6
+
+## 4.45.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.2
+  - @posthog/core@1.29.5
+
+## 4.45.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.1
+  - @posthog/core@1.29.4
+
+## 4.45.8
+
+### Patch Changes
+
+- [#3629](https://github.com/PostHog/posthog-js/pull/3629) [`9920e8b`](https://github.com/PostHog/posthog-js/commit/9920e8be5323ceaab60a097dab82656d9f1b6076) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - React Native surveys: closing a survey from Q2+ or the Thank You screen no longer flashes the first question during the fade-out. Opening another survey shortly after closing one no longer flashes the previous survey's content for the first frame on iOS — survey content unmounts one frame before the Modal dismisses so the UIKit snapshot the OS recycles is blank.
+  (2026-05-18)
+
+## 4.45.7
+
+### Patch Changes
+
+- Updated dependencies [[`594ea11`](https://github.com/PostHog/posthog-js/commit/594ea1146045d49080f6dfd951b037c13278e975)]:
+  - @posthog/types@1.374.0
+  - @posthog/core@1.29.3
+
+## 4.45.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.373.5
+  - @posthog/core@1.29.2
+
+## 4.45.5
+
+### Patch Changes
+
+- Updated dependencies [[`4b895bf`](https://github.com/PostHog/posthog-js/commit/4b895bf0151f24c0b72e8ce4cae47906795b29b8)]:
+  - @posthog/core@1.29.1
+  - @posthog/types@1.373.4
+
+## 4.45.4
+
+### Patch Changes
+
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+  - @posthog/core@1.29.0
+  - @posthog/types@1.373.3
+
 ## 4.45.3
 
 ### Patch Changes

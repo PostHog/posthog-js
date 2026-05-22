@@ -151,6 +151,10 @@ export interface PerformanceCaptureConfig {
 
     /**
      * Use chrome's web vitals library to wrap fetch and capture web vitals
+     *
+     * When `cookieless_mode` is active, there is no client-side SessionIdManager; vitals are still
+     * captured. Nested `$web_vitals_*_event` payloads omit `$session_id` / `$window_id`; PostHog ingestion assigns
+     * `$session_id` server-side for cookieless traffic when project cookieless settings are enabled (same as other events).
      */
     web_vitals?: boolean
 
@@ -287,6 +291,20 @@ export type DeadClicksAutoCaptureConfig = {
      * @default false
      */
     capture_clicks_with_modifier_keys?: boolean
+
+    /**
+     * List of CSS selectors to ignore dead clicks on
+     * e.g. ['.my-download-link']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > a > svg
+     * and ignore list config `['[download]']`
+     * we will ignore the dead click if the click-target or its parents has any download attribute
+     *
+     * Nothing is ignored when there's an empty ignorelist, e.g. []
+     * If no ignorelist is set, we default to ignoring .ph-no-deadclick and .ph-no-capture
+     * A custom ignorelist fully replaces the default — include .ph-no-capture if you want it to suppress dead-click capture as well
+     */
+    css_selector_ignorelist?: string[]
 
     /**
      * Allows setting behavior for when a dead click is captured.
@@ -524,8 +542,15 @@ export interface SessionRecordingOptions {
     compress_events?: boolean
 
     /**
-     * ADVANCED: alters the threshold before a recording considers a user has become idle.
-     * Normally only altered alongside changes to session_idle_timeout_ms.
+     * ADVANCED: Controls when session recording considers the user idle.
+     *
+     * If no replay user interaction occurs for this many milliseconds, the recorder marks the recording idle,
+     * emits a `sessionIdle` replay marker, flushes buffered replay events, and drops most subsequent replay
+     * events until user activity resumes. If activity resumes before `session_idle_timeout_seconds`, recording
+     * continues under the same `$session_id`.
+     *
+     * This does not control `$session_id` rotation. Session rotation is controlled by `session_idle_timeout_seconds`,
+     * so this value should be lower than `session_idle_timeout_seconds * 1000`.
      *
      * @default 1000 * 60 * 5 (5 minutes)
      */
@@ -1154,7 +1179,15 @@ export interface PostHogConfig {
 
     /**
      * Determines the session idle timeout in seconds.
-     * Any new event that's happened after this timeout will create a new session.
+     *
+     * If no events are captured for this many seconds, the next event starts a
+     * new session with a new `$session_id` (and `$window_id`). The SDK may also proactively reset the stored session
+     * after the timeout while the page is idle, so the next event creates a new session.
+     *
+     * Session recording has a separate idle threshold: `session_recording.session_idle_threshold_ms`. That setting
+     * only controls when the user is considered idle, it does not rotate `$session_id`.
+     *
+     * Must be between 60 seconds and 10 hours. Values outside this range are clamped.
      *
      * @default 30 * 60 -- 30 minutes
      */
@@ -1264,6 +1297,19 @@ export interface PostHogConfig {
      * @default undefined
      */
     evaluation_contexts?: readonly string[]
+
+    /**
+     * List of feature flag keys to remotely evaluate for this SDK instance.
+     * When set, only these flags are evaluated by `/flags`; omitted flags are not remotely evaluated.
+     * Dependencies of the requested flags may still be evaluated internally by PostHog.
+     * If unset, all eligible flags are evaluated.
+     *
+     * Examples: ['checkout-redesign', 'new-onboarding']
+     *
+     * @default undefined
+     */
+    flag_keys?: readonly string[]
+
     /**
      * Evaluation environments for feature flags.
      * @deprecated Use evaluation_contexts instead. This property will be removed in a future version.
@@ -1444,6 +1490,8 @@ export interface PostHogConfig {
     /**
      * Determines whether to capture dead clicks.
      *
+     * by default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent
+     *
      * @see {DeadClicksAutoCaptureConfig}
      * @default undefined
      */
@@ -1530,6 +1578,10 @@ export interface PostHogConfig {
     /**
      * Enables cookieless mode. In this mode, PostHog will not set any cookies, or use session or local storage. User
      * identity is handled by generating a privacy-preserving hash on PostHog's servers.
+     *
+     * Web Vitals (`capture_performance.web_vitals`) are supported: metrics are sent without client session IDs;
+     * ingestion assigns `$session_id` when cookieless mode is enabled for the project.
+     *
      * - 'always' - enable cookieless mode immediately on startup, use this if you do not intend to show a cookie banner
      * - 'on_reject' - enable cookieless mode only if the user rejects cookies, use this if you want to show a cookie banner. If the user accepts cookies, cookieless mode will not be used, and PostHog will use cookies and local storage as usual.
      *
