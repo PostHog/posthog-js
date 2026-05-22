@@ -223,6 +223,28 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should not leak body truncation state to subsequent logs', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('x'.repeat(10001))
+            assignableWindow.console.log('small message')
+
+            expect(mockEmit.mock.calls[0][0].attributes).toEqual(
+                expect.objectContaining({
+                    body_truncated: 'true',
+                })
+            )
+            expect(mockEmit.mock.calls[1][0]).toEqual(
+                expect.objectContaining({
+                    body: '"small message"',
+                    attributes: expect.not.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
         it('should handle large objects in body without crashing', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -356,6 +378,71 @@ describe('logs entrypoint', () => {
             expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty('unreadable')
         })
 
+        it('should serialize representative objects without corrupting body or attributes', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload: any = {
+                message: 'hello "quoted"\nline',
+                nested: {
+                    enabled: true,
+                    count: 2,
+                    empty: null,
+                },
+                list: ['first', undefined, () => 'ignored', Symbol('ignored'), null],
+                createdAt: new Date('2023-01-02T03:04:05.000Z'),
+            }
+            payload.self = payload
+
+            assignableWindow.console.log(payload)
+
+            const emitted = mockEmit.mock.calls[0][0]
+            expect(JSON.parse(emitted.body)).toEqual({
+                message: 'hello "quoted"\nline',
+                nested: {
+                    enabled: true,
+                    count: 2,
+                    empty: null,
+                },
+                list: ['first', null, null, null, null],
+                createdAt: '2023-01-02T03:04:05.000Z',
+                self: '[Circular]',
+            })
+            expect(emitted.attributes).toEqual(
+                expect.objectContaining({
+                    message: 'hello "quoted"\nline',
+                    'nested.enabled': true,
+                    'nested.count': 2,
+                    'nested.empty': null,
+                    self: '[Circular]',
+                })
+            )
+        })
+
+        it('should serialize Error objects with their details intact', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const error = new Error('boom') as Error & { code?: string }
+            error.name = 'CustomError'
+            error.stack = 'CustomError: boom\n    at test'
+            error.code = 'E_BOOM'
+
+            assignableWindow.console.error(error)
+
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({
+                code: 'E_BOOM',
+                name: 'CustomError',
+                message: 'boom',
+                stack: 'CustomError: boom\n    at test',
+            })
+            expect(mockEmit.mock.calls[0][0].attributes).toEqual(
+                expect.objectContaining({
+                    'log.source': 'console.error',
+                })
+            )
+        })
+
         it('should not add attributes_truncated when within limits', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -447,7 +534,7 @@ describe('logs entrypoint', () => {
             console.log(`Performance test (big body): wrapped=${wrappedTime.toFixed(2)}ms`)
         })
 
-        it('should not take more than 150ms to log a 2MB object with lots of keys', () => {
+        it('should not take more than 100ms to log a 2MB object with lots of keys', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
 
             // Create a 2MB object with lots of keys (each key-value pair ~40 bytes)
@@ -471,8 +558,7 @@ describe('logs entrypoint', () => {
 
             const wrappedTime = (performance.now() - wrappedStart) / iterations
 
-            // GitHub runners can vary enough that this occasionally lands a little above 100ms.
-            expect(wrappedTime).toBeLessThanOrEqual(150)
+            expect(wrappedTime).toBeLessThanOrEqual(100)
 
             console.log(`Performance test (big body): wrapped=${wrappedTime.toFixed(2)}ms`)
         })

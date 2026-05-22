@@ -106,7 +106,7 @@ const stringifyValueWithLimit = (
     }
 
     try {
-        const toJSON = value.toJSON
+        const toJSON = (value as any).toJSON
         if (isFunction(toJSON)) {
             return stringifyValueWithLimit(toJSON.call(value), parts, budget, seen, inArray)
         }
@@ -295,8 +295,9 @@ const initializeLogs = (posthog: PostHog) => {
             (...args: any[]) => {
                 if (args.length > 0) {
                     const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
-                    if (truncated) {
-                        attributes.body_truncated = 'true'
+                    const logAttributes = {
+                        ...attributes,
+                        ...(truncated ? { body_truncated: 'true' } : {}),
                     }
                     logger.emit({
                         severityText: SEVERITY_MAP[level],
@@ -305,7 +306,7 @@ const initializeLogs = (posthog: PostHog) => {
                             'log.source': `console.${level}`,
                             distinct_id: posthog.get_distinct_id(),
                             'location.href': assignableWindow.location.href,
-                            ...attributes,
+                            ...logAttributes,
                             ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
                         },
                     })
