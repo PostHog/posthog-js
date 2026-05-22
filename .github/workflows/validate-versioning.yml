@@ -235,7 +235,7 @@ jobs:
       
       - name: Comment about PR title and changeset mismatch
         if: failure() && steps.check-major.outputs.title_mismatch_found == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           TITLE_MISMATCH_FILES: ${{ steps.check-major.outputs.title_mismatch_files }}
           PR_TITLE: ${{ github.event.pull_request.title }}
