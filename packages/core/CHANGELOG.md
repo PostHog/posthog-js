@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.29.9
+
+### Patch Changes
+
+- [#3639](https://github.com/PostHog/posthog-js/pull/3639) [`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda) Thanks [@marandaneto](https://github.com/marandaneto)! - Use native async gzip compression for session recording events when CompressionStream is available.
+  (2026-05-22)
+- Updated dependencies []:
+  - @posthog/types@1.376.0
+
 ## 1.29.8
 
 ### Patch Changes
