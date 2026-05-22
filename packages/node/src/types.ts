@@ -145,8 +145,6 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
-   * @experimental This API is experimental and may change in minor versions.
-   *
    * Optional cache provider for feature flag definitions.
    *
    * Allows custom caching strategies (Redis, database, etc.) for flag definitions
@@ -157,7 +155,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    *
    * @example
    * ```typescript
-   * import { FlagDefinitionCacheProvider } from 'posthog-node/experimental'
+   * import type { FlagDefinitionCacheProvider } from 'posthog-node'
    *
    * class RedisCacheProvider implements FlagDefinitionCacheProvider {
    *   // ... implementation

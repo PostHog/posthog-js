@@ -1,5 +1,12 @@
 # @posthog/webpack-plugin
 
+## 1.4.32
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.29.8
+
 ## 1.4.31
 
 ### Patch Changes
