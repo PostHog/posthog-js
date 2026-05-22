@@ -140,7 +140,33 @@ describe('captureAiGeneration', () => {
     const properties = lastCaptureProperties(client)
     expect(properties.$ai_is_error).toBe(true)
     expect(properties.$ai_error).toEqual(expect.any(String))
+    const decoded = JSON.parse(properties.$ai_error as string)
+    expect(decoded).toEqual(
+      expect.objectContaining({
+        name: 'Error',
+        message: error.message,
+        stack: expect.any(String),
+      })
+    )
     expect(properties.$ai_http_status).toBe(expected)
+  })
+
+  it('preserves message, stack, custom fields, and the cause chain in $ai_error', async () => {
+    const client = buildClient()
+    const root = new Error('root cause')
+    const error = Object.assign(new Error('outer', { cause: root }), { statusCode: 502 })
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, error })
+
+    const properties = lastCaptureProperties(client)
+    const decoded = JSON.parse(properties.$ai_error as string) as Record<string, unknown>
+    expect(decoded.name).toBe('Error')
+    expect(decoded.message).toBe('outer')
+    expect(typeof decoded.stack).toBe('string')
+    expect(decoded.statusCode).toBe(502)
+    expect(decoded.cause).toEqual(
+      expect.objectContaining({ name: 'Error', message: 'root cause', stack: expect.any(String) })
+    )
   })
 
   it('mutates the original error in place when autocapture is enabled, so callers can re-throw safely', async () => {

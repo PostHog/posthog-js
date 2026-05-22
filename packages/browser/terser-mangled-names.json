@@ -208,6 +208,7 @@
         "_getToolbarState",
         "_getTracer",
         "_getValidEvaluationEnvironments",
+        "_getValidFlagKeys",
         "_getWindowId",
         "_groupId",
         "_handleBackToTickets",

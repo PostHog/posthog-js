@@ -1,5 +1,28 @@
 # posthog-ai
 
+## 7.19.1
+
+### Patch Changes
+
+- Updated dependencies [[`18ea8b5`](https://github.com/PostHog/posthog-js/commit/18ea8b53f608607075c93bc18b29be8dfd41eb3f)]:
+  - posthog-node@5.35.0
+  - @posthog/core@1.29.8
+
+## 7.19.0
+
+### Minor Changes
+
+- [#3605](https://github.com/PostHog/posthog-js/pull/3605) [`82fa498`](https://github.com/PostHog/posthog-js/commit/82fa498f4129e84030105c60724fc85591505004) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Improved error serialization to capture cause, message and stack
+  (2026-05-21)
+
+## 7.18.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.7
+  - posthog-node@5.34.9
+
 ## 7.18.11
 
 ### Patch Changes

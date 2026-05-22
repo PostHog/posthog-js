@@ -10,6 +10,7 @@ import type { DocumentInterface } from '@langchain/core/documents'
 import { ToolCall } from '@langchain/core/messages/tool'
 import { BaseMessage } from '@langchain/core/messages'
 import { sanitizeLangChain } from '../sanitization'
+import { stringifyError } from '../serializeError'
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -376,7 +377,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
     if (outputs instanceof Error) {
-      eventProperties['$ai_error'] = outputs.toString()
+      eventProperties['$ai_error'] = stringifyError(outputs)
       eventProperties['$ai_is_error'] = true
     } else if (outputs !== undefined) {
       eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, outputs)
@@ -436,7 +437,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
     if (output instanceof Error) {
       eventProperties['$ai_http_status'] = (output as any).status || 500
-      eventProperties['$ai_error'] = output.toString()
+      eventProperties['$ai_error'] = stringifyError(output)
       eventProperties['$ai_is_error'] = true
     } else {
       // Handle token usage

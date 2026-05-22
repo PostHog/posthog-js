@@ -1,5 +1,12 @@
 # rrweb-snapshot
 
+## 0.0.63
+
+### Patch Changes
+
+- [#3635](https://github.com/PostHog/posthog-js/pull/3635) [`5fb74b6`](https://github.com/PostHog/posthog-js/commit/5fb74b60bb31394d6511845cc902daf8810dbf3f) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Capture `<link rel="stylesheet">` URLs from `link.sheet.href` and try `link.sheet` directly for inlining, so recordings survive SPA `history.pushState` navigations between routes of different path depths (where `link.href` re-resolves against a new baseURI but `link.sheet.href` preserves the URL the browser actually fetched).
+  (2026-05-21)
+
 ## 0.0.62
 
 ### Patch Changes

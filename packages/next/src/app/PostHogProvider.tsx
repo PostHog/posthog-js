@@ -75,6 +75,10 @@ export async function PostHogProvider({
     children,
 }: PostHogProviderProps) {
     const apiKey = resolveApiKey(apiKeyProp)
+    if (!apiKey) {
+        return <>{children}</>
+    }
+
     if (!apiKey.startsWith('phc_')) {
         // eslint-disable-next-line no-console
         console.warn(
