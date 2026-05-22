@@ -386,11 +386,26 @@ const entrypointTargets = entrypoints.map((file) => {
     }
 })
 
+// Entries whose .d.ts must inline upstream types (respectExternal: true) so
+// consumers don't need a runtime dep on the re-exported package to resolve them.
+const inlineExternalTypesEntries = new Set([
+    'extension-bundles.es.ts',
+    'rrweb.es.ts',
+    'rrweb-types.es.ts',
+    'rrweb-plugin-console-record.es.ts',
+])
+
+// rrdom's dts drops the local `RRNodeType` alias declaration; the renderChunk
+// below rewrites value references back to `NodeType.`. Only rrweb pulls in rrdom.
+const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
+
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         const isExtensionBundles = file === 'extension-bundles.es.ts'
+        const inlineExternalTypes = inlineExternalTypesEntries.has(file)
+        const rewriteRrdomAlias = rewriteRrdomNodeTypeAlias(file)
         /** @type {import('rollup').RollupOptions} */
         return {
             input: source,
@@ -408,7 +423,7 @@ const typeTargets = entrypoints
                 json(),
                 dts({
                     exclude: [],
-                    ...(isExtensionBundles ? { respectExternal: true } : {}),
+                    ...(inlineExternalTypes ? { respectExternal: true } : {}),
                 }),
                 // dts preserves the tsc-era path (e.g. './module.slim.es') but the
                 // output has been renamed to module.slim.d.ts — fix the reference.
@@ -418,6 +433,17 @@ const typeTargets = entrypoints
                               name: 'fix-dts-external-paths',
                               renderChunk(code) {
                                   return code.replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                              },
+                          },
+                      ]
+                    : []),
+                ...(rewriteRrdomAlias
+                    ? [
+                          {
+                              name: 'resolve-rrdom-rrnodetype-alias',
+                              renderChunk(code) {
+                                  // Value uses only; the property name `RRNodeType` (rrdom public API) must stay.
+                                  return code.replace(/\bRRNodeType\./g, 'NodeType.')
                               },
                           },
                       ]

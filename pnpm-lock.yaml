@@ -343,6 +343,9 @@ importers:
       '@posthog-tooling/rollup-utils':
         specifier: workspace:*
         version: link:../../tooling/rollup-utils
+      '@posthog/rrweb':
+        specifier: workspace:*
+        version: link:../rrweb/rrweb
       '@posthog/rrweb-plugin-console-record':
         specifier: workspace:*
         version: link:../rrweb/plugins/rrweb-plugin-console-record
