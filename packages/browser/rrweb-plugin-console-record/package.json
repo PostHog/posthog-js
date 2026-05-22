@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-rrweb-plugin-console-record",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point exposing the @posthog/rrweb-plugin-console-record fork bundled inside posthog-js. ESM-only; consumed by bundlers via the `module` field.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/rrweb-plugin-console-record"
+    },
+    "main": "../dist/rrweb-plugin-console-record.js",
+    "module": "../dist/rrweb-plugin-console-record.js",
+    "types": "../dist/rrweb-plugin-console-record.d.ts"
+}
