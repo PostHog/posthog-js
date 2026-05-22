@@ -245,6 +245,21 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should not corrupt truncated strings with escaped characters', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('\\'.repeat(9998))
+
+            const emitted = mockEmit.mock.calls[0][0]
+            expect(emitted.attributes).toEqual(
+                expect.objectContaining({
+                    body_truncated: 'true',
+                })
+            )
+            expect(() => JSON.parse(emitted.body.slice(0, -3))).not.toThrow()
+        })
+
         it('should handle large objects in body without crashing', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -441,6 +456,20 @@ describe('logs entrypoint', () => {
                     'log.source': 'console.error',
                 })
             )
+        })
+
+        it('should handle toJSON returning itself without recursing forever', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload = {
+                toJSON() {
+                    return this
+                },
+            }
+
+            expect(() => assignableWindow.console.log(payload)).not.toThrow()
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual('[Circular]')
         })
 
         it('should not add attributes_truncated when within limits', () => {

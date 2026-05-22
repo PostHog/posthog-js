@@ -68,12 +68,28 @@ const appendWithLimit = (parts: string[], text: string, budget: StringifyBudget)
 }
 
 const stringifyStringWithLimit = (value: string, parts: string[], budget: StringifyBudget): boolean => {
-    if (value.length + 2 <= budget.remaining) {
-        return appendWithLimit(parts, JSON.stringify(value), budget)
+    const serialized = JSON.stringify(value)
+    if (serialized.length <= budget.remaining) {
+        return appendWithLimit(parts, serialized, budget)
     }
 
     budget.truncated = true
-    return appendWithLimit(parts, JSON.stringify(value.slice(0, budget.remaining)), budget)
+    if (budget.remaining < 2) {
+        return false
+    }
+
+    let low = 0
+    let high = Math.min(value.length, budget.remaining - 2)
+    while (low < high) {
+        const mid = Math.ceil((low + high) / 2)
+        if (JSON.stringify(value.slice(0, mid)).length <= budget.remaining) {
+            low = mid
+        } else {
+            high = mid - 1
+        }
+    }
+
+    return appendWithLimit(parts, JSON.stringify(value.slice(0, low)), budget)
 }
 
 const isJSONSerializablePrimitive = (value: any): boolean =>
@@ -105,6 +121,11 @@ const stringifyValueWithLimit = (
         return appendWithLimit(parts, JSON.stringify(value), budget)
     }
 
+    if (seen.has(value)) {
+        return stringifyStringWithLimit('[Circular]', parts, budget)
+    }
+    seen.add(value)
+
     try {
         const toJSON = (value as any).toJSON
         if (isFunction(toJSON)) {
@@ -113,11 +134,6 @@ const stringifyValueWithLimit = (
     } catch {
         // If toJSON can't be read or throws, fall through to safe property enumeration.
     }
-
-    if (seen.has(value)) {
-        return stringifyStringWithLimit('[Circular]', parts, budget)
-    }
-    seen.add(value)
 
     if (value instanceof Error) {
         const errorObject: Record<string, any> = {}
@@ -169,6 +185,10 @@ const stringifyValueWithLimit = (
         for (const key in value) {
             if (!Object.prototype.hasOwnProperty.call(value, key)) {
                 continue
+            }
+            if (budget.remaining <= 0) {
+                budget.truncated = true
+                return false
             }
 
             let propertyValue
