@@ -21,21 +21,35 @@ Found a bug? Feature request? [File it here](https://github.com/PostHog/posthog-
 
 ## 🚀 Quick Start
 
-Install the package:
+Install the package (requires Convex 1.39 or newer):
 
 ```sh
 pnpm add @posthog/convex
 ```
 
-Register the component in your `convex/convex.config.ts`:
+Register the component in your `convex/convex.config.ts` and forward the env vars from your app to the component:
 
 ```ts
 // convex/convex.config.ts
 import { defineApp } from "convex/server";
+import { v } from "convex/values";
 import posthog from "@posthog/convex/convex.config.js";
 
-const app = defineApp();
-app.use(posthog);
+const app = defineApp({
+  env: {
+    POSTHOG_TOKEN: v.string(),
+    POSTHOG_HOST: v.optional(v.string()),
+    POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
+  },
+});
+
+app.use(posthog, {
+  env: {
+    POSTHOG_TOKEN: app.env.POSTHOG_TOKEN,
+    POSTHOG_HOST: app.env.POSTHOG_HOST,
+    POSTHOG_PERSONAL_API_KEY: app.env.POSTHOG_PERSONAL_API_KEY,
+  },
+});
 
 export default app;
 ```
@@ -43,7 +57,7 @@ export default app;
 Set your PostHog credentials on your Convex deployment:
 
 ```sh
-npx convex env set POSTHOG_API_KEY phc_your_project_api_key
+npx convex env set POSTHOG_TOKEN phc_your_project_token
 npx convex env set POSTHOG_HOST https://us.i.posthog.com
 ```
 
@@ -53,49 +67,19 @@ To enable local feature flag evaluation, also set a [feature flags secure API ke
 npx convex env set POSTHOG_PERSONAL_API_KEY phs_your_feature_flags_secure_api_key
 ```
 
-> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward.
+> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward. Setting this env var also activates the component's built-in refresh cron — without it, the cron is skipped entirely so idle dev deployments don't burn function calls.
 
-Create a `convex/posthog.ts` file to initialize the client. Read the keys from `process.env` and pass them to the constructor — the client captures them and forwards them to component actions as needed:
+Create a `convex/posthog.ts` file to initialize the client. Credentials live on the component, so this file is just for callbacks (identify, beforeSend):
 
 ```ts
 // convex/posthog.ts
 import { PostHog } from "@posthog/convex";
 import { components } from "./_generated/api";
 
-export const posthog = new PostHog(components.posthog, {
-  apiKey: process.env.POSTHOG_API_KEY,
-  personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-  host: process.env.POSTHOG_HOST,
-});
+export const posthog = new PostHog(components.posthog);
 ```
 
-Schedule a cron in your own `convex/crons.ts` that refreshes the flag definitions on whatever interval suits you. The client class captures the keys you passed in `posthog.ts` and forwards them automatically:
-
-```ts
-// convex/crons.ts
-import { cronJobs } from "convex/server";
-import { internalAction } from "./_generated/server";
-import { internal } from "./_generated/api";
-import { posthog } from "./posthog";
-
-export const refreshPosthogFlags = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    await posthog.refreshFlagDefinitions(ctx);
-  },
-});
-
-const crons = cronJobs();
-crons.interval(
-  "refresh posthog feature flag definitions",
-  { minutes: 1 },
-  internal.crons.refreshPosthogFlags
-);
-
-export default crons;
-```
-
-That's the whole setup — feature flag methods will start returning live values on the next cron tick, or you can call `posthog.refreshFlagDefinitions(ctx)` from an action whenever you want an immediate refresh.
+That's the whole setup — feature flag methods will start returning live values on the next cron tick (the component refreshes every minute when `POSTHOG_PERSONAL_API_KEY` is set), or you can call `posthog.refreshFlagDefinitions(ctx)` from an action whenever you want an immediate refresh.
 
 ## 📊 Capturing Events
 
@@ -348,6 +332,48 @@ Three methods:
 | `posthog.evaluateAllFlags(ctx, args)` | `{ featureFlags, featureFlagPayloads }` |
 
 Same option shape as the local methods (`groups`, `personProperties`, `groupProperties`, `disableGeoip`, `flagKeys` on the all-flags variant). Pick local when the flag is suitable and the cost of `/flags/definitions` polling is justified; pick remote when it isn't.
+
+## ⬆️ Migrating from v1
+
+v2 moves credentials from the client constructor onto the component itself, using [Convex 1.39's typed component env vars](https://docs.convex.dev/components/authoring#environment-variables). It also bundles the refresh cron inside the component. The result is less plumbing per call site and a setup that's safe to leave running on free-tier dev deployments.
+
+To upgrade:
+
+1. **Bump your Convex peer dep** to `^1.39.0`.
+2. **Rename** the `POSTHOG_API_KEY` env var to `POSTHOG_TOKEN`:
+   ```sh
+   npx convex env set POSTHOG_TOKEN phc_your_project_token
+   npx convex env unset POSTHOG_API_KEY
+   ```
+3. **Declare the env vars on your app and forward them to the component** in `convex/convex.config.ts`:
+   ```ts
+   const app = defineApp({
+     env: {
+       POSTHOG_TOKEN: v.string(),
+       POSTHOG_HOST: v.optional(v.string()),
+       POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
+     },
+   });
+   app.use(posthog, {
+     env: {
+       POSTHOG_TOKEN: app.env.POSTHOG_TOKEN,
+       POSTHOG_HOST: app.env.POSTHOG_HOST,
+       POSTHOG_PERSONAL_API_KEY: app.env.POSTHOG_PERSONAL_API_KEY,
+     },
+   });
+   ```
+4. **Drop the credential options** from `new PostHog(...)`:
+   ```diff
+   - export const posthog = new PostHog(components.posthog, {
+   -   apiKey: process.env.POSTHOG_API_KEY,
+   -   personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
+   -   host: process.env.POSTHOG_HOST,
+   - });
+   + export const posthog = new PostHog(components.posthog);
+   ```
+5. **Delete your `convex/crons.ts`** if it only existed to refresh PostHog flag definitions — the component ships its own cron now, conditionally registered only when `POSTHOG_PERSONAL_API_KEY` is set. (`posthog.refreshFlagDefinitions(ctx)` still works for manual on-demand refreshes.)
+
+Everything else — the `capture`, `identify`, `getFeatureFlag`, `evaluateFlag`, etc. APIs — is unchanged.
 
 ## 📦 Example
 

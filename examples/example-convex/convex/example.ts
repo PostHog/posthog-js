@@ -214,8 +214,9 @@ export const flagDefinitionsStatus = query({
 /**
  * UI helper — lets the demo's "Refresh now" button trigger an on-demand refresh.
  *
- * Same call the cron in `crons.ts` makes once a minute. The client class forwards the keys it was
- * constructed with so we don't have to re-read env vars here.
+ * The PostHog component ships its own cron (registered inside the component, only when
+ * `POSTHOG_PERSONAL_API_KEY` is set) that refreshes once a minute; this just lets the UI nudge
+ * a refresh between cron ticks. Credentials come from the component's env vars.
  */
 export const refreshFlags = action({
     args: {},
