@@ -27,11 +27,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       alias: FunctionReference<
         "action",
         "internal",
-        {
-          alias: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-        },
+        { alias: string; disableGeoip?: boolean; distinctId: string },
         any,
         Name
       >;
@@ -125,11 +121,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       identify: FunctionReference<
         "action",
         "internal",
-        {
-          disableGeoip?: boolean;
-          distinctId: string;
-          properties?: string;
-        },
+        { disableGeoip?: boolean; distinctId: string; properties?: string },
         any,
         Name
       >;

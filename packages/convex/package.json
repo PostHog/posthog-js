@@ -22,7 +22,8 @@
   "scripts": {
     "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/component/version.ts",
     "build": "tsc --project ./tsconfig.build.json",
-    "build:codegen": "npx convex codegen --component-dir ./src/component && pnpm build",
+    "setup:codegen": "test -f .env.local || npx convex dev --once --configure new --dev-deployment local --project posthog-convex-component --typecheck disable || true",
+    "build:codegen": "pnpm run setup:codegen && npx convex codegen --component-dir ./src/component --typecheck disable && pnpm build",
     "clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
