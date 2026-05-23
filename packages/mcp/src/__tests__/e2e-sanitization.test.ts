@@ -13,8 +13,8 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     await eventCapture.start()
 
     try {
-      const { track } = await import('../index')
-      await track(server, {
+      const { instrument } = await import('../index')
+      await instrument(server, {
         apiKey: 'test-sanitization',
         context: false,
         enableTracing: true,
@@ -83,8 +83,8 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     await eventCapture.start()
 
     try {
-      const { track } = await import('../index')
-      await track(server, {
+      const { instrument } = await import('../index')
+      await instrument(server, {
         apiKey: 'test-sanitization-audio',
         context: false,
         enableTracing: true,
@@ -135,8 +135,8 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     await eventCapture.start()
 
     try {
-      const { track } = await import('../index')
-      await track(server, {
+      const { instrument } = await import('../index')
+      await instrument(server, {
         apiKey: 'test-sanitization-base64',
         context: false,
         enableTracing: true,
@@ -196,8 +196,8 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     await eventCapture.start()
 
     try {
-      const { track } = await import('../index')
-      await track(server, {
+      const { instrument } = await import('../index')
+      await instrument(server, {
         apiKey: 'test-sanitization-mixed',
         context: false,
         enableTracing: true,

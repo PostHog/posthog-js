@@ -1,5 +1,5 @@
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
-import { track } from '../index'
+import { instrument } from '../index'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
@@ -27,7 +27,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
 
   describe('tools/list injection', () => {
     it('adds get_more_tools with required context when reportMissing is true', async () => {
-      track(server, { apiKey: 'phc_test', reportMissing: true })
+      instrument(server, { apiKey: 'phc_test', reportMissing: true })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const tool = tools.find((t: any) => t.name === GET_MORE_TOOLS)
@@ -38,14 +38,14 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     })
 
     it('omits get_more_tools when reportMissing is false', async () => {
-      track(server, { apiKey: 'phc_test', reportMissing: false })
+      instrument(server, { apiKey: 'phc_test', reportMissing: false })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       expect(tools.find((t: any) => t.name === GET_MORE_TOOLS)).toBeUndefined()
     })
 
     it('does not re-inject the context param into get_more_tools (it already has its own)', async () => {
-      track(server, { apiKey: 'phc_test', reportMissing: true, context: true })
+      instrument(server, { apiKey: 'phc_test', reportMissing: true, context: true })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const reportMissing = tools.find((t: any) => t.name === GET_MORE_TOOLS)
@@ -64,7 +64,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('captures the report as a $mcp_tool_call event with context as userIntent', async () => {
       const capture = new EventCapture()
       await capture.start()
-      track(server, { apiKey: 'phc_test', reportMissing: true })
+      instrument(server, { apiKey: 'phc_test', reportMissing: true })
 
       const context = 'Need a database query tool for SQL operations'
       const result = await client.request(
@@ -89,7 +89,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('shares one session across get_more_tools and the surrounding tool calls', async () => {
       const capture = new EventCapture()
       await capture.start()
-      track(server, { apiKey: 'phc_test', reportMissing: true })
+      instrument(server, { apiKey: 'phc_test', reportMissing: true })
 
       const calls = [
         { name: 'add_todo', arguments: { text: 'First', context: 'Adding first todo' } },
@@ -113,7 +113,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('triggers identify on the first get_more_tools call when identify is configured', async () => {
       const capture = new EventCapture()
       await capture.start()
-      track(server, {
+      instrument(server, {
         apiKey: 'phc_test',
         reportMissing: true,
         identify: async () => ({ userId: 'user-1', userData: { role: 'developer' } }),

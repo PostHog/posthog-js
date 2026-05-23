@@ -1,5 +1,5 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
-import { track } from '../index'
+import { instrument } from '../index'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 import { EventCapture } from './test-utils'
 
@@ -16,21 +16,21 @@ describe('Tracing Initialization Tests', () => {
     await eventCapture.stop()
   })
 
-  it('should not create duplicate events when track() is called multiple times', async () => {
+  it('should not create duplicate events when instrument() is called multiple times', async () => {
     const { server, client, cleanup } = await setupTestServerAndClient()
 
     try {
-      await track(server, {
+      await instrument(server, {
         apiKey: 'test-project',
         enableTracing: true,
       })
 
-      await track(server, {
+      await instrument(server, {
         apiKey: 'test-project',
         enableTracing: true,
       })
 
-      await track(server, {
+      await instrument(server, {
         apiKey: 'test-project',
         enableTracing: true,
       })
@@ -87,7 +87,7 @@ describe('Tracing Initialization Tests', () => {
     const { server, client, cleanup } = await setupTestServerAndClient()
 
     try {
-      await track(server, {
+      await instrument(server, {
         apiKey: 'test-project',
         enableTracing: true,
       })

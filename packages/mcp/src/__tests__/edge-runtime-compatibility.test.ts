@@ -177,9 +177,9 @@ describe('Edge Runtime Compatibility', () => {
   })
 
   describe('Full SDK API Availability', () => {
-    it('should export track function', async () => {
+    it('should export instrument function', async () => {
       const mcpAnalytics = await import('../index')
-      expect(typeof mcpAnalytics.track).toBe('function')
+      expect(typeof mcpAnalytics.instrument).toBe('function')
     })
 
     it('should export publishCustomEvent function', async () => {
@@ -289,7 +289,7 @@ describe('Integration: SDK in Limited Environment', () => {
     const mcpAnalytics = await import('../index')
 
     // Core functions should exist
-    expect(mcpAnalytics.track).toBeDefined()
+    expect(mcpAnalytics.instrument).toBeDefined()
     expect(mcpAnalytics.publishCustomEvent).toBeDefined()
 
     // Exception capture should work

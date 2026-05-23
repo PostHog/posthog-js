@@ -1,4 +1,4 @@
-import { track } from '../index'
+import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { deriveSessionIdFromMCPSession, getServerSessionId } from '../extensions/session'
 import type { HighLevelMCPServerLike } from '../types'
@@ -55,7 +55,7 @@ describe('Session ID Management', () => {
       const apiKey = 'test-project-mcp'
       const mcpSessionId = 'mcp-session-abc-123'
 
-      track(server, { apiKey, enableTracing: true })
+      instrument(server, { apiKey, enableTracing: true })
 
       // Get the low-level server
       const lowLevelServer = server.server
@@ -82,7 +82,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      track(server, { apiKey: 'test-project', enableTracing: true })
+      instrument(server, { apiKey: 'test-project', enableTracing: true })
 
       const lowLevelServer = server.server
 
@@ -109,7 +109,7 @@ describe('Session ID Management', () => {
       const apiKey = 'test-project-switch'
       const mcpSessionId = 'mcp-session-appears'
 
-      track(server, { apiKey, enableTracing: true })
+      instrument(server, { apiKey, enableTracing: true })
 
       const lowLevelServer = server.server
 
@@ -144,7 +144,7 @@ describe('Session ID Management', () => {
       const apiKey = 'test-project-disappear'
       const mcpSessionId = 'mcp-session-disappears'
 
-      track(server, { apiKey, enableTracing: true })
+      instrument(server, { apiKey, enableTracing: true })
 
       const lowLevelServer = server.server
 
@@ -177,7 +177,7 @@ describe('Session ID Management', () => {
       const mcpSessionId1 = 'mcp-session-first'
       const mcpSessionId2 = 'mcp-session-second'
 
-      track(server, { apiKey, enableTracing: true })
+      instrument(server, { apiKey, enableTracing: true })
 
       const lowLevelServer = server.server
 
@@ -213,7 +213,7 @@ describe('Session ID Management', () => {
       const apiKey = 'test-project-timeout'
       const mcpSessionId = 'mcp-session-persistent'
 
-      track(server, { apiKey, enableTracing: true })
+      instrument(server, { apiKey, enableTracing: true })
 
       const lowLevelServer = server.server
 
@@ -240,7 +240,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      track(server, { apiKey: 'test-project', enableTracing: true })
+      instrument(server, { apiKey: 'test-project', enableTracing: true })
 
       const lowLevelServer = server.server
 
@@ -273,7 +273,7 @@ describe('Session ID Management', () => {
       const mcpSessionId = 'mcp-session-for-events'
       expect(deriveSessionIdFromMCPSession(mcpSessionId)).toMatch(SESSION_ID_PATTERN)
 
-      track(server, { apiKey, enableTracing: true })
+      instrument(server, { apiKey, enableTracing: true })
 
       // TODO: This test would require mocking the transport to inject sessionId into extra
       // For now, we'll verify the logic with direct function calls above

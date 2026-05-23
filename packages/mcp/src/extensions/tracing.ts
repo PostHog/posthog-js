@@ -91,14 +91,14 @@ async function handleListToolsRequest(
 
   if (!data) {
     log(
-      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called track(server, options) before using tool calls.'
+      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
     return { tools }
   }
 
   if (tools.length === 0) {
     log(
-      'Warning: No tools found in the original list. This is likely due to the tools not being registered before PostHog MCP analytics.track().'
+      'Warning: No tools found in the original list. This is likely due to the tools not being registered before PostHog MCP analytics.instrument().'
     )
     event.error = { message: 'No tools were sent to MCP client.' }
     event.isError = true
@@ -176,7 +176,7 @@ export function setupInitializeTracing(server: MCPServerLike): void {
       const data = getServerTrackingData(server)
       if (!data) {
         log(
-          'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called track(server, options) before using tool calls.'
+          'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
         )
         return await originalInitializeHandler(request, extra)
       }
@@ -228,7 +228,7 @@ async function handleToolCallRequest(
   const data = getServerTrackingData(server)
   if (!data) {
     log(
-      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called track(server, options) before using tool calls.'
+      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
     return await originalCallToolHandler?.(request, extra)
   }

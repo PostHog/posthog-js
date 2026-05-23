@@ -1,5 +1,5 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
-import { track } from '../index'
+import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { redactEvent } from '../extensions/redaction'
 import type { RedactFunction, UnredactedEvent } from '../types'
@@ -406,7 +406,7 @@ describe('redactEvent integration tests', () => {
     }
 
     // Enable tracking with redaction
-    track(server, {
+    instrument(server, {
       apiKey: 'test-project',
       enableTracing: true,
       redactSensitiveInformation: redactSensitiveData,
@@ -488,7 +488,7 @@ describe('redactEvent integration tests', () => {
     }
 
     // Enable tracking with redaction
-    track(server, {
+    instrument(server, {
       apiKey: 'test-project',
       enableTracing: true,
       redactSensitiveInformation: redactCreditCards,
@@ -539,7 +539,7 @@ describe('redactEvent integration tests', () => {
     }
 
     // Enable tracking
-    track(server, {
+    instrument(server, {
       apiKey: 'test-project',
       enableTracing: true,
       redactSensitiveInformation: aggressiveRedact,

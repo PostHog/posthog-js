@@ -29,9 +29,8 @@ export interface PostHogMCPOptions extends Pick<
 }
 
 /**
- * Stateless PostHog client tailored for MCP analytics. Owns its queue and HTTP
- * transport via `PostHogCoreStateless`. Internal to the package — consumers
- * interact with `track()`, not with this class directly.
+ * Internal PostHog client used by `instrument()`. Not exported from the package.
+ * Use `flush(server)` and `shutdown(server)` if you need to drive the queue manually.
  */
 export class PostHogMCP extends PostHogCoreStateless {
   private _memoryStorage = new PostHogMemoryStorage()

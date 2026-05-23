@@ -21,7 +21,7 @@ export interface MCPRequestLike {
 
 export interface MCPAnalyticsOptions {
   /**
-   * PostHog project API key (`phc_...`). Optional only when a `client` is passed.
+   * PostHog project API key (`phc_...`).
    */
   apiKey?: string | null
   /**
@@ -33,11 +33,6 @@ export interface MCPAnalyticsOptions {
    * Use this to tune batching, retries, or supply a custom `fetch`.
    */
   clientOptions?: PostHogMCPOptions
-  /**
-   * Use an existing PostHog client instead of letting the SDK create one. Most apps don't
-   * need this — pass it when you want to share one PostHog instance across instrumentation.
-   */
-  client?: PostHogMCP
   /**
    * Optional STDIO-safe log sink for SDK-internal warnings. Receives single string messages.
    * Defaults to a no-op since MCP STDIO transports cannot use console.
@@ -76,7 +71,7 @@ export interface MCPAnalyticsOptions {
   redactSensitiveInformation?: RedactFunction
   /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
-   * event properties as-is — values must be JSON-serializable.
+   * event properties as-is; values must be JSON-serializable.
    */
   eventProperties?: (
     request: MCPRequestLike,

@@ -10,7 +10,7 @@ import { truncateEvent } from '../extensions/truncation'
  * redact → sanitize → truncate pipeline the real `ingest` runs, so tests that
  * exercise redaction/sanitization/truncation see the transformed event.
  *
- * Patches the prototype so every `PostHogMCP` instance created by `track()`
+ * Patches the prototype so every `PostHogMCP` instance created by `instrument()`
  * during the test is intercepted.
  */
 export class EventCapture {

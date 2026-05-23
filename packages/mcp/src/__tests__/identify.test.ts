@@ -1,6 +1,6 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
-import { track } from '../index'
+import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
 import type { HighLevelMCPServerLike, UserIdentity } from '../types'
@@ -50,7 +50,7 @@ describe('identify option', () => {
       return identity
     })
 
-    track(server, { apiKey: 'phc_test', identify })
+    instrument(server, { apiKey: 'phc_test', identify })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -68,7 +68,7 @@ describe('identify option', () => {
     await capture.start()
     const identify = jest.fn(async () => ({ userId: 'user-1', userData: { name: 'Stable' } }))
 
-    track(server, { apiKey: 'phc_test', identify })
+    instrument(server, { apiKey: 'phc_test', identify })
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -83,12 +83,12 @@ describe('identify option', () => {
     await capture.stop()
   })
 
-  it('identifies the caller on tools registered after track() (proxy listener)', async () => {
+  it('identifies the caller on tools registered after instrument() (proxy listener)', async () => {
     const capture = new EventCapture()
     await capture.start()
 
     const identify = jest.fn(async () => ({ userId: 'late-user', userData: { name: 'Late' } }))
-    track(server, { apiKey: 'phc_test', context: true, identify })
+    instrument(server, { apiKey: 'phc_test', context: true, identify })
 
     server.tool!(
       'post_track_tool',
@@ -118,7 +118,7 @@ describe('identify option', () => {
   it('treats a null return as "no identity": no event published, no identity stored', async () => {
     const capture = new EventCapture()
     await capture.start()
-    track(server, { apiKey: 'phc_test', identify: async () => null })
+    instrument(server, { apiKey: 'phc_test', identify: async () => null })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -133,7 +133,7 @@ describe('identify option', () => {
   it('still tracks tool calls when no identify option is provided (anonymous sessions)', async () => {
     const capture = new EventCapture()
     await capture.start()
-    track(server, { apiKey: 'phc_test' })
+    instrument(server, { apiKey: 'phc_test' })
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -150,7 +150,7 @@ describe('identify option', () => {
   })
 
   it('populates session info with the resolved identity (userId, userName, userData)', async () => {
-    track(server, {
+    instrument(server, {
       apiKey: 'phc_test',
       identify: async () => ({
         userId: 'session-user',
@@ -170,7 +170,7 @@ describe('identify option', () => {
   it('awaits async identify callbacks and records a non-zero duration on the $identify event', async () => {
     const capture = new EventCapture()
     await capture.start()
-    track(server, {
+    instrument(server, {
       apiKey: 'phc_test',
       identify: async () => {
         await new Promise((r) => setTimeout(r, 50))
@@ -190,7 +190,7 @@ describe('identify option', () => {
   it('swallows errors thrown from identify so tool calls still succeed', async () => {
     const capture = new EventCapture()
     await capture.start()
-    track(server, {
+    instrument(server, {
       apiKey: 'phc_test',
       identify: async () => {
         throw new Error('identify boom')
@@ -207,7 +207,7 @@ describe('identify option', () => {
   })
 
   it('stores whatever identify returns — no schema validation', async () => {
-    track(server, {
+    instrument(server, {
       apiKey: 'phc_test',
       // The SDK does not validate the identity shape; whatever you return ends up cached.
       identify: async () => ({ invalidField: 'invalid' }) as unknown as UserIdentity,

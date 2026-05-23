@@ -119,25 +119,25 @@ describe('Basic Server Test', () => {
     }
   })
 
-  it('should properly trace tools added after track() is called', async () => {
+  it('should properly trace tools added after instrument() is called', async () => {
     resetTodos()
     const { server, client, cleanup } = await setupTestServerAndClient()
 
     try {
-      // Import track function
-      const { track } = await import('../index')
+      // Import instrument function
+      const { instrument } = await import('../index')
 
-      // Call track first with a project ID
-      await track(server, {
+      // Call instrument first with a project ID
+      await instrument(server, {
         apiKey: 'test-project',
         context: true,
         enableTracing: true,
       })
 
-      // Add a new tool after track() has been called using server.tool()
+      // Add a new tool after instrument() has been called using server.tool()
       server.tool(
         'new_tool_after_track',
-        'A tool added after track() was called',
+        'A tool added after instrument() was called',
         {
           data: z.string().optional().describe('Optional data parameter'),
         },
@@ -199,11 +199,11 @@ describe('Basic Server Test', () => {
     const { server, client, cleanup } = await setupTestServerAndClient()
 
     try {
-      // Import track function
-      const { track } = await import('../index')
+      // Import instrument function
+      const { instrument } = await import('../index')
 
-      // Call track first with a project ID
-      await track(server, {
+      // Call instrument first with a project ID
+      await instrument(server, {
         apiKey: 'test-project',
         context: true,
         enableTracing: true,
@@ -269,11 +269,11 @@ describe('Basic Server Test', () => {
     await eventCapture.start()
 
     try {
-      // Import track function
-      const { track } = await import('../index')
+      // Import instrument function
+      const { instrument } = await import('../index')
 
-      // Call track with tracing enabled
-      await track(server, {
+      // Call instrument with tracing enabled
+      await instrument(server, {
         apiKey: 'test-dedup-project',
         context: true,
         enableTracing: true,
@@ -359,7 +359,7 @@ describe('Basic Server Test', () => {
     }
   })
 
-  it('should handle tools defined BEFORE track() with shorthand Zod schema', async () => {
+  it('should handle tools defined BEFORE instrument() with shorthand Zod schema', async () => {
     resetTodos()
 
     // Create server instance
@@ -368,7 +368,7 @@ describe('Basic Server Test', () => {
       version: '1.0.0',
     })
 
-    // Define tools BEFORE calling track() - exactly like the user's code
+    // Define tools BEFORE calling instrument() - exactly like the user's code
     server.tool('add', { a: z.number(), b: z.number() }, async ({ a, b }) => ({
       content: [{ type: 'text', text: String(a + b) }],
     }))
@@ -433,11 +433,11 @@ describe('Basic Server Test', () => {
     await Promise.all([client.connect(clientTransport), server.server.connect(serverTransport)])
 
     try {
-      // Import track function
-      const { track } = await import('../index')
+      // Import instrument function
+      const { instrument } = await import('../index')
 
-      // NOW call track - after tools are already defined
-      await track(server, {
+      // NOW call instrument - after tools are already defined
+      await instrument(server, {
         apiKey: 'test-project',
         context: true,
         enableTracing: true,
@@ -522,8 +522,8 @@ describe('Basic Server Test', () => {
     await eventCapture.start()
 
     try {
-      const { track } = await import('../index')
-      await track(server, {
+      const { instrument } = await import('../index')
+      await instrument(server, {
         apiKey: 'test-tool-description',
         enableTracing: true,
       })
@@ -559,8 +559,8 @@ describe('Basic Server Test', () => {
     await eventCapture.start()
 
     try {
-      const { track } = await import('../index')
-      await track(server, {
+      const { instrument } = await import('../index')
+      await instrument(server, {
         apiKey: 'test-listed-tool-names',
         enableTracing: true,
       })

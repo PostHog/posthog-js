@@ -11,11 +11,12 @@
     "clean": "rimraf dist coverage",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
+    "pretest:unit": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "test:unit": "jest",
     "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "build": "rslib build",
     "dev": "rslib build -w",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "engines": {

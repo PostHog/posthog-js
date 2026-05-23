@@ -268,7 +268,7 @@ async function initializeToolCallEvent(
     const data = getServerTrackingData(server)
     if (!data) {
       log(
-        'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called track(server, options) before using tool calls.'
+        'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
       )
       return {
         event: null,

@@ -4,7 +4,7 @@ This document describes the internals of the `@posthog/mcp` SDK and the exact Po
 
 ## TL;DR
 
-- `track(server, options)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via `@posthog/core`.
+- `instrument(server, options)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via `@posthog/core`.
 - Every PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_custom`, `$mcp_initialize`, …) per the PostHog naming convention for SDK-owned events.
 - Every PostHog **property key** is also `$`-prefixed (`$mcp_tool_name`, `$mcp_intent`, `$mcp_duration_ms`, …) so MCP keys never collide with PostHog autocapture, web analytics, or other product events.
 - `$session_id` ties one MCP connection to one PostHog session. `distinct_id` falls back through `identified user → session id → "anonymous"`.
@@ -14,18 +14,20 @@ This document describes the internals of the `@posthog/mcp` SDK and the exact Po
 
 ## 1. Wire-up
 
-The public surface in `src/index.ts` is two functions plus a class:
+The public surface in `src/index.ts`:
 
-- `track(server, options)` — installs the SDK on an MCP server. Idempotent per server (re-calling logs and returns early).
-- `publishCustomEvent(server, eventData)` — emit an arbitrary `$mcp_custom` event onto the same pipeline. The server must already have been passed to `track()`.
-- `PostHogMCP` — the stateless PostHog client (subclass of `PostHogCoreStateless` from `@posthog/core`). Most apps don't instantiate this directly; `track()` does it for you. Exposed for users who want to share one client across instrumentation or for tests.
+- `instrument(server, options)` — installs the SDK on an MCP server. Idempotent per server (re-calling logs and returns early).
+- `publishCustomEvent(server, eventData)` — emit an arbitrary `$mcp_custom` event onto the same pipeline. The server must already have been passed to `instrument()`.
+- `flush(server)` / `shutdown(server)` — drive the underlying `@posthog/core` queue manually. Both throw if the server hasn't been instrumented.
 
-`track()` does five things (`src/index.ts`):
+The internal `PostHogMCP` client (`src/extensions/client.ts`) is not exported; `instrument()` constructs and owns it per-server.
+
+`instrument()` does five things (`src/index.ts`):
 
 1. Validate `server` is either a low-level `Server` or a high-level `McpServer`, and unwrap the latter to get the underlying `Server`.
-2. Resolve the PostHog client: use `options.client` if provided, else construct a new `PostHogMCP(apiKey, { host, ...options.clientOptions })`.
+2. Construct a `PostHogMCP(apiKey, { host, ...options.clientOptions })`.
 3. Build per-server tracking state (session id, identity cache, callbacks, the resolved client) stored in a module-level `WeakMap`.
-4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `track()` is also wrapped.
+4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `instrument()` is also wrapped.
 5. Optionally register the `get_more_tools` virtual tool when `options.reportMissing: true`.
 
 Two implementations exist for the two MCP server shapes:
@@ -160,10 +162,9 @@ The `eventProperties` callback returns key/value pairs that are **spread flat at
 
 | Option                       | Default                                   | Use case                                                                                                                                |
 | ---------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiKey`                     | —                                         | PostHog project key (`phc_…`). Required unless you pass `client`.                                                                       |
+| `apiKey`                     | —                                         | PostHog project key (`phc_…`).                                                                                                          |
 | `host`                       | `https://us.i.posthog.com`                | Ingestion host. Equivalent to `clientOptions.host`.                                                                                     |
-| `clientOptions`              | —                                         | Forwarded to `PostHogMCP` constructor — tune `flushAt`, `flushInterval`, `requestTimeout`, custom `fetch`, etc.                          |
-| `client`                     | —                                         | BYO existing `PostHogMCP` instance; bypasses construction.                                                                              |
+| `clientOptions`              | —                                         | Forwarded to the underlying `@posthog/core` client. Tune `flushAt`, `flushInterval`, `requestTimeout`, custom `fetch`, etc.             |
 | `logger`                     | no-op                                     | STDIO-safe log sink for SDK-internal warnings. Receives single string messages.                                                         |
 | `enableTracing`              | `true`                                    | Master kill switch for event emission.                                                                                                  |
 | `enableAITracing`            | `false`                                   | Emit `$ai_span` so MCP activity shows up in PostHog LLM analytics.                                                                      |
@@ -292,13 +293,13 @@ The previous version of this SDK lived in a separate repo and depended on `posth
 
 | Concern                                | Old (standalone 0.0.x)                                          | New (monorepo 0.1.0)                                                                  |
 | -------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| PostHog client                         | Required `posthog-node` runtime dep, or BYO via `posthogClient` | Uses `@posthog/core`'s `PostHogCoreStateless` directly via the bundled `PostHogMCP`   |
-| `posthogClient` option                 | Accepted any duck-typed client                                  | Removed; use `client: PostHogMCP` (or just `apiKey`)                                  |
-| `posthogOptions` option                | Forwarded to `posthog-node`                                     | Renamed to `clientOptions` and forwarded to `PostHogMCP`                              |
+| PostHog client                         | Required `posthog-node` runtime dep, or BYO via `posthogClient` | Uses `@posthog/core`'s `PostHogCoreStateless` directly via an internal client         |
+| `posthogClient` option                 | Accepted any duck-typed client                                  | Removed; use `apiKey` + `clientOptions`                                               |
+| `posthogOptions` option                | Forwarded to `posthog-node`                                     | Renamed to `clientOptions` and forwarded to `@posthog/core`                           |
 | `eventTags` callback                   | Constrained string map; spread flat on events                   | Removed — fold all metadata into `eventProperties`                                    |
 | `~/posthog-mcp-analytics.log`          | SDK wrote to the user's home directory                          | Removed; pass `logger?: (msg: string) => void` if you want to capture internal logs   |
 | PostHog event names                    | Plain (`mcp_tool_call`, `mcp_custom`, `posthog_identify`, …)    | `$`-prefixed (`$mcp_tool_call`, `$mcp_custom`, `$identify`, …) per PostHog convention |
-| `POSTHOG_MCP_ANALYTICS_HOST` env var   | Read at `track()` time                                          | Removed; pass `host` directly                                                         |
+| `POSTHOG_MCP_ANALYTICS_HOST` env var   | Read at `instrument()` time                                          | Removed; pass `host` directly                                                         |
 | Session id source                      | `uuidv4` via `node:crypto`                                      | `uuidv7` from `@posthog/core`                                                         |
 
 ### Insight migration checklist

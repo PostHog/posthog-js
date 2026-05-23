@@ -21,23 +21,28 @@ import type {
 
 /**
  * Instruments an MCP server so PostHog auto-captures tool calls, tool listings, initialize
- * requests, identity, and exceptions. Safe to call multiple times — subsequent calls on the
- * same server instance are no-ops.
+ * requests, identity, and exceptions.
  *
- * @param server - The MCP server instance to track (low-level `Server` or high-level `McpServer`).
+ * **Idempotent per server instance.** We store per-server tracking state in a
+ * module-level `WeakMap<MCPServerLike, MCPAnalyticsData>` (`internal.ts`). A
+ * second `instrument()` call on the same server checks that map, logs, and
+ * returns early, so handlers are never double-wrapped and events are never
+ * duplicated.
+ *
+ * @param server - The MCP server instance to instrument (low-level `Server` or high-level `McpServer`).
  * @param options - Configuration. See `MCPAnalyticsOptions`.
  * @returns The same server instance, typed.
  *
  * @example
  * ```ts
  * import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
- * import { track } from "@posthog/mcp"
+ * import { instrument } from "@posthog/mcp"
  *
  * const server = new McpServer({ name: "my-mcp", version: "1.0.0" })
- * track(server, { apiKey: "phc_..." })
+ * instrument(server, { apiKey: "phc_..." })
  * ```
  */
-function track<TServer>(server: TServer, options: MCPAnalyticsOptions = {}): TServer {
+function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {}): TServer {
   try {
     if (options.logger) {
       setLogger(options.logger)
@@ -48,7 +53,7 @@ function track<TServer>(server: TServer, options: MCPAnalyticsOptions = {}): TSe
 
     const existingData = getServerTrackingData(lowLevelServer)
     if (existingData) {
-      log('track() - Server already being tracked, skipping initialization')
+      log('instrument() - Server already instrumented, skipping initialization')
       return validatedServer as TServer
     }
 
@@ -64,15 +69,12 @@ function track<TServer>(server: TServer, options: MCPAnalyticsOptions = {}): TSe
 
     return validatedServer as TServer
   } catch (error) {
-    log(`Warning: Failed to track server - ${error}`)
+    log(`Warning: Failed to instrument server - ${error}`)
     return server
   }
 }
 
 function resolveClient(options: MCPAnalyticsOptions): PostHogMCP | undefined {
-  if (options.client) {
-    return options.client
-  }
   if (!options.apiKey) {
     return undefined
   }
@@ -144,9 +146,9 @@ function setupTrackedServer(
 }
 
 /**
- * Publishes a custom `$mcp_custom` event for a tracked server. Use this to record
+ * Publishes a custom `$mcp_custom` event for an instrumented server. Use this to record
  * domain-specific actions that aren't captured automatically (e.g. user feedback, app-level
- * state changes). The server must already have been passed to `track()`.
+ * state changes). The server must already have been passed to `instrument()`.
  */
 export function publishCustomEvent(server: unknown, eventData: CustomEventData = {}): Promise<void> {
   try {
@@ -159,13 +161,13 @@ export function publishCustomEvent(server: unknown, eventData: CustomEventData =
 
 function publishCustomEventSync(serverInput: unknown, eventData: CustomEventData): void {
   if (!serverInput || typeof serverInput !== 'object') {
-    throw new Error('First argument must be a tracked MCP server instance')
+    throw new Error('First argument must be an instrumented MCP server instance')
   }
 
   const lowLevelServer = getLowLevelServerFromUnknownObject(serverInput)
   const trackingData = getServerTrackingData(lowLevelServer)
   if (!trackingData) {
-    throw new Error('Server is not tracked. Call `track(server, options)` before `publishCustomEvent`.')
+    throw new Error('Server is not instrumented. Call `instrument(server, options)` before `publishCustomEvent`.')
   }
 
   const event: UnredactedEvent = {
@@ -210,8 +212,38 @@ function getLowLevelServerFromUnknownObject(server: object): MCPServerLike {
     : (server as MCPServerLike)
 }
 
-export { PostHogMCP } from './extensions/client'
-export type { PostHogMCPOptions } from './extensions/client'
+/**
+ * Flush any queued events for an instrumented server. Awaits the underlying
+ * `@posthog/core` queue. Safe to call before a graceful shutdown.
+ */
+export async function flush(server: unknown): Promise<void> {
+  const client = resolveTrackedClient(server, 'flush')
+  if (!client) return
+  await client.flush()
+}
+
+/**
+ * Flush and tear down the PostHog client for an instrumented server. Call this
+ * in a SIGTERM / `beforeExit` handler so in-flight events aren't dropped.
+ */
+export async function shutdown(server: unknown): Promise<void> {
+  const client = resolveTrackedClient(server, 'shutdown')
+  if (!client) return
+  await client.shutdown()
+}
+
+function resolveTrackedClient(serverInput: unknown, fnName: string): PostHogMCP | undefined {
+  if (!serverInput || typeof serverInput !== 'object') {
+    throw new Error(`First argument to ${fnName}() must be an instrumented MCP server instance`)
+  }
+  const lowLevelServer = getLowLevelServerFromUnknownObject(serverInput)
+  const data = getServerTrackingData(lowLevelServer)
+  if (!data) {
+    throw new Error(`Server is not instrumented. Call \`instrument(server, options)\` before \`${fnName}()\`.`)
+  }
+  return data.client
+}
+
 export { deriveSessionIdFromMCPSession }
 export {
   POSTHOG_MCP_ANALYTICS_SOURCE,
@@ -227,4 +259,4 @@ export type {
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']
-export { track }
+export { instrument }

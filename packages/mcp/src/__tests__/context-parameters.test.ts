@@ -1,5 +1,5 @@
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
-import { track } from '../index'
+import { instrument } from '../index'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
 import { addContextParameterToTool, addContextParameterToTools } from '../extensions/context-parameters'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
@@ -165,7 +165,7 @@ describe('addContextParameterToTools (batch)', () => {
 /**
  * --- Integration tests: context arg + intentFallback against a real MCP server ---
  */
-describe('Context Parameters — integration with a tracked server', () => {
+describe('Context Parameters — integration with an instrumented server', () => {
   let server: any
   let client: any
   let cleanup: () => Promise<void>
@@ -189,7 +189,7 @@ describe('Context Parameters — integration with a tracked server', () => {
     'injects the context parameter on every tool in tools/list (%s description)',
     async (_, customDescription, expectedDescription) => {
       const contextOption = customDescription ? { description: customDescription } : true
-      track(server, { apiKey: 'phc_test', context: contextOption })
+      instrument(server, { apiKey: 'phc_test', context: contextOption })
 
       const toolsResponse = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const userTools = toolsResponse.tools.filter((t: any) =>
@@ -208,7 +208,7 @@ describe('Context Parameters — integration with a tracked server', () => {
   it('captures the supplied `context` argument as `userIntent` with source=context_parameter', async () => {
     const capture = new EventCapture()
     await capture.start()
-    track(server, { apiKey: 'phc_test', context: true })
+    instrument(server, { apiKey: 'phc_test', context: true })
 
     const contextString = 'Testing context parameter injection for analytics'
     await client.request(
@@ -234,7 +234,7 @@ describe('Context Parameters — integration with a tracked server', () => {
   it('leaves `userIntent` unset when no context arg and no fallback configured', async () => {
     const capture = new EventCapture()
     await capture.start()
-    track(server, { apiKey: 'phc_test', context: true })
+    instrument(server, { apiKey: 'phc_test', context: true })
 
     await client.request({ method: 'tools/call', params: { name: 'list_todos', arguments: {} } }, CallToolResultSchema)
 
@@ -254,7 +254,7 @@ describe('Context Parameters — integration with a tracked server', () => {
   it('falls back to `intentFallback` when no context arg is supplied', async () => {
     const capture = new EventCapture()
     await capture.start()
-    track(server, {
+    instrument(server, {
       apiKey: 'phc_test',
       context: true,
       intentFallback: (request) => (request.params?.name === 'list_todos' ? 'Inspecting the todo list' : undefined),
@@ -278,7 +278,7 @@ describe('Context Parameters — integration with a tracked server', () => {
     const capture = new EventCapture()
     await capture.start()
     const intentFallback = jest.fn(() => 'Fallback intent')
-    track(server, { apiKey: 'phc_test', context: true, intentFallback })
+    instrument(server, { apiKey: 'phc_test', context: true, intentFallback })
 
     await client.request(
       {
@@ -310,7 +310,7 @@ describe('Context Parameters — integration with a tracked server', () => {
       return { content: [{ type: 'text', text: 'ok' }] }
     })
 
-    track(server, { apiKey: 'phc_test', enableTracing: true })
+    instrument(server, { apiKey: 'phc_test', enableTracing: true })
 
     await client.request(
       {

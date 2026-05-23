@@ -1,4 +1,4 @@
-import { publishCustomEvent, track } from '../index'
+import { publishCustomEvent, instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import type { MCPServerLike } from '../types'
 import { EventCapture } from './test-utils'
@@ -13,9 +13,9 @@ function makeMockLowLevelServer(): MCPServerLike {
 }
 
 describe('publishCustomEvent', () => {
-  it('publishes a $mcp_custom event for a tracked server', async () => {
+  it('publishes a $mcp_custom event for an instrumented server', async () => {
     const server = makeMockLowLevelServer()
-    track(server, { apiKey: 'phc_test' })
+    instrument(server, { apiKey: 'phc_test' })
 
     const capture = new EventCapture()
     await capture.start()
@@ -41,7 +41,7 @@ describe('publishCustomEvent', () => {
 
   it('records error details when isError is true', async () => {
     const server = makeMockLowLevelServer()
-    track(server, { apiKey: 'phc_test' })
+    instrument(server, { apiKey: 'phc_test' })
 
     const capture = new EventCapture()
     await capture.start()
@@ -61,7 +61,7 @@ describe('publishCustomEvent', () => {
   it('also works with high-level McpServer-like wrappers', async () => {
     const lowLevelServer = makeMockLowLevelServer()
     const highLevelServer = { server: lowLevelServer, _registeredTools: {}, tool: () => {} }
-    track(highLevelServer, { apiKey: 'phc_test' })
+    instrument(highLevelServer, { apiKey: 'phc_test' })
 
     const capture = new EventCapture()
     await capture.start()
@@ -74,21 +74,21 @@ describe('publishCustomEvent', () => {
     await capture.stop()
   })
 
-  it('rejects when the server has not been tracked', async () => {
+  it('rejects when the server has not been instrumented', async () => {
     await expect(publishCustomEvent({}, { resourceName: 'whatever' })).rejects.toThrow(
-      'Server is not tracked. Call `track(server, options)` before `publishCustomEvent`.'
+      'Server is not instrumented. Call `instrument(server, options)` before `publishCustomEvent`.'
     )
   })
 
   it('rejects when the first argument is not an object', async () => {
     await expect(publishCustomEvent(undefined as unknown as object)).rejects.toThrow(
-      'First argument must be a tracked MCP server instance'
+      'First argument must be an instrumented MCP server instance'
     )
   })
 
   it('always uses the custom event type for publishCustomEvent', async () => {
     const server = makeMockLowLevelServer()
-    track(server, { apiKey: 'phc_test' })
+    instrument(server, { apiKey: 'phc_test' })
 
     const capture = new EventCapture()
     await capture.start()
@@ -103,7 +103,7 @@ describe('publishCustomEvent', () => {
 
   it('stamps a timestamp on the captured event', async () => {
     const server = makeMockLowLevelServer()
-    track(server, { apiKey: 'phc_test' })
+    instrument(server, { apiKey: 'phc_test' })
 
     const capture = new EventCapture()
     await capture.start()
@@ -120,7 +120,7 @@ describe('publishCustomEvent', () => {
 
   it('accepts minimal event data', async () => {
     const server = makeMockLowLevelServer()
-    track(server, { apiKey: 'phc_test' })
+    instrument(server, { apiKey: 'phc_test' })
 
     const capture = new EventCapture()
     await capture.start()
@@ -138,7 +138,7 @@ describe('publishCustomEvent', () => {
     // A `publishCustomEvent` call is by definition user-initiated and should not
     // be silently swallowed when the host opts out of auto-capture.
     const server = makeMockLowLevelServer()
-    track(server, { apiKey: 'phc_test', enableTracing: false })
+    instrument(server, { apiKey: 'phc_test', enableTracing: false })
 
     const capture = new EventCapture()
     await capture.start()
