@@ -640,7 +640,7 @@ packages:
         optional: true
 
   '@posthog/convex@file:../../target/posthog-convex.tgz':
-    resolution: {integrity: sha512-msDEMP8qnuuaGVF+5w05JyHnimOPl+x3u94wrmHZvGCXJpD3jM07da21ibWqJEFnOxBc4nQVJs/ukCeJN0q+oA==, tarball: file:../../target/posthog-convex.tgz}
+    resolution: {integrity: sha512-WuvY9Hr0hV5pruBylVhJzxUGjltAygvCT13TdB1taFl7JhjG53GtjeOSj+1oZuuxX7HzOaKdzB8eCWh8NUXhpA==, tarball: file:../../target/posthog-convex.tgz}
     version: 1.0.6
     peerDependencies:
       convex: ^1.39.0

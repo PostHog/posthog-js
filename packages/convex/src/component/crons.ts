@@ -35,7 +35,11 @@ export function readPollingIntervalSeconds(): number {
  * `npx convex env set` triggers automatically in `npx convex dev`. The cron handler itself also
  * guards against a stale registration where the env var was cleared after deploy.
  */
-if (process.env.POSTHOG_PERSONAL_API_KEY) {
+// Trim before checking, matching how `readConfig()` in `lib.ts` interprets the env var.
+// `npx convex env set` can leave trailing whitespace; without the trim, a value like `" "` would
+// register the cron but then no-op every tick once `readConfig()` rejects the trimmed-to-empty
+// PAK — wasted function calls, especially painful on free-tier deployments.
+if ((process.env.POSTHOG_PERSONAL_API_KEY ?? '').trim()) {
   crons.interval(
     'Refresh PostHog feature flag definitions',
     { seconds: readPollingIntervalSeconds() },
