@@ -92,15 +92,6 @@ export class PostHog {
     this.identifyFn = options?.identify
   }
 
-  /**
-   * Trigger a one-off refresh of the cached feature flag definitions. The component already
-   * refreshes on a cron when `POSTHOG_PERSONAL_API_KEY` is set — call this only when you need
-   * an immediate refresh (e.g. after creating a flag in development). Requires an action context.
-   */
-  async refreshFlagDefinitions(ctx: RunActionCtx): Promise<unknown> {
-    return await ctx.runAction(this.component.lib.refreshFlagDefinitions, {})
-  }
-
   private async resolveDistinctId(ctx: unknown, argsDistinctId?: string): Promise<string> {
     if (this.identifyFn) {
       const result = await this.identifyFn(ctx)

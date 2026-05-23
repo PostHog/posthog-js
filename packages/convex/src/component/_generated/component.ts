@@ -133,12 +133,5 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         any,
         Name
       >;
-      refreshFlagDefinitions: FunctionReference<
-        "action",
-        "internal",
-        {},
-        any,
-        Name
-      >;
     };
   };

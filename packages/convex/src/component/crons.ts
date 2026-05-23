@@ -1,5 +1,5 @@
 import { cronJobs } from 'convex/server'
-import { api } from './_generated/api.js'
+import { internal } from './_generated/api.js'
 
 const crons = cronJobs()
 
@@ -13,7 +13,7 @@ const crons = cronJobs()
  * guards against a stale registration where the env var was cleared after deploy.
  */
 if (process.env.POSTHOG_PERSONAL_API_KEY) {
-  crons.interval('Refresh PostHog feature flag definitions', { minutes: 1 }, api.lib.refreshFlagDefinitions, {})
+  crons.interval('Refresh PostHog feature flag definitions', { minutes: 1 }, internal.lib.refreshFlagDefinitions, {})
 }
 
 export default crons

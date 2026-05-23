@@ -79,7 +79,7 @@ import { components } from "./_generated/api";
 export const posthog = new PostHog(components.posthog);
 ```
 
-That's the whole setup — feature flag methods will start returning live values on the next cron tick (the component refreshes every minute when `POSTHOG_PERSONAL_API_KEY` is set), or you can call `posthog.refreshFlagDefinitions(ctx)` from an action whenever you want an immediate refresh.
+That's the whole setup — feature flag methods will start returning live values on the next cron tick. The component refreshes flag definitions every minute when `POSTHOG_PERSONAL_API_KEY` is set.
 
 ## 📊 Capturing Events
 
@@ -371,7 +371,7 @@ To upgrade:
    - });
    + export const posthog = new PostHog(components.posthog);
    ```
-5. **Delete your `convex/crons.ts`** if it only existed to refresh PostHog flag definitions — the component ships its own cron now, conditionally registered only when `POSTHOG_PERSONAL_API_KEY` is set. (`posthog.refreshFlagDefinitions(ctx)` still works for manual on-demand refreshes.)
+5. **Delete your `convex/crons.ts`** if it only existed to refresh PostHog flag definitions — the component ships its own cron now, conditionally registered only when `POSTHOG_PERSONAL_API_KEY` is set. `posthog.refreshFlagDefinitions(ctx)` is gone too; the cron is the only refresh path, matching how the other PostHog server SDKs work.
 
 Everything else — the `capture`, `identify`, `getFeatureFlag`, `evaluateFlag`, etc. APIs — is unchanged.
 
