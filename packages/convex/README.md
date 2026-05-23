@@ -67,7 +67,7 @@ To enable local feature flag evaluation, also set a [feature flags secure API ke
 npx convex env set POSTHOG_PERSONAL_API_KEY phs_your_feature_flags_secure_api_key
 ```
 
-> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward. Setting this env var also activates the component's built-in refresh cron — without it, the cron is skipped entirely so idle dev deployments don't burn function calls.
+> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward. This env var also gates the component's built-in refresh cron: when it's set the cron is registered at deploy time and refreshes flag definitions once a minute; when it isn't, the cron isn't registered at all so idle dev deployments don't burn function calls. The gate is evaluated at module-load (i.e. deploy) time — `npx convex dev` redeploys automatically when you set the env var, but production deployments need a manual redeploy for the cron to start.
 
 Create a `convex/posthog.ts` file to initialize the client. Credentials live on the component, so this file is just for callbacks (identify, beforeSend):
 

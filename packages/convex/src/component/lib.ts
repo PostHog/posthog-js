@@ -29,11 +29,20 @@ const DEFAULT_HOST = 'https://us.i.posthog.com'
  * own deployment env vars. Trimming guards against accidental whitespace from `npx convex env set`.
  */
 function readConfig(): { token: string; host: string; personalApiKey: string } {
-  return {
-    token: (process.env.POSTHOG_TOKEN ?? '').trim(),
-    host: (process.env.POSTHOG_HOST ?? '').trim() || DEFAULT_HOST,
-    personalApiKey: (process.env.POSTHOG_PERSONAL_API_KEY ?? '').trim(),
+  const token = (process.env.POSTHOG_TOKEN ?? '').trim()
+  const host = (process.env.POSTHOG_HOST ?? '').trim() || DEFAULT_HOST
+  const personalApiKey = (process.env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
+  if (!token) {
+    // Convex's typed env-var validation should prevent an empty `POSTHOG_TOKEN` at deploy time,
+    // but the gate is enforced at the app's `convex.config.ts`. Log loudly here so anyone hitting
+    // an unexpected empty value (e.g. token cleared post-deploy on a stale isolate) has a trail
+    // to follow rather than silently dropped events.
+    console.warn(
+      '[PostHog] POSTHOG_TOKEN is not configured; this event will be dropped. ' +
+        'Set it with `npx convex env set POSTHOG_TOKEN phc_…` and redeploy.'
+    )
   }
+  return { token, host, personalApiKey }
 }
 
 /**
