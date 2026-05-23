@@ -154,3 +154,19 @@ export type DatabaseReader = GenericDatabaseReader<DataModel>;
  * for the guarantees Convex provides your functions.
  */
 export type DatabaseWriter = GenericDatabaseWriter<DataModel>;
+
+/**
+ * Typed access to the environment variables declared in this component's `convex.config.ts`.
+ *
+ * Required variables are typed as `string`; optional ones as `string | undefined`. The values
+ * come from `process.env` at runtime — Convex populates them from the wiring in the installing
+ * app's `app.use(posthog, { env: { ... } })`.
+ *
+ * Prefer this over `process.env` so missing or misspelled variables fail at compile time.
+ */
+export const env = process.env as unknown as {
+  POSTHOG_TOKEN: string;
+  POSTHOG_HOST: string | undefined;
+  POSTHOG_PERSONAL_API_KEY: string | undefined;
+  POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: string | undefined;
+};

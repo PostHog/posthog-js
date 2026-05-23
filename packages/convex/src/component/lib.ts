@@ -1,5 +1,5 @@
 import { PostHog as PostHogEdge } from 'posthog-node/edge'
-import { action, internalMutation, internalQuery, query } from './_generated/server.js'
+import { action, env, internalMutation, internalQuery, query } from './_generated/server.js'
 import { api, internal } from './_generated/api.js'
 import { v } from 'convex/values'
 import { version } from './version.js'
@@ -23,15 +23,15 @@ const DEFAULT_HOST = 'https://us.i.posthog.com'
 /**
  * Resolve the credentials and host the component was configured with.
  *
- * Reads the env vars declared in `convex.config.ts` — they're exposed on `process.env` at
- * runtime inside every component function. The installing app wires the values via
- * `app.use(posthog, { env: { ... } })`, typically threading them straight through from its
- * own deployment env vars. Trimming guards against accidental whitespace from `npx convex env set`.
+ * Reads the typed `env` from `_generated/server` (declared in `convex.config.ts`). The
+ * installing app wires the values via `app.use(posthog, { env: { ... } })`, typically
+ * threading them straight through from its own deployment env vars. Trimming guards
+ * against accidental whitespace from `npx convex env set`.
  */
 function readConfig(): { token: string; host: string; personalApiKey: string } {
-  const token = (process.env.POSTHOG_TOKEN ?? '').trim()
-  const host = (process.env.POSTHOG_HOST ?? '').trim() || DEFAULT_HOST
-  const personalApiKey = (process.env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
+  const token = (env.POSTHOG_TOKEN ?? '').trim()
+  const host = (env.POSTHOG_HOST ?? '').trim() || DEFAULT_HOST
+  const personalApiKey = (env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
   if (!token) {
     // Convex's typed env-var validation should prevent an empty `POSTHOG_TOKEN` at deploy time,
     // but the gate is enforced at the app's `convex.config.ts`. Log loudly here so anyone hitting
@@ -308,7 +308,7 @@ export const evaluateAllFlags = action({
 export const getFlagDefinitions = query({
   args: {},
   handler: async (ctx) => {
-    const localEvalConfigured = !!(process.env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
+    const localEvalConfigured = !!(env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
     const row = await ctx.db.query('flagDefinitions').order('desc').first()
     if (!row) {
       return { localEvalConfigured, data: null, fetchedAt: null, etag: undefined }

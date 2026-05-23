@@ -1,5 +1,6 @@
 import { cronJobs } from 'convex/server'
 import { api } from './_generated/api.js'
+import { env } from './_generated/server.js'
 
 const crons = cronJobs()
 
@@ -13,7 +14,7 @@ export const DEFAULT_INTERVAL_SECONDS = 60
  * and the operator gets a warning to act on. Exported for unit testing.
  */
 export function readPollingIntervalSeconds(): number {
-  const raw = (process.env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS ?? '').trim()
+  const raw = (env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS ?? '').trim()
   if (!raw) return DEFAULT_INTERVAL_SECONDS
   const parsed = Number(raw)
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
@@ -39,7 +40,7 @@ export function readPollingIntervalSeconds(): number {
 // `npx convex env set` can leave trailing whitespace; without the trim, a value like `" "` would
 // register the cron but then no-op every tick once `readConfig()` rejects the trimmed-to-empty
 // PAK — wasted function calls, especially painful on free-tier deployments.
-if ((process.env.POSTHOG_PERSONAL_API_KEY ?? '').trim()) {
+if ((env.POSTHOG_PERSONAL_API_KEY ?? '').trim()) {
   crons.interval(
     'Refresh PostHog feature flag definitions',
     { seconds: readPollingIntervalSeconds() },
