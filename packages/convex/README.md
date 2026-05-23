@@ -40,6 +40,7 @@ const app = defineApp({
     POSTHOG_TOKEN: v.string(),
     POSTHOG_HOST: v.optional(v.string()),
     POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
+    POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: v.optional(v.string()),
   },
 });
 
@@ -48,6 +49,7 @@ app.use(posthog, {
     POSTHOG_TOKEN: app.env.POSTHOG_TOKEN,
     POSTHOG_HOST: app.env.POSTHOG_HOST,
     POSTHOG_PERSONAL_API_KEY: app.env.POSTHOG_PERSONAL_API_KEY,
+    POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: app.env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS,
   },
 });
 
@@ -79,7 +81,13 @@ import { components } from "./_generated/api";
 export const posthog = new PostHog(components.posthog);
 ```
 
-That's the whole setup — feature flag methods will start returning live values on the next cron tick. The component refreshes flag definitions every minute when `POSTHOG_PERSONAL_API_KEY` is set.
+That's the whole setup — feature flag methods will start returning live values on the next cron tick. The component refreshes flag definitions every minute when `POSTHOG_PERSONAL_API_KEY` is set. To tune the cadence (e.g. raise it to `300` for a free-tier dev deployment), set `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` and redeploy:
+
+```sh
+npx convex env set POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS 300
+```
+
+If you call a local-eval method (`getFeatureFlag`, `isFeatureEnabled`, …) without `POSTHOG_PERSONAL_API_KEY` configured, the client throws with a pointer to the remote `evaluateFlag` / `evaluateFlagPayload` / `evaluateAllFlags` methods. While the first cron tick is still in flight (PAK is set but no definitions are cached yet) the local methods return `undefined` so your fallback path keeps working.
 
 ## 📊 Capturing Events
 

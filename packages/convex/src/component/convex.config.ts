@@ -13,5 +13,11 @@ export default defineComponent('posthog', {
     POSTHOG_TOKEN: v.string(),
     POSTHOG_HOST: v.optional(v.string()),
     POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
+    /**
+     * Polling interval for the local-evaluation refresh cron, in whole seconds. Optional
+     * (defaults to 60). Convex component env vars are string-typed on the wire, so this is
+     * parsed at module load — invalid values log a warning and fall back to the default.
+     */
+    POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: v.optional(v.string()),
   },
 })

@@ -117,11 +117,25 @@ export class PostHog {
 
   private async loadEvaluator(ctx: RunQueryCtx): Promise<LocalFeatureFlagEvaluator | null> {
     const row = (await ctx.runQuery(this.component.lib.getFlagDefinitions, {})) as {
-      data: string
-      fetchedAt: number
+      localEvalConfigured: boolean
+      data: string | null
+      fetchedAt: number | null
       etag?: string
-    } | null
-    if (!row) return null
+    }
+    if (!row.localEvalConfigured) {
+      // Loud failure rather than silent `undefined`: a caller invoking a local-eval method
+      // without `POSTHOG_PERSONAL_API_KEY` configured almost certainly meant to use a remote
+      // `evaluate*` method instead. Throwing tells them exactly what to do.
+      throw new Error(
+        'PostHog: local feature flag evaluation is not configured. ' +
+          'Set POSTHOG_PERSONAL_API_KEY on your Convex deployment, or call the remote ' +
+          '`evaluateFlag` / `evaluateFlagPayload` / `evaluateAllFlags` methods instead ' +
+          '(action context only).'
+      )
+    }
+    // PAK is set but the cron hasn't populated the cache yet — return null so callers fall
+    // back to their `undefined` graceful-degrade path until definitions land.
+    if (!row.data) return null
     let parsed: FlagDefinitions
     try {
       parsed = JSON.parse(row.data) as FlagDefinitions

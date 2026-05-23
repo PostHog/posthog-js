@@ -296,16 +296,24 @@ export const evaluateAllFlags = action({
 // no per-call action for flag evaluation.
 
 /**
- * Returns the latest cached flag definitions, or `null` if none have been fetched yet.
+ * Returns the cached flag definitions plus whether local evaluation is configured at all.
  *
- * The `data` field is a JSON-stringified `FlagDefinitions` object (see `client/feature-flags/types.ts`).
+ * `localEvalConfigured` reflects whether `POSTHOG_PERSONAL_API_KEY` is set on the component —
+ * the client uses this to distinguish "you haven't set up local eval" (throw, point the user
+ * at the remote `evaluateFlag` methods) from "PAK is set but the cron hasn't fetched yet"
+ * (return `undefined` gracefully). `data` is null until the first successful refresh.
+ *
+ * `data` is a JSON-stringified `FlagDefinitions` object (see `client/feature-flags/types.ts`).
  */
 export const getFlagDefinitions = query({
   args: {},
   handler: async (ctx) => {
+    const localEvalConfigured = !!(process.env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
     const row = await ctx.db.query('flagDefinitions').order('desc').first()
-    if (!row) return null
-    return { data: row.data, fetchedAt: row.fetchedAt, etag: row.etag }
+    if (!row) {
+      return { localEvalConfigured, data: null, fetchedAt: null, etag: undefined }
+    }
+    return { localEvalConfigured, data: row.data, fetchedAt: row.fetchedAt, etag: row.etag }
   },
 })
 
@@ -438,7 +446,7 @@ export const refreshFlagDefinitions = internalAction({
       if (looksCacheCold) {
         const existing = await ctx.runQuery(api.lib.getFlagDefinitions, {})
         const STALE_AFTER_MS = 5 * 60 * 1000
-        if (existing === null) {
+        if (existing.fetchedAt === null) {
           // No prior cache — write an empty snapshot so subsequent reads are deterministic and
           // the UI shows "no flags" instead of "loading".
           await ctx.runMutation(internal.lib._setFlagDefinitions, {

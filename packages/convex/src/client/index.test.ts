@@ -92,11 +92,49 @@ describe('PostHog client', () => {
     const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
     const posthog = new PostHog(component as never)
     const ctx = {
-      runQuery: jest.fn(async () => ({ data: definitions, fetchedAt: Date.now() })),
+      runQuery: jest.fn(async () => ({ localEvalConfigured: true, data: definitions, fetchedAt: Date.now() })),
     }
 
     const payload = await posthog.getFeatureFlagPayload(ctx as never, { key: 'flag', matchValue: 'red' })
     expect(payload).toBe('red-payload')
+  })
+})
+
+describe('local-eval configuration', () => {
+  // When `POSTHOG_PERSONAL_API_KEY` isn't set on the component the cron never runs and local eval
+  // can never produce a verdict. The client throws so callers don't silently get `undefined` and
+  // wonder why their flag rollouts aren't taking effect.
+  test('throws when local eval is not configured (no PAK)', async () => {
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = {
+      runQuery: jest.fn(async () => ({
+        localEvalConfigured: false,
+        data: null,
+        fetchedAt: null,
+      })),
+    }
+
+    await expect(posthog.getFeatureFlag(ctx as never, { key: 'my-flag', distinctId: 'u1' })).rejects.toThrow(
+      'local feature flag evaluation is not configured'
+    )
+  })
+
+  // PAK *is* set but the first cron tick hasn't landed yet — graceful degradation rather than
+  // throwing, so callers' fallback paths still work during the brief warm-up window.
+  test('returns undefined when PAK is configured but definitions have not been cached yet', async () => {
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = {
+      runQuery: jest.fn(async () => ({
+        localEvalConfigured: true,
+        data: null,
+        fetchedAt: null,
+      })),
+    }
+
+    const value = await posthog.getFeatureFlag(ctx as never, { key: 'my-flag', distinctId: 'u1' })
+    expect(value).toBeUndefined()
   })
 })
 
@@ -655,6 +693,7 @@ describe('identify callback', () => {
       })
       // Stub real-looking flag definitions so `loadEvaluator` returns an instance.
       const definitions = {
+        localEvalConfigured: true,
         data: JSON.stringify({ flags: [], groupTypeMapping: {}, cohorts: {} }),
         fetchedAt: Date.now(),
       }
