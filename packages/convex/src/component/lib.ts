@@ -1,5 +1,5 @@
 import { PostHog as PostHogEdge } from 'posthog-node/edge'
-import { action, internalAction, internalMutation, internalQuery, query } from './_generated/server.js'
+import { action, internalMutation, internalQuery, query } from './_generated/server.js'
 import { api, internal } from './_generated/api.js'
 import { v } from 'convex/values'
 import { version } from './version.js'
@@ -345,11 +345,11 @@ export const _getCurrentEtag = internalQuery({
 
 /**
  * Fetches flag definitions from PostHog's local-evaluation endpoint and stores them in the
- * `flagDefinitions` table. Called by the cron registered in `crons.ts` when
- * `POSTHOG_PERSONAL_API_KEY` is set. Internal — the cron owns the refresh schedule and
- * there's no reason to expose a manual refresh on the public API surface.
+ * `flagDefinitions` table. Called automatically by the cron registered in `crons.ts` when
+ * `POSTHOG_PERSONAL_API_KEY` is set, and also exposed publicly so the client's
+ * `reloadFeatureFlags(ctx)` method (parity with `posthog-node`) can trigger an on-demand refresh.
  */
-export const refreshFlagDefinitions = internalAction({
+export const refreshFlagDefinitions = action({
   args: {},
   handler: async (ctx) => {
     const { token, host, personalApiKey } = readConfig()

@@ -65,6 +65,21 @@ describe('PostHog client', () => {
     expect(typeof posthog.getAllFlagsAndPayloads).toBe('function')
   })
 
+  test('exposes reloadFeatureFlags method (parity with posthog-node)', () => {
+    const posthog = new PostHog({} as never)
+    expect(typeof posthog.reloadFeatureFlags).toBe('function')
+  })
+
+  test('reloadFeatureFlags forwards to the component refresh action with no args', async () => {
+    const component = { lib: { refreshFlagDefinitions: 'refresh_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = { runAction: jest.fn(async () => ({ status: 'updated' })) }
+
+    await posthog.reloadFeatureFlags(ctx as never)
+
+    expect(ctx.runAction).toHaveBeenCalledWith('refresh_ref', {})
+  })
+
   test('getFeatureFlagPayload with matchValue does not require a distinctId', async () => {
     // The matchValue path is a pure key+value payload lookup; resolving a distinctId would
     // force callers to configure an identify callback or pass an ID they don't have.

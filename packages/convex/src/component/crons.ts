@@ -1,18 +1,18 @@
 import { cronJobs } from 'convex/server'
-import { internal } from './_generated/api.js'
+import { api } from './_generated/api.js'
 
 const crons = cronJobs()
 
-const DEFAULT_INTERVAL_SECONDS = 60
+export const DEFAULT_INTERVAL_SECONDS = 60
 
 /**
  * Parse the optional `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` env var into a positive integer.
  *
  * Convex component env vars are string-typed, so we coerce here. Invalid values fall back to
  * the default rather than failing the deploy — flags will still refresh on the default cadence
- * and the operator gets a warning to act on.
+ * and the operator gets a warning to act on. Exported for unit testing.
  */
-function readPollingIntervalSeconds(): number {
+export function readPollingIntervalSeconds(): number {
   const raw = (process.env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS ?? '').trim()
   if (!raw) return DEFAULT_INTERVAL_SECONDS
   const parsed = Number(raw)
@@ -39,7 +39,7 @@ if (process.env.POSTHOG_PERSONAL_API_KEY) {
   crons.interval(
     'Refresh PostHog feature flag definitions',
     { seconds: readPollingIntervalSeconds() },
-    internal.lib.refreshFlagDefinitions,
+    api.lib.refreshFlagDefinitions,
     {}
   )
 }

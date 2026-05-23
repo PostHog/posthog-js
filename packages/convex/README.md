@@ -89,6 +89,8 @@ npx convex env set POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS 300
 
 If you call a local-eval method (`getFeatureFlag`, `isFeatureEnabled`, …) without `POSTHOG_PERSONAL_API_KEY` configured, the client throws with a pointer to the remote `evaluateFlag` / `evaluateFlagPayload` / `evaluateAllFlags` methods. While the first cron tick is still in flight (PAK is set but no definitions are cached yet) the local methods return `undefined` so your fallback path keeps working.
 
+Need to force a refresh between cron ticks (e.g. just after creating a flag in development)? Call `posthog.reloadFeatureFlags(ctx)` from an action — same name and shape as `posthog-node`.
+
 ## 📊 Capturing Events
 
 Import `posthog` from your setup file and call methods directly:
@@ -341,6 +343,18 @@ Three methods:
 
 Same option shape as the local methods (`groups`, `personProperties`, `groupProperties`, `disableGeoip`, `flagKeys` on the all-flags variant). Pick local when the flag is suitable and the cost of `/flags/definitions` polling is justified; pick remote when it isn't.
 
+## 🔄 Differences from `posthog-node`
+
+The method shapes line up with `posthog-node` everywhere they can, but a few things differ by necessity:
+
+- **Every method takes a `ctx` first.** Convex actions/mutations/queries always do.
+- **Method args are objects, not positional.** `posthog.capture(ctx, { distinctId, event, properties })` rather than `posthog.capture({ … })`. Same for `captureException`, flag methods, etc.
+- **No `captureImmediate` / `identifyImmediate` / `aliasImmediate` variants.** All component actions use the `Immediate` variants under the hood — Convex isolates don't have a clean lifecycle hook for batching and flushing, so we skip the queued mode entirely.
+- **No `flush()` / `shutdown()`.** Same reason — there's nothing to flush.
+- **Local-eval methods don't auto-fall-back to remote.** `posthog-node`'s `getFeatureFlag` will quietly hit `/flags` when local eval can't reach a verdict. Ours returns `undefined` (or `null` from `getFeatureFlagResult`) and you call `evaluateFlag` / `evaluateFlagPayload` / `evaluateAllFlags` explicitly for remote. Auto-fallback would force every local-eval call into an action context (since queries can't make network calls), which would defeat the reactivity win.
+- **Local-eval methods throw when `POSTHOG_PERSONAL_API_KEY` isn't configured.** `posthog-node` returns `undefined`; the throw here points you at the remote `evaluate*` methods so you can't get stuck wondering why your rollouts don't take effect.
+- **`reloadFeatureFlags(ctx)` matches `posthog-node`'s naming.** Same shape, just the extra `ctx`.
+
 ## ⬆️ Migrating from v1
 
 v2 moves credentials from the client constructor onto the component itself, using [Convex 1.39's typed component env vars](https://docs.convex.dev/components/authoring#environment-variables). It also bundles the refresh cron inside the component. The result is less plumbing per call site and a setup that's safe to leave running on free-tier dev deployments.
@@ -379,7 +393,7 @@ To upgrade:
    - });
    + export const posthog = new PostHog(components.posthog);
    ```
-5. **Delete your `convex/crons.ts`** if it only existed to refresh PostHog flag definitions — the component ships its own cron now, conditionally registered only when `POSTHOG_PERSONAL_API_KEY` is set. `posthog.refreshFlagDefinitions(ctx)` is gone too; the cron is the only refresh path, matching how the other PostHog server SDKs work.
+5. **Delete your `convex/crons.ts`** if it only existed to refresh PostHog flag definitions — the component ships its own cron now, conditionally registered only when `POSTHOG_PERSONAL_API_KEY` is set. `posthog.refreshFlagDefinitions(ctx)` was renamed to `posthog.reloadFeatureFlags(ctx)` for parity with `posthog-node`; the cron is the primary refresh path but you can still call this manually from an action when you need an immediate refresh.
 
 Everything else — the `capture`, `identify`, `getFeatureFlag`, `evaluateFlag`, etc. APIs — is unchanged.
 

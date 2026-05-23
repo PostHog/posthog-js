@@ -1020,6 +1020,39 @@ describe('refreshFlagDefinitions cron action', () => {
     })
 })
 
+describe('getFlagDefinitions query', () => {
+    // The query exposes a `localEvalConfigured` flag based on whether the component sees
+    // `POSTHOG_PERSONAL_API_KEY` in its env. The client uses this to distinguish "not configured"
+    // (throw) from "configured but not warmed up" (undefined). These tests guard the query
+    // surface that promise rests on.
+    beforeEach(() => {
+        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_HOST = 'https://test.posthog.com'
+    })
+
+    afterEach(() => {
+        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PERSONAL_API_KEY
+        delete process.env.POSTHOG_HOST
+    })
+
+    test('reports localEvalConfigured=false when POSTHOG_PERSONAL_API_KEY is unset', async () => {
+        const t = initConvexTest()
+        const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
+        expect(row.localEvalConfigured).toBe(false)
+        expect(row.data).toBeNull()
+        expect(row.fetchedAt).toBeNull()
+    })
+
+    test('reports localEvalConfigured=true when POSTHOG_PERSONAL_API_KEY is set', async () => {
+        process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test'
+        const t = initConvexTest()
+        const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
+        expect(row.localEvalConfigured).toBe(true)
+        expect(row.data).toBeNull()
+    })
+})
+
 // --- Remote feature flag evaluation tests ---
 //
 // These hit posthog-node's `evaluateFlags` under the hood, which posts to PostHog's `/flags`
