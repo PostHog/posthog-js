@@ -201,15 +201,28 @@ const stringifyValueWithLimit = (
                 continue
             }
 
-            if (!isFirst && !appendWithLimit(parts, ',', budget)) {
+            const propertyPrefix = `${isFirst ? '' : ','}${JSON.stringify(key)}:`
+            if (propertyPrefix.length >= budget.remaining) {
+                budget.truncated = true
                 return false
             }
-            isFirst = false
 
-            if (!appendWithLimit(parts, `${JSON.stringify(key)}:`, budget)) {
-                return false
+            const propertyParts: string[] = []
+            const propertyBudget = { remaining: budget.remaining - propertyPrefix.length, truncated: budget.truncated }
+            const serialized = stringifyValueWithLimit(propertyValue, propertyParts, propertyBudget, seen, false)
+            if (propertyParts.length === 0) {
+                budget.truncated = propertyBudget.truncated
+                if (!serialized) {
+                    return false
+                }
+                continue
             }
-            if (!stringifyValueWithLimit(propertyValue, parts, budget, seen, false)) {
+
+            parts.push(propertyPrefix, ...propertyParts)
+            budget.remaining = propertyBudget.remaining
+            budget.truncated = propertyBudget.truncated
+            isFirst = false
+            if (!serialized) {
                 return false
             }
         }

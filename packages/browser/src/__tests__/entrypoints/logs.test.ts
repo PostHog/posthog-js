@@ -472,6 +472,24 @@ describe('logs entrypoint', () => {
             expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual('[Circular]')
         })
 
+        it('should omit object properties whose toJSON returns non-serializable values', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log({
+                kept: 'value',
+                omitted: {
+                    toJSON() {
+                        return undefined
+                    },
+                },
+            })
+
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({
+                kept: 'value',
+            })
+        })
+
         it('should not add attributes_truncated when within limits', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
