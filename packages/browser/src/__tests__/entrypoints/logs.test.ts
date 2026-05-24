@@ -490,6 +490,19 @@ describe('logs entrypoint', () => {
             })
         })
 
+        it('should serialize boxed primitives like JSON.stringify does', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log(new String('abc'), new Number(123), new Boolean(false))
+
+            expect(mockEmit.mock.calls[0][0].body).toEqual(
+                `${JSON.stringify(new String('abc'))} ${JSON.stringify(new Number(123))} ${JSON.stringify(
+                    new Boolean(false)
+                )}`
+            )
+        })
+
         it('should not add attributes_truncated when within limits', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)

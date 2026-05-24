@@ -135,6 +135,15 @@ const stringifyValueWithLimit = (
         // If toJSON can't be read or throws, fall through to safe property enumeration.
     }
 
+    const objectTag = Object.prototype.toString.call(value)
+    if (objectTag === '[object String]') {
+        return stringifyStringWithLimit(value.valueOf(), parts, budget)
+    }
+
+    if (objectTag === '[object Number]' || objectTag === '[object Boolean]') {
+        return appendWithLimit(parts, JSON.stringify(value.valueOf()), budget)
+    }
+
     if (value instanceof Error) {
         const errorObject: Record<string, any> = {}
         try {
