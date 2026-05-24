@@ -137,7 +137,7 @@ const stringifyValueWithLimit = (
 
     const objectTag = Object.prototype.toString.call(value)
     if (objectTag === '[object String]') {
-        return stringifyStringWithLimit(value.valueOf(), parts, budget)
+        return stringifyStringWithLimit(String(value.valueOf()), parts, budget)
     }
 
     if (objectTag === '[object Number]' || objectTag === '[object Boolean]') {
