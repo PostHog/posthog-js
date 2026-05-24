@@ -216,20 +216,26 @@ const stringifyValueWithLimit = (
                 return false
             }
 
-            const propertyParts: string[] = []
-            const propertyBudget = { remaining: budget.remaining - propertyPrefix.length, truncated: budget.truncated }
-            const serialized = stringifyValueWithLimit(propertyValue, propertyParts, propertyBudget, seen, false)
-            if (propertyParts.length === 0) {
-                budget.truncated = propertyBudget.truncated
+            const partsBeforeProperty = parts.length
+            const remainingBeforeProperty = budget.remaining
+            const truncatedBeforeProperty = budget.truncated
+            if (!appendWithLimit(parts, propertyPrefix, budget)) {
+                return false
+            }
+
+            const partsBeforeValue = parts.length
+            const serialized = stringifyValueWithLimit(propertyValue, parts, budget, seen, false)
+            const truncatedAfterValue = budget.truncated
+            if (parts.length === partsBeforeValue) {
+                parts.length = partsBeforeProperty
+                budget.remaining = remainingBeforeProperty
+                budget.truncated = serialized ? truncatedBeforeProperty : truncatedAfterValue
                 if (!serialized) {
                     return false
                 }
                 continue
             }
 
-            parts.push(propertyPrefix, ...propertyParts)
-            budget.remaining = propertyBudget.remaining
-            budget.truncated = propertyBudget.truncated
             isFirst = false
             if (!serialized) {
                 return false
