@@ -23,16 +23,8 @@ const startOptions = {
                 addEventListener: typeof HTMLLinkElement.prototype.addEventListener
             }
             const original = proto.addEventListener
-            proto.addEventListener = function (
-                this: HTMLLinkElement,
-                type: string,
-                ...rest: unknown[]
-            ) {
-                if (
-                    type === 'load' &&
-                    this.getAttribute('rel') === 'preload' &&
-                    this.getAttribute('as') === 'style'
-                ) {
+            proto.addEventListener = function (this: HTMLLinkElement, type: string, ...rest: unknown[]) {
+                if (type === 'load' && this.getAttribute('rel') === 'preload' && this.getAttribute('as') === 'style') {
                     w.__preloadLoadAdds = (w.__preloadLoadAdds ?? 0) + 1
                 }
                 return (original as unknown as (...args: unknown[]) => unknown).call(this, type, ...rest)
