@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.35.2
+
+### Patch Changes
+
+- [#3658](https://github.com/PostHog/posthog-js/pull/3658) [`5d7a2d3`](https://github.com/PostHog/posthog-js/commit/5d7a2d336befb9c2b7be9ff1961d674623d33901) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Include group context in the $feature_flag_called deduplication key in \_captureFlagCalledEventIfNeeded, so events fire independently per group combination.
+  (2026-05-25)
+
 ## 5.35.1
 
 ### Patch Changes
