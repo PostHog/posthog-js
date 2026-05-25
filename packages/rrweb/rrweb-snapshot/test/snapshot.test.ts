@@ -10,6 +10,7 @@ import snapshot, {
   transformAttribute,
   wasMaxDepthReached,
   resetMaxDepthState,
+  resetStylesheetLoadTracking,
   serializeNodeWithId,
 } from '../src/snapshot';
 import { elementNode, serializedNodeWithId } from '../src/types';
@@ -762,6 +763,46 @@ describe('preload link load-listener accumulation', () => {
     expect(attrs).toBeDefined();
     expect(attrs._cssText).toContain('.a');
     expect(attrs._cssText).toContain('color: red');
+
+    document.head.removeChild(link);
+  });
+
+  it('re-tracks a pending stylesheet link after resetStylesheetLoadTracking', () => {
+    const { link, setSheet } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-cross-lifecycle.css',
+      sheet: null,
+    });
+
+    let firstSessionCalls = 0;
+    serializeWithCapture(link, () => {
+      firstSessionCalls += 1;
+    });
+
+    resetStylesheetLoadTracking();
+
+    let secondSessionDelivered: serializedNodeWithId | null = null;
+    serializeWithCapture(link, (_, node) => {
+      secondSessionDelivered = node;
+    });
+
+    const fakeRules = [
+      { cssText: '.late { color: blue; }', parentStyleSheet: null },
+    ];
+    setSheet({
+      cssRules: fakeRules as unknown as CSSRuleList,
+      rules: fakeRules as unknown as CSSRuleList,
+      href: null,
+    } as unknown as CSSStyleSheet);
+
+    link.dispatchEvent(new Event('load'));
+
+    expect(firstSessionCalls).toBeLessThanOrEqual(1);
+    expect(secondSessionDelivered).not.toBeNull();
+    const attrs = ((secondSessionDelivered as unknown as elementNode) ?? {})
+      .attributes;
+    expect(attrs._cssText).toContain('.late');
+    expect(attrs._cssText).toContain('color: blue');
 
     document.head.removeChild(link);
   });

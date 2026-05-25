@@ -396,7 +396,11 @@ function onceIframeLoaded(
   iframeEl.addEventListener('load', listener);
 }
 
-const stylesheetLoadTracked = new WeakSet<HTMLLinkElement>();
+let stylesheetLoadTracked = new WeakSet<HTMLLinkElement>();
+
+export function resetStylesheetLoadTracking(): void {
+  stylesheetLoadTracked = new WeakSet();
+}
 
 function onceStylesheetLoaded(
   link: HTMLLinkElement,
