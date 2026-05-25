@@ -89,8 +89,8 @@ describe('PostHogTraceExporter', () => {
   })
 
   it('throws when token is missing', () => {
-    expect(() => new PostHogTraceExporter({ token: '' })).toThrow('PostHogTraceExporter requires an token')
-    expect(() => new PostHogTraceExporter({ token: '  \n\t ' })).toThrow('PostHogTraceExporter requires an token')
+    expect(() => new PostHogTraceExporter({ token: '' })).toThrow('PostHogTraceExporter requires a token')
+    expect(() => new PostHogTraceExporter({ token: '  \n\t ' })).toThrow('PostHogTraceExporter requires a token')
   })
 
   it('inherits shutdown from OTLPTraceExporter', async () => {
