@@ -14,6 +14,7 @@ import {
 
 jest.useFakeTimers()
 
+// eslint-disable-next-line no-var
 var mockLocation: jest.Mock
 
 jest.mock('../../utils/globals', () => {

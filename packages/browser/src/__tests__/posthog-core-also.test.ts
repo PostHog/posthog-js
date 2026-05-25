@@ -14,6 +14,7 @@ import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
 
+// eslint-disable-next-line no-var
 var mockGetProperties: jest.Mock
 
 jest.mock('../utils/event-utils', () => {
