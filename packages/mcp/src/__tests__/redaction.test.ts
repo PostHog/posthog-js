@@ -407,7 +407,7 @@ describe('redactEvent integration tests', () => {
 
     // Enable tracking with redaction
     instrument(server, {
-      apiKey: 'test-project',
+      projectToken: 'test-project',
       enableTracing: true,
       redactSensitiveInformation: redactSensitiveData,
       identify: async () => ({
@@ -489,7 +489,7 @@ describe('redactEvent integration tests', () => {
 
     // Enable tracking with redaction
     instrument(server, {
-      apiKey: 'test-project',
+      projectToken: 'test-project',
       enableTracing: true,
       redactSensitiveInformation: redactCreditCards,
     })
@@ -540,7 +540,7 @@ describe('redactEvent integration tests', () => {
 
     // Enable tracking
     instrument(server, {
-      apiKey: 'test-project',
+      projectToken: 'test-project',
       enableTracing: true,
       redactSensitiveInformation: aggressiveRedact,
       identify: async () => ({

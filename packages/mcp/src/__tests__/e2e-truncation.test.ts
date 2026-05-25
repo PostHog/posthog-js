@@ -15,7 +15,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-truncation',
+        projectToken: 'test-truncation',
         context: false,
         enableTracing: true,
       })
@@ -70,7 +70,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-truncation-params',
+        projectToken: 'test-truncation-params',
         context: false,
         enableTracing: true,
       })
@@ -129,7 +129,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-truncation-mixed',
+        projectToken: 'test-truncation-mixed',
         context: false,
         enableTracing: true,
       })
@@ -191,7 +191,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-sanitize-then-truncate',
+        projectToken: 'test-sanitize-then-truncate',
         context: false,
         enableTracing: true,
       })

@@ -21,17 +21,17 @@ describe('Tracing Initialization Tests', () => {
 
     try {
       await instrument(server, {
-        apiKey: 'test-project',
+        projectToken: 'test-project',
         enableTracing: true,
       })
 
       await instrument(server, {
-        apiKey: 'test-project',
+        projectToken: 'test-project',
         enableTracing: true,
       })
 
       await instrument(server, {
-        apiKey: 'test-project',
+        projectToken: 'test-project',
         enableTracing: true,
       })
 
@@ -88,7 +88,7 @@ describe('Tracing Initialization Tests', () => {
 
     try {
       await instrument(server, {
-        apiKey: 'test-project',
+        projectToken: 'test-project',
         enableTracing: true,
       })
 

@@ -15,7 +15,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-sanitization',
+        projectToken: 'test-sanitization',
         context: false,
         enableTracing: true,
         // Off: the prompt-back appended on first mint would add an extra
@@ -85,7 +85,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-sanitization-audio',
+        projectToken: 'test-sanitization-audio',
         context: false,
         enableTracing: true,
       })
@@ -137,7 +137,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-sanitization-base64',
+        projectToken: 'test-sanitization-base64',
         context: false,
         enableTracing: true,
       })
@@ -198,7 +198,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-sanitization-mixed',
+        projectToken: 'test-sanitization-mixed',
         context: false,
         enableTracing: true,
       })

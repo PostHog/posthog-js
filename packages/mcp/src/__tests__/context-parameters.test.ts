@@ -189,7 +189,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
     'injects the context parameter on every tool in tools/list (%s description)',
     async (_, customDescription, expectedDescription) => {
       const contextOption = customDescription ? { description: customDescription } : true
-      instrument(server, { apiKey: 'phc_test', context: contextOption })
+      instrument(server, { projectToken: 'phc_test', context: contextOption })
 
       const toolsResponse = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const userTools = toolsResponse.tools.filter((t: any) =>
@@ -208,7 +208,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
   it('captures the supplied `context` argument as `userIntent` with source=context_parameter', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, { apiKey: 'phc_test', context: true })
+    instrument(server, { projectToken: 'phc_test', context: true })
 
     const contextString = 'Testing context parameter injection for analytics'
     await client.request(
@@ -234,7 +234,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
   it('leaves `userIntent` unset when no context arg and no fallback configured', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, { apiKey: 'phc_test', context: true })
+    instrument(server, { projectToken: 'phc_test', context: true })
 
     await client.request({ method: 'tools/call', params: { name: 'list_todos', arguments: {} } }, CallToolResultSchema)
 
@@ -255,7 +255,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
     const capture = new EventCapture()
     await capture.start()
     instrument(server, {
-      apiKey: 'phc_test',
+      projectToken: 'phc_test',
       context: true,
       intentFallback: (request) => (request.params?.name === 'list_todos' ? 'Inspecting the todo list' : undefined),
     })
@@ -278,7 +278,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
     const capture = new EventCapture()
     await capture.start()
     const intentFallback = jest.fn(() => 'Fallback intent')
-    instrument(server, { apiKey: 'phc_test', context: true, intentFallback })
+    instrument(server, { projectToken: 'phc_test', context: true, intentFallback })
 
     await client.request(
       {
@@ -310,7 +310,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
       return { content: [{ type: 'text', text: 'ok' }] }
     })
 
-    instrument(server, { apiKey: 'phc_test', enableTracing: true })
+    instrument(server, { projectToken: 'phc_test', enableTracing: true })
 
     await client.request(
       {

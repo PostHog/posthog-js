@@ -25,7 +25,7 @@ The internal `PostHogMCP` client (`src/extensions/client.ts`) is not exported; `
 `instrument()` does five things (`src/index.ts`):
 
 1. Validate `server` is either a low-level `Server` or a high-level `McpServer`, and unwrap the latter to get the underlying `Server`.
-2. Construct a `PostHogMCP(apiKey, { host, ...options.clientOptions })`.
+2. Construct a `PostHogMCP(projectToken, { host, ...options.clientOptions })`.
 3. Build per-server tracking state (session id, identity cache, callbacks, the resolved client) stored in a module-level `WeakMap`.
 4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `instrument()` is also wrapped.
 5. Optionally register the `get_more_tools` virtual tool when `options.reportMissing: true`.
@@ -58,7 +58,7 @@ The wrapper strips the `context` argument from `params.arguments` before forward
 
 Once an `UnredactedEvent` reaches `PostHogMCP.ingest()` (`src/extensions/client.ts`), it runs through:
 
-1. **Customer redaction** — `redactEvent(event, redactionFn)` if `options.redactSensitiveInformation` was set (`src/extensions/redaction.ts`). The redactor is called on every string in the event _except_ a protected field allowlist (`sessionId`, `id`, `apiKey`, `server`, identify-\* fields, `resourceName`, `eventType`, `actorId`, `properties`).
+1. **Customer redaction** — `redactEvent(event, redactionFn)` if `options.redactSensitiveInformation` was set (`src/extensions/redaction.ts`). The redactor is called on every string in the event _except_ a protected field allowlist (`sessionId`, `id`, `projectToken`, `server`, identify-\* fields, `resourceName`, `eventType`, `actorId`, `properties`).
 2. **Sanitization** — `sanitizeEvent` (`src/extensions/sanitization.ts`):
    - `type: "image" | "audio"` content blocks → replaced with a text stub.
    - `type: "resource"` blocks with `.blob` → replaced.
@@ -162,7 +162,7 @@ The `eventProperties` callback returns key/value pairs that are **spread flat at
 
 | Option                       | Default                                   | Use case                                                                                                                                |
 | ---------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiKey`                     | —                                         | PostHog project key (`phc_…`).                                                                                                          |
+| `projectToken`                     | —                                         | PostHog project key (`phc_…`).                                                                                                          |
 | `host`                       | `https://us.i.posthog.com`                | Ingestion host. Equivalent to `clientOptions.host`.                                                                                     |
 | `clientOptions`              | —                                         | Forwarded to the underlying `@posthog/core` client. Tune `flushAt`, `flushInterval`, `requestTimeout`, custom `fetch`, etc.             |
 | `logger`                     | no-op                                     | STDIO-safe log sink for SDK-internal warnings. Receives single string messages.                                                         |
@@ -294,7 +294,7 @@ The previous version of this SDK lived in a separate repo and depended on `posth
 | Concern                                | Old (standalone 0.0.x)                                          | New (monorepo 0.1.0)                                                                  |
 | -------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | PostHog client                         | Required `posthog-node` runtime dep, or BYO via `posthogClient` | Uses `@posthog/core`'s `PostHogCoreStateless` directly via an internal client         |
-| `posthogClient` option                 | Accepted any duck-typed client                                  | Removed; use `apiKey` + `clientOptions`                                               |
+| `posthogClient` option                 | Accepted any duck-typed client                                  | Removed; use `projectToken` + `clientOptions`                                               |
 | `posthogOptions` option                | Forwarded to `posthog-node`                                     | Renamed to `clientOptions` and forwarded to `@posthog/core`                           |
 | `eventTags` callback                   | Constrained string map; spread flat on events                   | Removed — fold all metadata into `eventProperties`                                    |
 | `~/posthog-mcp-analytics.log`          | SDK wrote to the user's home directory                          | Removed; pass `logger?: (msg: string) => void` if you want to capture internal logs   |

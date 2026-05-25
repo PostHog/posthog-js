@@ -32,7 +32,7 @@ server.tool(
 
 // One line. From here on every tool call, tool listing, and initialize
 // handshake on this server is captured to PostHog.
-instrument(server, { apiKey: 'phc_your_project_api_key' })
+instrument(server, { projectToken: 'phc_your_project_api_key' })
 ```
 
 What you get in PostHog out of the box:
@@ -57,7 +57,7 @@ The full event + property catalog (including `$ai_span` for LLM analytics and `$
 import jwt from 'jsonwebtoken'
 
 instrument(server, {
-  apiKey: 'phc_...',
+  projectToken: 'phc_...',
   identify: async (request, extra) => {
     const auth = extra?.headers?.authorization
     if (!auth) return null
@@ -85,7 +85,7 @@ If a client ignores the schema (raw cURL, in-house agents, JSON-blind crawlers),
 
 ```ts
 instrument(server, {
-  apiKey: 'phc_...',
+  projectToken: 'phc_...',
   intentFallback: (request) => {
     const tool = request.params?.name
     const args = request.params?.arguments ?? {}
@@ -117,7 +117,7 @@ Emits `$mcp_custom` with `$session_id`, `distinct_id`, server/client metadata, a
 
 ```ts
 instrument(server, {
-  apiKey: 'phc_...',
+  projectToken: 'phc_...',
   redactSensitiveInformation: async (text) => text.replace(/api_key_\w+/g, '[REDACTED]'),
 })
 ```
@@ -126,7 +126,7 @@ instrument(server, {
 
 ```ts
 instrument(server, {
-  apiKey: 'phc_...',
+  projectToken: 'phc_...',
   eventProperties: (request, extra) => ({
     deployment: process.env.NODE_ENV,
     region: 'us-east-1',
@@ -143,7 +143,7 @@ Register an extra `get_more_tools` virtual tool that lets the agent report funct
 
 ```ts
 instrument(server, {
-  apiKey: 'phc_...',
+  projectToken: 'phc_...',
   reportMissing: true,
 })
 ```
@@ -154,7 +154,7 @@ Opt into `enableConversationId: true` and the SDK injects a `conversation_id` pa
 
 ```ts
 instrument(server, {
-  apiKey: 'phc_...',
+  projectToken: 'phc_...',
   enableConversationId: true,
 })
 ```
@@ -163,7 +163,7 @@ instrument(server, {
 
 ```ts
 instrument(server, {
-  apiKey: 'phc_...',
+  projectToken: 'phc_...',
   enableAITracing: true,
 })
 ```
@@ -183,7 +183,7 @@ The full options reference lives in [`src/types.ts`](./src/types.ts) (`MCPAnalyt
 ```ts
 import { instrument, shutdown } from '@posthog/mcp'
 
-instrument(server, { apiKey: 'phc_...' })
+instrument(server, { projectToken: 'phc_...' })
 
 process.on('SIGTERM', async () => {
   await shutdown(server)
@@ -200,7 +200,7 @@ import fs from 'node:fs'
 const logStream = fs.createWriteStream('mcp.log', { flags: 'a' })
 
 instrument(server, {
-  apiKey: 'phc_...',
+  projectToken: 'phc_...',
   logger: (msg) => logStream.write(`${new Date().toISOString()} ${msg}\n`),
 })
 ```

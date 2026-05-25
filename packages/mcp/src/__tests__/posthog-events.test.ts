@@ -11,7 +11,7 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
   return {
     id: 'evt_test123',
     sessionId: 'ses_session456',
-    apiKey: 'proj_1',
+    projectToken: 'proj_1',
     eventType: MCPAnalyticsEventType.mcpToolsCall,
     timestamp: new Date('2025-01-15T10:00:00Z'),
     resourceName: 'get_weather',

@@ -21,9 +21,9 @@ export interface MCPRequestLike {
 
 export interface MCPAnalyticsOptions {
   /**
-   * PostHog project API key (`phc_...`).
+   * PostHog project token (`phc_...`). Available in your project settings.
    */
-  apiKey?: string | null
+  projectToken?: string | null
   /**
    * Override the PostHog ingestion host. Defaults to `https://us.i.posthog.com`.
    */

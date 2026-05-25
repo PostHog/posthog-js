@@ -129,7 +129,7 @@ describe('Basic Server Test', () => {
 
       // Call instrument first with a project ID
       await instrument(server, {
-        apiKey: 'test-project',
+        projectToken: 'test-project',
         context: true,
         enableTracing: true,
       })
@@ -204,7 +204,7 @@ describe('Basic Server Test', () => {
 
       // Call instrument first with a project ID
       await instrument(server, {
-        apiKey: 'test-project',
+        projectToken: 'test-project',
         context: true,
         enableTracing: true,
       })
@@ -274,7 +274,7 @@ describe('Basic Server Test', () => {
 
       // Call instrument with tracing enabled
       await instrument(server, {
-        apiKey: 'test-dedup-project',
+        projectToken: 'test-dedup-project',
         context: true,
         enableTracing: true,
       })
@@ -438,7 +438,7 @@ describe('Basic Server Test', () => {
 
       // NOW call instrument - after tools are already defined
       await instrument(server, {
-        apiKey: 'test-project',
+        projectToken: 'test-project',
         context: true,
         enableTracing: true,
       })
@@ -524,7 +524,7 @@ describe('Basic Server Test', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-tool-description',
+        projectToken: 'test-tool-description',
         enableTracing: true,
       })
 
@@ -561,7 +561,7 @@ describe('Basic Server Test', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        apiKey: 'test-listed-tool-names',
+        projectToken: 'test-listed-tool-names',
         enableTracing: true,
       })
 

@@ -39,7 +39,7 @@ import type {
  * import { instrument } from "@posthog/mcp"
  *
  * const server = new McpServer({ name: "my-mcp", version: "1.0.0" })
- * instrument(server, { apiKey: "phc_..." })
+ * instrument(server, { projectToken: "phc_..." })
  * ```
  */
 function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {}): TServer {
@@ -59,7 +59,7 @@ function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {})
 
     const client = resolveClient(options)
     if (!client) {
-      log('Warning: No PostHog API key or client configured. Events will not be sent anywhere.')
+      log('Warning: No PostHog project token configured. Events will not be sent anywhere.')
     }
 
     const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, client)
@@ -75,10 +75,10 @@ function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {})
 }
 
 function resolveClient(options: MCPAnalyticsOptions): PostHogMCP | undefined {
-  if (!options.apiKey) {
+  if (!options.projectToken) {
     return undefined
   }
-  return new PostHogMCP(options.apiKey, {
+  return new PostHogMCP(options.projectToken, {
     ...options.clientOptions,
     host: options.host || options.clientOptions?.host,
   })

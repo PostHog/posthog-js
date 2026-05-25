@@ -82,7 +82,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      instrument(server, { apiKey: 'test-project', enableTracing: true })
+      instrument(server, { projectToken: 'test-project', enableTracing: true })
 
       const lowLevelServer = server.server
 
@@ -240,7 +240,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      instrument(server, { apiKey: 'test-project', enableTracing: true })
+      instrument(server, { projectToken: 'test-project', enableTracing: true })
 
       const lowLevelServer = server.server
 
