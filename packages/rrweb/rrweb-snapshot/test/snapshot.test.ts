@@ -797,7 +797,7 @@ describe('preload link load-listener accumulation', () => {
 
     link.dispatchEvent(new Event('load'));
 
-    expect(firstSessionCalls).toBe(1);
+    expect(firstSessionCalls).toBe(0);
     expect(secondSessionDelivered).not.toBeNull();
     const attrs = ((secondSessionDelivered as unknown as elementNode) ?? {})
       .attributes;

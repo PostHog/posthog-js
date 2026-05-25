@@ -396,10 +396,19 @@ function onceIframeLoaded(
   iframeEl.addEventListener('load', listener);
 }
 
-let stylesheetLoadTracked = new WeakSet<HTMLLinkElement>();
+type StylesheetWatch = {
+  timer: ReturnType<typeof setTimeout>;
+  onLoad: () => void;
+};
+
+const stylesheetLoadTracked = new Map<HTMLLinkElement, StylesheetWatch>();
 
 export function resetStylesheetLoadTracking(): void {
-  stylesheetLoadTracked = new WeakSet();
+  stylesheetLoadTracked.forEach(({ timer, onLoad }, link) => {
+    clearTimeout(timer);
+    link.removeEventListener('load', onLoad);
+  });
+  stylesheetLoadTracked.clear();
 }
 
 function onceStylesheetLoaded(
@@ -418,24 +427,25 @@ function onceStylesheetLoaded(
 
   if (styleSheetLoaded) return;
 
-  stylesheetLoadTracked.add(link);
   let fired = false;
+  let timer: ReturnType<typeof setTimeout>;
   const fire = () => {
     if (fired) return;
     fired = true;
-    listener();
+    try {
+      listener();
+    } finally {
+      stylesheetLoadTracked.delete(link);
+    }
+  };
+  const onLoad = () => {
+    clearTimeout(timer);
+    fire();
   };
 
-  const timer = setTimeout(fire, styleSheetLoadTimeout);
-
-  link.addEventListener(
-    'load',
-    () => {
-      clearTimeout(timer);
-      fire();
-    },
-    { once: true },
-  );
+  timer = setTimeout(fire, styleSheetLoadTimeout);
+  stylesheetLoadTracked.set(link, { timer, onLoad });
+  link.addEventListener('load', onLoad, { once: true });
 }
 
 function serializeNode(
