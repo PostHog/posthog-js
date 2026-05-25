@@ -14,6 +14,10 @@ import {
 
 jest.useFakeTimers()
 
+// `var` so the hoisted jest.mock factory below can assign to it without TDZ.
+// Previously masked by babel-jest transpiling `let` -> `var` because IE 11
+// was in package.json#browserslist. `jest.hoisted()` would be the modern
+// fix but needs babel-plugin-jest-hoist 30 (jest 30 catalog bump).
 // eslint-disable-next-line no-var
 var mockLocation: jest.Mock
 
