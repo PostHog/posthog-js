@@ -584,3 +584,140 @@ describe('link href capture across SPA navigations', () => {
     expect(result).not.toBe('should-not-be-used');
   });
 });
+
+describe('preload link load-listener accumulation', () => {
+  const serializeLink = (link: HTMLLinkElement) =>
+    serializeNodeWithId(link, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      onStylesheetLoad: () => undefined,
+      stylesheetLoadTimeout: 5000,
+    });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('does not accumulate load listeners on a preload-as-style link across timer cycles', () => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'preload');
+    link.setAttribute('as', 'style');
+    link.setAttribute('href', 'https://example.com/preload.css');
+    Object.defineProperty(link, 'sheet', {
+      configurable: true,
+      get: () => null,
+    });
+    document.head.appendChild(link);
+
+    let loadAdds = 0;
+    const originalAdd = link.addEventListener.bind(link);
+    link.addEventListener = ((type: string, ...rest: unknown[]) => {
+      if (type === 'load') loadAdds += 1;
+      return (originalAdd as unknown as (...args: unknown[]) => unknown)(
+        type,
+        ...rest,
+      );
+    }) as typeof link.addEventListener;
+
+    serializeLink(link);
+
+    for (let cycle = 0; cycle < 5; cycle++) {
+      vi.advanceTimersByTime(5000);
+    }
+
+    expect(loadAdds).toBeLessThanOrEqual(1);
+
+    document.head.removeChild(link);
+  });
+
+  it('still fires onStylesheetLoad exactly once when a real stylesheet link loads', () => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', 'https://example.com/styles.css');
+    Object.defineProperty(link, 'sheet', {
+      configurable: true,
+      get: () => null,
+    });
+    document.head.appendChild(link);
+
+    let stylesheetLoadCalls = 0;
+    serializeNodeWithId(link, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      onStylesheetLoad: () => {
+        stylesheetLoadCalls += 1;
+      },
+      stylesheetLoadTimeout: 5000,
+    });
+
+    link.dispatchEvent(new Event('load'));
+    link.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(5000);
+
+    expect(stylesheetLoadCalls).toBe(1);
+
+    document.head.removeChild(link);
+  });
+
+  it('does not multiply work when a real load event fires on a preload-as-style link', () => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'preload');
+    link.setAttribute('as', 'style');
+    link.setAttribute('href', 'https://example.com/preload-escalate.css');
+    Object.defineProperty(link, 'sheet', {
+      configurable: true,
+      get: () => null,
+    });
+    document.head.appendChild(link);
+
+    let stylesheetLoadCalls = 0;
+    serializeNodeWithId(link, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      onStylesheetLoad: () => {
+        stylesheetLoadCalls += 1;
+      },
+      stylesheetLoadTimeout: 5000,
+    });
+
+    for (let round = 0; round < 5; round++) {
+      link.dispatchEvent(new Event('load'));
+    }
+    vi.advanceTimersByTime(5000);
+
+    expect(stylesheetLoadCalls).toBeLessThanOrEqual(1);
+
+    document.head.removeChild(link);
+  });
+});

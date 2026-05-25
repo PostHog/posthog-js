@@ -396,12 +396,15 @@ function onceIframeLoaded(
   iframeEl.addEventListener('load', listener);
 }
 
+const stylesheetLoadTracked = new WeakSet<HTMLLinkElement>();
+
 function onceStylesheetLoaded(
   link: HTMLLinkElement,
   listener: () => unknown,
   styleSheetLoadTimeout: number,
 ) {
-  let fired = false;
+  if (stylesheetLoadTracked.has(link)) return;
+
   let styleSheetLoaded: StyleSheet | null;
   try {
     styleSheetLoaded = link.sheet;
@@ -411,18 +414,24 @@ function onceStylesheetLoaded(
 
   if (styleSheetLoaded) return;
 
-  const timer = setTimeout(() => {
-    if (!fired) {
-      listener();
-      fired = true;
-    }
-  }, styleSheetLoadTimeout);
-
-  link.addEventListener('load', () => {
-    clearTimeout(timer);
+  stylesheetLoadTracked.add(link);
+  let fired = false;
+  const fire = () => {
+    if (fired) return;
     fired = true;
     listener();
-  });
+  };
+
+  const timer = setTimeout(fire, styleSheetLoadTimeout);
+
+  link.addEventListener(
+    'load',
+    () => {
+      clearTimeout(timer);
+      fire();
+    },
+    { once: true },
+  );
 }
 
 function serializeNode(
@@ -1283,50 +1292,16 @@ export function serializeNodeWithId(
   if (
     serializedNode.type === NodeType.Element &&
     serializedNode.tagName === 'link' &&
-    typeof serializedNode.attributes.rel === 'string' &&
-    (serializedNode.attributes.rel === 'stylesheet' ||
-      (serializedNode.attributes.rel === 'preload' &&
-        typeof serializedNode.attributes.href === 'string' &&
-        extractFileExtension(serializedNode.attributes.href) === 'css'))
+    serializedNode.attributes.rel === 'stylesheet'
   ) {
     onceStylesheetLoaded(
       n as HTMLLinkElement,
       () => {
         if (onStylesheetLoad) {
-          const serializedLinkNode = serializeNodeWithId(n, {
-            doc,
-            mirror,
-            blockClass,
-            blockSelector,
-            needsMask,
-            maskTextClass,
-            maskTextSelector,
-            skipChild: false,
-            inlineStylesheet,
-            maskInputOptions,
-            maskTextFn,
-            maskInputFn,
-            slimDOMOptions,
-            dataURLOptions,
-            inlineImages,
-            recordCanvas,
-            preserveWhiteSpace,
-            onSerialize,
-            onIframeLoad,
-            iframeLoadTimeout,
-            onStylesheetLoad,
-            stylesheetLoadTimeout,
-            keepIframeSrcFn,
-            depth,
-            maxDepth,
-          });
-
-          if (serializedLinkNode) {
-            onStylesheetLoad(
-              n as HTMLLinkElement,
-              serializedLinkNode as serializedElementNodeWithId,
-            );
-          }
+          onStylesheetLoad(
+            n as HTMLLinkElement,
+            serializedNode as serializedElementNodeWithId,
+          );
         }
       },
       stylesheetLoadTimeout,
