@@ -767,7 +767,7 @@ describe('preload link load-listener accumulation', () => {
     document.head.removeChild(link);
   });
 
-  it('re-tracks a pending stylesheet link after resetStylesheetLoadTracking', () => {
+  it('resetStylesheetLoadTracking tears down the previous session listener and re-tracks the link for the new session', () => {
     const { link, setSheet } = setupLink({
       rel: 'stylesheet',
       href: 'https://example.com/styles-cross-lifecycle.css',
