@@ -91,6 +91,18 @@ function isPostHogFetchError(err: unknown): err is PostHogFetchHttpError | PostH
   return typeof err === 'object' && (err instanceof PostHogFetchHttpError || err instanceof PostHogFetchNetworkError)
 }
 
+/**
+ * True for the network error PostHog throws when a request fails to reach the server
+ * (e.g. the device is offline or the request times out). Exposed so SDKs that autocapture
+ * errors can skip these expected connectivity failures instead of reporting them as
+ * application exceptions.
+ *
+ * @public
+ */
+export function isPostHogFetchNetworkError(err: unknown): err is PostHogFetchNetworkError {
+  return err instanceof PostHogFetchNetworkError
+}
+
 function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }

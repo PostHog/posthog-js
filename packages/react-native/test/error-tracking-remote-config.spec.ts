@@ -13,19 +13,10 @@ jest.mock('../src/utils', () => ({
 }))
 
 import { trackUncaughtExceptions, trackUnhandledRejections, trackConsole } from '../src/error-tracking/utils'
+import { createMockLogger, createMockPostHog } from './test-utils'
 
-const mockPostHog = {
-  capture: jest.fn(),
-  flush: jest.fn(() => Promise.resolve()),
-} as any
-
-const mockLogger = {
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  critical: jest.fn(),
-  createLogger: jest.fn(() => mockLogger),
-}
+const mockPostHog = createMockPostHog()
+const mockLogger = createMockLogger()
 
 describe('ErrorTracking remote config', () => {
   beforeEach(() => {

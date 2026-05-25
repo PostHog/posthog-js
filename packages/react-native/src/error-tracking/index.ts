@@ -1,5 +1,11 @@
 import type { PostHog } from '../posthog-rn'
-import { JsonType, Logger, PostHogEventProperties, ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import {
+  JsonType,
+  Logger,
+  PostHogEventProperties,
+  ErrorTracking as CoreErrorTracking,
+  isPostHogFetchNetworkError,
+} from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import { getRemoteConfigBool, isHermes } from '../utils'
 
@@ -134,6 +140,11 @@ export class ErrorTracking {
         return
       }
 
+      // Offline/timeout failures are expected, not application errors.
+      if (isPostHogFetchNetworkError(error)) {
+        return
+      }
+
       const hint: CoreErrorTracking.EventHint = {
         mechanism: {
           type: 'onuncaughtexception',
@@ -165,6 +176,11 @@ export class ErrorTracking {
     const onUnhandledRejection = (error: unknown) => {
       // Gate on remote config — if remotely disabled, don't capture
       if (!this._autocaptureEnabled) {
+        return
+      }
+
+      // Offline/timeout failures are expected, not application errors.
+      if (isPostHogFetchNetworkError(error)) {
         return
       }
 
