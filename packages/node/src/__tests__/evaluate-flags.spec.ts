@@ -218,6 +218,21 @@ describe('evaluateFlags', () => {
       expect(flagCalled).toHaveLength(1)
     })
 
+    it('dedupes $feature_flag_called events when groups is undefined vs empty object', async () => {
+      const flags1 = await posthog.evaluateFlags('user-1')
+      flags1.isEnabled('boolean-flag')
+
+      const flags2 = await posthog.evaluateFlags('user-1', { groups: {} })
+      flags2.isEnabled('boolean-flag')
+
+      // Both produce no group suffix — must dedupe to a single event.
+      await waitForPromises()
+      const flagCalled = captures.filter(
+        (m) => m.event === '$feature_flag_called' && m.properties.$feature_flag === 'boolean-flag'
+      )
+      expect(flagCalled).toHaveLength(1)
+    })
+
     it('getFlagPayload returns parsed payload without firing an event', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
