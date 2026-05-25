@@ -586,8 +586,38 @@ describe('link href capture across SPA navigations', () => {
 });
 
 describe('preload link load-listener accumulation', () => {
-  const serializeLink = (link: HTMLLinkElement) =>
-    serializeNodeWithId(link, {
+  function setupLink(opts: {
+    rel: string;
+    as?: string;
+    href: string;
+    sheet: CSSStyleSheet | null;
+  }) {
+    const link = document.createElement('link');
+    link.setAttribute('rel', opts.rel);
+    if (opts.as) link.setAttribute('as', opts.as);
+    link.setAttribute('href', opts.href);
+    let currentSheet = opts.sheet;
+    Object.defineProperty(link, 'sheet', {
+      configurable: true,
+      get: () => currentSheet,
+    });
+    document.head.appendChild(link);
+    return {
+      link,
+      setSheet: (next: CSSStyleSheet | null) => {
+        currentSheet = next;
+      },
+    };
+  }
+
+  function serializeWithCapture(
+    link: HTMLLinkElement,
+    onStylesheetLoad: (
+      link: HTMLLinkElement,
+      node: serializedNodeWithId,
+    ) => void = () => undefined,
+  ) {
+    return serializeNodeWithId(link, {
       doc: document,
       mirror: new Mirror(),
       blockClass: 'blockblock',
@@ -599,9 +629,10 @@ describe('preload link load-listener accumulation', () => {
       maskTextFn: undefined,
       maskInputFn: undefined,
       slimDOMOptions: {},
-      onStylesheetLoad: () => undefined,
+      onStylesheetLoad,
       stylesheetLoadTimeout: 5000,
     });
+  }
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -611,16 +642,36 @@ describe('preload link load-listener accumulation', () => {
     vi.useRealTimers();
   });
 
-  it('does not accumulate load listeners on a preload-as-style link across timer cycles', () => {
-    const link = document.createElement('link');
-    link.setAttribute('rel', 'preload');
-    link.setAttribute('as', 'style');
-    link.setAttribute('href', 'https://example.com/preload.css');
-    Object.defineProperty(link, 'sheet', {
-      configurable: true,
-      get: () => null,
+  const noListenerLeakCases: Array<{
+    name: string;
+    rel: string;
+    as?: string;
+    expectedAdds: number;
+  }> = [
+    {
+      name: 'preload-as-style link adds no load listeners across timer cycles',
+      rel: 'preload',
+      as: 'style',
+      expectedAdds: 0,
+    },
+    {
+      name: 'stylesheet link with already-loaded sheet adds no load listeners',
+      rel: 'stylesheet',
+      expectedAdds: 0,
+    },
+  ];
+
+  it.each(noListenerLeakCases)('$name', ({ rel, as, expectedAdds }) => {
+    const fakeSheet =
+      rel === 'stylesheet'
+        ? ({ cssRules: [], rules: [] } as unknown as CSSStyleSheet)
+        : null;
+    const { link } = setupLink({
+      rel,
+      as,
+      href: `https://example.com/${rel}-${as ?? ''}.css`,
+      sheet: fakeSheet,
     });
-    document.head.appendChild(link);
 
     let loadAdds = 0;
     const originalAdd = link.addEventListener.bind(link);
@@ -632,83 +683,44 @@ describe('preload link load-listener accumulation', () => {
       );
     }) as typeof link.addEventListener;
 
-    serializeLink(link);
+    serializeWithCapture(link);
 
     for (let cycle = 0; cycle < 5; cycle++) {
       vi.advanceTimersByTime(5000);
     }
 
-    expect(loadAdds).toBeLessThanOrEqual(1);
+    expect(loadAdds).toBe(expectedAdds);
 
     document.head.removeChild(link);
   });
 
-  it('still fires onStylesheetLoad exactly once when a real stylesheet link loads', () => {
-    const link = document.createElement('link');
-    link.setAttribute('rel', 'stylesheet');
-    link.setAttribute('href', 'https://example.com/styles.css');
-    Object.defineProperty(link, 'sheet', {
-      configurable: true,
-      get: () => null,
+  const noMultiplicationCases: Array<{
+    name: string;
+    rel: string;
+    as?: string;
+  }> = [
+    {
+      name: 'preload-as-style link: synthetic load events do not multiply work',
+      rel: 'preload',
+      as: 'style',
+    },
+    {
+      name: 'stylesheet link with sheet still null: timer path fires onStylesheetLoad exactly once',
+      rel: 'stylesheet',
+    },
+  ];
+
+  it.each(noMultiplicationCases)('$name', ({ rel, as }) => {
+    const { link } = setupLink({
+      rel,
+      as,
+      href: `https://example.com/${rel}-${as ?? ''}.css`,
+      sheet: null,
     });
-    document.head.appendChild(link);
 
     let stylesheetLoadCalls = 0;
-    serializeNodeWithId(link, {
-      doc: document,
-      mirror: new Mirror(),
-      blockClass: 'blockblock',
-      blockSelector: null,
-      maskTextClass: 'maskmask',
-      maskTextSelector: null,
-      skipChild: false,
-      inlineStylesheet: true,
-      maskTextFn: undefined,
-      maskInputFn: undefined,
-      slimDOMOptions: {},
-      onStylesheetLoad: () => {
-        stylesheetLoadCalls += 1;
-      },
-      stylesheetLoadTimeout: 5000,
-    });
-
-    link.dispatchEvent(new Event('load'));
-    link.dispatchEvent(new Event('load'));
-    vi.advanceTimersByTime(5000);
-
-    expect(stylesheetLoadCalls).toBe(1);
-
-    document.head.removeChild(link);
-  });
-
-  it('does not multiply work when a real load event fires on a preload-as-style link', () => {
-    const link = document.createElement('link');
-    link.setAttribute('rel', 'preload');
-    link.setAttribute('as', 'style');
-    link.setAttribute('href', 'https://example.com/preload-escalate.css');
-    Object.defineProperty(link, 'sheet', {
-      configurable: true,
-      get: () => null,
-    });
-    document.head.appendChild(link);
-
-    let stylesheetLoadCalls = 0;
-    serializeNodeWithId(link, {
-      doc: document,
-      mirror: new Mirror(),
-      blockClass: 'blockblock',
-      blockSelector: null,
-      maskTextClass: 'maskmask',
-      maskTextSelector: null,
-      skipChild: false,
-      inlineStylesheet: true,
-      maskTextFn: undefined,
-      maskInputFn: undefined,
-      slimDOMOptions: {},
-      onStylesheetLoad: () => {
-        stylesheetLoadCalls += 1;
-      },
-      stylesheetLoadTimeout: 5000,
+    serializeWithCapture(link, () => {
+      stylesheetLoadCalls += 1;
     });
 
     for (let round = 0; round < 5; round++) {
@@ -717,6 +729,39 @@ describe('preload link load-listener accumulation', () => {
     vi.advanceTimersByTime(5000);
 
     expect(stylesheetLoadCalls).toBeLessThanOrEqual(1);
+
+    document.head.removeChild(link);
+  });
+
+  it('delivers _cssText to onStylesheetLoad when a stylesheet finishes loading after first serialize', () => {
+    const initiallyPending = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-late.css',
+      sheet: null,
+    });
+    const { link, setSheet } = initiallyPending;
+
+    let deliveredNode: serializedNodeWithId | null = null;
+    serializeWithCapture(link, (_, node) => {
+      deliveredNode = node;
+    });
+
+    const fakeRules = [
+      { cssText: '.a { color: red; }', parentStyleSheet: null },
+    ];
+    setSheet({
+      cssRules: fakeRules as unknown as CSSRuleList,
+      rules: fakeRules as unknown as CSSRuleList,
+      href: null,
+    } as unknown as CSSStyleSheet);
+
+    link.dispatchEvent(new Event('load'));
+
+    expect(deliveredNode).not.toBeNull();
+    const attrs = ((deliveredNode as unknown as elementNode) ?? {}).attributes;
+    expect(attrs).toBeDefined();
+    expect(attrs._cssText).toContain('.a');
+    expect(attrs._cssText).toContain('color: red');
 
     document.head.removeChild(link);
   });

@@ -1,6 +1,9 @@
 <html>
 <head>
     <title>Preload-as-style link listener leak repro</title>
+    <!-- The chunk-*.css URLs below intentionally point at non-existent files so the
+         browser cannot satisfy the preload and link.sheet stays null forever. That
+         is the exact condition that exercises the leak before the fix. -->
     <link rel="preload" as="style" href="/preload-leak/chunk-a.css" />
     <link rel="preload" as="style" href="/preload-leak/chunk-b.css" />
     <link rel="preload" as="style" href="/preload-leak/chunk-c.css" />

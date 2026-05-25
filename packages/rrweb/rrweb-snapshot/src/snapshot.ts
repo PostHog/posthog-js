@@ -1298,10 +1298,40 @@ export function serializeNodeWithId(
       n as HTMLLinkElement,
       () => {
         if (onStylesheetLoad) {
-          onStylesheetLoad(
-            n as HTMLLinkElement,
-            serializedNode as serializedElementNodeWithId,
-          );
+          const serializedLinkNode = serializeNodeWithId(n, {
+            doc,
+            mirror,
+            blockClass,
+            blockSelector,
+            needsMask,
+            maskTextClass,
+            maskTextSelector,
+            skipChild: false,
+            inlineStylesheet,
+            maskInputOptions,
+            maskTextFn,
+            maskInputFn,
+            slimDOMOptions,
+            dataURLOptions,
+            inlineImages,
+            recordCanvas,
+            preserveWhiteSpace,
+            onSerialize,
+            onIframeLoad,
+            iframeLoadTimeout,
+            onStylesheetLoad,
+            stylesheetLoadTimeout,
+            keepIframeSrcFn,
+            depth,
+            maxDepth,
+          });
+
+          if (serializedLinkNode) {
+            onStylesheetLoad(
+              n as HTMLLinkElement,
+              serializedLinkNode as serializedElementNodeWithId,
+            );
+          }
         }
       },
       stylesheetLoadTimeout,

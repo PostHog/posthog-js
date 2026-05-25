@@ -67,6 +67,6 @@ test.describe('Session recording does not leak load listeners on preload-as-styl
             return (window as unknown as { __preloadLoadAdds?: number }).__preloadLoadAdds ?? 0
         })
 
-        expect(loadAdds).toBeLessThanOrEqual(5)
+        expect(loadAdds).toBe(0)
     })
 })
