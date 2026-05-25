@@ -107,4 +107,4 @@ These are all available via `import { isArray, isNull, isUndefined } from '@post
 - Must run `pnpm build` before running tests
 - React/Preact components in extensions use JSX factory `h`
 - Property mangling used in production builds for size optimization
-- IE11 is not in our supported browsers list, but the ES5 bundle (`array.full.es5.js`) is still built with IE11-compatible Babel targets and validated by `es-check` in CI as a canary for "do we need a new polyfill?"
+- IE11 is not in our supported browsers list, but the ES5 bundle (`array.full.es5.js`) is still built with IE11-compatible Babel targets (hard-coded in `rollup.config.mjs`) and validated by `es-check` in CI as a canary for "do we need a new polyfill?". Babel targets in `babel.config.cjs` (used by jest and testcafe) are also pinned to include IE11 so removing IE11 from `package.json#browserslist` doesn't break the testcafe IE11 browserstack test

@@ -14,7 +14,7 @@ import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
 
-var mockGetProperties: jest.Mock
+let mockGetProperties: jest.Mock
 
 jest.mock('../utils/event-utils', () => {
     const originalEventUtils = jest.requireActual('../utils/event-utils')
