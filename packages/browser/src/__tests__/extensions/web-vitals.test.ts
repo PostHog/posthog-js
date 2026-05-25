@@ -14,7 +14,7 @@ import {
 
 jest.useFakeTimers()
 
-let mockLocation: jest.Mock
+var mockLocation: jest.Mock
 
 jest.mock('../../utils/globals', () => {
     const original = jest.requireActual('../../utils/globals')
