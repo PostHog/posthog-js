@@ -44,7 +44,10 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
-        return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
+        // Non-async wrapper that returns originalFetch's promise directly: keeps this wrapper
+        // off the stack when fetch rejects, so end-user network errors (offline/CORS/DNS) are
+        // attributed to the caller rather than misattributed to unrelated SDK frames.
+        return function posthogPatchedFetch(url: URL | RequestInfo, init?: RequestInit | undefined) {
             // check IE earlier than this, we only initialize if Request is present
             // eslint-disable-next-line compat/compat
             const req = new Request(url, init)

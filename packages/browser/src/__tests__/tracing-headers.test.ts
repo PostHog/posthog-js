@@ -95,4 +95,33 @@ describe('tracing headers', () => {
             expect(setRequestHeaderSpy).not.toHaveBeenCalledWith(header, value)
         })
     })
+
+    describe('fetch error propagation', () => {
+        let restoreFetchPatch: (() => void) | undefined
+        const originalFetch = (globalThis as any).fetch
+
+        afterEach(() => {
+            restoreFetchPatch?.()
+            restoreFetchPatch = undefined
+            ;(globalThis as any).fetch = originalFetch
+        })
+
+        it('forwards the original rejection verbatim when the underlying fetch rejects', async () => {
+            const networkError = new TypeError('Failed to fetch')
+            ;(globalThis as any).fetch = jest.fn(() => Promise.reject(networkError))
+
+            restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
+
+            await expect((globalThis as any).fetch('https://example.com/path')).rejects.toBe(networkError)
+        })
+
+        it('still returns the response when the underlying fetch resolves', async () => {
+            const response = { ok: true } as Response
+            ;(globalThis as any).fetch = jest.fn(() => Promise.resolve(response))
+
+            restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
+
+            await expect((globalThis as any).fetch('https://example.com/path')).resolves.toBe(response)
+        })
+    })
 })
