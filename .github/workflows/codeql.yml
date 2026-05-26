@@ -109,8 +109,21 @@ jobs:
     # default branch — see https://github.com/advanced-security/dismiss-alerts
     # ("dismissal status of an alert is a global property") — and only for
     # languages that opted in via `matrix.query`.
-    - name: Dismiss alerts
+    # Only runs when the SARIF file was actually written by the analyze step.
+    # The file can be absent when the CodeQL analysis is cancelled or the
+    # runner exits early, which would otherwise fail this non-critical step.
+    - name: Check SARIF file exists
+      id: sarif-check
       if: github.ref == 'refs/heads/main' && matrix.query != ''
+      run: |
+        if [ -f "sarif-results/${{ matrix.language }}.sarif" ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Dismiss alerts
+      if: github.ref == 'refs/heads/main' && matrix.query != '' && steps.sarif-check.outputs.exists == 'true'
       uses: advanced-security/dismiss-alerts@046d6b48d2e43cf563f96f67332c47c432eff83e # v2.0.2
       with:
         sarif-id: ${{ steps.analyze.outputs.sarif-id }}
