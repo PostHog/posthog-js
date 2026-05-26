@@ -1,5 +1,14 @@
 # @posthog/next
 
+## 0.4.65
+
+### Patch Changes
+
+- Updated dependencies [[`cafa9cc`](https://github.com/PostHog/posthog-js/commit/cafa9cc786a07613677ec16f2fc9f0c4e833a12c)]:
+    - posthog-js@1.376.2
+    - @posthog/core@1.29.11
+    - posthog-node@5.35.4
+
 ## 0.4.64
 
 ### Patch Changes

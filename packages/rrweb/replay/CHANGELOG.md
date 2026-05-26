@@ -1,5 +1,12 @@
 # @rrweb/replay
 
+## 0.0.24
+
+### Patch Changes
+
+- Updated dependencies [[`cafa9cc`](https://github.com/PostHog/posthog-js/commit/cafa9cc786a07613677ec16f2fc9f0c4e833a12c)]:
+    - @posthog/rrweb@0.0.66
+
 ## 0.0.23
 
 ### Patch Changes
