@@ -106,7 +106,15 @@ test.describe('Session recording handles a pending stylesheet across rrweb check
         await waitForSessionRecordingToStart(page)
     })
 
-    test('aborts previous checkout listeners so the late _cssText arrives exactly once', async ({ page }) => {
+    test('aborts previous checkout listeners so the late _cssText arrives exactly once', async ({
+        page,
+        browserName,
+    }) => {
+        test.skip(
+            browserName !== 'chromium',
+            'Firefox and WebKit do not populate link.sheet.cssRules from a Playwright-route-fulfilled CSS response within our wait window. The fix being verified here is JS-internal and browser-agnostic — covered by the jsdom unit tests for non-chromium browsers.'
+        )
+
         await page.evaluate(() => {
             const link = document.createElement('link')
             link.rel = 'stylesheet'
