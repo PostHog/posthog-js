@@ -7,7 +7,7 @@ v2 moves credentials onto the component via [Convex 1.39's typed env-var config]
 **Breaking changes:**
 
 - Requires Convex `^1.39.0` (peer dependency bumped).
-- `POSTHOG_API_KEY` env var renamed to `POSTHOG_TOKEN`.
+- `POSTHOG_API_KEY` env var renamed to `POSTHOG_TOKEN`, to clearly differentiate the project token (`phc_…`) from `POSTHOG_PERSONAL_API_KEY` (`phx_…` / `phs_…`).
 - `apiKey`, `host`, and `personalApiKey` no longer accepted on the `PostHog` client constructor — declare them as env vars on the component instead.
 - `apiKey` and `host` are no longer arguments to the component's actions (`capture`, `identify`, `evaluateFlag`, etc.). `refreshFlagDefinitions` no longer takes any arguments.
 - The refresh cron is now registered inside the component and only fires when `POSTHOG_PERSONAL_API_KEY` is set — delete any app-level `convex/crons.ts` that existed only to refresh PostHog flags.

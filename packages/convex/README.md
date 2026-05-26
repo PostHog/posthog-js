@@ -365,7 +365,7 @@ v2 moves credentials from the client constructor onto the component itself, usin
 To upgrade:
 
 1. **Bump your app's `convex` dependency** to `^1.39.0` (required for the typed component env-var API).
-2. **Rename** the `POSTHOG_API_KEY` env var to `POSTHOG_TOKEN`:
+2. **Rename** the `POSTHOG_API_KEY` env var to `POSTHOG_TOKEN`. The new name is unambiguous: this is your PostHog project token (`phc_…`), distinct from `POSTHOG_PERSONAL_API_KEY` (the `phx_…` / `phs_…` key used for local flag evaluation).
    ```sh
    npx convex env set POSTHOG_TOKEN phc_your_project_token
    npx convex env unset POSTHOG_API_KEY
