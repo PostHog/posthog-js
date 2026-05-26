@@ -37,9 +37,13 @@ import posthog from "@posthog/convex/convex.config.js";
 
 const app = defineApp({
   env: {
+    // Required. PostHog project token (`phc_…`) — used to send events and evaluate flags remotely.
     POSTHOG_TOKEN: v.string(),
+    // Optional. PostHog host. Defaults to `https://us.i.posthog.com`; use `https://eu.i.posthog.com` for EU Cloud or your self-hosted URL.
     POSTHOG_HOST: v.optional(v.string()),
+    // Optional. A feature flags secure API key (`phs_…`, recommended) or personal API key (`phx_…`). Setting it enables local feature flag evaluation and starts the refresh cron.
     POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
+    // Optional. Cron interval (seconds) for refreshing flag definitions. Defaults to 60. Raise it on free-tier dev deployments to reduce function-call usage.
     POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: v.optional(v.string()),
   },
 });
@@ -360,7 +364,7 @@ v2 moves credentials from the client constructor onto the component itself, usin
 
 To upgrade:
 
-1. **Bump your Convex peer dep** to `^1.39.0`.
+1. **Bump your app's `convex` dependency** to `^1.39.0` (required for the typed component env-var API).
 2. **Rename** the `POSTHOG_API_KEY` env var to `POSTHOG_TOKEN`:
    ```sh
    npx convex env set POSTHOG_TOKEN phc_your_project_token
