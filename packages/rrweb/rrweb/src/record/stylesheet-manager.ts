@@ -1,4 +1,7 @@
-import { stringifyRule } from '@posthog/rrweb-snapshot';
+import {
+  resetStylesheetLoadTracking,
+  stringifyRule,
+} from '@posthog/rrweb-snapshot';
 import type {
   elementNode,
   serializedNodeWithId,
@@ -82,6 +85,7 @@ export class StylesheetManager {
   public reset() {
     this.styleMirror.reset();
     this.trackedLinkElements = new WeakSet();
+    resetStylesheetLoadTracking();
   }
 
   // TODO: take snapshot on stylesheet reload by applying event listener
