@@ -273,6 +273,17 @@ pnpm turbo --filter=<package-name> test:unit -- --verbose
 pnpm turbo --filter=<package-name> test:unit -- -u
 ```
 
+## Cursor Cloud specific instructions
+
+- **Node version**: The `.nvmrc` specifies Node 24. Run `nvm use` to activate it. Ensure `corepack enable` has been run so that `pnpm` resolves to the version in `packageManager` field of `package.json`.
+- **Build order matters**: Always run `pnpm build` before running playground/example projects, as they depend on built artifacts from workspace packages.
+- **Playground projects are independent workspaces**: They have their own `pnpm-lock.yaml` and `node_modules`. Run `pnpm install` inside the playground directory after generating tarballs. The `.pnpmfile.cjs` in `playground/` rewrites PostHog package references to local tarballs.
+- **Tarball workflow**: Use `pnpm package` (root) to generate tarballs in `./target/`, then `pnpm install` in the playground/example project to pick them up. Use `pnpm package:watch` for continuous development.
+- **Ignored build scripts warning**: After `pnpm install`, you'll see warnings about ignored build scripts (e.g., `@parcel/watcher`, `esbuild`, `msw`). These are safe to ignore — the binaries are pre-downloaded and don't need postinstall scripts to function.
+- **Unit tests are fast**: `pnpm turbo --filter=<package> test:unit` runs in seconds for most packages. Use `pnpm test:unit` for all packages.
+- **No external services required**: This is a library-only codebase. Unit tests and builds don't need databases, Docker, or a PostHog server. The SDK intentionally fails gracefully when its configured host is unreachable.
+- **Next.js playground**: To start it, run `pnpm install` in `playground/nextjs/` (ensure tarballs exist in `./target/` first), then `pnpm dev`. It starts on port 3000.
+
 ## Additional Resources
 
 - [PostHog Documentation](https://posthog.com/docs)
