@@ -88,7 +88,7 @@ export async function logFlushError(err: any): Promise<void> {
 }
 
 function isPostHogFetchError(err: unknown): err is PostHogFetchHttpError | PostHogFetchNetworkError {
-  return typeof err === 'object' && (err instanceof PostHogFetchHttpError || err instanceof PostHogFetchNetworkError)
+  return typeof err === 'object' && (err instanceof PostHogFetchHttpError || isPostHogFetchNetworkError(err))
 }
 
 /**
