@@ -38,6 +38,7 @@ describe('isPostHogFetchNetworkError recognizes real core errors', () => {
     }
     await posthog.shutdown()
 
+    expect(caught).toBeDefined()
     expect(isPostHogFetchNetworkError(caught)).toBe(true)
     // ordinary errors must not be mistaken for network errors
     expect(isPostHogFetchNetworkError(new Error('boom'))).toBe(false)
