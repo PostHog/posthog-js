@@ -2298,9 +2298,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
-        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.capture({ ...msg, uuid, flags })
-        )
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties
+        ).then((msg) => this.capture({ ...msg, uuid, flags }))
       )
     }
   }
@@ -2350,9 +2354,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
-        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.captureImmediate({ ...msg, flags })
-        )
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties
+        ).then((msg) => this.captureImmediate({ ...msg, flags }))
       )
     }
   }

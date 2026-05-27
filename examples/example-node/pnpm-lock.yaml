@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-51V53DYAleXHgPrntlBZSmeS8lOCPoT1zhKZkbvcJZs=
+pnpmfileChecksum: sha256-yVJZ6vhbVglHX96LCyXF5k3CRZo/MEv/K0owx+7kTTo=
 
 importers:
 
@@ -106,8 +106,12 @@ packages:
     engines: {node: '>= 8'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-KoEq+q0wuyI36rYRnR05L73SJF/uNlWUT4c4dpyb7/ruU5WZwx7jvFB/mHuhWrKx9aEDVtNpuEj8k3Ng/oe9rg==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.6.0
+    resolution: {integrity: sha512-quPW3CiWHvlntgoePEFedqhBAw8+OJSTjADf6QinTyGnvlLvsDk9QR1mQeEuz+SCrC5mVTD9Bwa4uUUu8Kgchg==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.29.12
+
+  '@posthog/types@file:../../target/posthog-types.tgz':
+    resolution: {integrity: sha512-RILFzuWlEiTjJ2NsyQckUjmYTSl6QJtSELniYltBURPZ9aRRcTpoJEDp8WrRiiBN2+J8KRU4j76chCvsZmDToQ==, tarball: file:../../target/posthog-types.tgz}
+    version: 1.376.3
 
   '@tsconfig/node10@1.0.11':
     resolution: {integrity: sha512-DcRjDCujK/kCk/cUe8Xz8ZSpm8mS3mNNpta+jGCA6USEDfktlNvm1+IuZ9eTcDbNk41BHwpHHeW+N1lKCz4zOw==}
@@ -623,9 +627,14 @@ packages:
     resolution: {integrity: sha512-RA1GjUVMnvYFxuqovrEqZoxxW5NUZqbwKtYz/Tt7nXerk0LbLblQmrsgdeOxV5SFHf0UDggjS/bSeOZwt1pmEQ==}
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-ppOeec7hEfjCfmPQ8nNyUG13WDxkc/HsnKeaH5sTRL31CDOw8q7B9Uu38b+duY4EmATWjtMD5kgOgGz2XA2J9w==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.14.0
-    engines: {node: '>=20'}
+    resolution: {integrity: sha512-DL70tro6poCO4qzZ6HI3q5dSmE0bxiiyunfljTm5jbwy8uhQ64eLXhRmZHArrHrtKfqrdHPV60Bq1jnMGtYHMw==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.35.5
+    engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
 
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
@@ -881,7 +890,9 @@ snapshots:
 
   '@posthog/core@file:../../target/posthog-core.tgz':
     dependencies:
-      cross-spawn: 7.0.6
+      '@posthog/types': file:../../target/posthog-types.tgz
+
+  '@posthog/types@file:../../target/posthog-types.tgz': {}
 
   '@tsconfig/node10@1.0.11': {}
 
