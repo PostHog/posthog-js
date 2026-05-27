@@ -38,7 +38,7 @@ import posthog from "@posthog/convex/convex.config.js";
 const app = defineApp({
   env: {
     // Required. PostHog project token (`phc_…`) — used to send events and evaluate flags remotely.
-    POSTHOG_TOKEN: v.string(),
+    POSTHOG_PROJECT_TOKEN: v.string(),
     // Optional. PostHog host. Defaults to `https://us.i.posthog.com`; use `https://eu.i.posthog.com` for EU Cloud or your self-hosted URL.
     POSTHOG_HOST: v.optional(v.string()),
     // Optional. A feature flags secure API key (`phs_…`, recommended) or personal API key (`phx_…`). Setting it enables local feature flag evaluation and starts the refresh cron.
@@ -50,7 +50,7 @@ const app = defineApp({
 
 app.use(posthog, {
   env: {
-    POSTHOG_TOKEN: app.env.POSTHOG_TOKEN,
+    POSTHOG_PROJECT_TOKEN: app.env.POSTHOG_PROJECT_TOKEN,
     POSTHOG_HOST: app.env.POSTHOG_HOST,
     POSTHOG_PERSONAL_API_KEY: app.env.POSTHOG_PERSONAL_API_KEY,
     POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: app.env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS,
@@ -63,7 +63,7 @@ export default app;
 Set your PostHog credentials on your Convex deployment:
 
 ```sh
-npx convex env set POSTHOG_TOKEN phc_your_project_token
+npx convex env set POSTHOG_PROJECT_TOKEN phc_your_project_token
 npx convex env set POSTHOG_HOST https://us.i.posthog.com
 ```
 
@@ -365,24 +365,24 @@ v2 moves credentials from the client constructor onto the component itself, usin
 To upgrade:
 
 1. **Bump your app's `convex` dependency** to `^1.39.0` (required for the typed component env-var API).
-2. **Rename** the `POSTHOG_API_KEY` env var to `POSTHOG_TOKEN`. The new name is unambiguous: this is your PostHog project token (`phc_…`), distinct from `POSTHOG_PERSONAL_API_KEY` (the `phx_…` / `phs_…` key used for local flag evaluation).
+2. **Rename** the `POSTHOG_API_KEY` env var to `POSTHOG_PROJECT_TOKEN`. The new name is unambiguous: this is your PostHog project token (`phc_…`), distinct from `POSTHOG_PERSONAL_API_KEY` (the `phx_…` / `phs_…` key used for local flag evaluation).
    ```sh
-   npx convex env set POSTHOG_TOKEN phc_your_project_token
+   npx convex env set POSTHOG_PROJECT_TOKEN phc_your_project_token
    npx convex env unset POSTHOG_API_KEY
    ```
-   `POSTHOG_TOKEN` is now **required at deploy time** (declared as `v.string()` on the component). In v1 the component would deploy without it set and silently no-op event sends at runtime; v2 fails fast at deploy. Make sure the env var is set before deploying.
+   `POSTHOG_PROJECT_TOKEN` is now **required at deploy time** (declared as `v.string()` on the component). In v1 the component would deploy without it set and silently no-op event sends at runtime; v2 fails fast at deploy. Make sure the env var is set before deploying.
 3. **Declare the env vars on your app and forward them to the component** in `convex/convex.config.ts`:
    ```ts
    const app = defineApp({
      env: {
-       POSTHOG_TOKEN: v.string(),
+       POSTHOG_PROJECT_TOKEN: v.string(),
        POSTHOG_HOST: v.optional(v.string()),
        POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
      },
    });
    app.use(posthog, {
      env: {
-       POSTHOG_TOKEN: app.env.POSTHOG_TOKEN,
+       POSTHOG_PROJECT_TOKEN: app.env.POSTHOG_PROJECT_TOKEN,
        POSTHOG_HOST: app.env.POSTHOG_HOST,
        POSTHOG_PERSONAL_API_KEY: app.env.POSTHOG_PERSONAL_API_KEY,
      },

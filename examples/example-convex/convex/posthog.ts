@@ -1,7 +1,7 @@
 import { PostHog } from '@posthog/convex'
 import { components } from './_generated/api'
 
-// Credentials (`POSTHOG_TOKEN`, `POSTHOG_HOST`, `POSTHOG_PERSONAL_API_KEY`) are declared on the
+// Credentials (`POSTHOG_PROJECT_TOKEN`, `POSTHOG_HOST`, `POSTHOG_PERSONAL_API_KEY`) are declared on the
 // component in `convex.config.ts` and read inside its actions — they don't get configured here.
 // Use this place for callbacks: identifying the current user, redacting events, etc.
 export const posthog = new PostHog(components.posthog, {

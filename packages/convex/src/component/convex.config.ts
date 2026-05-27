@@ -10,7 +10,7 @@ import { v } from 'convex/values'
  */
 export default defineComponent('posthog', {
   env: {
-    POSTHOG_TOKEN: v.string(),
+    POSTHOG_PROJECT_TOKEN: v.string(),
     POSTHOG_HOST: v.optional(v.string()),
     POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
     /**

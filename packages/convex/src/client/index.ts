@@ -72,7 +72,7 @@ export function normalizeError(error: unknown): {
 /**
  * Client-side wrapper around the PostHog Convex component.
  *
- * Credentials (`POSTHOG_TOKEN`, `POSTHOG_HOST`, `POSTHOG_PERSONAL_API_KEY`) are declared on the
+ * Credentials (`POSTHOG_PROJECT_TOKEN`, `POSTHOG_HOST`, `POSTHOG_PERSONAL_API_KEY`) are declared on the
  * component in `convex.config.ts` and read directly inside the component's actions — they don't
  * need to be plumbed through every call site. Configure callbacks (identify, beforeSend) on the
  * client; everything else lives in env vars.

@@ -26,7 +26,7 @@ describe('PostHog client', () => {
   })
 
   test('does not forward credentials to component calls (env-driven config)', async () => {
-    // Credentials live on the component as env vars (POSTHOG_TOKEN, POSTHOG_HOST,
+    // Credentials live on the component as env vars (POSTHOG_PROJECT_TOKEN, POSTHOG_HOST,
     // POSTHOG_PERSONAL_API_KEY) declared in convex.config.ts and read inside each action.
     // The client must not plumb them through every call site.
     const component = { lib: { capture: 'capture_ref' } }

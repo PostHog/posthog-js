@@ -71,13 +71,13 @@ function firstBatchEvent(): Record<string, unknown> {
 
 describe('capture', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -191,13 +191,13 @@ describe('capture', () => {
 
 describe('identify', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -259,13 +259,13 @@ describe('identify', () => {
 
 describe('captureException', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -414,21 +414,21 @@ function definitionsResponse(flags: FlagDefinition[]) {
 }
 
 async function loadDefinitions(t: ReturnType<typeof initConvexTest>) {
-    // Credentials are read from POSTHOG_TOKEN / POSTHOG_HOST / POSTHOG_PERSONAL_API_KEY env vars
+    // Credentials are read from POSTHOG_PROJECT_TOKEN / POSTHOG_HOST / POSTHOG_PERSONAL_API_KEY env vars
     // inside the component action, so the call itself takes no args.
     await t.action(components.posthog.lib.refreshFlagDefinitions, {})
 }
 
 describe('getFeatureFlag (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -536,14 +536,14 @@ describe('getFeatureFlag (local eval)', () => {
 
 describe('isFeatureEnabled (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -602,14 +602,14 @@ describe('isFeatureEnabled (local eval)', () => {
 
 describe('getFeatureFlagPayload (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -680,14 +680,14 @@ describe('getFeatureFlagPayload (local eval)', () => {
 
 describe('getFeatureFlagResult (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -739,14 +739,14 @@ describe('getFeatureFlagResult (local eval)', () => {
 
 describe('getAllFlags (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -800,14 +800,14 @@ describe('getAllFlags (local eval)', () => {
 
 describe('getAllFlagsAndPayloads (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -848,7 +848,7 @@ describe('refreshFlagDefinitions cron action', () => {
     // to 1ms via the env override so the retry-heavy tests stay snappy.
     beforeEach(() => {
         jest.useRealTimers()
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
         process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE = '1'
@@ -856,7 +856,7 @@ describe('refreshFlagDefinitions cron action', () => {
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         delete process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE
@@ -864,7 +864,7 @@ describe('refreshFlagDefinitions cron action', () => {
         jest.useFakeTimers()
     })
 
-    // No credentials are passed to the action — they're env-driven (POSTHOG_TOKEN,
+    // No credentials are passed to the action — they're env-driven (POSTHOG_PROJECT_TOKEN,
     // POSTHOG_HOST, POSTHOG_PERSONAL_API_KEY) and configured in beforeEach.
     const noArgs = {}
 
@@ -1026,12 +1026,12 @@ describe('getFlagDefinitions query', () => {
     // (throw) from "configured but not warmed up" (undefined). These tests guard the query
     // surface that promise rests on.
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
     })
@@ -1070,13 +1070,13 @@ function flagsResponse(featureFlags: Record<string, unknown>, featureFlagPayload
 
 describe('evaluateFlag (remote)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -1130,13 +1130,13 @@ describe('evaluateFlag (remote)', () => {
 
 describe('evaluateFlagPayload (remote)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -1168,13 +1168,13 @@ describe('evaluateFlagPayload (remote)', () => {
 
 describe('evaluateAllFlags (remote)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_TOKEN
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
