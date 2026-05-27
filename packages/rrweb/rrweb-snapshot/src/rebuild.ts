@@ -291,6 +291,28 @@ function buildNode(
         }
       }
 
+      // Old recordings (no rr_position) fall through to the legacy absolute path.
+      // relative/sticky also occupy a normal-flow slot — original offsets aren't
+      // captured but staying in-flow beats collapsing siblings.
+      const inFlow =
+        specialAttributes.rr_position === 'static' ||
+        specialAttributes.rr_position === 'relative' ||
+        specialAttributes.rr_position === 'sticky';
+      const wasInFlow =
+        inFlow &&
+        (specialAttributes.rr_transform === undefined ||
+          specialAttributes.rr_transform === 'none');
+
+      // Restore captured display; plain `inline` ignores width/height so promote
+      // to `inline-block`. `inline-flex`/`inline-grid`/`inline-block` apply as-is.
+      if (wasInFlow && typeof specialAttributes.rr_display === 'string') {
+        const display = specialAttributes.rr_display;
+        (node as HTMLElement).style.setProperty(
+          'display',
+          display === 'inline' ? 'inline-block' : display,
+        );
+      }
+
       for (const name in specialAttributes) {
         const value = specialAttributes[name];
         // handle internal attributes
@@ -327,11 +349,15 @@ function buildNode(
         } else if (name === 'rr_height') {
           (node as HTMLElement).style.setProperty('height', value.toString());
         } else if (name === 'rr_left') {
-          (node as HTMLElement).style.setProperty('left', value.toString());
-          (node as HTMLElement).style.setProperty('position', 'absolute');
+          if (!wasInFlow) {
+            (node as HTMLElement).style.setProperty('left', value.toString());
+            (node as HTMLElement).style.setProperty('position', 'absolute');
+          }
         } else if (name === 'rr_top') {
-          (node as HTMLElement).style.setProperty('top', value.toString());
-          (node as HTMLElement).style.setProperty('position', 'absolute');
+          if (!wasInFlow) {
+            (node as HTMLElement).style.setProperty('top', value.toString());
+            (node as HTMLElement).style.setProperty('position', 'absolute');
+          }
         } else if (
           name === 'rr_mediaCurrentTime' &&
           typeof value === 'number'
