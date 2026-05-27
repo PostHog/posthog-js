@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.376.3
+
+### Patch Changes
+
+- [#3649](https://github.com/PostHog/posthog-js/pull/3649) [`9cac1f6`](https://github.com/PostHog/posthog-js/commit/9cac1f650ed994a067bbffc5ec16b6d4dc65254f) Thanks [@marandaneto](https://github.com/marandaneto)! - Improve console log serialization performance for large objects.
+  (2026-05-27)
+- Updated dependencies []:
+    - @posthog/types@1.376.3
+    - @posthog/core@1.29.12
+
 ## 1.376.2
 
 ### Patch Changes
