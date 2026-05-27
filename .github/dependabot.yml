@@ -31,14 +31,13 @@ updates:
       exclude-paths:
           - 'examples/**'
           - 'playground/**'
+          - 'compliance/**'
       ignore:
           - dependency-name: '*'
             update-types: ['version-update:semver-major']
       open-pull-requests-limit: 1
       reviewers:
           - 'PostHog/team-llm-analytics'
-      assignees:
-          - 'PostHog/team-client-libraries'
 
     - package-ecosystem: 'npm'
       commit-message:
@@ -55,6 +54,7 @@ updates:
       exclude-paths:
           - 'examples/**'
           - 'playground/**'
+          - 'compliance/**'
       ignore:
           - dependency-name: '@anthropic-ai/sdk'
           - dependency-name: '@google/genai'
@@ -66,6 +66,4 @@ updates:
             update-types: ['version-update:semver-major']
       open-pull-requests-limit: 1
       reviewers:
-          - 'PostHog/team-client-libraries'
-      assignees:
           - 'PostHog/team-client-libraries'
