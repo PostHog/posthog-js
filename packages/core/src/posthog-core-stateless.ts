@@ -86,7 +86,7 @@ export async function logFlushError(err: any): Promise<void> {
     let text = ''
     try {
       text = await err.text
-    } catch { }
+    } catch {}
 
     console.error(`Error while flushing PostHog: message=${err.message}, response body=${text}`, err)
   } else {
@@ -646,10 +646,10 @@ export abstract class PostHogCoreStateless {
     disableGeoip?: boolean
   ): Promise<
     | {
-      response: FeatureFlagDetail | undefined
-      requestId: string | undefined
-      evaluatedAt: number | undefined
-    }
+        response: FeatureFlagDetail | undefined
+        requestId: string | undefined
+        evaluatedAt: number | undefined
+      }
     | undefined
   > {
     await this._initPromise
@@ -1048,7 +1048,7 @@ export abstract class PostHogCoreStateless {
       // Consume the response body to prevent cross-request promise warnings
       // in runtimes like Cloudflare Workers that enforce body consumption.
       // See: https://github.com/PostHog/posthog-js/issues/3173
-      await response.body?.cancel()?.catch(() => { })
+      await response.body?.cancel()?.catch(() => {})
     } catch (err) {
       this._events.emit('error', err)
     }
@@ -1231,7 +1231,7 @@ export abstract class PostHogCoreStateless {
         // Consume the response body to prevent cross-request promise warnings
         // in runtimes like Cloudflare Workers that enforce body consumption.
         // See: https://github.com/PostHog/posthog-js/issues/3173
-        await response.body?.cancel()?.catch(() => { })
+        await response.body?.cancel()?.catch(() => {})
       } catch (err) {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
