@@ -216,6 +216,168 @@ describe('rebuild', function () {
       expect(node.style.width).toBe('75.5px');
       expect(node.style.height).toBe('50.25px');
     });
+
+    it.each([
+      {
+        label: 'static, no transform → in-flow (no position override)',
+        tagName: 'div',
+        attrs: {
+          rr_width: '100px',
+          rr_height: '40px',
+          rr_left: '250px',
+          rr_top: '150px',
+          rr_position: 'static',
+        },
+        expected: { position: '', left: '', top: '', display: '' },
+      },
+      {
+        label:
+          'static + transform → absolute (transform contributes to visual position)',
+        tagName: 'div',
+        attrs: {
+          rr_width: '100px',
+          rr_height: '40px',
+          rr_left: '250px',
+          rr_top: '150px',
+          rr_position: 'static',
+          rr_transform: 'matrix(1, 0, 0, 1, 100, 0)',
+        },
+        expected: {
+          position: 'absolute',
+          left: '250px',
+          top: '150px',
+          display: '',
+        },
+      },
+      {
+        label: 'static + inline → inline-block promotion',
+        tagName: 'span',
+        attrs: {
+          rr_width: '60px',
+          rr_height: '20px',
+          rr_left: '40px',
+          rr_top: '80px',
+          rr_position: 'static',
+          rr_display: 'inline',
+        },
+        expected: {
+          position: '',
+          left: '',
+          top: '',
+          display: 'inline-block',
+        },
+      },
+      {
+        label: 'absolute + inline → no display promotion (legacy absolute path)',
+        tagName: 'span',
+        attrs: {
+          rr_width: '60px',
+          rr_height: '20px',
+          rr_left: '40px',
+          rr_top: '80px',
+          rr_position: 'absolute',
+          rr_display: 'inline',
+        },
+        expected: {
+          position: 'absolute',
+          left: '40px',
+          top: '80px',
+          display: '',
+        },
+      },
+      {
+        label: 'relative → in-flow (occupies normal-flow slot)',
+        tagName: 'div',
+        attrs: {
+          rr_width: '100px',
+          rr_height: '40px',
+          rr_left: '250px',
+          rr_top: '150px',
+          rr_position: 'relative',
+        },
+        expected: { position: '', left: '', top: '', display: '' },
+      },
+      {
+        label: 'sticky → in-flow (occupies normal-flow slot)',
+        tagName: 'div',
+        attrs: {
+          rr_width: '100px',
+          rr_height: '40px',
+          rr_left: '250px',
+          rr_top: '150px',
+          rr_position: 'sticky',
+        },
+        expected: { position: '', left: '', top: '', display: '' },
+      },
+      {
+        label: 'fixed → absolute (out-of-flow keeps legacy path)',
+        tagName: 'div',
+        attrs: {
+          rr_width: '100px',
+          rr_height: '40px',
+          rr_left: '250px',
+          rr_top: '150px',
+          rr_position: 'fixed',
+        },
+        expected: {
+          position: 'absolute',
+          left: '250px',
+          top: '150px',
+          display: '',
+        },
+      },
+      {
+        label: 'static + inline-block → display restored as-is',
+        tagName: 'span',
+        attrs: {
+          rr_width: '60px',
+          rr_height: '20px',
+          rr_left: '40px',
+          rr_top: '80px',
+          rr_position: 'static',
+          rr_display: 'inline-block',
+        },
+        expected: {
+          position: '',
+          left: '',
+          top: '',
+          display: 'inline-block',
+        },
+      },
+      {
+        label: 'static + inline-flex → display restored as-is',
+        tagName: 'span',
+        attrs: {
+          rr_width: '60px',
+          rr_height: '20px',
+          rr_left: '40px',
+          rr_top: '80px',
+          rr_position: 'static',
+          rr_display: 'inline-flex',
+        },
+        expected: {
+          position: '',
+          left: '',
+          top: '',
+          display: 'inline-flex',
+        },
+      },
+    ])('$label', function ({ tagName, attrs, expected }) {
+      const node = buildNodeWithSN(
+        {
+          id: 1,
+          tagName,
+          type: NodeType.Element,
+          attributes: { class: 'ph-no-capture', ...attrs },
+          childNodes: [],
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      ) as HTMLElement;
+      expect(node.style.position).toBe(expected.position);
+      expect(node.style.left).toBe(expected.left);
+      expect(node.style.top).toBe(expected.top);
+      expect(node.style.display).toBe(expected.display);
+    });
   });
 
   describe('shadowDom', function () {
