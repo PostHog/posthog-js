@@ -1,6 +1,6 @@
 {
   "name": "@posthog/rrweb-snapshot",
-  "version": "0.0.64",
+  "version": "0.0.65",
   "description": "rrweb's component to take a snapshot of DOM, aka DOM serializer",
   "scripts": {
     "retest": "vitest run",

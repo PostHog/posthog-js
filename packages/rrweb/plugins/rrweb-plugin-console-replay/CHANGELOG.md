@@ -1,5 +1,12 @@
 # @rrweb/rrweb-plugin-console-replay
 
+## 0.0.6
+
+### Patch Changes
+
+- Updated dependencies [[`add2fae`](https://github.com/PostHog/posthog-js/commit/add2fae385046aa95452db12acb0f7deb91e84b3)]:
+    - @posthog/rrweb@0.0.67
+
 ## 0.0.5
 
 ### Patch Changes

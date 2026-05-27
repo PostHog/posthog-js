@@ -1,5 +1,12 @@
 # rrweb-snapshot
 
+## 0.0.65
+
+### Patch Changes
+
+- [#3678](https://github.com/PostHog/posthog-js/pull/3678) [`add2fae`](https://github.com/PostHog/posthog-js/commit/add2fae385046aa95452db12acb0f7deb91e84b3) Thanks [@ksvat](https://github.com/ksvat)! - fix(replay): keep `ph-no-capture` placeholders in normal flow during replay. Blocked elements were rebuilt with `position: absolute` + recorded `left/top` regardless of how they were originally positioned, pulling in-flow elements (flex/grid children, inline spans) out of flow and collapsing sibling layout. Snapshot now captures the element's computed `position`, `transform`, and `display`; rebuild only forces absolute positioning when the original was non-static or contributed a transform, and promotes inline placeholders to `inline-block` so the redacted slot is preserved. Old recordings without the new attributes keep the legacy absolute behavior.
+  (2026-05-27)
+
 ## 0.0.64
 
 ### Patch Changes
