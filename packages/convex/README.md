@@ -21,21 +21,41 @@ Found a bug? Feature request? [File it here](https://github.com/PostHog/posthog-
 
 ## 🚀 Quick Start
 
-Install the package:
+Install the package (requires Convex 1.39 or newer):
 
 ```sh
 pnpm add @posthog/convex
 ```
 
-Register the component in your `convex/convex.config.ts`:
+Register the component in your `convex/convex.config.ts` and forward the env vars from your app to the component:
 
 ```ts
 // convex/convex.config.ts
 import { defineApp } from "convex/server";
+import { v } from "convex/values";
 import posthog from "@posthog/convex/convex.config.js";
 
-const app = defineApp();
-app.use(posthog);
+const app = defineApp({
+  env: {
+    // Required. PostHog project token (`phc_…`) — used to send events and evaluate flags remotely.
+    POSTHOG_PROJECT_TOKEN: v.string(),
+    // Optional. PostHog host. Defaults to `https://us.i.posthog.com`; use `https://eu.i.posthog.com` for EU Cloud or your self-hosted URL.
+    POSTHOG_HOST: v.optional(v.string()),
+    // Optional. A feature flags secure API key (`phs_…`, recommended) or personal API key (`phx_…`). Setting it enables local feature flag evaluation and starts the refresh cron.
+    POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
+    // Optional. Cron interval (seconds) for refreshing flag definitions. Defaults to 60. Raise it on free-tier dev deployments to reduce function-call usage.
+    POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: v.optional(v.string()),
+  },
+});
+
+app.use(posthog, {
+  env: {
+    POSTHOG_PROJECT_TOKEN: app.env.POSTHOG_PROJECT_TOKEN,
+    POSTHOG_HOST: app.env.POSTHOG_HOST,
+    POSTHOG_PERSONAL_API_KEY: app.env.POSTHOG_PERSONAL_API_KEY,
+    POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: app.env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS,
+  },
+});
 
 export default app;
 ```
@@ -43,7 +63,7 @@ export default app;
 Set your PostHog credentials on your Convex deployment:
 
 ```sh
-npx convex env set POSTHOG_API_KEY phc_your_project_api_key
+npx convex env set POSTHOG_PROJECT_TOKEN phc_your_project_token
 npx convex env set POSTHOG_HOST https://us.i.posthog.com
 ```
 
@@ -53,49 +73,27 @@ To enable local feature flag evaluation, also set a [feature flags secure API ke
 npx convex env set POSTHOG_PERSONAL_API_KEY phs_your_feature_flags_secure_api_key
 ```
 
-> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward.
+> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward. This env var also gates the component's built-in refresh cron: when it's set the cron is registered at deploy time and refreshes flag definitions once a minute; when it isn't, the cron isn't registered at all so idle dev deployments don't burn function calls. The gate is evaluated at module-load (i.e. deploy) time — `npx convex dev` redeploys automatically when you set the env var, but production deployments need a manual redeploy for the cron to start.
 
-Create a `convex/posthog.ts` file to initialize the client. Read the keys from `process.env` and pass them to the constructor — the client captures them and forwards them to component actions as needed:
+Create a `convex/posthog.ts` file to initialize the client. Credentials live on the component, so this file is just for callbacks (identify, beforeSend):
 
 ```ts
 // convex/posthog.ts
 import { PostHog } from "@posthog/convex";
 import { components } from "./_generated/api";
 
-export const posthog = new PostHog(components.posthog, {
-  apiKey: process.env.POSTHOG_API_KEY,
-  personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-  host: process.env.POSTHOG_HOST,
-});
+export const posthog = new PostHog(components.posthog);
 ```
 
-Schedule a cron in your own `convex/crons.ts` that refreshes the flag definitions on whatever interval suits you. The client class captures the keys you passed in `posthog.ts` and forwards them automatically:
+That's the whole setup — feature flag methods will start returning live values on the next cron tick. The component refreshes flag definitions every minute when `POSTHOG_PERSONAL_API_KEY` is set. To tune the cadence (e.g. raise it to `300` for a free-tier dev deployment), set `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` and redeploy:
 
-```ts
-// convex/crons.ts
-import { cronJobs } from "convex/server";
-import { internalAction } from "./_generated/server";
-import { internal } from "./_generated/api";
-import { posthog } from "./posthog";
-
-export const refreshPosthogFlags = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    await posthog.refreshFlagDefinitions(ctx);
-  },
-});
-
-const crons = cronJobs();
-crons.interval(
-  "refresh posthog feature flag definitions",
-  { minutes: 1 },
-  internal.crons.refreshPosthogFlags
-);
-
-export default crons;
+```sh
+npx convex env set POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS 300
 ```
 
-That's the whole setup — feature flag methods will start returning live values on the next cron tick, or you can call `posthog.refreshFlagDefinitions(ctx)` from an action whenever you want an immediate refresh.
+If you call a local-eval method (`getFeatureFlag`, `isFeatureEnabled`, …) without `POSTHOG_PERSONAL_API_KEY` configured, the client throws with a pointer to the remote `evaluateFlag` / `evaluateFlagPayload` / `evaluateAllFlags` methods. While the first cron tick is still in flight (PAK is set but no definitions are cached yet) the local methods return `undefined` so your fallback path keeps working.
+
+Need to force a refresh between cron ticks (e.g. just after creating a flag in development)? Call `posthog.reloadFeatureFlags(ctx)` from an action — same name and shape as `posthog-node`.
 
 ## 📊 Capturing Events
 
@@ -348,6 +346,60 @@ Three methods:
 | `posthog.evaluateAllFlags(ctx, args)` | `{ featureFlags, featureFlagPayloads }` |
 
 Same option shape as the local methods (`groups`, `personProperties`, `groupProperties`, `disableGeoip`, `flagKeys` on the all-flags variant). Pick local when the flag is suitable and the cost of `/flags/definitions` polling is justified; pick remote when it isn't.
+
+## 🔄 Differences from `posthog-node`
+
+Method names and option shapes (`groups`, `personProperties`, `groupProperties`, `disableGeoip`, `flagKeys`) match `posthog-node` where they reasonably can. The differences:
+
+- **Every method takes a Convex `ctx` first.** `posthog.capture(ctx, { … })` rather than `posthog.capture({ … })`. Required by Convex's runtime.
+- **Flag methods and `captureException` use an args object instead of positional args.** `getFeatureFlag(ctx, { key, distinctId, … })` rather than `getFeatureFlag(key, distinctId, …)`. The event methods (`capture`, `identify`, `alias`, `groupIdentify`) already use args objects in `posthog-node`, so those match.
+- **No `captureImmediate` / `identifyImmediate` / `aliasImmediate` variants.** All component actions use the `Immediate` paths under the hood — Convex isolates don't have a clean lifecycle hook for batching and flushing, so the queued mode is gone.
+- **No `flush()` / `shutdown()`.** Same reason — there's nothing to flush.
+- **Local-eval methods don't auto-fall-back to remote.** `posthog-node`'s `getFeatureFlag` quietly hits `/flags` when local eval can't reach a verdict. Ours returns `undefined` (or `null` from `getFeatureFlagResult`) and you call `evaluateFlag` / `evaluateFlagPayload` / `evaluateAllFlags` explicitly for remote. Auto-fallback would force every local-eval call into an action context (since queries can't make network calls), which would defeat the reactivity win.
+- **Local-eval methods throw when `POSTHOG_PERSONAL_API_KEY` isn't configured.** `posthog-node` returns `undefined`; the throw here points you at the remote `evaluate*` methods so you can't get stuck wondering why your rollouts don't take effect.
+
+## ⬆️ Migrating from v1
+
+v2 moves credentials from the client constructor onto the component itself, using [Convex 1.39's typed component env vars](https://docs.convex.dev/components/authoring#environment-variables). It also bundles the refresh cron inside the component. The result is less plumbing per call site and a setup that's safe to leave running on free-tier dev deployments.
+
+To upgrade:
+
+1. **Bump your app's `convex` dependency** to `^1.39.0` (required for the typed component env-var API).
+2. **Rename** the `POSTHOG_API_KEY` env var to `POSTHOG_PROJECT_TOKEN`. The new name is unambiguous: this is your PostHog project token (`phc_…`), distinct from `POSTHOG_PERSONAL_API_KEY` (the `phx_…` / `phs_…` key used for local flag evaluation).
+   ```sh
+   npx convex env set POSTHOG_PROJECT_TOKEN phc_your_project_token
+   npx convex env unset POSTHOG_API_KEY
+   ```
+   `POSTHOG_PROJECT_TOKEN` is now **required at deploy time** (declared as `v.string()` on the component). In v1 the component would deploy without it set and silently no-op event sends at runtime; v2 fails fast at deploy. Make sure the env var is set before deploying.
+3. **Declare the env vars on your app and forward them to the component** in `convex/convex.config.ts`:
+   ```ts
+   const app = defineApp({
+     env: {
+       POSTHOG_PROJECT_TOKEN: v.string(),
+       POSTHOG_HOST: v.optional(v.string()),
+       POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
+     },
+   });
+   app.use(posthog, {
+     env: {
+       POSTHOG_PROJECT_TOKEN: app.env.POSTHOG_PROJECT_TOKEN,
+       POSTHOG_HOST: app.env.POSTHOG_HOST,
+       POSTHOG_PERSONAL_API_KEY: app.env.POSTHOG_PERSONAL_API_KEY,
+     },
+   });
+   ```
+4. **Drop the credential options** from `new PostHog(...)`:
+   ```diff
+   - export const posthog = new PostHog(components.posthog, {
+   -   apiKey: process.env.POSTHOG_API_KEY,
+   -   personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
+   -   host: process.env.POSTHOG_HOST,
+   - });
+   + export const posthog = new PostHog(components.posthog);
+   ```
+5. **Delete your `convex/crons.ts`** if it only existed to refresh PostHog flag definitions — the component ships its own cron now, conditionally registered only when `POSTHOG_PERSONAL_API_KEY` is set. `posthog.refreshFlagDefinitions(ctx)` was renamed to `posthog.reloadFeatureFlags(ctx)` for parity with `posthog-node`; the cron is the primary refresh path but you can still call this manually from an action when you need an immediate refresh.
+
+Everything else — the `capture`, `identify`, `getFeatureFlag`, `evaluateFlag`, etc. APIs — is unchanged.
 
 ## 📦 Example
 

@@ -528,11 +528,11 @@ importers:
         specifier: ^24.10.12
         version: 24.10.13
       convex:
-        specifier: 1.31.7
-        version: 1.31.7(react@19.2.1)
+        specifier: 1.39.1
+        version: 1.39.1(react@19.2.1)
       convex-test:
         specifier: 0.0.41
-        version: 0.0.41(convex@1.31.7(react@19.2.1))
+        version: 0.0.41(convex@1.39.1(react@19.2.1))
       globals:
         specifier: ^17.3.0
         version: 17.3.0
@@ -7523,18 +7523,21 @@ packages:
     peerDependencies:
       convex: ^1.16.4
 
-  convex@1.31.7:
-    resolution: {integrity: sha512-PtNMe1mAIOvA8Yz100QTOaIdgt2rIuWqencVXrb4McdhxBHZ8IJ1eXTnrgCC9HydyilGT1pOn+KNqT14mqn9fQ==}
+  convex@1.39.1:
+    resolution: {integrity: sha512-W+gVXA7BpRF1xLlS1kGTtKVaqd5yonqbGESKiPtIUXjV744GdDz8IG7RVsSY5KzHbgxuJBHKaJYk+92OIHTskQ==}
     engines: {node: '>=18.0.0', npm: '>=7.0.0'}
     hasBin: true
     peerDependencies:
       '@auth0/auth0-react': ^2.0.1
       '@clerk/clerk-react': ^4.12.8 || ^5.0.0
+      '@clerk/react': ^6.4.3
       react: ^18.0.0 || ^19.0.0-0 || ^19.0.0
     peerDependenciesMeta:
       '@auth0/auth0-react':
         optional: true
       '@clerk/clerk-react':
+        optional: true
+      '@clerk/react':
         optional: true
       react:
         optional: true
@@ -15432,6 +15435,18 @@ packages:
     peerDependencies:
       bufferutil: ^4.0.1
       utf-8-validate: ^5.0.2
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  ws@8.18.0:
+    resolution: {integrity: sha512-8VbfWfHLbbwu3+N6OKsOMpBdT4kXPDDB9cJk2bJ6mh9ucxdlnNvH1e+roYkKmN9Nxw2yjz7VzeO9oOz2zJ04Pw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
     peerDependenciesMeta:
       bufferutil:
         optional: true
@@ -23497,16 +23512,20 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  convex-test@0.0.41(convex@1.31.7(react@19.2.1)):
+  convex-test@0.0.41(convex@1.39.1(react@19.2.1)):
     dependencies:
-      convex: 1.31.7(react@19.2.1)
+      convex: 1.39.1(react@19.2.1)
 
-  convex@1.31.7(react@19.2.1):
+  convex@1.39.1(react@19.2.1):
     dependencies:
       esbuild: 0.27.0
       prettier: 3.7.4
+      ws: 8.18.0
     optionalDependencies:
       react: 19.2.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   cookie-es@1.2.2: {}
 
@@ -34391,6 +34410,8 @@ snapshots:
       async-limiter: 1.0.1
 
   ws@7.5.10: {}
+
+  ws@8.18.0: {}
 
   ws@8.18.3: {}
 

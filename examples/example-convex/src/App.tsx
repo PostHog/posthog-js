@@ -154,7 +154,6 @@ function App() {
     const identifyM = useMutation(api.example.testIdentify)
     const captureExceptionM = useMutation(api.example.testCaptureException)
     const throwErrorM = useMutation(api.example.testThrowError)
-    const refreshFlagsA = useAction(api.example.refreshFlags)
 
     const agentManualA = useAction(api.convexAgent.manualCapture.generate)
     const agentOtelA = useAction(api.convexAgent.openTelemetry.generate)
@@ -715,13 +714,6 @@ function App() {
                                     </span>
                                 </div>
                             </div>
-                            <button
-                                {...btnProps('refresh-now')}
-                                onClick={() => run('refresh-now', () => refreshFlagsA({}))}
-                                className={`btn btn--small ${btnStatus['refresh-now'] ? `btn--${btnStatus['refresh-now']}` : ''}`}
-                            >
-                                Refresh ↻
-                            </button>
                         </div>
                         <div className="status-grid">
                             <div className="status-row">

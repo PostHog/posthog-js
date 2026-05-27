@@ -1,13 +1,10 @@
 import { PostHog } from '@posthog/convex'
 import { components } from './_generated/api'
 
-// Configure once with your project credentials. The client captures these and forwards them to
-// any component action that needs them — including the cron defined in `crons.ts`.
+// Credentials (`POSTHOG_PROJECT_TOKEN`, `POSTHOG_HOST`, `POSTHOG_PERSONAL_API_KEY`) are declared on the
+// component in `convex.config.ts` and read inside its actions — they don't get configured here.
+// Use this place for callbacks: identifying the current user, redacting events, etc.
 export const posthog = new PostHog(components.posthog, {
-    apiKey: process.env.POSTHOG_API_KEY,
-    personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-    host: process.env.POSTHOG_HOST,
-
     // Automatically resolve the current user's identity from Convex auth.
     // Falls back to an explicit distinctId if the user is not signed in.
     identify: async (ctx) => {
