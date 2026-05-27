@@ -503,6 +503,21 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should fall back when Object.prototype.toString throws', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload = { kept: 'value' }
+            Object.defineProperty(payload, Symbol.toStringTag, {
+                get() {
+                    throw new Error('cross-origin object tag')
+                },
+            })
+
+            expect(() => assignableWindow.console.log(payload)).not.toThrow()
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({ kept: 'value' })
+        })
+
         it('should not add attributes_truncated when within limits', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)

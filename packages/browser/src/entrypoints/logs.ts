@@ -98,6 +98,14 @@ const isJSONSerializablePrimitive = (value: any): boolean =>
     typeof value !== 'symbol' &&
     typeof value !== 'bigint'
 
+const isNumberOrBoolean = (value: any): boolean => {
+    try {
+        return isNumber(value) || isBoolean(value)
+    } catch {
+        return false
+    }
+}
+
 const stringifyValueWithLimit = (
     value: any,
     parts: string[],
@@ -109,7 +117,7 @@ const stringifyValueWithLimit = (
         return inArray ? appendWithLimit(parts, 'null', budget) : true
     }
 
-    if (isNull(value) || isNumber(value) || isBoolean(value)) {
+    if (isNull(value) || isNumberOrBoolean(value)) {
         return appendWithLimit(parts, JSON.stringify(value), budget)
     }
 
@@ -135,13 +143,17 @@ const stringifyValueWithLimit = (
         // If toJSON can't be read or throws, fall through to safe property enumeration.
     }
 
-    const objectTag = Object.prototype.toString.call(value)
-    if (objectTag === '[object String]') {
-        return stringifyStringWithLimit(String(value.valueOf()), parts, budget)
-    }
+    try {
+        const objectTag = Object.prototype.toString.call(value)
+        if (objectTag === '[object String]') {
+            return stringifyStringWithLimit(String(value.valueOf()), parts, budget)
+        }
 
-    if (objectTag === '[object Number]' || objectTag === '[object Boolean]') {
-        return appendWithLimit(parts, JSON.stringify(value.valueOf()), budget)
+        if (objectTag === '[object Number]' || objectTag === '[object Boolean]') {
+            return appendWithLimit(parts, JSON.stringify(value.valueOf()), budget)
+        }
+    } catch {
+        // If Object.prototype.toString or valueOf throws, fall through to safe property enumeration.
     }
 
     if (value instanceof Error) {
