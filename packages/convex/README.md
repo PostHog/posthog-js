@@ -370,6 +370,7 @@ To upgrade:
    npx convex env set POSTHOG_TOKEN phc_your_project_token
    npx convex env unset POSTHOG_API_KEY
    ```
+   `POSTHOG_TOKEN` is now **required at deploy time** (declared as `v.string()` on the component). In v1 the component would deploy without it set and silently no-op event sends at runtime; v2 fails fast at deploy. Make sure the env var is set before deploying.
 3. **Declare the env vars on your app and forward them to the component** in `convex/convex.config.ts`:
    ```ts
    const app = defineApp({
