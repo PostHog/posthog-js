@@ -28,7 +28,44 @@ updates:
           - dependency-name: '@ai-sdk/provider'
           - dependency-name: '@langchain/core'
           - dependency-name: 'langchain'
+      exclude-paths:
+          - 'examples/**'
+          - 'playground/**'
       ignore:
           - dependency-name: '*'
             update-types: ['version-update:semver-major']
       open-pull-requests-limit: 1
+      reviewers:
+          - 'PostHog/team-llm-analytics'
+      assignees:
+          - 'PostHog/team-client-libraries'
+
+    - package-ecosystem: 'npm'
+      commit-message:
+          prefix: 'chore'
+      labels:
+          - dependencies
+          - release
+      directory: '/'
+      schedule:
+          interval: 'weekly'
+          day: 'monday'
+          time: '10:00'
+          timezone: 'UTC'
+      exclude-paths:
+          - 'examples/**'
+          - 'playground/**'
+      ignore:
+          - dependency-name: '@anthropic-ai/sdk'
+          - dependency-name: '@google/genai'
+          - dependency-name: 'openai'
+          - dependency-name: '@ai-sdk/provider'
+          - dependency-name: '@langchain/core'
+          - dependency-name: 'langchain'
+          - dependency-name: '*'
+            update-types: ['version-update:semver-major']
+      open-pull-requests-limit: 1
+      reviewers:
+          - 'PostHog/team-client-libraries'
+      assignees:
+          - 'PostHog/team-client-libraries'

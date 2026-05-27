@@ -56,4 +56,3 @@ CLAUDE.md
 
 # Ignore Ralph's local configuration directory
 .ralph/
-.worktrees/
