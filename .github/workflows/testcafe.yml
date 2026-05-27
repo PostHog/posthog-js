@@ -58,6 +58,7 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.browser }}
+          BROWSERSLIST: "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
         run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
         working-directory: packages/browser
 

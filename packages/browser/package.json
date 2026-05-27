@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.376.0",
+    "version": "1.376.3",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "engineering@posthog.com",
@@ -141,6 +141,6 @@
         "yargs": "^17.7.2"
     },
     "browserslist": [
-        "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
+        "> 0.5%, last 2 versions, Firefox ESR, not dead"
     ]
 }

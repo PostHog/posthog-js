@@ -11,7 +11,7 @@
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
   "author": "PostHog Inc.",
-  "version": "1.0.6",
+  "version": "1.0.10",
   "license": "MIT",
   "keywords": [
     "convex",

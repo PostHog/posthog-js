@@ -10,6 +10,7 @@ import snapshot, {
   transformAttribute,
   wasMaxDepthReached,
   resetMaxDepthState,
+  resetStylesheetLoadTracking,
   serializeNodeWithId,
 } from '../src/snapshot';
 import { elementNode, serializedNodeWithId } from '../src/types';
@@ -582,5 +583,227 @@ describe('link href capture across SPA navigations', () => {
     );
 
     expect(result).not.toBe('should-not-be-used');
+  });
+});
+
+describe('preload link load-listener accumulation', () => {
+  function setupLink(opts: {
+    rel: string;
+    as?: string;
+    href: string;
+    sheet: CSSStyleSheet | null;
+  }) {
+    const link = document.createElement('link');
+    link.setAttribute('rel', opts.rel);
+    if (opts.as) link.setAttribute('as', opts.as);
+    link.setAttribute('href', opts.href);
+    let currentSheet = opts.sheet;
+    Object.defineProperty(link, 'sheet', {
+      configurable: true,
+      get: () => currentSheet,
+    });
+    document.head.appendChild(link);
+    return {
+      link,
+      setSheet: (next: CSSStyleSheet | null) => {
+        currentSheet = next;
+      },
+    };
+  }
+
+  function serializeWithCapture(
+    link: HTMLLinkElement,
+    onStylesheetLoad: (
+      link: HTMLLinkElement,
+      node: serializedNodeWithId,
+    ) => void = () => undefined,
+  ) {
+    return serializeNodeWithId(link, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      onStylesheetLoad,
+      stylesheetLoadTimeout: 5000,
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const noListenerLeakCases: Array<{
+    name: string;
+    rel: string;
+    as?: string;
+    expectedAdds: number;
+  }> = [
+    {
+      name: 'preload-as-style link adds no load listeners across timer cycles',
+      rel: 'preload',
+      as: 'style',
+      expectedAdds: 0,
+    },
+    {
+      name: 'stylesheet link with already-loaded sheet adds no load listeners',
+      rel: 'stylesheet',
+      expectedAdds: 0,
+    },
+  ];
+
+  it.each(noListenerLeakCases)('$name', ({ rel, as, expectedAdds }) => {
+    const fakeSheet =
+      rel === 'stylesheet'
+        ? ({ cssRules: [], rules: [] } as unknown as CSSStyleSheet)
+        : null;
+    const { link } = setupLink({
+      rel,
+      as,
+      href: `https://example.com/${rel}-${as ?? ''}.css`,
+      sheet: fakeSheet,
+    });
+
+    let loadAdds = 0;
+    const originalAdd = link.addEventListener.bind(link);
+    link.addEventListener = ((type: string, ...rest: unknown[]) => {
+      if (type === 'load') loadAdds += 1;
+      return (originalAdd as unknown as (...args: unknown[]) => unknown)(
+        type,
+        ...rest,
+      );
+    }) as typeof link.addEventListener;
+
+    serializeWithCapture(link);
+
+    for (let cycle = 0; cycle < 5; cycle++) {
+      vi.advanceTimersByTime(5000);
+    }
+
+    expect(loadAdds).toBe(expectedAdds);
+
+    document.head.removeChild(link);
+  });
+
+  const noMultiplicationCases: Array<{
+    name: string;
+    rel: string;
+    as?: string;
+  }> = [
+    {
+      name: 'preload-as-style link: synthetic load events do not multiply work',
+      rel: 'preload',
+      as: 'style',
+    },
+    {
+      name: 'stylesheet link with sheet still null: timer path fires onStylesheetLoad exactly once',
+      rel: 'stylesheet',
+    },
+  ];
+
+  it.each(noMultiplicationCases)('$name', ({ rel, as }) => {
+    const { link } = setupLink({
+      rel,
+      as,
+      href: `https://example.com/${rel}-${as ?? ''}.css`,
+      sheet: null,
+    });
+
+    let stylesheetLoadCalls = 0;
+    serializeWithCapture(link, () => {
+      stylesheetLoadCalls += 1;
+    });
+
+    for (let round = 0; round < 5; round++) {
+      link.dispatchEvent(new Event('load'));
+    }
+    vi.advanceTimersByTime(5000);
+
+    expect(stylesheetLoadCalls).toBeLessThanOrEqual(1);
+
+    document.head.removeChild(link);
+  });
+
+  it('delivers _cssText to onStylesheetLoad when a stylesheet finishes loading after first serialize', () => {
+    const initiallyPending = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-late.css',
+      sheet: null,
+    });
+    const { link, setSheet } = initiallyPending;
+
+    let deliveredNode: serializedNodeWithId | null = null;
+    serializeWithCapture(link, (_, node) => {
+      deliveredNode = node;
+    });
+
+    const fakeRules = [
+      { cssText: '.a { color: red; }', parentStyleSheet: null },
+    ];
+    setSheet({
+      cssRules: fakeRules as unknown as CSSRuleList,
+      rules: fakeRules as unknown as CSSRuleList,
+      href: null,
+    } as unknown as CSSStyleSheet);
+
+    link.dispatchEvent(new Event('load'));
+
+    expect(deliveredNode).not.toBeNull();
+    const attrs = ((deliveredNode as unknown as elementNode) ?? {}).attributes;
+    expect(attrs).toBeDefined();
+    expect(attrs._cssText).toContain('.a');
+    expect(attrs._cssText).toContain('color: red');
+
+    document.head.removeChild(link);
+  });
+
+  it('resetStylesheetLoadTracking tears down the previous session listener and re-tracks the link for the new session', () => {
+    const { link, setSheet } = setupLink({
+      rel: 'stylesheet',
+      href: 'https://example.com/styles-cross-lifecycle.css',
+      sheet: null,
+    });
+
+    let firstSessionCalls = 0;
+    serializeWithCapture(link, () => {
+      firstSessionCalls += 1;
+    });
+
+    resetStylesheetLoadTracking();
+
+    let secondSessionDelivered: serializedNodeWithId | null = null;
+    serializeWithCapture(link, (_, node) => {
+      secondSessionDelivered = node;
+    });
+
+    const fakeRules = [
+      { cssText: '.late { color: blue; }', parentStyleSheet: null },
+    ];
+    setSheet({
+      cssRules: fakeRules as unknown as CSSRuleList,
+      rules: fakeRules as unknown as CSSRuleList,
+      href: null,
+    } as unknown as CSSStyleSheet);
+
+    link.dispatchEvent(new Event('load'));
+
+    expect(firstSessionCalls).toBe(0);
+    expect(secondSessionDelivered).not.toBeNull();
+    const attrs = ((secondSessionDelivered as unknown as elementNode) ?? {})
+      .attributes;
+    expect(attrs._cssText).toContain('.late');
+    expect(attrs._cssText).toContain('color: blue');
+
+    document.head.removeChild(link);
   });
 });
