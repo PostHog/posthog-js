@@ -19,12 +19,12 @@ export interface PostHogTraceExporterOptions {
   /**
    * Your PostHog project API token.
    */
-  token?: string
+  projectToken?: string
 
   /**
    * Your PostHog project API key.
    *
-   * @deprecated Use `token` instead
+   * @deprecated Use `projectToken` instead
    */
   apiKey?: string
 
@@ -55,15 +55,15 @@ export interface PostHogTraceExporterOptions {
  *
  * registerOTel({
  *   serviceName: 'my-app',
- *   traceExporter: new PostHogTraceExporter({ token: 'phc_...' }),
+ *   traceExporter: new PostHogTraceExporter({ projectToken: 'phc_...' }),
  * })
  * ```
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
   constructor(options: PostHogTraceExporterOptions) {
-    const token = normalizeToken(options.token || options.apiKey)
+    const token = normalizeToken(options.projectToken || options.apiKey)
     if (!token) {
-      throw new Error('PostHogTraceExporter requires a token')
+      throw new Error('PostHogTraceExporter requires a projectToken')
     }
 
     const host = new URL(normalizeHost(options.host)).origin

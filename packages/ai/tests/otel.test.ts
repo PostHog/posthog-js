@@ -36,41 +36,41 @@ describe('PostHogTraceExporter', () => {
   it.each([
     {
       name: 'default host',
-      token: 'phc_test123',
+      projectToken: 'phc_test123',
       host: undefined,
       expectedUrl: 'https://us.i.posthog.com/i/v0/ai/otel',
       expectedToken: 'phc_test123',
     },
     {
       name: 'custom host',
-      token: 'phc_test456',
+      projectToken: 'phc_test456',
       host: 'https://eu.i.posthog.com',
       expectedUrl: 'https://eu.i.posthog.com/i/v0/ai/otel',
       expectedToken: 'phc_test456',
     },
     {
       name: 'trailing slash',
-      token: 'phc_test789',
+      projectToken: 'phc_test789',
       host: 'https://custom.posthog.com/',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
       expectedToken: 'phc_test789',
     },
     {
       name: 'multiple trailing slashes',
-      token: 'phc_test000',
+      projectToken: 'phc_test000',
       host: 'https://custom.posthog.com///',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
       expectedToken: 'phc_test000',
     },
     {
       name: 'trimmed whitespace-sensitive values',
-      token: '  phc_test999\t ',
+      projectToken: '  phc_test999\t ',
       host: '  https://custom.posthog.com/\n',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
       expectedToken: 'phc_test999',
     },
-  ])('configures the OTLP exporter correctly with $name', ({ token, host, expectedUrl, expectedToken }) => {
-    new PostHogTraceExporter({ token, host })
+  ])('configures the OTLP exporter correctly with $name', ({ projectToken, host, expectedUrl, expectedToken }) => {
+    new PostHogTraceExporter({ projectToken, host })
 
     expect(OTLPTraceExporter).toHaveBeenCalledWith({
       url: expectedUrl,
@@ -88,19 +88,21 @@ describe('PostHogTraceExporter', () => {
     })
   })
 
-  it('throws when token is missing', () => {
-    expect(() => new PostHogTraceExporter({ token: '' })).toThrow('PostHogTraceExporter requires a token')
-    expect(() => new PostHogTraceExporter({ token: '  \n\t ' })).toThrow('PostHogTraceExporter requires a token')
+  it('throws when projectToken is missing', () => {
+    expect(() => new PostHogTraceExporter({ projectToken: '' })).toThrow('PostHogTraceExporter requires a projectToken')
+    expect(() => new PostHogTraceExporter({ projectToken: '  \n\t ' })).toThrow(
+      'PostHogTraceExporter requires a projectToken'
+    )
   })
 
   it('inherits shutdown from OTLPTraceExporter', async () => {
-    const exporter = new PostHogTraceExporter({ token: DEFAULT_TOKEN })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     await exporter.shutdown()
     expect(getSuperShutdown()).toHaveBeenCalled()
   })
 
   it('inherits forceFlush from OTLPTraceExporter', async () => {
-    const exporter = new PostHogTraceExporter({ token: DEFAULT_TOKEN })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     await exporter.forceFlush()
     expect(getSuperForceFlush()).toHaveBeenCalled()
   })
@@ -112,7 +114,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
   })
 
   it('exports only AI spans', () => {
-    const exporter = new PostHogTraceExporter({ token: DEFAULT_TOKEN })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     const callback = jest.fn()
 
     exporter.export([makeSpan('gen_ai.chat'), makeSpan('http.request'), makeSpan('llm.completion')], callback)
@@ -124,7 +126,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
   })
 
   it('calls back with success immediately when no AI spans are present', () => {
-    const exporter = new PostHogTraceExporter({ token: DEFAULT_TOKEN })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     const callback = jest.fn()
 
     exporter.export([makeSpan('http.request'), makeSpan('db.query')], callback)
@@ -134,7 +136,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
   })
 
   it('detects AI spans by attribute keys', () => {
-    const exporter = new PostHogTraceExporter({ token: DEFAULT_TOKEN })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     const callback = jest.fn()
 
     exporter.export([makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }), makeSpan('other.operation')], callback)
