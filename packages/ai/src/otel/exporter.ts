@@ -6,7 +6,7 @@ import { isAISpan } from './spans'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
 
-function normalizeApiKey(value?: unknown): string {
+function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -17,9 +17,16 @@ function normalizeHost(value?: unknown): string {
 
 export interface PostHogTraceExporterOptions {
   /**
-   * Your PostHog project API key.
+   * Your PostHog project API token.
    */
-  apiKey: string
+  token?: string
+
+  /**
+   * Your PostHog project API key.
+   *
+   * @deprecated Use `token` instead
+   */
+  apiKey?: string
 
   /**
    * PostHog host URL. Defaults to `https://us.i.posthog.com`.
@@ -48,21 +55,22 @@ export interface PostHogTraceExporterOptions {
  *
  * registerOTel({
  *   serviceName: 'my-app',
- *   traceExporter: new PostHogTraceExporter({ apiKey: 'phc_...' }),
+ *   traceExporter: new PostHogTraceExporter({ token: 'phc_...' }),
  * })
  * ```
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
   constructor(options: PostHogTraceExporterOptions) {
-    const apiKey = normalizeApiKey(options.apiKey)
-    if (!apiKey) {
-      throw new Error('PostHogTraceExporter requires an apiKey')
+    const token = normalizeToken(options.token || options.apiKey)
+    if (!token) {
+      throw new Error('PostHogTraceExporter requires a token')
     }
+
     const host = new URL(normalizeHost(options.host)).origin
     super({
       url: `${host}/i/v0/ai/otel`,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${token}`,
       },
     })
   }
