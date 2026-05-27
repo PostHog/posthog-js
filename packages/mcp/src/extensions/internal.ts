@@ -8,7 +8,7 @@ import type {
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { log } from './logger'
-import { publishEvent } from './publish'
+import { captureEvent } from './capture'
 
 /**
  * Simple LRU cache for session identities.
@@ -156,7 +156,7 @@ export async function handleIdentify(
 
       if (hasChanged) {
         log(`Identified session ${currentSessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
-        publishEvent(server, identifyEvent)
+        captureEvent(server, identifyEvent)
       }
     } else {
       log(`Warning: Supplied identify function returned null for session ${sessionId}`)

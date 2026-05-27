@@ -173,6 +173,23 @@ describe('buildPostHogCaptureEvents', () => {
     expect(events[0].event).toBe('$mcp_tool_call')
   })
 
+  it('does not build an $exception event when enableExceptionAutocapture is false', () => {
+    const events = buildPostHogCaptureEvents(makeEvent({ isError: true, error: { message: 'boom' } }), {
+      enableExceptionAutocapture: false,
+    })
+
+    expect(events).toHaveLength(1)
+    expect(events[0].event).toBe('$mcp_tool_call')
+    expect(findEvent(events, PostHogMCPAnalyticsEvent.Exception)).toBeUndefined()
+  })
+
+  it('builds an $exception event by default when isError is true', () => {
+    const events = buildPostHogCaptureEvents(makeEvent({ isError: true, error: { message: 'boom' } }))
+
+    expect(events).toHaveLength(2)
+    expect(findEvent(events, PostHogMCPAnalyticsEvent.Exception)).toBeDefined()
+  })
+
   it('includes $set person properties from identity data', () => {
     const [event] = buildPostHogCaptureEvents(
       makeEvent({

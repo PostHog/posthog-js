@@ -1,13 +1,13 @@
 import type { Event, UnredactedEvent } from '../types'
-import { PostHogMCP } from '../extensions/client'
+import { PostHogMCP, PostHogMCPCaptureOptions } from '../extensions/client'
 import { redactEvent } from '../extensions/redaction'
 import { sanitizeEvent } from '../extensions/sanitization'
 import { truncateEvent } from '../extensions/truncation'
 
 /**
- * Intercepts events on the `PostHogMCP.ingest` boundary so tests can assert on the
+ * Intercepts events on the `PostHogMCP.capture` boundary so tests can assert on the
  * post-pipeline event without making an HTTP call. Runs the same
- * redact → sanitize → truncate pipeline the real `ingest` runs, so tests that
+ * redact → sanitize → truncate pipeline the real `capture` runs, so tests that
  * exercise redaction/sanitization/truncation see the transformed event.
  *
  * Patches the prototype so every `PostHogMCP` instance created by `instrument()`
@@ -15,18 +15,18 @@ import { truncateEvent } from '../extensions/truncation'
  */
 export class EventCapture {
   private capturedEvents: UnredactedEvent[] = []
-  private original?: (event: UnredactedEvent, enableAITracing: boolean) => Promise<void>
+  private original?: (event: UnredactedEvent, options: PostHogMCPCaptureOptions) => Promise<void>
 
   async start(): Promise<void> {
     if (this.original) {
       return
     }
-    this.original = PostHogMCP.prototype.ingest
+    this.original = PostHogMCP.prototype.capture
     const capture = this
-    PostHogMCP.prototype.ingest = async function (
+    PostHogMCP.prototype.capture = async function (
       this: PostHogMCP,
       event: UnredactedEvent,
-      _enableAITracing: boolean
+      _options: PostHogMCPCaptureOptions
     ): Promise<void> {
       let processed: UnredactedEvent = event
       if (event.redactionFn) {
@@ -34,7 +34,7 @@ export class EventCapture {
           processed = (await redactEvent(event, event.redactionFn)) as UnredactedEvent
           processed.redactionFn = undefined
         } catch {
-          // mirror client.ingest: drop event on redact failure
+          // mirror client.capture: drop event on redact failure
           return
         }
       }
@@ -49,12 +49,12 @@ export class EventCapture {
         return
       }
       capture.capturedEvents.push(processed)
-    } as typeof PostHogMCP.prototype.ingest
+    } as typeof PostHogMCP.prototype.capture
   }
 
   async stop(): Promise<void> {
     if (this.original) {
-      PostHogMCP.prototype.ingest = this.original
+      PostHogMCP.prototype.capture = this.original
       this.original = undefined
     }
   }

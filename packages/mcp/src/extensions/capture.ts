@@ -15,7 +15,7 @@ import { getSessionInfo } from './session'
  * here with `eventType: custom` and bypass that gate — disabling auto-capture should not
  * silently swallow events the host application explicitly chose to emit.
  */
-export function publishEvent(server: MCPServerLike, eventInput: UnredactedEvent): void {
+export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent): void {
   const data = getServerTrackingData(server)
   if (!data) {
     log('Warning: Server tracking data not found. Event will not be published.')
@@ -67,5 +67,8 @@ export function publishEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     properties: eventInput.properties,
   }
 
-  void client.ingest(fullEvent, data.options.enableAITracing ?? false)
+  void client.capture(fullEvent, {
+    enableAITracing: data.options.enableAITracing ?? false,
+    enableExceptionAutocapture: data.options.enableExceptionAutocapture ?? true,
+  })
 }

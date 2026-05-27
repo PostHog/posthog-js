@@ -4,7 +4,7 @@ import { MCPAnalyticsEventType } from './extensions/event-types'
 import { captureException } from './extensions/exceptions'
 import { getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { log, setLogger } from './extensions/logger'
-import { publishEvent } from './extensions/publish'
+import { captureEvent } from './extensions/capture'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
 import { setupMCPAnalyticsTools } from './extensions/tools'
 import { setupToolCallTracing } from './extensions/tracing'
@@ -190,7 +190,7 @@ function publishCustomEventSync(serverInput: unknown, eventData: CustomEventData
 
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc.
-  publishEvent(lowLevelServer, event)
+  captureEvent(lowLevelServer, event)
   log(`Published custom event for session ${trackingData.sessionId}`)
 }
 

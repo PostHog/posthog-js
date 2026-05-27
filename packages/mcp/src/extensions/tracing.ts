@@ -14,7 +14,7 @@ import {
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
-import { publishEvent } from './publish'
+import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
@@ -103,7 +103,7 @@ async function handleListToolsRequest(
     event.error = { message: 'No tools were sent to MCP client.' }
     event.isError = true
     event.duration = getEventDuration(event)
-    publishEvent(server, event)
+    captureEvent(server, event)
     return { tools }
   }
 
@@ -111,7 +111,7 @@ async function handleListToolsRequest(
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = getEventDuration(event)
-  publishEvent(server, event)
+  captureEvent(server, event)
   return { tools }
 }
 
@@ -162,7 +162,7 @@ async function getTracedToolsList(
     event.error = { message: getMCPCompatibleErrorMessage(error) }
     event.isError = true
     event.duration = getEventDuration(event)
-    publishEvent(server, event)
+    captureEvent(server, event)
     throw error
   }
 }
@@ -198,7 +198,7 @@ export function setupInitializeTracing(server: MCPServerLike): void {
 
       const result = await originalInitializeHandler(request, extra)
       event.response = result
-      publishEvent(server, event)
+      captureEvent(server, event)
       return result
     })
   }
@@ -278,7 +278,7 @@ async function handleToolCallRequest(
 
     event.response = finalResult
     event.duration = getEventDuration(event)
-    publishEvent(server, event)
+    captureEvent(server, event)
     return finalResult
   } catch (error) {
     event.isError = true
@@ -287,7 +287,7 @@ async function handleToolCallRequest(
       event.conversationId = undefined
     }
     event.duration = getEventDuration(event)
-    publishEvent(server, event)
+    captureEvent(server, event)
     throw error
   }
 }
@@ -314,7 +314,7 @@ async function executeToolCall(
     message: `Tool call handler not found for ${request.params?.name || 'unknown'}`,
   }
   event.duration = getEventDuration(event) || undefined
-  publishEvent(server, event)
+  captureEvent(server, event)
   throw new Error(`Unknown tool: ${request.params?.name || 'unknown'}`)
 }
 

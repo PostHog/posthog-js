@@ -46,6 +46,12 @@ export interface MCPAnalyticsOptions {
   enableConversationId?: boolean
   /** Master switch for auto-captured events. Defaults to `true`. */
   enableTracing?: boolean
+  /**
+   * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.
+   * Set to `false` if you handle error tracking elsewhere and don't want MCP errors
+   * fanning out into PostHog error tracking.
+   */
+  enableExceptionAutocapture?: boolean
   /** Inject a required `context` parameter on every tool to capture user intent. */
   context?: boolean | MCPAnalyticsContextOptions
   /**

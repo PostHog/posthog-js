@@ -2,7 +2,7 @@ import { type CallToolResult, ListToolsRequestSchema, type ListToolsResult } fro
 import type { MCPServerLike, UnredactedEvent } from '../types'
 import { getMCPCompatibleErrorMessage } from './compatibility'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
-import { publishEvent } from './publish'
+import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
@@ -96,7 +96,7 @@ export function setupMCPAnalyticsTools(server: MCPServerLike): void {
         event.error = { message: getMCPCompatibleErrorMessage(error) }
         event.isError = true
         event.duration = (event.timestamp && Date.now() - event.timestamp.getTime()) || 0
-        publishEvent(server, event)
+        captureEvent(server, event)
         throw error
       }
 
@@ -114,7 +114,7 @@ export function setupMCPAnalyticsTools(server: MCPServerLike): void {
         event.error = { message: 'No tools were sent to MCP client.' }
         event.isError = true
         event.duration = (event.timestamp && Date.now() - event.timestamp.getTime()) || 0
-        publishEvent(server, event)
+        captureEvent(server, event)
         return { tools }
       }
 
@@ -138,7 +138,7 @@ export function setupMCPAnalyticsTools(server: MCPServerLike): void {
       event.response = { tools }
       event.isError = false
       event.duration = (event.timestamp && Date.now() - event.timestamp.getTime()) || 0
-      publishEvent(server, event)
+      captureEvent(server, event)
       return { tools }
     })
   } catch (error) {

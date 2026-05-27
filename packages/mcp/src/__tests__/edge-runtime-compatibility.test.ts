@@ -131,7 +131,7 @@ describe('Edge Runtime Compatibility', () => {
       jest.resetModules()
 
       // Should not throw when importing
-      await expect(import('../extensions/publish')).resolves.toBeDefined()
+      await expect(import('../extensions/capture')).resolves.toBeDefined()
     })
 
     it('should handle process being undefined', async () => {
@@ -140,9 +140,9 @@ describe('Edge Runtime Compatibility', () => {
 
       jest.resetModules()
 
-      // Should not throw - publish module should still load without process
-      const module = await import('../extensions/publish')
-      expect(typeof module.publishEvent).toBe('function')
+      // Should not throw - capture module should still load without process
+      const module = await import('../extensions/capture')
+      expect(typeof module.captureEvent).toBe('function')
 
       // Restore process before other tests run
       globalThis.process = originalProcess

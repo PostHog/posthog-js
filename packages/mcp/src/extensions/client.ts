@@ -28,6 +28,12 @@ export interface PostHogMCPOptions extends Pick<
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
 }
 
+/** Per-event toggles consulted by `PostHogMCP.capture()` when fanning out an event. */
+export interface PostHogMCPCaptureOptions {
+  enableAITracing: boolean
+  enableExceptionAutocapture: boolean
+}
+
 /**
  * Internal PostHog client used by `instrument()`. Not exported from the package.
  * Use `flush(server)` and `shutdown(server)` if you need to drive the queue manually.
@@ -70,7 +76,9 @@ export class PostHogMCP extends PostHogCoreStateless {
    * Push an MCP event through the pipeline (redact → sanitize → truncate → fan out → enqueue).
    * Errors at any stage are logged and the event is dropped, never re-thrown into tool code.
    */
-  async ingest(event: UnredactedEvent, enableAITracing: boolean): Promise<void> {
+  async capture(event: UnredactedEvent, options: PostHogMCPCaptureOptions): Promise<void> {
+    const { enableAITracing, enableExceptionAutocapture } = options
+
     let processed: UnredactedEvent = event
 
     if (event.redactionFn) {
@@ -101,7 +109,10 @@ export class PostHogMCP extends PostHogCoreStateless {
     const fullEvent = processed as Event
 
     try {
-      for (const captureEvent of buildPostHogCaptureEvents(fullEvent, { enableAITracing })) {
+      for (const captureEvent of buildPostHogCaptureEvents(fullEvent, {
+        enableAITracing,
+        enableExceptionAutocapture,
+      })) {
         this.captureStateless(
           captureEvent.distinct_id,
           captureEvent.event,

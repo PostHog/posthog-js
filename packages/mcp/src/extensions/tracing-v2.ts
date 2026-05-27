@@ -14,7 +14,7 @@ import {
   resolveConversationId,
   stripConversationId,
 } from './conversation-id'
-import { publishEvent } from './publish'
+import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
@@ -404,7 +404,7 @@ function publishSuccessfulToolEvent(
 
   tracing.event.response = result
   tracing.event.duration = Date.now() - startTime.getTime()
-  publishEvent(server, tracing.event)
+  captureEvent(server, tracing.event)
 }
 
 function publishFailedToolEvent(
@@ -420,7 +420,7 @@ function publishFailedToolEvent(
   tracing.event.isError = true
   tracing.event.error = captureException(error)
   tracing.event.duration = Date.now() - startTime.getTime()
-  publishEvent(server, tracing.event)
+  captureEvent(server, tracing.event)
 }
 
 export function setupTracking(server: HighLevelMCPServerLike): void {

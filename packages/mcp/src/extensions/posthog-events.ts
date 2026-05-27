@@ -32,6 +32,8 @@ export interface PostHogCaptureEvent {
 
 export interface BuildPostHogCaptureEventsOptions {
   enableAITracing?: boolean
+  /** Whether to emit a `$exception` sibling alongside errored events. Defaults to `true`. */
+  enableExceptionAutocapture?: boolean
 }
 
 export function buildPostHogCaptureEvents(
@@ -40,7 +42,7 @@ export function buildPostHogCaptureEvents(
 ): PostHogCaptureEvent[] {
   const batch = [buildCaptureEvent(event, options)]
 
-  if (event.isError && event.error) {
+  if (event.isError && event.error && options.enableExceptionAutocapture !== false) {
     batch.push(buildExceptionEvent(event))
   }
 
