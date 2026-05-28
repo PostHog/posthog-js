@@ -19,6 +19,14 @@ export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
+// Granularity for persisting the session activity timestamp to the
+// persistence store. The in-memory value is updated at full resolution on
+// every call; only writes to storage are throttled.
+// Activity-timestamp-only changes within this window are not persisted.
+// The minimum configurable idle timeout is 60s, so 5s of staleness in the
+// persisted value cannot cause incorrect idle detection.
+const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
+
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
     private readonly _windowIdGenerator: () => string
@@ -31,6 +39,11 @@ export class SessionIdManager {
     private _sessionStartTimestamp: number | null
 
     private _sessionActivityTimestamp: number | null
+    // Tracks the activity timestamp we most recently persisted. Used to
+    // decide whether a new activity-only change is worth writing to
+    // storage. Reset to null on `resetSessionId` so the next real value
+    // always lands in storage.
+    private _lastPersistedActivityTimestamp: number | null = null
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
     private readonly _sessionTimeoutMs: number
 
@@ -164,19 +177,42 @@ export class SessionIdManager {
         sessionActivityTimestamp: number | null,
         sessionStartTimestamp: number | null
     ): void {
-        if (
-            sessionId !== this._sessionId ||
-            sessionActivityTimestamp !== this._sessionActivityTimestamp ||
-            sessionStartTimestamp !== this._sessionStartTimestamp
-        ) {
-            this._sessionStartTimestamp = sessionStartTimestamp
-            this._sessionActivityTimestamp = sessionActivityTimestamp
-            this._sessionId = sessionId
+        const idChanged = sessionId !== this._sessionId
+        const startChanged = sessionStartTimestamp !== this._sessionStartTimestamp
+        const activityChanged = sessionActivityTimestamp !== this._sessionActivityTimestamp
 
-            this._persistence.register({
-                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
-            })
+        // Always update in-memory state at full resolution so reads see
+        // the freshest values even if we choose not to persist.
+        this._sessionStartTimestamp = sessionStartTimestamp
+        this._sessionActivityTimestamp = sessionActivityTimestamp
+        this._sessionId = sessionId
+
+        if (!idChanged && !startChanged && !activityChanged) {
+            return
         }
+
+        // SESSION_ID changes and session-start changes are semantically
+        // important — always persist them. Activity-timestamp-only changes
+        // happen on every event capture (4+ times per second during active
+        // use); persist them only when the timestamp has moved enough that
+        // a stale read could affect idle detection. The in-memory value
+        // remains at full resolution above.
+        if (!idChanged && !startChanged) {
+            const lastPersisted = this._lastPersistedActivityTimestamp
+            if (
+                lastPersisted !== null &&
+                sessionActivityTimestamp !== null &&
+                Math.abs(sessionActivityTimestamp - lastPersisted) <
+                    ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
+            ) {
+                return
+            }
+        }
+
+        this._lastPersistedActivityTimestamp = sessionActivityTimestamp
+        this._persistence.register({
+            [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
+        })
     }
 
     private _getSessionId(): [number, string, number] {

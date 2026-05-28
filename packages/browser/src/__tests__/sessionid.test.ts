@@ -307,6 +307,116 @@ describe('Session ID manager', () => {
         })
     })
 
+    describe('activity timestamp persistence granularity', () => {
+        // Activity timestamp is updated on every event capture (4+ times
+        // per second). Persisting on every call writes the entire props
+        // blob to localStorage and broadcasts it cross-tab via storage
+        // events. We persist only when the value moves enough to matter
+        // for idle detection. In-memory state always stays at full
+        // resolution.
+        it('persists the first activity timestamp', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_000, 'id', 1_000_000],
+            })
+        })
+
+        it.each([
+            { label: '+1ms', delta: 1 },
+            { label: '+999ms', delta: 999 },
+            { label: '+4_999ms', delta: 4_999 },
+        ])('does not persist activity-only change $label (under granularity)', ({ delta }) => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_000_000 + delta, 1_000_000)
+            expect(persistence.register).not.toHaveBeenCalled()
+        })
+
+        it.each([
+            { label: '+5_000ms (boundary)', delta: 5_000 },
+            { label: '+5_001ms', delta: 5_001 },
+            { label: '+60_000ms', delta: 60_000 },
+        ])('persists activity-only change $label (crosses granularity)', ({ delta }) => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_000_000 + delta, 1_000_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_000 + delta, 'id', 1_000_000],
+            })
+        })
+
+        it('persists immediately when sessionId changes, regardless of timestamp delta', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id1', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id2', 1_000_001, 1_000_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_001, 'id2', 1_000_000],
+            })
+        })
+
+        it('persists immediately when startTimestamp changes, regardless of timestamp delta', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_000_001, 2_000_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_001, 'id', 2_000_000],
+            })
+        })
+
+        it('keeps in-memory activity timestamp at full resolution when persistence is skipped', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('id', 1_000_001, 1_000_000)
+            // Under the 5_000 ms granularity, persistence is skipped, but the
+            // in-memory value still reflects the latest tick — important for
+            // any in-process readers and for the next granularity comparison.
+            expect(sessionIdManager['_sessionActivityTimestamp']).toBe(1_000_001)
+        })
+
+        it('compares against last persisted, not last in-memory', () => {
+            // Six 1_000 ms increments — none on its own crosses 5_000 ms,
+            // but the cumulative delta does. We must compare to the
+            // last-persisted value, not the previous in-memory tick.
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000) // persisted (first)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_001_000, 1_000_000) // +1s
+            sessionIdManager['_setSessionId']('id', 1_002_000, 1_000_000) // +2s
+            sessionIdManager['_setSessionId']('id', 1_003_000, 1_000_000) // +3s
+            sessionIdManager['_setSessionId']('id', 1_004_000, 1_000_000) // +4s
+            expect(persistence.register).not.toHaveBeenCalled()
+
+            sessionIdManager['_setSessionId']('id', 1_005_000, 1_000_000) // +5s, crosses
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_005_000, 'id', 1_000_000],
+            })
+        })
+
+        it('persists immediately after resetSessionId, even within granularity window', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            sessionIdManager.resetSessionId() // persists null tuple
+            ;(persistence.register as jest.Mock).mockClear()
+
+            // After reset, the next real value is sessionId-changed
+            // (was null, now string) so it persists regardless of timestamp.
+            sessionIdManager['_setSessionId']('id', 1_000_001, 1_000_001)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_001, 'id', 1_000_001],
+            })
+        })
+    })
+
     describe('reset session id', () => {
         it('clears the existing session id', () => {
             sessionIdMgr(persistence).resetSessionId()
