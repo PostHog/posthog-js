@@ -21,6 +21,8 @@ const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
 // Must stay well under MIN_SESSION_IDLE_TIMEOUT_SECONDS so idle detection on
 // other tabs cannot fire on stale persisted data (pinned by a unit test).
+// Tradeoff: sibling tabs only observe activity once it has been persisted —
+// in-memory ticks within this window are invisible across tabs.
 export const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
 
 export class SessionIdManager {
@@ -254,9 +256,12 @@ export class SessionIdManager {
     }
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
-    // new ids will be generated.
+    // new ids will be generated. Also clears the idle timer so a stale fire
+    // cannot rotate the freshly-cleared session.
     resetSessionId(): void {
         this._lastPersistedActivityTimestamp = null
+        clearTimeout(this._enforceIdleTimeout)
+        this._enforceIdleTimeout = undefined
         this._setSessionId(null, null, null)
     }
 

@@ -558,6 +558,26 @@ describe('Session ID manager', () => {
             sessionIdMgr(persistence).resetSessionId()
             expect(persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
         })
+
+        it('clears the idle timer so a stale fire cannot rotate the reset session', () => {
+            jest.useFakeTimers()
+            try {
+                const sessionIdManager = sessionIdMgr(persistence)
+                ;(persistence.register as jest.Mock).mockClear()
+
+                sessionIdManager.resetSessionId()
+                ;(persistence.register as jest.Mock).mockClear()
+
+                // Advance well past the idle timer's scheduled fire time.
+                // Without the clear, the queued timer would fire here and
+                // call resetSessionId again on a session that's already null.
+                jest.advanceTimersByTime(sessionIdManager.sessionTimeoutMs * 2)
+
+                expect(persistence.register).not.toHaveBeenCalled()
+            } finally {
+                jest.useRealTimers()
+            }
+        })
         it('a new session id is generated when called', () => {
             persistence.props[SESSION_ID] = [null, null, null]
             expect(sessionIdMgr(persistence)['_getSessionId']()).toEqual([null, null, null])
