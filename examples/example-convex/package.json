@@ -19,7 +19,7 @@
         "@posthog/ai": "file:../../target/posthog-ai.tgz",
         "@posthog/convex": "file:../../target/posthog-convex.tgz",
         "ai": "^6.0.182",
-        "convex": "^1.38.0",
+        "convex": "^1.39.0",
         "convex-helpers": "^0.1.117",
         "posthog-node": "file:../../target/posthog-node.tgz",
         "react": "^19.2.6",

@@ -379,6 +379,70 @@ describe('blocked elements with CSS transforms', () => {
     expect(left).toBeGreaterThanOrEqual(0);
     expect(top).toBeGreaterThanOrEqual(0);
   });
+
+  it('captures rr_position=static for in-flow blocked elements and omits rr_transform', () => {
+    const el = renderWithStyle(
+      `<div class="blockblock" style="width: 100px; height: 50px;">In-flow blocked</div>`,
+      '',
+    );
+
+    const sn = serializeNode(el) as elementNode;
+
+    expect(sn?.attributes?.rr_position).toBe('static');
+    // No transform was set, so rr_transform should not be serialized.
+    expect(sn?.attributes?.rr_transform).toBeUndefined();
+  });
+
+  it('captures rr_transform for blocked elements that have a CSS transform', () => {
+    const el = renderWithStyle(
+      `<div class="blockblock" style="transform: translate(20px, 30px); width: 100px; height: 50px;">Transformed</div>`,
+      '',
+    );
+
+    const sn = serializeNode(el) as elementNode;
+
+    expect(sn?.attributes?.rr_position).toBe('static');
+    expect(sn?.attributes?.rr_transform).toBeDefined();
+    expect(sn?.attributes?.rr_transform).not.toBe('none');
+  });
+
+  it('captures rr_position for explicitly positioned blocked elements', () => {
+    const el = renderWithStyle(
+      `<div class="blockblock" style="position: relative; width: 100px; height: 50px;">Relative</div>`,
+      '',
+    );
+
+    const sn = serializeNode(el) as elementNode;
+
+    expect(sn?.attributes?.rr_position).toBe('relative');
+  });
+
+  it.each([
+    { display: 'inline', shouldCapture: true },
+    { display: 'inline-block', shouldCapture: true },
+    { display: 'inline-flex', shouldCapture: true },
+    { display: 'inline-grid', shouldCapture: true },
+    { display: 'block', shouldCapture: false },
+    { display: 'flex', shouldCapture: false },
+  ])(
+    'rr_display capture for display=$display (captured=$shouldCapture)',
+    ({ display, shouldCapture }) => {
+      // JSDOM's getComputedStyle doesn't infer the tag's default display, so set it explicitly.
+      document.write(
+        `<div><span class="blockblock" style="display: ${display};">x</span></div>`,
+      );
+      const el = document.querySelector('span.blockblock')! as HTMLElement;
+
+      const sn = serializeNode(el) as elementNode;
+
+      if (shouldCapture) {
+        expect(sn?.attributes?.rr_display).toBe(display);
+      } else {
+        // Only inline-level displays need a rebuild override.
+        expect(sn?.attributes?.rr_display).toBeUndefined();
+      }
+    },
+  );
 });
 
 describe('jsdom snapshot', () => {

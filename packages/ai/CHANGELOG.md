@@ -1,5 +1,13 @@
 # posthog-ai
 
+## 7.19.6
+
+### Patch Changes
+
+- [#3668](https://github.com/PostHog/posthog-js/pull/3668) [`7c80b2e`](https://github.com/PostHog/posthog-js/commit/7c80b2efbfd61936c1786cdd69d917e4ed657dea) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Expose `projectToken` in addition to `apiKey` for `PostHogTraceExporter`
+
+  We're moving towards a place where we're calling this `projectToken` everywhere. Let's release this as a patch version because it's a tiny change and we still support the old usage. This might be dropped in the next packages/ai major version. (2026-05-28)
+
 ## 7.19.5
 
 ### Patch Changes

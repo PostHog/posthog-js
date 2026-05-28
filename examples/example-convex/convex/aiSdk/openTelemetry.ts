@@ -20,7 +20,7 @@ const provider = new BasicTracerProvider({
     spanProcessors: [
         new SimpleSpanProcessor(
             new PostHogTraceExporter({
-                apiKey: process.env.POSTHOG_API_KEY!,
+                projectToken: process.env.POSTHOG_PROJECT_TOKEN!,
                 host: process.env.POSTHOG_HOST,
             })
         ),
