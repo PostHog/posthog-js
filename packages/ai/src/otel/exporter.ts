@@ -15,24 +15,32 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_OTEL_HOST
 }
 
-export interface PostHogTraceExporterOptions {
-  /**
-   * Your PostHog project API token.
-   */
-  projectToken?: string
-
-  /**
-   * Your PostHog project API key.
-   *
-   * @deprecated Use `projectToken` instead
-   */
-  apiKey?: string
-
-  /**
-   * PostHog host URL. Defaults to `https://us.i.posthog.com`.
-   */
-  host?: string
-}
+/**
+ * Options for the PostHogTraceExporter. You must obligatorily provide `projectToken`. You can also
+ * optionally override the `host` URL. `host` defaults to `https://us.i.posthog.com`.
+ *
+ * @example
+ * ```ts
+ * import { PostHogTraceExporter } from '@posthog/ai/otel'
+ *
+ * new PostHogTraceExporter({ projectToken: 'phc_...' })
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { PostHogTraceExporter } from '@posthog/ai/otel'
+ *
+ * new PostHogTraceExporter({ projectToken: 'phc_...', host: 'https://eu.i.posthog.com' })
+ * ```
+ */
+export type PostHogTraceExporterOptions =
+  | { projectToken: string; apiKey?: never; host?: string }
+  | {
+      /** @deprecated Use `projectToken` instead */
+      apiKey: string
+      projectToken?: never
+      host?: string
+    }
 
 /**
  * An OpenTelemetry `TraceExporter` that sends AI traces to PostHog's OTLP
@@ -48,6 +56,9 @@ export interface PostHogTraceExporterOptions {
  * plug PostHog into an existing processor chain. Otherwise prefer
  * {@link PostHogSpanProcessor}, which is self-contained.
  *
+ * You must obligatorily provide `projectToken`. You can also
+ * optionally override the `host` URL.
+ *
  * @example
  * ```ts
  * import { PostHogTraceExporter } from '@posthog/ai/otel'
@@ -61,7 +72,7 @@ export interface PostHogTraceExporterOptions {
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
   constructor(options: PostHogTraceExporterOptions) {
-    const token = normalizeToken(options.projectToken || options.apiKey)
+    const token = 'projectToken' in options ? normalizeToken(options.projectToken) : normalizeToken(options.apiKey)
     if (!token) {
       throw new Error('PostHogTraceExporter requires a projectToken')
     }
