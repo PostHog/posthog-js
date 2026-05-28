@@ -1,13 +1,21 @@
 import { isBuiltin, isEvent, isPrimitive } from '@/utils'
 import { CoercingContext, ErrorTrackingCoercer, ExceptionLike } from '../types'
 
-type EventWithDetailReason = Event & { detail: { reason: unknown } }
+// Structural subsets of the DOM `PromiseRejectionEvent` / `Event`. Avoids leaking
+// DOM-only globals into the public type surface so non-DOM consumers (e.g. React
+// Native, whose tsconfig lib excludes DOM) can still consume `@posthog/core`
+// types via tools like api-extractor that resolve symbols transitively.
+interface PromiseRejectionEventLike {
+  reason: unknown
+}
+interface EventWithDetailReason {
+  detail: { reason: unknown }
+}
+type RejectionLike = PromiseRejectionEventLike | EventWithDetailReason
 
 // Web only
-export class PromiseRejectionEventCoercer implements ErrorTrackingCoercer<
-  PromiseRejectionEvent | EventWithDetailReason
-> {
-  match(err: unknown): err is PromiseRejectionEvent | EventWithDetailReason {
+export class PromiseRejectionEventCoercer implements ErrorTrackingCoercer<RejectionLike> {
+  match(err: unknown): err is RejectionLike {
     return isBuiltin(err, 'PromiseRejectionEvent') || this.isCustomEventWrappingRejection(err)
   }
 
@@ -16,14 +24,14 @@ export class PromiseRejectionEventCoercer implements ErrorTrackingCoercer<
       return false
     }
     try {
-      const detail = (err as EventWithDetailReason).detail
+      const detail = (err as unknown as EventWithDetailReason).detail
       return detail != null && typeof detail === 'object' && 'reason' in detail
     } catch {
       return false
     }
   }
 
-  coerce(err: PromiseRejectionEvent | EventWithDetailReason, ctx: CoercingContext): ExceptionLike | undefined {
+  coerce(err: RejectionLike, ctx: CoercingContext): ExceptionLike | undefined {
     const reason = this.getUnhandledRejectionReason(err)
     if (isPrimitive(reason)) {
       return {
@@ -37,7 +45,7 @@ export class PromiseRejectionEventCoercer implements ErrorTrackingCoercer<
     }
   }
 
-  private getUnhandledRejectionReason(error: PromiseRejectionEvent | EventWithDetailReason): unknown {
+  private getUnhandledRejectionReason(error: RejectionLike): unknown {
     try {
       // PromiseRejectionEvents store the object of the rejection under 'reason'
       // see https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent
