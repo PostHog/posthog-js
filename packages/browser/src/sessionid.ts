@@ -7,7 +7,7 @@ import { window } from './utils/globals'
 
 import { createLogger } from './utils/logger'
 
-import { isArray, isUndefined, clampToRange, isPositiveNumber } from '@posthog/core'
+import { isArray, isNull, isUndefined, clampToRange, isPositiveNumber } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -200,10 +200,9 @@ export class SessionIdManager {
         if (!idChanged && !startChanged) {
             const lastPersisted = this._lastPersistedActivityTimestamp
             if (
-                lastPersisted !== null &&
-                sessionActivityTimestamp !== null &&
-                Math.abs(sessionActivityTimestamp - lastPersisted) <
-                    ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
+                !isNull(lastPersisted) &&
+                !isNull(sessionActivityTimestamp) &&
+                Math.abs(sessionActivityTimestamp - lastPersisted) < ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
             ) {
                 return
             }

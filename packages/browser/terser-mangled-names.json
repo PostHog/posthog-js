@@ -308,6 +308,7 @@
         "_lastMessageTimestamp",
         "_lastMutation",
         "_lastPathname",
+        "_lastPersistedActivityTimestamp",
         "_lastRemoteConfig",
         "_lastSelectionChanged",
         "_lastVisibilityChange",
