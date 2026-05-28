@@ -352,6 +352,73 @@ describe('persistence', () => {
             }
             expect(library.properties()).toEqual({})
         })
+
+        describe('no-op write rejection in save()', () => {
+            // save() short-circuits if the serialized props are unchanged
+            // since the last successful write. cookieStore and localStore
+            // are shared singletons; the spy may carry calls from setup
+            // (library.clear() removes both subdomain variants, which
+            // cookieStore._remove implements as two _set calls). We
+            // mockClear() after the setup write to isolate the assertion.
+
+            it('skips storage writes when props are unchanged', () => {
+                library.register({ distinct_id: 'hi' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                library.save()
+                library.save()
+                library.save()
+
+                expect(storageSetSpy).not.toHaveBeenCalled()
+            })
+
+            it('writes when a value changes', () => {
+                library.register({ distinct_id: 'hi' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                library.register({ distinct_id: 'bye' })
+                expect(storageSetSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it('writes again after a remove() resets the cache', () => {
+                library.register({ distinct_id: 'hi' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+
+                // Without remove(), the save below would be deduped.
+                library.remove()
+                storageSetSpy.mockClear()
+                library.save()
+
+                expect(storageSetSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it('writes through after remove() even if props are unchanged', () => {
+                library.register({ distinct_id: 'hi' })
+                library.remove()
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                // save() with unchanged props would normally be a no-op.
+                // After remove(), the cache was cleared, so this must
+                // write through — there is nothing in storage right now.
+                library.save()
+                expect(storageSetSpy).toHaveBeenCalled()
+            })
+
+            it('treats equivalent props (same JSON) as no-op even with new object identity', () => {
+                library.register({ distinct_id: 'hi', tags: ['a', 'b'] })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                // Force a save() with no real change. register() guards
+                // against this via `!==`, so call save() directly.
+                library.save()
+
+                expect(storageSetSpy).not.toHaveBeenCalled()
+            })
+        })
     })
 
     describe('localStorage+cookie', () => {
@@ -609,9 +676,10 @@ describe('posthog instance persistence', () => {
         const createdStore = (posthog.persistence as any)._storage
         const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
 
-        // Trigger a save to verify storage is called
+        // Trigger a save to verify storage is called. We force a real
+        // state change because save() now no-ops identical writes.
         if (posthog.persistence) {
-            posthog.persistence.save()
+            posthog.persistence.register({ verify_write: 'yes' })
         }
 
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')

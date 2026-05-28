@@ -70,6 +70,11 @@ export class PostHogPersistence {
     private _expire_days: number | undefined
     private _default_expiry: number | undefined
     private _cross_subdomain: boolean | undefined
+    // Serialized snapshot of `props` from the most recent successful write.
+    // Used by `save()` to skip writes that would produce an identical
+    // payload. Cleared whenever we explicitly remove the storage entry, so
+    // a save after remove always lands.
+    private _lastSavedSerialized: string | undefined
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -202,6 +207,20 @@ export class PostHogPersistence {
         if (this._disabled) {
             return
         }
+
+        // No-op rejection: skip the write if `props` serialize to the same
+        // string we wrote last time. Callers spam `save()` after every
+        // property change, and many of those changes leave the serialized
+        // payload unchanged (e.g. resetting a value to its current value).
+        // Writing identical bytes to localStorage still fires a `storage`
+        // event in every other same-origin tab, where Chrome allocates the
+        // payload buffer in mojo IPC even though no listener reacts.
+        const serialized = JSON.stringify(this.props)
+        if (serialized === this._lastSavedSerialized) {
+            return
+        }
+        this._lastSavedSerialized = serialized
+
         this._storage._set(
             this._name,
             this.props,
@@ -216,6 +235,8 @@ export class PostHogPersistence {
         // remove both domain and subdomain cookies
         this._storage._remove(this._name, false)
         this._storage._remove(this._name, true)
+        // Storage entry is gone — any future save() must write through.
+        this._lastSavedSerialized = undefined
     }
 
     // removes the storage entry and deletes all loaded data
