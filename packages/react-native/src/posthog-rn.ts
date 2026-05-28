@@ -701,7 +701,7 @@ export class PostHog extends PostHogCore {
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
   private _setDefaultPersonPropertiesForFlags(reloadFeatureFlags = true): void {
-    const defaultProps: Record<string, string> = {}
+    const defaultProps: Record<string, JsonType> = {}
     const relevantKeys = [
       '$app_version',
       '$app_build',
@@ -714,16 +714,16 @@ export class PostHog extends PostHogCore {
     relevantKeys.forEach((key) => {
       const value = this._appProperties[key]
       if (value !== null && value !== undefined) {
-        defaultProps[key] = String(value)
+        defaultProps[key] = value
       }
     })
 
     const commonProps = this.getCommonEventProperties()
     if (commonProps.$lib) {
-      defaultProps.$lib = String(commonProps.$lib)
+      defaultProps.$lib = commonProps.$lib as JsonType
     }
     if (commonProps.$lib_version) {
-      defaultProps.$lib_version = String(commonProps.$lib_version)
+      defaultProps.$lib_version = commonProps.$lib_version as JsonType
     }
 
     if (Object.keys(defaultProps).length > 0) {
@@ -1041,11 +1041,11 @@ export class PostHog extends PostHogCore {
 
     // Automatically cache group properties for feature flag evaluation
     if (properties && Object.keys(properties).length > 0) {
-      const propsToCache: Record<string, string> = {}
+      const propsToCache: Record<string, JsonType> = {}
       Object.keys(properties).forEach((key) => {
         const value = properties[key]
         if (value !== null && value !== undefined) {
-          propsToCache[key] = String(value)
+          propsToCache[key] = value as JsonType
         }
       })
       if (Object.keys(propsToCache).length > 0) {
@@ -1188,7 +1188,7 @@ export class PostHog extends PostHogCore {
    * @param properties The group properties to set for flag evaluation
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setGroupPropertiesForFlags(properties: Record<string, Record<string, string>>, reloadFeatureFlags = true): void {
+  setGroupPropertiesForFlags(properties: Record<string, Record<string, JsonType>>, reloadFeatureFlags = true): void {
     super.setGroupPropertiesForFlags(properties)
 
     if (reloadFeatureFlags) {
@@ -1513,20 +1513,20 @@ export class PostHog extends PostHogCore {
 
     // Automatically cache person properties for feature flag evaluation
 
-    const propsToCache: Record<string, string> = {}
+    const propsToCache: Record<string, JsonType> = {}
     if (userProps) {
       Object.entries(userProps).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
-          propsToCache[key] = String(value)
+          propsToCache[key] = value as JsonType
         }
       })
     }
 
-    const propsOnceToCache: Record<string, string> = {}
+    const propsOnceToCache: Record<string, JsonType> = {}
     if (userPropsOnce && typeof userPropsOnce === 'object') {
       Object.entries(userPropsOnce as Record<string, unknown>).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
-          propsOnceToCache[key] = String(value)
+          propsOnceToCache[key] = value as JsonType
         }
       })
     }

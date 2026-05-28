@@ -838,6 +838,33 @@ describe('PostHog React Native', () => {
         expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
       })
 
+      it('should preserve non-string types (boolean, array, number, object) in person properties', async () => {
+        posthog.identify('user-123', {
+          $set: {
+            hasApprovedSubscription: true,
+            user_categories: ['wl'],
+            score: 7,
+            nested: { x: 1, deep: ['a', 'b'] },
+          },
+          $set_once: {
+            initial_signup_completed: false,
+            signup_steps: ['email', 'plan'],
+          },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+        expect(cachedProps).toEqual({
+          hasApprovedSubscription: true,
+          user_categories: ['wl'],
+          score: 7,
+          nested: { x: 1, deep: ['a', 'b'] },
+          initial_signup_completed: false,
+          signup_steps: ['email', 'plan'],
+        })
+        expect(cachedProps.hasApprovedSubscription).not.toBe('true')
+        expect(cachedProps.user_categories).not.toBe('wl')
+      })
+
       it('should cache $set_once properties with set-once semantics', async () => {
         posthog.identify('user-123', {
           $set: { email: 'test@example.com' },
@@ -931,7 +958,7 @@ describe('PostHog React Native', () => {
         posthog.group('company', 'acme-inc', { name: 'Acme Inc', employees: 50 })
 
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
-        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: '50' } })
+        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: 50 } })
       })
 
       it('should merge group properties from multiple group() calls', async () => {
@@ -939,7 +966,28 @@ describe('PostHog React Native', () => {
         posthog.group('company', 'acme-inc', { employees: 50 })
 
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
-        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: '50' } })
+        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: 50 } })
+      })
+
+      it('should preserve non-string types (boolean, array, number, object) for group properties', async () => {
+        posthog.group('company', 'acme-inc', {
+          plan_active: true,
+          seats: 10,
+          tags: ['enterprise', 'beta'],
+          metadata: { region: 'us', tier: 1 },
+        })
+
+        const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
+        expect(cachedProps).toEqual({
+          company: {
+            plan_active: true,
+            seats: 10,
+            tags: ['enterprise', 'beta'],
+            metadata: { region: 'us', tier: 1 },
+          },
+        })
+        expect(cachedProps.company.plan_active).not.toBe('true')
+        expect(cachedProps.company.tags).not.toBe('enterprise,beta')
       })
 
       it('should handle multiple group types', async () => {
