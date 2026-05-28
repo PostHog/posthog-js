@@ -3283,6 +3283,62 @@ describe('Lazy SessionRecording', () => {
         })
     })
 
+    describe('rrweb attach debug signals', () => {
+        it('reports neither attached nor start attempted before the recorder runs', () => {
+            // No onRemoteConfig call yet: _startRecorder has never been entered.
+            const lazy = sessionRecording['_lazyLoadedSessionRecording']
+            expect(lazy).toBeUndefined()
+            // Once the lazy recorder exists but start has not run, both should be false.
+            // We simulate that by constructing it directly without driving the script load.
+            const standalone = new LazyLoadedSessionRecording(posthog)
+            expect(standalone.sdkDebugProperties.$sdk_debug_rrweb_attached).toBe(false)
+            expect(standalone.sdkDebugProperties.$sdk_debug_rrweb_start_attempted).toBe(false)
+        })
+
+        it('reports attached: true and start_attempted: true after a successful start', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const debug = sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
+            expect(debug.$sdk_debug_rrweb_attached).toBe(true)
+            expect(debug.$sdk_debug_rrweb_start_attempted).toBe(true)
+        })
+
+        it('reports start_attempted: true but attached: false when rrweb.record returns undefined', () => {
+            loadScriptMock.mockImplementation((_ph: any, _path: any, callback: any) => {
+                assignableWindow.__PosthogExtensions__.rrweb = {
+                    record: jest.fn(() => undefined),
+                    version: 'fake',
+                    wasMaxDepthReached: jest.fn(() => false),
+                    resetMaxDepthState: jest.fn(),
+                }
+                assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn()
+                assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = jest.fn()
+                assignableWindow.__PosthogExtensions__.initSessionRecording = () => {
+                    return new LazyLoadedSessionRecording(posthog)
+                }
+                callback()
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const debug = sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
+            expect(debug.$sdk_debug_rrweb_start_attempted).toBe(true)
+            expect(debug.$sdk_debug_rrweb_attached).toBe(false)
+        })
+    })
+
     describe('buffering minimum duration', () => {
         it('can report no duration when no data', () => {
             sessionRecording.onRemoteConfig(
