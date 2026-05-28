@@ -175,6 +175,8 @@ export abstract class PostHogCoreStateless {
   /**
    * Returns the builder used by `captureException` to coerce arbitrary inputs into a
    * structured `$exception_list` (with parsed stack frames).
+   *
+   * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
    */
   getErrorPropertiesBuilder(): ErrorPropertiesBuilder {
     if (!this._errorPropertiesBuilder) {

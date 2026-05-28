@@ -1171,12 +1171,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * @returns {CaptureResult} The result of the capture
    */
   captureException(error: unknown, additionalProperties?: PostHogEventProperties, hint?: EventHint): void {
-    const exceptionProperties = this.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
-    this.capture(
-      '$exception',
-      { ...exceptionProperties, ...additionalProperties } as unknown as PostHogEventProperties,
-      { _originatedFromCaptureException: true }
-    )
+    try {
+      const exceptionProperties = this.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
+      this.capture(
+        '$exception',
+        { ...exceptionProperties, ...additionalProperties } as unknown as PostHogEventProperties,
+        { _originatedFromCaptureException: true }
+      )
+    } catch (e) {
+      this._logger.error('Error while capturing $exception:', e)
+    }
   }
 
   /**
