@@ -720,10 +720,10 @@ export class PostHog extends PostHogCore {
 
     const commonProps = this.getCommonEventProperties()
     if (commonProps.$lib) {
-      defaultProps.$lib = commonProps.$lib as JsonType
+      defaultProps.$lib = commonProps.$lib
     }
     if (commonProps.$lib_version) {
-      defaultProps.$lib_version = commonProps.$lib_version as JsonType
+      defaultProps.$lib_version = commonProps.$lib_version
     }
 
     if (Object.keys(defaultProps).length > 0) {
@@ -1045,7 +1045,7 @@ export class PostHog extends PostHogCore {
       Object.keys(properties).forEach((key) => {
         const value = properties[key]
         if (value !== null && value !== undefined) {
-          propsToCache[key] = value as JsonType
+          propsToCache[key] = value
         }
       })
       if (Object.keys(propsToCache).length > 0) {
@@ -1514,19 +1514,19 @@ export class PostHog extends PostHogCore {
     // Automatically cache person properties for feature flag evaluation
 
     const propsToCache: Record<string, JsonType> = {}
-    if (userProps) {
+    if (userProps && typeof userProps === 'object' && !Array.isArray(userProps)) {
       Object.entries(userProps).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
-          propsToCache[key] = value as JsonType
+          propsToCache[key] = value
         }
       })
     }
 
     const propsOnceToCache: Record<string, JsonType> = {}
-    if (userPropsOnce && typeof userPropsOnce === 'object') {
-      Object.entries(userPropsOnce as Record<string, unknown>).forEach(([key, value]) => {
+    if (userPropsOnce && typeof userPropsOnce === 'object' && !Array.isArray(userPropsOnce)) {
+      Object.entries(userPropsOnce).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
-          propsOnceToCache[key] = value as JsonType
+          propsOnceToCache[key] = value
         }
       })
     }
