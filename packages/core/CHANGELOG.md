@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.29.13
+
+### Patch Changes
+
+- [#3681](https://github.com/PostHog/posthog-js/pull/3681) [`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - unify captureException in posthog core
+  (2026-05-28)
+- Updated dependencies []:
+  - @posthog/types@1.376.4
+
 ## 1.29.12
 
 ### Patch Changes
