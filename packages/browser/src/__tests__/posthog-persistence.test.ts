@@ -418,6 +418,58 @@ describe('persistence', () => {
 
                 expect(storageSetSpy).not.toHaveBeenCalled()
             })
+
+            it.each([
+                {
+                    label: 'expire_days change',
+                    mutate: (lib: PostHogPersistence) => ((lib as any)._expire_days = 90),
+                },
+                {
+                    label: 'cross_subdomain change',
+                    mutate: (lib: PostHogPersistence) => ((lib as any)._cross_subdomain = true),
+                },
+                {
+                    label: 'secure change',
+                    mutate: (lib: PostHogPersistence) => ((lib as any)._secure = true),
+                },
+            ])('writes through when $label invalidates the storage args, even with unchanged props', ({ mutate }) => {
+                // The no-op fingerprint must cover all four arguments to
+                // `_storage._set` — serialized props plus expire_days,
+                // cross_subdomain, secure. Otherwise a customer who calls
+                // `posthog.set_config({ cookie_expiration: 90 })` would
+                // mutate `_expire_days` but the no-op check (which only
+                // saw props) would short-circuit, and the cookie keeps
+                // its old `Expires` header until some other prop changes.
+                library.register({ distinct_id: 'hi' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                mutate(library)
+                library.save()
+
+                expect(storageSetSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it.each([
+                { label: 'BigInt', value: BigInt(1234567890123) },
+                {
+                    label: 'circular reference',
+                    value: (() => {
+                        const o: any = {}
+                        o.self = o
+                        return o
+                    })(),
+                },
+            ])('does not throw on $label values that JSON.stringify rejects', ({ value }) => {
+                // Pre-existing behaviour: unserializable values like BigInt
+                // and circular references were caught by the storage layer's
+                // own try/catch and logged/dropped. The no-op fingerprint
+                // calls JSON.stringify too, but we mustn't propagate the
+                // exception out of save() — application code that registered
+                // such values would crash.
+                library.register({ ok: 'value', weird: value })
+                expect(() => library.save()).not.toThrow()
+            })
         })
     })
 

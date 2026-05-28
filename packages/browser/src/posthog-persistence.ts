@@ -208,18 +208,33 @@ export class PostHogPersistence {
             return
         }
 
-        // No-op rejection: skip the write if `props` serialize to the same
-        // string we wrote last time. Callers spam `save()` after every
-        // property change, and many of those changes leave the serialized
-        // payload unchanged (e.g. resetting a value to its current value).
-        // Writing identical bytes to localStorage still fires a `storage`
-        // event in every other same-origin tab, where Chrome allocates the
-        // payload buffer in mojo IPC even though no listener reacts.
-        const serialized = JSON.stringify(this.props)
-        if (serialized === this._lastSavedSerialized) {
-            return
+        // No-op rejection: skip the write when none of the arguments to
+        // `_storage._set` have changed since the last successful write.
+        // Callers spam `save()` after every property change, and many of
+        // those changes leave the storage payload unchanged. Writing
+        // identical bytes to localStorage still fires a cross-tab `storage`
+        // event where Chrome allocates the payload buffer in mojo IPC even
+        // though no listener reacts.
+        //
+        // The fingerprint covers all four meaningful inputs to `_storage._set`:
+        // serialized props, expire_days, cross_subdomain, secure. For
+        // localStorage / sessionStorage the last three are ignored by the
+        // storage backend so including them just costs a redundant write
+        // when cookie options change on a non-cookie store — rare and cheap.
+        //
+        // JSON.stringify can throw on BigInt / circular refs. We let the
+        // underlying storage layer keep its existing try/catch behaviour
+        // (log and drop) by falling through on serialization errors.
+        try {
+            const fingerprint =
+                JSON.stringify(this.props) + '|' + this._expire_days + '|' + this._cross_subdomain + '|' + this._secure
+            if (fingerprint === this._lastSavedSerialized) {
+                return
+            }
+            this._lastSavedSerialized = fingerprint
+        } catch {
+            // fall through to storage._set, which handles the error itself
         }
-        this._lastSavedSerialized = serialized
 
         this._storage._set(
             this._name,
