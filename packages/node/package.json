@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.34.8",
+  "version": "5.35.5",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -102,7 +102,10 @@
       "require": "./dist/entrypoints/nestjs.js"
     },
     "./experimental": {
-      "types": "./dist/experimental.d.ts"
+      "types": "./dist/experimental.d.ts",
+      "import": "./dist/experimental.mjs",
+      "require": "./dist/experimental.js",
+      "default": "./dist/experimental.js"
     }
   }
 }

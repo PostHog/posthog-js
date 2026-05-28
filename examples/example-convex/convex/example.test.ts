@@ -71,13 +71,13 @@ function firstBatchEvent(): Record<string, unknown> {
 
 describe('capture', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -191,13 +191,13 @@ describe('capture', () => {
 
 describe('identify', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -259,13 +259,13 @@ describe('identify', () => {
 
 describe('captureException', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -414,23 +414,21 @@ function definitionsResponse(flags: FlagDefinition[]) {
 }
 
 async function loadDefinitions(t: ReturnType<typeof initConvexTest>) {
-    await t.action(components.posthog.lib.refreshFlagDefinitions, {
-        apiKey: process.env.POSTHOG_API_KEY ?? '',
-        personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY ?? '',
-        host: process.env.POSTHOG_HOST,
-    })
+    // Credentials are read from POSTHOG_PROJECT_TOKEN / POSTHOG_HOST / POSTHOG_PERSONAL_API_KEY env vars
+    // inside the component action, so the call itself takes no args.
+    await t.action(components.posthog.lib.refreshFlagDefinitions, {})
 }
 
 describe('getFeatureFlag (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -538,14 +536,14 @@ describe('getFeatureFlag (local eval)', () => {
 
 describe('isFeatureEnabled (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -604,14 +602,14 @@ describe('isFeatureEnabled (local eval)', () => {
 
 describe('getFeatureFlagPayload (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -682,14 +680,14 @@ describe('getFeatureFlagPayload (local eval)', () => {
 
 describe('getFeatureFlagResult (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -741,14 +739,14 @@ describe('getFeatureFlagResult (local eval)', () => {
 
 describe('getAllFlags (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -802,14 +800,14 @@ describe('getAllFlags (local eval)', () => {
 
 describe('getAllFlagsAndPayloads (local eval)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         fetchCalls = []
@@ -850,7 +848,7 @@ describe('refreshFlagDefinitions cron action', () => {
     // to 1ms via the env override so the retry-heavy tests stay snappy.
     beforeEach(() => {
         jest.useRealTimers()
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
         process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE = '1'
@@ -858,7 +856,7 @@ describe('refreshFlagDefinitions cron action', () => {
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_PERSONAL_API_KEY
         delete process.env.POSTHOG_HOST
         delete process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE
@@ -866,11 +864,9 @@ describe('refreshFlagDefinitions cron action', () => {
         jest.useFakeTimers()
     })
 
-    const credentials = {
-        apiKey: 'phc_test_key',
-        personalApiKey: 'phx_test_personal_key',
-        host: 'https://test.posthog.com',
-    }
+    // No credentials are passed to the action — they're env-driven (POSTHOG_PROJECT_TOKEN,
+    // POSTHOG_HOST, POSTHOG_PERSONAL_API_KEY) and configured in beforeEach.
+    const noArgs = {}
 
     /** Builds a fetch mock whose responses are picked per call from the supplied sequence. */
     function sequencedFetch(
@@ -898,7 +894,7 @@ describe('refreshFlagDefinitions cron action', () => {
         global.fetch = mockFetch(definitionsResponse([flagDef('flag-a')]))
         const t = initConvexTest()
 
-        await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)
+        await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)
 
         const definitionCalls = fetchCalls.filter((c) => c.url.includes('/flags/definitions'))
         expect(definitionCalls).toHaveLength(1)
@@ -906,15 +902,14 @@ describe('refreshFlagDefinitions cron action', () => {
         expect(definitionCalls[0].url).toContain('send_cohorts')
     })
 
-    test('no-ops when personalApiKey is missing', async () => {
+    test('no-ops when POSTHOG_PERSONAL_API_KEY env var is missing', async () => {
+        // Clearing the env var simulates a deployment where local evaluation isn't configured —
+        // the refresh action returns a skip status rather than fetching.
+        delete process.env.POSTHOG_PERSONAL_API_KEY
         global.fetch = mockFetch()
         const t = initConvexTest()
 
-        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, {
-            apiKey: 'phc_test_key',
-            personalApiKey: '',
-            host: 'https://test.posthog.com',
-        })) as { status: string }
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as { status: string }
 
         expect(result.status).toBe('skipped')
         expect(fetchCalls.filter((c) => c.url.includes('/flags/definitions'))).toHaveLength(0)
@@ -934,7 +929,7 @@ describe('refreshFlagDefinitions cron action', () => {
         ])
         const t = initConvexTest()
 
-        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
             status: string
         }
 
@@ -948,7 +943,7 @@ describe('refreshFlagDefinitions cron action', () => {
         ])
         const t = initConvexTest()
 
-        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
             status: string
         }
 
@@ -963,13 +958,13 @@ describe('refreshFlagDefinitions cron action', () => {
         // Seed the cache with real defs.
         const t = initConvexTest()
         global.fetch = mockFetch(definitionsResponse([flagDef('seed')]))
-        await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)
+        await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)
 
         // Now PostHog flaps cold-cache 503s. Cache is < 5min old so we keep what we have.
         global.fetch = sequencedFetch([
             { status: 503, body: 'Required data not found in cache.' },
         ])
-        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
             status: string
         }
 
@@ -985,7 +980,7 @@ describe('refreshFlagDefinitions cron action', () => {
         try {
             const t = initConvexTest()
             global.fetch = mockFetch(definitionsResponse([flagDef('seed')]))
-            await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)
+            await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)
 
             // Jump 6 minutes forward; the cached defs now count as stale.
             jest.setSystemTime(new Date(Date.now() + 6 * 60 * 1000))
@@ -993,7 +988,7 @@ describe('refreshFlagDefinitions cron action', () => {
             global.fetch = sequencedFetch([
                 { status: 503, body: 'Required data not found in cache.' },
             ])
-            const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+            const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
                 status: string
             }
 
@@ -1011,17 +1006,50 @@ describe('refreshFlagDefinitions cron action', () => {
         global.fetch = mockFetch({
             '/flags/definitions': { flags: [flagDef('seed')], group_type_mapping: {}, cohorts: {} },
         })
-        await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)
+        await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)
 
         // Now PostHog returns 304 — no body, just the not-modified status.
         global.fetch = sequencedFetch([{ status: 304 }])
-        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, credentials)) as {
+        const result = (await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)) as {
             status: string
         }
 
         expect(result.status).toBe('unchanged')
         const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
         expect(JSON.parse(row!.data).flags).toHaveLength(1)
+    })
+})
+
+describe('getFlagDefinitions query', () => {
+    // The query exposes a `localEvalConfigured` flag based on whether the component sees
+    // `POSTHOG_PERSONAL_API_KEY` in its env. The client uses this to distinguish "not configured"
+    // (throw) from "configured but not warmed up" (undefined). These tests guard the query
+    // surface that promise rests on.
+    beforeEach(() => {
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
+        process.env.POSTHOG_HOST = 'https://test.posthog.com'
+    })
+
+    afterEach(() => {
+        delete process.env.POSTHOG_PROJECT_TOKEN
+        delete process.env.POSTHOG_PERSONAL_API_KEY
+        delete process.env.POSTHOG_HOST
+    })
+
+    test('reports localEvalConfigured=false when POSTHOG_PERSONAL_API_KEY is unset', async () => {
+        const t = initConvexTest()
+        const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
+        expect(row.localEvalConfigured).toBe(false)
+        expect(row.data).toBeNull()
+        expect(row.fetchedAt).toBeNull()
+    })
+
+    test('reports localEvalConfigured=true when POSTHOG_PERSONAL_API_KEY is set', async () => {
+        process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test'
+        const t = initConvexTest()
+        const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
+        expect(row.localEvalConfigured).toBe(true)
+        expect(row.data).toBeNull()
     })
 })
 
@@ -1042,13 +1070,13 @@ function flagsResponse(featureFlags: Record<string, unknown>, featureFlagPayload
 
 describe('evaluateFlag (remote)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -1058,8 +1086,6 @@ describe('evaluateFlag (remote)', () => {
         const t = initConvexTest()
 
         const value = await t.action(components.posthog.lib.evaluateFlag, {
-            apiKey: 'phc_test_key',
-            host: 'https://test.posthog.com',
             key: 'test-flag',
             distinctId: 'user-123',
         })
@@ -1074,8 +1100,6 @@ describe('evaluateFlag (remote)', () => {
         const t = initConvexTest()
 
         const value = await t.action(components.posthog.lib.evaluateFlag, {
-            apiKey: 'phc_test_key',
-            host: 'https://test.posthog.com',
             key: 'missing',
             distinctId: 'user-123',
         })
@@ -1088,8 +1112,6 @@ describe('evaluateFlag (remote)', () => {
         const t = initConvexTest()
 
         await t.action(components.posthog.lib.evaluateFlag, {
-            apiKey: 'phc_test_key',
-            host: 'https://test.posthog.com',
             key: 'test-flag',
             distinctId: 'user-123',
             groups: { company: 'acme' },
@@ -1108,13 +1130,13 @@ describe('evaluateFlag (remote)', () => {
 
 describe('evaluateFlagPayload (remote)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -1124,8 +1146,6 @@ describe('evaluateFlagPayload (remote)', () => {
         const t = initConvexTest()
 
         const payload = await t.action(components.posthog.lib.evaluateFlagPayload, {
-            apiKey: 'phc_test_key',
-            host: 'https://test.posthog.com',
             key: 'test-flag',
             distinctId: 'user-123',
         })
@@ -1138,8 +1158,6 @@ describe('evaluateFlagPayload (remote)', () => {
         const t = initConvexTest()
 
         const payload = await t.action(components.posthog.lib.evaluateFlagPayload, {
-            apiKey: 'phc_test_key',
-            host: 'https://test.posthog.com',
             key: 'test-flag',
             distinctId: 'user-123',
         })
@@ -1150,13 +1168,13 @@ describe('evaluateFlagPayload (remote)', () => {
 
 describe('evaluateAllFlags (remote)', () => {
     beforeEach(() => {
-        process.env.POSTHOG_API_KEY = 'phc_test_key'
+        process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
     })
 
     afterEach(() => {
         global.fetch = originalFetch
-        delete process.env.POSTHOG_API_KEY
+        delete process.env.POSTHOG_PROJECT_TOKEN
         delete process.env.POSTHOG_HOST
         fetchCalls = []
     })
@@ -1171,8 +1189,6 @@ describe('evaluateAllFlags (remote)', () => {
         const t = initConvexTest()
 
         const result = (await t.action(components.posthog.lib.evaluateAllFlags, {
-            apiKey: 'phc_test_key',
-            host: 'https://test.posthog.com',
             distinctId: 'user-123',
         })) as { featureFlags: Record<string, unknown>; featureFlagPayloads: Record<string, unknown> }
 

@@ -1,5 +1,85 @@
 # @posthog/convex
 
+## 2.0.0
+
+### Major Changes
+
+- [#3662](https://github.com/PostHog/posthog-js/pull/3662) [`4285c40`](https://github.com/PostHog/posthog-js/commit/4285c406c5d68874a1da5aabfe52e3faa18903ae) Thanks [@richardsolomou](https://github.com/richardsolomou)! - v2 moves credentials onto the component via [Convex 1.39's typed env-var config](https://docs.convex.dev/components/authoring#environment-variables), bundles the flag-definitions refresh cron inside the component, and renames `POSTHOG_API_KEY` → `POSTHOG_PROJECT_TOKEN`.
+
+  **Breaking changes:**
+  - Requires Convex `^1.39.0` (peer dependency bumped).
+  - `POSTHOG_API_KEY` env var renamed to `POSTHOG_PROJECT_TOKEN`, to clearly differentiate the project token (`phc_…`) from `POSTHOG_PERSONAL_API_KEY` (`phx_…` / `phs_…`). `POSTHOG_PROJECT_TOKEN` is now required at deploy time (Convex env validation enforces it); v1 silently no-op'd missing-token event sends at runtime.
+  - `apiKey`, `host`, and `personalApiKey` no longer accepted on the `PostHog` client constructor — declare them as env vars on the component instead.
+  - `apiKey` and `host` are no longer arguments to the component's actions (`capture`, `identify`, `evaluateFlag`, etc.). `refreshFlagDefinitions` no longer takes any arguments.
+  - The refresh cron is now registered inside the component and only fires when `POSTHOG_PERSONAL_API_KEY` is set — delete any app-level `convex/crons.ts` that existed only to refresh PostHog flags.
+  - `posthog.refreshFlagDefinitions(ctx)` renamed to `posthog.reloadFeatureFlags(ctx)` for parity with `posthog-node`.
+  - Local-eval methods (`getFeatureFlag`, `isFeatureEnabled`, etc.) now **throw** when `POSTHOG_PERSONAL_API_KEY` isn't configured, pointing callers at the remote `evaluateFlag` methods. They still return `undefined` during the warm-up window when PAK is set but the cron hasn't fetched yet.
+  - New optional `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` env var lets you tune the cron cadence (default 60 seconds). Raise it on free-tier dev deployments to reduce function-call usage.
+
+  See the migration guide in the README for the full diff. (2026-05-27)
+
+## 1.0.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.12
+  - posthog-node@5.35.5
+
+## 1.0.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.11
+  - posthog-node@5.35.4
+
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+  - @posthog/core@1.29.10
+  - posthog-node@5.35.3
+
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [[`5d7a2d3`](https://github.com/PostHog/posthog-js/commit/5d7a2d336befb9c2b7be9ff1961d674623d33901)]:
+  - posthog-node@5.35.2
+
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+  - posthog-node@5.35.1
+
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [[`18ea8b5`](https://github.com/PostHog/posthog-js/commit/18ea8b53f608607075c93bc18b29be8dfd41eb3f)]:
+  - posthog-node@5.35.0
+  - @posthog/core@1.29.8
+
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [[`f42f371`](https://github.com/PostHog/posthog-js/commit/f42f3710f8e8788ecffce742face8ad34db3ef1c)]:
+  - posthog-node@5.34.10
+
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.7
+  - posthog-node@5.34.9
+
 ## 1.0.2
 
 ### Patch Changes

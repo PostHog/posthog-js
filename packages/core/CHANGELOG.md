@@ -1,5 +1,51 @@
 # @posthog/core
 
+## 1.29.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.3
+
+## 1.29.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.2
+
+## 1.29.10
+
+### Patch Changes
+
+- [#3665](https://github.com/PostHog/posthog-js/pull/3665) [`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Don't autocapture PostHog's own `PostHogFetchNetworkError` (raised when the device is offline) as a `$exception`. These connectivity failures are expected and were flooding error tracking with internal SDK noise. Adds an `isPostHogFetchNetworkError` type guard to `@posthog/core` so SDKs can detect these errors.
+  (2026-05-26)
+- Updated dependencies []:
+  - @posthog/types@1.376.1
+
+## 1.29.9
+
+### Patch Changes
+
+- [#3639](https://github.com/PostHog/posthog-js/pull/3639) [`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda) Thanks [@marandaneto](https://github.com/marandaneto)! - Use native async gzip compression for session recording events when CompressionStream is available.
+  (2026-05-22)
+- Updated dependencies []:
+  - @posthog/types@1.376.0
+
+## 1.29.8
+
+### Patch Changes
+
+- Updated dependencies [[`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d)]:
+  - @posthog/types@1.375.0
+
+## 1.29.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.4
+
 ## 1.29.6
 
 ### Patch Changes

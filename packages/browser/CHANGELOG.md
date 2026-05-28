@@ -1,5 +1,79 @@
 # posthog-js
 
+## 1.376.3
+
+### Patch Changes
+
+- [#3649](https://github.com/PostHog/posthog-js/pull/3649) [`9cac1f6`](https://github.com/PostHog/posthog-js/commit/9cac1f650ed994a067bbffc5ec16b6d4dc65254f) Thanks [@marandaneto](https://github.com/marandaneto)! - Improve console log serialization performance for large objects.
+  (2026-05-27)
+- Updated dependencies []:
+    - @posthog/types@1.376.3
+    - @posthog/core@1.29.12
+
+## 1.376.2
+
+### Patch Changes
+
+- [#3667](https://github.com/PostHog/posthog-js/pull/3667) [`cafa9cc`](https://github.com/PostHog/posthog-js/commit/cafa9cc786a07613677ec16f2fc9f0c4e833a12c) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(replay): stop polling preload-as-style `<link>` elements forever. Session recorder treated `<link rel="preload" as="style" href="*.css">` as if it were a stylesheet and waited for `link.sheet` to populate. Per spec preload links never instantiate a `CSSStyleSheet`, so the wait timed out, re-serialized the link, scheduled another wait, and leaked a `load` listener on every cycle — multiplying further on every real `load` event. Pages with Next.js-style CSS preloads accumulated thousands of active polling chains, saturating the main thread and freezing the tab on refocus
+  (2026-05-26)
+- Updated dependencies []:
+    - @posthog/types@1.376.2
+    - @posthog/core@1.29.11
+
+## 1.376.1
+
+### Patch Changes
+
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+    - @posthog/core@1.29.10
+    - @posthog/types@1.376.1
+
+## 1.376.0
+
+### Minor Changes
+
+- [#3655](https://github.com/PostHog/posthog-js/pull/3655) [`6e8d349`](https://github.com/PostHog/posthog-js/commit/6e8d3495d0a29076aeea5220e19e646aeb7f063f) Thanks [@arnaudhillen](https://github.com/arnaudhillen)! - Expose the in-repo `@posthog/rrweb`, `@posthog/rrweb-types`, and `@posthog/rrweb-plugin-console-record` packages as subpath entry points on `posthog-js`. Consumers can now `import { Replayer } from 'posthog-js/rrweb'`, `import type { eventWithTime } from 'posthog-js/rrweb-types'`, and `import { LogLevel } from 'posthog-js/rrweb-plugin-console-record'` instead of installing the underlying rrweb packages directly. The rrweb worker sourcemap (`image-bitmap-data-url-worker-*.js.map`) is also shipped from `posthog-js/dist/` so downstream bundlers no longer need to reach into `node_modules/@posthog/rrweb`.
+  (2026-05-22)
+
+### Patch Changes
+
+- [#3639](https://github.com/PostHog/posthog-js/pull/3639) [`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda) Thanks [@marandaneto](https://github.com/marandaneto)! - Use native async gzip compression for session recording events when CompressionStream is available.
+  (2026-05-22)
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+    - @posthog/core@1.29.9
+    - @posthog/types@1.376.0
+
+## 1.375.0
+
+### Minor Changes
+
+- [#3641](https://github.com/PostHog/posthog-js/pull/3641) [`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `flag_keys` config to restrict browser feature flag remote evaluation to specific flag keys.
+  (2026-05-21)
+
+### Patch Changes
+
+- Updated dependencies [[`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d)]:
+    - @posthog/types@1.375.0
+    - @posthog/core@1.29.8
+
+## 1.374.4
+
+### Patch Changes
+
+- [#3638](https://github.com/PostHog/posthog-js/pull/3638) [`87e2145`](https://github.com/PostHog/posthog-js/commit/87e2145b5d09ed8a24df1fc337dad5c3c90c1b8a) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply tracing headers to matching XMLHttpRequest requests
+  (2026-05-21)
+
+- [#3646](https://github.com/PostHog/posthog-js/pull/3646) [`4f87827`](https://github.com/PostHog/posthog-js/commit/4f87827dda9c102a6deded986f2afd9fdddfb2e5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid throwing or initializing PostHogProvider when no API key or client is provided
+  (2026-05-21)
+
+- [#3645](https://github.com/PostHog/posthog-js/pull/3645) [`280832b`](https://github.com/PostHog/posthog-js/commit/280832b50b4c058e010436c4aab861cb143577c1) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Capture `<link rel="stylesheet">` URLs from `link.sheet.href` and try `link.sheet` directly for inlining, so recordings survive SPA `history.pushState` navigations between routes of different path depths (where `link.href` re-resolves against a new baseURI but `link.sheet.href` preserves the URL the browser actually fetched).
+
+    Ships the fix landed in #3635, which only bumped the internal `@posthog/rrweb-snapshot` package — that package is bundled into `posthog-js` at build time but is not published to npm on its own, so a `posthog-js` bump is needed to actually deliver the change. (2026-05-21)
+
+- Updated dependencies []:
+    - @posthog/types@1.374.4
+    - @posthog/core@1.29.7
+
 ## 1.374.3
 
 ### Patch Changes

@@ -1,5 +1,62 @@
 # posthog-react-native
 
+## 4.46.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.3
+  - @posthog/core@1.29.12
+
+## 4.46.0
+
+### Minor Changes
+
+- [#3673](https://github.com/PostHog/posthog-js/pull/3673) [`778205f`](https://github.com/PostHog/posthog-js/commit/778205f0bddbe02ce0aae21225d93cd119d9c19e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Bump optional peer dependency `posthog-react-native-session-replay` floor to `>= 1.6.0`. The new minor adds an opt-in path that resolves `posthog-ios` through Swift Package Manager when consumers set `"posthog.useSpm": "true"` in their app's `ios/Podfile.properties.json` (with `use_frameworks! :linkage => :dynamic`). Default behavior is unchanged: without the property, `posthog-ios` continues to resolve through CocoaPods. See the [session-replay README](https://github.com/PostHog/posthog-react-native-session-replay#ios-dependency-resolution) for the opt-in details.
+  (2026-05-27)
+
+## 4.45.16
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.2
+  - @posthog/core@1.29.11
+
+## 4.45.15
+
+### Patch Changes
+
+- [#3665](https://github.com/PostHog/posthog-js/pull/3665) [`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Don't autocapture PostHog's own `PostHogFetchNetworkError` (raised when the device is offline) as a `$exception`. These connectivity failures are expected and were flooding error tracking with internal SDK noise. Adds an `isPostHogFetchNetworkError` type guard to `@posthog/core` so SDKs can detect these errors.
+  (2026-05-26)
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+  - @posthog/core@1.29.10
+  - @posthog/types@1.376.1
+
+## 4.45.14
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+  - @posthog/types@1.376.0
+
+## 4.45.13
+
+### Patch Changes
+
+- Updated dependencies [[`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d)]:
+  - @posthog/types@1.375.0
+  - @posthog/core@1.29.8
+
+## 4.45.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.4
+  - @posthog/core@1.29.7
+
 ## 4.45.11
 
 ### Patch Changes

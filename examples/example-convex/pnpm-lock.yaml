@@ -15,7 +15,7 @@ importers:
         version: 3.0.63(zod@4.4.3)
       '@convex-dev/agent':
         specifier: ^0.6.1
-        version: 0.6.1(@ai-sdk/provider-utils@4.0.27(zod@4.4.3))(ai@6.0.182(zod@4.4.3))(convex-helpers@0.1.117(@standard-schema/spec@1.1.0)(convex@1.38.0(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3))(convex@1.38.0(react@19.2.6))(react@19.2.6)
+        version: 0.6.1(@ai-sdk/provider-utils@4.0.27(zod@4.4.3))(ai@6.0.182(zod@4.4.3))(convex-helpers@0.1.117(@standard-schema/spec@1.1.0)(convex@1.39.1(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3))(convex@1.39.1(react@19.2.6))(react@19.2.6)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -33,16 +33,16 @@ importers:
         version: file:../../target/posthog-ai.tgz(@ai-sdk/provider@3.0.10)(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(posthog-node@file:../../target/posthog-node.tgz)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(ws@8.20.1)
       '@posthog/convex':
         specifier: file:../../target/posthog-convex.tgz
-        version: file:../../target/posthog-convex.tgz(convex@1.38.0(react@19.2.6))
+        version: file:../../target/posthog-convex.tgz(convex@1.39.1(react@19.2.6))
       ai:
         specifier: ^6.0.182
         version: 6.0.182(zod@4.4.3)
       convex:
-        specifier: ^1.38.0
-        version: 1.38.0(react@19.2.6)
+        specifier: ^1.39.0
+        version: 1.39.1(react@19.2.6)
       convex-helpers:
         specifier: ^0.1.117
-        version: 0.1.117(@standard-schema/spec@1.1.0)(convex@1.38.0(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3)
+        version: 0.1.117(@standard-schema/spec@1.1.0)(convex@1.39.1(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3)
       posthog-node:
         specifier: file:../../target/posthog-node.tgz
         version: file:../../target/posthog-node.tgz
@@ -617,8 +617,8 @@ packages:
     resolution: {integrity: sha512-3oz8m3FGdr2nDXVqmFUw7jolKliC4MoyXYIG2c7gpjBnzUWQpUGIYcXYKxTdTi+N2jusvt610ckTMkxdwHkYEg==}
 
   '@posthog/ai@file:../../target/posthog-ai.tgz':
-    resolution: {integrity: sha512-okokSmW+UnjGdxRvmetxtU3FoTtvPElntbWRkte3RFo0hpamEEVRpdi+4Q0TjtcvYYw1PlBRhBnEdwXvRgsXxg==, tarball: file:../../target/posthog-ai.tgz}
-    version: 7.18.7
+    resolution: {integrity: sha512-z2nyJcpDsPjA7IpM2rNpgkuBZyQd/Urwssq/W1px/TEtvsQGWF6fLTLD1nUk5yxM7VbhmQ566F+kcAnw9dG3hQ==, tarball: file:../../target/posthog-ai.tgz}
+    version: 7.19.2
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       '@ai-sdk/provider': ^2.0.0 || ^3.0.0
@@ -640,18 +640,18 @@ packages:
         optional: true
 
   '@posthog/convex@file:../../target/posthog-convex.tgz':
-    resolution: {integrity: sha512-QDxxLvcSl29yPSA6hdwAGTfHcoZa2PXuMg5W9qoBXzlAOuUaJj0KcvH0GrGQX9M4hyDEBm74VyNnNG4t1M8HAg==, tarball: file:../../target/posthog-convex.tgz}
-    version: 1.0.0
+    resolution: {integrity: sha512-5HiiXGGuOoKpg4kuP4o9/TJR980JJxSg0QcZm7bALsDnkvtL+c+j+nSQiP0rbxSfXQjMgvEJ9npYryru5ZlVRQ==, tarball: file:../../target/posthog-convex.tgz}
+    version: 1.0.6
     peerDependencies:
-      convex: ^1.31.7
+      convex: ^1.39.0
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-WJ/fqWaGKkh+S2XwDo42GkfmFpu1SiYmXQ68VngWHhT0jrs/IP93SkLmETuY/YdpdL6VEeZlRRAWI5FJkGyfIQ==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.29.2
+    resolution: {integrity: sha512-7ce5LkInlx3DavKZk71Tm4hYA4CqEzBiXVpPdmytybkbKSbB2am6u28Y4cqTQjBcFjCq6G60BBhB3dGYOsDvBg==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.29.9
 
   '@posthog/types@file:../../target/posthog-types.tgz':
-    resolution: {integrity: sha512-/q9Tjsgq7g20YMRwVDfQLZ5ojfueEZdBWEfWl1N6ZrwAs4G/lr3e8EYXh2R33beoV03mN2eIj4ZFSbDLcg9ONw==, tarball: file:../../target/posthog-types.tgz}
-    version: 1.373.5
+    resolution: {integrity: sha512-LZrdS5/+CvtdBOqRd+BnHr1MZpAXTQLW0lJPbsxUldqmv76t/8dlRXyw0wIznOq/oHQoSIEmM18JeI6o45SuQA==, tarball: file:../../target/posthog-types.tgz}
+    version: 1.376.0
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -872,8 +872,8 @@ packages:
       zod:
         optional: true
 
-  convex@1.38.0:
-    resolution: {integrity: sha512-122AC6y5lUS7mr39cluLw9+TOtRX5d/XxeivHhHObs/NTXoVvOnIgDzexVcxaz6Rk0oLFSoydSR1rDCltEz/0A==}
+  convex@1.39.1:
+    resolution: {integrity: sha512-W+gVXA7BpRF1xLlS1kGTtKVaqd5yonqbGESKiPtIUXjV744GdDz8IG7RVsSY5KzHbgxuJBHKaJYk+92OIHTskQ==}
     engines: {node: '>=18.0.0', npm: '>=7.0.0'}
     hasBin: true
     peerDependencies:
@@ -1215,8 +1215,8 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-5Bkjz5Y4y54q+9Q7yPZuGsw0GF+4KFpiODgZPFJaBbxCqa+xUELJyV3E7r/4hWwzVHD5Q2BNFPJF3oSC+A+bQw==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.34.2
+    resolution: {integrity: sha512-l36oSN4qoTx5ComA3mugw63WZeSF4RLBLSynrfQQoVxkbNIdJ46PUZiSQe0DmMWVJw46jmyLNRrFkA4VKDQaUw==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.35.1
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       rxjs: ^7.0.0
@@ -1433,12 +1433,12 @@ snapshots:
 
   '@cfworker/json-schema@4.1.1': {}
 
-  '@convex-dev/agent@0.6.1(@ai-sdk/provider-utils@4.0.27(zod@4.4.3))(ai@6.0.182(zod@4.4.3))(convex-helpers@0.1.117(@standard-schema/spec@1.1.0)(convex@1.38.0(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3))(convex@1.38.0(react@19.2.6))(react@19.2.6)':
+  '@convex-dev/agent@0.6.1(@ai-sdk/provider-utils@4.0.27(zod@4.4.3))(ai@6.0.182(zod@4.4.3))(convex-helpers@0.1.117(@standard-schema/spec@1.1.0)(convex@1.39.1(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3))(convex@1.39.1(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
       ai: 6.0.182(zod@4.4.3)
-      convex: 1.38.0(react@19.2.6)
-      convex-helpers: 0.1.117(@standard-schema/spec@1.1.0)(convex@1.38.0(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3)
+      convex: 1.39.1(react@19.2.6)
+      convex-helpers: 0.1.117(@standard-schema/spec@1.1.0)(convex@1.39.1(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3)
     optionalDependencies:
       '@ungap/structured-clone': 1.3.1
       react: 19.2.6
@@ -1861,10 +1861,10 @@ snapshots:
       - ws
       - zod-to-json-schema
 
-  '@posthog/convex@file:../../target/posthog-convex.tgz(convex@1.38.0(react@19.2.6))':
+  '@posthog/convex@file:../../target/posthog-convex.tgz(convex@1.39.1(react@19.2.6))':
     dependencies:
       '@posthog/core': file:../../target/posthog-core.tgz
-      convex: 1.38.0(react@19.2.6)
+      convex: 1.39.1(react@19.2.6)
       posthog-node: file:../../target/posthog-node.tgz
     transitivePeerDependencies:
       - rxjs
@@ -2002,16 +2002,16 @@ snapshots:
 
   buffer-equal-constant-time@1.0.1: {}
 
-  convex-helpers@0.1.117(@standard-schema/spec@1.1.0)(convex@1.38.0(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3):
+  convex-helpers@0.1.117(@standard-schema/spec@1.1.0)(convex@1.39.1(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3):
     dependencies:
-      convex: 1.38.0(react@19.2.6)
+      convex: 1.39.1(react@19.2.6)
     optionalDependencies:
       '@standard-schema/spec': 1.1.0
       react: 19.2.6
       typescript: 6.0.3
       zod: 4.4.3
 
-  convex@1.38.0(react@19.2.6):
+  convex@1.39.1(react@19.2.6):
     dependencies:
       esbuild: 0.27.0
       prettier: 3.8.3
