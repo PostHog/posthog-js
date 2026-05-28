@@ -405,7 +405,9 @@ describe('cookieless', () => {
             jest.advanceTimersByTime(5000) // flush the batch queue
             expect(mockedFetch).toBeCalledTimes(3) // flags + pageview + custom event
             expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].event).toEqual('custom event')
-            expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].properties.distinct_id).toEqual(
+                '$posthog_cookieless'
+            )
         })
     })
 })
