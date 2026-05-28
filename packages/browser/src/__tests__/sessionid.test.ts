@@ -1,4 +1,10 @@
-import { DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS, MAX_SESSION_IDLE_TIMEOUT_SECONDS, SessionIdManager } from '../sessionid'
+import {
+    ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS,
+    DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS,
+    MAX_SESSION_IDLE_TIMEOUT_SECONDS,
+    MIN_SESSION_IDLE_TIMEOUT_SECONDS,
+    SessionIdManager,
+} from '../sessionid'
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
 import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
@@ -414,6 +420,78 @@ describe('Session ID manager', () => {
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [1_000_001, 'id', 1_000_001],
             })
+        })
+
+        it.each([
+            { label: '-1ms (within granularity)', delta: -1, shouldPersist: false },
+            { label: '-4_999ms', delta: -4_999, shouldPersist: false },
+            { label: '-5_000ms (boundary)', delta: -5_000, shouldPersist: true },
+            { label: '-6_000ms (clock-skew jump)', delta: -6_000, shouldPersist: true },
+        ])('handles backward activity-only delta $label', ({ delta, shouldPersist }) => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_000_000 + delta, 1_000_000)
+            if (shouldPersist) {
+                expect(persistence.register).toHaveBeenCalledWith({
+                    [SESSION_ID]: [1_000_000 + delta, 'id', 1_000_000],
+                })
+            } else {
+                expect(persistence.register).not.toHaveBeenCalled()
+            }
+        })
+
+        it('compares against the new persisted baseline after an id change', () => {
+            // After a session-id change, subsequent activity-only ticks
+            // should be throttled against the *new* persisted baseline,
+            // not the prior session's last value.
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id1', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('id2', 1_010_000, 1_010_000) // id change, new baseline
+            ;(persistence.register as jest.Mock).mockClear()
+
+            // +1s from new baseline — within granularity, must not persist
+            sessionIdManager['_setSessionId']('id2', 1_011_000, 1_010_000)
+            expect(persistence.register).not.toHaveBeenCalled()
+
+            // +5_001ms from new baseline — crosses granularity, must persist
+            sessionIdManager['_setSessionId']('id2', 1_015_001, 1_010_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_015_001, 'id2', 1_010_000],
+            })
+        })
+
+        it('persist granularity stays well under the minimum idle timeout', () => {
+            // The throttle is only safe while the persist granularity is
+            // a small fraction of the minimum idle timeout. If someone
+            // shrinks the min idle timeout (or grows the granularity)
+            // without thinking about this invariant, idle detection on
+            // other tabs could fire on stale data.
+            expect(MIN_SESSION_IDLE_TIMEOUT_SECONDS * 1000).toBeGreaterThanOrEqual(
+                6 * ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
+            )
+        })
+
+        it('flushes the pending activity timestamp on destroy', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000) // persisted (baseline)
+            sessionIdManager['_setSessionId']('id', 1_001_000, 1_000_000) // suppressed
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager.destroy()
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_001_000, 'id', 1_000_000],
+            })
+        })
+
+        it('destroy is a no-op for the throttle when in-memory matches persisted', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager.destroy()
+            expect(persistence.register).not.toHaveBeenCalled()
         })
     })
 

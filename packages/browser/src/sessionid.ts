@@ -16,7 +16,7 @@ const logger = createLogger('[SessionId]')
 
 export const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
 export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
-const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
+export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
 // Granularity for persisting the session activity timestamp to the
@@ -25,7 +25,9 @@ const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 // Activity-timestamp-only changes within this window are not persisted.
 // The minimum configurable idle timeout is 60s, so 5s of staleness in the
 // persisted value cannot cause incorrect idle detection.
-const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
+// A regression test pins the invariant that this is well under the
+// minimum idle timeout.
+export const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
 
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
@@ -41,8 +43,8 @@ export class SessionIdManager {
     private _sessionActivityTimestamp: number | null
     // Tracks the activity timestamp we most recently persisted. Used to
     // decide whether a new activity-only change is worth writing to
-    // storage. Reset to null on `resetSessionId` so the next real value
-    // always lands in storage.
+    // storage. Explicitly reset to null in `resetSessionId` so the next
+    // real value always lands in storage.
     private _lastPersistedActivityTimestamp: number | null = null
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
     private readonly _sessionTimeoutMs: number
@@ -170,6 +172,19 @@ export class SessionIdManager {
         return null
     }
 
+    // The throttle suppresses activity-only writes that move the timestamp
+    // less than `ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS`. `Math.abs` is
+    // defensive against clock skew (NTP correction, devtools time travel,
+    // another tab writing an older value) — without it a backwards jump
+    // would slip past the gate and write on every tick.
+    private _isActivityChangeBelowGranularity(newActivityTimestamp: number | null): boolean {
+        const lastPersisted = this._lastPersistedActivityTimestamp
+        if (isNull(lastPersisted) || isNull(newActivityTimestamp)) {
+            return false
+        }
+        return Math.abs(newActivityTimestamp - lastPersisted) < ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
+    }
+
     // Note: 'this.persistence.register' can be disabled in the config.
     // In that case, this works by storing sessionId and the timestamp in memory.
     private _setSessionId(
@@ -180,6 +195,7 @@ export class SessionIdManager {
         const idChanged = sessionId !== this._sessionId
         const startChanged = sessionStartTimestamp !== this._sessionStartTimestamp
         const activityChanged = sessionActivityTimestamp !== this._sessionActivityTimestamp
+        const isActivityOnlyChange = !idChanged && !startChanged
 
         // Always update in-memory state at full resolution so reads see
         // the freshest values even if we choose not to persist.
@@ -187,7 +203,7 @@ export class SessionIdManager {
         this._sessionActivityTimestamp = sessionActivityTimestamp
         this._sessionId = sessionId
 
-        if (!idChanged && !startChanged && !activityChanged) {
+        if (isActivityOnlyChange && !activityChanged) {
             return
         }
 
@@ -197,20 +213,31 @@ export class SessionIdManager {
         // use); persist them only when the timestamp has moved enough that
         // a stale read could affect idle detection. The in-memory value
         // remains at full resolution above.
-        if (!idChanged && !startChanged) {
-            const lastPersisted = this._lastPersistedActivityTimestamp
-            if (
-                !isNull(lastPersisted) &&
-                !isNull(sessionActivityTimestamp) &&
-                Math.abs(sessionActivityTimestamp - lastPersisted) < ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
-            ) {
-                return
-            }
+        if (isActivityOnlyChange && this._isActivityChangeBelowGranularity(sessionActivityTimestamp)) {
+            return
         }
 
         this._lastPersistedActivityTimestamp = sessionActivityTimestamp
         this._persistence.register({
             [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
+        })
+    }
+
+    // Forces a write of the latest in-memory activity timestamp if it has
+    // diverged from the last-persisted value because the throttle held it
+    // back. Called from `destroy` and the unload listener so a tab close
+    // within the granularity window does not leave the persisted value
+    // up to 5s stale for other tabs / future loads.
+    private _flushPendingActivityTimestamp(): void {
+        if (
+            isNull(this._sessionActivityTimestamp) ||
+            this._sessionActivityTimestamp === this._lastPersistedActivityTimestamp
+        ) {
+            return
+        }
+        this._lastPersistedActivityTimestamp = this._sessionActivityTimestamp
+        this._persistence.register({
+            [SESSION_ID]: [this._sessionActivityTimestamp, this._sessionId ?? null, this._sessionStartTimestamp],
         })
     }
 
@@ -231,6 +258,7 @@ export class SessionIdManager {
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
     // new ids will be generated.
     resetSessionId(): void {
+        this._lastPersistedActivityTimestamp = null
         this._setSessionId(null, null, null)
     }
 
@@ -239,6 +267,8 @@ export class SessionIdManager {
      * Should be called when the SessionIdManager is no longer needed to prevent memory leaks.
      */
     destroy(): void {
+        this._flushPendingActivityTimestamp()
+
         // Clear the idle timeout timer
         clearTimeout(this._enforceIdleTimeout)
         this._enforceIdleTimeout = undefined
@@ -261,6 +291,7 @@ export class SessionIdManager {
      */
     private _listenToReloadWindow(): void {
         this._beforeUnloadListener = () => {
+            this._flushPendingActivityTimestamp()
             if (this._canUseSessionStorage()) {
                 sessionStore._remove(this._primary_window_exists_storage_key)
             }
