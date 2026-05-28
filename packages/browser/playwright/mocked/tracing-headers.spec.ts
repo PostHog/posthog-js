@@ -88,4 +88,49 @@ test.describe('tracing headers', () => {
             expect(headers['x-posthog-window-id']).toBeUndefined()
         })
     }
+
+    // Safari refuses stream uploads. The fetch wrapper used to construct `new Request(url, init)`
+    // and forward that Request — which upgraded a string body to a ReadableStream and triggered
+    // `NotSupportedError: ReadableStream uploading is not supported` on Safari/webkit.
+    test('POST with string body succeeds on webkit and preserves the body', async ({ page, context, browserName }) => {
+        test.skip(browserName !== 'webkit', 'Safari-only regression: stream-upload rejection only happens on webkit')
+
+        let capturedHeaders: Record<string, string> = {}
+        let capturedBody: string | undefined
+
+        page.on('request', (request) => {
+            if (request.url().includes('example.com')) {
+                capturedHeaders = request.headers()
+                capturedBody = request.postData() ?? undefined
+            }
+        })
+
+        await context.route('**/example.com/**', (route) => {
+            route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
+        })
+
+        await start(baseOptions, page, context)
+
+        await page.waitForFunction(() => {
+            const win = window as any
+            return win.__PosthogExtensions__?.tracingHeadersPatchFns && win.posthog
+        })
+
+        const result = await page.evaluate(async () => {
+            try {
+                const response = await fetch('https://example.com/api/test', {
+                    method: 'POST',
+                    body: JSON.stringify({ a: 1 }),
+                })
+                return { ok: response.ok, error: null }
+            } catch (err) {
+                return { ok: false, error: (err as Error).message }
+            }
+        })
+
+        expect(result.error).toBeNull()
+        expect(result.ok).toBe(true)
+        expect(capturedBody).toBe(JSON.stringify({ a: 1 }))
+        expect(capturedHeaders['x-posthog-distinct-id']).toBeTruthy()
+    })
 })

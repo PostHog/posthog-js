@@ -588,7 +588,14 @@ function initFetchObserver(
                 }
 
                 start = win.performance.now()
-                res = await originalFetch(req)
+                // For (url, init) callers, forward (url, init) instead of the reconstructed `req`:
+                // on Safari, forwarding a Request whose body was a string triggers
+                // `NotSupportedError: ReadableStream uploading is not supported`. For Request-input
+                // callers, forwarding `req` is unavoidable and required: constructing the local
+                // `req` above consumed the caller's Request body, so `req` is now the only usable
+                // copy. `req` already incorporates any `init` overrides, so we don't re-pass init.
+                // eslint-disable-next-line compat/compat
+                res = url instanceof Request ? await originalFetch(req) : await originalFetch(url, init)
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}

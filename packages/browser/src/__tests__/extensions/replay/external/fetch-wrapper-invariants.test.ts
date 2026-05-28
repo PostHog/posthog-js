@@ -172,7 +172,7 @@ describe('fetch wrapper', () => {
     })
 
     describe('downstream wrapper compatibility', () => {
-        it('downstream receives Request object as first argument', async () => {
+        it('downstream receives the caller input verbatim', async () => {
             let receivedInput: RequestInfo | URL | undefined
             const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
                 receivedInput = input
@@ -182,10 +182,10 @@ describe('fetch wrapper', () => {
             await wrappedFetch('https://example.com/api', { method: 'POST' })
             cleanup()
 
-            expect(receivedInput).toBeInstanceOf(Request)
+            expect(receivedInput).toBe('https://example.com/api')
         })
 
-        it('downstream receives undefined as second argument (init not passed)', async () => {
+        it('downstream receives the caller init verbatim', async () => {
             let receivedInit: RequestInit | undefined
             const { wrappedFetch, cleanup } = setupWrappedFetch(
                 async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -197,19 +197,45 @@ describe('fetch wrapper', () => {
             await wrappedFetch('https://example.com/api', { method: 'POST', body: 'test' })
             cleanup()
 
-            expect(receivedInit).toBeUndefined()
+            expect(receivedInit?.method).toBe('POST')
+            expect(receivedInit?.body).toBe('test')
+        })
+
+        // On Safari, constructing `new Request(url, { body: '<string>' })` upgrades the body to a
+        // ReadableStream; forwarding that Request to native fetch then raises
+        // `NotSupportedError: ReadableStream uploading is not supported`. The wrapper must keep
+        // string bodies as strings all the way through to the downstream fetch.
+        it('forwards string body as a string, not a stream', async () => {
+            let receivedBody: BodyInit | null | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (_input: RequestInfo | URL, init?: RequestInit) => {
+                    receivedBody = init?.body
+                    return new Response('ok')
+                }
+            )
+
+            await wrappedFetch('https://example.com/api', { method: 'POST', body: '{"a":1}' })
+            cleanup()
+
+            expect(typeof receivedBody).toBe('string')
+            expect(receivedBody).toBe('{"a":1}')
         })
 
         it.each([
-            ['method', { method: 'PUT' } as RequestInit, (req: Request) => req.method, 'PUT'],
-            ['headers', { headers: { 'X-Custom': 'value' } }, (req: Request) => req.headers.get('X-Custom'), 'value'],
-            ['url', {}, (req: Request) => req.url, 'https://example.com/api'],
-        ])('downstream can read %s from Request object', async (_name, init, getter, expected) => {
+            ['method', { method: 'PUT' } as RequestInit, 'PUT'],
+            ['headers', { headers: { 'X-Custom': 'value' } }, 'value'],
+            ['url', {}, 'https://example.com/api'],
+        ])('downstream can reconstruct %s into a Request', async (name, init, expected) => {
             let captured: string | null | undefined
-            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
-                captured = getter(input as Request)
-                return new Response('ok')
-            })
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, downstreamInit?: RequestInit) => {
+                    const req = input instanceof Request ? input : new Request(input, downstreamInit)
+                    if (name === 'method') captured = req.method
+                    else if (name === 'headers') captured = req.headers.get('X-Custom')
+                    else captured = req.url
+                    return new Response('ok')
+                }
+            )
 
             await wrappedFetch('https://example.com/api', init)
             cleanup()
@@ -241,8 +267,8 @@ describe('fetch wrapper', () => {
         expect(headerBoundary).toContain(bodyBoundary)
     })
 
-    // TODO: Fix https://github.com/PostHog/posthog-js/issues/1326
-    it.skip('passes init to downstream wrappers', async () => {
+    // Regression test for https://github.com/PostHog/posthog-js/issues/1326
+    it('passes init to downstream wrappers', async () => {
         let capturedInit: RequestInit | undefined
         const { wrappedFetch, cleanup } = setupWrappedFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
             capturedInit = init
@@ -302,10 +328,12 @@ describe('fetch wrapper', () => {
 
         it.each(cases)('via %s: preserves %s on downstream Request', async (_label, name, value, invoke) => {
             let downstream: Request | undefined
-            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
-                downstream = input as Request
-                return new Response('ok')
-            })
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, init?: RequestInit) => {
+                    downstream = input instanceof Request ? input : new Request(input, init)
+                    return new Response('ok')
+                }
+            )
 
             await invoke(wrappedFetch, name, value)
             cleanup()
@@ -320,10 +348,12 @@ describe('fetch wrapper', () => {
     describe('does not strip ordinary headers from the actual outgoing request', () => {
         it.each(unaffectedHeaderCases)('preserves %s on downstream Request', async (name, value) => {
             let downstream: Request | undefined
-            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
-                downstream = input as Request
-                return new Response('ok')
-            })
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, init?: RequestInit) => {
+                    downstream = input instanceof Request ? input : new Request(input, init)
+                    return new Response('ok')
+                }
+            )
 
             await wrappedFetch('https://example.com/api/internal/surveys', {
                 method: 'POST',

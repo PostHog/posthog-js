@@ -51,7 +51,15 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
 
             addTracingHeaders(hostnames, distinctId, sessionManager, req)
 
-            return originalFetch(req)
+            // For non-Request callers, forward (url, init) with the tracing headers merged in:
+            // on Safari, forwarding a Request whose body was a string triggers
+            // `NotSupportedError: ReadableStream uploading is not supported`. For Request callers,
+            // forwarding `req` is unavoidable (the caller already chose a Request body).
+            // eslint-disable-next-line compat/compat
+            if (url instanceof Request) {
+                return originalFetch(req)
+            }
+            return originalFetch(url, { ...init, headers: req.headers })
         }
     })
 }
