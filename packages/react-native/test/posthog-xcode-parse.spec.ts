@@ -7,6 +7,9 @@ import * as path from 'path'
  * to parse a git remote URL into {host, owner/repo}. Rather than re-declare
  * the regexes here (and risk drift), we extract them at test runtime from the
  * shell script itself — so the tests cannot diverge from the source.
+ *
+ * Also contains regression tests for issue #3682: posthog-xcode.sh was
+ * resolving REACT_NATIVE_XCODE to /bin/sh when invoked by the Expo plugin.
  */
 
 const SCRIPT_PATH = path.resolve(__dirname, '..', 'tooling', 'posthog-xcode.sh')
@@ -64,5 +67,51 @@ describe('posthog-xcode.sh remote URL parsing', () => {
   it('constructs the expected remote_url for self-hosted', () => {
     const { host, repo } = parse('git@git.corp.internal:team/repo.git')
     expect(`https://${host}/${repo}.git`).toBe('https://git.corp.internal/team/repo.git')
+  })
+})
+
+// Regression tests for issue #3682:
+// The Expo plugin wraps the bundle phase as:
+//   /bin/sh posthog-xcode.sh /bin/sh react-native-xcode.sh ...
+// making $1 = /bin/sh inside posthog-xcode.sh.  REACT_NATIVE_XCODE then
+// resolves to /bin/sh (a binary), so the grep/sed patch against it silently
+// no-ops and the packager sourcemap is deleted before posthog-cli reads it.
+describe('posthog-xcode.sh REACT_NATIVE_XCODE resolution', () => {
+  const scriptContents = fs.readFileSync(SCRIPT_PATH, 'utf8')
+
+  // Extract the REACT_NATIVE_XCODE_DEFAULT + resolution block from the script
+  // so the tests track the actual source and cannot silently diverge from it.
+  const extractAssignmentBlock = (): string => {
+    // Match from REACT_NATIVE_XCODE_DEFAULT=... through the closing `fi` of
+    // the if/else guard (or a plain assignment if the structure changes again).
+    const match = scriptContents.match(
+      /REACT_NATIVE_XCODE_DEFAULT="[^"]+"[\s\S]+?(?:fi|REACT_NATIVE_XCODE="\$\{[^}]+\}")/
+    )
+    if (!match) throw new Error('Could not locate REACT_NATIVE_XCODE assignment in posthog-xcode.sh')
+    return match[0]
+  }
+
+  const resolveReactNativeXcode = (arg1: string): string => {
+    const block = extractAssignmentBlock()
+    // Run the extracted shell fragment with $1 set to the provided value and
+    // print the resulting REACT_NATIVE_XCODE variable.
+    const script = `${block}\nprintf '%s' "$REACT_NATIVE_XCODE"`
+    const escaped = arg1.replace(/'/g, `'\\''`)
+    return execSync(`/bin/bash -c 'set -- '"'"'${escaped}'"'"'; ${script}'`).toString()
+  }
+
+  it('resolves to react-native-xcode.sh when $1 is the RN script path (no shell prefix)', () => {
+    const rnScript = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const result = resolveReactNativeXcode(rnScript)
+    expect(result).toBe(rnScript)
+    expect(result).not.toBe('/bin/sh')
+  })
+
+  it('does NOT resolve to /bin/sh when $1 is /bin/sh (issue #3682 — Expo shell-prefixed bundle phase)', () => {
+    // This is the broken state: the Expo plugin passes /bin/sh as $1.
+    // The test currently FAILS (documents the bug). Once the fix is applied it must PASS.
+    const result = resolveReactNativeXcode('/bin/sh')
+    expect(result).not.toBe('/bin/sh')
+    expect(result).toContain('react-native-xcode.sh')
   })
 })

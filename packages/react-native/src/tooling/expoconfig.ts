@@ -54,10 +54,13 @@ const POSTHOG_REACT_NATIVE_XCODE_PATH =
   "`\"$NODE_BINARY\" --print \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog-xcode.sh')\"`"
 
 export function addPostHogWithBundledScriptsToBundleShellScript(script: string): string {
+  // Capture only the RN script path (group 1), stripping any leading shell/interpreter
+  // token (e.g. "/bin/sh") that may prefix it in Expo SDK 53+ bundle phase scripts.
+  // Without this, $1 inside posthog-xcode.sh resolves to "/bin/sh" instead of the
+  // react-native-xcode.sh path, silently breaking the PACKAGER_SOURCEMAP_FILE patch.
   return script.replace(
-    /^.*?(packager|scripts)\/react-native-xcode\.sh\s*(\\'\\\\")?/m,
-    // eslint-disable-next-line no-useless-escape
-    (match: string) => `/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${match}`
+    /^(?:.*\s)?((?:[^\s]*(?:packager|scripts)\/react-native-xcode\.sh)\s*(?:\'\\\")?)/m,
+    (_match: string, rnPath: string) => `/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${rnPath}`
   )
 }
 
