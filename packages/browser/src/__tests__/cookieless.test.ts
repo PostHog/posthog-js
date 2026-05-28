@@ -382,5 +382,30 @@ describe('cookieless', () => {
             expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
             expect(JSON.parse(mockedFetch.mock.calls[3][1].body)[0].event).toEqual('custom event')
         })
+
+        it('should start the request queue when opting out (cookieless transport regression #3680)', async () => {
+            // Regression: after opt_out_capturing() in on_reject mode the SDK switches to cookieless
+            // capturing, but the RequestQueue was never enabled — so batched events were enqueued
+            // but never flushed over the network.
+            jest.useFakeTimers()
+            const { posthog } = await setup({
+                cookieless_mode: 'on_reject',
+                request_batching: true,
+            })
+            jest.advanceTimersByTime(10)
+            expect(mockedFetch).toBeCalledTimes(1) // flags only — queue is paused, no events yet
+
+            posthog.opt_out_capturing()
+            // opt_out triggers an initial $pageview in cookieless mode — it should be sent immediately (non-batched)
+            expect(mockedFetch).toBeCalledTimes(2) // flags + pageview
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$pageview')
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).properties.distinct_id).toEqual('$posthog_cookieless')
+
+            posthog.capture('custom event')
+            jest.advanceTimersByTime(5000) // flush the batch queue
+            expect(mockedFetch).toBeCalledTimes(3) // flags + pageview + custom event
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].event).toEqual('custom event')
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].properties.distinct_id).toEqual('$posthog_cookieless')
+        })
     })
 })
