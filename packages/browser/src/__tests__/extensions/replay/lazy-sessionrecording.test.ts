@@ -1260,6 +1260,44 @@ describe('Lazy SessionRecording', () => {
                 const recorderSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
                 expect(recorderSessionId).toEqual(rotatedSessionId)
             })
+
+            it('restarts recorder when session rotates via forcedIdleReset', () => {
+                // After forcedIdleReset, _isIdle is 'unknown' and rrweb is stopped; the
+                // session-id callback must still restart so the new session gets a full snapshot.
+                const firstActivityTimestamp = startingTimestamp + 100
+                const idleTriggerTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+
+                emitActiveEvent(firstActivityTimestamp)
+                const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                expect(recordMock).toHaveBeenCalledTimes(1)
+
+                emitInactiveEvent(idleTriggerTimestamp, true)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+
+                sessionIdGeneratorMock.mockClear()
+                const rotatedSessionId = 'forced-idle-rotated-session-id'
+                sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+                sessionManager.resetSessionId()
+                sessionManager['_eventEmitter'].emit('forcedIdleReset', { idleSessionId: firstSessionId })
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(false)
+
+                const rotationTimestamp = idleTriggerTimestamp + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                const { sessionId: newSessionId } = sessionManager.checkAndGetSessionAndWindowId(
+                    false,
+                    rotationTimestamp
+                )
+                expect(newSessionId).toEqual(rotatedSessionId)
+                expect(newSessionId).not.toEqual(firstSessionId)
+
+                expect(recordMock).toHaveBeenCalledTimes(2)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(rotatedSessionId)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(true)
+            })
         })
 
         describe('scheduled full snapshots', () => {
@@ -3280,6 +3318,62 @@ describe('Lazy SessionRecording', () => {
 
             expect(sessionRecording.started).toEqual(true)
             expect(sessionRecording.status).not.toEqual('rrweb_error')
+        })
+    })
+
+    describe('rrweb attach debug signals', () => {
+        it('reports neither attached nor start attempted before the recorder runs', () => {
+            // No onRemoteConfig call yet: _startRecorder has never been entered.
+            const lazy = sessionRecording['_lazyLoadedSessionRecording']
+            expect(lazy).toBeUndefined()
+            // Once the lazy recorder exists but start has not run, both should be false.
+            // We simulate that by constructing it directly without driving the script load.
+            const standalone = new LazyLoadedSessionRecording(posthog)
+            expect(standalone.sdkDebugProperties.$sdk_debug_rrweb_attached).toBe(false)
+            expect(standalone.sdkDebugProperties.$sdk_debug_rrweb_start_attempted).toBe(false)
+        })
+
+        it('reports attached: true and start_attempted: true after a successful start', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const debug = sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
+            expect(debug.$sdk_debug_rrweb_attached).toBe(true)
+            expect(debug.$sdk_debug_rrweb_start_attempted).toBe(true)
+        })
+
+        it('reports start_attempted: true but attached: false when rrweb.record returns undefined', () => {
+            loadScriptMock.mockImplementation((_ph: any, _path: any, callback: any) => {
+                assignableWindow.__PosthogExtensions__.rrweb = {
+                    record: jest.fn(() => undefined),
+                    version: 'fake',
+                    wasMaxDepthReached: jest.fn(() => false),
+                    resetMaxDepthState: jest.fn(),
+                }
+                assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn()
+                assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = jest.fn()
+                assignableWindow.__PosthogExtensions__.initSessionRecording = () => {
+                    return new LazyLoadedSessionRecording(posthog)
+                }
+                callback()
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const debug = sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
+            expect(debug.$sdk_debug_rrweb_start_attempted).toBe(true)
+            expect(debug.$sdk_debug_rrweb_attached).toBe(false)
         })
     })
 

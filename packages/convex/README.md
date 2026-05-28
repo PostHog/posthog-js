@@ -41,7 +41,7 @@ const app = defineApp({
     POSTHOG_PROJECT_TOKEN: v.string(),
     // Optional. PostHog host. Defaults to `https://us.i.posthog.com`; use `https://eu.i.posthog.com` for EU Cloud or your self-hosted URL.
     POSTHOG_HOST: v.optional(v.string()),
-    // Optional. A feature flags secure API key (`phs_…`, recommended) or personal API key (`phx_…`). Setting it enables local feature flag evaluation and starts the refresh cron.
+    // Optional. A feature flags secure API key (`phs_…`, recommended) or personal API key (`phx_…`). Setting it enables local feature flag evaluation.
     POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
     // Optional. Cron interval (seconds) for refreshing flag definitions. Defaults to 60. Raise it on free-tier dev deployments to reduce function-call usage.
     POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: v.optional(v.string()),
@@ -73,7 +73,7 @@ To enable local feature flag evaluation, also set a [feature flags secure API ke
 npx convex env set POSTHOG_PERSONAL_API_KEY phs_your_feature_flags_secure_api_key
 ```
 
-> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward. This env var also gates the component's built-in refresh cron: when it's set the cron is registered at deploy time and refreshes flag definitions once a minute; when it isn't, the cron isn't registered at all so idle dev deployments don't burn function calls. The gate is evaluated at module-load (i.e. deploy) time — `npx convex dev` redeploys automatically when you set the env var, but production deployments need a manual redeploy for the cron to start.
+> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward. Setting this env var is what flips on local evaluation — the component's built-in refresh cron starts populating flag definitions on the next tick, no redeploy needed.
 
 Create a `convex/posthog.ts` file to initialize the client. Credentials live on the component, so this file is just for callbacks (identify, beforeSend):
 
@@ -85,7 +85,7 @@ import { components } from "./_generated/api";
 export const posthog = new PostHog(components.posthog);
 ```
 
-That's the whole setup — feature flag methods will start returning live values on the next cron tick. The component refreshes flag definitions every minute when `POSTHOG_PERSONAL_API_KEY` is set. To tune the cadence (e.g. raise it to `300` for a free-tier dev deployment), set `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` and redeploy:
+That's the whole setup — feature flag methods will start returning live values on the next cron tick. The component refreshes flag definitions once a minute by default when `POSTHOG_PERSONAL_API_KEY` is set. To tune the cadence (e.g. raise it to `300` for a free-tier dev deployment), set `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` and redeploy:
 
 ```sh
 npx convex env set POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS 300

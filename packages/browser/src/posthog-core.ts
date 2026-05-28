@@ -3693,6 +3693,9 @@ export class PostHog implements PostHogInterface {
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
             this._captureInitialPageview()
+            // At init time, consent was PENDING so is_capturing() was false and _start_queue_if_opted_in() was a no-op.
+            // Now that rejection has been recorded, capturing is active — enable the queue so batched events are flushed.
+            this._start_queue_if_opted_in()
         }
     }
 
