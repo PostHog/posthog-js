@@ -896,6 +896,26 @@ export interface PostHogConfig {
     disable_cookie?: boolean
 
     /**
+     * Coalesce rapid `Persistence.save()` calls into a single write.
+     *
+     * Set to a positive number (milliseconds) to debounce writes to localStorage / cookie
+     * by that window. The in-memory `props` object is always updated synchronously so
+     * within-tab reads see the latest values immediately. Cross-tab `storage` events
+     * (which carry the full persistence value as a payload) are reduced proportionally
+     * to the debounce window.
+     *
+     * Pending writes are flushed on `beforeunload` and `pagehide` so no state is lost
+     * on tab close. The cross-tab visibility delay is bounded by the configured window.
+     *
+     * Defaults to `0` (no debouncing, write synchronously) for backwards compatibility.
+     * On pages that capture many events per second, `250` is a reasonable starting point
+     * to reduce localStorage write pressure and cross-tab IPC traffic.
+     *
+     * @default 0
+     */
+    persistence_save_debounce_ms?: number
+
+    /**
      * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false

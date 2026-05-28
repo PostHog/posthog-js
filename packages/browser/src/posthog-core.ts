@@ -222,6 +222,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     upgrade: false,
     disable_session_recording: false,
     disable_persistence: false,
+    persistence_save_debounce_ms: 0,
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
     disable_surveys_automatic_display: false,
