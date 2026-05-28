@@ -1260,6 +1260,44 @@ describe('Lazy SessionRecording', () => {
                 const recorderSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
                 expect(recorderSessionId).toEqual(rotatedSessionId)
             })
+
+            it('restarts recorder when session rotates via forcedIdleReset', () => {
+                // After forcedIdleReset, _isIdle is 'unknown' and rrweb is stopped; the
+                // session-id callback must still restart so the new session gets a full snapshot.
+                const firstActivityTimestamp = startingTimestamp + 100
+                const idleTriggerTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+
+                emitActiveEvent(firstActivityTimestamp)
+                const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                expect(recordMock).toHaveBeenCalledTimes(1)
+
+                emitInactiveEvent(idleTriggerTimestamp, true)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+
+                sessionIdGeneratorMock.mockClear()
+                const rotatedSessionId = 'forced-idle-rotated-session-id'
+                sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+                sessionManager.resetSessionId()
+                sessionManager['_eventEmitter'].emit('forcedIdleReset', { idleSessionId: firstSessionId })
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(false)
+
+                const rotationTimestamp = idleTriggerTimestamp + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                const { sessionId: newSessionId } = sessionManager.checkAndGetSessionAndWindowId(
+                    false,
+                    rotationTimestamp
+                )
+                expect(newSessionId).toEqual(rotatedSessionId)
+                expect(newSessionId).not.toEqual(firstSessionId)
+
+                expect(recordMock).toHaveBeenCalledTimes(2)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(rotatedSessionId)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(true)
+            })
         })
 
         describe('scheduled full snapshots', () => {

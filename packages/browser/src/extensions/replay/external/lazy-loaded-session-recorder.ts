@@ -1099,10 +1099,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        // When idle, _updateWindowAndSessionIds bails early and won't pick up the
-        // session change, so we restart here. Otherwise it handles the restart after
-        // this callback returns.
-        if (this._isIdle === true) {
+        // When rrweb isn't running _updateWindowAndSessionIds can't drive the restart,
+        // so we restart here. Otherwise it handles the restart after this callback returns.
+        if (this._isIdle === true || !this.isStarted) {
             this._isIdle = 'unknown'
             this.stop()
             this.start('session_id_changed')
