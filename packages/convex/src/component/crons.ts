@@ -4,8 +4,8 @@ import { env } from './_generated/server.js'
 
 const crons = cronJobs()
 
-// Override via `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` for faster propagation.
-export const DEFAULT_INTERVAL_SECONDS = 600
+// Override via `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS`.
+export const DEFAULT_INTERVAL_SECONDS = 60
 
 // Convex component env vars are string-typed. Invalid values warn and fall back rather than
 // failing the deploy. Exported for unit testing.
