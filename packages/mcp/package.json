@@ -11,9 +11,10 @@
     "clean": "rimraf dist coverage",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "pretest:unit": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "generate-version": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "pretest:unit": "pnpm generate-version",
     "test:unit": "jest",
-    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "prebuild": "pnpm generate-version",
     "build": "rslib build",
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
@@ -42,7 +43,7 @@
   "devDependencies": {
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
-    "@modelcontextprotocol/sdk": "~1.24.2",
+    "@modelcontextprotocol/sdk": "~1.29.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/jest": "catalog:",
@@ -51,7 +52,7 @@
     "zod": "^3.25.0"
   },
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": ">=1.11"
+    "@modelcontextprotocol/sdk": ">=1.26.0"
   },
   "keywords": [
     "posthog",
