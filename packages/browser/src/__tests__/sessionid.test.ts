@@ -52,6 +52,7 @@ describe('Session ID manager', () => {
                 Object.assign(persistence.props, props)
             }),
             load: jest.fn(),
+            flush: jest.fn(),
             _disabled: false,
         }
         ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
@@ -550,6 +551,29 @@ describe('Session ID manager', () => {
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [1_004_000, 'sessionA', 1_000_000],
             })
+        })
+
+        it('flush calls persistence.flush before load and after register so debounced writes are not lost', () => {
+            // With persistence_save_debounce_ms > 0, persistence batches saves.
+            // Calling load() without flushing first would clobber pending
+            // debounced writes; not flushing after register() would leave
+            // our SESSION_ID write waiting on a debounce timer that never
+            // fires before the page closes.
+            const order: string[] = []
+            ;(persistence.flush as jest.Mock).mockImplementation(() => order.push('flush'))
+            ;(persistence.load as jest.Mock).mockImplementation(() => order.push('load'))
+            ;(persistence.register as jest.Mock).mockImplementation((props) => {
+                Object.assign(persistence.props, props)
+                order.push('register')
+            })
+
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('sessionA', 1_004_000, 1_000_000) // throttled
+            order.length = 0
+
+            sessionIdManager['_flushPendingActivityTimestamp']()
+            expect(order).toEqual(['flush', 'load', 'register', 'flush'])
         })
     })
 

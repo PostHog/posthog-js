@@ -216,6 +216,10 @@ export class SessionIdManager {
             return
         }
 
+        // Push any pending debounced writes (persistence_save_debounce_ms > 0)
+        // to storage first — otherwise load() would clobber them in memory.
+        this._persistence.flush()
+
         // A sibling tab may have rotated the session — refresh and skip the
         // flush if storage no longer matches our cached id/start, otherwise
         // we would clobber the new session with stale values.
@@ -229,6 +233,9 @@ export class SessionIdManager {
         this._persistence.register({
             [SESSION_ID]: [this._sessionActivityTimestamp, this._sessionId ?? null, this._sessionStartTimestamp],
         })
+        // Force the write past the debounce — destroy / unload paths cannot
+        // wait for a deferred timer that will never fire.
+        this._persistence.flush()
     }
 
     // `max` because either view can be ahead: the throttle holds in-memory
