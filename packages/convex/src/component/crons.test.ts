@@ -1,5 +1,39 @@
 import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globals'
+import type { Crons } from 'convex/server'
 import { DEFAULT_INTERVAL_SECONDS, readPollingIntervalSeconds } from './crons.js'
+
+describe('cron registration', () => {
+  let originalPak: string | undefined
+
+  beforeEach(() => {
+    originalPak = process.env.POSTHOG_PERSONAL_API_KEY
+    jest.resetModules()
+  })
+
+  afterEach(() => {
+    if (originalPak === undefined) {
+      delete process.env.POSTHOG_PERSONAL_API_KEY
+    } else {
+      process.env.POSTHOG_PERSONAL_API_KEY = originalPak
+    }
+    jest.resetModules()
+  })
+
+  // Convex forwards component env vars only at runtime, so deploy-time module analysis sees
+  // `process.env.POSTHOG_PERSONAL_API_KEY` empty even when the installing app has set it.
+  // A load-time gate would silently drop the cron — see #3683.
+  test('registers the refresh cron when POSTHOG_PERSONAL_API_KEY is empty at module load', async () => {
+    delete process.env.POSTHOG_PERSONAL_API_KEY
+    const mod = (await import('./crons.js')) as { default: Crons }
+    expect(Object.keys(mod.default.crons)).toContain('Refresh PostHog feature flag definitions')
+  })
+
+  test('registers the refresh cron when POSTHOG_PERSONAL_API_KEY is set at module load', async () => {
+    process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test'
+    const mod = (await import('./crons.js')) as { default: Crons }
+    expect(Object.keys(mod.default.crons)).toContain('Refresh PostHog feature flag definitions')
+  })
+})
 
 describe('readPollingIntervalSeconds', () => {
   let warnSpy: ReturnType<typeof jest.spyOn>

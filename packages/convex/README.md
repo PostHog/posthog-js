@@ -41,9 +41,9 @@ const app = defineApp({
     POSTHOG_PROJECT_TOKEN: v.string(),
     // Optional. PostHog host. Defaults to `https://us.i.posthog.com`; use `https://eu.i.posthog.com` for EU Cloud or your self-hosted URL.
     POSTHOG_HOST: v.optional(v.string()),
-    // Optional. A feature flags secure API key (`phs_…`, recommended) or personal API key (`phx_…`). Setting it enables local feature flag evaluation and starts the refresh cron.
+    // Optional. A feature flags secure API key (`phs_…`, recommended) or personal API key (`phx_…`). Setting it enables local feature flag evaluation.
     POSTHOG_PERSONAL_API_KEY: v.optional(v.string()),
-    // Optional. Cron interval (seconds) for refreshing flag definitions. Defaults to 60. Raise it on free-tier dev deployments to reduce function-call usage.
+    // Optional. Cron interval (seconds) for refreshing flag definitions. Defaults to 600 (10 minutes). Lower it for faster flag propagation; raise it to reduce function-call usage further.
     POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: v.optional(v.string()),
   },
 });
@@ -73,7 +73,7 @@ To enable local feature flag evaluation, also set a [feature flags secure API ke
 npx convex env set POSTHOG_PERSONAL_API_KEY phs_your_feature_flags_secure_api_key
 ```
 
-> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward. This env var also gates the component's built-in refresh cron: when it's set the cron is registered at deploy time and refreshes flag definitions once a minute; when it isn't, the cron isn't registered at all so idle dev deployments don't burn function calls. The gate is evaluated at module-load (i.e. deploy) time — `npx convex dev` redeploys automatically when you set the env var, but production deployments need a manual redeploy for the cron to start.
+> Personal API keys (`phx_…`) also still work for local evaluation, but PostHog recommends the project-scoped feature flags secure API key going forward. Setting this env var is what flips on local evaluation — the component's built-in refresh cron starts populating flag definitions on the next tick, no redeploy needed.
 
 Create a `convex/posthog.ts` file to initialize the client. Credentials live on the component, so this file is just for callbacks (identify, beforeSend):
 
@@ -85,10 +85,10 @@ import { components } from "./_generated/api";
 export const posthog = new PostHog(components.posthog);
 ```
 
-That's the whole setup — feature flag methods will start returning live values on the next cron tick. The component refreshes flag definitions every minute when `POSTHOG_PERSONAL_API_KEY` is set. To tune the cadence (e.g. raise it to `300` for a free-tier dev deployment), set `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` and redeploy:
+That's the whole setup — feature flag methods will start returning live values on the next cron tick. The component refreshes flag definitions every 10 minutes by default when `POSTHOG_PERSONAL_API_KEY` is set. To tune the cadence (e.g. drop it to `60` for faster flag propagation in development), set `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` and redeploy:
 
 ```sh
-npx convex env set POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS 300
+npx convex env set POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS 60
 ```
 
 If you call a local-eval method (`getFeatureFlag`, `isFeatureEnabled`, …) without `POSTHOG_PERSONAL_API_KEY` configured, the client throws with a pointer to the remote `evaluateFlag` / `evaluateFlagPayload` / `evaluateAllFlags` methods. While the first cron tick is still in flight (PAK is set but no definitions are cached yet) the local methods return `undefined` so your fallback path keeps working.
@@ -310,7 +310,7 @@ await posthog.capture(ctx, {
 There are also reasons you might *not want* local eval at all, even when it's possible:
 
 - **Low-traffic projects.** PostHog bills each `/flags/definitions` poll as 10 flag-request equivalents. For projects that evaluate fewer flags than that per polling interval, remote evaluation is cheaper.
-- **Need-it-now changes.** Local eval accepts up to one polling interval of staleness (default 1 minute with our cron). For flags that must flip in well under that, you want remote eval.
+- **Need-it-now changes.** Local eval accepts up to one polling interval of staleness (default 10 minutes with our cron, configurable via `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS`). For flags that must flip in well under that, you want remote eval.
 - **No personal API key.** If you don't want to set `POSTHOG_PERSONAL_API_KEY`, the local methods aren't useful — there's nothing for them to read.
 
 For any of those, use the remote-eval methods below instead.
