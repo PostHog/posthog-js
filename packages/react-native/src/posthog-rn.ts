@@ -20,6 +20,7 @@ import {
   logFlushError,
   maybeAdd,
   patchFetchForTracingHeaders,
+  safeSetTimeout,
   FeatureFlagValue,
   ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
@@ -371,8 +372,12 @@ export class PostHog extends PostHogCore {
       void logsFlushPromise.catch(async (err) => {
         await logFlushError(err)
       })
-      // Drain pending logs-storage writes to disk before the OS may suspend
-      // the process. waitForPersist swallows errors internally.
+      // Drain pending storage writes to disk before the OS may suspend the
+      // process. Writes are debounced, so without this a capture landing in the
+      // same window as a background transition could lose its scheduled write
+      // to OS suspension. Both pipelines, since each debounces independently.
+      // waitForPersist swallows errors internally.
+      void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
 
       if (state === 'active') {
@@ -546,10 +551,27 @@ export class PostHog extends PostHogCore {
    * `shutdownTimeoutMs` so a final flush can never run past the caller's
    * shutdown SLA, while still respecting the configured logs-specific
    * termination budget when it's tighter.
+   *
+   * After the flushes, drain any debounced storage writes that weren't already
+   * persisted via the queue-advance path — `setPersistedProperty` calls for
+   * distinctId, sessionId, deviceId, feature flag overrides, etc. only arm a
+   * debounced write. The drain runs in `finally` so a timed-out flush still
+   * persists them, and its await is bounded by the time left in the shutdown
+   * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
-    await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
+    try {
+      await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
+    } finally {
+      // waitForPersist initiates the write synchronously, so the latest state
+      // reaches the backend even if we bail on the await below; the race only
+      // bounds how long we wait for in-flight async writes to settle.
+      const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
+      const drain = Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
+      await Promise.race([drain, new Promise<void>((resolve) => safeSetTimeout(resolve, remainingMs))])
+    }
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
@@ -691,6 +713,14 @@ export class PostHog extends PostHogCore {
       // reloading, and allow the super.reset() call to reload the flags.
       this._setDefaultPersonPropertiesForFlags(false)
     }
+
+    // Logout must be durable. reset() clears identity (distinctId, sessionId,
+    // anonymousId, etc.) through the debounced storage path, so force those
+    // writes to disk now — without this, a crash within the debounce window
+    // could resurface the previous user's identity on the next launch. Identity
+    // lives in _eventsStorage (LogsQueue is the only key routed elsewhere, and
+    // reset preserves it). waitForPersist drains synchronously and never throws.
+    void this._eventsStorage.waitForPersist()
   }
 
   /**
@@ -1555,6 +1585,12 @@ export class PostHog extends PostHogCore {
         this._logger.error(`Session replay failed to identify: ${e}.`)
       }
     }
+
+    // Identity changes must be durable. super.identify() persists the new
+    // distinctId/anonymousId through the debounced path; force it to disk now so
+    // a crash within the debounce window can't leave the previous user's
+    // identity on disk (account-switch safety — same rationale as reset()).
+    void this._eventsStorage.waitForPersist()
   }
 
   /**

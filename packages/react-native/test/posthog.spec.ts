@@ -302,6 +302,10 @@ describe('PostHog React Native', () => {
       })
 
       onCapture.mockClear()
+      // The first instance's app-version write is debounced; drain it so the
+      // second instance reads it on preload and detects an update (not a fresh
+      // install).
+      await (posthog as any)._eventsStorage.waitForPersist()
       // act
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -355,6 +359,11 @@ describe('PostHog React Native', () => {
       })
 
       onCapture.mockClear()
+
+      // The first instance's app-version write is debounced; drain it so the
+      // second instance reads it on preload and fires only "Opened" (not a
+      // fresh-install pair).
+      await (posthog as any)._eventsStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -429,6 +438,9 @@ describe('PostHog React Native', () => {
       const semiAsyncStorage = createEventsStorage(mockStorage)
       await semiAsyncStorage.preloadPromise
       semiAsyncStorage.setItem(PostHogPersistedProperty.AnonymousId, 'my-anonymous-id')
+      // Storage writes are debounced; force the scheduled write to land in
+      // mockStorage before the test's `new PostHog(...)` reads from it.
+      await semiAsyncStorage.waitForPersist()
     })
 
     it('should allow immediate calls but delay for the stored values', async () => {
@@ -508,6 +520,10 @@ describe('PostHog React Native', () => {
       })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
+      // The override write is debounced; drain it so the second instance reads
+      // it from `storage` without preload.
+      await (posthog as any)._eventsStorage.waitForPersist()
+
       // New instance but same sync storage — the override persisted via
       // the first instance is visible to the second without preload.
       posthog = new PostHog('1', {
@@ -517,12 +533,98 @@ describe('PostHog React Native', () => {
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
     })
 
+    it('drains debounced storage writes on shutdown', async () => {
+      posthog = new PostHog('1', {
+        customStorage: storage,
+        captureAppLifecycleEvents: false,
+      })
+      ;(storage.setItem as jest.Mock).mockClear()
+
+      posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'persisted-on-shutdown')
+      // Debounced — nothing written to the backend yet.
+      expect(storage.setItem).not.toHaveBeenCalled()
+
+      await posthog.shutdown()
+
+      // _shutdown drains pending writes, so the value reaches the backend even
+      // though no flush/background transition forced it.
+      const written = (storage.setItem as jest.Mock).mock.calls
+        .map((call) => JSON.parse(call[1] as string))
+        .find((blob) => blob.content[PostHogPersistedProperty.DistinctId] === 'persisted-on-shutdown')
+      expect(written).toBeDefined()
+    })
+
+    it('drains debounced storage writes when the app backgrounds', () => {
+      ;(AppState.addEventListener as jest.Mock).mockClear()
+      posthog = new PostHog('1', {
+        customStorage: storage,
+        captureAppLifecycleEvents: false,
+      })
+      // With captureAppLifecycleEvents off, the constructor registers exactly
+      // one AppState listener (the lifecycle one is gated on that flag).
+      const onAppStateChange = (AppState.addEventListener as jest.Mock).mock.calls[0][1]
+
+      ;(storage.setItem as jest.Mock).mockClear()
+      posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'persisted-on-background')
+      // Debounced — nothing on disk yet.
+      expect(storage.setItem).not.toHaveBeenCalled()
+
+      // Backgrounding must drain to disk synchronously before the OS suspends us.
+      onAppStateChange('background')
+
+      expect(storage.setItem).toHaveBeenCalled()
+      const written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      expect(written.content[PostHogPersistedProperty.DistinctId]).toEqual('persisted-on-background')
+    })
+
+    it('persists reset() to disk synchronously so logout cannot leak across sessions', async () => {
+      posthog = new PostHog('1', {
+        customStorage: storage,
+        captureAppLifecycleEvents: false,
+      })
+      posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'previous-user')
+      await (posthog as any)._eventsStorage.waitForPersist()
+
+      // Sanity: the previous user is on disk.
+      let written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      expect(written.content[PostHogPersistedProperty.DistinctId]).toEqual('previous-user')
+      ;(storage.setItem as jest.Mock).mockClear()
+
+      // Logout. The clear must reach disk synchronously (drained), NOT wait out
+      // the debounce — otherwise a crash in the window would resurface the
+      // previous user's identity on next launch.
+      posthog.reset()
+
+      expect(storage.setItem).toHaveBeenCalled()
+      written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      expect(written.content[PostHogPersistedProperty.DistinctId]).toBeUndefined()
+    })
+
+    it('persists identify() to disk synchronously (account-switch safety)', async () => {
+      posthog = new PostHog('1', {
+        customStorage: storage,
+        captureAppLifecycleEvents: false,
+      })
+      posthog.identify('user-a')
+      await (posthog as any)._eventsStorage.waitForPersist()
+      ;(storage.setItem as jest.Mock).mockClear()
+
+      // Switch accounts. The new identity must reach disk synchronously, not on
+      // the debounce — a crash in the window must not leave user-a on disk.
+      posthog.identify('user-b')
+
+      expect(storage.setItem).toHaveBeenCalled()
+      const written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      expect(written.content[PostHogPersistedProperty.DistinctId]).toEqual('user-b')
+    })
+
     it('do not rotate session id on restart', async () => {
       const sessionId = '0192244d-a627-7ae2-b22a-ccd594bed71d'
       rnStorage.setItem(PostHogPersistedProperty.SessionId, sessionId)
       const now = Date.now()
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, now)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, now)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -541,6 +643,7 @@ describe('PostHog React Native', () => {
       const now = Date.now()
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, now)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, now)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -561,6 +664,7 @@ describe('PostHog React Native', () => {
       const nowMinus45Minutes = JSON.stringify(now - 45 * 60 * 1000)
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, nowMinus45Minutes)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, nowMinus1Hour)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -583,6 +687,7 @@ describe('PostHog React Native', () => {
       const nowMinus15Minutes = JSON.stringify(now - 15 * 60 * 1000)
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, nowMinus15Minutes)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, nowMinus1Hour)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -604,6 +709,7 @@ describe('PostHog React Native', () => {
       const nowMinus15Minutes = JSON.stringify(now - 15 * 60 * 1000)
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, nowMinus15Minutes)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, nowMinus25Hour)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,
@@ -626,6 +732,7 @@ describe('PostHog React Native', () => {
       const nowMinus15Minutes = JSON.stringify(now - 15 * 60 * 1000)
       rnStorage.setItem(PostHogPersistedProperty.SessionLastTimestamp, nowMinus15Minutes)
       rnStorage.setItem(PostHogPersistedProperty.SessionStartTimestamp, nowMinus23Hour)
+      await rnStorage.waitForPersist()
 
       posthog = new PostHog('1', {
         customStorage: storage,

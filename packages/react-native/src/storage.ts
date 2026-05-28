@@ -1,4 +1,4 @@
-import { isPromise } from '@posthog/core'
+import { isPromise, safeSetTimeout } from '@posthog/core'
 import { PostHogCustomStorage } from './types'
 
 // Module-local: SDK-internal detail, not part of any public or reachable
@@ -8,6 +8,22 @@ const EVENTS_STORAGE_FILE = '.posthog-rn.json'
 const LOGS_STORAGE_FILE = '.posthog-rn-logs.json'
 const POSTHOG_STORAGE_VERSION = 'v1'
 
+// Window over which storage mutations coalesce into one disk write. The
+// single-blob storage shape re-serializes the full cache on every write, so an
+// unbatched burst of N captures costs O(n²) bytes; coalescing collapses a
+// same-tick burst to a single write. The mutation lands in memoryCache
+// synchronously — only the disk write is deferred — and flush / AppState
+// background / shutdown each force a synchronous write via waitForPersist, so
+// the only data-loss window is a hard crash before the next drain.
+//
+// 100ms is chosen from the write-rate curve: at high burst rates the disk-write
+// count is already floored by the events flushAt (a flush drains every 20
+// events), and 100ms is enough to reach that floor while bounding worst-case
+// loss to ~one flush batch. Larger windows don't reduce writes further (the
+// floor is flushAt, not the window) and only widen the loss window when flushes
+// aren't draining.
+const PERSIST_DEBOUNCE_MS = 100
+
 type PostHogStorageContents = { [key: string]: any }
 
 export class PostHogRNStorage {
@@ -16,6 +32,12 @@ export class PostHogRNStorage {
   preloadPromise: Promise<void> | undefined
   private _storageKey: string
   private _pendingPromises: Set<Promise<void>> = new Set()
+  // Single in-flight debounce timer. Its presence doubles as the "a write is
+  // scheduled" flag — one source of truth. Armed on the first mutation in a
+  // window and deliberately not reset by later mutations, so write latency is
+  // bounded to PERSIST_DEBOUNCE_MS rather than starving under a continuous
+  // stream of captures.
+  private _persistTimer?: ReturnType<typeof setTimeout>
 
   // Prefer the `create*Storage` factories below over calling this directly —
   // they're the only callers that know which file to bind to.
@@ -39,17 +61,23 @@ export class PostHogRNStorage {
   }
 
   /**
-   * Waits for all pending storage persist operations to complete.
-   * This ensures data has been written to the underlying storage before proceeding.
-   * This method never throws - errors are logged but swallowed.
+   * Waits for all pending storage persist operations to complete, so callers
+   * (events flush, AppState background, shutdown) can rely on the latest state
+   * having been handed to the storage backend before they resume — the
+   * durability contract the events flush relies on to avoid replaying an
+   * already-sent batch after an app crash.
+   *
+   * Drains any scheduled-but-not-yet-fired debounced write synchronously first,
+   * then awaits in-flight async writes. Never throws: async errors are caught
+   * in persist(), and sync throws from the drained persist() are caught in
+   * _drainScheduledPersist(). No try/catch around Promise.all is needed because
+   * every promise in _pendingPromises already has its own .catch applied — they
+   * resolve, so Promise.all can't reject.
    */
   async waitForPersist(): Promise<void> {
-    try {
-      if (this._pendingPromises.size > 0) {
-        await Promise.all(this._pendingPromises)
-      }
-    } catch {
-      // Errors already logged in persist(), safe to ignore here
+    this._drainScheduledPersist()
+    if (this._pendingPromises.size > 0) {
+      await Promise.all(this._pendingPromises)
     }
   }
 
@@ -74,22 +102,61 @@ export class PostHogRNStorage {
     }
   }
 
+  // Arms a single debounced persist(). Repeated calls within the window are
+  // no-ops — the mutation is already in memoryCache and the scheduled fire
+  // reads the final state. safeSetTimeout unrefs in Node so a pending write
+  // can't keep the process alive. Sync throws from persist() (e.g. a circular
+  // value passed to JSON.stringify, or a custom storage backend that throws
+  // synchronously) are caught so the timer callback can't surface as an
+  // unhandled error in the RN runtime.
+  private schedulePersist(): void {
+    if (this._persistTimer !== undefined) {
+      return
+    }
+    this._persistTimer = safeSetTimeout(() => {
+      this._persistTimer = undefined
+      try {
+        this.persist()
+      } catch (err) {
+        console.warn('PostHog storage scheduled persist threw:', err)
+      }
+    }, PERSIST_DEBOUNCE_MS)
+  }
+
+  // Forces a scheduled persist to fire now. Used by waitForPersist (and thus by
+  // flushStorage / AppState background / shutdown) so durability-sensitive
+  // callers get the latest state to the backend without waiting out the
+  // debounce. Catches sync throws so waitForPersist's never-throws contract
+  // holds.
+  private _drainScheduledPersist(): void {
+    if (this._persistTimer === undefined) {
+      return
+    }
+    clearTimeout(this._persistTimer)
+    this._persistTimer = undefined
+    try {
+      this.persist()
+    } catch (err) {
+      console.warn('PostHog storage drain persist threw:', err)
+    }
+  }
+
   getItem(key: string): any | null | undefined {
     return this.memoryCache[key]
   }
   setItem(key: string, value: any): void {
     this.memoryCache[key] = value
-    this.persist()
+    this.schedulePersist()
   }
   removeItem(key: string): void {
     delete this.memoryCache[key]
-    this.persist()
+    this.schedulePersist()
   }
   clear(): void {
     for (const key in this.memoryCache) {
       delete this.memoryCache[key]
     }
-    this.persist()
+    this.schedulePersist()
   }
   getAllKeys(): readonly string[] {
     return Object.keys(this.memoryCache)
