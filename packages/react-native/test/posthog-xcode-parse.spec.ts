@@ -100,17 +100,11 @@ describe('posthog-xcode.sh REACT_NATIVE_XCODE resolution', () => {
     return execSync(`/bin/bash -c 'set -- '"'"'${escaped}'"'"'; ${script}'`).toString()
   }
 
-  it('resolves to react-native-xcode.sh when $1 is the RN script path (no shell prefix)', () => {
-    const rnScript = '../node_modules/react-native/scripts/react-native-xcode.sh'
-    const result = resolveReactNativeXcode(rnScript)
-    expect(result).toBe(rnScript)
-    expect(result).not.toBe('/bin/sh')
-  })
-
-  it('does NOT resolve to /bin/sh when $1 is /bin/sh (issue #3682 — Expo shell-prefixed bundle phase)', () => {
-    // This is the broken state: the Expo plugin passes /bin/sh as $1.
-    // The test currently FAILS (documents the bug). Once the fix is applied it must PASS.
-    const result = resolveReactNativeXcode('/bin/sh')
+  it.each([
+    ['RN script path', '../node_modules/react-native/scripts/react-native-xcode.sh'],
+    ['/bin/sh (issue #3682 — Expo shell-prefixed bundle phase)', '/bin/sh'],
+  ])('REACT_NATIVE_XCODE resolves to react-native-xcode.sh path when $1 is %s', (_desc, arg1) => {
+    const result = resolveReactNativeXcode(arg1)
     expect(result).not.toBe('/bin/sh')
     expect(result).toContain('react-native-xcode.sh')
   })
