@@ -327,7 +327,7 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
-export type ConfigDefaults = '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults = '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -909,7 +909,8 @@ export interface PostHogConfig {
      *
      * Defaults to `0` (no debouncing, write synchronously) for backwards compatibility.
      * On pages that capture many events per second, `250` is a reasonable starting point
-     * to reduce localStorage write pressure and cross-tab IPC traffic.
+     * to reduce localStorage write pressure and cross-tab IPC traffic. The `2026-05-30`
+     * config default opts into `250` automatically.
      *
      * @default 0
      */

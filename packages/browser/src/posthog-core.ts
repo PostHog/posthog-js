@@ -187,12 +187,14 @@ const defaultsThatVaryByConfig = (
     | 'session_recording'
     | 'external_scripts_inject_target'
     | 'internal_or_test_user_hostname'
+    | 'persistence_save_debounce_ms'
 > => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
+    persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -222,7 +224,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     upgrade: false,
     disable_session_recording: false,
     disable_persistence: false,
-    persistence_save_debounce_ms: 0,
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
     disable_surveys_automatic_display: false,
