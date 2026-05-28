@@ -235,10 +235,38 @@ export class SessionIdManager {
         ) {
             return
         }
+
+        // Another tab may have rotated the session while this tab held a
+        // throttled activity tick. Refresh from storage and skip the flush
+        // if the persisted session id / start no longer match ours, otherwise
+        // we would clobber the new session with stale id/start values.
+        // `load()` has side effects on other in-memory props, but this only
+        // runs on destroy / unload when the SDK is being torn down — those
+        // props are about to be lost anyway.
+        this._persistence.load()
+        const [, persistedSessionId, persistedStart] = this._getSessionId()
+        if (persistedSessionId !== this._sessionId || persistedStart !== this._sessionStartTimestamp) {
+            return
+        }
+
         this._lastPersistedActivityTimestamp = this._sessionActivityTimestamp
         this._persistence.register({
             [SESSION_ID]: [this._sessionActivityTimestamp, this._sessionId ?? null, this._sessionStartTimestamp],
         })
+    }
+
+    // Returns the freshest known activity timestamp across this tab's
+    // in-memory view and the persisted (cross-tab) view. The throttle can
+    // hold in-memory ahead of persisted for up to the granularity window,
+    // so idle detection that read persisted alone could rotate an active
+    // session up to that window early. Conversely, a sibling tab may have
+    // kept the session alive while this tab was frozen — the persisted
+    // value can be ahead of in-memory. Taking the max covers both.
+    private _freshestActivityTimestamp(): number {
+        const [persistedActivity] = this._getSessionId()
+        const persisted = isPositiveNumber(persistedActivity) ? persistedActivity : 0
+        const inMemory = isPositiveNumber(this._sessionActivityTimestamp) ? this._sessionActivityTimestamp : 0
+        return Math.max(persisted, inMemory)
     }
 
     private _getSessionId(): [number, string, number] {
@@ -329,7 +357,13 @@ export class SessionIdManager {
         const timestamp = _timestamp || new Date().getTime()
 
         // eslint-disable-next-line prefer-const
-        let [lastActivityTimestamp, sessionId, startTimestamp] = this._getSessionId()
+        let [, sessionId, startTimestamp] = this._getSessionId()
+        // Idle detection must compare against the freshest known activity
+        // timestamp, not just the persisted one: the throttle can hold the
+        // in-memory value ahead of persisted by up to the granularity, and
+        // a sibling tab may have kept the session alive while this tab was
+        // frozen.
+        const lastActivityTimestamp = this._freshestActivityTimestamp()
         let windowId = this._getWindowId()
 
         const sessionPastMaximumLength =
@@ -393,7 +427,7 @@ export class SessionIdManager {
             // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
             // we need to check session activity first in case a different window has kept the session active
             // while this window has been idle - and the timer has not progressed - e.g. window memory frozen while hidden
-            const [lastActivityTimestamp] = this._getSessionId()
+            const lastActivityTimestamp = this._freshestActivityTimestamp()
             if (this._sessionHasBeenIdleTooLong(new Date().getTime(), lastActivityTimestamp)) {
                 const idleSessionId = this._sessionId
                 this.resetSessionId()
