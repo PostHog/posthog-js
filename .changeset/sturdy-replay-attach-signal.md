@@ -1,0 +1,5 @@
+---
+'posthog-js': patch
+---
+
+chore(replay): expose `$sdk_debug_rrweb_attached` and `$sdk_debug_rrweb_start_attempted` debug properties on captured events. Today the SDK already stamps several `$sdk_debug_*` properties (start reason, linked-flag trigger status, recording status) that report the SDK's *intent* to record — they all flip to "active" as soon as the state machine evaluates the configured triggers. None of them observe whether rrweb actually attached and is producing events. The new booleans close that gap: `$sdk_debug_rrweb_start_attempted` is set when `_startRecorder()` is first entered, and `$sdk_debug_rrweb_attached` reflects whether `_stopRrweb` is currently a non-falsy stop handle (i.e. `rrwebRecord({...})` returned successfully and the recorder has not been torn down). No behavior change — this only adds two booleans to the existing `sdkDebugProperties` channel, used to diagnose cases where a session reports `trigger_activated` / `recording_status: active` but no `$snapshot` data is ever uploaded.

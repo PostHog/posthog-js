@@ -55,6 +55,8 @@ import {
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_START_REASON,
+    SDK_DEBUG_REPLAY_RRWEB_ATTACHED,
+    SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
@@ -480,6 +482,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
     private _rrwebError = false
+    private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
 
     private _linkedFlagMatching: LinkedFlagMatching
@@ -1856,6 +1859,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
+            [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
+            [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
         }
     }
 
@@ -1863,6 +1868,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (this._stopRrweb) {
             return
         }
+        this._rrwebStartAttempted = true
 
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
         const sessionRecordingOptions: recordOptions = {
