@@ -19,14 +19,8 @@ export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
-// Granularity for persisting the session activity timestamp to the
-// persistence store. The in-memory value is updated at full resolution on
-// every call; only writes to storage are throttled.
-// Activity-timestamp-only changes within this window are not persisted.
-// The minimum configurable idle timeout is 60s, so 5s of staleness in the
-// persisted value cannot cause incorrect idle detection.
-// A regression test pins the invariant that this is well under the
-// minimum idle timeout.
+// Must stay well under MIN_SESSION_IDLE_TIMEOUT_SECONDS so idle detection on
+// other tabs cannot fire on stale persisted data (pinned by a unit test).
 export const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
 
 export class SessionIdManager {
@@ -41,10 +35,6 @@ export class SessionIdManager {
     private _sessionStartTimestamp: number | null
 
     private _sessionActivityTimestamp: number | null
-    // Tracks the activity timestamp we most recently persisted. Used to
-    // decide whether a new activity-only change is worth writing to
-    // storage. Explicitly reset to null in `resetSessionId` so the next
-    // real value always lands in storage.
     private _lastPersistedActivityTimestamp: number | null = null
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
     private readonly _sessionTimeoutMs: number
@@ -172,16 +162,13 @@ export class SessionIdManager {
         return null
     }
 
-    // The throttle suppresses activity-only writes that move the timestamp
-    // less than `ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS`. `Math.abs` is
-    // defensive against clock skew (NTP correction, devtools time travel,
-    // another tab writing an older value) — without it a backwards jump
-    // would slip past the gate and write on every tick.
     private _isActivityChangeBelowGranularity(newActivityTimestamp: number | null): boolean {
         const lastPersisted = this._lastPersistedActivityTimestamp
         if (isNull(lastPersisted) || isNull(newActivityTimestamp)) {
             return false
         }
+        // Math.abs guards against clock skew (NTP, devtools time travel) — a
+        // backwards jump would otherwise slip past the gate.
         return Math.abs(newActivityTimestamp - lastPersisted) < ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
     }
 
@@ -197,8 +184,8 @@ export class SessionIdManager {
         const activityChanged = sessionActivityTimestamp !== this._sessionActivityTimestamp
         const isActivityOnlyChange = !idChanged && !startChanged
 
-        // Always update in-memory state at full resolution so reads see
-        // the freshest values even if we choose not to persist.
+        // In-memory state always tracks the freshest values, even when the
+        // write below is throttled, so in-process reads stay accurate.
         this._sessionStartTimestamp = sessionStartTimestamp
         this._sessionActivityTimestamp = sessionActivityTimestamp
         this._sessionId = sessionId
@@ -207,12 +194,6 @@ export class SessionIdManager {
             return
         }
 
-        // SESSION_ID changes and session-start changes are semantically
-        // important — always persist them. Activity-timestamp-only changes
-        // happen on every event capture (4+ times per second during active
-        // use); persist them only when the timestamp has moved enough that
-        // a stale read could affect idle detection. The in-memory value
-        // remains at full resolution above.
         if (isActivityOnlyChange && this._isActivityChangeBelowGranularity(sessionActivityTimestamp)) {
             return
         }
@@ -223,11 +204,8 @@ export class SessionIdManager {
         })
     }
 
-    // Forces a write of the latest in-memory activity timestamp if it has
-    // diverged from the last-persisted value because the throttle held it
-    // back. Called from `destroy` and the unload listener so a tab close
-    // within the granularity window does not leave the persisted value
-    // up to 5s stale for other tabs / future loads.
+    // Called from destroy / beforeunload so a tab close inside the throttle
+    // window doesn't leave the persisted activity timestamp stale.
     private _flushPendingActivityTimestamp(): void {
         if (
             isNull(this._sessionActivityTimestamp) ||
@@ -236,13 +214,9 @@ export class SessionIdManager {
             return
         }
 
-        // Another tab may have rotated the session while this tab held a
-        // throttled activity tick. Refresh from storage and skip the flush
-        // if the persisted session id / start no longer match ours, otherwise
-        // we would clobber the new session with stale id/start values.
-        // `load()` has side effects on other in-memory props, but this only
-        // runs on destroy / unload when the SDK is being torn down — those
-        // props are about to be lost anyway.
+        // A sibling tab may have rotated the session — refresh and skip the
+        // flush if storage no longer matches our cached id/start, otherwise
+        // we would clobber the new session with stale values.
         this._persistence.load()
         const [, persistedSessionId, persistedStart] = this._getSessionId()
         if (persistedSessionId !== this._sessionId || persistedStart !== this._sessionStartTimestamp) {
@@ -255,13 +229,9 @@ export class SessionIdManager {
         })
     }
 
-    // Returns the freshest known activity timestamp across this tab's
-    // in-memory view and the persisted (cross-tab) view. The throttle can
-    // hold in-memory ahead of persisted for up to the granularity window,
-    // so idle detection that read persisted alone could rotate an active
-    // session up to that window early. Conversely, a sibling tab may have
-    // kept the session alive while this tab was frozen — the persisted
-    // value can be ahead of in-memory. Taking the max covers both.
+    // `max` because either view can be ahead: the throttle holds in-memory
+    // ahead of persisted, and a sibling tab can hold persisted ahead of a
+    // frozen in-memory.
     private _freshestActivityTimestamp(): number {
         const [persistedActivity] = this._getSessionId()
         const persisted = isPositiveNumber(persistedActivity) ? persistedActivity : 0
@@ -358,11 +328,6 @@ export class SessionIdManager {
 
         // eslint-disable-next-line prefer-const
         let [, sessionId, startTimestamp] = this._getSessionId()
-        // Idle detection must compare against the freshest known activity
-        // timestamp, not just the persisted one: the throttle can hold the
-        // in-memory value ahead of persisted by up to the granularity, and
-        // a sibling tab may have kept the session alive while this tab was
-        // frozen.
         const lastActivityTimestamp = this._freshestActivityTimestamp()
         let windowId = this._getWindowId()
 
