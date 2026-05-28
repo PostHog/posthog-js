@@ -40,7 +40,7 @@ describe('ErrorTracking filters PostHog internal network errors', () => {
 
     handler(new Error('network'), false)
 
-    expect(mockPostHog.capture).not.toHaveBeenCalled()
+    expect(mockPostHog.captureException).not.toHaveBeenCalled()
   })
 
   it('does not capture a network error from the unhandled rejection handler', () => {
@@ -50,7 +50,7 @@ describe('ErrorTracking filters PostHog internal network errors', () => {
 
     handler(new Error('network'))
 
-    expect(mockPostHog.capture).not.toHaveBeenCalled()
+    expect(mockPostHog.captureException).not.toHaveBeenCalled()
   })
 
   it('still captures ordinary application errors from the uncaught exception handler', () => {
@@ -59,7 +59,7 @@ describe('ErrorTracking filters PostHog internal network errors', () => {
 
     handler(new Error('boom'), false)
 
-    expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+    expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
   })
 
   it('does not filter the console handler (console is left untouched)', () => {
@@ -69,6 +69,6 @@ describe('ErrorTracking filters PostHog internal network errors', () => {
 
     consoleHandler(new Error('network'), false)
 
-    expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+    expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
   })
 })

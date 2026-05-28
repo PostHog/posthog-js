@@ -32,14 +32,14 @@ describe('ErrorTracking remote config', () => {
 
       // Should capture before remote config
       handler(new Error('test'), false)
-      expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
 
-      mockPostHog.capture.mockClear()
+      mockPostHog.captureException.mockClear()
 
       // undefined should not change anything
       et.onRemoteConfig(undefined)
       handler(new Error('test2'), false)
-      expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
     })
 
     it('does not change state when errorTracking is null', () => {
@@ -48,7 +48,7 @@ describe('ErrorTracking remote config', () => {
 
       et.onRemoteConfig(null as any)
       handler(new Error('test'), false)
-      expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
     })
 
     it('disables autocapture when errorTracking is false', () => {
@@ -57,7 +57,7 @@ describe('ErrorTracking remote config', () => {
 
       et.onRemoteConfig(false)
       handler(new Error('test'), false)
-      expect(mockPostHog.capture).not.toHaveBeenCalled()
+      expect(mockPostHog.captureException).not.toHaveBeenCalled()
     })
 
     it('enables autocapture when errorTracking is true', () => {
@@ -67,12 +67,12 @@ describe('ErrorTracking remote config', () => {
       // First disable
       et.onRemoteConfig(false)
       handler(new Error('test'), false)
-      expect(mockPostHog.capture).not.toHaveBeenCalled()
+      expect(mockPostHog.captureException).not.toHaveBeenCalled()
 
       // Then re-enable
       et.onRemoteConfig(true)
       handler(new Error('test2'), false)
-      expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
     })
 
     it('enables autocapture when errorTracking map has autocaptureExceptions=true', () => {
@@ -81,7 +81,7 @@ describe('ErrorTracking remote config', () => {
 
       et.onRemoteConfig({ autocaptureExceptions: true })
       handler(new Error('test'), false)
-      expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
     })
 
     it('disables autocapture when errorTracking map has autocaptureExceptions=false', () => {
@@ -90,7 +90,7 @@ describe('ErrorTracking remote config', () => {
 
       et.onRemoteConfig({ autocaptureExceptions: false })
       handler(new Error('test'), false)
-      expect(mockPostHog.capture).not.toHaveBeenCalled()
+      expect(mockPostHog.captureException).not.toHaveBeenCalled()
     })
 
     it('disables autocapture when errorTracking map is missing autocaptureExceptions key', () => {
@@ -99,7 +99,7 @@ describe('ErrorTracking remote config', () => {
 
       et.onRemoteConfig({ otherKey: 'value' })
       handler(new Error('test'), false)
-      expect(mockPostHog.capture).not.toHaveBeenCalled()
+      expect(mockPostHog.captureException).not.toHaveBeenCalled()
     })
 
     it('gates unhandled rejection handler on remote config', () => {
@@ -108,13 +108,13 @@ describe('ErrorTracking remote config', () => {
 
       // Enabled by default
       handler(new Error('test'))
-      expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
-      mockPostHog.capture.mockClear()
+      expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
+      mockPostHog.captureException.mockClear()
 
       // Disable via remote config
       et.onRemoteConfig(false)
       handler(new Error('test2'))
-      expect(mockPostHog.capture).not.toHaveBeenCalled()
+      expect(mockPostHog.captureException).not.toHaveBeenCalled()
     })
 
     it('gates console handler on remote config', () => {
@@ -126,13 +126,13 @@ describe('ErrorTracking remote config', () => {
 
       // Enabled by default
       consoleHandler(new Error('test'), false)
-      expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
-      mockPostHog.capture.mockClear()
+      expect(mockPostHog.captureException).toHaveBeenCalledTimes(1)
+      mockPostHog.captureException.mockClear()
 
       // Disable via remote config
       et.onRemoteConfig(false)
       consoleHandler(new Error('test2'), false)
-      expect(mockPostHog.capture).not.toHaveBeenCalled()
+      expect(mockPostHog.captureException).not.toHaveBeenCalled()
     })
   })
 })

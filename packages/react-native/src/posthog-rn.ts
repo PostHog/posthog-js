@@ -21,6 +21,7 @@ import {
   maybeAdd,
   patchFetchForTracingHeaders,
   FeatureFlagValue,
+  ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
 import {
   PostHogRNStorage,
@@ -38,7 +39,7 @@ import {
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isValidSampleRate } from './utils'
+import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isValidSampleRate } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -1587,15 +1588,34 @@ export class PostHog extends PostHogCore {
    * @param {Object} [additionalProperties] Any additional properties to add to the error event
    * @returns {void}
    */
-  captureException(error: Error | unknown, additionalProperties: PostHogEventProperties = {}): void {
-    const syntheticException = new Error('Synthetic Error')
-    this._errorTracking.captureException(error, additionalProperties, {
-      mechanism: {
-        handled: true,
-        type: 'generic',
-      },
-      syntheticException,
-    })
+  captureException(
+    error: Error | unknown,
+    additionalProperties: PostHogEventProperties = {},
+    hint?: CoreErrorTracking.EventHint
+  ): void {
+    const resolvedHint: CoreErrorTracking.EventHint = hint ?? {
+      mechanism: { handled: true, type: 'generic' },
+      syntheticException: new Error('Synthetic Error'),
+    }
+    super.captureException(error, additionalProperties, resolvedHint)
+  }
+
+  protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
+    return new CoreErrorTracking.ErrorPropertiesBuilder(
+      [
+        new CoreErrorTracking.PromiseRejectionEventCoercer(),
+        new CoreErrorTracking.ErrorCoercer(),
+        new CoreErrorTracking.ErrorEventCoercer(),
+        new CoreErrorTracking.ObjectCoercer(),
+        new CoreErrorTracking.StringCoercer(),
+        new CoreErrorTracking.PrimitiveCoercer(),
+      ],
+      CoreErrorTracking.createStackParser(
+        isHermes() ? 'hermes' : 'web:javascript',
+        CoreErrorTracking.chromeStackLineParser,
+        CoreErrorTracking.geckoStackLineParser
+      )
+    )
   }
 
   initReactNativeNavigation(options: PostHogAutocaptureOptions): boolean {

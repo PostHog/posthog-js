@@ -4,6 +4,7 @@ export const wait = async (t: number): Promise<void> => {
 
 export const createMockPostHog = (): any => ({
   capture: jest.fn(),
+  captureException: jest.fn(),
   flush: jest.fn(() => Promise.resolve()),
 })
 

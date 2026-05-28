@@ -867,12 +867,12 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-XeeSqo/UNA8itbVs9qlseZMA/Z3MWtkQZ7nb+N/fTeeltNtBZCfL0Tt7tgnZ9+932nh/+cT7J205mPyCn/JC7g==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.27.7
+    resolution: {integrity: sha512-quPW3CiWHvlntgoePEFedqhBAw8+OJSTjADf6QinTyGnvlLvsDk9QR1mQeEuz+SCrC5mVTD9Bwa4uUUu8Kgchg==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.29.12
 
   '@posthog/types@file:../../target/posthog-types.tgz':
-    resolution: {integrity: sha512-67d/J6sJY2YFuM57v61jrvwk31nea//DR4scLzu5f1GdJuBafCoRx4DcMNF+wgO5+95g8vDGA/DNcZdLELBCvQ==, tarball: file:../../target/posthog-types.tgz}
-    version: 1.372.3
+    resolution: {integrity: sha512-RILFzuWlEiTjJ2NsyQckUjmYTSl6QJtSELniYltBURPZ9aRRcTpoJEDp8WrRiiBN2+J8KRU4j76chCvsZmDToQ==, tarball: file:../../target/posthog-types.tgz}
+    version: 1.376.3
 
   '@radix-ui/react-compose-refs@1.1.2':
     resolution: {integrity: sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==}
@@ -3140,8 +3140,8 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-XvkNZkDbnsz/hzV2emgIdMsWATiazRBGC4MjEVgpcYXY3dTRT91Oh2OChZpwSE7gnPEMssHiQbnjhUW9qIBRBQ==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.43.10
+    resolution: {integrity: sha512-F/IwIPXnSB774erZGOYPAyECp14q/7se5A1ANrQeRrMliy1uBiLUpEovlBK3Pi2IXSEfTu4LPI2da2nyd1ss0g==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.46.1
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
@@ -3149,7 +3149,7 @@ packages:
       expo-device: '>= 4.0.0'
       expo-file-system: '>= 13.0.0'
       expo-localization: '>= 11.0.0'
-      posthog-react-native-session-replay: '>= 1.5.6'
+      posthog-react-native-session-replay: '>= 1.6.0'
       react-native-device-info: '>= 10.0.0'
       react-native-localize: '>= 3.0.0'
       react-native-navigation: '>= 6.0.0'

@@ -1,13 +1,7 @@
 import type { PostHog } from '../posthog-rn'
-import {
-  JsonType,
-  Logger,
-  PostHogEventProperties,
-  ErrorTracking as CoreErrorTracking,
-  isPostHogFetchNetworkError,
-} from '@posthog/core'
+import { JsonType, Logger, ErrorTracking as CoreErrorTracking, isPostHogFetchNetworkError } from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
-import { getRemoteConfigBool, isHermes } from '../utils'
+import { getRemoteConfigBool } from '../utils'
 
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
@@ -36,7 +30,6 @@ interface ResolvedErrorTrackingOptions {
 }
 
 export class ErrorTracking {
-  private errorPropertiesBuilder: CoreErrorTracking.ErrorPropertiesBuilder
   private logger: Logger
   private options: ResolvedErrorTrackingOptions
 
@@ -53,21 +46,6 @@ export class ErrorTracking {
     options: ErrorTrackingOptions = {},
     logger: Logger
   ) {
-    this.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuilder(
-      [
-        new CoreErrorTracking.PromiseRejectionEventCoercer(),
-        new CoreErrorTracking.ErrorCoercer(),
-        new CoreErrorTracking.ErrorEventCoercer(),
-        new CoreErrorTracking.ObjectCoercer(),
-        new CoreErrorTracking.StringCoercer(),
-        new CoreErrorTracking.PrimitiveCoercer(),
-      ],
-      CoreErrorTracking.createStackParser(
-        isHermes() ? 'hermes' : 'web:javascript',
-        CoreErrorTracking.chromeStackLineParser,
-        CoreErrorTracking.geckoStackLineParser
-      )
-    )
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
     this.autocapture(this.options.autocapture)
@@ -90,18 +68,6 @@ export class ErrorTracking {
     this.logger.info(
       `Error tracking autocapture ${this._autocaptureEnabled ? 'enabled' : 'disabled'} by remote config.`
     )
-  }
-
-  captureException(input: unknown, additionalProperties: PostHogEventProperties, hint: CoreErrorTracking.EventHint) {
-    try {
-      const properties = this.errorPropertiesBuilder.buildFromUnknown(input, hint)
-      return this.instance.capture('$exception', {
-        ...properties,
-        ...additionalProperties,
-      } as unknown as PostHogEventProperties)
-    } catch (error) {
-      this.logger.error('An error occurred while capturing an $exception event:', error)
-    }
   }
 
   private resolveOptions(options: ErrorTrackingOptions): ResolvedErrorTrackingOptions {
@@ -157,7 +123,7 @@ export class ErrorTracking {
         additionalProperties['$exception_level'] = 'fatal' as CoreErrorTracking.SeverityLevel
       }
 
-      this.captureException(error, additionalProperties, hint)
+      this.instance.captureException(error, additionalProperties, hint)
 
       if (isFatal) {
         void this.instance.flush().catch(() => {
@@ -190,7 +156,7 @@ export class ErrorTracking {
           handled: false,
         },
       }
-      this.captureException(error, {}, hint)
+      this.instance.captureException(error, {}, hint)
     }
 
     try {
@@ -217,7 +183,7 @@ export class ErrorTracking {
       const additionalProperties = {
         $exception_level: level as CoreErrorTracking.SeverityLevel,
       }
-      this.captureException(error, additionalProperties, hint)
+      this.instance.captureException(error, additionalProperties, hint)
     }
 
     try {
