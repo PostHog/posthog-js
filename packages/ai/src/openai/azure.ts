@@ -140,7 +140,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 if (!completionIdFromResponse && chunk.id) {
                   completionIdFromResponse = chunk.id
                 }
-                if (systemFingerprintFromResponse === undefined && chunk.system_fingerprint) {
+                if (!systemFingerprintFromResponse && chunk.system_fingerprint) {
                   systemFingerprintFromResponse = chunk.system_fingerprint
                 }
 
