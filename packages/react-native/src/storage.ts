@@ -61,18 +61,14 @@ export class PostHogRNStorage {
   }
 
   /**
-   * Waits for all pending storage persist operations to complete, so callers
-   * (events flush, AppState background, shutdown) can rely on the latest state
-   * having been handed to the storage backend before they resume — the
-   * durability contract the events flush relies on to avoid replaying an
-   * already-sent batch after an app crash.
+   * Force any scheduled write to be initiated now and await in-flight async
+   * writes. Used by durability-sensitive paths (events flush, AppState
+   * background, shutdown, login/logout/opt-in/opt-out, fatal exceptions) so the
+   * latest state is on its way to the backend before they continue.
    *
-   * Drains any scheduled-but-not-yet-fired debounced write synchronously first,
-   * then awaits in-flight async writes. Never throws: async errors are caught
-   * in persist(), and sync throws from the drained persist() are caught in
-   * _drainScheduledPersist(). No try/catch around Promise.all is needed because
-   * every promise in _pendingPromises already has its own .catch applied — they
-   * resolve, so Promise.all can't reject.
+   * Best-effort under crash: backend writes are async, so an immediate
+   * termination can interrupt them. Never throws — backend errors are logged
+   * inside persist() / _drainScheduledPersist().
    */
   async waitForPersist(): Promise<void> {
     this._drainScheduledPersist()
@@ -102,13 +98,9 @@ export class PostHogRNStorage {
     }
   }
 
-  // Arms a single debounced persist(). Repeated calls within the window are
-  // no-ops — the mutation is already in memoryCache and the scheduled fire
-  // reads the final state. safeSetTimeout unrefs in Node so a pending write
-  // can't keep the process alive. Sync throws from persist() (e.g. a circular
-  // value passed to JSON.stringify, or a custom storage backend that throws
-  // synchronously) are caught so the timer callback can't surface as an
-  // unhandled error in the RN runtime.
+  // Arm a single debounced persist on the first un-persisted mutation. Repeated
+  // calls within the window are no-ops — the mutation is already in memoryCache
+  // and the scheduled fire reads the final state.
   private schedulePersist(): void {
     if (this._persistTimer !== undefined) {
       return
@@ -123,11 +115,7 @@ export class PostHogRNStorage {
     }, PERSIST_DEBOUNCE_MS)
   }
 
-  // Forces a scheduled persist to fire now. Used by waitForPersist (and thus by
-  // flushStorage / AppState background / shutdown) so durability-sensitive
-  // callers get the latest state to the backend without waiting out the
-  // debounce. Catches sync throws so waitForPersist's never-throws contract
-  // holds.
+  // Force any scheduled persist to fire now (cancels the timer, persists immediately).
   private _drainScheduledPersist(): void {
     if (this._persistTimer === undefined) {
       return

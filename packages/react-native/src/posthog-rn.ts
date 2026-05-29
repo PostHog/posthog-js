@@ -372,12 +372,7 @@ export class PostHog extends PostHogCore {
       void logsFlushPromise.catch(async (err) => {
         await logFlushError(err)
       })
-      // Initiate the pending storage writes before the OS may suspend the
-      // process (the writes complete async; this just kicks them off now rather
-      // than waiting out the debounce). Without it a capture landing in the same
-      // window as a background transition could lose its scheduled write to OS
-      // suspension. Both pipelines, since each debounces independently.
-      // waitForPersist swallows errors internally.
+      // Persist pending writes before the OS may suspend the process.
       void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
 
@@ -566,9 +561,8 @@ export class PostHog extends PostHogCore {
     try {
       await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
     } finally {
-      // waitForPersist initiates the write synchronously, so the latest state
-      // reaches the backend even if we bail on the await below; the race only
-      // bounds how long we wait for in-flight async writes to settle.
+      // Sync drain runs inside waitForPersist before the race below; the race
+      // only bounds the await for in-flight async writes.
       const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
       const drain = Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
       await Promise.race([drain, new Promise<void>((resolve) => safeSetTimeout(resolve, remainingMs))])
@@ -715,14 +709,7 @@ export class PostHog extends PostHogCore {
       this._setDefaultPersonPropertiesForFlags(false)
     }
 
-    // Logout must be durable. reset() clears identity (distinctId, sessionId,
-    // anonymousId, etc.) through the debounced storage path, so initiate those
-    // writes now instead of waiting out the timer — otherwise a crash within the
-    // debounce window could resurface the previous user's identity on the next
-    // launch. (Best-effort: the write is async, so it isn't guaranteed to land
-    // before an immediate crash.) Identity lives in _eventsStorage (LogsQueue is
-    // the only key routed elsewhere, and reset preserves it). waitForPersist
-    // drains synchronously and never throws.
+    // Logout must be durable so a crash in the debounce window can't resurface the previous user.
     void this._eventsStorage.waitForPersist()
   }
 
@@ -909,7 +896,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optIn(): Promise<void> {
-    return super.optIn()
+    // Consent must be durable. See reset()/identify().
+    const result = super.optIn()
+    void this._eventsStorage.waitForPersist()
+    return result
   }
 
   /**
@@ -928,7 +918,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optOut(): Promise<void> {
-    return super.optOut()
+    // Consent must be durable. See reset()/identify().
+    const result = super.optOut()
+    void this._eventsStorage.waitForPersist()
+    return result
   }
 
   /**
@@ -1589,11 +1582,7 @@ export class PostHog extends PostHogCore {
       }
     }
 
-    // Identity changes must be durable. super.identify() persists the new
-    // distinctId/anonymousId through the debounced path; initiate that write now
-    // instead of waiting out the timer, so a crash within the debounce window is
-    // less likely to leave the previous user's identity on disk (account-switch
-    // safety — same rationale as reset(); best-effort since the write is async).
+    // Account-switch safety — same as reset().
     void this._eventsStorage.waitForPersist()
   }
 
@@ -1639,13 +1628,7 @@ export class PostHog extends PostHogCore {
     }
     super.captureException(error, additionalProperties, resolvedHint)
 
-    // A fatal exception may terminate the app within the debounce window, so
-    // initiate writing both pipelines now — the exception event and any recent
-    // logs — instead of waiting out the timer. Best-effort: the write is async,
-    // so it may not complete before the app dies. Handled (non-fatal) exceptions
-    // aren't crashing, so they persist via the normal debounce. The uncaught
-    // handler tags fatal crashes with $exception_level. waitForPersist drains
-    // synchronously (kicks off the write now) and never throws.
+    // On a fatal crash, persist the exception + recent logs before the app may die.
     if (additionalProperties?.$exception_level === 'fatal') {
       void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()

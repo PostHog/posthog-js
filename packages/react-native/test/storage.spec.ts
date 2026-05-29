@@ -309,5 +309,58 @@ describe('PostHog React Native', () => {
       expect(consoleSpy).toHaveBeenCalledWith('PostHog storage drain persist threw:', expect.any(Error))
       consoleSpy.mockRestore()
     })
+
+    it('fires the debounced write on its own after the debounce window', () => {
+      // Every other test forces the write via waitForPersist() — this one lets
+      // the timer fire so a regression that broke timer-driven persistence
+      // (e.g. schedulePersist never arming) wouldn't pass silently.
+      jest.useFakeTimers()
+      try {
+        const cache: Record<string, string> = {}
+        const sync = new PostHogRNStorage(
+          {
+            getItem: (k: string) => cache[k] ?? null,
+            setItem: (k: string, v: string) => {
+              cache[k] = v
+            },
+          },
+          '.test-timer.json'
+        )
+        sync.setItem('a', '1')
+        expect(cache['.test-timer.json']).toBeUndefined()
+        jest.advanceTimersByTime(100)
+        expect(JSON.parse(cache['.test-timer.json']).content.a).toBe('1')
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('does not reset the timer on later mutations — write fires within one window of the first', () => {
+      // Guards the "arm-once, no starvation" property. A textbook debounce that
+      // clears-and-reschedules on every mutation would push the write out
+      // indefinitely under a continuous stream — this test would fail under that
+      // shape.
+      jest.useFakeTimers()
+      try {
+        const cache: Record<string, string> = {}
+        const sync = new PostHogRNStorage(
+          {
+            getItem: (k: string) => cache[k] ?? null,
+            setItem: (k: string, v: string) => {
+              cache[k] = v
+            },
+          },
+          '.test-bound.json'
+        )
+        sync.setItem('a', '1')
+        jest.advanceTimersByTime(50)
+        sync.setItem('a', '2')
+        jest.advanceTimersByTime(50) // 100ms total from the first mutation
+        // Fired within one window of the first mutation with the latest value.
+        expect(JSON.parse(cache['.test-bound.json']).content.a).toBe('2')
+      } finally {
+        jest.useRealTimers()
+      }
+    })
   })
 })

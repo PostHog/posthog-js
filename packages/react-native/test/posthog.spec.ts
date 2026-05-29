@@ -644,9 +644,16 @@ describe('PostHog React Native', () => {
       // exception) and the logs file.
       const writes = (storage.setItem as jest.Mock).mock.calls
       const wroteLogs = writes.some((c) => String(c[0]).includes('logs'))
-      const wroteException = writes.some((c) => !String(c[0]).includes('logs') && String(c[1]).includes('$exception'))
+      const eventsWrite = writes.find((c) => !String(c[0]).includes('logs'))
       expect(wroteLogs).toBe(true)
-      expect(wroteException).toBe(true)
+      expect(eventsWrite).toBeDefined()
+      // Assert on the parsed queue, not a substring — the actual exception event
+      // must be in the persisted queue, not just the $exception_level tag.
+      const queue =
+        (JSON.parse(eventsWrite![1] as string).content[PostHogPersistedProperty.Queue] as Array<{
+          message?: { event?: string }
+        }>) ?? []
+      expect(queue.some((item) => item.message?.event === '$exception')).toBe(true)
     })
 
     it('does not flush synchronously on a non-fatal exception (uses the debounce)', () => {
@@ -659,6 +666,36 @@ describe('PostHog React Native', () => {
       posthog.captureException(new Error('boom'))
 
       expect(storage.setItem).not.toHaveBeenCalled()
+    })
+
+    it('persists optOut() to disk synchronously (consent durability)', () => {
+      posthog = new PostHog('1', {
+        customStorage: storage,
+        captureAppLifecycleEvents: false,
+      })
+      ;(storage.setItem as jest.Mock).mockClear()
+
+      posthog.optOut()
+
+      // A hard kill within the debounce window must not lose the opt-out and
+      // resurface as "capture allowed" on next launch.
+      expect(storage.setItem).toHaveBeenCalled()
+      const written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      expect(written.content[PostHogPersistedProperty.OptedOut]).toBe(true)
+    })
+
+    it('persists optIn() to disk synchronously (consent durability)', () => {
+      posthog = new PostHog('1', {
+        customStorage: storage,
+        captureAppLifecycleEvents: false,
+      })
+      ;(storage.setItem as jest.Mock).mockClear()
+
+      posthog.optIn()
+
+      expect(storage.setItem).toHaveBeenCalled()
+      const written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      expect(written.content[PostHogPersistedProperty.OptedOut]).toBe(false)
     })
 
     it('do not rotate session id on restart', async () => {
