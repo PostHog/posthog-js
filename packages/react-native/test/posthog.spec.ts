@@ -618,7 +618,28 @@ describe('PostHog React Native', () => {
       expect(written.content[PostHogPersistedProperty.DistinctId]).toEqual('user-b')
     })
 
-    it('persists captureException to disk synchronously (crash-correlated, bypasses debounce)', () => {
+    it('flushes both pipelines to disk synchronously on a fatal exception', () => {
+      posthog = new PostHog('1', {
+        customStorage: storage,
+        captureAppLifecycleEvents: false,
+      })
+      // Seed a log so the logs pipeline has something to flush.
+      posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [{ message: 'log' }])
+      ;(storage.setItem as jest.Mock).mockClear()
+
+      posthog.captureException(new Error('boom'), { $exception_level: 'fatal' })
+
+      // A fatal exception can crash the app within the debounce window, so both
+      // pipelines reach disk synchronously: the events file (holding the
+      // exception) and the logs file.
+      const writes = (storage.setItem as jest.Mock).mock.calls
+      const wroteLogs = writes.some((c) => String(c[0]).includes('logs'))
+      const wroteException = writes.some((c) => !String(c[0]).includes('logs') && String(c[1]).includes('$exception'))
+      expect(wroteLogs).toBe(true)
+      expect(wroteException).toBe(true)
+    })
+
+    it('does not flush synchronously on a non-fatal exception (uses the debounce)', () => {
       posthog = new PostHog('1', {
         customStorage: storage,
         captureAppLifecycleEvents: false,
@@ -627,12 +648,7 @@ describe('PostHog React Native', () => {
 
       posthog.captureException(new Error('boom'))
 
-      // A fatal exception can terminate the app before the debounce window
-      // elapses, so the exception must reach disk synchronously — not on the
-      // timer — otherwise we'd lose the very exception that crashed the app.
-      expect(storage.setItem).toHaveBeenCalled()
-      const lastWrite = (storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string
-      expect(lastWrite).toContain('$exception')
+      expect(storage.setItem).not.toHaveBeenCalled()
     })
 
     it('do not rotate session id on restart', async () => {
