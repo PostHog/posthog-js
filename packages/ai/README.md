@@ -125,7 +125,7 @@ import { registerOTel } from '@vercel/otel'
 registerOTel({
   serviceName: 'my-app',
   traceExporter: new PostHogTraceExporter({
-    apiKey: '<YOUR_PROJECT_API_KEY>',
+    projectToken: '<YOUR_PROJECT_TOKEN>',
     host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
   }),
 })

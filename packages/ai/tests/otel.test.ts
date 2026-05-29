@@ -10,6 +10,8 @@ jest.mock('@opentelemetry/exporter-trace-otlp-http', () => {
   return { OTLPTraceExporter: MockExporter }
 })
 
+const DEFAULT_TOKEN = 'phc_test'
+
 function makeSpan(name: string, attributes: Record<string, unknown> = {}): ReadableSpan {
   return { name, attributes } as unknown as ReadableSpan
 }
@@ -34,63 +36,73 @@ describe('PostHogTraceExporter', () => {
   it.each([
     {
       name: 'default host',
-      apiKey: 'phc_test123',
+      projectToken: 'phc_test123',
       host: undefined,
       expectedUrl: 'https://us.i.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test123',
+      expectedToken: 'phc_test123',
     },
     {
       name: 'custom host',
-      apiKey: 'phc_test456',
+      projectToken: 'phc_test456',
       host: 'https://eu.i.posthog.com',
       expectedUrl: 'https://eu.i.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test456',
+      expectedToken: 'phc_test456',
     },
     {
       name: 'trailing slash',
-      apiKey: 'phc_test789',
+      projectToken: 'phc_test789',
       host: 'https://custom.posthog.com/',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test789',
+      expectedToken: 'phc_test789',
     },
     {
       name: 'multiple trailing slashes',
-      apiKey: 'phc_test000',
+      projectToken: 'phc_test000',
       host: 'https://custom.posthog.com///',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test000',
+      expectedToken: 'phc_test000',
     },
     {
       name: 'trimmed whitespace-sensitive values',
-      apiKey: '  phc_test999\t ',
+      projectToken: '  phc_test999\t ',
       host: '  https://custom.posthog.com/\n',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test999',
+      expectedToken: 'phc_test999',
     },
-  ])('configures the OTLP exporter correctly with $name', ({ apiKey, host, expectedUrl, expectedApiKey }) => {
-    new PostHogTraceExporter({ apiKey, host })
+  ])('configures the OTLP exporter correctly with $name', ({ projectToken, host, expectedUrl, expectedToken }) => {
+    new PostHogTraceExporter({ projectToken, host })
 
     expect(OTLPTraceExporter).toHaveBeenCalledWith({
       url: expectedUrl,
       headers: {
-        Authorization: `Bearer ${expectedApiKey}`,
+        Authorization: `Bearer ${expectedToken}`,
       },
     })
   })
 
-  it('throws when apiKey is missing', () => {
-    expect(() => new PostHogTraceExporter({ apiKey: '' })).toThrow('PostHogTraceExporter requires an apiKey')
-    expect(() => new PostHogTraceExporter({ apiKey: '  \n\t ' })).toThrow('PostHogTraceExporter requires an apiKey')
+  it('accepts deprecated apiKey', () => {
+    new PostHogTraceExporter({ apiKey: DEFAULT_TOKEN })
+    expect(OTLPTraceExporter).toHaveBeenCalledWith({
+      url: 'https://us.i.posthog.com/i/v0/ai/otel',
+      headers: { Authorization: `Bearer ${DEFAULT_TOKEN}` },
+    })
+  })
+
+  it('throws when projectToken is missing', () => {
+    expect(() => new PostHogTraceExporter({ projectToken: '' })).toThrow('PostHogTraceExporter requires a projectToken')
+    expect(() => new PostHogTraceExporter({ projectToken: '  \n\t ' })).toThrow(
+      'PostHogTraceExporter requires a projectToken'
+    )
   })
 
   it('inherits shutdown from OTLPTraceExporter', async () => {
-    const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     await exporter.shutdown()
     expect(getSuperShutdown()).toHaveBeenCalled()
   })
 
   it('inherits forceFlush from OTLPTraceExporter', async () => {
-    const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     await exporter.forceFlush()
     expect(getSuperForceFlush()).toHaveBeenCalled()
   })
@@ -102,7 +114,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
   })
 
   it('exports only AI spans', () => {
-    const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     const callback = jest.fn()
 
     exporter.export([makeSpan('gen_ai.chat'), makeSpan('http.request'), makeSpan('llm.completion')], callback)
@@ -114,7 +126,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
   })
 
   it('calls back with success immediately when no AI spans are present', () => {
-    const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     const callback = jest.fn()
 
     exporter.export([makeSpan('http.request'), makeSpan('db.query')], callback)
@@ -124,7 +136,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
   })
 
   it('detects AI spans by attribute keys', () => {
-    const exporter = new PostHogTraceExporter({ apiKey: 'phc_test' })
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     const callback = jest.fn()
 
     exporter.export([makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }), makeSpan('other.operation')], callback)

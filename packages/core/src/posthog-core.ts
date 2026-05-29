@@ -35,7 +35,8 @@ import {
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isEmptyObject, isNullish, isPlainError, getPersonPropertiesHash, isObject } from './utils'
+import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject } from './utils'
+import { EventHint } from './error-tracking'
 
 // Stores the parameters for a pending feature flags reload request
 interface FlagsAsyncOptions {
@@ -1169,23 +1170,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * @param {Object} [additionalProperties] Any additional properties to add to the error event
    * @returns {CaptureResult} The result of the capture
    */
-  captureException(error: unknown, additionalProperties?: PostHogEventProperties): void {
-    const properties: { [key: string]: any } = {
-      $exception_level: 'error',
-      $exception_list: [
-        {
-          type: isPlainError(error) ? error.name : 'Error',
-          value: isPlainError(error) ? error.message : error,
-          mechanism: {
-            handled: true,
-            synthetic: false,
-          },
-        },
-      ],
-      ...additionalProperties,
+  captureException(error: unknown, additionalProperties?: PostHogEventProperties, hint?: EventHint): void {
+    try {
+      const exceptionProperties = this.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
+      this.capture(
+        '$exception',
+        { ...exceptionProperties, ...additionalProperties } as unknown as PostHogEventProperties,
+        { _originatedFromCaptureException: true }
+      )
+    } catch (e) {
+      this._logger.error('Error while capturing $exception:', e)
     }
-
-    this.capture('$exception', properties, { _originatedFromCaptureException: true })
   }
 
   /**

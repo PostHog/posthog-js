@@ -1,5 +1,68 @@
 # @posthog/webpack-plugin
 
+## 1.4.38
+
+### Patch Changes
+
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+    - @posthog/core@1.29.13
+
+## 1.4.37
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.29.12
+
+## 1.4.36
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.29.11
+
+## 1.4.35
+
+### Patch Changes
+
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+    - @posthog/core@1.29.10
+
+## 1.4.34
+
+### Patch Changes
+
+- [#3661](https://github.com/PostHog/posthog-js/pull/3661) [`f12ee73`](https://github.com/PostHog/posthog-js/commit/f12ee73362545c2fe946a566d76bb14b7d5aa746) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Bump `@posthog/cli` to `~0.7.13`, which drops several unused runtime dependencies (`axios`, `axios-proxy-builder`, `console.table`, `rimraf`).
+  (2026-05-22)
+
+## 1.4.33
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+    - @posthog/core@1.29.9
+
+## 1.4.32
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.29.8
+
+## 1.4.31
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.29.7
+
+## 1.4.30
+
+### Patch Changes
+
+- Updated dependencies [[`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+    - @posthog/core@1.29.6
+
 ## 1.4.29
 
 ### Patch Changes

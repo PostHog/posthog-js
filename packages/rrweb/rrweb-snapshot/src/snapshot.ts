@@ -191,6 +191,13 @@ export function transformAttribute(
     name === 'src' ||
     (name === 'href' && !(tagName === 'use' && value[0] === '#'))
   ) {
+    // Prefer the loaded sheet's href — survives baseURI changes from SPA pushState.
+    if (tagName === 'link' && element) {
+      const sheetHref = (element as HTMLLinkElement).sheet?.href;
+      if (sheetHref) {
+        return sheetHref;
+      }
+    }
     // href starts with a # is an id pointer for svg
     const transformedValue = absoluteToDoc(doc, value);
 
@@ -389,12 +396,20 @@ function onceIframeLoaded(
   iframeEl.addEventListener('load', listener);
 }
 
+const stylesheetLoadTracked = new Map<HTMLLinkElement, AbortController>();
+
+export function resetStylesheetLoadTracking(): void {
+  stylesheetLoadTracked.forEach((controller) => controller.abort());
+  stylesheetLoadTracked.clear();
+}
+
 function onceStylesheetLoaded(
   link: HTMLLinkElement,
   listener: () => unknown,
   styleSheetLoadTimeout: number,
 ) {
-  let fired = false;
+  if (stylesheetLoadTracked.has(link)) return;
+
   let styleSheetLoaded: StyleSheet | null;
   try {
     styleSheetLoaded = link.sheet;
@@ -404,18 +419,29 @@ function onceStylesheetLoaded(
 
   if (styleSheetLoaded) return;
 
-  const timer = setTimeout(() => {
-    if (!fired) {
-      listener();
-      fired = true;
-    }
-  }, styleSheetLoadTimeout);
-
-  link.addEventListener('load', () => {
-    clearTimeout(timer);
+  const controller = new AbortController();
+  let fired = false;
+  const fire = () => {
+    if (fired) return;
     fired = true;
-    listener();
+    try {
+      listener();
+    } finally {
+      stylesheetLoadTracked.delete(link);
+      controller.abort();
+    }
+  };
+
+  const timer = setTimeout(fire, styleSheetLoadTimeout);
+  controller.signal.addEventListener('abort', () => clearTimeout(timer), {
+    once: true,
   });
+  link.addEventListener('load', fire, {
+    signal: controller.signal,
+    once: true,
+  });
+
+  stylesheetLoadTracked.set(link, controller);
 }
 
 function serializeNode(
@@ -655,25 +681,29 @@ function serializeElementNode(
   }
   // remote css
   if (tagName === 'link' && inlineStylesheet) {
-    //TODO: maybe replace this `.styleSheets` with original one
-    const href: string | undefined = hrefFrom(n);
-    if (href) {
-      let stylesheet = findStylesheet(doc, href);
-      if (!stylesheet && href.includes('.css')) {
-        const rootDomain = window.location.origin;
-        const stylesheetPath = href.replace(window.location.href, '');
-        const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
-        stylesheet = findStylesheet(doc, potentialStylesheetHref);
+    // Direct sheet reference survives baseURI drift; href lookup is the fallback.
+    let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
+      .sheet;
+    if (!stylesheet) {
+      const href: string | undefined = hrefFrom(n);
+      if (href) {
+        stylesheet = findStylesheet(doc, href);
+        if (!stylesheet && href.includes('.css')) {
+          const rootDomain = window.location.origin;
+          const stylesheetPath = href.replace(window.location.href, '');
+          const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
+          stylesheet = findStylesheet(doc, potentialStylesheetHref);
+        }
       }
-      let cssText: string | null = null;
-      if (stylesheet) {
-        cssText = stringifyStylesheet(stylesheet);
-      }
-      if (cssText) {
-        delete attributes.rel;
-        delete attributes.href;
-        attributes._cssText = cssText;
-      }
+    }
+    let cssText: string | null = null;
+    if (stylesheet) {
+      cssText = stringifyStylesheet(stylesheet);
+    }
+    if (cssText) {
+      delete attributes.rel;
+      delete attributes.href;
+      attributes._cssText = cssText;
     }
   }
   // dynamic stylesheet
@@ -843,6 +873,7 @@ function serializeElementNode(
   // block element
   if (needBlock) {
     const { width, height, left, top } = n.getBoundingClientRect();
+    const computed = doc.defaultView?.getComputedStyle(n);
     attributes = {
       class: attributes.class,
       rr_width: `${width}px`,
@@ -850,6 +881,21 @@ function serializeElementNode(
       rr_left: `${Math.floor(left + (doc.defaultView?.scrollX || 0))}px`,
       rr_top: `${Math.floor(top + (doc.defaultView?.scrollY || 0))}px`,
     };
+    // Captured so rebuild can keep originally-in-flow placeholders in flow
+    // instead of forcing `position: absolute` and collapsing sibling layout.
+    if (computed) {
+      // JSDOM-style envs return '' for unset computed values; normalize to the CSS default.
+      attributes.rr_position = computed.position || 'static';
+      if (computed.transform && computed.transform !== 'none') {
+        attributes.rr_transform = computed.transform;
+      }
+      // Any inline-level box has its in-flow slot rebuilt as the tag's default
+      // display once style is stripped, which collapses width/height. Capture
+      // so rebuild can restore (promote plain `inline` → `inline-block`).
+      if (computed.display && computed.display.startsWith('inline')) {
+        attributes.rr_display = computed.display;
+      }
+    }
   }
   // iframe
   if (tagName === 'iframe' && !keepIframeSrcFn(attributes.src as string)) {
@@ -1272,11 +1318,7 @@ export function serializeNodeWithId(
   if (
     serializedNode.type === NodeType.Element &&
     serializedNode.tagName === 'link' &&
-    typeof serializedNode.attributes.rel === 'string' &&
-    (serializedNode.attributes.rel === 'stylesheet' ||
-      (serializedNode.attributes.rel === 'preload' &&
-        typeof serializedNode.attributes.href === 'string' &&
-        extractFileExtension(serializedNode.attributes.href) === 'css'))
+    serializedNode.attributes.rel === 'stylesheet'
   ) {
     onceStylesheetLoaded(
       n as HTMLLinkElement,

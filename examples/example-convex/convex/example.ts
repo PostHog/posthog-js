@@ -211,19 +211,6 @@ export const flagDefinitionsStatus = query({
     },
 })
 
-/**
- * UI helper — lets the demo's "Refresh now" button trigger an on-demand refresh.
- *
- * Same call the cron in `crons.ts` makes once a minute. The client class forwards the keys it was
- * constructed with so we don't have to re-read env vars here.
- */
-export const refreshFlags = action({
-    args: {},
-    handler: async (ctx): Promise<unknown> => {
-        return await posthog.refreshFlagDefinitions(ctx)
-    },
-})
-
 // --- Remote feature flag evaluation wrappers ---
 //
 // These are action-context actions that hit PostHog's `/flags` endpoint via the client's

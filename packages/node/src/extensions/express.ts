@@ -90,7 +90,13 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
     }
 
     posthog.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, hint, contextData.distinctId, additionalProperties).then((msg) => {
+      ErrorTracking.buildEventMessage(
+        posthog.getErrorPropertiesBuilder(),
+        error,
+        hint,
+        contextData.distinctId,
+        additionalProperties
+      ).then((msg) => {
         posthog.capture(msg)
       })
     )

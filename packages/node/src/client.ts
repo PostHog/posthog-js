@@ -125,7 +125,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _flagOverrides?: Record<string, FeatureFlagValue>
   private _payloadOverrides?: Record<string, JsonType>
 
-  distinctIdHasSentFlagCalls: Record<string, string[]>
+  distinctIdHasSentFlagCalls: Record<string, Set<string>>
 
   // waitUntil debounce state (per-instance)
   private _waitUntilCycle?: {
@@ -671,7 +671,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+    await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
   }
 
   /**
@@ -1757,11 +1757,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   protected _captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void {
     const { distinctId, key, response, groups, disableGeoip, properties } = params
-    const featureFlagReportedKey = `${key}_${response}`
+    const groupSuffix =
+      groups && Object.keys(groups).length > 0
+        ? `_${JSON.stringify(Object.entries(groups).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))}`
+        : ''
+    const featureFlagReportedKey = `${key}_${response}${groupSuffix}`
 
     if (
       distinctId in this.distinctIdHasSentFlagCalls &&
-      this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey)
+      this.distinctIdHasSentFlagCalls[distinctId].has(featureFlagReportedKey)
     ) {
       return
     }
@@ -1769,10 +1773,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
       this.distinctIdHasSentFlagCalls = {}
     }
-    if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
-      this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
+    if (this.distinctIdHasSentFlagCalls[distinctId] instanceof Set) {
+      this.distinctIdHasSentFlagCalls[distinctId].add(featureFlagReportedKey)
     } else {
-      this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
+      this.distinctIdHasSentFlagCalls[distinctId] = new Set([featureFlagReportedKey])
     }
 
     this.capture({
@@ -2294,9 +2298,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
-        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.capture({ ...msg, uuid, flags })
-        )
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties
+        ).then((msg) => this.capture({ ...msg, uuid, flags }))
       )
     }
   }
@@ -2346,9 +2354,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
-        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.captureImmediate({ ...msg, flags })
-        )
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties
+        ).then((msg) => this.captureImmediate({ ...msg, flags }))
       )
     }
   }

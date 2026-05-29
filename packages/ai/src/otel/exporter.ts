@@ -6,7 +6,7 @@ import { isAISpan } from './spans'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
 
-function normalizeApiKey(value?: unknown): string {
+function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -15,17 +15,32 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_OTEL_HOST
 }
 
-export interface PostHogTraceExporterOptions {
-  /**
-   * Your PostHog project API key.
-   */
-  apiKey: string
-
-  /**
-   * PostHog host URL. Defaults to `https://us.i.posthog.com`.
-   */
-  host?: string
-}
+/**
+ * Options for the PostHogTraceExporter. You must obligatorily provide `projectToken`. You can also
+ * optionally override the `host` URL. `host` defaults to `https://us.i.posthog.com`.
+ *
+ * @example
+ * ```ts
+ * import { PostHogTraceExporter } from '@posthog/ai/otel'
+ *
+ * new PostHogTraceExporter({ projectToken: 'phc_...' })
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { PostHogTraceExporter } from '@posthog/ai/otel'
+ *
+ * new PostHogTraceExporter({ projectToken: 'phc_...', host: 'https://eu.i.posthog.com' })
+ * ```
+ */
+export type PostHogTraceExporterOptions =
+  | { projectToken: string; apiKey?: never; host?: string }
+  | {
+      /** @deprecated Use `projectToken` instead */
+      apiKey: string
+      projectToken?: never
+      host?: string
+    }
 
 /**
  * An OpenTelemetry `TraceExporter` that sends AI traces to PostHog's OTLP
@@ -41,6 +56,9 @@ export interface PostHogTraceExporterOptions {
  * plug PostHog into an existing processor chain. Otherwise prefer
  * {@link PostHogSpanProcessor}, which is self-contained.
  *
+ * You must obligatorily provide `projectToken`. You can also
+ * optionally override the `host` URL.
+ *
  * @example
  * ```ts
  * import { PostHogTraceExporter } from '@posthog/ai/otel'
@@ -48,21 +66,22 @@ export interface PostHogTraceExporterOptions {
  *
  * registerOTel({
  *   serviceName: 'my-app',
- *   traceExporter: new PostHogTraceExporter({ apiKey: 'phc_...' }),
+ *   traceExporter: new PostHogTraceExporter({ projectToken: 'phc_...' }),
  * })
  * ```
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
   constructor(options: PostHogTraceExporterOptions) {
-    const apiKey = normalizeApiKey(options.apiKey)
-    if (!apiKey) {
-      throw new Error('PostHogTraceExporter requires an apiKey')
+    const token = 'projectToken' in options ? normalizeToken(options.projectToken) : normalizeToken(options.apiKey)
+    if (!token) {
+      throw new Error('PostHogTraceExporter requires a projectToken')
     }
+
     const host = new URL(normalizeHost(options.host)).origin
     super({
       url: `${host}/i/v0/ai/otel`,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${token}`,
       },
     })
   }

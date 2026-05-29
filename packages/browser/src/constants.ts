@@ -105,6 +105,8 @@ export const SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS = '$sdk_debug_rep
 export const SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG = '$sdk_debug_replay_remote_trigger_matching_config'
 export const SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT = '$sdk_debug_replay_trigger_groups_count'
 export const SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS = '$sdk_debug_replay_url_trigger_status'
+export const SDK_DEBUG_REPLAY_RRWEB_ATTACHED = '$sdk_debug_rrweb_attached'
+export const SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED = '$sdk_debug_rrweb_start_attempted'
 export const SESSION_RECORDING_START_REASON = '$session_recording_start_reason'
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000

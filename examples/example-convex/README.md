@@ -19,7 +19,7 @@ In a second terminal:
 ```sh
 cd examples/example-convex
 npx convex dev
-npx convex env set POSTHOG_API_KEY phc_…           # project key
+npx convex env set POSTHOG_PROJECT_TOKEN phc_…             # project token
 npx convex env set POSTHOG_PERSONAL_API_KEY phs_…  # optional, enables local eval
 npx convex env set POSTHOG_HOST https://us.i.posthog.com   # optional, US default
 ```

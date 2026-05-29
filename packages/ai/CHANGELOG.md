@@ -1,5 +1,84 @@
 # posthog-ai
 
+## 7.19.7
+
+### Patch Changes
+
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+  - @posthog/core@1.29.13
+  - posthog-node@5.35.6
+
+## 7.19.6
+
+### Patch Changes
+
+- [#3668](https://github.com/PostHog/posthog-js/pull/3668) [`7c80b2e`](https://github.com/PostHog/posthog-js/commit/7c80b2efbfd61936c1786cdd69d917e4ed657dea) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Expose `projectToken` in addition to `apiKey` for `PostHogTraceExporter`
+
+  We're moving towards a place where we're calling this `projectToken` everywhere. Let's release this as a patch version because it's a tiny change and we still support the old usage. This might be dropped in the next packages/ai major version. (2026-05-28)
+
+## 7.19.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.12
+  - posthog-node@5.35.5
+
+## 7.19.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.11
+  - posthog-node@5.35.4
+
+## 7.19.3
+
+### Patch Changes
+
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+  - @posthog/core@1.29.10
+  - posthog-node@5.35.3
+
+## 7.19.2
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+  - posthog-node@5.35.1
+
+## 7.19.1
+
+### Patch Changes
+
+- Updated dependencies [[`18ea8b5`](https://github.com/PostHog/posthog-js/commit/18ea8b53f608607075c93bc18b29be8dfd41eb3f)]:
+  - posthog-node@5.35.0
+  - @posthog/core@1.29.8
+
+## 7.19.0
+
+### Minor Changes
+
+- [#3605](https://github.com/PostHog/posthog-js/pull/3605) [`82fa498`](https://github.com/PostHog/posthog-js/commit/82fa498f4129e84030105c60724fc85591505004) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Improved error serialization to capture cause, message and stack
+  (2026-05-21)
+
+## 7.18.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.7
+  - posthog-node@5.34.9
+
+## 7.18.11
+
+### Patch Changes
+
+- Updated dependencies [[`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/core@1.29.6
+  - posthog-node@5.34.7
+
 ## 7.18.10
 
 ### Patch Changes

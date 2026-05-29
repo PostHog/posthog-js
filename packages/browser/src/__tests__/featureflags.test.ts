@@ -8,6 +8,7 @@ import {
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
+import { isUndefined } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 import { SimpleEventEmitter } from '../utils/simple-event-emitter'
@@ -1074,6 +1075,87 @@ describe('featureflags', () => {
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
+        })
+
+        it.each([
+            [
+                'configured with flag keys',
+                ['beta-feature', 'checkout-redesign'],
+                ['beta-feature', 'checkout-redesign'],
+                0,
+            ],
+            ['configured as an empty array', [], [], 0],
+            [
+                'configured with invalid entries',
+                ['beta-feature', '', null as any, 'checkout-redesign', '   '],
+                ['beta-feature', 'checkout-redesign'],
+                3,
+            ],
+            ['configured with an invalid non-array value', 'beta-feature' as any, undefined, 1],
+            ['not configured', undefined, undefined, 0],
+        ])('should handle flag_keys when %s', (_description, configuredFlagKeys, expectedFlagKeys, expectedErrors) => {
+            const errorSpy = jest.spyOn(window.console, 'error').mockImplementation()
+            if (!isUndefined(configuredFlagKeys)) {
+                instance.config.flag_keys = configuredFlagKeys as any
+            }
+
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            if (isUndefined(expectedFlagKeys)) {
+                expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('flag_keys')
+            } else {
+                expect(instance._send_request.mock.calls[0][0].data.flag_keys).toEqual(expectedFlagKeys)
+            }
+            expect(errorSpy).toHaveBeenCalledTimes(expectedErrors as number)
+
+            errorSpy.mockRestore()
+        })
+
+        it('should replace existing flags with the flag_keys response', () => {
+            const requestedFlagDetail = {
+                key: 'checkout-redesign',
+                enabled: true,
+                variant: undefined,
+                reason: { code: 'condition_match', condition_index: 0, description: undefined },
+                metadata: { id: 42, version: 1, payload: undefined, description: undefined },
+            }
+            const unrequestedFlagDetail = {
+                ...requestedFlagDetail,
+                key: 'other-flag',
+                metadata: { id: 43, version: 1, payload: undefined, description: undefined },
+            }
+
+            featureFlags.receivedFeatureFlags({
+                flags: {
+                    'checkout-redesign': requestedFlagDetail,
+                    'other-flag': unrequestedFlagDetail,
+                },
+            })
+            expect(instance.persistence.props.$enabled_feature_flags).toEqual({
+                'checkout-redesign': true,
+                'other-flag': true,
+            })
+
+            instance.config.flag_keys = ['checkout-redesign']
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        flags: {
+                            'checkout-redesign': requestedFlagDetail,
+                        },
+                    },
+                })
+            )
+
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance.persistence.props.$enabled_feature_flags).toEqual({
+                'checkout-redesign': true,
+            })
         })
 
         it('should not include evaluation_contexts when not configured', () => {
@@ -3099,6 +3181,36 @@ describe('getRemoteConfigPayload', () => {
                 }),
             })
         )
+    })
+
+    it.each([
+        ['configured with flag keys', ['remote-config-flag'], ['remote-config-flag']],
+        ['configured as an empty array', [], []],
+        ['not configured', undefined, undefined],
+    ])('should handle flag_keys when %s', (_description, configuredFlagKeys, expectedFlagKeys) => {
+        if (!isUndefined(configuredFlagKeys)) {
+            instance.config.flag_keys = configuredFlagKeys as any
+        }
+
+        const callback = jest.fn()
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'flags/flags/?v=2',
+                data: expect.objectContaining({
+                    distinct_id: 'test-distinct-id',
+                    token: 'test-token',
+                }),
+            })
+        )
+
+        if (isUndefined(expectedFlagKeys)) {
+            expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('flag_keys')
+        } else {
+            expect(instance._send_request.mock.calls[0][0].data.flag_keys).toEqual(expectedFlagKeys)
+        }
     })
 
     it('should not include evaluation_contexts when not configured', () => {

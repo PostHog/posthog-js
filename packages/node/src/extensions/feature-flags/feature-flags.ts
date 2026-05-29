@@ -1330,6 +1330,20 @@ function isValidRegex(regex: string): boolean {
 type SemverTuple = [number, number, number]
 
 /**
+ * Parse a single numeric identifier from a semver string.
+ * Per semver 2.0.0 §2, numeric identifiers MUST NOT include leading zeros.
+ */
+function parseSemverNumericIdentifier(part: string, raw: string): number {
+  if (!/^\d+$/.test(part)) {
+    throw new InconclusiveMatchError(`Invalid semver: ${raw}`)
+  }
+  if (part.length > 1 && part[0] === '0') {
+    throw new InconclusiveMatchError(`Invalid semver: ${raw}`)
+  }
+  return parseInt(part, 10)
+}
+
+/**
  * Parse a version string into a [major, minor, patch] tuple.
  * - Strips leading/trailing whitespace
  * - Strips 'v' or 'V' prefix
@@ -1354,10 +1368,7 @@ function parseSemver(value: string): SemverTuple {
     if (part === undefined || part === '') {
       return 0
     }
-    if (!/^\d+$/.test(part)) {
-      throw new InconclusiveMatchError(`Invalid semver: ${value}`)
-    }
-    return parseInt(part, 10)
+    return parseSemverNumericIdentifier(part, value)
   }
 
   const major = parsePart(parts[0])
@@ -1428,10 +1439,14 @@ function computeWildcardBounds(value: string): { lower: SemverTuple; upper: Semv
   }
 
   const parts = cleanedText.split('.')
-  const major = parseInt(parts[0], 10)
-  if (isNaN(major)) {
-    throw new InconclusiveMatchError(`Invalid wildcard semver: ${value}`)
+  const parseWildcardPart = (part: string): number => {
+    try {
+      return parseSemverNumericIdentifier(part, value)
+    } catch {
+      throw new InconclusiveMatchError(`Invalid wildcard semver: ${value}`)
+    }
   }
+  const major = parseWildcardPart(parts[0])
 
   let lower: SemverTuple
   let upper: SemverTuple
@@ -1442,10 +1457,7 @@ function computeWildcardBounds(value: string): { lower: SemverTuple; upper: Semv
     upper = [major + 1, 0, 0]
   } else {
     // X.Y.* pattern
-    const minor = parseInt(parts[1], 10)
-    if (isNaN(minor)) {
-      throw new InconclusiveMatchError(`Invalid wildcard semver: ${value}`)
-    }
+    const minor = parseWildcardPart(parts[1])
     lower = [major, minor, 0]
     upper = [major, minor + 1, 0]
   }

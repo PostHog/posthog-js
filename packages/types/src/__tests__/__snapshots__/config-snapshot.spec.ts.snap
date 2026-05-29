@@ -513,6 +513,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "readonly string[]"
   ],
+  "flag_keys": [
+    "undefined",
+    "readonly string[]"
+  ],
   "evaluation_environments": [
     "undefined",
     "readonly string[]"

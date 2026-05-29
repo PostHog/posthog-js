@@ -177,6 +177,34 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should not read object properties after the body size limit is reached', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const getterAfterLimit = jest.fn(() => {
+                throw new Error('should not be read')
+            })
+            const objectWithUnreadPropertyAfterLimit: any = {
+                largeKey: 'x'.repeat(10001),
+            }
+            Object.defineProperty(objectWithUnreadPropertyAfterLimit, 'unreadAfterLimit', {
+                enumerable: true,
+                get: getterAfterLimit,
+            })
+
+            expect(() => assignableWindow.console.log(objectWithUnreadPropertyAfterLimit)).not.toThrow()
+
+            expect(getterAfterLimit).not.toHaveBeenCalled()
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'),
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
         it('should not truncate log body when within size limit', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -193,6 +221,43 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+        })
+
+        it('should not leak body truncation state to subsequent logs', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('x'.repeat(10001))
+            assignableWindow.console.log('small message')
+
+            expect(mockEmit.mock.calls[0][0].attributes).toEqual(
+                expect.objectContaining({
+                    body_truncated: 'true',
+                })
+            )
+            expect(mockEmit.mock.calls[1][0]).toEqual(
+                expect.objectContaining({
+                    body: '"small message"',
+                    attributes: expect.not.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
+        it('should not corrupt truncated strings with escaped characters', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('\\'.repeat(9998))
+
+            const emitted = mockEmit.mock.calls[0][0]
+            expect(emitted.attributes).toEqual(
+                expect.objectContaining({
+                    body_truncated: 'true',
+                })
+            )
+            expect(() => JSON.parse(emitted.body.slice(0, -3))).not.toThrow()
         })
 
         it('should handle large objects in body without crashing', () => {
@@ -326,6 +391,131 @@ describe('logs entrypoint', () => {
                 })
             )
             expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty('unreadable')
+        })
+
+        it('should serialize representative objects without corrupting body or attributes', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload: any = {
+                message: 'hello "quoted"\nline',
+                nested: {
+                    enabled: true,
+                    count: 2,
+                    empty: null,
+                },
+                list: ['first', undefined, () => 'ignored', Symbol('ignored'), null],
+                createdAt: new Date('2023-01-02T03:04:05.000Z'),
+            }
+            payload.self = payload
+
+            assignableWindow.console.log(payload)
+
+            const emitted = mockEmit.mock.calls[0][0]
+            expect(JSON.parse(emitted.body)).toEqual({
+                message: 'hello "quoted"\nline',
+                nested: {
+                    enabled: true,
+                    count: 2,
+                    empty: null,
+                },
+                list: ['first', null, null, null, null],
+                createdAt: '2023-01-02T03:04:05.000Z',
+                self: '[Circular]',
+            })
+            expect(emitted.attributes).toEqual(
+                expect.objectContaining({
+                    message: 'hello "quoted"\nline',
+                    'nested.enabled': true,
+                    'nested.count': 2,
+                    'nested.empty': null,
+                    self: '[Circular]',
+                })
+            )
+        })
+
+        it('should serialize Error objects with their details intact', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const error = new Error('boom') as Error & { code?: string }
+            error.name = 'CustomError'
+            error.stack = 'CustomError: boom\n    at test'
+            error.code = 'E_BOOM'
+
+            assignableWindow.console.error(error)
+
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({
+                code: 'E_BOOM',
+                name: 'CustomError',
+                message: 'boom',
+                stack: 'CustomError: boom\n    at test',
+            })
+            expect(mockEmit.mock.calls[0][0].attributes).toEqual(
+                expect.objectContaining({
+                    'log.source': 'console.error',
+                })
+            )
+        })
+
+        it('should handle toJSON returning itself without recursing forever', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload = {
+                toJSON() {
+                    return this
+                },
+            }
+
+            expect(() => assignableWindow.console.log(payload)).not.toThrow()
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual('[Circular]')
+        })
+
+        it('should omit object properties whose toJSON returns non-serializable values', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log({
+                kept: 'value',
+                omitted: {
+                    toJSON() {
+                        return undefined
+                    },
+                },
+            })
+
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({
+                kept: 'value',
+            })
+        })
+
+        it('should serialize boxed primitives like JSON.stringify does', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log(new String('abc'), new Number(123), new Boolean(false))
+
+            expect(mockEmit.mock.calls[0][0].body).toEqual(
+                `${JSON.stringify(new String('abc'))} ${JSON.stringify(new Number(123))} ${JSON.stringify(
+                    new Boolean(false)
+                )}`
+            )
+        })
+
+        it('should fall back when Object.prototype.toString throws', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload = { kept: 'value' }
+            Object.defineProperty(payload, Symbol.toStringTag, {
+                get() {
+                    throw new Error('cross-origin object tag')
+                },
+            })
+
+            expect(() => assignableWindow.console.log(payload)).not.toThrow()
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({ kept: 'value' })
         })
 
         it('should not add attributes_truncated when within limits', () => {

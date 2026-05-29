@@ -26,7 +26,7 @@ jobs:
                     echo "skip=false" >> $GITHUB_OUTPUT
                   fi
 
-            - uses: actions/stale@v9
+            - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
               if: steps.holiday.outputs.skip != 'true'
               with:
                   days-before-issue-stale: 730

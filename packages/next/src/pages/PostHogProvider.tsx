@@ -38,6 +38,10 @@ let apiKeyWarned = false
 
 export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, bootstrap, children }: PagesPostHogProviderProps) {
     const apiKey = resolveApiKey(apiKeyProp)
+    if (!apiKey) {
+        return <>{children}</>
+    }
+
     if (!apiKeyWarned && !apiKey.startsWith('phc_')) {
         apiKeyWarned = true
         // eslint-disable-next-line no-console

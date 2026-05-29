@@ -151,6 +151,10 @@ export interface PerformanceCaptureConfig {
 
     /**
      * Use chrome's web vitals library to wrap fetch and capture web vitals
+     *
+     * When `cookieless_mode` is active, there is no client-side SessionIdManager; vitals are still
+     * captured. Nested `$web_vitals_*_event` payloads omit `$session_id` / `$window_id`; PostHog ingestion assigns
+     * `$session_id` server-side for cookieless traffic when project cookieless settings are enabled (same as other events).
      */
     web_vitals?: boolean
 
@@ -1293,6 +1297,19 @@ export interface PostHogConfig {
      * @default undefined
      */
     evaluation_contexts?: readonly string[]
+
+    /**
+     * List of feature flag keys to remotely evaluate for this SDK instance.
+     * When set, only these flags are evaluated by `/flags`; omitted flags are not remotely evaluated.
+     * Dependencies of the requested flags may still be evaluated internally by PostHog.
+     * If unset, all eligible flags are evaluated.
+     *
+     * Examples: ['checkout-redesign', 'new-onboarding']
+     *
+     * @default undefined
+     */
+    flag_keys?: readonly string[]
+
     /**
      * Evaluation environments for feature flags.
      * @deprecated Use evaluation_contexts instead. This property will be removed in a future version.
@@ -1561,6 +1578,10 @@ export interface PostHogConfig {
     /**
      * Enables cookieless mode. In this mode, PostHog will not set any cookies, or use session or local storage. User
      * identity is handled by generating a privacy-preserving hash on PostHog's servers.
+     *
+     * Web Vitals (`capture_performance.web_vitals`) are supported: metrics are sent without client session IDs;
+     * ingestion assigns `$session_id` when cookieless mode is enabled for the project.
+     *
      * - 'always' - enable cookieless mode immediately on startup, use this if you do not intend to show a cookie banner
      * - 'on_reject' - enable cookieless mode only if the user rejects cookies, use this if you want to show a cookie banner. If the user accepts cookies, cookieless mode will not be used, and PostHog will use cookies and local storage as usual.
      *

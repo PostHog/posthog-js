@@ -4,7 +4,8 @@ module.exports = {
         const isAllowedFile =
             filename.includes('src/entrypoints') ||
             filename.includes('src/extensions/replay/external') ||
-            filename.includes('__tests__')
+            filename.includes('__tests__') ||
+            filename.includes('/playwright/')
 
         function isRestrictedImport(importPath) {
             // Handle absolute paths with aliases
@@ -30,7 +31,7 @@ module.exports = {
                         context.report({
                             node,
                             message:
-                                'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, or test files',
+                                'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
                         })
                     }
                 }
@@ -43,7 +44,7 @@ module.exports = {
                             context.report({
                                 node,
                                 message:
-                                    'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, or test files',
+                                    'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
                             })
                         }
                     }
