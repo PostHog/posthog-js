@@ -76,18 +76,17 @@ export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
 
   constructor(options: PostHogSpanProcessorOptions = {}) {
-    const safeOptions = options ?? {}
-    const apiKey = normalizeApiKey(safeOptions.apiKey)
+    const apiKey = normalizeApiKey(options.apiKey)
     if (!apiKey) {
       console.warn('[PostHogSpanProcessor] apiKey is missing or blank; the processor will be disabled.')
       this.inner = new NoopSpanProcessor()
       return
     }
 
-    if (safeOptions._spanProcessor) {
-      this.inner = safeOptions._spanProcessor
+    if (options._spanProcessor) {
+      this.inner = options._spanProcessor
     } else {
-      const host = new URL(normalizeHost(safeOptions.host)).origin
+      const host = new URL(normalizeHost(options.host)).origin
       const exporter = new OTLPTraceExporter({
         url: `${host}/i/v0/ai/otel`,
         headers: {

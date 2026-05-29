@@ -90,7 +90,6 @@ describe('PostHogTraceExporter', () => {
 
   it.each([
     ['missing', {}],
-    ['null', null],
     ['empty', { projectToken: '' }],
     ['blank', { projectToken: '  \n\t ' }],
   ])('disables and no-ops when projectToken is %s', (_case, options) => {

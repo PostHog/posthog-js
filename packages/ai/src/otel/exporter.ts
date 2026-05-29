@@ -74,10 +74,9 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
   private readonly disabled: boolean
 
   constructor(options: PostHogTraceExporterOptions = {}) {
-    const safeOptions = options ?? {}
-    const token = normalizeToken(safeOptions.projectToken) || normalizeToken(safeOptions.apiKey)
+    const token = normalizeToken(options.projectToken) || normalizeToken(options.apiKey)
     const disabled = !token
-    const host = token ? new URL(normalizeHost(safeOptions.host)).origin : DEFAULT_OTEL_HOST
+    const host = token ? new URL(normalizeHost(options.host)).origin : DEFAULT_OTEL_HOST
     super({
       url: `${host}/i/v0/ai/otel`,
       headers: token

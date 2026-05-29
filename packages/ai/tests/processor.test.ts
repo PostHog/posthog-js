@@ -76,7 +76,6 @@ describe('PostHogSpanProcessor', () => {
 
   it.each([
     ['missing', {}],
-    ['null', null],
     ['empty', { apiKey: '' }],
     ['blank', { apiKey: '  \n\t ' }],
   ])('disables and no-ops when apiKey is %s', async (_case, options) => {
