@@ -13,7 +13,13 @@ export PATH="/usr/bin:/usr/local/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.l
 # WITH_ENVIRONMENT is executed by React Native
 
 REACT_NATIVE_XCODE_DEFAULT="../node_modules/react-native/scripts/react-native-xcode.sh"
-REACT_NATIVE_XCODE="${1:-$REACT_NATIVE_XCODE_DEFAULT}"
+# Accept $1 only when it actually points at a shell script; guard against the
+# Expo plugin previously passing "/bin/sh" as $1 (issue #3682).
+if [[ "${1:-}" == *.sh ]]; then
+  REACT_NATIVE_XCODE="$1"
+else
+  REACT_NATIVE_XCODE="$REACT_NATIVE_XCODE_DEFAULT"
+fi
 
 # Check if DERIVED_FILE_DIR exists, defined by Xcode
 if [ ! -d "$DERIVED_FILE_DIR" ]; then
