@@ -92,15 +92,12 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
       'shell-prefixed command (Expo SDK 53+ / plain RN)',
       '/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh',
     ],
-  ])(
-    'arg1 passed to posthog-xcode.sh is react-native-xcode.sh path, not /bin/sh — %s',
-    (_desc, original) => {
-      const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
-      const arg1 = extractArg1(wrapped)
-      expect(arg1).toContain('react-native-xcode.sh')
-      expect(arg1).not.toBe('/bin/sh')
-    }
-  )
+  ])('arg1 passed to posthog-xcode.sh is react-native-xcode.sh path, not /bin/sh — %s', (_desc, original) => {
+    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
+    const arg1 = extractArg1(wrapped)
+    expect(arg1).toContain('react-native-xcode.sh')
+    expect(arg1).not.toBe('/bin/sh')
+  })
 })
 
 describe('modifyExistingXcodeBuildScript', () => {
