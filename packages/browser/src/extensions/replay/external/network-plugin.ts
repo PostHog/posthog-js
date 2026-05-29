@@ -11,7 +11,17 @@
 
 import type { IWindow, listenerHandler, RecordPlugin } from '../types/rrweb-types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
-import { isArray, isBoolean, isFormData, isNull, isNullish, isString, isUndefined, isObject } from '@posthog/core'
+import {
+    isArray,
+    isBoolean,
+    isFormData,
+    isFunction,
+    isNull,
+    isNullish,
+    isString,
+    isUndefined,
+    isObject,
+} from '@posthog/core'
 import { isDocument } from '../../../utils/type-utils'
 import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
@@ -489,6 +499,10 @@ function _checkForCannotReadResponseBody({
     return null
 }
 
+function isReadableStreamBody(body: unknown): body is ReadableStream<Uint8Array> {
+    return isObject(body) && isFunction(body.getReader) && isFunction(body.tee)
+}
+
 function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
@@ -576,7 +590,11 @@ function initFetchObserver(
                 if (recordRequestHeaders) {
                     networkRequest.requestHeaders = requestHeaders
                 }
+                // Check the caller-supplied body, not req.body: Request normalizes all non-null bodies
+                // to a ReadableStream, but only an original ReadableStream would be locked by req.clone().text().
+                const requestBodyIsReadableStream = isReadableStreamBody(init?.body)
                 if (
+                    !requestBodyIsReadableStream &&
                     shouldRecordBody({
                         type: 'request',
                         headers: requestHeaders,

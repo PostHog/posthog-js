@@ -190,6 +190,36 @@ describe('fetch wrapper', () => {
             expect(receivedInit).toMatchObject({ method: 'POST', body: 'test' })
         })
 
+        it('does not pass a locked caller-supplied ReadableStream body to downstream fetch', async () => {
+            const stream = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode('stream body'))
+                    controller.close()
+                },
+            })
+            const init = { method: 'POST', body: stream, duplex: 'half' } as RequestInit & { duplex: 'half' }
+            let downstreamBody: BodyInit | null | undefined
+            let downstreamText: string | undefined
+
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL, requestInit) => {
+                downstreamBody = requestInit?.body
+                // Mimics the browser/native fetch path (or a downstream wrapper) consuming the init body.
+                // This throws if PostHog's body recording has already locked/disturbed the stream.
+                const downstreamRequest = new Request(input, requestInit)
+                downstreamText = await downstreamRequest.text()
+                return new Response('ok')
+            })
+
+            try {
+                await expect(wrappedFetch('https://example.com/api', init)).resolves.toBeInstanceOf(Response)
+            } finally {
+                cleanup()
+            }
+
+            expect(downstreamBody).toBe(stream)
+            expect(downstreamText).toBe('stream body')
+        })
+
         it('preserves Request input shape when caller supplied a Request', async () => {
             let receivedInput: RequestInfo | URL | undefined
             let receivedInit: RequestInit | undefined
