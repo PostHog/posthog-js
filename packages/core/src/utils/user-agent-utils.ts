@@ -62,69 +62,39 @@ const BRAVE = 'Brave'
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
 
-// `navigator.userAgentData.brands` shape — only the brand name and version are
-// stable across browsers. Defined here (rather than relying on the lib.dom
-// types) so this module stays usable in non-DOM contexts.
-export interface UserAgentBrand {
-  brand: string
-  version: string
-}
-
 /**
  * Hints from sources outside the User-Agent string. These let us identify
- * browsers that intentionally hide themselves from the UA — most notably Arc
- * (Chromium, no UA marker, but advertises itself in Client Hints brands) and
- * Brave (Chromium, no UA marker, but exposes `navigator.brave`).
+ * browsers that intentionally hide themselves from the UA — Arc (Chromium,
+ * no UA marker, but injects CSS custom properties on every page) and Brave
+ * on desktop / Android (Chromium, no UA marker, but exposes `navigator.brave`).
+ *
+ * Brave on iOS is detected via UA (`Brave/X` marker) — it doesn't expose
+ * `navigator.brave` on WebKit — so no hint is needed there.
+ *
+ * Arc does NOT reliably advertise itself in `navigator.userAgentData.brands`:
+ * the low-entropy brands list returns Chromium / Google Chrome / a grease
+ * brand. The reliable Arc signal is the `--arc-palette-*` CSS custom
+ * properties Arc injects on `document.documentElement` — the SDK side reads
+ * those and passes the resulting boolean here.
  */
 export interface BrowserDetectionHints {
-  // Pass `navigator.userAgentData?.brands` here. Used to identify Chromium
-  // forks (Arc, etc.) that surface themselves only through Client Hints.
-  userAgentDataBrands?: UserAgentBrand[]
-  // Pass `!!navigator.brave` here. The Brave object exists on all Brave
-  // builds and is the recommended sync detection signal.
+  // Set to `true` when an Arc-only DOM/CSS signal is present (the SDK reads
+  // `--arc-palette-title` from `document.documentElement`).
+  arc?: boolean
+  // Set to `true` when `navigator.brave` exists. This is the sync detection
+  // signal Brave recommends. Not available on iOS — see UA fallback below.
   brave?: boolean
 }
 
-// Brand names we recognise in `navigator.userAgentData.brands`. Comparison is
-// case-insensitive against the brand field.
-const CLIENT_HINTS_BRAND_MAP: Record<string, string> = {
-  arc: ARC,
-  brave: BRAVE,
-}
-
-function brandFromHints(hints: BrowserDetectionHints | undefined): string | null {
+function browserFromHints(hints: BrowserDetectionHints | undefined): string | null {
   if (!hints) {
     return null
   }
+  if (hints.arc) {
+    return ARC
+  }
   if (hints.brave) {
     return BRAVE
-  }
-  const brands = hints.userAgentDataBrands
-  if (brands && brands.length) {
-    for (let i = 0; i < brands.length; i++) {
-      const brand = brands[i]?.brand
-      if (brand) {
-        const mapped = CLIENT_HINTS_BRAND_MAP[brand.toLowerCase()]
-        if (mapped) {
-          return mapped
-        }
-      }
-    }
-  }
-  return null
-}
-
-function brandVersionFromHints(hints: BrowserDetectionHints | undefined, expectedBrand: string): number | null {
-  const brands = hints?.userAgentDataBrands
-  if (!brands) {
-    return null
-  }
-  for (let i = 0; i < brands.length; i++) {
-    const entry = brands[i]
-    if (entry?.brand && entry.brand.toLowerCase() === expectedBrand.toLowerCase()) {
-      const parsed = parseFloat(entry.version)
-      return isNaN(parsed) ? null : parsed
-    }
   }
   return null
 }
@@ -176,10 +146,10 @@ export const detectBrowser = function (
 ): string {
   vendor = vendor || '' // vendor is undefined for at least IE9
 
-  // Client Hints / API-based signals win over UA sniffing because the
-  // browsers we care about here (Arc, Brave) are deliberately invisible in
-  // the UA string and would otherwise be misdetected as Chrome.
-  const fromHints = brandFromHints(hints)
+  // Out-of-band signals win over UA sniffing because the browsers we care
+  // about here (Arc, desktop Brave) are deliberately invisible in the UA
+  // string and would otherwise be misdetected as Chrome.
+  const fromHints = browserFromHints(hints)
   if (fromHints) {
     return fromHints
   }
@@ -232,6 +202,12 @@ export const detectBrowser = function (
     return FIREFOX_IOS
   } else if (includes(user_agent.toLowerCase(), KONQUEROR.toLowerCase())) {
     return KONQUEROR
+  }
+  // Brave on iOS does stamp itself into the UA as `Brave/X` — desktop and
+  // Android Brave intentionally do not. Must come before the Safari branch
+  // because iOS Brave's UA otherwise looks like Mobile Safari.
+  else if (includes(user_agent, BRAVE + '/')) {
+    return BRAVE
   } else if (safariCheck(user_agent, vendor)) {
     return includes(user_agent, MOBILE) ? MOBILE_SAFARI : SAFARI
   }
@@ -272,6 +248,10 @@ const versionRegexes: Record<string, RegExp[]> = {
   [VIVALDI]: [new RegExp(VIVALDI + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [YANDEX]: [new RegExp('YaBrowser\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [WHALE]: [new RegExp(WHALE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  // Brave on iOS exposes itself as `Brave/X.X` in the UA. Desktop / Android
+  // Brave don't, which is why hint-based Brave detection returns a null
+  // version: we have no UA marker to parse.
+  [BRAVE]: [new RegExp(BRAVE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   // DuckDuckGo on iOS uses `Ddg/`, on Android/desktop preview it uses `DuckDuckGo/`.
   [DUCKDUCKGO]: [new RegExp('(DuckDuckGo|Ddg)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [PALE_MOON]: [new RegExp('PaleMoon\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
@@ -295,11 +275,12 @@ export const detectBrowserVersion = function (
 ): number | null {
   const browser = detectBrowser(userAgent, vendor, hints)
 
-  // Browsers detected purely through Client Hints have no UA marker we can
-  // regex against — read the version directly from the brands entry. Brave
-  // hides itself from `brands` by default so it usually returns null here.
-  if (browser === ARC || browser === BRAVE) {
-    return brandVersionFromHints(hints, browser)
+  // Arc has no UA marker we can parse — when we identified it via the CSS
+  // hint we don't have a version. Brave on iOS DOES have a `Brave/X` UA
+  // marker (handled below via versionRegexes), but desktop/Android Brave
+  // detected via `navigator.brave` does not — return null in that case.
+  if (browser === ARC) {
+    return null
   }
 
   const regexes: RegExp[] | undefined = versionRegexes[browser as keyof typeof versionRegexes]

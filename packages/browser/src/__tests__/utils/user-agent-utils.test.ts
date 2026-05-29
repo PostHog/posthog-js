@@ -297,6 +297,17 @@ describe('user-agent-utils', () => {
                 expectedVersion: null,
                 expectedBrowser: 'Waterfox',
             },
+            {
+                // Brave on iOS is the only Brave build that stamps itself into the UA
+                // (desktop / Android Brave deliberately hide). Must be detected without
+                // hints because WebKit doesn't ship `navigator.brave`.
+                name: 'Brave on iOS (UA marker, no hints)',
+                userAgent:
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1 Brave/1.51',
+                vendor: 'Apple Computer, Inc.',
+                expectedVersion: 1.51,
+                expectedBrowser: 'Brave',
+            },
         ]
 
         test.each(browserTestcases)('browser version %s', ({ userAgent, vendor, expectedVersion }) => {
@@ -352,10 +363,16 @@ describe('user-agent-utils', () => {
             expect(detectBrowser(ua, vendor)).toBe('Safari')
         })
 
-        describe('detectBrowser with Client Hints / API hints', () => {
-            // Arc and Brave intentionally hide themselves from the UA string,
-            // so without hints they fall through to Chrome — the same problem
-            // that originally let Arc users go undetected (PostHog/posthog-js#TODO).
+        describe('detectBrowser with out-of-band hints', () => {
+            // Arc and desktop Brave intentionally hide themselves from the UA
+            // string, so without hints they fall through to Chrome — which is
+            // exactly what triggered this work.
+            //
+            // Note: Arc is NOT detectable via `navigator.userAgentData.brands`
+            // (the low-entropy list returns Chromium + Google Chrome + a grease
+            // brand). The reliable Arc signal is a CSS custom property Arc
+            // injects on `document.documentElement`; the SDK side reads that
+            // and forwards a boolean `arc` hint here.
             const chromeMacOsUA =
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
@@ -367,102 +384,53 @@ describe('user-agent-utils', () => {
                 expect(detectBrowser(chromeMacOsUA, 'Google Inc.', {})).toBe('Chrome')
             })
 
-            it('detects Arc when userAgentData.brands advertises Arc', () => {
-                expect(
-                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
-                        userAgentDataBrands: [
-                            { brand: 'Not_A Brand', version: '8' },
-                            { brand: 'Chromium', version: '120' },
-                            { brand: 'Arc', version: '1.27' },
-                        ],
-                    })
-                ).toBe('Arc')
+            it('detects Arc when the `arc` hint is set', () => {
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { arc: true })).toBe('Arc')
             })
 
-            it('detects Arc regardless of brand casing in Client Hints', () => {
-                expect(
-                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
-                        userAgentDataBrands: [{ brand: 'arc', version: '1.27' }],
-                    })
-                ).toBe('Arc')
-            })
-
-            it('detects Brave via navigator.brave even when UA looks like Chrome', () => {
+            it('detects desktop / Android Brave via the `brave` hint (Chromium UA)', () => {
                 expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { brave: true })).toBe('Brave')
             })
 
-            it('detects Brave via brands list when present', () => {
-                expect(
-                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
-                        userAgentDataBrands: [{ brand: 'Brave', version: '1.62' }],
-                    })
-                ).toBe('Brave')
-            })
-
-            it('prefers hint-based detection over UA sniffing (Brave on Chrome UA)', () => {
-                // Chrome UA + brave hint → Brave (the hint is authoritative).
+            it('hints take precedence over UA sniffing', () => {
+                // Even on a Chrome-shaped UA, an explicit hint wins.
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { arc: true })).toBe('Arc')
                 expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { brave: true })).toBe('Brave')
             })
 
-            it('ignores unknown brand entries', () => {
-                expect(
-                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
-                        userAgentDataBrands: [
-                            { brand: 'Not_A Brand', version: '8' },
-                            { brand: 'Chromium', version: '120' },
-                        ],
-                    })
-                ).toBe('Chrome')
+            it('prefers Arc over Brave if (somehow) both are set', () => {
+                // Defensive: the two should never co-occur, but make the
+                // ordering explicit so future readers don't have to guess.
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { arc: true, brave: true })).toBe('Arc')
             })
 
-            it('handles malformed brand entries without throwing', () => {
-                expect(
-                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
-                        // @ts-expect-error intentionally malformed for robustness check
-                        userAgentDataBrands: [null, undefined, { brand: '' }, { brand: 'Arc', version: '1.27' }],
-                    })
-                ).toBe('Arc')
+            it('does not affect Brave-on-iOS detection (UA marker wins, no hints needed)', () => {
+                // Brave on iOS doesn't expose `navigator.brave`, but the UA
+                // contains `Brave/X` and the UA branch handles that on its own.
+                const braveIosUA =
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1 Brave/1.51'
+                expect(detectBrowser(braveIosUA, 'Apple Computer, Inc.')).toBe('Brave')
             })
         })
 
-        describe('detectBrowserVersion with Client Hints / API hints', () => {
+        describe('detectBrowserVersion with out-of-band hints', () => {
             const chromeMacOsUA =
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-            it('reads Arc version from brands entry', () => {
-                expect(
-                    detectBrowserVersion(chromeMacOsUA, 'Google Inc.', {
-                        userAgentDataBrands: [{ brand: 'Arc', version: '1.27' }],
-                    })
-                ).toBe(1.27)
+            it('returns null for Arc — there is no UA version to parse', () => {
+                // We detected Arc via a CSS signal; the UA still says Chrome,
+                // so reporting a "Chrome" version under `Arc` would be wrong.
+                expect(detectBrowserVersion(chromeMacOsUA, 'Google Inc.', { arc: true })).toBeNull()
             })
 
-            it('returns null Brave version when brands does not include Brave (default privacy posture)', () => {
-                expect(
-                    detectBrowserVersion(chromeMacOsUA, 'Google Inc.', {
-                        brave: true,
-                        userAgentDataBrands: [
-                            { brand: 'Not_A Brand', version: '8' },
-                            { brand: 'Chromium', version: '120' },
-                        ],
-                    })
-                ).toBeNull()
+            it('returns null for desktop / Android Brave — no UA marker exists', () => {
+                expect(detectBrowserVersion(chromeMacOsUA, 'Google Inc.', { brave: true })).toBeNull()
             })
 
-            it('reads Brave version when brands includes Brave', () => {
-                expect(
-                    detectBrowserVersion(chromeMacOsUA, 'Google Inc.', {
-                        userAgentDataBrands: [{ brand: 'Brave', version: '1.62' }],
-                    })
-                ).toBe(1.62)
-            })
-
-            it('returns null when brand version is not parseable', () => {
-                expect(
-                    detectBrowserVersion(chromeMacOsUA, 'Google Inc.', {
-                        userAgentDataBrands: [{ brand: 'Arc', version: 'not-a-version' }],
-                    })
-                ).toBeNull()
+            it('reads Brave-on-iOS version from the UA marker (no hints needed)', () => {
+                const braveIosUA =
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1 Brave/1.51'
+                expect(detectBrowserVersion(braveIosUA, 'Apple Computer, Inc.')).toBe(1.51)
             })
 
             it('preserves UA-based version when hints are absent', () => {

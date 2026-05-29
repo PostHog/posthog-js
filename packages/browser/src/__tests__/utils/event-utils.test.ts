@@ -163,15 +163,20 @@ describe(`event-utils`, () => {
     })
 
     describe('getBrowserDetectionHints', () => {
-        const originalUserAgentData = Object.getOwnPropertyDescriptor(window.navigator, 'userAgentData')
         const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
 
+        // jsdom's `getComputedStyle` won't surface custom properties — stub it
+        // so we can simulate Arc's `--arc-palette-title` injection.
+        let getComputedStyleSpy: jest.SpyInstance
+
+        beforeEach(() => {
+            getComputedStyleSpy = jest.spyOn(window, 'getComputedStyle').mockReturnValue({
+                getPropertyValue: () => '',
+            } as unknown as CSSStyleDeclaration)
+        })
+
         afterEach(() => {
-            if (originalUserAgentData) {
-                Object.defineProperty(window.navigator, 'userAgentData', originalUserAgentData)
-            } else {
-                delete (window.navigator as any).userAgentData
-            }
+            getComputedStyleSpy.mockRestore()
             if (originalBrave) {
                 Object.defineProperty(window.navigator, 'brave', originalBrave)
             } else {
@@ -180,21 +185,8 @@ describe(`event-utils`, () => {
         })
 
         it('returns empty hints when neither signal is present', () => {
-            delete (window.navigator as any).userAgentData
             delete (window.navigator as any).brave
             expect(getBrowserDetectionHints()).toEqual({})
-        })
-
-        it('forwards userAgentData.brands when present', () => {
-            const brands = [
-                { brand: 'Chromium', version: '120' },
-                { brand: 'Arc', version: '1.27' },
-            ]
-            Object.defineProperty(window.navigator, 'userAgentData', {
-                value: { brands },
-                configurable: true,
-            })
-            expect(getBrowserDetectionHints()).toEqual({ userAgentDataBrands: brands })
         })
 
         it('flags brave when navigator.brave exists', () => {
@@ -205,53 +197,71 @@ describe(`event-utils`, () => {
             expect(getBrowserDetectionHints()).toEqual({ brave: true })
         })
 
-        it('combines both signals when both are available', () => {
-            const brands = [{ brand: 'Brave', version: '1.62' }]
-            Object.defineProperty(window.navigator, 'userAgentData', {
-                value: { brands },
-                configurable: true,
+        it('flags arc when the Arc CSS custom property is present on documentElement', () => {
+            getComputedStyleSpy.mockImplementation(
+                (el: Element) =>
+                    (el === document.documentElement
+                        ? { getPropertyValue: (name: string) => (name === '--arc-palette-title' ? '#fff' : '') }
+                        : { getPropertyValue: () => '' }) as unknown as CSSStyleDeclaration
+            )
+            expect(getBrowserDetectionHints()).toEqual({ arc: true })
+        })
+
+        it('does not flag arc when the CSS custom property is empty / whitespace-only', () => {
+            getComputedStyleSpy.mockReturnValue({
+                getPropertyValue: () => '   ',
+            } as unknown as CSSStyleDeclaration)
+            expect(getBrowserDetectionHints()).toEqual({})
+        })
+
+        it('swallows errors from getComputedStyle', () => {
+            getComputedStyleSpy.mockImplementation(() => {
+                throw new Error('boom')
             })
+            // Must not throw — the SDK calling this should never blow up.
+            expect(() => getBrowserDetectionHints()).not.toThrow()
+            expect(getBrowserDetectionHints()).toEqual({})
+        })
+
+        it('combines both signals when both are available', () => {
             Object.defineProperty(window.navigator, 'brave', { value: {}, configurable: true })
-            expect(getBrowserDetectionHints()).toEqual({ userAgentDataBrands: brands, brave: true })
+            getComputedStyleSpy.mockReturnValue({
+                getPropertyValue: () => '#fff',
+            } as unknown as CSSStyleDeclaration)
+            expect(getBrowserDetectionHints()).toEqual({ arc: true, brave: true })
         })
     })
 
     describe('Arc detection end-to-end', () => {
-        const originalUserAgentData = Object.getOwnPropertyDescriptor(window.navigator, 'userAgentData')
         const chromeMacOsUA =
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        let getComputedStyleSpy: jest.SpyInstance
 
         beforeEach(() => {
             // @ts-expect-error ok to set global in test
             globals['userAgent'] = chromeMacOsUA
+            getComputedStyleSpy = jest.spyOn(window, 'getComputedStyle')
         })
 
         afterEach(() => {
-            if (originalUserAgentData) {
-                Object.defineProperty(window.navigator, 'userAgentData', originalUserAgentData)
-            } else {
-                delete (window.navigator as any).userAgentData
-            }
+            getComputedStyleSpy.mockRestore()
         })
 
-        it('reports $browser as Arc when Client Hints advertises Arc, even on a Chrome UA', () => {
-            Object.defineProperty(window.navigator, 'userAgentData', {
-                value: {
-                    brands: [
-                        { brand: 'Not_A Brand', version: '8' },
-                        { brand: 'Chromium', version: '120' },
-                        { brand: 'Arc', version: '1.27' },
-                    ],
-                },
-                configurable: true,
-            })
+        it('reports $browser as Arc when the Arc CSS custom property is present, even on a Chrome UA', () => {
+            getComputedStyleSpy.mockReturnValue({
+                getPropertyValue: (name: string) => (name === '--arc-palette-title' ? '#fff' : ''),
+            } as unknown as CSSStyleDeclaration)
             const properties = getEventProperties()
             expect(properties['$browser']).toBe('Arc')
-            expect(properties['$browser_version']).toBe(1.27)
+            // We can't get a real Arc version from a CSS variable, so honest
+            // null beats a fake Chrome-version stamped under `Arc`.
+            expect(properties['$browser_version']).toBeNull()
         })
 
-        it('reports $browser as Chrome when Client Hints does not advertise Arc', () => {
-            delete (window.navigator as any).userAgentData
+        it('reports $browser as Chrome when no Arc signal is present', () => {
+            getComputedStyleSpy.mockReturnValue({
+                getPropertyValue: () => '',
+            } as unknown as CSSStyleDeclaration)
             const properties = getEventProperties()
             expect(properties['$browser']).toBe('Chrome')
             expect(properties['$browser_version']).toBe(120.0)

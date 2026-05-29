@@ -268,21 +268,36 @@ export function getTimezoneOffset(): number | undefined {
     }
 }
 
+// Arc injects this CSS custom property on `document.documentElement` very
+// early on every page it loads. It's the most reliable sync signal we have —
+// Arc deliberately presents as plain Chromium in the UA *and* in the
+// low-entropy `navigator.userAgentData.brands` list, so neither helps here.
+const ARC_CSS_PROPERTY = '--arc-palette-title'
+
+function detectArc(): boolean {
+    if (typeof document === 'undefined' || !document?.documentElement) {
+        return false
+    }
+    try {
+        const value = window?.getComputedStyle?.(document.documentElement).getPropertyValue(ARC_CSS_PROPERTY)
+        return !!value && value.trim().length > 0
+    } catch {
+        return false
+    }
+}
+
 // Gathers signals that aren't in the UA string but help identify browsers that
-// hide themselves there (Arc, Brave). Lives next to `getEventProperties` so we
-// can call it once per event without going back to the navigator each time.
+// hide themselves there (Arc desktop, Brave on desktop/Android). Brave on iOS
+// is picked up via the `Brave/` UA marker by `detectBrowser` itself, so no
+// hint is needed for that case.
 export function getBrowserDetectionHints(): BrowserDetectionHints {
     const nav = typeof navigator !== 'undefined' ? (navigator as Record<string, any>) : undefined
-    if (!nav) {
-        return {}
-    }
     const hints: BrowserDetectionHints = {}
-    const brands = nav.userAgentData?.brands
-    if (brands) {
-        hints.userAgentDataBrands = brands
-    }
-    if (nav.brave) {
+    if (nav?.brave) {
         hints.brave = true
+    }
+    if (detectArc()) {
+        hints.arc = true
     }
     return hints
 }
