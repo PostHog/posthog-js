@@ -188,7 +188,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
     }
 
-    if (normalizedOptions.personalApiKey) {
+    if (!this.disabled && normalizedOptions.personalApiKey) {
       if (normalizedOptions.personalApiKey.includes('phc_')) {
         throw new Error(
           'Your Personal API key is invalid. These keys are prefixed with "phx_" and can be created in PostHog project settings.'
@@ -819,6 +819,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     } = {},
     matchValue?: FeatureFlagValue
   ): Promise<FeatureFlagResult | undefined> {
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     const sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
     // Check for overrides first - they take precedence over all evaluation
     if (this._flagOverrides !== undefined && key in this._flagOverrides) {
@@ -1252,6 +1257,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @throws Error if personal API key is not provided
    */
   async getRemoteConfigPayload(flagKey: string): Promise<JsonType | undefined> {
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     if (!this.options.personalApiKey) {
       throw new Error('Personal API key is required for remote config payload decryption')
     }
@@ -1451,6 +1461,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return { featureFlags: {}, featureFlagPayloads: {} }
     }
 
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return { featureFlags: {}, featureFlagPayloads: {} }
+    }
+
     const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
@@ -1606,6 +1621,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return new FeatureFlagEvaluations({
         host: this._getFeatureFlagEvaluationsHost(),
         distinctId: '',
+        flags: {},
+      })
+    }
+
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return new FeatureFlagEvaluations({
+        host: this._getFeatureFlagEvaluationsHost(),
+        distinctId: resolvedDistinctId,
         flags: {},
       })
     }
@@ -2083,7 +2107,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   private async _requestRemoteConfigPayload(flagKey: string): Promise<PostHogFetchResponse | undefined> {
-    if (!this.options.personalApiKey) {
+    if (this.disabled || !this.apiKey || !this.options.personalApiKey) {
       return undefined
     }
 
@@ -2156,6 +2180,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     disableGeoip?: boolean,
     sendFeatureFlagsOptions?: SendFeatureFlagsOptions
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
+    if (this.disabled || !this.apiKey) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     // Use properties directly from options if they exist
     const finalPersonProperties = sendFeatureFlagsOptions?.personProperties || {}
     const finalGroupProperties = sendFeatureFlagsOptions?.groupProperties || {}
