@@ -20,6 +20,7 @@ import {
   logFlushError,
   maybeAdd,
   patchFetchForTracingHeaders,
+  safeSetTimeout,
   FeatureFlagValue,
   ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
@@ -371,8 +372,8 @@ export class PostHog extends PostHogCore {
       void logsFlushPromise.catch(async (err) => {
         await logFlushError(err)
       })
-      // Drain pending logs-storage writes to disk before the OS may suspend
-      // the process. waitForPersist swallows errors internally.
+      // Persist pending writes before the OS may suspend the process.
+      void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
 
       if (state === 'active') {
@@ -546,10 +547,26 @@ export class PostHog extends PostHogCore {
    * `shutdownTimeoutMs` so a final flush can never run past the caller's
    * shutdown SLA, while still respecting the configured logs-specific
    * termination budget when it's tighter.
+   *
+   * After the flushes, drain any debounced storage writes that weren't already
+   * persisted via the queue-advance path — `setPersistedProperty` calls for
+   * distinctId, sessionId, deviceId, feature flag overrides, etc. only arm a
+   * debounced write. The drain runs in `finally` so a timed-out flush still
+   * persists them, and its await is bounded by the time left in the shutdown
+   * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
-    await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
+    try {
+      await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
+    } finally {
+      // Sync drain runs inside waitForPersist before the race below; the race
+      // only bounds the await for in-flight async writes.
+      const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
+      const drain = Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
+      await Promise.race([drain, new Promise<void>((resolve) => safeSetTimeout(resolve, remainingMs))])
+    }
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
@@ -691,6 +708,9 @@ export class PostHog extends PostHogCore {
       // reloading, and allow the super.reset() call to reload the flags.
       this._setDefaultPersonPropertiesForFlags(false)
     }
+
+    // Logout must be durable so a crash in the debounce window can't resurface the previous user.
+    void this._eventsStorage.waitForPersist()
   }
 
   /**
@@ -876,7 +896,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optIn(): Promise<void> {
-    return super.optIn()
+    // Consent must be durable. See reset()/identify().
+    const result = super.optIn()
+    void this._eventsStorage.waitForPersist()
+    return result
   }
 
   /**
@@ -895,7 +918,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optOut(): Promise<void> {
-    return super.optOut()
+    // Consent must be durable. See reset()/identify().
+    const result = super.optOut()
+    void this._eventsStorage.waitForPersist()
+    return result
   }
 
   /**
@@ -1555,6 +1581,9 @@ export class PostHog extends PostHogCore {
         this._logger.error(`Session replay failed to identify: ${e}.`)
       }
     }
+
+    // Account-switch safety — same as reset().
+    void this._eventsStorage.waitForPersist()
   }
 
   /**
@@ -1598,6 +1627,12 @@ export class PostHog extends PostHogCore {
       syntheticException: new Error('Synthetic Error'),
     }
     super.captureException(error, additionalProperties, resolvedHint)
+
+    // On a fatal crash, persist the exception + recent logs before the app may die.
+    if (additionalProperties?.$exception_level === 'fatal') {
+      void this._eventsStorage.waitForPersist()
+      void this._logsStorage.waitForPersist()
+    }
   }
 
   protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
