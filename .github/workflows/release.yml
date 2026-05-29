@@ -220,7 +220,11 @@ jobs:
                     - name: '@posthog/react'
                     - name: '@posthog/ai'
                     - name: '@posthog/convex'
-                    - name: '@posthog/mcp'
+                    # Temporarily disabled: scaffold was merged but the npm
+                    # package isn't wired up yet, so every release run 404s
+                    # on PUT to the registry and gets marked failure. Re-enable
+                    # once the npm package settings point at this monorepo.
+                    # - name: '@posthog/mcp'
                     - name: '@posthog/next'
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'
