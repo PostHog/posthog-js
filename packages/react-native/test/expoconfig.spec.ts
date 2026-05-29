@@ -52,6 +52,18 @@ describe('disableUserScriptSandboxing', () => {
   })
 })
 
+// Extracts the argument that would become $1 inside posthog-xcode.sh when
+// the wrapped line is executed by the shell. The shell runs:
+//   /bin/sh <posthog-xcode.sh-path> <...rest>
+// so $1 is the token immediately after the posthog-xcode.sh path.
+const extractArg1 = (wrappedLine: string): string => {
+  // The line looks like: /bin/sh `<node eval>` <arg1> ...
+  // Split on the backtick-delimited posthog-xcode.sh path expression, then
+  // take the first whitespace-separated token from whatever follows it.
+  const afterPosthog = wrappedLine.split(/`[^`]+`/)[1] ?? ''
+  return afterPosthog.trim().split(/\s+/)[0]
+}
+
 describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
   it('wraps the react-native-xcode.sh invocation with posthog-xcode.sh', () => {
     const original = '"../node_modules/react-native/scripts/react-native-xcode.sh"'
@@ -67,6 +79,24 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
     expect(wrapped).toContain('posthog-xcode.sh')
     expect(wrapped).toContain('packager/react-native-xcode.sh')
+  })
+
+  // Regression tests for issue #3682:
+  // When the Expo bundle phase already contains a /bin/sh prefix (common in
+  // Expo SDK 53+ and plain RN projects), posthog-xcode.sh receives /bin/sh as
+  // $1, which makes the REACT_NATIVE_XCODE variable resolve to /bin/sh instead
+  // of react-native-xcode.sh, silently breaking the PACKAGER_SOURCEMAP_FILE patch.
+  it.each([
+    ['simple path (no shell prefix)', '../node_modules/react-native/scripts/react-native-xcode.sh'],
+    [
+      'shell-prefixed command (Expo SDK 53+ / plain RN)',
+      '/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh',
+    ],
+  ])('arg1 passed to posthog-xcode.sh is react-native-xcode.sh path, not /bin/sh — %s', (_desc, original) => {
+    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
+    const arg1 = extractArg1(wrapped)
+    expect(arg1).toContain('react-native-xcode.sh')
+    expect(arg1).not.toBe('/bin/sh')
   })
 })
 

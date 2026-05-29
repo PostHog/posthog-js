@@ -2,7 +2,17 @@ import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { Linking, AppState, AppStateStatus } from 'react-native'
 import { waitForExpect } from './test-utils'
 import { PostHogRNStorage, createEventsStorage } from '../src/storage'
-import { FeatureFlagError } from '@posthog/core'
+import { FeatureFlagError, JsonType } from '@posthog/core'
+
+const typePreservationCases: Array<{ name: string; value: JsonType; buggyString: string }> = [
+  { name: 'boolean true', value: true, buggyString: 'true' },
+  { name: 'boolean false', value: false, buggyString: 'false' },
+  { name: 'number', value: 7, buggyString: '7' },
+  { name: 'zero', value: 0, buggyString: '0' },
+  { name: 'array of strings', value: ['wl', 'beta'], buggyString: 'wl,beta' },
+  { name: 'empty array', value: [], buggyString: '' },
+  { name: 'nested object', value: { x: 1, deep: ['a', 'b'] }, buggyString: '[object Object]' },
+]
 
 Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
 AppState.addEventListener = jest.fn()
@@ -978,6 +988,32 @@ describe('PostHog React Native', () => {
         expect(cachedProps).toEqual({ email: 'test@example.com', plan: 'premium' })
       })
 
+      it.each(typePreservationCases)(
+        'preserves $name in $set person properties (no String() coercion)',
+        ({ value, buggyString }) => {
+          posthog.identify('user-123', { $set: { prop: value } })
+
+          const cachedProps = posthog.getPersistedProperty<Record<string, JsonType>>(
+            PostHogPersistedProperty.PersonProperties
+          )
+          expect(cachedProps?.prop).toEqual(value)
+          expect(cachedProps?.prop).not.toBe(buggyString)
+        }
+      )
+
+      it.each(typePreservationCases)(
+        'preserves $name in $set_once person properties (no String() coercion)',
+        ({ value, buggyString }) => {
+          posthog.identify('user-123', { $set_once: { prop: value } })
+
+          const cachedProps = posthog.getPersistedProperty<Record<string, JsonType>>(
+            PostHogPersistedProperty.PersonProperties
+          )
+          expect(cachedProps?.prop).toEqual(value)
+          expect(cachedProps?.prop).not.toBe(buggyString)
+        }
+      )
+
       it('should cache $set_once properties with set-once semantics', async () => {
         posthog.identify('user-123', {
           $set: { email: 'test@example.com' },
@@ -1071,7 +1107,7 @@ describe('PostHog React Native', () => {
         posthog.group('company', 'acme-inc', { name: 'Acme Inc', employees: 50 })
 
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
-        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: '50' } })
+        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: 50 } })
       })
 
       it('should merge group properties from multiple group() calls', async () => {
@@ -1079,8 +1115,21 @@ describe('PostHog React Native', () => {
         posthog.group('company', 'acme-inc', { employees: 50 })
 
         const cachedProps = posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)
-        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: '50' } })
+        expect(cachedProps).toEqual({ company: { name: 'Acme Inc', employees: 50 } })
       })
+
+      it.each(typePreservationCases)(
+        'preserves $name in group properties (no String() coercion)',
+        ({ value, buggyString }) => {
+          posthog.group('company', 'acme-inc', { prop: value })
+
+          const cachedProps = posthog.getPersistedProperty<Record<string, Record<string, JsonType>>>(
+            PostHogPersistedProperty.GroupProperties
+          )
+          expect(cachedProps?.company.prop).toEqual(value)
+          expect(cachedProps?.company.prop).not.toBe(buggyString)
+        }
+      )
 
       it('should handle multiple group types', async () => {
         posthog.group('company', 'acme-inc', { name: 'Acme Inc' })
