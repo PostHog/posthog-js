@@ -535,11 +535,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
-  setGroupPropertiesForFlags(properties: { [type: string]: Record<string, string> }): void {
+  setGroupPropertiesForFlags(properties: { [type: string]: Record<string, JsonType> }): void {
     this.wrap(() => {
       // Get persisted group properties
       const existingProperties =
-        this.getPersistedProperty<Record<string, Record<string, string>>>(PostHogPersistedProperty.GroupProperties) ||
+        this.getPersistedProperty<Record<string, Record<string, JsonType>>>(PostHogPersistedProperty.GroupProperties) ||
         {}
 
       if (Object.keys(existingProperties).length !== 0) {
