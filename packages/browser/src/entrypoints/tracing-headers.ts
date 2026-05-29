@@ -13,13 +13,14 @@ const addTracingHeaders = (
     hostnames: string[],
     distinctId: string,
     sessionManager: SessionIdManager | undefined,
-    req: Request
+    url: string,
+    headers: Headers
 ) => {
     let reqHostname: string
     try {
         // we don't need to support IE11 here
         // eslint-disable-next-line compat/compat
-        reqHostname = new URL(req.url).hostname
+        reqHostname = new URL(url).hostname
     } catch {
         // If the URL is invalid, we skip adding tracing headers
         return
@@ -32,11 +33,11 @@ const addTracingHeaders = (
 
     if (sessionManager) {
         const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
-        req.headers.set(SESSION_ID_HEADER, sessionId)
-        req.headers.set(WINDOW_ID_HEADER, windowId)
+        headers.set(SESSION_ID_HEADER, sessionId)
+        headers.set(WINDOW_ID_HEADER, windowId)
     }
     if (distinctId !== COOKIELESS_SENTINEL_VALUE) {
-        req.headers.set(DISTINCT_ID_HEADER, distinctId)
+        headers.set(DISTINCT_ID_HEADER, distinctId)
     }
 }
 
@@ -49,9 +50,18 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
             // eslint-disable-next-line compat/compat
             const req = new Request(url, init)
 
-            addTracingHeaders(hostnames, distinctId, sessionManager, req)
+            // Use the Request object for URL parsing only. For fetch(url, init), do not pass this internally-created
+            // Request downstream: it exposes request.body as a ReadableStream, and wrappers that forward that body can
+            // trigger Safari's "ReadableStream uploading is not supported" error.
+            if (url instanceof Request) {
+                addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
+                return originalFetch(req)
+            }
 
-            return originalFetch(req)
+            const headers = new Headers(init?.headers)
+            addTracingHeaders(hostnames, distinctId, sessionManager, req.url, headers)
+
+            return originalFetch(url, { ...(init || {}), headers })
         }
     })
 }
@@ -79,13 +89,14 @@ const patchXHR = (hostnames: string[], distinctId: string, sessionManager?: Sess
                 // check IE earlier than this, we only initialize if Request is present
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url)
+                const headers = new Headers()
 
-                addTracingHeaders(hostnames, distinctId, sessionManager, req)
+                addTracingHeaders(hostnames, distinctId, sessionManager, req.url, headers)
 
                 const result = originalOpen.call(xhr, method, req.url, async, username, password)
 
                 TRACING_HEADERS.forEach((header) => {
-                    const value = req.headers.get(header)
+                    const value = headers.get(header)
                     if (value) {
                         xhr.setRequestHeader(header, value)
                     }

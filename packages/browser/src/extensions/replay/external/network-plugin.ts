@@ -588,7 +588,11 @@ function initFetchObserver(
                 }
 
                 start = win.performance.now()
-                res = await originalFetch(req)
+                // Use `req` for recording metadata/body only. For fetch(url, init), do not pass this internally-created
+                // Request downstream: it exposes request.body as a ReadableStream, and wrappers that forward that body
+                // can trigger Safari's "ReadableStream uploading is not supported" error. For fetch(Request), we must
+                // pass the cloned Request because constructing `req` may consume the original Request body.
+                res = url instanceof Request ? await originalFetch(req) : await originalFetch(url, init)
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}
