@@ -618,6 +618,23 @@ describe('PostHog React Native', () => {
       expect(written.content[PostHogPersistedProperty.DistinctId]).toEqual('user-b')
     })
 
+    it('persists captureException to disk synchronously (crash-correlated, bypasses debounce)', () => {
+      posthog = new PostHog('1', {
+        customStorage: storage,
+        captureAppLifecycleEvents: false,
+      })
+      ;(storage.setItem as jest.Mock).mockClear()
+
+      posthog.captureException(new Error('boom'))
+
+      // A fatal exception can terminate the app before the debounce window
+      // elapses, so the exception must reach disk synchronously — not on the
+      // timer — otherwise we'd lose the very exception that crashed the app.
+      expect(storage.setItem).toHaveBeenCalled()
+      const lastWrite = (storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string
+      expect(lastWrite).toContain('$exception')
+    })
+
     it('do not rotate session id on restart', async () => {
       const sessionId = '0192244d-a627-7ae2-b22a-ccd594bed71d'
       rnStorage.setItem(PostHogPersistedProperty.SessionId, sessionId)

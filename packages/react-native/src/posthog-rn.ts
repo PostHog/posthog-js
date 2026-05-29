@@ -1634,6 +1634,15 @@ export class PostHog extends PostHogCore {
       syntheticException: new Error('Synthetic Error'),
     }
     super.captureException(error, additionalProperties, resolvedHint)
+
+    // Exceptions are crash-correlated: a fatal one can terminate the app within
+    // the 100ms debounce window. waitForPersist() synchronously drains the
+    // scheduled write — it cancels the timer and writes the events blob to disk
+    // now instead of on the next tick. We don't await it (void); we just need
+    // the exception's write *initiated* before a possible crash, or we'd lose
+    // the very exception that crashed the app. The exception is an event, so
+    // only the events pipeline needs draining.
+    void this._eventsStorage.waitForPersist()
   }
 
   protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
