@@ -1,4 +1,5 @@
 import {
+    getBrowserDetectionHints,
     getBrowserLanguage,
     getBrowserLanguagePrefix,
     getEventProperties,
@@ -158,6 +159,102 @@ describe(`event-utils`, () => {
 
             const properties = getEventProperties()
             expect(properties['$device_type']).toBe('Desktop')
+        })
+    })
+
+    describe('getBrowserDetectionHints', () => {
+        const originalUserAgentData = Object.getOwnPropertyDescriptor(window.navigator, 'userAgentData')
+        const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
+
+        afterEach(() => {
+            if (originalUserAgentData) {
+                Object.defineProperty(window.navigator, 'userAgentData', originalUserAgentData)
+            } else {
+                delete (window.navigator as any).userAgentData
+            }
+            if (originalBrave) {
+                Object.defineProperty(window.navigator, 'brave', originalBrave)
+            } else {
+                delete (window.navigator as any).brave
+            }
+        })
+
+        it('returns empty hints when neither signal is present', () => {
+            delete (window.navigator as any).userAgentData
+            delete (window.navigator as any).brave
+            expect(getBrowserDetectionHints()).toEqual({})
+        })
+
+        it('forwards userAgentData.brands when present', () => {
+            const brands = [
+                { brand: 'Chromium', version: '120' },
+                { brand: 'Arc', version: '1.27' },
+            ]
+            Object.defineProperty(window.navigator, 'userAgentData', {
+                value: { brands },
+                configurable: true,
+            })
+            expect(getBrowserDetectionHints()).toEqual({ userAgentDataBrands: brands })
+        })
+
+        it('flags brave when navigator.brave exists', () => {
+            Object.defineProperty(window.navigator, 'brave', {
+                value: { isBrave: () => Promise.resolve(true) },
+                configurable: true,
+            })
+            expect(getBrowserDetectionHints()).toEqual({ brave: true })
+        })
+
+        it('combines both signals when both are available', () => {
+            const brands = [{ brand: 'Brave', version: '1.62' }]
+            Object.defineProperty(window.navigator, 'userAgentData', {
+                value: { brands },
+                configurable: true,
+            })
+            Object.defineProperty(window.navigator, 'brave', { value: {}, configurable: true })
+            expect(getBrowserDetectionHints()).toEqual({ userAgentDataBrands: brands, brave: true })
+        })
+    })
+
+    describe('Arc detection end-to-end', () => {
+        const originalUserAgentData = Object.getOwnPropertyDescriptor(window.navigator, 'userAgentData')
+        const chromeMacOsUA =
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+        beforeEach(() => {
+            // @ts-expect-error ok to set global in test
+            globals['userAgent'] = chromeMacOsUA
+        })
+
+        afterEach(() => {
+            if (originalUserAgentData) {
+                Object.defineProperty(window.navigator, 'userAgentData', originalUserAgentData)
+            } else {
+                delete (window.navigator as any).userAgentData
+            }
+        })
+
+        it('reports $browser as Arc when Client Hints advertises Arc, even on a Chrome UA', () => {
+            Object.defineProperty(window.navigator, 'userAgentData', {
+                value: {
+                    brands: [
+                        { brand: 'Not_A Brand', version: '8' },
+                        { brand: 'Chromium', version: '120' },
+                        { brand: 'Arc', version: '1.27' },
+                    ],
+                },
+                configurable: true,
+            })
+            const properties = getEventProperties()
+            expect(properties['$browser']).toBe('Arc')
+            expect(properties['$browser_version']).toBe(1.27)
+        })
+
+        it('reports $browser as Chrome when Client Hints does not advertise Arc', () => {
+            delete (window.navigator as any).userAgentData
+            const properties = getEventProperties()
+            expect(properties['$browser']).toBe('Chrome')
+            expect(properties['$browser_version']).toBe(120.0)
         })
     })
 

@@ -224,6 +224,79 @@ describe('user-agent-utils', () => {
                 expectedVersion: 30.0,
                 expectedBrowser: 'Oculus Browser',
             },
+            {
+                name: 'Vivaldi on macOS',
+                userAgent:
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Vivaldi/6.5.3206.63',
+                vendor: 'Google Inc.',
+                expectedVersion: 6.5,
+                expectedBrowser: 'Vivaldi',
+            },
+            {
+                name: 'Vivaldi on Windows',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 Vivaldi/6.4.3160.42',
+                vendor: 'Google Inc.',
+                expectedVersion: 6.4,
+                expectedBrowser: 'Vivaldi',
+            },
+            {
+                name: 'Yandex Browser on Windows',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 YaBrowser/23.5.0.2271 Yowser/2.5 Safari/537.36',
+                vendor: 'Google Inc.',
+                expectedVersion: 23.5,
+                expectedBrowser: 'Yandex',
+            },
+            {
+                name: 'Naver Whale on macOS',
+                userAgent:
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Whale/3.21.192.18 Safari/537.36',
+                vendor: 'Google Inc.',
+                expectedVersion: 3.21,
+                expectedBrowser: 'Whale',
+            },
+            {
+                name: 'DuckDuckGo Browser on iOS (Ddg marker)',
+                userAgent:
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Ddg/7.85.0 Mobile/15E148 Safari/605.1.15',
+                vendor: 'Apple Computer, Inc.',
+                expectedVersion: 7.85,
+                expectedBrowser: 'DuckDuckGo',
+            },
+            {
+                name: 'DuckDuckGo Browser on Android',
+                userAgent:
+                    'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.0.0 Mobile DuckDuckGo/5 Safari/537.36',
+                vendor: 'Google Inc.',
+                expectedVersion: 5,
+                expectedBrowser: 'DuckDuckGo',
+            },
+            {
+                name: 'Pale Moon on Windows',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Goanna/6.5 Firefox/102.0 PaleMoon/33.0.1',
+                vendor: '',
+                expectedVersion: 33.0,
+                expectedBrowser: 'Pale Moon',
+            },
+            {
+                name: 'Waterfox on Linux (classic numeric version)',
+                userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0 Waterfox/56.2.14',
+                vendor: '',
+                expectedVersion: 56.2,
+                expectedBrowser: 'Waterfox',
+            },
+            {
+                name: 'Waterfox G on Windows (no version match, but browser still recognised)',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0 Waterfox/G6.0.13',
+                vendor: '',
+                // Waterfox G stamps a non-numeric "G" prefix; we still identify the browser
+                // but can't pull a major version from it.
+                expectedVersion: null,
+                expectedBrowser: 'Waterfox',
+            },
         ]
 
         test.each(browserTestcases)('browser version %s', ({ userAgent, vendor, expectedVersion }) => {
@@ -277,6 +350,124 @@ describe('user-agent-utils', () => {
             const ua = 'Mozilla/5.0 (darwin) AppleWebKit/537.36 (KHTML, like Gecko) jsdom/16.7.0'
             const vendor = 'Apple Computer, Inc.'
             expect(detectBrowser(ua, vendor)).toBe('Safari')
+        })
+
+        describe('detectBrowser with Client Hints / API hints', () => {
+            // Arc and Brave intentionally hide themselves from the UA string,
+            // so without hints they fall through to Chrome — the same problem
+            // that originally let Arc users go undetected (PostHog/posthog-js#TODO).
+            const chromeMacOsUA =
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+            it('falls back to Chrome when no hints are provided', () => {
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.')).toBe('Chrome')
+            })
+
+            it('falls back to Chrome when hints are empty', () => {
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', {})).toBe('Chrome')
+            })
+
+            it('detects Arc when userAgentData.brands advertises Arc', () => {
+                expect(
+                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
+                        userAgentDataBrands: [
+                            { brand: 'Not_A Brand', version: '8' },
+                            { brand: 'Chromium', version: '120' },
+                            { brand: 'Arc', version: '1.27' },
+                        ],
+                    })
+                ).toBe('Arc')
+            })
+
+            it('detects Arc regardless of brand casing in Client Hints', () => {
+                expect(
+                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
+                        userAgentDataBrands: [{ brand: 'arc', version: '1.27' }],
+                    })
+                ).toBe('Arc')
+            })
+
+            it('detects Brave via navigator.brave even when UA looks like Chrome', () => {
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { brave: true })).toBe('Brave')
+            })
+
+            it('detects Brave via brands list when present', () => {
+                expect(
+                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
+                        userAgentDataBrands: [{ brand: 'Brave', version: '1.62' }],
+                    })
+                ).toBe('Brave')
+            })
+
+            it('prefers hint-based detection over UA sniffing (Brave on Chrome UA)', () => {
+                // Chrome UA + brave hint → Brave (the hint is authoritative).
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { brave: true })).toBe('Brave')
+            })
+
+            it('ignores unknown brand entries', () => {
+                expect(
+                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
+                        userAgentDataBrands: [
+                            { brand: 'Not_A Brand', version: '8' },
+                            { brand: 'Chromium', version: '120' },
+                        ],
+                    })
+                ).toBe('Chrome')
+            })
+
+            it('handles malformed brand entries without throwing', () => {
+                expect(
+                    detectBrowser(chromeMacOsUA, 'Google Inc.', {
+                        // @ts-expect-error intentionally malformed for robustness check
+                        userAgentDataBrands: [null, undefined, { brand: '' }, { brand: 'Arc', version: '1.27' }],
+                    })
+                ).toBe('Arc')
+            })
+        })
+
+        describe('detectBrowserVersion with Client Hints / API hints', () => {
+            const chromeMacOsUA =
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+            it('reads Arc version from brands entry', () => {
+                expect(
+                    detectBrowserVersion(chromeMacOsUA, 'Google Inc.', {
+                        userAgentDataBrands: [{ brand: 'Arc', version: '1.27' }],
+                    })
+                ).toBe(1.27)
+            })
+
+            it('returns null Brave version when brands does not include Brave (default privacy posture)', () => {
+                expect(
+                    detectBrowserVersion(chromeMacOsUA, 'Google Inc.', {
+                        brave: true,
+                        userAgentDataBrands: [
+                            { brand: 'Not_A Brand', version: '8' },
+                            { brand: 'Chromium', version: '120' },
+                        ],
+                    })
+                ).toBeNull()
+            })
+
+            it('reads Brave version when brands includes Brave', () => {
+                expect(
+                    detectBrowserVersion(chromeMacOsUA, 'Google Inc.', {
+                        userAgentDataBrands: [{ brand: 'Brave', version: '1.62' }],
+                    })
+                ).toBe(1.62)
+            })
+
+            it('returns null when brand version is not parseable', () => {
+                expect(
+                    detectBrowserVersion(chromeMacOsUA, 'Google Inc.', {
+                        userAgentDataBrands: [{ brand: 'Arc', version: 'not-a-version' }],
+                    })
+                ).toBeNull()
+            })
+
+            it('preserves UA-based version when hints are absent', () => {
+                expect(detectBrowserVersion(chromeMacOsUA, 'Google Inc.')).toBe(120.0)
+            })
         })
 
         describe('detectDeviceType with options', () => {

@@ -4,7 +4,14 @@ import { Properties } from '../types'
 import Config from '../config'
 import { each, extend, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
-import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from '@posthog/core'
+import {
+    BrowserDetectionHints,
+    detectBrowser,
+    detectBrowserVersion,
+    detectDevice,
+    detectDeviceType,
+    detectOS,
+} from '@posthog/core'
 import { cookieStore } from '../storage'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
@@ -261,6 +268,25 @@ export function getTimezoneOffset(): number | undefined {
     }
 }
 
+// Gathers signals that aren't in the UA string but help identify browsers that
+// hide themselves there (Arc, Brave). Lives next to `getEventProperties` so we
+// can call it once per event without going back to the navigator each time.
+export function getBrowserDetectionHints(): BrowserDetectionHints {
+    const nav = typeof navigator !== 'undefined' ? (navigator as Record<string, any>) : undefined
+    if (!nav) {
+        return {}
+    }
+    const hints: BrowserDetectionHints = {}
+    const brands = nav.userAgentData?.brands
+    if (brands) {
+        hints.userAgentDataBrands = brands
+    }
+    if (nav.brave) {
+        hints.brave = true
+    }
+    return hints
+}
+
 export function getEventProperties(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[]
@@ -272,12 +298,13 @@ export function getEventProperties(
         ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const [os_name, os_version] = detectOS(userAgent)
+    const browserHints = getBrowserDetectionHints()
 
     return extend(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator.vendor),
+            $browser: detectBrowser(userAgent, navigator.vendor, browserHints),
             $device: detectDevice(userAgent),
             $device_type: detectDeviceType(userAgent, {
                 // eslint-disable-next-line compat/compat
@@ -295,7 +322,7 @@ export function getEventProperties(
             $host: location?.host,
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-            $browser_version: detectBrowserVersion(userAgent, navigator.vendor),
+            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints),
             $browser_language: getBrowserLanguage(),
             $browser_language_prefix: getBrowserLanguagePrefix(),
             $screen_height: window?.screen.height,
