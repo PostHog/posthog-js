@@ -406,6 +406,7 @@
         "_pauseRecording",
         "_pendingCompressionEvents",
         "_pendingRemoteConfig",
+        "_pendingSaveTimer",
         "_pendingTourTimeouts",
         "_perfConfig",
         "_persistFlagsOnSessionListener",
@@ -503,6 +504,7 @@
         "_runBeforeSend",
         "_sampleRate",
         "_samplingSessionListener",
+        "_saveDebounceMs",
         "_saveSessionState",
         "_scheduleFlush",
         "_scheduleFullSnapshot",
@@ -633,6 +635,7 @@
         "_windowId",
         "_windowIdGenerator",
         "_window_id_storage_key",
-        "_write"
+        "_write",
+        "_writeNow"
     ]
 }
