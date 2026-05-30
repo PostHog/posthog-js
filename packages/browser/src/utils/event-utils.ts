@@ -296,12 +296,13 @@ function detectArc(): boolean {
 
 // We want to memoize the hints — `getEventProperties` runs on every captured
 // event and `detectArc`'s `getComputedStyle` call can force a synchronous style
-// recalc, so we don't want to pay that per event. But Arc only injects its
-// palette CSS variables once the page has finished loading, so an early call can
-// see no Arc signal yet. We therefore only freeze the result once it can no
-// longer change: when we've found Arc, or the document has finished loading.
-// That avoids both the per-event cost and locking in an early false negative for
-// real Arc users. (`navigator.brave` is stable from the start.)
+// recalc, so we don't want to pay that per event. We freeze the result once it
+// can no longer change: when we have a stable positive signal (`navigator.brave`
+// is present from the start; Arc's CSS var, once we've seen it), or the document
+// has finished loading (the point by which Arc would have injected its palette).
+// Gating Arc on load avoids locking in an early false negative for real Arc
+// users; not gating Brave avoids re-running `detectArc` per event for Brave
+// users during load.
 let cachedBrowserDetectionHints: BrowserDetectionHints | null = null
 
 // Gathers signals that aren't in the UA string but help identify browsers that
@@ -320,7 +321,7 @@ export function getBrowserDetectionHints(): BrowserDetectionHints {
     if (detectArc()) {
         hints.arc = true
     }
-    if (hints.arc || document?.readyState === 'complete') {
+    if (hints.arc || hints.brave || document?.readyState === 'complete') {
         cachedBrowserDetectionHints = hints
     }
     return hints

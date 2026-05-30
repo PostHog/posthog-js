@@ -239,6 +239,24 @@ describe(`event-utils`, () => {
             }
         })
 
+        it('memoizes as soon as Brave is detected, even before the page finishes loading', () => {
+            // `navigator.brave` is stable from page start, so a Brave hint can be
+            // frozen immediately — a Brave user firing events mid-load must not
+            // keep re-running detectArc's getComputedStyle on every event.
+            Object.defineProperty(document, 'readyState', { value: 'loading', configurable: true })
+            Object.defineProperty(window.navigator, 'brave', { value: {}, configurable: true })
+            try {
+                expect(getBrowserDetectionHints()).toEqual({ brave: true })
+                const callsBefore = getComputedStyleSpy.mock.calls.length
+                // Second event: hints are already cached, so detectArc (and its
+                // getComputedStyle) must not run again.
+                expect(getBrowserDetectionHints()).toEqual({ brave: true })
+                expect(getComputedStyleSpy.mock.calls.length).toBe(callsBefore)
+            } finally {
+                delete (document as any).readyState
+            }
+        })
+
         it('does not flag arc when the CSS custom property is empty / whitespace-only', () => {
             getComputedStyleSpy.mockReturnValue({
                 getPropertyValue: () => '   ',
