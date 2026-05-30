@@ -3,7 +3,7 @@ import { isNull, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
 import { each, extend, stripEmptyProperties } from './index'
-import { document, location, navigator, userAgent, window } from './globals'
+import { document, location, userAgent, window } from './globals'
 import {
     BrowserDetectionHints,
     detectBrowser,
@@ -177,8 +177,10 @@ export function getSearchInfo(): Record<string, any> {
 }
 
 export function getBrowserLanguage(): string | undefined {
-    // `navigator.language` on any modern browser; `userLanguage` on IE11
-    return navigator?.language || (navigator as Record<string, any> | undefined)?.userLanguage
+    return (
+        navigator.language || // Any modern browser
+        (navigator as Record<string, any>).userLanguage // IE11
+    )
 }
 
 export function getBrowserLanguagePrefix(): string | undefined {
@@ -313,7 +315,7 @@ export function getBrowserDetectionHints(): BrowserDetectionHints {
     if (!isNull(cachedBrowserDetectionHints)) {
         return cachedBrowserDetectionHints
     }
-    const nav = navigator as (Navigator & Record<string, any>) | undefined
+    const nav = typeof navigator !== 'undefined' ? (navigator as Record<string, any>) : undefined
     const hints: BrowserDetectionHints = {}
     if (nav?.brave) {
         hints.brave = true
@@ -350,7 +352,7 @@ export function getEventProperties(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator?.vendor, browserHints),
+            $browser: detectBrowser(userAgent, navigator.vendor, browserHints),
             $device: detectDevice(userAgent),
             $device_type: detectDeviceType(userAgent, {
                 // eslint-disable-next-line compat/compat
@@ -368,7 +370,7 @@ export function getEventProperties(
             $host: location?.host,
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-            $browser_version: detectBrowserVersion(userAgent, navigator?.vendor, browserHints),
+            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints),
             $browser_language: getBrowserLanguage(),
             $browser_language_prefix: getBrowserLanguagePrefix(),
             $screen_height: window?.screen.height,
