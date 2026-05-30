@@ -3,7 +3,7 @@ import { isNull, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
 import { each, extend, stripEmptyProperties } from './index'
-import { document, location, userAgent, window } from './globals'
+import { document, location, navigator, userAgent, window } from './globals'
 import {
     BrowserDetectionHints,
     detectBrowser,
@@ -177,10 +177,8 @@ export function getSearchInfo(): Record<string, any> {
 }
 
 export function getBrowserLanguage(): string | undefined {
-    return (
-        navigator.language || // Any modern browser
-        (navigator as Record<string, any>).userLanguage // IE11
-    )
+    // `navigator.language` on any modern browser; `userLanguage` on IE11
+    return navigator?.language || (navigator as Record<string, any> | undefined)?.userLanguage
 }
 
 export function getBrowserLanguagePrefix(): string | undefined {
@@ -272,10 +270,16 @@ export function getTimezoneOffset(): number | undefined {
 // early on every page it loads. It's the most reliable sync signal we have —
 // Arc deliberately presents as plain Chromium in the UA *and* in the
 // low-entropy `navigator.userAgentData.brands` list, so neither helps here.
+//
+// This is best-effort: a CSS custom property is page-controllable, so any site
+// that happens to define `--arc-palette-title` on its root element would make
+// every visitor look like Arc. `$browser === 'Arc'` therefore means "Arc, or a
+// page that set this variable" — fine for analytics bucketing, but don't treat
+// it as authoritative.
 const ARC_CSS_PROPERTY = '--arc-palette-title'
 
 function detectArc(): boolean {
-    if (typeof document === 'undefined' || !document?.documentElement) {
+    if (!document?.documentElement) {
         return false
     }
     try {
@@ -286,12 +290,22 @@ function detectArc(): boolean {
     }
 }
 
+// Both signals (`navigator.brave` and Arc's CSS custom property) are fixed for
+// the lifetime of the page, so we compute the hints once and reuse them.
+// `getEventProperties` runs on every captured event and `detectArc`'s
+// `getComputedStyle` call can force a synchronous style recalc — we don't want
+// to pay that per event.
+let cachedBrowserDetectionHints: BrowserDetectionHints | null = null
+
 // Gathers signals that aren't in the UA string but help identify browsers that
 // hide themselves there (Arc desktop, Brave on desktop/Android). Brave on iOS
 // is picked up via the `Brave/` UA marker by `detectBrowser` itself, so no
 // hint is needed for that case.
 export function getBrowserDetectionHints(): BrowserDetectionHints {
-    const nav = typeof navigator !== 'undefined' ? (navigator as Record<string, any>) : undefined
+    if (!isNull(cachedBrowserDetectionHints)) {
+        return cachedBrowserDetectionHints
+    }
+    const nav = navigator as (Navigator & Record<string, any>) | undefined
     const hints: BrowserDetectionHints = {}
     if (nav?.brave) {
         hints.brave = true
@@ -299,7 +313,14 @@ export function getBrowserDetectionHints(): BrowserDetectionHints {
     if (detectArc()) {
         hints.arc = true
     }
+    cachedBrowserDetectionHints = hints
     return hints
+}
+
+// Exported for tests: the hints are memoized for the page lifetime, so a test
+// simulating a different browser must clear the cache first.
+export function resetBrowserDetectionHintsCache(): void {
+    cachedBrowserDetectionHints = null
 }
 
 export function getEventProperties(
@@ -319,7 +340,7 @@ export function getEventProperties(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator.vendor, browserHints),
+            $browser: detectBrowser(userAgent, navigator?.vendor, browserHints),
             $device: detectDevice(userAgent),
             $device_type: detectDeviceType(userAgent, {
                 // eslint-disable-next-line compat/compat
@@ -337,7 +358,7 @@ export function getEventProperties(
             $host: location?.host,
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints),
+            $browser_version: detectBrowserVersion(userAgent, navigator?.vendor, browserHints),
             $browser_language: getBrowserLanguage(),
             $browser_language_prefix: getBrowserLanguagePrefix(),
             $screen_height: window?.screen.height,

@@ -5,11 +5,19 @@ import {
     getEventProperties,
     getTimezone,
     getTimezoneOffset,
+    resetBrowserDetectionHintsCache,
 } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
 import { isUndefined } from '@posthog/core'
 
 describe(`event-utils`, () => {
+    // The browser-detection hints are memoized for the page lifetime, so reset
+    // the cache before each test — otherwise one test's simulated browser leaks
+    // into the next.
+    beforeEach(() => {
+        resetBrowserDetectionHintsCache()
+    })
+
     describe('properties', () => {
         it('should have $host and $pathname in properties', () => {
             const properties = getEventProperties()

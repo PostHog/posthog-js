@@ -134,9 +134,9 @@ const safariCheck = (ua: string, vendor?: string) => (vendor && includes(vendor,
  * The order of the checks are important since many user agents
  * include keywords used in later checks.
  *
- * `hints` is an optional bag of extra signals (Client Hints `brands`,
- * `navigator.brave`) used to detect browsers that intentionally do not
- * identify themselves in the UA string. When omitted, only UA-string
+ * `hints` is an optional bag of out-of-band signals (an Arc-only CSS custom
+ * property and `navigator.brave`) used to detect browsers that intentionally do
+ * not identify themselves in the UA string. When omitted, only UA-string
  * detection runs — preserving the previous behaviour.
  */
 export const detectBrowser = function (
