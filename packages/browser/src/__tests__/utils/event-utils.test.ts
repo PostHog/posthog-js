@@ -174,7 +174,7 @@ describe(`event-utils`, () => {
         const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
 
         // jsdom's `getComputedStyle` won't surface custom properties — stub it
-        // so we can simulate Arc's `--arc-palette-title` injection.
+        // so we can simulate Arc's `--arc-palette-background` injection.
         let getComputedStyleSpy: jest.SpyInstance
 
         beforeEach(() => {
@@ -209,10 +209,34 @@ describe(`event-utils`, () => {
             getComputedStyleSpy.mockImplementation(
                 (el: Element) =>
                     (el === document.documentElement
-                        ? { getPropertyValue: (name: string) => (name === '--arc-palette-title' ? '#fff' : '') }
+                        ? { getPropertyValue: (name: string) => (name === '--arc-palette-background' ? '#fff' : '') }
                         : { getPropertyValue: () => '' }) as unknown as CSSStyleDeclaration
             )
             expect(getBrowserDetectionHints()).toEqual({ arc: true })
+        })
+
+        it('does not memoize a missing Arc signal until the page has finished loading', () => {
+            // Arc injects its palette only after load, so an early check (page
+            // still loading, no Arc signal yet) must NOT be cached — otherwise a
+            // real Arc user who fires an event mid-load is stuck as non-Arc.
+            Object.defineProperty(document, 'readyState', { value: 'loading', configurable: true })
+            try {
+                expect(getBrowserDetectionHints()).toEqual({})
+
+                // Arc now injects the property; a later event must pick it up.
+                getComputedStyleSpy.mockImplementation(
+                    (el: Element) =>
+                        (el === document.documentElement
+                            ? {
+                                  getPropertyValue: (name: string) =>
+                                      name === '--arc-palette-background' ? '#fff' : '',
+                              }
+                            : { getPropertyValue: () => '' }) as unknown as CSSStyleDeclaration
+                )
+                expect(getBrowserDetectionHints()).toEqual({ arc: true })
+            } finally {
+                delete (document as any).readyState
+            }
         })
 
         it('does not flag arc when the CSS custom property is empty / whitespace-only', () => {
@@ -257,7 +281,7 @@ describe(`event-utils`, () => {
 
         it('reports $browser as Arc when the Arc CSS custom property is present, even on a Chrome UA', () => {
             getComputedStyleSpy.mockReturnValue({
-                getPropertyValue: (name: string) => (name === '--arc-palette-title' ? '#fff' : ''),
+                getPropertyValue: (name: string) => (name === '--arc-palette-background' ? '#fff' : ''),
             } as unknown as CSSStyleDeclaration)
             const properties = getEventProperties()
             expect(properties['$browser']).toBe('Arc')

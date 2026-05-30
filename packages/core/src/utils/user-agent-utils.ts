@@ -79,7 +79,7 @@ const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_RE
  */
 export interface BrowserDetectionHints {
   // Set to `true` when an Arc-only DOM/CSS signal is present (the SDK reads
-  // `--arc-palette-title` from `document.documentElement`).
+  // `--arc-palette-background` from `document.documentElement`).
   arc?: boolean
   // Set to `true` when `navigator.brave` exists. This is the sync detection
   // signal Brave recommends. Not available on iOS — see UA fallback below.

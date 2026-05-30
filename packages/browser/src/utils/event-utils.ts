@@ -266,17 +266,21 @@ export function getTimezoneOffset(): number | undefined {
     }
 }
 
-// Arc injects this CSS custom property on `document.documentElement` very
-// early on every page it loads. It's the most reliable sync signal we have —
-// Arc deliberately presents as plain Chromium in the UA *and* in the
+// Arc injects a palette of CSS custom properties onto `document.documentElement`
+// for theming. `--arc-palette-background` is one of the core, always-present
+// members (the gradient vars can be absent) and is the conventional Arc-detection
+// signal — Arc otherwise presents as plain Chromium in the UA *and* in the
 // low-entropy `navigator.userAgentData.brands` list, so neither helps here.
 //
-// This is best-effort: a CSS custom property is page-controllable, so any site
-// that happens to define `--arc-palette-title` on its root element would make
-// every visitor look like Arc. `$browser === 'Arc'` therefore means "Arc, or a
-// page that set this variable" — fine for analytics bucketing, but don't treat
-// it as authoritative.
-const ARC_CSS_PROPERTY = '--arc-palette-title'
+// Two caveats:
+//  - Timing: Arc injects these only once the page has finished loading, so an
+//    early check can miss it — handled by the memoization gate below.
+//  - Best-effort: a CSS custom property is page-controllable, so any site that
+//    defines `--arc-palette-background` on its root element would make every
+//    visitor look like Arc. `$browser === 'Arc'` therefore means "Arc, or a page
+//    that set this variable" — fine for analytics bucketing, but don't treat it
+//    as authoritative.
+const ARC_CSS_PROPERTY = '--arc-palette-background'
 
 function detectArc(): boolean {
     if (!document?.documentElement) {
@@ -290,11 +294,14 @@ function detectArc(): boolean {
     }
 }
 
-// Both signals (`navigator.brave` and Arc's CSS custom property) are fixed for
-// the lifetime of the page, so we compute the hints once and reuse them.
-// `getEventProperties` runs on every captured event and `detectArc`'s
-// `getComputedStyle` call can force a synchronous style recalc — we don't want
-// to pay that per event.
+// We want to memoize the hints — `getEventProperties` runs on every captured
+// event and `detectArc`'s `getComputedStyle` call can force a synchronous style
+// recalc, so we don't want to pay that per event. But Arc only injects its
+// palette CSS variables once the page has finished loading, so an early call can
+// see no Arc signal yet. We therefore only freeze the result once it can no
+// longer change: when we've found Arc, or the document has finished loading.
+// That avoids both the per-event cost and locking in an early false negative for
+// real Arc users. (`navigator.brave` is stable from the start.)
 let cachedBrowserDetectionHints: BrowserDetectionHints | null = null
 
 // Gathers signals that aren't in the UA string but help identify browsers that
@@ -313,7 +320,9 @@ export function getBrowserDetectionHints(): BrowserDetectionHints {
     if (detectArc()) {
         hints.arc = true
     }
-    cachedBrowserDetectionHints = hints
+    if (hints.arc || !document || document.readyState === 'complete') {
+        cachedBrowserDetectionHints = hints
+    }
     return hints
 }
 
