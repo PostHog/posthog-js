@@ -320,7 +320,7 @@ export function getBrowserDetectionHints(): BrowserDetectionHints {
     if (detectArc()) {
         hints.arc = true
     }
-    if (hints.arc || !document || document.readyState === 'complete') {
+    if (hints.arc || document?.readyState === 'complete') {
         cachedBrowserDetectionHints = hints
     }
     return hints

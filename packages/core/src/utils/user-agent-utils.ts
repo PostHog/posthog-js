@@ -275,14 +275,9 @@ export const detectBrowserVersion = function (
 ): number | null {
   const browser = detectBrowser(userAgent, vendor, hints)
 
-  // Arc has no UA marker we can parse — when we identified it via the CSS
-  // hint we don't have a version. Brave on iOS DOES have a `Brave/X` UA
-  // marker (handled below via versionRegexes), but desktop/Android Brave
-  // detected via `navigator.brave` does not — return null in that case.
-  if (browser === ARC) {
-    return null
-  }
-
+  // Arc and desktop/Android Brave have no parseable UA version, so both return
+  // null below: Arc has no `versionRegexes` entry, and Brave's entry only
+  // matches the iOS `Brave/` marker (absent from a desktop Chrome UA).
   const regexes: RegExp[] | undefined = versionRegexes[browser as keyof typeof versionRegexes]
   if (isUndefined(regexes)) {
     return null
