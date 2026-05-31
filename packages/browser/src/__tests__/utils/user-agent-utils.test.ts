@@ -364,15 +364,10 @@ describe('user-agent-utils', () => {
         })
 
         describe('detectBrowser with out-of-band hints', () => {
-            // Arc and desktop Brave intentionally hide themselves from the UA
-            // string, so without hints they fall through to Chrome — which is
-            // exactly what triggered this work.
-            //
-            // Note: Arc is NOT detectable via `navigator.userAgentData.brands`
-            // (the low-entropy list returns Chromium + Google Chrome + a grease
-            // brand). The reliable Arc signal is a CSS custom property Arc
-            // injects on `document.documentElement`; the SDK side reads that
-            // and forwards a boolean `arc` hint here.
+            // Desktop / Android Brave intentionally hides itself from the UA
+            // string, so without the `brave` hint it falls through to Chrome —
+            // which is exactly what triggered this work. The SDK reads
+            // `navigator.brave` and forwards a boolean `brave` hint here.
             const chromeMacOsUA =
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
@@ -384,24 +379,13 @@ describe('user-agent-utils', () => {
                 expect(detectBrowser(chromeMacOsUA, 'Google Inc.', {})).toBe('Chrome')
             })
 
-            it('detects Arc when the `arc` hint is set', () => {
-                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { arc: true })).toBe('Arc')
-            })
-
             it('detects desktop / Android Brave via the `brave` hint (Chromium UA)', () => {
                 expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { brave: true })).toBe('Brave')
             })
 
-            it('hints take precedence over UA sniffing', () => {
+            it('hint takes precedence over UA sniffing', () => {
                 // Even on a Chrome-shaped UA, an explicit hint wins.
-                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { arc: true })).toBe('Arc')
                 expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { brave: true })).toBe('Brave')
-            })
-
-            it('prefers Arc over Brave if (somehow) both are set', () => {
-                // Defensive: the two should never co-occur, but make the
-                // ordering explicit so future readers don't have to guess.
-                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { arc: true, brave: true })).toBe('Arc')
             })
 
             it('does not affect Brave-on-iOS detection (UA marker wins, no hints needed)', () => {
@@ -416,12 +400,6 @@ describe('user-agent-utils', () => {
         describe('detectBrowserVersion with out-of-band hints', () => {
             const chromeMacOsUA =
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-
-            it('returns null for Arc — there is no UA version to parse', () => {
-                // We detected Arc via a CSS signal; the UA still says Chrome,
-                // so reporting a "Chrome" version under `Arc` would be wrong.
-                expect(detectBrowserVersion(chromeMacOsUA, 'Google Inc.', { arc: true })).toBeNull()
-            })
 
             it('returns null for desktop / Android Brave — no UA marker exists', () => {
                 expect(detectBrowserVersion(chromeMacOsUA, 'Google Inc.', { brave: true })).toBeNull()

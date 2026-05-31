@@ -5,19 +5,11 @@ import {
     getEventProperties,
     getTimezone,
     getTimezoneOffset,
-    resetBrowserDetectionHintsCache,
 } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
 import { isUndefined } from '@posthog/core'
 
 describe(`event-utils`, () => {
-    // The browser-detection hints are memoized for the page lifetime, so reset
-    // the cache before each test — otherwise one test's simulated browser leaks
-    // into the next.
-    beforeEach(() => {
-        resetBrowserDetectionHintsCache()
-    })
-
     describe('properties', () => {
         it('should have $host and $pathname in properties', () => {
             const properties = getEventProperties()
@@ -173,18 +165,7 @@ describe(`event-utils`, () => {
     describe('getBrowserDetectionHints', () => {
         const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
 
-        // jsdom's `getComputedStyle` won't surface custom properties — stub it
-        // so we can simulate Arc's `--arc-palette-background` injection.
-        let getComputedStyleSpy: jest.SpyInstance
-
-        beforeEach(() => {
-            getComputedStyleSpy = jest.spyOn(window, 'getComputedStyle').mockReturnValue({
-                getPropertyValue: () => '',
-            } as unknown as CSSStyleDeclaration)
-        })
-
         afterEach(() => {
-            getComputedStyleSpy.mockRestore()
             if (originalBrave) {
                 Object.defineProperty(window.navigator, 'brave', originalBrave)
             } else {
@@ -192,7 +173,7 @@ describe(`event-utils`, () => {
             }
         })
 
-        it('returns empty hints when neither signal is present', () => {
+        it('returns empty hints when navigator.brave is absent', () => {
             delete (window.navigator as any).brave
             expect(getBrowserDetectionHints()).toEqual({})
         })
@@ -204,114 +185,37 @@ describe(`event-utils`, () => {
             })
             expect(getBrowserDetectionHints()).toEqual({ brave: true })
         })
-
-        it('flags arc when the Arc CSS custom property is present on documentElement', () => {
-            getComputedStyleSpy.mockImplementation(
-                (el: Element) =>
-                    (el === document.documentElement
-                        ? { getPropertyValue: (name: string) => (name === '--arc-palette-background' ? '#fff' : '') }
-                        : { getPropertyValue: () => '' }) as unknown as CSSStyleDeclaration
-            )
-            expect(getBrowserDetectionHints()).toEqual({ arc: true })
-        })
-
-        it('does not memoize a missing Arc signal until the page has finished loading', () => {
-            // Arc injects its palette only after load, so an early check (page
-            // still loading, no Arc signal yet) must NOT be cached — otherwise a
-            // real Arc user who fires an event mid-load is stuck as non-Arc.
-            Object.defineProperty(document, 'readyState', { value: 'loading', configurable: true })
-            try {
-                expect(getBrowserDetectionHints()).toEqual({})
-
-                // Arc now injects the property; a later event must pick it up.
-                getComputedStyleSpy.mockImplementation(
-                    (el: Element) =>
-                        (el === document.documentElement
-                            ? {
-                                  getPropertyValue: (name: string) =>
-                                      name === '--arc-palette-background' ? '#fff' : '',
-                              }
-                            : { getPropertyValue: () => '' }) as unknown as CSSStyleDeclaration
-                )
-                expect(getBrowserDetectionHints()).toEqual({ arc: true })
-            } finally {
-                delete (document as any).readyState
-            }
-        })
-
-        it('memoizes as soon as Brave is detected, even before the page finishes loading', () => {
-            // `navigator.brave` is stable from page start, so a Brave hint can be
-            // frozen immediately — a Brave user firing events mid-load must not
-            // keep re-running detectArc's getComputedStyle on every event.
-            Object.defineProperty(document, 'readyState', { value: 'loading', configurable: true })
-            Object.defineProperty(window.navigator, 'brave', { value: {}, configurable: true })
-            try {
-                expect(getBrowserDetectionHints()).toEqual({ brave: true })
-                const callsBefore = getComputedStyleSpy.mock.calls.length
-                // Second event: hints are already cached, so detectArc (and its
-                // getComputedStyle) must not run again.
-                expect(getBrowserDetectionHints()).toEqual({ brave: true })
-                expect(getComputedStyleSpy.mock.calls.length).toBe(callsBefore)
-            } finally {
-                delete (document as any).readyState
-            }
-        })
-
-        it('does not flag arc when the CSS custom property is empty / whitespace-only', () => {
-            getComputedStyleSpy.mockReturnValue({
-                getPropertyValue: () => '   ',
-            } as unknown as CSSStyleDeclaration)
-            expect(getBrowserDetectionHints()).toEqual({})
-        })
-
-        it('swallows errors from getComputedStyle', () => {
-            getComputedStyleSpy.mockImplementation(() => {
-                throw new Error('boom')
-            })
-            // Must not throw — the SDK calling this should never blow up.
-            expect(() => getBrowserDetectionHints()).not.toThrow()
-            expect(getBrowserDetectionHints()).toEqual({})
-        })
-
-        it('combines both signals when both are available', () => {
-            Object.defineProperty(window.navigator, 'brave', { value: {}, configurable: true })
-            getComputedStyleSpy.mockReturnValue({
-                getPropertyValue: () => '#fff',
-            } as unknown as CSSStyleDeclaration)
-            expect(getBrowserDetectionHints()).toEqual({ arc: true, brave: true })
-        })
     })
 
-    describe('Arc detection end-to-end', () => {
+    describe('Brave detection end-to-end', () => {
         const chromeMacOsUA =
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        let getComputedStyleSpy: jest.SpyInstance
+        const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
 
         beforeEach(() => {
             // @ts-expect-error ok to set global in test
             globals['userAgent'] = chromeMacOsUA
-            getComputedStyleSpy = jest.spyOn(window, 'getComputedStyle')
         })
 
         afterEach(() => {
-            getComputedStyleSpy.mockRestore()
+            if (originalBrave) {
+                Object.defineProperty(window.navigator, 'brave', originalBrave)
+            } else {
+                delete (window.navigator as any).brave
+            }
         })
 
-        it('reports $browser as Arc when the Arc CSS custom property is present, even on a Chrome UA', () => {
-            getComputedStyleSpy.mockReturnValue({
-                getPropertyValue: (name: string) => (name === '--arc-palette-background' ? '#fff' : ''),
-            } as unknown as CSSStyleDeclaration)
+        it('reports $browser as Brave when navigator.brave exists, even on a Chrome UA', () => {
+            Object.defineProperty(window.navigator, 'brave', { value: {}, configurable: true })
             const properties = getEventProperties()
-            expect(properties['$browser']).toBe('Arc')
-            // We can't get a real Arc version from a CSS variable, so honest
-            // null beats a fake Chrome-version stamped under `Arc`.
+            expect(properties['$browser']).toBe('Brave')
+            // Desktop Brave has no UA version marker, so honest null beats a
+            // Chrome version stamped under `Brave`.
             expect(properties['$browser_version']).toBeNull()
         })
 
-        it('reports $browser as Chrome when no Arc signal is present', () => {
-            getComputedStyleSpy.mockReturnValue({
-                getPropertyValue: () => '',
-            } as unknown as CSSStyleDeclaration)
+        it('reports $browser as Chrome when navigator.brave is absent', () => {
+            delete (window.navigator as any).brave
             const properties = getEventProperties()
             expect(properties['$browser']).toBe('Chrome')
             expect(properties['$browser_version']).toBe(120.0)

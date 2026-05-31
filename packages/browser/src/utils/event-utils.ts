@@ -268,71 +268,13 @@ export function getTimezoneOffset(): number | undefined {
     }
 }
 
-// Arc injects a palette of CSS custom properties onto `document.documentElement`
-// for theming. `--arc-palette-background` is one of the core, always-present
-// members (the gradient vars can be absent) and is the conventional Arc-detection
-// signal — Arc otherwise presents as plain Chromium in the UA *and* in the
-// low-entropy `navigator.userAgentData.brands` list, so neither helps here.
-//
-// Two caveats:
-//  - Timing: Arc injects these only once the page has finished loading, so an
-//    early check can miss it — handled by the memoization gate below.
-//  - Best-effort: a CSS custom property is page-controllable, so any site that
-//    defines `--arc-palette-background` on its root element would make every
-//    visitor look like Arc. `$browser === 'Arc'` therefore means "Arc, or a page
-//    that set this variable" — fine for analytics bucketing, but don't treat it
-//    as authoritative.
-const ARC_CSS_PROPERTY = '--arc-palette-background'
-
-function detectArc(): boolean {
-    if (!document?.documentElement) {
-        return false
-    }
-    try {
-        const value = window?.getComputedStyle?.(document.documentElement).getPropertyValue(ARC_CSS_PROPERTY)
-        return !!value && value.trim().length > 0
-    } catch {
-        return false
-    }
-}
-
-// We want to memoize the hints — `getEventProperties` runs on every captured
-// event and `detectArc`'s `getComputedStyle` call can force a synchronous style
-// recalc, so we don't want to pay that per event. We freeze the result once it
-// can no longer change: when we have a stable positive signal (`navigator.brave`
-// is present from the start; Arc's CSS var, once we've seen it), or the document
-// has finished loading (the point by which Arc would have injected its palette).
-// Gating Arc on load avoids locking in an early false negative for real Arc
-// users; not gating Brave avoids re-running `detectArc` per event for Brave
-// users during load.
-let cachedBrowserDetectionHints: BrowserDetectionHints | null = null
-
-// Gathers signals that aren't in the UA string but help identify browsers that
-// hide themselves there (Arc desktop, Brave on desktop/Android). Brave on iOS
-// is picked up via the `Brave/` UA marker by `detectBrowser` itself, so no
-// hint is needed for that case.
+// Gathers signals that aren't in the UA string. Desktop / Android Brave is
+// Chromium-based and exposes `navigator.brave` rather than a UA marker. (Brave
+// on iOS is picked up via the `Brave/` UA marker by `detectBrowser` itself, so
+// no hint is needed there.)
 export function getBrowserDetectionHints(): BrowserDetectionHints {
-    if (!isNull(cachedBrowserDetectionHints)) {
-        return cachedBrowserDetectionHints
-    }
     const nav = typeof navigator !== 'undefined' ? (navigator as Record<string, any>) : undefined
-    const hints: BrowserDetectionHints = {}
-    if (nav?.brave) {
-        hints.brave = true
-    }
-    if (detectArc()) {
-        hints.arc = true
-    }
-    if (hints.arc || hints.brave || document?.readyState === 'complete') {
-        cachedBrowserDetectionHints = hints
-    }
-    return hints
-}
-
-// Exported for tests: the hints are memoized for the page lifetime, so a test
-// simulating a different browser must clear the cache first.
-export function resetBrowserDetectionHintsCache(): void {
-    cachedBrowserDetectionHints = null
+    return nav?.brave ? { brave: true } : {}
 }
 
 export function getEventProperties(
