@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.376.5
+
+### Patch Changes
+
+- [#3686](https://github.com/PostHog/posthog-js/pull/3686) [`66cbc59`](https://github.com/PostHog/posthog-js/commit/66cbc5987427d539999834a2db3f0110ba6bd8c5) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(persistence): throttle session-activity timestamp writes to a 5s granularity. The in-memory value still moves at full resolution; only writes to localStorage/cookie are coalesced. Activity-timestamp-only updates within the granularity window are skipped, dropping localStorage write pressure and cross-tab `storage` event broadcasts on pages that capture many events per second. The pending in-memory value is flushed on `destroy` and `beforeunload` so a tab close inside the window does not leave the persisted value up to 5s stale for sibling tabs. The flush re-reads storage first and bails out if a sibling tab has rotated the session, so the flush cannot clobber the new session with the old id/start.
+  (2026-05-31)
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+    - @posthog/core@1.29.14
+    - @posthog/types@1.376.5
+
 ## 1.376.4
 
 ### Patch Changes
