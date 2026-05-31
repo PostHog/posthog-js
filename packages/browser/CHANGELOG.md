@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.376.6
+
+### Patch Changes
+
+- [#3687](https://github.com/PostHog/posthog-js/pull/3687) [`663e250`](https://github.com/PostHog/posthog-js/commit/663e250b10df6bcadf42b7938fa3a77fb91f427b) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(persistence): skip the storage write when the serialized props are unchanged. Callers spam `save()` after every property change, and many of those changes leave the serialized payload identical (e.g. resetting a value to its current value). Writing identical bytes to localStorage still fires a cross-tab `storage` event in every same-origin tab, where Chrome allocates the payload buffer in mojo IPC even though no listener reacts. Now `save()` compares the serialized payload against the last successful write and bails out when nothing changed.
+  (2026-05-31)
+- Updated dependencies []:
+    - @posthog/types@1.376.6
+    - @posthog/core@1.29.15
+
 ## 1.376.5
 
 ### Patch Changes

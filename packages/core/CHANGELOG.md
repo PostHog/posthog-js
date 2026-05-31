@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.29.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.6
+
 ## 1.29.14
 
 ### Patch Changes
