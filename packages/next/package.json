@@ -1,6 +1,6 @@
 {
     "name": "@posthog/next",
-    "version": "0.4.69",
+    "version": "0.4.70",
     "description": "PostHog integration for Next.js",
     "repository": {
         "type": "git",
