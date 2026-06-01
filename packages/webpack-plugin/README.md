@@ -43,7 +43,7 @@ export default {
 | `host`                         | `string`                                             | No       | `https://us.i.posthog.com` | PostHog instance host                       |
 | `logLevel`                     | `'debug' \| 'info' \| 'warn' \| 'error' \| 'silent'` | No       | `'info'`                   | Logging verbosity                           |
 | `cliBinaryPath`                | `string`                                             | No       | Auto-detected              | Path to the PostHog CLI binary              |
-| `sourcemaps.enabled`           | `boolean`                                            | No       | `true` in production       | Enable source map processing                |
+| `sourcemaps.enabled`           | `boolean`                                            | No       | `true`                     | Enable source map processing                |
 | `sourcemaps.releaseName`       | `string`                                             | No       | -                          | Release name for source map grouping        |
 | `sourcemaps.releaseVersion`    | `string`                                             | No       | -                          | Version identifier for the release          |
 | `sourcemaps.deleteAfterUpload` | `boolean`                                            | No       | `true`                     | Delete source maps after upload             |
