@@ -70,6 +70,11 @@ export class PostHogPersistence {
     private _expire_days: number | undefined
     private _default_expiry: number | undefined
     private _cross_subdomain: boolean | undefined
+    // Serialized snapshot of `props` from the most recent successful write.
+    // Used by `save()` to skip writes that would produce an identical
+    // payload. Cleared whenever we explicitly remove the storage entry, so
+    // a save after remove always lands.
+    private _lastSavedSerialized: string | undefined
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -202,6 +207,35 @@ export class PostHogPersistence {
         if (this._disabled) {
             return
         }
+
+        // No-op rejection: skip the write when none of the arguments to
+        // `_storage._set` have changed since the last successful write.
+        // Callers spam `save()` after every property change, and many of
+        // those changes leave the storage payload unchanged. Writing
+        // identical bytes to localStorage still fires a cross-tab `storage`
+        // event where Chrome allocates the payload buffer in mojo IPC even
+        // though no listener reacts.
+        //
+        // The fingerprint covers all four meaningful inputs to `_storage._set`:
+        // serialized props, expire_days, cross_subdomain, secure. For
+        // localStorage / sessionStorage the last three are ignored by the
+        // storage backend so including them just costs a redundant write
+        // when cookie options change on a non-cookie store — rare and cheap.
+        //
+        // JSON.stringify can throw on BigInt / circular refs. We let the
+        // underlying storage layer keep its existing try/catch behaviour
+        // (log and drop) by falling through on serialization errors.
+        try {
+            const fingerprint =
+                JSON.stringify(this.props) + '|' + this._expire_days + '|' + this._cross_subdomain + '|' + this._secure
+            if (fingerprint === this._lastSavedSerialized) {
+                return
+            }
+            this._lastSavedSerialized = fingerprint
+        } catch {
+            // fall through to storage._set, which handles the error itself
+        }
+
         this._storage._set(
             this._name,
             this.props,
@@ -216,6 +250,8 @@ export class PostHogPersistence {
         // remove both domain and subdomain cookies
         this._storage._remove(this._name, false)
         this._storage._remove(this._name, true)
+        // Storage entry is gone — any future save() must write through.
+        this._lastSavedSerialized = undefined
     }
 
     // removes the storage entry and deletes all loaded data

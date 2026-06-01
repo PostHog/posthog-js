@@ -74,9 +74,25 @@ describe('PostHogSpanProcessor', () => {
     expect(BatchSpanProcessor).toHaveBeenCalledWith(expect.any(Object))
   })
 
-  it('throws when apiKey is missing', () => {
-    expect(() => new PostHogSpanProcessor({ apiKey: '' })).toThrow('PostHogSpanProcessor requires an apiKey')
-    expect(() => new PostHogSpanProcessor({ apiKey: '  \n\t ' })).toThrow('PostHogSpanProcessor requires an apiKey')
+  it.each([
+    ['missing', {}],
+    ['empty', { apiKey: '' }],
+    ['blank', { apiKey: '  \n\t ' }],
+  ])('disables and no-ops when apiKey is %s', async (_case, options) => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const processor = new PostHogSpanProcessor(options as any)
+
+    processor.onStart({} as Span, {} as Context)
+    processor.onEnd(makeSpan('gen_ai.chat'))
+    await expect(processor.shutdown()).resolves.toBeUndefined()
+    await expect(processor.forceFlush()).resolves.toBeUndefined()
+
+    expect(OTLPTraceExporter).not.toHaveBeenCalled()
+    expect(BatchSpanProcessor).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[PostHogSpanProcessor] apiKey is missing or blank; the processor will be disabled.'
+    )
+    warnSpy.mockRestore()
   })
 
   it('delegates onStart to the inner processor', () => {

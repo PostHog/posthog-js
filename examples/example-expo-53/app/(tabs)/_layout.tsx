@@ -64,6 +64,13 @@ export default function TabLayout() {
                     tabBarIcon: ({ color }) => <IconSymbol size={28} name="text.bubble.fill" color={color} />,
                 }}
             />
+            <Tabs.Screen
+                name="storage-burst"
+                options={{
+                    title: 'Storage',
+                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet.rectangle" color={color} />,
+                }}
+            />
         </Tabs>
     )
 }

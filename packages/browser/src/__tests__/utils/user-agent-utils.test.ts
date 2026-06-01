@@ -224,6 +224,90 @@ describe('user-agent-utils', () => {
                 expectedVersion: 30.0,
                 expectedBrowser: 'Oculus Browser',
             },
+            {
+                name: 'Vivaldi on macOS',
+                userAgent:
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Vivaldi/6.5.3206.63',
+                vendor: 'Google Inc.',
+                expectedVersion: 6.5,
+                expectedBrowser: 'Vivaldi',
+            },
+            {
+                name: 'Vivaldi on Windows',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 Vivaldi/6.4.3160.42',
+                vendor: 'Google Inc.',
+                expectedVersion: 6.4,
+                expectedBrowser: 'Vivaldi',
+            },
+            {
+                name: 'Yandex Browser on Windows',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 YaBrowser/23.5.0.2271 Yowser/2.5 Safari/537.36',
+                vendor: 'Google Inc.',
+                expectedVersion: 23.5,
+                expectedBrowser: 'Yandex',
+            },
+            {
+                name: 'Naver Whale on macOS',
+                userAgent:
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Whale/3.21.192.18 Safari/537.36',
+                vendor: 'Google Inc.',
+                expectedVersion: 3.21,
+                expectedBrowser: 'Whale',
+            },
+            {
+                name: 'DuckDuckGo Browser on iOS (Ddg marker)',
+                userAgent:
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Ddg/7.85.0 Mobile/15E148 Safari/605.1.15',
+                vendor: 'Apple Computer, Inc.',
+                expectedVersion: 7.85,
+                expectedBrowser: 'DuckDuckGo',
+            },
+            {
+                name: 'DuckDuckGo Browser on Android',
+                userAgent:
+                    'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.0.0 Mobile DuckDuckGo/5 Safari/537.36',
+                vendor: 'Google Inc.',
+                expectedVersion: 5,
+                expectedBrowser: 'DuckDuckGo',
+            },
+            {
+                name: 'Pale Moon on Windows',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Goanna/6.5 Firefox/102.0 PaleMoon/33.0.1',
+                vendor: '',
+                expectedVersion: 33.0,
+                expectedBrowser: 'Pale Moon',
+            },
+            {
+                name: 'Waterfox on Linux (classic numeric version)',
+                userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0 Waterfox/56.2.14',
+                vendor: '',
+                expectedVersion: 56.2,
+                expectedBrowser: 'Waterfox',
+            },
+            {
+                name: 'Waterfox G on Windows (no version match, but browser still recognised)',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0 Waterfox/G6.0.13',
+                vendor: '',
+                // Waterfox G stamps a non-numeric "G" prefix; we still identify the browser
+                // but can't pull a major version from it.
+                expectedVersion: null,
+                expectedBrowser: 'Waterfox',
+            },
+            {
+                // Brave on iOS is the only Brave build that stamps itself into the UA
+                // (desktop / Android Brave deliberately hide). Must be detected without
+                // hints because WebKit doesn't ship `navigator.brave`.
+                name: 'Brave on iOS (UA marker, no hints)',
+                userAgent:
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1 Brave/1.51',
+                vendor: 'Apple Computer, Inc.',
+                expectedVersion: 1.51,
+                expectedBrowser: 'Brave',
+            },
         ]
 
         test.each(browserTestcases)('browser version %s', ({ userAgent, vendor, expectedVersion }) => {
@@ -277,6 +361,59 @@ describe('user-agent-utils', () => {
             const ua = 'Mozilla/5.0 (darwin) AppleWebKit/537.36 (KHTML, like Gecko) jsdom/16.7.0'
             const vendor = 'Apple Computer, Inc.'
             expect(detectBrowser(ua, vendor)).toBe('Safari')
+        })
+
+        describe('detectBrowser with out-of-band hints', () => {
+            // Desktop / Android Brave intentionally hides itself from the UA
+            // string, so without the `brave` hint it falls through to Chrome —
+            // which is exactly what triggered this work. The SDK reads
+            // `navigator.brave` and forwards a boolean `brave` hint here.
+            const chromeMacOsUA =
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+            it('falls back to Chrome when no hints are provided', () => {
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.')).toBe('Chrome')
+            })
+
+            it('falls back to Chrome when hints are empty', () => {
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', {})).toBe('Chrome')
+            })
+
+            it('detects desktop / Android Brave via the `brave` hint (Chromium UA)', () => {
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { brave: true })).toBe('Brave')
+            })
+
+            it('hint takes precedence over UA sniffing', () => {
+                // Even on a Chrome-shaped UA, an explicit hint wins.
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', { brave: true })).toBe('Brave')
+            })
+
+            it('does not affect Brave-on-iOS detection (UA marker wins, no hints needed)', () => {
+                // Brave on iOS doesn't expose `navigator.brave`, but the UA
+                // contains `Brave/X` and the UA branch handles that on its own.
+                const braveIosUA =
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1 Brave/1.51'
+                expect(detectBrowser(braveIosUA, 'Apple Computer, Inc.')).toBe('Brave')
+            })
+        })
+
+        describe('detectBrowserVersion with out-of-band hints', () => {
+            const chromeMacOsUA =
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+            it('returns null for desktop / Android Brave — no UA marker exists', () => {
+                expect(detectBrowserVersion(chromeMacOsUA, 'Google Inc.', { brave: true })).toBeNull()
+            })
+
+            it('reads Brave-on-iOS version from the UA marker (no hints needed)', () => {
+                const braveIosUA =
+                    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1 Brave/1.51'
+                expect(detectBrowserVersion(braveIosUA, 'Apple Computer, Inc.')).toBe(1.51)
+            })
+
+            it('preserves UA-based version when hints are absent', () => {
+                expect(detectBrowserVersion(chromeMacOsUA, 'Google Inc.')).toBe(120.0)
+            })
         })
 
         describe('detectDeviceType with options', () => {

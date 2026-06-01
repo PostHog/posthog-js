@@ -88,11 +88,34 @@ describe('PostHogTraceExporter', () => {
     })
   })
 
-  it('throws when projectToken is missing', () => {
-    expect(() => new PostHogTraceExporter({ projectToken: '' })).toThrow('PostHogTraceExporter requires a projectToken')
-    expect(() => new PostHogTraceExporter({ projectToken: '  \n\t ' })).toThrow(
-      'PostHogTraceExporter requires a projectToken'
+  it.each([
+    ['missing', {}],
+    ['empty', { projectToken: '' }],
+    ['blank', { projectToken: '  \n\t ' }],
+  ])('disables and no-ops when projectToken is %s', (_case, options) => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const exporter = new PostHogTraceExporter(options as any)
+    const callback = jest.fn()
+
+    exporter.export([makeSpan('gen_ai.chat')], callback)
+
+    expect(getSuperExport()).not.toHaveBeenCalled()
+    expect(callback).toHaveBeenCalledWith({ code: 0 })
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[PostHogTraceExporter] projectToken is missing or blank; the exporter will be disabled.'
     )
+    warnSpy.mockRestore()
+  })
+
+  it('does not validate host when disabled by missing projectToken', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+    expect(() => new PostHogTraceExporter({ projectToken: '', host: 'not a url' })).not.toThrow()
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[PostHogTraceExporter] projectToken is missing or blank; the exporter will be disabled.'
+    )
+    warnSpy.mockRestore()
   })
 
   it('inherits shutdown from OTLPTraceExporter', async () => {

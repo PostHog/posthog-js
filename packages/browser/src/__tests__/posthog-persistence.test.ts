@@ -352,6 +352,125 @@ describe('persistence', () => {
             }
             expect(library.properties()).toEqual({})
         })
+
+        describe('no-op write rejection in save()', () => {
+            // save() short-circuits if the serialized props are unchanged
+            // since the last successful write. cookieStore and localStore
+            // are shared singletons; the spy may carry calls from setup
+            // (library.clear() removes both subdomain variants, which
+            // cookieStore._remove implements as two _set calls). We
+            // mockClear() after the setup write to isolate the assertion.
+
+            it('skips storage writes when props are unchanged', () => {
+                library.register({ distinct_id: 'hi' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                library.save()
+                library.save()
+                library.save()
+
+                expect(storageSetSpy).not.toHaveBeenCalled()
+            })
+
+            it('writes when a value changes', () => {
+                library.register({ distinct_id: 'hi' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                library.register({ distinct_id: 'bye' })
+                expect(storageSetSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it('writes again after a remove() resets the cache', () => {
+                library.register({ distinct_id: 'hi' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+
+                // Without remove(), the save below would be deduped.
+                library.remove()
+                storageSetSpy.mockClear()
+                library.save()
+
+                expect(storageSetSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it('writes through after remove() even if props are unchanged', () => {
+                library.register({ distinct_id: 'hi' })
+                library.remove()
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                // save() with unchanged props would normally be a no-op.
+                // After remove(), the cache was cleared, so this must
+                // write through — there is nothing in storage right now.
+                library.save()
+                expect(storageSetSpy).toHaveBeenCalled()
+            })
+
+            it('treats equivalent props (same JSON) as no-op even with new object identity', () => {
+                library.register({ distinct_id: 'hi', tags: ['a', 'b'] })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                // Force a save() with no real change. register() guards
+                // against this via `!==`, so call save() directly.
+                library.save()
+
+                expect(storageSetSpy).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                {
+                    label: 'expire_days change',
+                    mutate: (lib: PostHogPersistence) => ((lib as any)._expire_days = 90),
+                },
+                {
+                    label: 'cross_subdomain change',
+                    mutate: (lib: PostHogPersistence) => ((lib as any)._cross_subdomain = true),
+                },
+                {
+                    label: 'secure change',
+                    mutate: (lib: PostHogPersistence) => ((lib as any)._secure = true),
+                },
+            ])('writes through when $label invalidates the storage args, even with unchanged props', ({ mutate }) => {
+                // The no-op fingerprint must cover all four arguments to
+                // `_storage._set` — serialized props plus expire_days,
+                // cross_subdomain, secure. Otherwise a customer who calls
+                // `posthog.set_config({ cookie_expiration: 90 })` would
+                // mutate `_expire_days` but the no-op check (which only
+                // saw props) would short-circuit, and the cookie keeps
+                // its old `Expires` header until some other prop changes.
+                library.register({ distinct_id: 'hi' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                mutate(library)
+                library.save()
+
+                expect(storageSetSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it.each([
+                { label: 'BigInt', value: BigInt(1234567890123) },
+                {
+                    label: 'circular reference',
+                    value: (() => {
+                        const o: any = {}
+                        o.self = o
+                        return o
+                    })(),
+                },
+            ])('does not throw on $label values that JSON.stringify rejects', ({ value }) => {
+                // Pre-existing behaviour: unserializable values like BigInt
+                // and circular references were caught by the storage layer's
+                // own try/catch and logged/dropped. The no-op fingerprint
+                // calls JSON.stringify too, but we mustn't propagate the
+                // exception out of save() — application code that registered
+                // such values would crash.
+                library.register({ ok: 'value', weird: value })
+                expect(() => library.save()).not.toThrow()
+            })
+        })
     })
 
     describe('localStorage+cookie', () => {
@@ -609,9 +728,10 @@ describe('posthog instance persistence', () => {
         const createdStore = (posthog.persistence as any)._storage
         const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
 
-        // Trigger a save to verify storage is called
+        // Trigger a save to verify storage is called. We force a real
+        // state change because save() now no-ops identical writes.
         if (posthog.persistence) {
-            posthog.persistence.save()
+            posthog.persistence.register({ verify_write: 'yes' })
         }
 
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')

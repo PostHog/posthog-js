@@ -986,6 +986,42 @@ describe('PostHog Node.js', () => {
       expect(posthog.options.personalApiKey).toEqual('TEST_PERSONAL_API_KEY')
     })
 
+    it('should not start local evaluation polling or fetch flags when api key is missing', async () => {
+      mockedFetch.mockClear()
+
+      posthog = new PostHog('  \n\t ', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        featureFlagsPollingInterval: 100,
+        disableCompression: true,
+      })
+
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      expect(posthog.isDisabled).toEqual(true)
+      expect(await posthog.getFeatureFlag('feature-1', 'distinct_id')).toBeUndefined()
+      expect(await posthog.getAllFlagsAndPayloads('distinct_id')).toEqual({
+        featureFlags: {},
+        featureFlagPayloads: {},
+      })
+      expect((await posthog.evaluateFlags('distinct_id')).keys).toEqual([])
+
+      posthog.capture({ distinctId: 'distinct_id', event: 'node test event', sendFeatureFlags: true })
+      await posthog.captureImmediate({
+        distinctId: 'distinct_id',
+        event: 'node immediate event',
+        sendFeatureFlags: true,
+      })
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      expect(mockedFetch).not.toHaveBeenCalled()
+    })
+
     it('should throw an error when creating SDK if a project key is passed in as personalApiKey', async () => {
       expect(() => {
         posthog = new PostHog('TEST_API_KEY', {
@@ -2756,6 +2792,19 @@ describe('PostHog Node.js', () => {
       await expect(posthogWithoutKey.getRemoteConfigPayload('test-flag')).rejects.toThrow(
         'Personal API key is required for remote config payload decryption'
       )
+    })
+
+    it('should return undefined without fetching when api key is missing', async () => {
+      const posthogWithoutProjectKey = new PostHog('  \n\t ', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+      })
+      mockedFetch.mockClear()
+
+      await expect(posthogWithoutProjectKey.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(mockedFetch).not.toHaveBeenCalled()
     })
 
     it('should return empty object when no payload is available', async () => {
