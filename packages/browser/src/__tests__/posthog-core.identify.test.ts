@@ -34,6 +34,7 @@ describe('identify()', () => {
             featureFlags: {
                 setAnonymousDistinctId: jest.fn(),
                 setPersonPropertiesForFlags: jest.fn(),
+                unsetPersonPropertiesForFlags: jest.fn(),
                 reloadFeatureFlags: jest.fn(),
             },
             unregister: jest.fn(),
@@ -357,6 +358,52 @@ describe('identify()', () => {
                 })
             )
             expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('unsetPersonProperties', () => {
+        beforeEach(() => {
+            instance.persistence!.props['distinct_id'] = 'a-new-id'
+        })
+
+        it('captures a $set event with a $unset array for a single property', () => {
+            instance.unsetPersonProperties('plan')
+
+            expect(beforeSendMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    event: '$set',
+                    properties: expect.objectContaining({
+                        $unset: ['plan'],
+                    }),
+                })
+            )
+        })
+
+        it('captures a $set event with a $unset array for multiple properties', () => {
+            instance.unsetPersonProperties(['plan', 'email'])
+
+            expect(beforeSendMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    event: '$set',
+                    properties: expect.objectContaining({
+                        $unset: ['plan', 'email'],
+                    }),
+                })
+            )
+        })
+
+        it('removes the properties from the flag person properties and reloads flags', () => {
+            instance.unsetPersonProperties(['plan', 'email'])
+
+            expect(instance.featureFlags.unsetPersonPropertiesForFlags).toHaveBeenCalledWith(['plan', 'email'], true)
+        })
+
+        it('does not capture an event when given no valid property names', () => {
+            beforeSendMock.mockClear()
+            instance.unsetPersonProperties([])
+            instance.unsetPersonProperties('')
+
+            expect(beforeSendMock).not.toHaveBeenCalled()
         })
     })
 })

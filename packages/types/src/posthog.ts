@@ -162,6 +162,13 @@ export interface PostHog {
     setPersonProperties(userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
 
     /**
+     * Remove properties from the current user.
+     *
+     * @param propertyNames - The name (or names) of the person properties to remove (using $unset)
+     */
+    unsetPersonProperties(propertyNames: string | string[]): void
+
+    /**
      * Create an alias for the current user.
      *
      * @param alias - The alias to create

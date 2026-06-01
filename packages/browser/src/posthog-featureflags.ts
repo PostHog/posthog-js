@@ -1249,6 +1249,28 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
+    /**
+     * Remove override person properties used for feature flags.
+     * This is the counterpart to setPersonPropertiesForFlags, used when person properties
+     * are unset so flags re-evaluate without the removed values.
+     */
+    unsetPersonPropertiesForFlags(propertyNames: string[], reloadFeatureFlags = true): void {
+        const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
+
+        const nextProperties: Properties = { ...existingProperties }
+        propertyNames.forEach((name) => {
+            delete nextProperties[name]
+        })
+
+        this._instance.register({
+            [STORED_PERSON_PROPERTIES_KEY]: nextProperties,
+        })
+
+        if (reloadFeatureFlags) {
+            this._instance.reloadFeatureFlags()
+        }
+    }
+
     resetPersonPropertiesForFlags(): void {
         this._instance.unregister(STORED_PERSON_PROPERTIES_KEY)
     }
