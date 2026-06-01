@@ -19,7 +19,7 @@ export interface PostHogSpanProcessorOptions {
   /**
    * Your PostHog project API key.
    */
-  apiKey: string
+  apiKey?: string
 
   /**
    * PostHog host URL. Defaults to `https://us.i.posthog.com`.
@@ -32,8 +32,25 @@ export interface PostHogSpanProcessorOptions {
   _spanProcessor?: SpanProcessor
 }
 
+class NoopSpanProcessor implements SpanProcessor {
+  onStart(_span: Span, _parentContext: Context): void {
+    return
+  }
+  onEnd(_span: ReadableSpan): void {
+    return
+  }
+  shutdown(): Promise<void> {
+    return Promise.resolve()
+  }
+  forceFlush(): Promise<void> {
+    return Promise.resolve()
+  }
+}
+
 /**
  * An OpenTelemetry `SpanProcessor` that sends AI traces to PostHog.
+ *
+ * Missing or blank project API keys disable the processor.
  *
  * Internally batches spans and exports them to PostHog's OTLP ingestion
  * endpoint. Only AI-related spans (those whose name or attribute keys
@@ -58,10 +75,12 @@ export interface PostHogSpanProcessorOptions {
 export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
 
-  constructor(options: PostHogSpanProcessorOptions) {
+  constructor(options: PostHogSpanProcessorOptions = {}) {
     const apiKey = normalizeApiKey(options.apiKey)
     if (!apiKey) {
-      throw new Error('PostHogSpanProcessor requires an apiKey')
+      console.warn('[PostHogSpanProcessor] apiKey is missing or blank; the processor will be disabled.')
+      this.inner = new NoopSpanProcessor()
+      return
     }
 
     if (options._spanProcessor) {

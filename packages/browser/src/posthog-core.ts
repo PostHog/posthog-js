@@ -556,7 +556,8 @@ export class PostHog implements PostHogInterface {
     // code a bit cleaner, but will add some overhead.
     //
     _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog {
-        if (isUndefined(token) || isEmptyString(token)) {
+        const normalizedToken = isString(token) ? token.trim() : ''
+        if (!normalizedToken) {
             logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
             )
@@ -586,7 +587,7 @@ export class PostHog implements PostHogInterface {
         this.set_config(
             extend({}, defaultConfig(config.defaults), configRenames(config), {
                 name: name,
-                token: token,
+                token: normalizedToken,
             })
         )
 
