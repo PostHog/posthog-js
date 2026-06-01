@@ -1,9 +1,15 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { ErrorTracking } from '@posthog/core'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
 import type { PostHogMCP, PostHogMCPOptions } from './extensions/client'
 import type { LoggerFn } from './extensions/logger'
 
 export type JsonRecord = Record<string, unknown>
+
+/** PostHog error-tracking properties (`$exception_list`). Re-exported from `@posthog/core`. */
+export type ErrorProperties = ErrorTracking.ErrorProperties
+/** A single parsed stack frame. Re-exported from `@posthog/core`. */
+export type StackFrame = ErrorTracking.StackFrame
 
 export interface MCPRequestParamsLike {
   arguments?: JsonRecord
@@ -111,7 +117,7 @@ export interface Event {
   clientVersion?: string
   conversationId?: string
   duration?: number
-  error?: ErrorData | null
+  error?: ErrorProperties | null
   eventId?: string
   eventType: MCPAnalyticsEventType
   id: string
@@ -200,33 +206,6 @@ export interface MCPAnalyticsData {
   sessionInfo: SessionInfo
   sessionSource: 'generated' | 'mcp'
   toolDescriptions: Map<string, string>
-}
-
-export interface StackFrame {
-  abs_path?: string
-  colno?: number
-  context_line?: string
-  filename: string
-  function: string
-  in_app: boolean
-  lineno?: number
-}
-
-export interface ChainedErrorData {
-  frames?: StackFrame[]
-  message: string
-  stack?: string
-  type?: string
-}
-
-export interface ErrorData {
-  chained_errors?: ChainedErrorData[]
-  frames?: StackFrame[]
-  message: string
-  platform?: string
-  stack?: string
-  type?: string
-  [key: string]: unknown
 }
 
 export interface CustomEventData {

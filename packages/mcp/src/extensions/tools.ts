@@ -1,8 +1,8 @@
 import { type CallToolResult, ListToolsRequestSchema, type ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
 import type { MCPServerLike, UnredactedEvent } from '../types'
-import { getMCPCompatibleErrorMessage } from './compatibility'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import { captureEvent } from './capture'
+import { captureException } from './exceptions'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
@@ -93,7 +93,7 @@ export function setupMCPAnalyticsTools(server: MCPServerLike): void {
         log(
           `Warning: Original list tools handler failed, this suggests an error PostHog MCP analytics did not cause - ${error}`
         )
-        event.error = { message: getMCPCompatibleErrorMessage(error) }
+        event.error = captureException(error)
         event.isError = true
         event.duration = (event.timestamp && Date.now() - event.timestamp.getTime()) || 0
         captureEvent(server, event)
@@ -111,7 +111,7 @@ export function setupMCPAnalyticsTools(server: MCPServerLike): void {
         log(
           'Warning: No tools found in the original list. This is likely due to the tools not being registered before PostHog MCP analytics.instrument().'
         )
-        event.error = { message: 'No tools were sent to MCP client.' }
+        event.error = captureException('No tools were sent to MCP client.')
         event.isError = true
         event.duration = (event.timestamp && Date.now() - event.timestamp.getTime()) || 0
         captureEvent(server, event)

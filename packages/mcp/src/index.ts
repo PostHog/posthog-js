@@ -199,10 +199,8 @@ function resolveCustomEventError(error: unknown): UnredactedEvent['error'] {
     return error
   }
 
-  if (typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error as UnredactedEvent['error']
-  }
-
+  // Everything else (Error, string, object with `message`, etc.) is normalized
+  // by the core coercers into the `$exception_list` shape.
   return captureException(error)
 }
 

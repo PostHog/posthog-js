@@ -5,7 +5,6 @@ import {
   type ListToolsResult,
 } from '@modelcontextprotocol/sdk/types.js'
 import type { HighLevelMCPServerLike, MCPServerLike, UnredactedEvent } from '../types'
-import { getMCPCompatibleErrorMessage } from './compatibility'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addConversationIdToTools,
@@ -100,7 +99,7 @@ async function handleListToolsRequest(
     log(
       'Warning: No tools found in the original list. This is likely due to the tools not being registered before PostHog MCP analytics.instrument().'
     )
-    event.error = { message: 'No tools were sent to MCP client.' }
+    event.error = captureException('No tools were sent to MCP client.')
     event.isError = true
     event.duration = getEventDuration(event)
     captureEvent(server, event)
@@ -159,7 +158,7 @@ async function getTracedToolsList(
     log(
       `Warning: Original list tools handler failed, this suggests an error PostHog MCP analytics did not cause - ${error}`
     )
-    event.error = { message: getMCPCompatibleErrorMessage(error) }
+    event.error = captureException(error)
     event.isError = true
     event.duration = getEventDuration(event)
     captureEvent(server, event)
@@ -310,9 +309,7 @@ async function executeToolCall(
   }
 
   event.isError = true
-  event.error = {
-    message: `Tool call handler not found for ${request.params?.name || 'unknown'}`,
-  }
+  event.error = captureException(`Tool call handler not found for ${request.params?.name || 'unknown'}`)
   event.duration = getEventDuration(event) || undefined
   captureEvent(server, event)
   throw new Error(`Unknown tool: ${request.params?.name || 'unknown'}`)

@@ -1,4 +1,4 @@
-import type { ErrorData, Event, StackFrame, UnredactedEvent } from '../types'
+import type { ErrorProperties, Event, StackFrame, UnredactedEvent } from '../types'
 
 // --- Constants ---
 export const MAX_DEPTH = 10
@@ -194,6 +194,30 @@ function truncateStackFrames(frames: StackFrame[] | undefined): StackFrame[] | u
   }
   const half = Math.floor(MAX_STACK_FRAMES / 2)
   return [...frames.slice(0, half), ...frames.slice(-half)]
+}
+
+/**
+ * Bounds an `ErrorProperties` payload: truncates each exception's `value`
+ * (message) and caps its stack frames. Operates on the core `$exception_list`
+ * shape produced by `captureException`.
+ */
+function truncateExceptionList(error: ErrorProperties): ErrorProperties {
+  if (!Array.isArray(error.$exception_list)) {
+    return error
+  }
+  return {
+    ...error,
+    $exception_list: error.$exception_list.map((exception) => {
+      const next = { ...exception }
+      if (typeof next.value === 'string') {
+        next.value = truncateString(next.value, MAX_ERROR_MESSAGE_LENGTH)
+      }
+      if (next.stacktrace?.frames) {
+        next.stacktrace = { ...next.stacktrace, frames: truncateStackFrames(next.stacktrace.frames) }
+      }
+      return next
+    }),
+  }
 }
 
 function truncateResponseContent(response: unknown): unknown {
@@ -402,14 +426,9 @@ export function truncateEvent<T extends Event | UnredactedEvent>(event: T): T {
   result.clientName = truncateString(result.clientName, MAX_METADATA_LENGTH)
   result.clientVersion = truncateString(result.clientVersion, MAX_METADATA_LENGTH)
 
-  // Error field limits
+  // Error field limits — operate on the core `$exception_list` shape
   if (result.error != null && typeof result.error === 'object') {
-    const error = { ...(result.error as Partial<ErrorData>) }
-    error.message = truncateString(error.message, MAX_ERROR_MESSAGE_LENGTH)
-    if (error.frames !== undefined) {
-      error.frames = truncateStackFrames(error.frames)
-    }
-    result.error = error as ErrorData
+    result.error = truncateExceptionList(result.error as ErrorProperties)
   }
 
   // Response content text limits

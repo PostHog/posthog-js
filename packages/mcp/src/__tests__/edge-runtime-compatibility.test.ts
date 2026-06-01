@@ -15,54 +15,36 @@ import { captureException } from '../extensions/exceptions'
 describe('Edge Runtime Compatibility', () => {
   describe('Exception Capture - Graceful Degradation', () => {
     it('should capture basic exception info without filesystem access', () => {
-      const error = new Error('Test error')
-      const captured = captureException(error)
+      const captured = captureException(new Error('Test error'))
+      const [exception] = captured.$exception_list
 
-      // Should capture basic error information regardless of environment
-      expect(captured.message).toBe('Test error')
-      expect(captured.type).toBe('Error')
-      expect(captured.platform).toBe('javascript')
+      expect(exception.value).toBe('Test error')
+      expect(exception.type).toBe('Error')
+      expect(captured.$exception_level).toBe('error')
     })
 
     it('should parse stack traces without requiring fs module', () => {
-      const error = new Error('Stack trace test')
-      const captured = captureException(error)
+      const captured = captureException(new Error('Stack trace test'))
+      const frames = captured.$exception_list[0].stacktrace?.frames
 
-      // Stack parsing doesn't require fs - only context_line extraction does
-      expect(captured.frames).toBeDefined()
-      expect(Array.isArray(captured.frames)).toBe(true)
-      expect(captured.frames!.length).toBeGreaterThan(0)
-
-      // Frames should have basic info
-      const firstFrame = captured.frames![0]
-      expect(firstFrame.filename).toBeDefined()
-      expect(typeof firstFrame.lineno).toBe('number')
+      expect(Array.isArray(frames)).toBe(true)
+      expect(frames!.length).toBeGreaterThan(0)
+      expect(frames![0].filename).toBeDefined()
     })
 
     it('should handle chained errors (Error.cause)', () => {
-      const rootCause = new Error('Root cause')
-      const wrapper = new Error('Wrapper error', { cause: rootCause })
-
+      const wrapper = new Error('Wrapper error', { cause: new Error('Root cause') })
       const captured = captureException(wrapper)
 
-      expect(captured.message).toBe('Wrapper error')
-      expect(captured.chained_errors).toBeDefined()
-      expect(captured.chained_errors!.length).toBe(1)
-      expect(captured.chained_errors![0].message).toBe('Root cause')
+      // Cause chains become multiple entries in $exception_list.
+      expect(captured.$exception_list.map((e) => e.value)).toEqual(['Wrapper error', 'Root cause'])
     })
 
     it('should handle non-Error objects being thrown', () => {
-      const captured1 = captureException('string error')
-      expect(captured1.message).toBe('string error')
-
-      const captured2 = captureException({ code: 404 })
-      expect(captured2.message).toBe('{"code":404}')
-
-      const captured3 = captureException(null)
-      expect(captured3.message).toBe('null')
-
-      const captured4 = captureException(undefined)
-      expect(captured4.message).toBe('undefined')
+      expect(captureException('string error').$exception_list[0].value).toBe('string error')
+      expect(captureException({ code: 404 }).$exception_list[0].value).toContain('code')
+      expect(captureException(null).$exception_list[0].value).toContain('null')
+      expect(captureException(undefined).$exception_list[0].value).toContain('undefined')
     })
   })
 
@@ -88,8 +70,8 @@ describe('Edge Runtime Compatibility', () => {
       const error = new Error('Test without cwd')
       const captured = captureException(error)
 
-      expect(captured.message).toBe('Test without cwd')
-      expect(captured.type).toBe('Error')
+      expect(captured.$exception_list[0].value).toBe('Test without cwd')
+      expect(captured.$exception_list[0].type).toBe('Error')
     })
 
     it('should handle process.cwd throwing', () => {
@@ -104,7 +86,7 @@ describe('Edge Runtime Compatibility', () => {
       const error = new Error('Test with throwing cwd')
       const captured = captureException(error)
 
-      expect(captured.message).toBe('Test with throwing cwd')
+      expect(captured.$exception_list[0].value).toBe('Test with throwing cwd')
     })
   })
 
@@ -258,7 +240,7 @@ describe('Edge Runtime Compatibility', () => {
       const captured = captureException(error)
 
       // Should have parsed the stack without errors
-      expect(captured.frames).toBeDefined()
+      expect(captured.$exception_list[0].stacktrace?.frames).toBeDefined()
     })
   })
 })
@@ -297,7 +279,7 @@ describe('Integration: SDK in Limited Environment', () => {
     const error = new Error('Limited env test')
     const captured = capture(error)
 
-    expect(captured.message).toBe('Limited env test')
+    expect(captured.$exception_list[0].value).toBe('Limited env test')
 
     // Restore
     globalThis.process = originalProcess
@@ -322,10 +304,8 @@ describe('Error Handling Robustness', () => {
     const captured = captureException(error)
 
     // Should still capture basic info
-    expect(captured.message).toBe('Malformed')
-    expect(captured.type).toBe('Error')
-    // Should handle malformed frames gracefully
-    expect(captured.frames).toBeDefined()
+    expect(captured.$exception_list[0].value).toBe('Malformed')
+    expect(captured.$exception_list[0].type).toBe('Error')
   })
 
   it('should handle circular reference in error.cause', () => {
@@ -339,10 +319,9 @@ describe('Error Handling Robustness', () => {
     // Should not infinite loop
     const captured = captureException(error1)
 
-    expect(captured.message).toBe('Error 1')
-    expect(captured.chained_errors).toBeDefined()
-    // Should stop before infinite loop
-    expect(captured.chained_errors!.length).toBeLessThanOrEqual(10)
+    expect(captured.$exception_list[0].value).toBe('Error 1')
+    // Core caps cause recursion, so the list stays bounded instead of looping.
+    expect(captured.$exception_list.length).toBeLessThanOrEqual(10)
   })
 
   it('should handle deeply nested error chains', () => {
@@ -354,8 +333,8 @@ describe('Error Handling Robustness', () => {
 
     const captured = captureException(current)
 
-    expect(captured.message).toBe('Level 19')
-    // Should be capped at MAX_EXCEPTION_CHAIN_DEPTH (10)
-    expect(captured.chained_errors!.length).toBeLessThanOrEqual(10)
+    expect(captured.$exception_list[0].value).toBe('Level 19')
+    // Core caps the cause chain, so the list stays bounded.
+    expect(captured.$exception_list.length).toBeLessThanOrEqual(10)
   })
 })

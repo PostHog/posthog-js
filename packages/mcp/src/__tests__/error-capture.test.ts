@@ -49,10 +49,10 @@ describe('error capture on the tool-call path', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     const event = capture.findEventsByResourceName('complete_todo').find((e) => e.isError)
-    expect(event?.error?.message).toContain('not found')
-    expect(event?.error?.type).toBe('Error')
-    expect(event?.error?.stack).toBeDefined()
-    expect(event?.error?.frames?.length).toBeGreaterThan(0)
+    const exception = event?.error?.$exception_list?.[0]
+    expect(exception?.value).toContain('not found')
+    expect(exception?.type).toBe('Error')
+    expect(exception?.stacktrace?.frames?.length).toBeGreaterThan(0)
   })
 
   it('still propagates the error result to the MCP client (does not swallow it)', async () => {
@@ -119,8 +119,9 @@ describe('error capture on the tool-call path', () => {
 
     await new Promise((r) => setTimeout(r, 50))
     const event = capture.findEventsByResourceName(toolName).find((e) => e.isError)
-    expect(event?.error?.message).toMatch(/Invalid|required/i)
-    expect(['McpError', 'Error', undefined]).toContain(event?.error?.type)
+    const exception = event?.error?.$exception_list?.[0]
+    expect(exception?.value).toMatch(/Invalid|required/i)
+    expect(['McpError', 'Error', undefined]).toContain(exception?.type)
   })
 
   it('captures errors for unknown tool names', async () => {
@@ -135,6 +136,6 @@ describe('error capture on the tool-call path', () => {
 
     await new Promise((r) => setTimeout(r, 50))
     const event = capture.findEventsByResourceName('nonexistent_tool').find((e) => e.isError)
-    expect(event?.error?.message).toContain('not found')
+    expect(event?.error?.$exception_list?.[0]?.value).toContain('not found')
   })
 })

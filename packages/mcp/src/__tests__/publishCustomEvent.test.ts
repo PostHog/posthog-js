@@ -53,7 +53,8 @@ describe('publishCustomEvent', () => {
 
     const [event] = capture.getEvents()
     expect(event.isError).toBe(true)
-    expect((event.error as { message?: string } | undefined)?.message).toBe('Custom error')
+    // resolveCustomEventError normalizes into the core $exception_list shape.
+    expect(event.error?.$exception_list?.[0]?.value).toBe('Custom error')
 
     await capture.stop()
   })

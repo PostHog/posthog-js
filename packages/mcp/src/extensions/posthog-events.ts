@@ -181,21 +181,14 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   const timestamp = getTimestamp(event)
 
   const properties: Record<string, unknown> = {
-    $exception_source: 'backend',
     [PostHogMCPAnalyticsProperty.SessionId]: event.sessionId,
   }
   addConversationIdProperty(event, properties)
 
   if (event.error) {
-    if (event.error.message) {
-      properties.$exception_message = event.error.message
-    }
-    if (event.error.type) {
-      properties.$exception_type = event.error.type
-    }
-    if (event.error.stack) {
-      properties.$exception_stacktrace = event.error.stack
-    }
+    // Spread the core `$exception_list` / `$exception_level` properties so MCP
+    // tool failures use the same error-tracking contract as every other SDK.
+    Object.assign(properties, event.error)
   }
 
   if (event.resourceName) {

@@ -29,6 +29,14 @@ function findEvent(events: PostHogCaptureEvent[], eventName: string): PostHogCap
   return events.find((event) => event.event === eventName)
 }
 
+// Minimal core ErrorProperties ($exception_list) shape for fixtures.
+function makeError(value: string, type = 'Error'): Event['error'] {
+  return {
+    $exception_list: [{ type, value, mechanism: { type: 'generic', handled: true } }],
+    $exception_level: 'error',
+  }
+}
+
 describe('buildPostHogCaptureEvents', () => {
   it('builds the regular MCP tool-call event payload', () => {
     const [event] = buildPostHogCaptureEvents(makeEvent())
@@ -117,11 +125,7 @@ describe('buildPostHogCaptureEvents', () => {
     const events = buildPostHogCaptureEvents(
       makeEvent({
         isError: true,
-        error: {
-          message: 'Connection timeout',
-          type: 'TimeoutError',
-          stack: 'TimeoutError: Connection timeout\n    at fetch (/app/index.js:10:5)',
-        },
+        error: makeError('Connection timeout', 'TimeoutError'),
       })
     )
 
@@ -132,12 +136,11 @@ describe('buildPostHogCaptureEvents', () => {
     const exceptionEvent = events[1]
     expect(exceptionEvent.event).toBe('$exception')
     expect(exceptionEvent.distinct_id).toBe('ses_session456')
-    expect(exceptionEvent.properties.$exception_message).toBe('Connection timeout')
-    expect(exceptionEvent.properties.$exception_type).toBe('TimeoutError')
-    expect(exceptionEvent.properties.$exception_stacktrace).toBe(
-      'TimeoutError: Connection timeout\n    at fetch (/app/index.js:10:5)'
-    )
-    expect(exceptionEvent.properties.$exception_source).toBe('backend')
+    // The core $exception_list / $exception_level properties are spread through.
+    expect(exceptionEvent.properties.$exception_level).toBe('error')
+    expect(exceptionEvent.properties.$exception_list).toEqual([
+      expect.objectContaining({ type: 'TimeoutError', value: 'Connection timeout' }),
+    ])
     expect(exceptionEvent.properties.$session_id).toBe('ses_session456')
     expect(exceptionEvent.properties.$mcp_resource_name).toBe('get_weather')
     expect(exceptionEvent.properties.$mcp_tool_name).toBe('get_weather')
@@ -148,7 +151,7 @@ describe('buildPostHogCaptureEvents', () => {
     const events = buildPostHogCaptureEvents(
       makeEvent({
         isError: true,
-        error: { message: 'boom' },
+        error: makeError('boom'),
         properties: {
           deployment: 'prod',
           $mcp_exec_tool_call_description: 'Run a HogQL/SQL query.',
@@ -174,7 +177,7 @@ describe('buildPostHogCaptureEvents', () => {
   })
 
   it('does not build an $exception event when enableExceptionAutocapture is false', () => {
-    const events = buildPostHogCaptureEvents(makeEvent({ isError: true, error: { message: 'boom' } }), {
+    const events = buildPostHogCaptureEvents(makeEvent({ isError: true, error: makeError('boom') }), {
       enableExceptionAutocapture: false,
     })
 
@@ -184,7 +187,7 @@ describe('buildPostHogCaptureEvents', () => {
   })
 
   it('builds an $exception event by default when isError is true', () => {
-    const events = buildPostHogCaptureEvents(makeEvent({ isError: true, error: { message: 'boom' } }))
+    const events = buildPostHogCaptureEvents(makeEvent({ isError: true, error: makeError('boom') }))
 
     expect(events).toHaveLength(2)
     expect(findEvent(events, PostHogMCPAnalyticsEvent.Exception)).toBeDefined()
@@ -285,7 +288,7 @@ describe('buildPostHogCaptureEvents', () => {
       makeEvent({
         toolDescription: description,
         isError: true,
-        error: { message: 'boom' },
+        error: makeError('boom'),
       })
     )
 
@@ -542,10 +545,7 @@ describe('buildPostHogCaptureEvents', () => {
       makeEvent({
         eventType: MCPAnalyticsEventType.mcpToolsCall,
         isError: true,
-        error: {
-          message: 'Tool execution failed',
-          type: 'ExecutionError',
-        },
+        error: makeError('Tool execution failed', 'ExecutionError'),
       }),
       { enableAITracing: true }
     )
@@ -555,9 +555,10 @@ describe('buildPostHogCaptureEvents', () => {
     expect(events[1].event).toBe('$exception')
     expect(events[2].event).toBe('$ai_span')
     expect(events[2].properties.$ai_is_error).toBe(true)
-    expect(events[2].properties.$ai_error).toEqual({
-      message: 'Tool execution failed',
-      type: 'ExecutionError',
-    })
+    expect(events[2].properties.$ai_error).toEqual(
+      expect.objectContaining({
+        $exception_list: [expect.objectContaining({ type: 'ExecutionError', value: 'Tool execution failed' })],
+      })
+    )
   })
 })

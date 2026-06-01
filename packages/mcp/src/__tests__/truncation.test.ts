@@ -248,58 +248,55 @@ describe('truncateEvent - field-level string limits', () => {
 })
 
 describe('truncateEvent - error field limits', () => {
-  it('should truncate error.message exceeding 2048 chars', () => {
-    const event = makeEvent({
-      error: {
-        message: 'e'.repeat(3000),
-        type: 'Error',
-      },
-    })
-    const result = truncateEvent(event)
-    expect(result.error!.message.length).toBe(2048 + 3)
-    expect(result.error!.message.endsWith('...')).toBe(true)
-  })
-
-  it('should limit error.frames to 50 (first 25 + last 25)', () => {
-    const frames: StackFrame[] = Array.from({ length: 80 }, (_, i) => ({
+  const makeFrames = (count: number): StackFrame[] =>
+    Array.from({ length: count }, (_, i) => ({
       filename: `file${i}.ts`,
       function: `func${i}`,
       lineno: i + 1,
       in_app: true,
+      platform: 'node:javascript' as const,
     }))
-    const event = makeEvent({
-      error: { message: 'test', frames },
-    })
-    const result = truncateEvent(event)
-    expect(result.error!.frames!.length).toBe(50)
-    // First 25 should be from the start
-    expect(result.error!.frames![0].filename).toBe('file0.ts')
-    expect(result.error!.frames![24].filename).toBe('file24.ts')
-    // Last 25 should be from the end
-    expect(result.error!.frames![25].filename).toBe('file55.ts')
-    expect(result.error!.frames![49].filename).toBe('file79.ts')
+
+  const makeError = (value: string, frames?: StackFrame[]): Event['error'] => ({
+    $exception_list: [
+      {
+        type: 'Error',
+        value,
+        mechanism: { type: 'generic', handled: true },
+        ...(frames ? { stacktrace: { type: 'raw' as const, frames } } : {}),
+      },
+    ],
+    $exception_level: 'error',
+  })
+
+  const firstException = (event: Event) => event.error!.$exception_list[0]
+
+  it('should truncate exception value exceeding 2048 chars', () => {
+    const result = truncateEvent(makeEvent({ error: makeError('e'.repeat(3000)) }))
+    const value = firstException(result).value!
+    expect(value.length).toBe(2048 + 3)
+    expect(value.endsWith('...')).toBe(true)
+  })
+
+  it('should limit stack frames to 50 (first 25 + last 25)', () => {
+    const result = truncateEvent(makeEvent({ error: makeError('test', makeFrames(80)) }))
+    const frames = firstException(result).stacktrace!.frames!
+    expect(frames.length).toBe(50)
+    expect(frames[0].filename).toBe('file0.ts')
+    expect(frames[24].filename).toBe('file24.ts')
+    expect(frames[25].filename).toBe('file55.ts')
+    expect(frames[49].filename).toBe('file79.ts')
   })
 
   it('should leave frames at exactly 50 unchanged', () => {
-    const frames: StackFrame[] = Array.from({ length: 50 }, (_, i) => ({
-      filename: `file${i}.ts`,
-      function: `func${i}`,
-      in_app: true,
-    }))
-    const event = makeEvent({
-      error: { message: 'test', frames },
-    })
-    const result = truncateEvent(event)
-    expect(result.error!.frames!.length).toBe(50)
+    const result = truncateEvent(makeEvent({ error: makeError('test', makeFrames(50)) }))
+    expect(firstException(result).stacktrace!.frames!.length).toBe(50)
   })
 
-  it('should handle error without frames', () => {
-    const event = makeEvent({
-      error: { message: 'test' },
-    })
-    const result = truncateEvent(event)
-    expect(result.error!.message).toBe('test')
-    expect(result.error!.frames).toBeUndefined()
+  it('should handle an exception without a stacktrace', () => {
+    const result = truncateEvent(makeEvent({ error: makeError('test') }))
+    expect(firstException(result).value).toBe('test')
+    expect(firstException(result).stacktrace).toBeUndefined()
   })
 })
 
@@ -407,12 +404,23 @@ describe('truncateEvent - non-mutation', () => {
       userIntent: longIntent,
       parameters: { deep: { nested: { data: 'y'.repeat(40_000) } } },
       error: {
-        message: 'e'.repeat(3000),
-        frames: Array.from({ length: 80 }, (_, i) => ({
-          filename: `file${i}.ts`,
-          function: `func${i}`,
-          in_app: true,
-        })),
+        $exception_list: [
+          {
+            type: 'Error',
+            value: 'e'.repeat(3000),
+            mechanism: { type: 'generic', handled: true },
+            stacktrace: {
+              type: 'raw',
+              frames: Array.from({ length: 80 }, (_, i) => ({
+                filename: `file${i}.ts`,
+                function: `func${i}`,
+                in_app: true,
+                platform: 'node:javascript' as const,
+              })),
+            },
+          },
+        ],
+        $exception_level: 'error',
       },
     })
 
