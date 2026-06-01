@@ -1,3 +1,4 @@
+import { isNull, isUndefined } from '@posthog/core'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import patchFns from '../entrypoints/tracing-headers'
 
@@ -10,7 +11,7 @@ class TestRequest {
 
     constructor(input: string | URL | TestRequest, init?: RequestInit) {
         const inputRequest = input instanceof TestRequest ? input : undefined
-        if (inputRequest?.bodyUsed && init?.body === undefined) {
+        if (inputRequest?.bodyUsed && isUndefined(init?.body)) {
             throw new TypeError('Cannot construct a Request with a Request object that has already been used.')
         }
 
@@ -19,7 +20,7 @@ class TestRequest {
         this.method = init?.method ?? inputRequest?.method ?? 'GET'
         this.body = init?.body ?? inputRequest?.body ?? null
 
-        if (inputRequest && init?.body === undefined && inputRequest.body !== null && inputRequest.body !== undefined) {
+        if (inputRequest && isUndefined(init?.body) && !isNull(inputRequest.body) && !isUndefined(inputRequest.body)) {
             inputRequest.bodyUsed = true
         }
     }
