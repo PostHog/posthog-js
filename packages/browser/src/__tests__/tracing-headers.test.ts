@@ -3,23 +3,36 @@ import patchFns from '../entrypoints/tracing-headers'
 
 class TestRequest {
     body?: BodyInit | null
+    bodyUsed = false
     headers: Headers
     method: string
     url: string
 
     constructor(input: string | URL | TestRequest, init?: RequestInit) {
         const inputRequest = input instanceof TestRequest ? input : undefined
+        if (inputRequest?.bodyUsed && init?.body === undefined) {
+            throw new TypeError('Cannot construct a Request with a Request object that has already been used.')
+        }
+
         this.url = inputRequest ? inputRequest.url : input.toString()
         this.headers = new Headers(init?.headers ?? inputRequest?.headers)
         this.method = init?.method ?? inputRequest?.method ?? 'GET'
         this.body = init?.body ?? inputRequest?.body ?? null
+
+        if (inputRequest && init?.body === undefined && inputRequest.body !== null && inputRequest.body !== undefined) {
+            inputRequest.bodyUsed = true
+        }
     }
 
     clone(): TestRequest {
-        return new TestRequest(this)
+        return new TestRequest(this.url, { body: this.body, headers: this.headers, method: this.method })
     }
 
     text(): Promise<string> {
+        if (this.bodyUsed) {
+            return Promise.reject(new TypeError('Body has already been used.'))
+        }
+        this.bodyUsed = true
         return Promise.resolve(this.body?.toString() ?? '')
     }
 
@@ -121,6 +134,38 @@ describe('tracing headers', () => {
             await window.fetch('https://other.example/path', init)
 
             expect(originalFetch).toHaveBeenCalledWith('https://other.example/path', init)
+            expect(sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+        })
+
+        it('passes the cloned Request downstream when a Request input hostname does not match', async () => {
+            let downstreamRequest: Request | undefined
+            const originalFetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+                downstreamRequest = new Request(input, init)
+                return {} as Response
+            }) as jest.MockedFunction<typeof fetch>
+            setWindowFetch(originalFetch)
+            restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
+
+            const request = new Request('https://other.example/path', {
+                body: 'request-body',
+                headers: { 'x-request': 'request-header' },
+                method: 'POST',
+            })
+
+            await expect(window.fetch(request)).resolves.toBeDefined()
+
+            expect(originalFetch).toHaveBeenCalledTimes(1)
+            const [input, init] = originalFetch.mock.calls[0]
+            expect(input).toBeInstanceOf(Request)
+            expect(input).not.toBe(request)
+            expect(init).toBeUndefined()
+            expect(downstreamRequest?.url).toBe('https://other.example/path')
+            expect(downstreamRequest?.method).toBe('POST')
+            expect(downstreamRequest?.headers.get('x-request')).toBe('request-header')
+            expect(downstreamRequest?.headers.get('X-POSTHOG-SESSION-ID')).toBeNull()
+            expect(downstreamRequest?.headers.get('X-POSTHOG-WINDOW-ID')).toBeNull()
+            expect(downstreamRequest?.headers.get('X-POSTHOG-DISTINCT-ID')).toBeNull()
+            await expect(downstreamRequest?.clone().text()).resolves.toBe('request-body')
             expect(sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 

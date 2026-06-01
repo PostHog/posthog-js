@@ -175,9 +175,8 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
                         // bodies as ReadableStreams to downstream wrappers in Safari.
                         // eslint-disable-next-line compat/compat
                         const req = new Request(url, init)
-                        if (addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)) {
-                            fetchArgs = [req]
-                        }
+                        addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
+                        fetchArgs = [req]
                     } else {
                         const headers = new Headers(isObjectLike(init) ? init.headers : undefined)
                         if (addTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)) {
