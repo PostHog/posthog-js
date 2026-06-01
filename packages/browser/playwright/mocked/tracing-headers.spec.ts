@@ -4,7 +4,7 @@ import { Page, BrowserContext, Request } from '@playwright/test'
 
 const baseOptions = {
     options: {
-        __add_tracing_headers: ['example.com', 'no-session.com', 'xhr-test.com'],
+        tracing_headers: ['example.com', 'no-session.com', 'xhr-test.com'],
     },
     url: '/playground/cypress/index.html',
 }

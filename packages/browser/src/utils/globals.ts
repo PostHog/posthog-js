@@ -224,6 +224,8 @@ export interface LazyLoadedConversationsInterface {
     getWidgetSessionId: () => string
 }
 
+type TracingHeadersHostnames = string[] | boolean | undefined
+
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -258,8 +260,16 @@ interface PostHogExtensions {
      */
     loadWebVitalsCallbacks?: (useAttribution?: boolean) => PostHogExtensions['postHogWebVitalsCallbacks']
     tracingHeadersPatchFns?: {
-        _patchFetch: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
-        _patchXHR: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
+        _patchFetch: (
+            hostnames: TracingHeadersHostnames,
+            distinctId: string,
+            sessionManager?: SessionIdManager
+        ) => () => void
+        _patchXHR: (
+            hostnames: TracingHeadersHostnames,
+            distinctId: string,
+            sessionManager?: SessionIdManager
+        ) => () => void
     }
     initDeadClicksAutocapture?: (
         ph: PostHog,

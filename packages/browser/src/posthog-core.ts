@@ -117,6 +117,7 @@ import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
+import type { TracingHeaders } from './extensions/tracing-headers'
 import type { WebVitalsAutocapture } from './extensions/web-vitals'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
@@ -375,6 +376,7 @@ export class PostHog implements PostHogInterface {
     siteApps?: SiteApps
     autocapture?: Autocapture
     heatmaps?: Heatmaps
+    tracingHeaders?: TracingHeaders
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
@@ -788,7 +790,7 @@ export class PostHog implements PostHogInterface {
             this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
         if (ext.tracingHeaders) {
-            this._extensions.push(new ext.tracingHeaders(this))
+            this._extensions.push((this.tracingHeaders = new ext.tracingHeaders(this)))
         }
         if (ext.siteApps) {
             this._extensions.push((this.siteApps = new ext.siteApps(this)))
@@ -3072,6 +3074,7 @@ export class PostHog implements PostHogInterface {
             this.exceptions?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
+            this.tracingHeaders?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.exceptionObserver?.startIfEnabledOrStop()

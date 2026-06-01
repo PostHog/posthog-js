@@ -120,8 +120,11 @@ const createFetchInitWithHeaders = (init: RequestInit | undefined, headers: Head
     }) as RequestInit
 }
 
-const addTracingHeaders = (
-    hostnames: string[],
+type TracingHeadersHostnames = string[] | boolean | undefined
+type FetchArgs = [URL | RequestInfo] | [URL | RequestInfo, RequestInit | undefined]
+
+const appendTracingHeaders = (
+    hostnames: TracingHeadersHostnames,
     distinctId: string,
     sessionManager: SessionIdManager | undefined,
     url: string,
@@ -136,9 +139,12 @@ const addTracingHeaders = (
         // If the URL is invalid, we skip adding tracing headers
         return false
     }
+    if (!hostnames) {
+        return false
+    }
     if (isArray(hostnames) && !hostnames.includes(reqHostname)) {
         // Skip if the hostname is not in the list (also skip if hostnames is not an array,
-        // because in the earliest version of this __add_tracing_headers was a bool)
+        // because in the earliest version of the legacy __add_tracing_headers option it was a bool)
         return false
     }
 
@@ -156,9 +162,11 @@ const addTracingHeaders = (
     return hasAddedHeaders
 }
 
-type FetchArgs = [URL | RequestInfo] | [URL | RequestInfo, RequestInit | undefined]
-
-const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
+const patchFetch = (
+    hostnames: TracingHeadersHostnames,
+    distinctId: string,
+    sessionManager?: SessionIdManager
+): (() => void) => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
@@ -175,11 +183,11 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
                         // bodies as ReadableStreams to downstream wrappers in Safari.
                         // eslint-disable-next-line compat/compat
                         const req = new Request(url, init)
-                        addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
+                        appendTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
                         fetchArgs = [req]
                     } else {
                         const headers = new Headers(isObjectLike(init) ? init.headers : undefined)
-                        if (addTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)) {
+                        if (appendTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)) {
                             const initWithHeaders = createFetchInitWithHeaders(init, headers)
                             if (initWithHeaders) {
                                 fetchArgs = [url, initWithHeaders]
@@ -196,7 +204,11 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
     })
 }
 
-const patchXHR = (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
+const patchXHR = (
+    hostnames: TracingHeadersHostnames,
+    distinctId: string,
+    sessionManager?: SessionIdManager
+): (() => void) => {
     return patch(
         // we can assert this is present because we've checked previously
         window!.XMLHttpRequest.prototype,
@@ -219,7 +231,7 @@ const patchXHR = (hostnames: string[], distinctId: string, sessionManager?: Sess
                 const headers = new Headers()
                 const requestUrl = getRequestUrl(url)
                 if (requestUrl) {
-                    addTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)
+                    appendTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)
                 }
 
                 const result = originalOpen.call(xhr, method, url, async, username, password)

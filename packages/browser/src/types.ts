@@ -145,8 +145,21 @@ export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init'>
  * Specify that `loaded` should be using the PostHog instance type
  * as implemented by the browser/src/posthog-core.ts file rather than the @posthog/types type
  */
-export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
+export type PostHogConfig = Omit<BasePostHogConfig, 'loaded' | '__add_tracing_headers'> & {
     loaded: (posthog: PostHogInterface) => void
+
+    /**
+     * A list of hostnames for which to inject PostHog tracing headers to all requests
+     * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID). Used to link
+     * frontend sessions to backend traces (see https://posthog.com/docs/llm-analytics/link-session-replay).
+     */
+    tracing_headers?: string[]
+
+    /**
+     * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
+     * @internal
+     */
+    __add_tracing_headers?: string[]
 
     /**
      * Internal: Extension class overrides for tree-shaking support.

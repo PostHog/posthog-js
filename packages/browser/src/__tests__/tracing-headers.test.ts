@@ -1,6 +1,7 @@
 import { isNull, isUndefined } from '@posthog/core'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import patchFns from '../entrypoints/tracing-headers'
+import { TracingHeaders } from '../extensions/tracing-headers'
 
 class TestRequest {
     body?: BodyInit | null
@@ -78,6 +79,52 @@ describe('tracing headers', () => {
         sessionManager.checkAndGetSessionAndWindowId.mockClear()
     })
 
+    describe('config aliases', () => {
+        const getConfiguredHostnames = (config: Record<string, unknown>): string[] | undefined => {
+            const tracingHeaders = new TracingHeaders({ config } as any)
+            return (tracingHeaders as any)._getConfiguredHostnames()
+        }
+
+        it('uses the public tracing_headers option', () => {
+            expect(getConfiguredHostnames({ tracing_headers: ['example.com'] })).toEqual(['example.com'])
+        })
+
+        it('falls back to deprecated __add_tracing_headers', () => {
+            expect(getConfiguredHostnames({ __add_tracing_headers: ['legacy.example'] })).toEqual(['legacy.example'])
+        })
+
+        it('prefers tracing_headers over deprecated __add_tracing_headers', () => {
+            expect(
+                getConfiguredHostnames({
+                    tracing_headers: ['public.example'],
+                    __add_tracing_headers: ['legacy.example'],
+                })
+            ).toEqual(['public.example'])
+        })
+
+        it('allows an empty tracing_headers list to override deprecated __add_tracing_headers', () => {
+            expect(
+                getConfiguredHostnames({
+                    tracing_headers: [],
+                    __add_tracing_headers: ['legacy.example'],
+                })
+            ).toEqual([])
+        })
+
+        it('mutates the installed hostname list when tracing_headers changes', () => {
+            const config = { tracing_headers: ['example.com'] }
+            const tracingHeaders = new TracingHeaders({ config } as any)
+            const hostnames = (tracingHeaders as any)._syncHostnamesForPatch()
+
+            expect(hostnames).toEqual(['example.com'])
+
+            config.tracing_headers = []
+
+            expect((tracingHeaders as any)._syncHostnamesForPatch()).toBeUndefined()
+            expect(hostnames).toEqual([])
+        })
+    })
+
     describe('fetch', () => {
         it('adds tracing headers without spreading init or mutating caller headers', async () => {
             const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
@@ -135,6 +182,27 @@ describe('tracing headers', () => {
             await window.fetch('https://other.example/path', init)
 
             expect(originalFetch).toHaveBeenCalledWith('https://other.example/path', init)
+            expect(sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+        })
+
+        it('uses the latest configured hostnames from a mutated hostname list without re-patching', async () => {
+            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            setWindowFetch(originalFetch)
+            const hostnames = ['example.com']
+            restoreFetchPatch = patchFns._patchFetch(hostnames, 'distinct-id', sessionManager as any)
+
+            await window.fetch('https://example.com/path')
+            expect(new Headers(originalFetch.mock.calls[0][1]?.headers).get('X-POSTHOG-DISTINCT-ID')).toBe(
+                'distinct-id'
+            )
+
+            originalFetch.mockClear()
+            sessionManager.checkAndGetSessionAndWindowId.mockClear()
+            hostnames.splice(0)
+
+            await window.fetch('https://example.com/path')
+
+            expect(originalFetch).toHaveBeenCalledWith('https://example.com/path')
             expect(sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
