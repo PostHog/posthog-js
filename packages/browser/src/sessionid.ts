@@ -206,6 +206,17 @@ export class SessionIdManager {
         })
     }
 
+    // Gates the per-key cross-tab refresh path. When persistence is in
+    // debounced-write mode, our pending in-memory writes plus a sibling's
+    // recent on-disk writes are both at risk if we do a whole-blob
+    // `flush() + load()` cycle. Per-key refresh avoids both clobbers. The
+    // dated default (>= 2026-05-30) enables debounce, so the new behaviour
+    // and the bug surface roll out together.
+    private _useCrossTabRefreshHardening(): boolean {
+        const debounce = this._config?.persistence_save_debounce_ms
+        return isPositiveNumber(debounce) && debounce > 0
+    }
+
     // Called from destroy / beforeunload so a tab close inside the throttle
     // window doesn't leave the persisted activity timestamp stale.
     private _flushPendingActivityTimestamp(): void {
@@ -216,14 +227,19 @@ export class SessionIdManager {
             return
         }
 
-        // Push any pending debounced writes (persistence_save_debounce_ms > 0)
-        // to storage first — otherwise load() would clobber them in memory.
-        this._persistence.flush()
-
-        // A sibling tab may have rotated the session — refresh and skip the
-        // flush if storage no longer matches our cached id/start, otherwise
-        // we would clobber the new session with stale values.
-        this._persistence.load()
+        if (this._useCrossTabRefreshHardening()) {
+            // Pull only the SESSION_ID slot from storage to see whether a
+            // sibling tab has rotated the session. We must NOT flush our
+            // whole props blob first — it would clobber the sibling's
+            // SESSION_ID write before we get to read it.
+            this._persistence.refreshKey(SESSION_ID)
+        } else {
+            // Legacy path for callers with debounce disabled. `flush()` is
+            // a no-op when there's no pending timer, and `load()` does a
+            // whole-blob refresh that picks up sibling SESSION_ID writes.
+            this._persistence.flush()
+            this._persistence.load()
+        }
         const [, persistedSessionId, persistedStart] = this._getSessionId()
         if (persistedSessionId !== this._sessionId || persistedStart !== this._sessionStartTimestamp) {
             return

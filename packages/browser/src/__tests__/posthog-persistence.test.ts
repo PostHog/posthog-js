@@ -472,6 +472,52 @@ describe('persistence', () => {
             })
         })
 
+        describe('refreshKey', () => {
+            // Pulls a single key from on-disk storage into in-memory props
+            // without a whole-blob flush() (which would clobber a sibling's
+            // write) or load() (which would discard pending in-memory writes).
+            let parseSpy: jest.SpyInstance
+
+            afterEach(() => {
+                parseSpy?.mockRestore()
+            })
+
+            it('pulls a single key from storage and leaves other in-memory props untouched', () => {
+                library.register({ distinct_id: 'mine', other: 'in-memory-only' })
+
+                // Simulate a sibling having written a different value for one key.
+                const onDisk = { ...library.props, distinct_id: 'from-sibling' }
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue(onDisk)
+
+                library.refreshKey('distinct_id')
+
+                expect(library.props.distinct_id).toBe('from-sibling')
+                expect(library.props.other).toBe('in-memory-only')
+            })
+
+            it('does not write to storage', () => {
+                library.register({ distinct_id: 'mine' })
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue({ distinct_id: 'from-sibling' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                library.refreshKey('distinct_id')
+
+                expect(storageSetSpy).not.toHaveBeenCalled()
+                storageSetSpy.mockRestore()
+            })
+
+            it('deletes the in-memory key when storage no longer has it', () => {
+                library.register({ distinct_id: 'mine', keep: 'me' })
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue({ keep: 'me' })
+
+                library.refreshKey('distinct_id')
+
+                expect(library.props.distinct_id).toBeUndefined()
+                expect(library.props.keep).toBe('me')
+            })
+        })
+
         describe('save debounce', () => {
             // `persistence_save_debounce_ms` coalesces rapid save() calls
             // into a single write per window. The default is 0 (immediate).

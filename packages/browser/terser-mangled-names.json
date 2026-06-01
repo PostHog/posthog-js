@@ -623,6 +623,7 @@
         "_urlTriggerMatching",
         "_urlTriggerStatus",
         "_urlTriggers",
+        "_useCrossTabRefreshHardening",
         "_validateEmail",
         "_validateIdentifyId",
         "_validateSampleRate",

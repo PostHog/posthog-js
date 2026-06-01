@@ -225,6 +225,28 @@ export class PostHogPersistence {
     }
 
     /**
+     * Refresh a single key from on-disk storage into `this.props` without
+     * touching the rest. Used by `SessionIdManager` on the cross-tab idle
+     * path so we can pick up a sibling tab's SESSION_ID write without
+     * either:
+     *  - flushing our own (potentially stale) whole-props blob to storage
+     *    via `flush()`, which would clobber the sibling's write, or
+     *  - replacing all of `props` via `load()`, which would discard any
+     *    in-memory writes that haven't yet been debounced to storage.
+     */
+    refreshKey(prop: string): void {
+        if (this._disabled) {
+            return
+        }
+        const entry = this._storage._parse(this._name)
+        if (entry && prop in entry) {
+            this._setProp(prop, entry[prop])
+        } else {
+            this._deleteProp(prop)
+        }
+    }
+
+    /**
      * NOTE: Saving frequently causes issues with Recordings and Consent Management Platform (CMP) tools which
      * observe cookie changes, and modify their UI, often causing infinite loops.
      * As such callers of this should ideally check that the data has changed beforehand
