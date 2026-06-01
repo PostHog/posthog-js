@@ -34,7 +34,9 @@ export function patch(
         source[name] = wrapped
 
         return () => {
-            source[name] = original
+            if (source[name] === wrapped) {
+                source[name] = original
+            }
         }
     } catch {
         return () => {
