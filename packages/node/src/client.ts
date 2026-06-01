@@ -2519,7 +2519,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       properties: eventProperties,
       options: {
         timestamp: eventMessage.timestamp,
-        disableGeoip: eventMessage.disableGeoip,
+        disableGeoip: eventMessage.disableGeoip ?? this.options.disableGeoip,
         uuid: eventMessage.uuid,
       },
     }
