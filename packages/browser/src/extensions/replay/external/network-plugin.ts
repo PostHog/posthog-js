@@ -118,6 +118,20 @@ function shouldRecordHeaders(type: 'request' | 'response', recordHeaders: Networ
     return !!recordHeaders && (isBoolean(recordHeaders) || recordHeaders[type])
 }
 
+function isRequest(value: unknown): value is Request {
+    if (typeof Request === 'undefined') {
+        return false
+    }
+    if (value instanceof Request) {
+        return true
+    }
+    try {
+        return Object.prototype.toString.call(value) === '[object Request]'
+    } catch {
+        return false
+    }
+}
+
 export function shouldRecordBody({
     type,
     recordBody,
@@ -149,7 +163,7 @@ export function shouldRecordBody({
             if (url instanceof URL) {
                 return url.protocol === 'blob:'
             }
-            if (url instanceof Request) {
+            if (isRequest(url)) {
                 return isBlobURL(url.url)
             }
             return false
@@ -610,7 +624,7 @@ function initFetchObserver(
                 // Request downstream: it exposes request.body as a ReadableStream, and wrappers that forward that body
                 // can trigger Safari's "ReadableStream uploading is not supported" error. For fetch(Request), we must
                 // pass the cloned Request because constructing `req` may consume the original Request body.
-                res = url instanceof Request ? await originalFetch(req) : await originalFetch(url, init)
+                res = isRequest(url) ? await originalFetch(req) : await originalFetch(url, init)
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}

@@ -239,6 +239,37 @@ describe('fetch wrapper', () => {
             expect(receivedInit).toBeUndefined()
         })
 
+        it('preserves Request input shape for Request-branded inputs when instanceof fails', async () => {
+            let receivedInput: RequestInfo | URL | undefined
+            let receivedInit: RequestInit | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, init?: RequestInit) => {
+                    receivedInput = input
+                    receivedInit = init
+                    return new Response('ok')
+                }
+            )
+            const requestFromAnotherRealm = {
+                url: 'https://example.com/api',
+                toString() {
+                    return 'https://example.com/api'
+                },
+                get [Symbol.toStringTag]() {
+                    return 'Request'
+                },
+            } as unknown as Request
+
+            expect(requestFromAnotherRealm).not.toBeInstanceOf(Request)
+            expect(Object.prototype.toString.call(requestFromAnotherRealm)).toBe('[object Request]')
+
+            await wrappedFetch(requestFromAnotherRealm)
+            cleanup()
+
+            expect(receivedInput).toBeInstanceOf(Request)
+            expect(receivedInput).not.toBe(requestFromAnotherRealm)
+            expect(receivedInit).toBeUndefined()
+        })
+
         it.each([
             ['method', { method: 'PUT' } as RequestInit, (req: Request) => req.method, 'PUT'],
             ['headers', { headers: { 'X-Custom': 'value' } }, (req: Request) => req.headers.get('X-Custom'), 'value'],
