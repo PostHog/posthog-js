@@ -1,5 +1,13 @@
 # posthog-ai
 
+## 7.20.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.1
+  - posthog-node@5.35.10
+
 ## 7.20.3
 
 ### Patch Changes
