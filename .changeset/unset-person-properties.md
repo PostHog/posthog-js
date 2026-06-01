@@ -1,6 +1,7 @@
 ---
 'posthog-js': minor
 '@posthog/core': minor
+'@posthog/types': minor
 'posthog-react-native': minor
 ---
 
