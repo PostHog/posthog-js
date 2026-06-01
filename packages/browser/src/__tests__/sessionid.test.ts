@@ -52,6 +52,8 @@ describe('Session ID manager', () => {
                 Object.assign(persistence.props, props)
             }),
             load: jest.fn(),
+            flush: jest.fn(),
+            refreshKey: jest.fn(),
             _disabled: false,
         }
         ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
@@ -540,6 +542,36 @@ describe('Session ID manager', () => {
             expect(persistence.props[SESSION_ID]).toEqual([2_000_000, 'sessionB', 2_000_000])
         })
 
+        it('flush does not clobber a cross-tab rotation when debounce is enabled', () => {
+            // The debounce>0 regression: a leading whole-blob flush() would
+            // write our stale SESSION_ID over the sibling's rotation before
+            // we read it, defeating the mismatch guard. Per-key refresh reads
+            // SESSION_ID without writing, so the sibling's rotation survives.
+            config.persistence_save_debounce_ms = 250
+            try {
+                const sessionIdManager = sessionIdMgr(persistence)
+                sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+                sessionIdManager['_setSessionId']('sessionA', 1_004_000, 1_000_000) // throttled
+                ;(persistence.register as jest.Mock).mockClear()
+
+                // Sibling rotated to sessionB in storage; refreshKey pulls it in.
+                ;(persistence.refreshKey as jest.Mock).mockImplementation(() => {
+                    persistence.props[SESSION_ID] = [2_000_000, 'sessionB', 2_000_000]
+                })
+
+                sessionIdManager['_flushPendingActivityTimestamp']()
+
+                // Guard skips before any write: refreshKey read the sibling
+                // rotation, and we never flushed our stale blob.
+                expect(persistence.refreshKey).toHaveBeenCalledWith(SESSION_ID)
+                expect(persistence.flush).not.toHaveBeenCalled()
+                expect(persistence.register).not.toHaveBeenCalled()
+                expect(persistence.props[SESSION_ID]).toEqual([2_000_000, 'sessionB', 2_000_000])
+            } finally {
+                delete config.persistence_save_debounce_ms
+            }
+        })
+
         it('flush proceeds when persisted session still matches the tab', () => {
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
@@ -550,6 +582,55 @@ describe('Session ID manager', () => {
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [1_004_000, 'sessionA', 1_000_000],
             })
+        })
+
+        it('flush refreshes SESSION_ID from storage, registers, then forces the debounced write (hardened path)', () => {
+            // With persistence_save_debounce_ms > 0, a whole-blob flush()
+            // would clobber a sibling SESSION_ID write before we read it.
+            // Per-key refresh reads only SESSION_ID and writes nothing, so
+            // neither side is clobbered. The trailing flush() forces the
+            // SESSION_ID register past the debounce.
+            config.persistence_save_debounce_ms = 250
+            try {
+                const order: string[] = []
+                ;(persistence.flush as jest.Mock).mockImplementation(() => order.push('flush'))
+                ;(persistence.refreshKey as jest.Mock).mockImplementation(() => order.push('refreshKey'))
+                ;(persistence.register as jest.Mock).mockImplementation((props) => {
+                    Object.assign(persistence.props, props)
+                    order.push('register')
+                })
+
+                const sessionIdManager = sessionIdMgr(persistence)
+                sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+                sessionIdManager['_setSessionId']('sessionA', 1_004_000, 1_000_000) // throttled
+                order.length = 0
+
+                sessionIdManager['_flushPendingActivityTimestamp']()
+                expect(order).toEqual(['refreshKey', 'register', 'flush'])
+            } finally {
+                delete config.persistence_save_debounce_ms
+            }
+        })
+
+        it('flush uses legacy flush+load when debounce is disabled', () => {
+            // With debounce off, flush() is a no-op (no pending timer) so it
+            // cannot clobber storage, and load() picks up sibling writes.
+            const order: string[] = []
+            ;(persistence.flush as jest.Mock).mockImplementation(() => order.push('flush'))
+            ;(persistence.load as jest.Mock).mockImplementation(() => order.push('load'))
+            ;(persistence.refreshKey as jest.Mock).mockImplementation(() => order.push('refreshKey'))
+            ;(persistence.register as jest.Mock).mockImplementation((props) => {
+                Object.assign(persistence.props, props)
+                order.push('register')
+            })
+
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('sessionA', 1_004_000, 1_000_000) // throttled
+            order.length = 0
+
+            sessionIdManager['_flushPendingActivityTimestamp']()
+            expect(order).toEqual(['flush', 'load', 'register', 'flush'])
         })
     })
 

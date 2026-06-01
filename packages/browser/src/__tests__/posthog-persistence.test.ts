@@ -471,6 +471,208 @@ describe('persistence', () => {
                 expect(() => library.save()).not.toThrow()
             })
         })
+
+        describe('refreshKey', () => {
+            // Pulls a single key from on-disk storage into in-memory props
+            // without a whole-blob flush() (which would clobber a sibling's
+            // write) or load() (which would discard pending in-memory writes).
+            let parseSpy: jest.SpyInstance
+
+            afterEach(() => {
+                parseSpy?.mockRestore()
+            })
+
+            it('pulls a single key from storage and leaves other in-memory props untouched', () => {
+                library.register({ distinct_id: 'mine', other: 'in-memory-only' })
+
+                // Simulate a sibling having written a different value for one key.
+                const onDisk = { ...library.props, distinct_id: 'from-sibling' }
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue(onDisk)
+
+                library.refreshKey('distinct_id')
+
+                expect(library.props.distinct_id).toBe('from-sibling')
+                expect(library.props.other).toBe('in-memory-only')
+            })
+
+            it('does not write to storage', () => {
+                library.register({ distinct_id: 'mine' })
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue({ distinct_id: 'from-sibling' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                library.refreshKey('distinct_id')
+
+                expect(storageSetSpy).not.toHaveBeenCalled()
+                storageSetSpy.mockRestore()
+            })
+
+            it('deletes the in-memory key when storage no longer has it', () => {
+                library.register({ distinct_id: 'mine', keep: 'me' })
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue({ keep: 'me' })
+
+                library.refreshKey('distinct_id')
+
+                expect(library.props.distinct_id).toBeUndefined()
+                expect(library.props.keep).toBe('me')
+            })
+        })
+
+        describe('save debounce', () => {
+            // `persistence_save_debounce_ms` coalesces rapid save() calls
+            // into a single write per window. The default is 0 (immediate).
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            afterEach(() => {
+                jest.runOnlyPendingTimers()
+                jest.useRealTimers()
+            })
+
+            it('writes immediately when debounce is 0 (default)', () => {
+                const config = makePostHogConfig('test-debounce-off', persistenceMode)
+                const debounced = new PostHogPersistence(config)
+                const spy = jest.spyOn(debounced['_storage'], '_set')
+                spy.mockClear()
+
+                debounced.register({ distinct_id: 'a' })
+                debounced.register({ distinct_id: 'b' })
+
+                expect(spy).toHaveBeenCalledTimes(2)
+                debounced.clear()
+            })
+
+            it('coalesces multiple saves within the debounce window into one write', () => {
+                const config = {
+                    ...makePostHogConfig('test-debounce-on', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+                const spy = jest.spyOn(debounced['_storage'], '_set')
+                spy.mockClear()
+
+                debounced.register({ a: '1' })
+                debounced.register({ b: '2' })
+                debounced.register({ c: '3' })
+
+                expect(spy).not.toHaveBeenCalled()
+
+                jest.advanceTimersByTime(250)
+
+                expect(spy).toHaveBeenCalledTimes(1)
+                expect(debounced.props).toMatchObject({ a: '1', b: '2', c: '3' })
+                debounced.clear()
+            })
+
+            it('in-memory props update synchronously even before the debounced write lands', () => {
+                const config = {
+                    ...makePostHogConfig('test-debounce-sync', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+
+                debounced.register({ distinct_id: 'live' })
+                expect(debounced.props.distinct_id).toBe('live')
+                debounced.clear()
+            })
+
+            it('flush() writes pending state immediately', () => {
+                const config = {
+                    ...makePostHogConfig('test-debounce-flush', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+                const spy = jest.spyOn(debounced['_storage'], '_set')
+                spy.mockClear()
+
+                debounced.register({ distinct_id: 'before-flush' })
+                expect(spy).not.toHaveBeenCalled()
+
+                debounced.flush()
+                expect(spy).toHaveBeenCalledTimes(1)
+
+                jest.advanceTimersByTime(1000)
+                expect(spy).toHaveBeenCalledTimes(1)
+                debounced.clear()
+            })
+
+            it('remove() cancels any pending debounced write', () => {
+                const config = {
+                    ...makePostHogConfig('test-debounce-remove', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+                const setSpy = jest.spyOn(debounced['_storage'], '_set')
+                const removeSpy = jest.spyOn(debounced['_storage'], '_remove')
+
+                debounced.register({ distinct_id: 'doomed' })
+                setSpy.mockClear()
+                removeSpy.mockClear()
+
+                debounced.remove()
+                jest.advanceTimersByTime(1000)
+
+                expect(setSpy).not.toHaveBeenCalled()
+                expect(removeSpy).toHaveBeenCalled()
+            })
+
+            it('flush() does NOT resurrect storage after remove() (the reset bug)', () => {
+                // Sequence: posthog.reset() → clear() → remove() cancels
+                // the timer, clears _lastSavedSerialized, deletes storage.
+                // Then the unload listener fires flush(). Without the
+                // pending-timer guard, flush() would call _writeNow() with
+                // props={}, mismatch against undefined _lastSavedSerialized,
+                // and resurrect the storage entry that remove() just
+                // deleted. The guard means flush() is a no-op once there
+                // is no pending timer.
+                const config = {
+                    ...makePostHogConfig('test-flush-after-remove', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+                debounced.register({ distinct_id: 'before-reset' })
+
+                // Simulate reset
+                debounced.clear()
+
+                const setSpy = jest.spyOn(debounced['_storage'], '_set')
+                setSpy.mockClear()
+
+                // Simulate the unload listener firing after reset
+                debounced.flush()
+
+                expect(setSpy).not.toHaveBeenCalled()
+            })
+
+            it('writes through on flush() when debounce is enabled at runtime via set_config (late-enable)', () => {
+                // Customer constructs PostHog with debounce=0 (no listener
+                // would be installed under the old logic), then later does
+                // `posthog.set_config({ persistence_save_debounce_ms: 250 })`.
+                // The mutable config is read every save() via _saveDebounceMs(),
+                // so save() correctly starts debouncing. But we must ALSO
+                // have installed unload listeners at construction so the
+                // pending write isn't lost on page close.
+                const config: any = makePostHogConfig('test-late-debounce', persistenceMode)
+                const debounced = new PostHogPersistence(config)
+                const spy = jest.spyOn(debounced['_storage'], '_set')
+
+                // Enable debounce after construction.
+                config.persistence_save_debounce_ms = 250
+                spy.mockClear()
+
+                debounced.register({ distinct_id: 'late' })
+
+                // The debounced write is pending — not in storage yet.
+                expect(spy).not.toHaveBeenCalled()
+
+                // Simulate the unload listener firing.
+                debounced.flush()
+
+                expect(spy).toHaveBeenCalledTimes(1)
+                debounced.clear()
+            })
+        })
     })
 
     describe('localStorage+cookie', () => {
