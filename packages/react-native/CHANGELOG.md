@@ -1,5 +1,29 @@
 # posthog-react-native
 
+## 4.46.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.6
+  - @posthog/core@1.29.15
+
+## 4.46.3
+
+### Patch Changes
+
+- [#3701](https://github.com/PostHog/posthog-js/pull/3701) [`6f0caf4`](https://github.com/PostHog/posthog-js/commit/6f0caf45b169ebc33a0f6386950c75539070ad9c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Coalesce React Native storage writes into a short window so a burst of captures no longer re-serializes and rewrites the whole storage blob on every event. Login, logout, opt-in/opt-out, event flush, app background, shutdown, and fatal exceptions still persist synchronously.
+  (2026-05-31)
+
+- [#3689](https://github.com/PostHog/posthog-js/pull/3689) [`501ade6`](https://github.com/PostHog/posthog-js/commit/501ade6df6cba0f6556830244a1b708338a3c85f) Thanks [@ioannisj](https://github.com/ioannisj)! - fix(ios): iOS Release builds with Expo config plugin fail when bundle phase uses a /bin/sh prefix, causing posthog-xcode.sh to receive /bin/sh as $1 instead of the react-native-xcode.sh path. The PACKAGER_SOURCEMAP_FILE preservation patch was silently skipped, leading to posthog-cli failing with "Failed to load minified map". Fixes #3682.
+  (2026-05-31)
+
+- [#3694](https://github.com/PostHog/posthog-js/pull/3694) [`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix(react-native): preserve non-string property types (booleans, arrays, numbers, objects) when caching person and group properties for feature flag evaluation. Previously these were force-coerced to strings via `String(value)`, causing flag conditions using boolean equality or array `contains` to fail on device while the PostHog UI still evaluated correctly.
+  (2026-05-31)
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+  - @posthog/types@1.376.5
+
 ## 4.46.2
 
 ### Patch Changes

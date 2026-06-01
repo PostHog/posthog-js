@@ -11,7 +11,9 @@ interface MockAsyncIterator<T> {
   [Symbol.asyncIterator](): AsyncIterator<T>
 }
 
-let mockOpenAiChatResponse: ChatCompletion = {} as ChatCompletion
+// `_request_id` is attached by the OpenAI SDK from the `x-request-id` response
+// header; it is not part of the public `ChatCompletion` type, so widen it here.
+let mockOpenAiChatResponse: ChatCompletion & { _request_id?: string } = {} as ChatCompletion
 let mockOpenAiParsedResponse: ParsedResponse<any> = {} as ParsedResponse<any>
 let mockOpenAiEmbeddingResponse: any = {}
 let mockStreamChunks: ChatCompletionChunk[] = []
@@ -155,6 +157,7 @@ const createMockStreamChunks = (options: {
     model: 'gpt-4',
     object: 'chat.completion.chunk',
     created: Date.now() / 1000,
+    system_fingerprint: 'fp_stream_test',
   }
 
   if (options.content) {
@@ -283,10 +286,12 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
     // Default chat completion mock for non-streaming responses
     mockOpenAiChatResponse = {
-      id: 'test-response-id',
+      id: 'chatcmpl-test-response-id',
       model: 'gpt-4',
       object: 'chat.completion',
       created: Date.now() / 1000,
+      system_fingerprint: 'fp_test123',
+      _request_id: 'req_test-request-id',
       choices: [
         {
           index: 0,
@@ -346,6 +351,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       input: [],
       metadata: null,
       response_id: 'test-parsed-response-id',
+      _request_id: 'req_test-parsed-request-id',
       service_tier: null,
       system_fingerprint: null,
       queue_time: null,
@@ -448,6 +454,11 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
     expect(properties['$ai_usage']).toBeDefined()
+    expect(properties['$ai_completion_id']).toBe('chatcmpl-test-response-id')
+    expect(properties['$ai_provider_metadata']).toEqual({
+      system_fingerprint: 'fp_test123',
+      request_id: 'req_test-request-id',
+    })
   })
 
   conditionalTest('groups', async () => {
@@ -629,6 +640,9 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    expect(properties['$ai_completion_id']).toBe('test-parsed-response-id')
+    // Responses API has no system_fingerprint, so only request_id is reported.
+    expect(properties['$ai_provider_metadata']).toEqual({ request_id: 'req_test-parsed-request-id' })
   })
 
   conditionalTest('responses parse with instructions parameter', async () => {
@@ -759,6 +773,10 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_input_tokens']).toBe(25)
       expect(properties['$ai_output_tokens']).toBe(15)
       expect(properties['streamTest']).toBe(true)
+      // Completion metadata is accumulated from the streamed chunks. The
+      // streaming path has no request id, so only system_fingerprint is reported.
+      expect(properties['$ai_completion_id']).toBe('chatcmpl-test')
+      expect(properties['$ai_provider_metadata']).toEqual({ system_fingerprint: 'fp_stream_test' })
     })
 
     conditionalTest('handles streaming with tool calls', async () => {
@@ -1574,6 +1592,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       // Mock Responses API response with web_search_call items
       const mockResponsesResult = {
         id: 'resp_test',
+        _request_id: 'req_test-responses-create',
         output: [
           {
             type: 'web_search_call',
@@ -1617,6 +1636,9 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       // Should detect 2 web_search_call items (exact count)
       expect(properties['$ai_web_search_count']).toBe(2)
+      // Completion metadata for the non-streaming Responses API create path.
+      expect(properties['$ai_completion_id']).toBe('resp_test')
+      expect(properties['$ai_provider_metadata']).toEqual({ request_id: 'req_test-responses-create' })
     })
 
     conditionalTest('should track web search in streaming with citations on final chunk', async () => {

@@ -1,5 +1,21 @@
 # @posthog/core
 
+## 1.29.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.6
+
+## 1.29.14
+
+### Patch Changes
+
+- [#3694](https://github.com/PostHog/posthog-js/pull/3694) [`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix(react-native): preserve non-string property types (booleans, arrays, numbers, objects) when caching person and group properties for feature flag evaluation. Previously these were force-coerced to strings via `String(value)`, causing flag conditions using boolean equality or array `contains` to fail on device while the PostHog UI still evaluated correctly.
+  (2026-05-31)
+- Updated dependencies []:
+  - @posthog/types@1.376.5
+
 ## 1.29.13
 
 ### Patch Changes

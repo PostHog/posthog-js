@@ -1,5 +1,28 @@
 # posthog-ai
 
+## 7.20.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.15
+  - posthog-node@5.35.8
+
+## 7.20.1
+
+### Patch Changes
+
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+  - posthog-node@5.35.7
+
+## 7.20.0
+
+### Minor Changes
+
+- [#3306](https://github.com/PostHog/posthog-js/pull/3306) [`1a2f8a8`](https://github.com/PostHog/posthog-js/commit/1a2f8a88ae6ea30cbbc6456d72fae0dca59efbff) Thanks [@johnsykim](https://github.com/johnsykim)! - Add `$ai_completion_id` and `$ai_provider_metadata` to `$ai_generation` events for the OpenAI and Azure OpenAI wrappers. `$ai_completion_id` is the provider's response ID (e.g. `chatcmpl-…` / `resp_…`); `$ai_provider_metadata` carries OpenAI-specific fields (`system_fingerprint`, `request_id`). Together they enable correlating PostHog events with OpenAI's Logs dashboard (`platform.openai.com/logs/{completion_id}`). The same options (`completionId`, `providerMetadata`) are now accepted by the public `captureAiGeneration` primitive so other provider wrappers can follow the same pattern.
+  (2026-05-29)
+
 ## 7.19.7
 
 ### Patch Changes

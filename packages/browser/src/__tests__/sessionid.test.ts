@@ -1,4 +1,10 @@
-import { DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS, MAX_SESSION_IDLE_TIMEOUT_SECONDS, SessionIdManager } from '../sessionid'
+import {
+    ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS,
+    DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS,
+    MAX_SESSION_IDLE_TIMEOUT_SECONDS,
+    MIN_SESSION_IDLE_TIMEOUT_SECONDS,
+    SessionIdManager,
+} from '../sessionid'
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
 import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
@@ -45,6 +51,7 @@ describe('Session ID manager', () => {
                 // Mock the behavior of register - it should update the props
                 Object.assign(persistence.props, props)
             }),
+            load: jest.fn(),
             _disabled: false,
         }
         ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
@@ -307,10 +314,269 @@ describe('Session ID manager', () => {
         })
     })
 
+    describe('activity timestamp persistence granularity', () => {
+        // Activity timestamp is updated on every event capture (4+ times
+        // per second). Persisting on every call writes the entire props
+        // blob to localStorage and broadcasts it cross-tab via storage
+        // events. We persist only when the value moves enough to matter
+        // for idle detection. In-memory state always stays at full
+        // resolution.
+        it('persists the first activity timestamp', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_000, 'id', 1_000_000],
+            })
+        })
+
+        it.each([
+            { label: '+1ms', delta: 1 },
+            { label: '+999ms', delta: 999 },
+            { label: '+4_999ms', delta: 4_999 },
+        ])('does not persist activity-only change $label (under granularity)', ({ delta }) => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_000_000 + delta, 1_000_000)
+            expect(persistence.register).not.toHaveBeenCalled()
+        })
+
+        it.each([
+            { label: '+5_000ms (boundary)', delta: 5_000 },
+            { label: '+5_001ms', delta: 5_001 },
+            { label: '+60_000ms', delta: 60_000 },
+        ])('persists activity-only change $label (crosses granularity)', ({ delta }) => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_000_000 + delta, 1_000_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_000 + delta, 'id', 1_000_000],
+            })
+        })
+
+        it('persists immediately when sessionId changes, regardless of timestamp delta', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id1', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id2', 1_000_001, 1_000_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_001, 'id2', 1_000_000],
+            })
+        })
+
+        it('persists immediately when startTimestamp changes, regardless of timestamp delta', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_000_001, 2_000_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_001, 'id', 2_000_000],
+            })
+        })
+
+        it('keeps in-memory activity timestamp at full resolution when persistence is skipped', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('id', 1_000_001, 1_000_000)
+            // Under the 5_000 ms granularity, persistence is skipped, but the
+            // in-memory value still reflects the latest tick — important for
+            // any in-process readers and for the next granularity comparison.
+            expect(sessionIdManager['_sessionActivityTimestamp']).toBe(1_000_001)
+        })
+
+        it('compares against last persisted, not last in-memory', () => {
+            // Six 1_000 ms increments — none on its own crosses 5_000 ms,
+            // but the cumulative delta does. We must compare to the
+            // last-persisted value, not the previous in-memory tick.
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000) // persisted (first)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_001_000, 1_000_000) // +1s
+            sessionIdManager['_setSessionId']('id', 1_002_000, 1_000_000) // +2s
+            sessionIdManager['_setSessionId']('id', 1_003_000, 1_000_000) // +3s
+            sessionIdManager['_setSessionId']('id', 1_004_000, 1_000_000) // +4s
+            expect(persistence.register).not.toHaveBeenCalled()
+
+            sessionIdManager['_setSessionId']('id', 1_005_000, 1_000_000) // +5s, crosses
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_005_000, 'id', 1_000_000],
+            })
+        })
+
+        it('persists immediately after resetSessionId, even within granularity window', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            sessionIdManager.resetSessionId() // persists null tuple
+            ;(persistence.register as jest.Mock).mockClear()
+
+            // After reset, the next real value is sessionId-changed
+            // (was null, now string) so it persists regardless of timestamp.
+            sessionIdManager['_setSessionId']('id', 1_000_001, 1_000_001)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_000_001, 'id', 1_000_001],
+            })
+        })
+
+        it.each([
+            { label: '-1ms (within granularity)', delta: -1, shouldPersist: false },
+            { label: '-4_999ms', delta: -4_999, shouldPersist: false },
+            { label: '-5_000ms (boundary)', delta: -5_000, shouldPersist: true },
+            { label: '-6_000ms (clock-skew jump)', delta: -6_000, shouldPersist: true },
+        ])('handles backward activity-only delta $label', ({ delta, shouldPersist }) => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_setSessionId']('id', 1_000_000 + delta, 1_000_000)
+            if (shouldPersist) {
+                expect(persistence.register).toHaveBeenCalledWith({
+                    [SESSION_ID]: [1_000_000 + delta, 'id', 1_000_000],
+                })
+            } else {
+                expect(persistence.register).not.toHaveBeenCalled()
+            }
+        })
+
+        it('compares against the new persisted baseline after an id change', () => {
+            // After a session-id change, subsequent activity-only ticks
+            // should be throttled against the *new* persisted baseline,
+            // not the prior session's last value.
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id1', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('id2', 1_010_000, 1_010_000) // id change, new baseline
+            ;(persistence.register as jest.Mock).mockClear()
+
+            // +1s from new baseline — within granularity, must not persist
+            sessionIdManager['_setSessionId']('id2', 1_011_000, 1_010_000)
+            expect(persistence.register).not.toHaveBeenCalled()
+
+            // +5_001ms from new baseline — crosses granularity, must persist
+            sessionIdManager['_setSessionId']('id2', 1_015_001, 1_010_000)
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_015_001, 'id2', 1_010_000],
+            })
+        })
+
+        it('persist granularity stays well under the minimum idle timeout', () => {
+            // The throttle is only safe while the persist granularity is
+            // a small fraction of the minimum idle timeout. If someone
+            // shrinks the min idle timeout (or grows the granularity)
+            // without thinking about this invariant, idle detection on
+            // other tabs could fire on stale data.
+            expect(MIN_SESSION_IDLE_TIMEOUT_SECONDS * 1000).toBeGreaterThanOrEqual(
+                6 * ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
+            )
+        })
+
+        it('flushes the pending activity timestamp on destroy', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000) // persisted (baseline)
+            sessionIdManager['_setSessionId']('id', 1_001_000, 1_000_000) // suppressed
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager.destroy()
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_001_000, 'id', 1_000_000],
+            })
+        })
+
+        it('destroy is a no-op for the throttle when in-memory matches persisted', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('id', 1_000_000, 1_000_000)
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager.destroy()
+            expect(persistence.register).not.toHaveBeenCalled()
+        })
+
+        it('does not rotate session early when in-memory activity is fresher than persisted', () => {
+            // Throttled scenario: persisted activity sits at T0 while in-memory
+            // has advanced by less than the granularity. With idle timeout T,
+            // a query at T0 + T - 1 must NOT rotate the session because real
+            // last activity is still inside the timeout — but a naive check
+            // against the stale persisted value would think we have been
+            // idle for T0 + T - 1 - T0 = T - 1 ... wait, that's fine.
+            //
+            // The actual failure mode needs the in-memory to have advanced
+            // since the last persist. Set up: persist at 1_000_000, then a
+            // throttled tick at 1_004_999 (in-memory advances, persisted
+            // stays at 1_000_000). Query at 1_004_999 + DEFAULT_TIMEOUT - 1.
+            //   real idle    = (1_004_999 + T - 1) - 1_004_999 = T - 1  (NOT idle)
+            //   stale-only   = (1_004_999 + T - 1) - 1_000_000 = T + 4_998  (idle)
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('sessionA', 1_004_999, 1_000_000)
+
+            const timeoutMs = DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000
+            const queryTime = 1_004_999 + timeoutMs - 1
+            const result = sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+
+            expect(result.sessionId).toBe('sessionA')
+            expect(result.changeReason).toBeUndefined()
+        })
+
+        it('flush does not clobber a cross-tab session rotation', () => {
+            // Tab A persists session A, then a throttled tick leaves a
+            // pending in-memory activity that has not been persisted yet.
+            // Meanwhile Tab B rotates the session to B and writes it to
+            // shared storage. When Tab A unloads, _flushPendingActivityTimestamp
+            // must not overwrite Tab B's session.
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('sessionA', 1_004_000, 1_000_000) // throttled
+            ;(persistence.register as jest.Mock).mockClear()
+
+            // Simulate Tab B's cross-tab rotation
+            persistence.props[SESSION_ID] = [2_000_000, 'sessionB', 2_000_000]
+
+            sessionIdManager['_flushPendingActivityTimestamp']()
+            expect(persistence.register).not.toHaveBeenCalled()
+            expect(persistence.props[SESSION_ID]).toEqual([2_000_000, 'sessionB', 2_000_000])
+        })
+
+        it('flush proceeds when persisted session still matches the tab', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+            sessionIdManager['_setSessionId']('sessionA', 1_004_000, 1_000_000) // throttled
+            ;(persistence.register as jest.Mock).mockClear()
+
+            sessionIdManager['_flushPendingActivityTimestamp']()
+            expect(persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [1_004_000, 'sessionA', 1_000_000],
+            })
+        })
+    })
+
     describe('reset session id', () => {
         it('clears the existing session id', () => {
             sessionIdMgr(persistence).resetSessionId()
             expect(persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
+        })
+
+        it('clears the idle timer so a stale fire cannot rotate the reset session', () => {
+            jest.useFakeTimers()
+            try {
+                const sessionIdManager = sessionIdMgr(persistence)
+                ;(persistence.register as jest.Mock).mockClear()
+
+                sessionIdManager.resetSessionId()
+                ;(persistence.register as jest.Mock).mockClear()
+
+                // Advance well past the idle timer's scheduled fire time.
+                // Without the clear, the queued timer would fire here and
+                // call resetSessionId again on a session that's already null.
+                jest.advanceTimersByTime(sessionIdManager.sessionTimeoutMs * 2)
+
+                expect(persistence.register).not.toHaveBeenCalled()
+            } finally {
+                jest.useRealTimers()
+            }
         })
         it('a new session id is generated when called', () => {
             persistence.props[SESSION_ID] = [null, null, null]
@@ -549,9 +815,12 @@ describe('Session ID manager', () => {
         })
     })
 
-    describe('persistence is source of truth over in-memory cache', () => {
-        // This test verifies that when persistence is updated (e.g., by another tab or after a frozen tab thaws),
-        // the session manager reads from persistence rather than trusting stale in-memory cache
+    describe('idle detection uses freshest known activity', () => {
+        // Idle detection compares the current wall clock against the
+        // freshest activity timestamp known to the manager — `max(persisted,
+        // in-memory)`. This covers both directions of drift between the
+        // two views (throttled in-memory ahead of persisted; or persisted
+        // ahead of in-memory because a sibling tab kept the session alive).
 
         const memoryConfig = {
             persistence_name: 'test-session-memory',
@@ -560,9 +829,9 @@ describe('Session ID manager', () => {
         } as PostHogConfig
 
         it.each([
-            { description: 'with stale timestamp from simulated frozen tab', offsetMs: 1000 },
-            { description: 'with exactly expired timestamp', offsetMs: 1 },
-        ])('should detect activity timeout $description', ({ offsetMs }) => {
+            { description: 'just past timeout', offsetMs: 1 },
+            { description: 'well past timeout', offsetMs: 1000 },
+        ])('rotates the session when wall clock crosses timeout ($description)', ({ offsetMs }) => {
             const realPersistence = new PostHogPersistence(memoryConfig)
             const testTimestamp = 1603107479471
 
@@ -580,18 +849,41 @@ describe('Session ID manager', () => {
             const firstResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
             expect(firstResult.sessionId).toBe('newUUID')
 
-            // Simulate persistence being updated externally to have a stale timestamp
-            // In a frozen tab scenario, another tab might have updated persistence,
-            // or time passed while the tab was frozen
-            const staleTimestamp = testTimestamp - (DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000 + offsetMs)
-            realPersistence.register({ [SESSION_ID]: [staleTimestamp, 'oldSessionID', staleTimestamp] })
+            // Tab freezes here. Nothing calls `_setSessionId` while frozen,
+            // so both in-memory and persisted stay at testTimestamp.
+            // Wall clock advances past the idle timeout; the tab thaws and
+            // queries again — the session must rotate.
+            const queryTimestamp = testTimestamp + DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000 + offsetMs
+            const secondResult = sessionIdManager.checkAndGetSessionAndWindowId(false, queryTimestamp)
 
-            // Second call should read from persistence and detect the activity timeout
-            const secondResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
-
-            // The session SHOULD rotate because persistence shows idle timeout exceeded
             expect(secondResult.changeReason?.activityTimeout).toBe(true)
-            expect(secondResult.sessionId).not.toBe('oldSessionID')
+        })
+
+        it('does not rotate when persisted is older than in-memory (in-memory wins)', () => {
+            // A sibling write that lands an older value into persistence
+            // (e.g. a race during cross-tab restoration) must not cause
+            // this tab to spuriously time out — in-memory has the freshest
+            // local view.
+            const realPersistence = new PostHogPersistence(memoryConfig)
+            const testTimestamp = 1603107479471
+
+            const sessionIdManager = new SessionIdManager(
+                createMockPostHog({
+                    config: memoryConfig,
+                    persistence: realPersistence,
+                    register: jest.fn(),
+                }),
+                () => 'newUUID',
+                () => 'newUUID'
+            )
+
+            sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
+
+            const staleTimestamp = testTimestamp - (DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000 + 1000)
+            realPersistence.register({ [SESSION_ID]: [staleTimestamp, 'newUUID', staleTimestamp] })
+
+            const secondResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
+            expect(secondResult.changeReason?.activityTimeout).toBeUndefined()
         })
     })
 
