@@ -5,6 +5,7 @@ import '@testing-library/jest-dom'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_ID,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_REMOTE_CONFIG,
@@ -1297,6 +1298,63 @@ describe('Lazy SessionRecording', () => {
                 expect(recordMock).toHaveBeenCalledTimes(2)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(rotatedSessionId)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(true)
+            })
+
+            it('recorder follows an adopted sibling-tab session id (does not record under the stale id)', () => {
+                // Regression for cross-tab session adoption: when this tab is idle and a
+                // sibling tab has kept the session alive (here under a different id), the
+                // idle check ADOPTS the sibling's id instead of rotating. The recorder must
+                // switch to the adopted id so its snapshots are stamped with the live
+                // session, not this tab's stale one — otherwise the replay splits.
+                config.persistence_save_debounce_ms = 250 // enable the cross-tab hardening (emit on adoption)
+                try {
+                    const firstActivityTimestamp = startingTimestamp + 100
+                    const idleTriggerTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                    // past this tab's own session timeout, so its first idle check fires
+                    const checkTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+
+                    emitActiveEvent(firstActivityTimestamp)
+                    const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                    emitInactiveEvent(idleTriggerTimestamp, true)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+
+                    const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                    recordMock.mockClear()
+
+                    // A sibling tab kept the session alive under its own id. The cross-tab
+                    // refresh pulls that id (with fresh activity) from storage, so the idle
+                    // check adopts it rather than rotating. We must NOT rotate, so the
+                    // generator returning a fresh id would be a bug — assert against it.
+                    const siblingSessionId = 'sibling-tab-session-id'
+                    sessionIdGeneratorMock.mockClear()
+                    sessionIdGeneratorMock.mockImplementation(() => 'should-not-be-generated')
+                    const persistence = sessionManager['_persistence']
+                    const refreshSpy = jest.spyOn(persistence, 'refreshKey').mockImplementation(() => {
+                        persistence.props[SESSION_ID] = [checkTimestamp - 1000, siblingSessionId, startingTimestamp]
+                    })
+
+                    // An analytics event triggers checkAndGetSessionAndWindowId while idle.
+                    jest.useFakeTimers().setSystemTime(new Date(checkTimestamp))
+                    const { sessionId: resultSessionId } = sessionManager.checkAndGetSessionAndWindowId(
+                        false,
+                        checkTimestamp
+                    )
+
+                    // The manager adopted the sibling's id, it did not rotate.
+                    expect(resultSessionId).toEqual(siblingSessionId)
+                    expect(resultSessionId).not.toEqual(firstSessionId)
+                    expect(sessionIdGeneratorMock).not.toHaveBeenCalled()
+
+                    // The recorder followed the adopted id (emit fired synchronously while
+                    // idle), and restarted exactly once — no churn.
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(siblingSessionId)
+                    expect(recordMock).toHaveBeenCalledTimes(1)
+
+                    refreshSpy.mockRestore()
+                } finally {
+                    delete config.persistence_save_debounce_ms
+                }
             })
         })
 
