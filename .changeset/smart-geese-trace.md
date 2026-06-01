@@ -1,5 +1,6 @@
 ---
-"posthog-js": minor
+'posthog-js': minor
+'@posthog/types': minor
 ---
 
-Promote tracing header configuration to the public `tracing_headers` option while keeping `__add_tracing_headers` as a deprecated alias.
+Promote tracing header configuration to the public `tracing_headers` option while keeping `addTracingHeaders` and `__add_tracing_headers` as deprecated aliases.
