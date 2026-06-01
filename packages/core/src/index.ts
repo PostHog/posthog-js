@@ -8,6 +8,7 @@ export {
   isNativeAsyncGzipReadError,
 } from './gzip'
 export * from './utils'
+export { PostHogMemoryStorage } from './storage-memory'
 export * as ErrorTracking from './error-tracking'
 export {
   buildOtlpLogRecord,

@@ -4,12 +4,12 @@ import {
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogMemoryStorage,
   PostHogPersistedProperty,
   uuidv7,
 } from '@posthog/core'
 
 import { version } from '../version'
-import { PostHogMemoryStorage } from '../storage-memory'
 import type { Event, UnredactedEvent } from '../types'
 import { log } from './logger'
 import { buildPostHogCaptureEvents } from './posthog-events'
