@@ -94,6 +94,8 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
 
   override export(spans: ReadableSpan[], resultCallback: (result: { code: number; error?: Error }) => void): void {
     if (this.disabled) {
+      // Intentionally report success: missing or blank tokens disable exporting as a compatibility no-op.
+      // Reporting failure would make OpenTelemetry treat every span as an export error.
       resultCallback({ code: ExportResultCode.SUCCESS })
       return
     }
