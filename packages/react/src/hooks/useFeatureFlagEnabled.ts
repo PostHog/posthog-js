@@ -2,7 +2,23 @@ import { useContext, useEffect, useState } from 'react'
 import { PostHogContext } from '../context'
 import { isUndefined } from '../utils/type-utils'
 
+/**
+ * Check whether a feature flag is enabled for the current user.
+ *
+ * Returns `undefined` while flags are still loading or when the flag is absent, so callers can
+ * distinguish "not known yet" from "disabled".
+ *
+ * @param flag Key of the feature flag.
+ * @returns Whether the flag is enabled, or `undefined` if not yet loaded or not found.
+ */
 export function useFeatureFlagEnabled(flag: string): boolean | undefined
+/**
+ * Check whether a feature flag is enabled for the current user.
+ *
+ * @param flag Key of the feature flag.
+ * @param defaultValue Returned instead of `undefined` while flags are loading or when the flag is absent.
+ * @returns Whether the flag is enabled, falling back to `defaultValue` when the value is unknown.
+ */
 export function useFeatureFlagEnabled(flag: string, defaultValue: boolean): boolean
 export function useFeatureFlagEnabled(flag: string, defaultValue?: boolean): boolean | undefined {
     const { client, bootstrap } = useContext(PostHogContext)
