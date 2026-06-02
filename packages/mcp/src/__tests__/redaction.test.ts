@@ -4,7 +4,7 @@ import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { redactEvent } from '../extensions/redaction'
 import type { RedactFunction, UnredactedEvent } from '../types'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 
 const CREDIT_CARD_PATTERN = /\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}/
 const SESSION_ID_PATTERN = /^ses_/
@@ -407,7 +407,7 @@ describe('redactEvent integration tests', () => {
 
     // Enable tracking with redaction
     instrument(server, {
-      projectToken: 'test-project',
+      posthog: fakePostHog(),
       enableTracing: true,
       redactSensitiveInformation: redactSensitiveData,
       identify: async () => ({
@@ -489,7 +489,7 @@ describe('redactEvent integration tests', () => {
 
     // Enable tracking with redaction
     instrument(server, {
-      projectToken: 'test-project',
+      posthog: fakePostHog(),
       enableTracing: true,
       redactSensitiveInformation: redactCreditCards,
     })
@@ -540,7 +540,7 @@ describe('redactEvent integration tests', () => {
 
     // Enable tracking
     instrument(server, {
-      projectToken: 'test-project',
+      posthog: fakePostHog(),
       enableTracing: true,
       redactSensitiveInformation: aggressiveRedact,
       identify: async () => ({

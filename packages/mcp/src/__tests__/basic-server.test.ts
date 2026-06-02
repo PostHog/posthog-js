@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 describe('Basic Server Test', () => {
@@ -129,7 +129,7 @@ describe('Basic Server Test', () => {
 
       // Call instrument first with a project ID
       await instrument(server, {
-        projectToken: 'test-project',
+        posthog: fakePostHog(),
         context: true,
         enableTracing: true,
       })
@@ -204,7 +204,7 @@ describe('Basic Server Test', () => {
 
       // Call instrument first with a project ID
       await instrument(server, {
-        projectToken: 'test-project',
+        posthog: fakePostHog(),
         context: true,
         enableTracing: true,
       })
@@ -274,7 +274,7 @@ describe('Basic Server Test', () => {
 
       // Call instrument with tracing enabled
       await instrument(server, {
-        projectToken: 'test-dedup-project',
+        posthog: fakePostHog(),
         context: true,
         enableTracing: true,
       })
@@ -438,7 +438,7 @@ describe('Basic Server Test', () => {
 
       // NOW call instrument - after tools are already defined
       await instrument(server, {
-        projectToken: 'test-project',
+        posthog: fakePostHog(),
         context: true,
         enableTracing: true,
       })
@@ -524,7 +524,7 @@ describe('Basic Server Test', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-tool-description',
+        posthog: fakePostHog(),
         enableTracing: true,
       })
 
@@ -561,7 +561,7 @@ describe('Basic Server Test', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-listed-tool-names',
+        posthog: fakePostHog(),
         enableTracing: true,
       })
 

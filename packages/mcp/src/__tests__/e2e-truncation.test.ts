@@ -1,7 +1,7 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 describe('E2E Truncation - real MCP tool calls', () => {
@@ -15,7 +15,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-truncation',
+        posthog: fakePostHog(),
         context: false,
         enableTracing: true,
       })
@@ -70,7 +70,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-truncation-params',
+        posthog: fakePostHog(),
         context: false,
         enableTracing: true,
       })
@@ -129,7 +129,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-truncation-mixed',
+        posthog: fakePostHog(),
         context: false,
         enableTracing: true,
       })
@@ -191,7 +191,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-sanitize-then-truncate',
+        posthog: fakePostHog(),
         context: false,
         enableTracing: true,
       })

@@ -2,7 +2,7 @@ import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { deriveSessionIdFromMCPSession, getServerSessionId } from '../extensions/session'
 import type { HighLevelMCPServerLike } from '../types'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 const SESSION_ID_PATTERN = /^ses_/
@@ -82,7 +82,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      instrument(server, { projectToken: 'test-project', enableTracing: true })
+      instrument(server, { posthog: fakePostHog(), enableTracing: true })
 
       const lowLevelServer = server.server
 
@@ -240,7 +240,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      instrument(server, { projectToken: 'test-project', enableTracing: true })
+      instrument(server, { posthog: fakePostHog(), enableTracing: true })
 
       const lowLevelServer = server.server
 

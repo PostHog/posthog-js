@@ -6,7 +6,7 @@ import { getSessionInfo } from './session'
 
 /**
  * Materializes an `UnredactedEvent` against the server's tracking data + session info,
- * then hands it to the configured `PostHogMCP` client for the redact/sanitize/truncate
+ * then hands it to the `McpEventSink` (wrapping the user's posthog-node client) for the redact/sanitize/truncate
  * pipeline and capture. No-ops if the server isn't tracked, no client is attached, or
  * `enableTracing` is false for an auto-captured event.
  *
@@ -27,8 +27,8 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     return
   }
 
-  const client = data.client
-  if (!client) {
+  const sink = data.sink
+  if (!sink) {
     return
   }
 
@@ -67,7 +67,7 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     properties: eventInput.properties,
   }
 
-  void client.capture(fullEvent, {
+  void sink.capture(fullEvent, {
     enableAITracing: data.options.enableAITracing ?? false,
     enableExceptionAutocapture: data.options.enableExceptionAutocapture ?? true,
   })

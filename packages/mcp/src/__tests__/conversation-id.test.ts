@@ -196,7 +196,7 @@ describe('conversation-id', () => {
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import type { HighLevelMCPServerLike } from '../types'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 describe('conversation_id tool parameter', () => {
@@ -218,7 +218,7 @@ describe('conversation_id tool parameter', () => {
 
   describe('tools/list schema injection', () => {
     it('adds an optional conversation_id parameter to every tool when enabled', async () => {
-      instrument(server, { projectToken: 'phc_test', enableConversationId: true })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: true })
 
       const result = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
 
@@ -234,7 +234,7 @@ describe('conversation_id tool parameter', () => {
     })
 
     it('does not inject when enableConversationId is false', async () => {
-      instrument(server, { projectToken: 'phc_test', enableConversationId: false })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: false })
 
       const result = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
 
@@ -251,7 +251,7 @@ describe('conversation_id tool parameter', () => {
     it('captures the agent-supplied conversation_id verbatim on the event', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, { projectToken: 'phc_test', enableConversationId: true })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: true })
 
       const agentConversationId = 'conversation-abc-1'
       await client.request(
@@ -272,7 +272,7 @@ describe('conversation_id tool parameter', () => {
     })
 
     it('mints a conversation_id and appends a prompt-back text block when the agent omits it', async () => {
-      instrument(server, { projectToken: 'phc_test', enableConversationId: true })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: true })
 
       const result = await client.request(
         {
@@ -295,7 +295,7 @@ describe('conversation_id tool parameter', () => {
       const capture = new EventCapture()
       await capture.start()
 
-      instrument(server, { projectToken: 'phc_test', enableConversationId: true })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: true })
 
       await client.request(
         {
@@ -317,7 +317,7 @@ describe('conversation_id tool parameter', () => {
       const capture = new EventCapture()
       await capture.start()
 
-      instrument(server, { projectToken: 'phc_test', enableConversationId: true })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: true })
 
       await client.request(
         {
@@ -337,7 +337,7 @@ describe('conversation_id tool parameter', () => {
     })
 
     it('does not inject the prompt-back into error results', async () => {
-      instrument(server, { projectToken: 'phc_test', enableConversationId: true })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: true })
 
       const result = await client.request(
         {
@@ -359,7 +359,7 @@ describe('conversation_id tool parameter', () => {
     it('clears event.conversationId on error when we minted it (agent never received it)', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, { projectToken: 'phc_test', enableConversationId: true })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: true })
 
       await client.request(
         {
@@ -382,7 +382,7 @@ describe('conversation_id tool parameter', () => {
     it('keeps event.conversationId on error when the agent supplied it', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, { projectToken: 'phc_test', enableConversationId: true })
+      instrument(server, { posthog: fakePostHog(), enableConversationId: true })
 
       await client.request(
         {

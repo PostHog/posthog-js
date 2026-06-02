@@ -1,7 +1,7 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 
 describe('Tracing Initialization Tests', () => {
   let eventCapture: EventCapture
@@ -21,17 +21,17 @@ describe('Tracing Initialization Tests', () => {
 
     try {
       await instrument(server, {
-        projectToken: 'test-project',
+        posthog: fakePostHog(),
         enableTracing: true,
       })
 
       await instrument(server, {
-        projectToken: 'test-project',
+        posthog: fakePostHog(),
         enableTracing: true,
       })
 
       await instrument(server, {
-        projectToken: 'test-project',
+        posthog: fakePostHog(),
         enableTracing: true,
       })
 
@@ -88,7 +88,7 @@ describe('Tracing Initialization Tests', () => {
 
     try {
       await instrument(server, {
-        projectToken: 'test-project',
+        posthog: fakePostHog(),
         enableTracing: true,
       })
 

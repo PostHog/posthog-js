@@ -1,5 +1,5 @@
 import type { Event, UnredactedEvent } from '../types'
-import { PostHogMCP, PostHogMCPCaptureOptions } from '../extensions/client'
+import { McpEventSink, McpCaptureOptions } from '../extensions/sink'
 import { redactEvent } from '../extensions/redaction'
 import { sanitizeEvent } from '../extensions/sanitization'
 import { truncateEvent } from '../extensions/truncation'
@@ -15,18 +15,18 @@ import { truncateEvent } from '../extensions/truncation'
  */
 export class EventCapture {
   private capturedEvents: UnredactedEvent[] = []
-  private original?: (event: UnredactedEvent, options: PostHogMCPCaptureOptions) => Promise<void>
+  private original?: (event: UnredactedEvent, options: McpCaptureOptions) => Promise<void>
 
   async start(): Promise<void> {
     if (this.original) {
       return
     }
-    this.original = PostHogMCP.prototype.capture
+    this.original = McpEventSink.prototype.capture
     const capture = this
-    PostHogMCP.prototype.capture = async function (
-      this: PostHogMCP,
+    McpEventSink.prototype.capture = async function (
+      this: McpEventSink,
       event: UnredactedEvent,
-      _options: PostHogMCPCaptureOptions
+      _options: McpCaptureOptions
     ): Promise<void> {
       let processed: UnredactedEvent = event
       if (event.redactionFn) {
@@ -49,12 +49,12 @@ export class EventCapture {
         return
       }
       capture.capturedEvents.push(processed)
-    } as typeof PostHogMCP.prototype.capture
+    } as typeof McpEventSink.prototype.capture
   }
 
   async stop(): Promise<void> {
     if (this.original) {
-      PostHogMCP.prototype.capture = this.original
+      McpEventSink.prototype.capture = this.original
       this.original = undefined
     }
   }
@@ -73,5 +73,21 @@ export class EventCapture {
 
   findEventsByResourceName(resourceName: string): Event[] {
     return this.capturedEvents.filter((e) => e.resourceName === resourceName) as Event[]
+  }
+}
+
+/**
+ * Minimal stand-in for a `posthog-node` client. `instrument()` only needs a
+ * truthy `posthog` to build a sink, and `EventCapture` intercepts the sink
+ * before it ever calls `posthog.capture`, so a no-op `capture` is enough for
+ * tests that assert on captured MCP events.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function fakePostHog(): any {
+  return {
+    capture: () => undefined,
+    captureException: () => undefined,
+    flush: async () => undefined,
+    shutdown: async () => undefined,
   }
 }

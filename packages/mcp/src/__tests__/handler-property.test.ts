@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { instrument } from '../index'
+import { fakePostHog } from './test-utils'
 
 // Helper to get the tool function property name for the current MCP SDK version
 function getToolFunctionPropertyName(tool: any): 'callback' | 'handler' {
@@ -51,7 +52,7 @@ describe('MCP SDK callback/handler compatibility', () => {
     const originalPropName = getToolFunctionPropertyName(toolBefore)
 
     // Call instrument() to apply PostHog MCP analytics's tracing
-    instrument(server, { projectToken: 'test-project-id' })
+    instrument(server, { posthog: fakePostHog() })
 
     const toolsAfter = (server as any)._registeredTools
     const toolAfter = toolsAfter.test_tool
@@ -78,7 +79,7 @@ describe('MCP SDK callback/handler compatibility', () => {
     const expectedPropName = getToolFunctionPropertyName((server as any)._registeredTools.initial_tool)
 
     // Call instrument() first
-    instrument(server, { projectToken: 'test-project-id' })
+    instrument(server, { posthog: fakePostHog() })
 
     // Then register a tool after instrument()
     server.tool('late_tool', { b: z.string() }, async ({ b }) => ({

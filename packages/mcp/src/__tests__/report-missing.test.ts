@@ -3,7 +3,7 @@ import { instrument } from '../index'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 const GET_MORE_TOOLS = 'get_more_tools'
@@ -27,7 +27,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
 
   describe('tools/list injection', () => {
     it('adds get_more_tools with required context when reportMissing is true', async () => {
-      instrument(server, { projectToken: 'phc_test', reportMissing: true })
+      instrument(server, { posthog: fakePostHog(), reportMissing: true })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const tool = tools.find((t: any) => t.name === GET_MORE_TOOLS)
@@ -38,14 +38,14 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     })
 
     it('omits get_more_tools when reportMissing is false', async () => {
-      instrument(server, { projectToken: 'phc_test', reportMissing: false })
+      instrument(server, { posthog: fakePostHog(), reportMissing: false })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       expect(tools.find((t: any) => t.name === GET_MORE_TOOLS)).toBeUndefined()
     })
 
     it('does not re-inject the context param into get_more_tools (it already has its own)', async () => {
-      instrument(server, { projectToken: 'phc_test', reportMissing: true, context: true })
+      instrument(server, { posthog: fakePostHog(), reportMissing: true, context: true })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const reportMissing = tools.find((t: any) => t.name === GET_MORE_TOOLS)
@@ -64,7 +64,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('captures the report as a $mcp_tool_call event with context as userIntent', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, { projectToken: 'phc_test', reportMissing: true })
+      instrument(server, { posthog: fakePostHog(), reportMissing: true })
 
       const context = 'Need a database query tool for SQL operations'
       const result = await client.request(
@@ -89,7 +89,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('shares one session across get_more_tools and the surrounding tool calls', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, { projectToken: 'phc_test', reportMissing: true })
+      instrument(server, { posthog: fakePostHog(), reportMissing: true })
 
       const calls = [
         { name: 'add_todo', arguments: { text: 'First', context: 'Adding first todo' } },
@@ -114,7 +114,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       const capture = new EventCapture()
       await capture.start()
       instrument(server, {
-        projectToken: 'phc_test',
+        posthog: fakePostHog(),
         reportMissing: true,
         identify: async () => ({ userId: 'user-1', userData: { role: 'developer' } }),
       })

@@ -1,5 +1,5 @@
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
-import { PostHogMCP } from './extensions/client'
+import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
 import { captureException } from './extensions/exceptions'
 import { getServerTrackingData, setServerTrackingData } from './extensions/internal'
@@ -57,12 +57,12 @@ function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {})
       return validatedServer as TServer
     }
 
-    const client = resolveClient(options)
-    if (!client) {
-      log('Warning: No PostHog project token configured. Events will not be sent anywhere.')
+    const sink = options.posthog ? new McpEventSink(options.posthog) : undefined
+    if (!sink) {
+      log('Warning: No PostHog client provided (`posthog` option). Events will not be sent anywhere.')
     }
 
-    const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, client)
+    const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, sink)
 
     setServerTrackingData(lowLevelServer, mcpAnalyticsData)
     setupTrackedServer(validatedServer, lowLevelServer, mcpAnalyticsData)
@@ -74,16 +74,6 @@ function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {})
   }
 }
 
-function resolveClient(options: MCPAnalyticsOptions): PostHogMCP | undefined {
-  if (!options.projectToken) {
-    return undefined
-  }
-  return new PostHogMCP(options.projectToken, {
-    ...options.clientOptions,
-    host: options.host || options.clientOptions?.host,
-  })
-}
-
 function getLowLevelServer(server: MCPServerLike | HighLevelMCPServerLike): MCPServerLike {
   return isHighLevelServer(server) ? (server as HighLevelMCPServerLike).server : (server as MCPServerLike)
 }
@@ -91,10 +81,10 @@ function getLowLevelServer(server: MCPServerLike | HighLevelMCPServerLike): MCPS
 function buildTrackingData(
   lowLevelServer: MCPServerLike,
   options: MCPAnalyticsOptions,
-  client: PostHogMCP | undefined
+  sink: McpEventSink | undefined
 ): MCPAnalyticsData {
   return {
-    client,
+    sink,
     sessionId: newSessionId(),
     lastActivity: new Date(),
     identifiedSessions: new Map<string, UserIdentity>(),
@@ -110,7 +100,6 @@ function buildTrackingData(
       identify: options.identify,
       redactSensitiveInformation: options.redactSensitiveInformation,
       eventProperties: options.eventProperties,
-      host: options.host,
       logger: options.logger,
     },
     sessionSource: 'generated',
@@ -208,38 +197,6 @@ function getLowLevelServerFromUnknownObject(server: object): MCPServerLike {
   return 'server' in server && server.server && typeof server.server === 'object'
     ? (server.server as MCPServerLike)
     : (server as MCPServerLike)
-}
-
-/**
- * Flush any queued events for an instrumented server. Awaits the underlying
- * `@posthog/core` queue. Safe to call before a graceful shutdown.
- */
-export async function flush(server: unknown): Promise<void> {
-  const client = resolveTrackedClient(server, 'flush')
-  if (!client) return
-  await client.flush()
-}
-
-/**
- * Flush and tear down the PostHog client for an instrumented server. Call this
- * in a SIGTERM / `beforeExit` handler so in-flight events aren't dropped.
- */
-export async function shutdown(server: unknown): Promise<void> {
-  const client = resolveTrackedClient(server, 'shutdown')
-  if (!client) return
-  await client.shutdown()
-}
-
-function resolveTrackedClient(serverInput: unknown, fnName: string): PostHogMCP | undefined {
-  if (!serverInput || typeof serverInput !== 'object') {
-    throw new Error(`First argument to ${fnName}() must be an instrumented MCP server instance`)
-  }
-  const lowLevelServer = getLowLevelServerFromUnknownObject(serverInput)
-  const data = getServerTrackingData(lowLevelServer)
-  if (!data) {
-    throw new Error(`Server is not instrumented. Call \`instrument(server, options)\` before \`${fnName}()\`.`)
-  }
-  return data.client
 }
 
 export { deriveSessionIdFromMCPSession }

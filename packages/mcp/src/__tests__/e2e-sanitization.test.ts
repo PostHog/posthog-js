@@ -1,7 +1,7 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 describe('E2E Sanitization - real MCP tool calls', () => {
@@ -15,7 +15,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-sanitization',
+        posthog: fakePostHog(),
         context: false,
         enableTracing: true,
         // Off: the prompt-back appended on first mint would add an extra
@@ -85,7 +85,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-sanitization-audio',
+        posthog: fakePostHog(),
         context: false,
         enableTracing: true,
       })
@@ -137,7 +137,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-sanitization-base64',
+        posthog: fakePostHog(),
         context: false,
         enableTracing: true,
       })
@@ -198,7 +198,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     try {
       const { instrument } = await import('../index')
       await instrument(server, {
-        projectToken: 'test-sanitization-mixed',
+        posthog: fakePostHog(),
         context: false,
         enableTracing: true,
       })

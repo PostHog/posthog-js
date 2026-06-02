@@ -1,7 +1,7 @@
 import { publishCustomEvent, instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import type { MCPServerLike } from '../types'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 
 function makeMockLowLevelServer(): MCPServerLike {
   return {
@@ -15,7 +15,7 @@ function makeMockLowLevelServer(): MCPServerLike {
 describe('publishCustomEvent', () => {
   it('publishes a $mcp_custom event for an instrumented server', async () => {
     const server = makeMockLowLevelServer()
-    instrument(server, { projectToken: 'phc_test' })
+    instrument(server, { posthog: fakePostHog() })
 
     const capture = new EventCapture()
     await capture.start()
@@ -41,7 +41,7 @@ describe('publishCustomEvent', () => {
 
   it('records error details when isError is true', async () => {
     const server = makeMockLowLevelServer()
-    instrument(server, { projectToken: 'phc_test' })
+    instrument(server, { posthog: fakePostHog() })
 
     const capture = new EventCapture()
     await capture.start()
@@ -62,7 +62,7 @@ describe('publishCustomEvent', () => {
   it('also works with high-level McpServer-like wrappers', async () => {
     const lowLevelServer = makeMockLowLevelServer()
     const highLevelServer = { server: lowLevelServer, _registeredTools: {}, tool: () => {} }
-    instrument(highLevelServer, { projectToken: 'phc_test' })
+    instrument(highLevelServer, { posthog: fakePostHog() })
 
     const capture = new EventCapture()
     await capture.start()
@@ -89,7 +89,7 @@ describe('publishCustomEvent', () => {
 
   it('always uses the custom event type for publishCustomEvent', async () => {
     const server = makeMockLowLevelServer()
-    instrument(server, { projectToken: 'phc_test' })
+    instrument(server, { posthog: fakePostHog() })
 
     const capture = new EventCapture()
     await capture.start()
@@ -104,7 +104,7 @@ describe('publishCustomEvent', () => {
 
   it('stamps a timestamp on the captured event', async () => {
     const server = makeMockLowLevelServer()
-    instrument(server, { projectToken: 'phc_test' })
+    instrument(server, { posthog: fakePostHog() })
 
     const capture = new EventCapture()
     await capture.start()
@@ -121,7 +121,7 @@ describe('publishCustomEvent', () => {
 
   it('accepts minimal event data', async () => {
     const server = makeMockLowLevelServer()
-    instrument(server, { projectToken: 'phc_test' })
+    instrument(server, { posthog: fakePostHog() })
 
     const capture = new EventCapture()
     await capture.start()
@@ -139,7 +139,7 @@ describe('publishCustomEvent', () => {
     // A `publishCustomEvent` call is by definition user-initiated and should not
     // be silently swallowed when the host opts out of auto-capture.
     const server = makeMockLowLevelServer()
-    instrument(server, { projectToken: 'phc_test', enableTracing: false })
+    instrument(server, { posthog: fakePostHog(), enableTracing: false })
 
     const capture = new EventCapture()
     await capture.start()

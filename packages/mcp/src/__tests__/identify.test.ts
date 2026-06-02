@@ -4,7 +4,7 @@ import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
 import type { HighLevelMCPServerLike, UserIdentity } from '../types'
-import { EventCapture } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 const callAddTodo = (client: any, context = 'test context') =>
@@ -50,7 +50,7 @@ describe('identify option', () => {
       return identity
     })
 
-    instrument(server, { projectToken: 'phc_test', identify })
+    instrument(server, { posthog: fakePostHog(), identify })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -68,7 +68,7 @@ describe('identify option', () => {
     await capture.start()
     const identify = jest.fn(async () => ({ userId: 'user-1', userData: { name: 'Stable' } }))
 
-    instrument(server, { projectToken: 'phc_test', identify })
+    instrument(server, { posthog: fakePostHog(), identify })
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -88,7 +88,7 @@ describe('identify option', () => {
     await capture.start()
 
     const identify = jest.fn(async () => ({ userId: 'late-user', userData: { name: 'Late' } }))
-    instrument(server, { projectToken: 'phc_test', context: true, identify })
+    instrument(server, { posthog: fakePostHog(), context: true, identify })
 
     server.tool!(
       'post_track_tool',
@@ -118,7 +118,7 @@ describe('identify option', () => {
   it('treats a null return as "no identity": no event published, no identity stored', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, { projectToken: 'phc_test', identify: async () => null })
+    instrument(server, { posthog: fakePostHog(), identify: async () => null })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -133,7 +133,7 @@ describe('identify option', () => {
   it('still tracks tool calls when no identify option is provided (anonymous sessions)', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, { projectToken: 'phc_test' })
+    instrument(server, { posthog: fakePostHog() })
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -151,7 +151,7 @@ describe('identify option', () => {
 
   it('populates session info with the resolved identity (userId, userName, userData)', async () => {
     instrument(server, {
-      projectToken: 'phc_test',
+      posthog: fakePostHog(),
       identify: async () => ({
         userId: 'session-user',
         userName: 'Session Alice',
@@ -171,7 +171,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, {
-      projectToken: 'phc_test',
+      posthog: fakePostHog(),
       identify: async () => {
         await new Promise((r) => setTimeout(r, 50))
         return { userId: 'async-user', userData: {} }
@@ -191,7 +191,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, {
-      projectToken: 'phc_test',
+      posthog: fakePostHog(),
       identify: async () => {
         throw new Error('identify boom')
       },
@@ -208,7 +208,7 @@ describe('identify option', () => {
 
   it('stores whatever identify returns — no schema validation', async () => {
     instrument(server, {
-      projectToken: 'phc_test',
+      posthog: fakePostHog(),
       // The SDK does not validate the identity shape; whatever you return ends up cached.
       identify: async () => ({ invalidField: 'invalid' }) as unknown as UserIdentity,
     })

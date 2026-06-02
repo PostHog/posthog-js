@@ -18,15 +18,14 @@ The public surface in `src/index.ts`:
 
 - `instrument(server, options)` — installs the SDK on an MCP server. Idempotent per server (re-calling logs and returns early).
 - `publishCustomEvent(server, eventData)` — emit an arbitrary `$mcp_custom` event onto the same pipeline. The server must already have been passed to `instrument()`.
-- `flush(server)` / `shutdown(server)` — drive the underlying `@posthog/core` queue manually. Both throw if the server hasn't been instrumented.
 
-The internal `PostHogMCP` client (`src/extensions/client.ts`) is not exported; `instrument()` constructs and owns it per-server.
+The host application supplies its own `posthog-node` client via `options.posthog` (same pattern as `@posthog/ai`) and owns its lifecycle — there is no SDK-managed client to flush or shut down. Internally, `instrument()` wraps that client in an `McpEventSink` (`src/extensions/sink.ts`, not exported) that runs the pipeline and calls `posthog.capture()`.
 
 `instrument()` does five things (`src/index.ts`):
 
 1. Validate `server` is either a low-level `Server` or a high-level `McpServer`, and unwrap the latter to get the underlying `Server`.
-2. Construct a `PostHogMCP(projectToken, { host, ...options.clientOptions })`.
-3. Build per-server tracking state (session id, identity cache, callbacks, the resolved client) stored in a module-level `WeakMap`.
+2. Wrap the user-provided `options.posthog` client in an `McpEventSink`.
+3. Build per-server tracking state (session id, identity cache, callbacks, the sink) stored in a module-level `WeakMap`.
 4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `instrument()` is also wrapped.
 5. Optionally register the `get_more_tools` virtual tool when `options.reportMissing: true`.
 
@@ -49,16 +48,16 @@ client → MCP server → tools/call wrapper (tracing-v2.ts)
   ├─ resolveToolCallIntent        ← context arg OR intentFallback callback
   ├─ originalHandler(request,extra)
   ├─ publishSuccessfulToolEvent   ← attaches result, duration
-  └─ publishEvent(server, event)  → PostHogMCP.ingest()
+  └─ captureEvent(server, event)  → McpEventSink.capture()
 ```
 
 The wrapper strips the `context` argument from `params.arguments` before forwarding to the user's tool callback, so tool implementations never see the analytics-only arg.
 
 ## 3. Event pipeline
 
-Once an `UnredactedEvent` reaches `PostHogMCP.ingest()` (`src/extensions/client.ts`), it runs through:
+Once an `UnredactedEvent` reaches `McpEventSink.capture()` (`src/extensions/sink.ts`), it runs through:
 
-1. **Customer redaction** — `redactEvent(event, redactionFn)` if `options.redactSensitiveInformation` was set (`src/extensions/redaction.ts`). The redactor is called on every string in the event _except_ a protected field allowlist (`sessionId`, `id`, `projectToken`, `server`, identify-\* fields, `resourceName`, `eventType`, `actorId`, `properties`).
+1. **Customer redaction** — `redactEvent(event, redactionFn)` if `options.redactSensitiveInformation` was set (`src/extensions/redaction.ts`). The redactor is called on every string in the event _except_ a protected field allowlist (`sessionId`, `id`, `server`, identify-\* fields, `resourceName`, `eventType`, `actorId`, `properties`).
 2. **Sanitization** — `sanitizeEvent` (`src/extensions/sanitization.ts`):
    - `type: "image" | "audio"` content blocks → replaced with a text stub.
    - `type: "resource"` blocks with `.blob` → replaced.
@@ -70,7 +69,7 @@ Once an `UnredactedEvent` reaches `PostHogMCP.ingest()` (`src/extensions/client.
    - Always: the main `$mcp_*` capture event.
    - If `event.isError && event.error`: a sibling `$exception` event.
    - If `enableAITracing && eventType === mcpToolsCall`: a sibling `$ai_span` event.
-5. **Dispatch** — each event is handed to `PostHogCoreStateless.captureStateless()`. Batching, retries, and flushing are owned by `@posthog/core`. Consumers call `client.shutdown()` / `client.flush()` on the `PostHogMCP` instance to drain. No process-signal handlers are installed by the SDK — that's the host application's choice.
+5. **Dispatch** — each event is handed to the user's `posthog-node` client via `posthog.capture()`. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain — the SDK installs no process-signal handlers and owns no client lifecycle.
 
 ## 4. Session & identity
 
@@ -98,7 +97,7 @@ All events are emitted by `buildPostHogCaptureEvents`. The main event name is co
 | `$mcp_prompt_get`      | Prompt fetched                                                | `$mcp_resource_name` (= prompt name)                                                                                                                                            |
 | `$mcp_custom`          | `publishCustomEvent()`                                        | Whatever the caller passed in `properties`                                                                                                                                      |
 | `$identify`            | `options.identify` returned a new identity for the session    | `$set` populated                                                                                                                                                                |
-| `$exception`           | Sibling to any errored event                                  | `$exception_message`, `$exception_type`, `$exception_stacktrace`, `$exception_source = "backend"`                                                                               |
+| `$exception`           | Sibling to any errored event                                  | `$exception_list`, `$exception_level` (standard `@posthog/core` error-tracking shape)                                                                                           |
 | `$ai_span`             | Sibling to `$mcp_tool_call` when `enableAITracing: true`      | Full `$ai_*` set — see §6                                                                                                                                                       |
 
 ## 6. Property catalog
@@ -152,7 +151,7 @@ All wire keys live in `PostHogMCPAnalyticsProperty` (`src/extensions/constants.t
 
 ### Exception properties (`$exception` event)
 
-`$exception_source = "backend"`, `$exception_message`, `$exception_type`, `$exception_stacktrace`, plus `$session_id`, `$mcp_resource_name`, `$mcp_tool_name` and `$mcp_tool_description` (tool calls only), `$mcp_server_*`, `$mcp_client_*`.
+`$exception_list` + `$exception_level` (the standard `@posthog/core` error-tracking shape — each exception carries `type`, `value`, `mechanism`, and a parsed `stacktrace.frames`), plus `$session_id`, `$mcp_resource_name`, `$mcp_tool_name` and `$mcp_tool_description` (tool calls only), `$mcp_server_*`, `$mcp_client_*`.
 
 ### Customer-defined properties
 
@@ -162,9 +161,7 @@ The `eventProperties` callback returns key/value pairs that are **spread flat at
 
 | Option                       | Default                                   | Use case                                                                                                                                |
 | ---------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `projectToken`                     | —                                         | PostHog project key (`phc_…`).                                                                                                          |
-| `host`                       | `https://us.i.posthog.com`                | Ingestion host. Equivalent to `clientOptions.host`.                                                                                     |
-| `clientOptions`              | —                                         | Forwarded to the underlying `@posthog/core` client. Tune `flushAt`, `flushInterval`, `requestTimeout`, custom `fetch`, etc.             |
+| `posthog`                    | —                                         | A `posthog-node` client you construct and own (host, project token, batching, lifecycle all configured there). Without it, no events are sent. |
 | `logger`                     | no-op                                     | STDIO-safe log sink for SDK-internal warnings. Receives single string messages.                                                         |
 | `enableTracing`              | `true`                                    | Master kill switch for event emission.                                                                                                  |
 | `enableAITracing`            | `false`                                   | Emit `$ai_span` so MCP activity shows up in PostHog LLM analytics.                                                                      |
@@ -293,9 +290,9 @@ The previous version of this SDK lived in a separate repo and depended on `posth
 
 | Concern                                | Old (standalone 0.0.x)                                          | New (monorepo 0.1.0)                                                                  |
 | -------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| PostHog client                         | Required `posthog-node` runtime dep, or BYO via `posthogClient` | Uses `@posthog/core`'s `PostHogCoreStateless` directly via an internal client         |
-| `posthogClient` option                 | Accepted any duck-typed client                                  | Removed; use `projectToken` + `clientOptions`                                               |
-| `posthogOptions` option                | Forwarded to `posthog-node`                                     | Renamed to `clientOptions` and forwarded to `@posthog/core`                           |
+| PostHog client                         | Required `posthog-node` runtime dep, or BYO via `posthogClient` | BYO `posthog-node` client via the `posthog` option (matches `@posthog/ai`)            |
+| `posthogClient` option                 | Accepted any duck-typed client                                  | Renamed to `posthog`; expects a `posthog-node` `PostHog` instance                     |
+| `posthogOptions` option                | Forwarded to `posthog-node`                                     | Removed — configure the `posthog-node` client you pass in directly                    |
 | `eventTags` callback                   | Constrained string map; spread flat on events                   | Removed — fold all metadata into `eventProperties`                                    |
 | `~/posthog-mcp-analytics.log`          | SDK wrote to the user's home directory                          | Removed; pass `logger?: (msg: string) => void` if you want to capture internal logs   |
 | PostHog event names                    | Plain (`mcp_tool_call`, `mcp_custom`, `posthog_identify`, …)    | `$`-prefixed (`$mcp_tool_call`, `$mcp_custom`, `$identify`, …) per PostHog convention |
@@ -381,8 +378,8 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | Property/event constants                         | `src/extensions/constants.ts`                                 |
 | Event serialization to PostHog                   | `src/extensions/posthog-events.ts`                            |
 | Internal event types                             | `src/extensions/event-types.ts`                               |
-| `PostHogMCP` client + ingest pipeline            | `src/extensions/client.ts`                                    |
-| Per-server `publishEvent` helper                 | `src/extensions/publish.ts`                                   |
+| `McpEventSink` (wraps posthog-node) + pipeline   | `src/extensions/sink.ts`                                      |
+| Per-server `captureEvent` helper                 | `src/extensions/capture.ts`                                  |
 | High-level `McpServer` wrapping                  | `src/extensions/tracing-v2.ts`                                |
 | Low-level `Server` wrapping                      | `src/extensions/tracing.ts`                                   |
 | Intent resolution (context arg + fallback)       | `src/extensions/intent.ts`                                    |
