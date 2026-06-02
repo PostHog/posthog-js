@@ -421,6 +421,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Returns the common properties attached to every captured event.
+   *
+   * @remarks
+   * Extends the shared core properties (`$lib`, `$lib_version`) with
+   * `$is_server: true` so that events emitted from the server-side SDKs
+   * (posthog-node and posthog-edge, which both extend this class) are
+   * distinguishable from browser and react-native events. Browser and
+   * react-native clients do not extend `PostHogBackendClient`, so they
+   * never receive this property.
+   *
+   * @returns The common event properties, including `$is_server: true`.
+   */
+  protected override getCommonEventProperties(): PostHogEventProperties {
+    return {
+      ...super.getCommonEventProperties(),
+      $is_server: true,
+    }
+  }
+
+  /**
    * Enable the PostHog client (opt-in).
    *
    * @example

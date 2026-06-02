@@ -98,6 +98,7 @@ describe('PostHog Node.js', () => {
             $geoip_disable: true,
             $lib: 'posthog-node',
             $lib_version: '1.2.3',
+            $is_server: true,
           },
           uuid: expect.any(String),
           timestamp: expect.any(String),
@@ -106,6 +107,24 @@ describe('PostHog Node.js', () => {
           library_version: '1.2.3',
         },
       ])
+    })
+
+    it('should include $is_server: true on captured events (server-side SDK)', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+      posthog.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0]).toEqual(
+        expect.objectContaining({
+          event: 'test-event',
+          properties: expect.objectContaining({
+            $lib: 'posthog-node',
+            $is_server: true,
+          }),
+        })
+      )
     })
 
     it('shouldnt muddy subsequent capture calls', async () => {
