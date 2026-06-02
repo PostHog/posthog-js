@@ -2720,6 +2720,44 @@ describe('featureflags', () => {
             )
         })
 
+        it('omits version/reason/id/condition_index when the value is served from cache/bootstrap without v2 details', () => {
+            // Reproduces the support ticket scenario: the flag value (and a stale requestId /
+            // evaluatedAt) are served from persisted/bootstrapped state before the remote /flags
+            // response loads for this page view. Such state only carries the flat flag value, not
+            // the v2 `flags` detail object, so none of the server-evaluation debug fields can be
+            // attached even though the event otherwise looks like a real evaluation.
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': 'test' },
+                featureFlagPayloads: {},
+                requestId: TEST_REQUEST_ID,
+                evaluatedAt: TEST_EVALUATED_AT,
+                // note: no `flags` detail object, mirroring bootstrap / flat cached state
+            })
+            featureFlags._hasLoadedFlags = true
+            // remote /flags has not responded for this page view
+            featureFlags._flagsLoadedFromRemote = false
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            const captured = (instance.capture as jest.Mock).mock.calls.find(
+                (call) => call[0] === '$feature_flag_called'
+            )?.[1]
+
+            // The flat value and the (stale) request metadata are still present...
+            expect(captured).toMatchObject({
+                $feature_flag: 'test-flag',
+                $feature_flag_response: 'test',
+                $feature_flag_request_id: TEST_REQUEST_ID,
+                $feature_flag_evaluated_at: TEST_EVALUATED_AT,
+                $used_bootstrap_value: true,
+            })
+            // ...but the server-evaluation debug fields are absent because there are no details.
+            expect(captured).not.toHaveProperty('$feature_flag_version')
+            expect(captured).not.toHaveProperty('$feature_flag_reason')
+            expect(captured).not.toHaveProperty('$feature_flag_id')
+            expect(captured).not.toHaveProperty('$feature_flag_condition_index')
+        })
+
         it('updates requestId when new /flags response is received', () => {
             // First /flags response
             featureFlags.receivedFeatureFlags({
