@@ -2,6 +2,7 @@ import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
+import { SDK_DIST_CHANNEL } from '../constants'
 import { each, extend, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import {
@@ -290,7 +291,7 @@ export function getEventProperties(
     const [os_name, os_version] = detectOS(userAgent)
     const browserHints = getBrowserDetectionHints()
 
-    return extend(
+    const properties = extend(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
@@ -325,4 +326,10 @@ export function getEventProperties(
             $time: Date.now() / 1000, // epoch time in seconds
         }
     )
+
+    if (Config.SDK_DIST_CHANNEL) {
+        properties[SDK_DIST_CHANNEL] = Config.SDK_DIST_CHANNEL
+    }
+
+    return properties
 }
