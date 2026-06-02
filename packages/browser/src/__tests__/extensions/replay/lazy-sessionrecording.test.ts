@@ -1535,6 +1535,39 @@ describe('Lazy SessionRecording', () => {
 
                 expect(takeFullSnapshotMock()).toHaveBeenCalledTimes(1)
             })
+
+            it('debounces rapid $pageview navigations into a single snapshot', () => {
+                posthog.config.session_recording.full_snapshot_on_navigation = true
+
+                firePageview()
+                expect(takeFullSnapshotMock()).toHaveBeenCalledTimes(1)
+
+                // rrweb emits the resulting full snapshot, which records the debounce timestamp
+                _emit(createFullSnapshot({ timestamp: Date.now() }))
+
+                // a second navigation within the debounce window must not snapshot again
+                firePageview('https://test.com/again')
+                expect(takeFullSnapshotMock()).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not take a full snapshot on $pageview while idle', () => {
+                posthog.config.session_recording.full_snapshot_on_navigation = true
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+
+                firePageview()
+
+                expect(takeFullSnapshotMock()).not.toHaveBeenCalled()
+            })
+
+            it('reschedules the periodic full snapshot timer after a navigation snapshot', () => {
+                posthog.config.session_recording.full_snapshot_on_navigation = true
+                const scheduleSpy = jest.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_scheduleFullSnapshot')
+
+                firePageview()
+
+                expect(takeFullSnapshotMock()).toHaveBeenCalledTimes(1)
+                expect(scheduleSpy).toHaveBeenCalled()
+            })
         })
 
         describe('when compression is active', () => {
