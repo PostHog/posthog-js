@@ -1,5 +1,12 @@
 # @posthog/next
 
+## 0.4.73
+
+### Patch Changes
+
+- Updated dependencies [[`3aff16e`](https://github.com/PostHog/posthog-js/commit/3aff16e98540e659be4158a784fe38ef755f878e)]:
+    - @posthog/react@1.10.0
+
 ## 0.4.72
 
 ### Patch Changes
