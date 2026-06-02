@@ -836,6 +836,11 @@ export class PostHogFeatureFlags implements Extension {
                     properties.$feature_flag_reason = reason
                 }
 
+                // condition_index can be 0 (the first condition set), so explicitly check for undefined
+                if (!isUndefined(flagDetails?.reason?.condition_index)) {
+                    properties.$feature_flag_condition_index = flagDetails.reason.condition_index
+                }
+
                 if (flagDetails?.metadata?.id) {
                     properties.$feature_flag_id = flagDetails.metadata.id
                 }

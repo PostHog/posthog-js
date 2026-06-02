@@ -2641,6 +2641,81 @@ describe('featureflags', () => {
                     $feature_flag_version: 42,
                     $feature_flag_reason: 'Matched condition set 1',
                     $feature_flag_id: 23,
+                    $feature_flag_condition_index: 1,
+                })
+            )
+        })
+
+        it('includes condition_index of 0 in feature flag called event', () => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                requestId: TEST_REQUEST_ID,
+                evaluatedAt: TEST_EVALUATED_AT,
+                flags: {
+                    'test-flag': {
+                        key: 'test-flag',
+                        id: 23,
+                        enabled: true,
+                        variant: 'variant-1',
+                        reason: {
+                            description: 'Matched condition set 1',
+                            code: 'test-code',
+                            condition_index: 0,
+                        },
+                        metadata: {
+                            id: 23,
+                            version: 42,
+                        },
+                    },
+                },
+            })
+            featureFlags._hasLoadedFlags = true
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            // condition_index of 0 is the first condition set and must still be reported
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_condition_index: 0,
+                })
+            )
+        })
+
+        it('omits condition_index when not provided by the server', () => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                requestId: TEST_REQUEST_ID,
+                evaluatedAt: TEST_EVALUATED_AT,
+                flags: {
+                    'test-flag': {
+                        key: 'test-flag',
+                        id: 23,
+                        enabled: true,
+                        variant: 'variant-1',
+                        reason: {
+                            description: 'Matched condition set 1',
+                            code: 'test-code',
+                            condition_index: undefined,
+                        },
+                        metadata: {
+                            id: 23,
+                            version: 42,
+                        },
+                    },
+                },
+            })
+            featureFlags._hasLoadedFlags = true
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.not.objectContaining({
+                    $feature_flag_condition_index: expect.anything(),
                 })
             )
         })
