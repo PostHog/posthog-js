@@ -83,6 +83,13 @@ function MyComponent() {
 }
 ```
 
+By default the hook returns `boolean | undefined`, where `undefined` means the flags haven't loaded yet or the flag is absent. Pass a `defaultValue` to use instead of `undefined` in those cases — the return type then narrows to `boolean`:
+
+```tsx
+// false until proven enabled
+const isEnabled = useFeatureFlagEnabled('new-feature', false)
+```
+
 #### useFeatureFlagVariantKey
 
 Get the variant key for a multivariate feature flag.
