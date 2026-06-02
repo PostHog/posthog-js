@@ -3,7 +3,7 @@ import path from 'path'
 import * as ts from 'typescript'
 
 import * as constants from '../constants'
-import { getPersistenceKeyPolicy, PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
+import { getPersistenceKeyPolicy, PERSISTENCE_KEY_POLICY, PERSISTENCE_STORAGE_GROUPS } from '../persistence-key-policy'
 
 const PERSISTENCE_OBJECT_METHODS = new Set(['register', 'register_once'])
 const PERSISTENCE_SINGLE_KEY_METHODS = new Set(['set_property', 'unregister'])
@@ -486,5 +486,49 @@ describe('persistence key policy', () => {
                 expect(exactPolicyKeys.has(value as string)).toBe(true)
             }
         }
+    })
+
+    describe('storageGroup', () => {
+        const keysInGroup = (group: string): string[] =>
+            Object.entries(PERSISTENCE_KEY_POLICY)
+                .filter(([, policy]) => policy.storageGroup === group)
+                .map(([key]) => key)
+                .sort()
+
+        it('tags exactly the atomic flag-config cluster as the flags group', () => {
+            expect(keysInGroup('flags')).toEqual(
+                [
+                    constants.ENABLED_FEATURE_FLAGS,
+                    constants.PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+                    constants.PERSISTENCE_FEATURE_FLAG_DETAILS,
+                    constants.PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+                    constants.PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+                    constants.PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+                ].sort()
+            )
+        })
+
+        it.each([
+            ['$flag_call_reported (written on the read path)', constants.FLAG_CALL_REPORTED],
+            ['$flag_call_reported_session_id', constants.FLAG_CALL_REPORTED_SESSION_ID],
+            ['$feature_flag_errors', constants.PERSISTENCE_FEATURE_FLAG_ERRORS],
+            ['$override_feature_flags', constants.PERSISTENCE_OVERRIDE_FEATURE_FLAGS],
+            ['$override_feature_flag_payloads', constants.PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS],
+            ['$stored_person_properties', constants.STORED_PERSON_PROPERTIES_KEY],
+            ['$stored_group_properties', constants.STORED_GROUP_PROPERTIES_KEY],
+            ['$early_access_features', constants.PERSISTENCE_EARLY_ACCESS_FEATURES],
+            ['$surveys_activated', constants.SURVEYS_ACTIVATED],
+        ])('keeps %s in the main blob (no storageGroup)', (_label, key) => {
+            expect(getPersistenceKeyPolicy(key)?.storageGroup).toBeUndefined()
+        })
+
+        it('only ever uses declared group names', () => {
+            const groups = new Set<string>(PERSISTENCE_STORAGE_GROUPS)
+            for (const policy of Object.values(PERSISTENCE_KEY_POLICY)) {
+                if (policy.storageGroup) {
+                    expect(groups.has(policy.storageGroup)).toBe(true)
+                }
+            }
+        })
     })
 })

@@ -457,6 +457,11 @@ export interface PersistentStore {
     _error: (error: any) => void
     _parse: (name: string) => any
     _get: (name: string) => any
+    // Returns whether the write was accepted without throwing. Backends that
+    // swallow quota/serialization errors return false so callers can avoid
+    // caching a write that never landed. This is best-effort, not a durable
+    // -persistence guarantee — e.g. Safari private mode has historically
+    // reported success on a write that did not persist.
     _set: (
         name: string,
         value: any,
@@ -464,7 +469,7 @@ export interface PersistentStore {
         cross_subdomain?: boolean,
         secure?: boolean,
         debug?: boolean
-    ) => void
+    ) => boolean
     _remove: (name: string, cross_subdomain?: boolean) => void
 }
 

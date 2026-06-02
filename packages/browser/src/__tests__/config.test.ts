@@ -38,6 +38,18 @@ describe('config', () => {
             expect(posthog.config.persistence_save_debounce_ms).toBe(expected)
         })
 
+        it.each([
+            ['unset', undefined, false],
+            ['2025-05-24', '2025-05-24' as const, false],
+            ['2025-11-30', '2025-11-30' as const, false],
+            ['2026-01-30', '2026-01-30' as const, false],
+            ['2026-05-30', '2026-05-30' as const, true],
+        ])('split_storage with defaults %s', (_label, defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', defaults ? { defaults } : undefined)
+            expect(posthog.config.split_storage).toBe(expected)
+        })
+
         it('should preserve other default config values when setting defaults', () => {
             const posthog1 = new PostHog()
             posthog1._init('test-token')

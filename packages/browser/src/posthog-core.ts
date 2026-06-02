@@ -189,6 +189,7 @@ const defaultsThatVaryByConfig = (
     | 'external_scripts_inject_target'
     | 'internal_or_test_user_hostname'
     | 'persistence_save_debounce_ms'
+    | 'split_storage'
 > => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
@@ -196,6 +197,7 @@ const defaultsThatVaryByConfig = (
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
+    split_storage: !!(defaults && defaults >= '2026-05-30'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -607,7 +609,8 @@ export class PostHog implements PostHogInterface {
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
-                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled)
+                : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
+                  new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled, false)
 
         // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
@@ -3048,7 +3051,12 @@ export class PostHog implements PostHogInterface {
             this.sessionPersistence =
                 this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                     ? this.persistence
-                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
+                    : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
+                      new PostHogPersistence(
+                          { ...this.config, persistence: 'sessionStorage' },
+                          isPersistenceDisabled,
+                          false
+                      )
 
             const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
             if (isBoolean(debugConfigFromLocalStorage)) {
