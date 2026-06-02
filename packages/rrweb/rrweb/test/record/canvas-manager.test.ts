@@ -300,11 +300,21 @@ describe('CanvasManager reference-counted teardown', () => {
     return { manager, resetObservers };
   };
 
-  it('tears down once a single consumer releases', () => {
+  it.each([
+    ['one acquire, one reset', (m: CanvasManager) => m.reset()],
+    [
+      'extra resets are clamped',
+      (m: CanvasManager) => {
+        m.reset();
+        m.reset();
+        m.reset();
+      },
+    ],
+  ])('tears down exactly once: %s', (_label, releaseAll) => {
     const { manager, resetObservers } = makeManager();
     manager.acquire();
 
-    manager.reset();
+    releaseAll(manager);
 
     expect(resetObservers).toHaveBeenCalledTimes(1);
   });
@@ -319,17 +329,6 @@ describe('CanvasManager reference-counted teardown', () => {
     expect(resetObservers).not.toHaveBeenCalled();
 
     manager.reset(); // last consumer (main document) released
-
-    expect(resetObservers).toHaveBeenCalledTimes(1);
-  });
-
-  it('only tears down once even if reset is called more than there were consumers', () => {
-    const { manager, resetObservers } = makeManager();
-    manager.acquire();
-
-    manager.reset();
-    manager.reset();
-    manager.reset();
 
     expect(resetObservers).toHaveBeenCalledTimes(1);
   });
