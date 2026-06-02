@@ -263,6 +263,23 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * @default 500
    */
   waitUntilMaxWaitMs?: number
+  /**
+   * Whether to attach the `$is_server: true` property to every captured event.
+   *
+   * @remarks
+   * Defaults to `true` because this SDK is intended for server-side use, where
+   * the property lets PostHog distinguish server events from browser and
+   * react-native events. Set this to `false` when running the SDK as a
+   * client/CLI so the event is attributed to the device OS normally instead of
+   * being marked as a server event. When `false`, the `$is_server` property is
+   * omitted entirely.
+   *
+   * @default true
+   * @example
+   * // CLI usage: don't mark events as server-side
+   * new PostHog('key', { isServer: false })
+   */
+  isServer?: boolean
 }
 
 export type PostHogFeatureFlag = {

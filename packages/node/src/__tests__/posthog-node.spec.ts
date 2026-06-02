@@ -127,6 +127,34 @@ describe('PostHog Node.js', () => {
       )
     })
 
+    it('should not include $is_server when isServer is false (client/CLI usage)', async () => {
+      const cliClient = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        isServer: false,
+      })
+
+      try {
+        cliClient.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+
+        await waitForFlushTimer()
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents?.[0]).toEqual(
+          expect.objectContaining({
+            event: 'test-event',
+            properties: expect.objectContaining({
+              $lib: 'posthog-node',
+            }),
+          })
+        )
+        expect(batchEvents?.[0]?.properties).not.toHaveProperty('$is_server')
+      } finally {
+        await cliClient.shutdown()
+      }
+    })
+
     it('shouldnt muddy subsequent capture calls', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' }, groups: { org: 123 } })

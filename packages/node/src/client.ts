@@ -431,13 +431,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * react-native clients do not extend `PostHogBackendClient`, so they
    * never receive this property.
    *
-   * @returns The common event properties, including `$is_server: true`.
+   * This is controlled by the `isServer` option, which defaults to `true`.
+   * When `isServer` is `false` (e.g. when using the SDK as a client/CLI), the
+   * `$is_server` property is omitted entirely so the device OS is attributed
+   * normally.
+   *
+   * @returns The common event properties, including `$is_server: true` when
+   * the `isServer` option is enabled.
    */
   protected override getCommonEventProperties(): PostHogEventProperties {
-    return {
-      ...super.getCommonEventProperties(),
-      $is_server: true,
+    const commonProperties = super.getCommonEventProperties()
+
+    if (this.options.isServer ?? true) {
+      commonProperties.$is_server = true
     }
+
+    return commonProperties
   }
 
   /**
