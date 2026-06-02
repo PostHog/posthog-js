@@ -2720,12 +2720,10 @@ describe('featureflags', () => {
             )
         })
 
-        it('omits version/reason/id/condition_index when the value is served from cache/bootstrap without v2 details', () => {
-            // Reproduces the support ticket scenario: the flag value (and a stale requestId /
-            // evaluatedAt) are served from persisted/bootstrapped state before the remote /flags
-            // response loads for this page view. Such state only carries the flat flag value, not
-            // the v2 `flags` detail object, so none of the server-evaluation debug fields can be
-            // attached even though the event otherwise looks like a real evaluation.
+        it('omits version/reason/id/condition_index when the value has no v2 details', () => {
+            // A flat response (no `flags` detail object) carries only the flat flag value, not the
+            // v2 per-flag details, so none of the server-evaluation debug fields can be attached
+            // even though the event otherwise looks like a real evaluation.
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': 'test' },
                 featureFlagPayloads: {},
@@ -2734,8 +2732,6 @@ describe('featureflags', () => {
                 // note: no `flags` detail object, mirroring bootstrap / flat cached state
             })
             featureFlags._hasLoadedFlags = true
-            // remote /flags has not responded for this page view
-            featureFlags._flagsLoadedFromRemote = false
 
             featureFlags.getFeatureFlag('test-flag')
 
@@ -2743,15 +2739,67 @@ describe('featureflags', () => {
                 (call) => call[0] === '$feature_flag_called'
             )?.[1]
 
-            // The flat value and the (stale) request metadata are still present...
+            // The flat value and the request metadata this response carried are present...
             expect(captured).toMatchObject({
                 $feature_flag: 'test-flag',
                 $feature_flag_response: 'test',
                 $feature_flag_request_id: TEST_REQUEST_ID,
                 $feature_flag_evaluated_at: TEST_EVALUATED_AT,
-                $used_bootstrap_value: true,
             })
             // ...but the server-evaluation debug fields are absent because there are no details.
+            expect(captured).not.toHaveProperty('$feature_flag_version')
+            expect(captured).not.toHaveProperty('$feature_flag_reason')
+            expect(captured).not.toHaveProperty('$feature_flag_id')
+            expect(captured).not.toHaveProperty('$feature_flag_condition_index')
+        })
+
+        it('clears stale requestId/evaluatedAt when a later flat/bootstrap update replaces the details', () => {
+            // Reproduces the support-ticket inconsistency: a v2 response persists details +
+            // requestId + evaluatedAt, then a flat update (e.g. bootstrap initialize(), which sends
+            // only `featureFlags`) wipes the details. Previously the now-orphaned requestId /
+            // evaluatedAt were left behind, so the event looked like a real server evaluation but
+            // was missing $feature_flag_version / _reason / _id / _condition_index. They must now be
+            // cleared so the persisted "last evaluation" metadata stays internally consistent.
+            featureFlags.receivedFeatureFlags({
+                requestId: TEST_REQUEST_ID,
+                evaluatedAt: TEST_EVALUATED_AT,
+                flags: {
+                    'test-flag': {
+                        key: 'test-flag',
+                        enabled: true,
+                        variant: 'test',
+                        reason: { code: 'condition_match', condition_index: 2, description: 'Matched condition set 3' },
+                        metadata: { id: 99, version: 7, description: undefined, payload: undefined },
+                    },
+                },
+            } as any)
+
+            // sanity check: the v2 response stored consistent metadata
+            expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
+            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
+
+            // a flat update (bootstrap-style) with no requestId/evaluatedAt and no `flags` details
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': 'test' },
+                featureFlagPayloads: {},
+            })
+
+            // the orphaned server-evaluation metadata is cleared rather than left stale
+            expect(instance.get_property('$feature_flag_request_id')).toBeUndefined()
+            expect(instance.get_property('$feature_flag_evaluated_at')).toBeUndefined()
+
+            featureFlags._hasLoadedFlags = true
+            featureFlags.getFeatureFlag('test-flag')
+
+            const captured = (instance.capture as jest.Mock).mock.calls.find(
+                (call) => call[0] === '$feature_flag_called'
+            )?.[1]
+
+            // the event is now internally consistent: no server-evaluation fields at all
+            expect(captured).toMatchObject({ $feature_flag: 'test-flag', $feature_flag_response: 'test' })
+            // request_id / evaluated_at are always keys on the event, so assert they carry no value
+            expect(captured.$feature_flag_request_id).toBeUndefined()
+            expect(captured.$feature_flag_evaluated_at).toBeUndefined()
             expect(captured).not.toHaveProperty('$feature_flag_version')
             expect(captured).not.toHaveProperty('$feature_flag_reason')
             expect(captured).not.toHaveProperty('$feature_flag_id')

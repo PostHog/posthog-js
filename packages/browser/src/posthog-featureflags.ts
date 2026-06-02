@@ -122,7 +122,16 @@ export const parseFlagsResponse = (
     let newFeatureFlags = featureFlags
     let newFeatureFlagPayloads = flagPayloads
     let newFeatureFlagDetails = flagDetails
+    // A merge augments a previously stored server response (partial reloads via flag_keys, or
+    // upserts when some flags failed to compute), so any previously stored requestId/evaluatedAt
+    // still describe the bulk of the flags and should be preserved. A full replace, on the other
+    // hand, fully owns the persisted state — including when it carries no requestId/evaluatedAt
+    // (e.g. bootstrapped or otherwise flat-loaded flags). In that case the previously stored
+    // values no longer describe the persisted flags/details, so they must be cleared rather than
+    // left behind as stale metadata.
+    let isMergeResponse = false
     if (options?.partialResponse) {
+        isMergeResponse = true
         // The response is intentionally partial (e.g., only survey flags were requested via
         // advanced_only_evaluate_survey_feature_flags). Merge with existing flags so that
         // bootstrapped or previously loaded non-survey flags are preserved.
@@ -130,6 +139,7 @@ export const parseFlagsResponse = (
         newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
         newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
     } else if (response.errorsWhileComputingFlags) {
+        isMergeResponse = true
         // if not all flags were computed, we upsert flags instead of replacing them
         // but filter out flags that failed to evaluate so they don't overwrite cached values
         if (flagDetails) {
@@ -166,8 +176,18 @@ export const parseFlagsResponse = (
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
-            ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
-            ...(evaluatedAt ? { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt } : {}),
+            // On a merge, only overwrite when this response carries the value (preserve prior).
+            // On a full replace, always write the response's value so a stale requestId/evaluatedAt
+            // can't outlive the flag details it described (undefined clears the stored value).
+            ...(isMergeResponse
+                ? {
+                      ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
+                      ...(evaluatedAt ? { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt } : {}),
+                  }
+                : {
+                      [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId,
+                      [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt,
+                  }),
         })
 }
 
