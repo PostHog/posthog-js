@@ -1169,8 +1169,6 @@ export class PostHog implements PostHogInterface {
      * posthog.push(['register', { a: 'b' }]);
      * ```
      *
-     * @public
-     *
      * @param {SnippetArrayItem} item A `[function_name, ...args]` array to be executed.
      */
     push(item: SnippetArrayItem): void {
@@ -2141,8 +2139,6 @@ export class PostHog implements PostHogInterface {
      * posthog.onSurveysLoaded((surveys, context) => { // do something })
      * ```
      *
-     * @public
-     *
      * @param {SurveyCallback} callback The callback function will be called when surveys are loaded or updated.
      * @returns A function that can be called to unsubscribe the listener.
      */
@@ -2284,8 +2280,6 @@ export class PostHog implements PostHogInterface {
      * ```
      *
      * {@label Surveys}
-     *
-     * @public
      */
     displaySurvey(surveyId: string, options: DisplaySurveyOptions = DEFAULT_DISPLAY_SURVEY_OPTIONS): void {
         this.surveys?.displaySurvey(surveyId, options)
@@ -2295,8 +2289,6 @@ export class PostHog implements PostHogInterface {
      * Cancels a pending survey that is waiting to be displayed (e.g., due to a popup delay).
      *
      * {@label Surveys}
-     *
-     * @public
      *
      * @param {string} surveyId The survey ID whose pending display should be cancelled.
      */
@@ -3831,8 +3823,6 @@ export class PostHog implements PostHogInterface {
      * user has opted out or been defaulted to opt-out.
      *
      * {@label Privacy}
-     *
-     * @public
      *
      * @see {PostHogConfig.cookieless_mode}
      * @see {PostHogConfig.opt_out_persistence_by_default}
