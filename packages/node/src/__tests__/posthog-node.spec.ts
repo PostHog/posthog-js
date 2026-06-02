@@ -335,6 +335,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
     })
 
@@ -355,6 +356,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       client.capture({
@@ -374,6 +376,7 @@ describe('PostHog Node.js', () => {
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
         $geoip_disable: true,
+        $is_server: true,
       })
 
       client.capture({
@@ -393,6 +396,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       await client.shutdown()
@@ -1207,6 +1211,7 @@ describe('PostHog Node.js', () => {
         '$feature/feature-variant': 'variant',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       // no calls to `/local_evaluation`
