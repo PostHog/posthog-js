@@ -193,6 +193,7 @@ export default class MutationBuffer {
   private canvasManager: observerParam['canvasManager'];
   private processedNodeManager: observerParam['processedNodeManager'];
   private unattachedDoc: HTMLDocument;
+  private canvasManagerReleased = false;
 
   public init(options: MutationBufferParam) {
     (
@@ -223,6 +224,10 @@ export default class MutationBuffer {
       // just a type trick, the runtime result is correct
       this[key] = options[key] as never;
     });
+    // Register this buffer as a consumer of the shared CanvasManager so its (global) canvas
+    // observers are only torn down once every root that references it has been reset. Balanced
+    // by the canvasManager.reset() call in this.reset().
+    this.canvasManager.acquire();
   }
 
   public freeze() {
@@ -253,6 +258,19 @@ export default class MutationBuffer {
 
   public reset() {
     this.shadowDomManager.reset();
+    this.releaseCanvasManager();
+  }
+
+  /**
+   * Releases this buffer's reference to the shared CanvasManager exactly once, even if reset()
+   * runs multiple times (the iframe pagehide + stop paths can both fire). Kept separate from
+   * reset() so shadow-root teardown can release without recursing back into shadowDomManager.reset().
+   */
+  public releaseCanvasManager() {
+    if (this.canvasManagerReleased) {
+      return;
+    }
+    this.canvasManagerReleased = true;
     this.canvasManager.reset();
   }
 
