@@ -67,9 +67,7 @@ export class ShadowDomManager {
     this.restoreHandlers.push(() => {
       observer.disconnect();
       buffer.destroy();
-      // Release this shadow root's reference to the shared CanvasManager so the reference count
-      // stays balanced. We can't call buffer.reset() here because that re-enters this manager's
-      // reset() (we're often invoked from it), so release the canvas reference directly.
+      // Release the canvas ref directly; buffer.reset() would re-enter shadowDomManager.reset().
       buffer.releaseCanvasManager();
       const index = mutationBuffers.indexOf(buffer);
       if (index !== -1) {

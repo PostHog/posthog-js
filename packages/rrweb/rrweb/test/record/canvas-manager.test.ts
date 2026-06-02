@@ -279,11 +279,7 @@ describe('CanvasManager FPS observer', () => {
   });
 });
 
-// Regression coverage for the bug where tearing down a single iframe / shadow-root observer
-// would unpatch HTMLCanvasElement.prototype.getContext and cancel the FPS loop for the WHOLE
-// page, silently stopping canvas recording while the session stayed active. The CanvasManager is
-// shared across the main document and every secondary root, so its teardown is reference-counted:
-// it only happens once the last consumer releases.
+// A single root tearing down must not stop canvas recording for the whole page.
 describe('CanvasManager reference-counted teardown', () => {
   const makeManager = (): {
     manager: CanvasManager;

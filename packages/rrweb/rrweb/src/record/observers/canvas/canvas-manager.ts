@@ -39,13 +39,8 @@ export class CanvasManager {
   private refCount = 0;
   private torndown = false;
 
-  /**
-   * A single CanvasManager is shared by the main document and every iframe / shadow-root
-   * observer (see record/index.ts). Each consumer registers itself so we can reference-count
-   * teardown: the getContext patch and FPS loop are global, so tearing them down when only one
-   * root is cleaned up (e.g. an iframe unloads, or a framework unmounts a subtree rrweb was
-   * observing) would silently stop canvas recording for the whole page.
-   */
+  // Shared by the main document and every iframe/shadow-root observer, so reference-count
+  // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
   public acquire() {
     this.refCount += 1;
   }
@@ -54,7 +49,6 @@ export class CanvasManager {
     if (this.refCount > 0) {
       this.refCount -= 1;
     }
-    // Only the last consumer to release actually tears the observers down.
     if (this.refCount > 0) {
       return;
     }
