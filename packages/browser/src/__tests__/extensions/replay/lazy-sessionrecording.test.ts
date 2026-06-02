@@ -1496,6 +1496,47 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        describe('full snapshot on navigation', () => {
+            const takeFullSnapshotMock = () =>
+                assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as jest.Mock
+
+            const firePageview = (url = 'https://test.com/next') =>
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: { $current_url: url } })
+
+            beforeEach(() => {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                // make recording active so rrweb is ready and the $pageview hook is registered
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                takeFullSnapshotMock().mockClear()
+            })
+
+            it('does not take a full snapshot on $pageview by default', () => {
+                firePageview()
+
+                expect(takeFullSnapshotMock()).not.toHaveBeenCalled()
+            })
+
+            it('takes a full snapshot on $pageview when full_snapshot_on_navigation is enabled client-side', () => {
+                posthog.config.session_recording.full_snapshot_on_navigation = true
+
+                firePageview()
+
+                expect(takeFullSnapshotMock()).toHaveBeenCalledTimes(1)
+            })
+
+            it('takes a full snapshot on $pageview when enabled server-side via remote config', () => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', fullSnapshotOnNavigation: true } })
+                )
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                takeFullSnapshotMock().mockClear()
+
+                firePageview()
+
+                expect(takeFullSnapshotMock()).toHaveBeenCalledTimes(1)
+            })
+        })
+
         describe('when compression is active', () => {
             const captureOptions = {
                 _batchKey: 'recordings',

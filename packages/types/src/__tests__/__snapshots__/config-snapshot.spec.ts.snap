@@ -431,6 +431,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "number"
     ],
+    "full_snapshot_on_navigation": [
+      "undefined",
+      "false",
+      "true"
+    ],
     "compress_events": [
       "undefined",
       "false",

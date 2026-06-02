@@ -533,6 +533,20 @@ export interface SessionRecordingOptions {
     full_snapshot_interval_millis?: number
 
     /**
+     * ADVANCED: take a fresh full snapshot on SPA navigation (on `$pageview`).
+     * rrweb does not capture route changes in single-page apps, so the DOM is rebuilt purely
+     * from incremental mutations between periodic full snapshots. On long, navigation-heavy
+     * sessions this lets the replayed DOM drift from reality (stale/duplicated content).
+     * Snapshotting on navigation bounds that drift to a single page view.
+     * Debounced so rapid redirects don't each trigger a snapshot.
+     * Increases recording size on navigation-heavy sites — enable when replay fidelity matters
+     * more than payload size.
+     *
+     * @default false
+     */
+    full_snapshot_on_navigation?: boolean
+
+    /**
      * ADVANCED: whether to partially compress rrweb events before sending them to the server,
      * defaults to true, can be set to false to disable partial compression
      * NB requests are still compressed when sent to the server regardless of this setting

@@ -92,6 +92,10 @@ const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
 
+// Minimum gap between full snapshots triggered by SPA navigation, so that a chain of
+// redirects (which can fire several $pageview events back-to-back) only costs one snapshot.
+const FULL_SNAPSHOT_ON_NAVIGATION_DEBOUNCE_MS = TWO_SECONDS
+
 /**
  * Extracts the network_timing value from a capturePerformance config.
  * Returns `true`/`false` if explicitly set, or `undefined` if not specified.
@@ -492,6 +496,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
+    private _lastFullSnapshotTimestamp: number = 0
 
     private _windowId: string
     private _sessionId: string
@@ -770,6 +775,37 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.takeFullSnapshot()))
     }
 
+    // can be enabled server side (per-team remote config) or client side (init config)
+    private get _fullSnapshotOnNavigation(): boolean {
+        return (
+            this._remoteConfig?.fullSnapshotOnNavigation ??
+            this._instance.config.session_recording?.full_snapshot_on_navigation ??
+            false
+        )
+    }
+
+    /**
+     * rrweb rebuilds the DOM from the last full snapshot plus incremental mutations. It does not
+     * snapshot on SPA route changes, so long navigation-heavy sessions can drift from reality
+     * before the next periodic snapshot. When `full_snapshot_on_navigation` is enabled we take a
+     * fresh snapshot on each `$pageview` (debounced) so every page starts from a clean DOM, and we
+     * reschedule the periodic timer so we don't double-snapshot right after.
+     */
+    private _takeFullSnapshotOnNavigation(): void {
+        if (!this._fullSnapshotOnNavigation) {
+            return
+        }
+        if (this._isIdle === true) {
+            return
+        }
+        if (Date.now() - this._lastFullSnapshotTimestamp < FULL_SNAPSHOT_ON_NAVIGATION_DEBOUNCE_MS) {
+            return
+        }
+        if (this._tryTakeFullSnapshot()) {
+            this._scheduleFullSnapshot()
+        }
+    }
+
     private get _fullSnapshotIntervalMillis(): number {
         if (this._strategy?.hasPendingTriggers(this.sessionId) && !['sampled', 'active'].includes(this.status)) {
             return ONE_MINUTE
@@ -1045,6 +1081,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                             return
                         }
                         this._tryAddCustomEvent('$pageview', { href })
+                        this._takeFullSnapshotOnNavigation()
                     }
                 } catch (e) {
                     logger.error('Could not add $pageview to rrweb session', e)
@@ -1430,6 +1467,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (rawEvent.type === EventType.FullSnapshot) {
+            this._lastFullSnapshotTimestamp = rawEvent.timestamp
             this._fullSnapshotTimestamps.push([this._sessionId, rawEvent.timestamp])
             if (this._fullSnapshotTimestamps.length > 6) {
                 this._fullSnapshotTimestamps = this._fullSnapshotTimestamps.slice(-6)

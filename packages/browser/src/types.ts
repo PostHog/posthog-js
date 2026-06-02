@@ -243,6 +243,12 @@ export type SessionRecordingPersistedConfig = Omit<
 export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
     endpoint?: string
     consoleLogRecordingEnabled?: boolean
+    /**
+     * Take a fresh full snapshot on SPA navigation (`$pageview`), so the replayed DOM can't
+     * drift across route changes. Server-side counterpart of the `full_snapshot_on_navigation`
+     * client option; when set here it lets us enable the behaviour per-team without a customer deploy.
+     */
+    fullSnapshotOnNavigation?: boolean
     // the API returns a decimal between 0 and 1 as a string
     sampleRate?: string | null
     minimumDurationMilliseconds?: number
