@@ -1,6 +1,6 @@
 import packageInfo from '../package.json'
 
-type SDKInstallSource = 'npm' | 'script_loader'
+type SDKDistChannel = 'npm' | 'cdn'
 
 // overridden in posthog-core,
 // e.g.     Config.DEBUG = Config.DEBUG || instance.config.debug
@@ -8,7 +8,7 @@ const Config: {
     DEBUG: boolean
     LIB_VERSION: string
     LIB_NAME: string
-    SDK_INSTALL_SOURCE?: SDKInstallSource
+    SDK_DIST_CHANNEL?: SDKDistChannel
     JS_SDK_VERSION: string
 } = {
     DEBUG: false,

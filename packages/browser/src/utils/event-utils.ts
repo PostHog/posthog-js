@@ -2,6 +2,7 @@ import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
+import { SDK_DIST_CHANNEL } from '../constants'
 import { each, extend, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import {
@@ -326,8 +327,8 @@ export function getEventProperties(
         }
     )
 
-    if (Config.SDK_INSTALL_SOURCE) {
-        properties['$sdk_install_source'] = Config.SDK_INSTALL_SOURCE
+    if (Config.SDK_DIST_CHANNEL) {
+        properties[SDK_DIST_CHANNEL] = Config.SDK_DIST_CHANNEL
     }
 
     return properties
