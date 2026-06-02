@@ -134,18 +134,15 @@ describe('feature flag hooks', () => {
             )
         }
 
-        it('returns the default value while the flag value is unknown', () => {
-            const { result } = renderHook(() => useFeatureFlagEnabled('missing', false), {
+        it.each([
+            [false as boolean | undefined, false],
+            [true as boolean | undefined, true],
+            [undefined, undefined],
+        ])('returns %s for an unknown flag when defaultValue is %s', (defaultValue, expected) => {
+            const { result } = renderHook(() => useFeatureFlagEnabled('missing', defaultValue as boolean), {
                 wrapper: renderWithUnknownFlag(),
             })
-            expect(result.current).toBe(false)
-        })
-
-        it('returns undefined for an unknown flag when no default is given', () => {
-            const { result } = renderHook(() => useFeatureFlagEnabled('missing'), {
-                wrapper: renderWithUnknownFlag(),
-            })
-            expect(result.current).toBeUndefined()
+            expect(result.current).toBe(expected)
         })
 
         it('prefers the real flag value over the default', () => {
