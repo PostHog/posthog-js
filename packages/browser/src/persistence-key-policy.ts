@@ -63,6 +63,7 @@ import {
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     SURVEYS_ACTIVATED,
+    SURVEYS_LOADED_AT,
     USER_STATE,
     WEB_VITALS_ALLOWED_METRICS,
     WEB_VITALS_ENABLED_SERVER_SIDE,
@@ -86,9 +87,9 @@ export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
  * stay in the main blob. Members of one group are written in a single entry so
  * an atomic `register` of the whole group lands as one write (no torn state).
  */
-export type PersistenceStorageGroup = 'flags'
+export type PersistenceStorageGroup = 'flags' | 'surveys'
 
-export const PERSISTENCE_STORAGE_GROUPS: readonly PersistenceStorageGroup[] = ['flags']
+export const PERSISTENCE_STORAGE_GROUPS: readonly PersistenceStorageGroup[] = ['flags', 'surveys']
 
 interface PersistenceKeyPolicyEntry {
     exposure: PersistenceKeyExposure
@@ -134,7 +135,8 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden' },
     [STORED_PERSON_PROPERTIES_KEY]: { exposure: 'hidden' },
     [STORED_GROUP_PROPERTIES_KEY]: { exposure: 'hidden' },
-    [SURVEYS]: { exposure: 'hidden' },
+    [SURVEYS]: { exposure: 'hidden', storageGroup: 'surveys' },
+    [SURVEYS_LOADED_AT]: { exposure: 'hidden', storageGroup: 'surveys' },
     [SURVEYS_ACTIVATED]: { exposure: 'event' },
     [PRODUCT_TOURS]: { exposure: 'hidden' },
     [PRODUCT_TOURS_ACTIVATED]: { exposure: 'hidden' },

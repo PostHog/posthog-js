@@ -2,7 +2,7 @@ import { expect, test } from './utils/posthog-playwright-test-base'
 import { start, waitForRemoteConfig } from './utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from './utils/event-capture-utils'
 import { Page } from '@playwright/test'
-import { ENABLED_FEATURE_FLAGS, PERSISTENCE_FEATURE_FLAG_DETAILS, SESSION_ID } from '@/constants'
+import { ENABLED_FEATURE_FLAGS, PERSISTENCE_FEATURE_FLAG_DETAILS, SESSION_ID, SURVEYS } from '@/constants'
 
 // `setup.ts` always inits with the token 'test token', so the persistence name
 // (and therefore the split-entry keys) are fixed for these tests.
@@ -138,6 +138,54 @@ test.describe('split storage (split_storage)', () => {
         // ...but the flag cluster has been lifted out of the main blob into __flags
         expect(snap.main?.[ENABLED_FEATURE_FLAGS]).toBeUndefined()
         expect(snap.flags?.[ENABLED_FEATURE_FLAGS]).toBeTruthy()
+    })
+
+    test('gate on (surveys): $surveys is split out, the survey shows, and dismissal survives reload', async ({
+        page,
+        context,
+    }) => {
+        const surveyId = '123'
+        // Register the survey mock before the page loads (await the route setup,
+        // not after start) so the initial /surveys request is intercepted — the
+        // route stays installed across the later reload too.
+        await page.route('**/surveys/**', (route) =>
+            route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: surveyId,
+                            name: 'Split storage survey',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [
+                                { type: 'open', question: 'What feedback do you have for us?', id: 'open_text_1' },
+                            ],
+                        },
+                    ],
+                },
+            })
+        )
+
+        const options = { split_storage: true }
+        const flagsResponseOverrides = { surveys: true }
+
+        await start({ options, flagsResponseOverrides, url: PAGE }, page, context)
+
+        await expect(page.locator(`.PostHogSurvey-${surveyId}`).locator('.survey-form')).toBeVisible()
+
+        // $surveys must not ride in the main blob when the gate is on
+        const snap = await readPersistence(page)
+        expect(snap.main?.[SURVEYS]).toBeUndefined()
+
+        await page.locator(`.PostHogSurvey-${surveyId}`).locator('.form-cancel').click()
+        await expect(page.locator(`.PostHogSurvey-${surveyId}`).locator('.survey-form')).not.toBeInViewport()
+
+        await page.reload()
+        await start({ options, flagsResponseOverrides, url: PAGE, type: 'reload' }, page, context)
+
+        // a dismissed survey stays dismissed across the reload with the gate on
+        await expect(page.locator(`.PostHogSurvey-${surveyId}`).locator('.survey-form')).not.toBeInViewport()
     })
 
     test('gate on (replay): linked-flag recording still starts, and SESSION_ID stays in the main blob', async ({
