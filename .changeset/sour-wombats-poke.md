@@ -2,4 +2,4 @@
 "posthog-js": minor
 ---
 
-Add `$sdk_install_source` event property for browser SDK npm/module and snippet installs.
+Add `$sdk_dist_channel` event property for browser SDK `npm` and `cdn` distribution channels.

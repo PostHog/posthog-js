@@ -10,19 +10,16 @@ describe('sdk dist channel', () => {
         assignableWindow.posthog = undefined as any
     })
 
-    it('does not report dist channel before an entrypoint sets it', () => {
-        Config.SDK_DIST_CHANNEL = undefined
+    it.each([
+        ['before an entrypoint sets it', undefined],
+        ['when empty', ''],
+    ])('does not report dist channel %s', (_, sdkDistChannel) => {
+        ;(Config as any).SDK_DIST_CHANNEL = sdkDistChannel
 
         expect(getEventProperties()).not.toHaveProperty(SDK_DIST_CHANNEL)
     })
 
-    it('does not report empty dist channel', () => {
-        ;(Config as any).SDK_DIST_CHANNEL = ''
-
-        expect(getEventProperties()).not.toHaveProperty(SDK_DIST_CHANNEL)
-    })
-
-    it('reports npm for module usage', () => {
+    it('overrides a prior dist channel and reports npm for module usage', () => {
         Config.SDK_DIST_CHANNEL = 'cdn'
 
         init_as_module()
