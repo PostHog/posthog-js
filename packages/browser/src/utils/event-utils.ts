@@ -290,7 +290,7 @@ export function getEventProperties(
     const [os_name, os_version] = detectOS(userAgent)
     const browserHints = getBrowserDetectionHints()
 
-    return extend(
+    const properties = extend(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
@@ -325,4 +325,10 @@ export function getEventProperties(
             $time: Date.now() / 1000, // epoch time in seconds
         }
     )
+
+    if (Config.SDK_INSTALL_SOURCE) {
+        properties['$sdk_install_source'] = Config.SDK_INSTALL_SOURCE
+    }
+
+    return properties
 }
