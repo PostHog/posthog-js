@@ -89,45 +89,44 @@ plugins.withId('com.android.application') {
                         }
 
                         def injected = project.objects.newInstance(InjectedExecOps)
+
+                        // Resolve the CLI path, arguments and OS prefix at configuration time and
+                        // capture them as plain serializable state (String/List). The doFirst/doLast
+                        // actions must not call the script-level resolvePostHogCliPackagePath() nor
+                        // read `project` at execution time: with Gradle's configuration cache enabled
+                        // the task actions are serialized and lose the apply-from script's owner
+                        // chain, which breaks method resolution ("Could not find method
+                        // resolvePostHogCliPackagePath() ... on object of type
+                        // DefaultExecAction_Decorated") and disallows `Task.project` access.
+                        def cliPackage = resolvePostHogCliPackagePath(reactRoot)
+                        def osCompatibility = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'node'] : []
+
+                        def cloneArgs = [cliPackage]
+                        cloneArgs.addAll(["hermes", "clone",
+                            "--minified-map-path", packagerSourcemapOutput, // The path to a sourcemap
+                            "--composed-map-path", sourcemapOutput          // The path of the composed source map
+                        ])
+                        cloneArgs.addAll(extraArgs)
+                        logger.info("posthog-cli clone arguments: ${cloneArgs}")
+
+                        def uploadArgs = [cliPackage]
+                        uploadArgs.addAll(["hermes", "upload",
+                            "--directory", sourcemapOutput.getParent()      // The path to a sourcemap that should be uploaded.
+                        ])
+                        uploadArgs.addAll(extraArgs)
+                        logger.info("posthog-cli upload arguments: ${uploadArgs}")
+
                         doFirst {
                             injected.execOps.exec {
                                 workingDir reactRoot
-
-                                def cliPackage = resolvePostHogCliPackagePath(reactRoot)
-                                def args = [cliPackage]
-
-                                args.addAll(["hermes", "clone",
-                                    "--minified-map-path", packagerSourcemapOutput, // The path to a sourcemap
-                                    "--composed-map-path", sourcemapOutput          // The path of the composed source map
-                                ])
-
-                                args.addAll(extraArgs)
-
-                                project.logger.info("posthog-cli clone arguments: ${args}")
-                                def osCompatibility = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'node'] : []
-
-                                commandLine(*osCompatibility, *args)
+                                commandLine(*osCompatibility, *cloneArgs)
                             }
                         }
 
                         doLast {
                             injected.execOps.exec {
                                 workingDir reactRoot
-
-                                def cliPackage = resolvePostHogCliPackagePath(reactRoot)
-                                def args = [cliPackage]
-
-                                def sourcemapDir = sourcemapOutput.getParent()
-                                args.addAll(["hermes", "upload",
-                                    "--directory", sourcemapDir        // The path to a sourcemap that should be uploaded.
-                                ])
-
-                                args.addAll(extraArgs)
-
-                                project.logger.info("posthog-cli upload arguments: ${args}")
-                                def osCompatibility = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'node'] : []
-
-                                commandLine(*osCompatibility, *args)
+                                commandLine(*osCompatibility, *uploadArgs)
                             }
                         }
 
