@@ -4048,6 +4048,7 @@ const add_dom_loaded_handler = function () {
 }
 
 export function init_from_snippet(): void {
+    Config.SDK_DIST_CHANNEL = 'cdn'
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     const snippetPostHog = assignableWindow['posthog']
@@ -4107,6 +4108,7 @@ export function init_from_snippet(): void {
 }
 
 export function init_as_module(): PostHog {
+    Config.SDK_DIST_CHANNEL = 'npm'
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     add_dom_loaded_handler()
