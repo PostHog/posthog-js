@@ -149,10 +149,24 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
     loaded: (posthog: PostHogInterface) => void
 
     /**
-     * Internal: Extension class overrides for tree-shaking support.
-     * When provided, these classes are used instead of the default imports.
-     * This enables entrypoints to control which extensions are bundled.
-     * @internal
+     * Extension class overrides for tree-shaking support.
+     *
+     * @remarks
+     * Used with slim and extension-bundle entrypoints to opt in to the browser SDK features
+     * you want bundled, such as surveys, session replay, or feature flags.
+     *
+     * @example
+     * ```js
+     * import posthog from 'posthog-js/dist/module.slim'
+     * import { SessionReplayExtensions } from 'posthog-js/dist/extension-bundles'
+     *
+     * posthog.init('<ph_project_api_key>', {
+     *   api_host: 'https://us.i.posthog.com',
+     *   __extensionClasses: SessionReplayExtensions,
+     * })
+     * ```
+     *
+     * @experimental
      */
     __extensionClasses?: {
         exceptions?: ExtensionConstructor<PostHogExceptions>

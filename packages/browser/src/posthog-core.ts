@@ -433,6 +433,11 @@ export class PostHog implements PostHogInterface {
         return this.featureFlags?.hasLoadedFlags ?? false
     }
 
+    /**
+     * Whether the feature flags endpoint has been hit for this instance.
+     *
+     * @returns True once feature flags have been loaded or attempted.
+     */
     public get flagsEndpointWasHit(): boolean {
         return this.featureFlags?.hasLoadedFlags ?? false
     }
@@ -443,6 +448,19 @@ export class PostHog implements PostHogInterface {
         set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
     }
 
+    /**
+     * Creates an uninitialized PostHog instance.
+     *
+     * @remarks
+     * Most browser applications should use the default exported singleton and call `posthog.init()`.
+     * Construct a new instance only when you need to manage a separate SDK instance manually.
+     *
+     * @example
+     * ```js
+     * const instance = new PostHog()
+     * instance.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })
+     * ```
+     */
     constructor() {
         this.config = defaultConfig()
 
@@ -497,7 +515,7 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * All new instances are added to the main posthog object as sub properties (such as
-     * `posthog.library_name`) and also returned by this function. [Learn more about configuration options](https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91)
+     * `posthog.library_name`) and also returned by this function. [Learn more about configuration options](https://posthog.com/docs/libraries/js/config)
      *
      * @example
      * ```js
@@ -1151,7 +1169,9 @@ export class PostHog implements PostHogInterface {
      * posthog.push(['register', { a: 'b' }]);
      * ```
      *
-     * @param {Array} item A [function_name, args...] array to be executed
+     * @public
+     *
+     * @param {SnippetArrayItem} item A `[function_name, ...args]` array to be executed.
      */
     push(item: SnippetArrayItem): void {
         if (_executeArrayDepth > 0 && isArray(item) && isString(item[0])) {
@@ -1770,9 +1790,9 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {Object|String} prop Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
-     *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
+     * @param {string} key Key of the feature flag.
+     * @param {FeatureFlagOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.
+     * @returns {boolean | string | undefined} The feature flag value, or undefined if the flag is unavailable.
      */
     getFeatureFlag(key: string, options?: FeatureFlagOptions): boolean | string | undefined {
         return this.featureFlags?.getFeatureFlag(key, options)
@@ -1795,7 +1815,8 @@ export class PostHog implements PostHogInterface {
      *
      * @deprecated Use `getFeatureFlagResult()` instead
      *
-     * @param {Object|String} prop Key of the feature flag.
+     * @param {string} key Key of the feature flag.
+     * @returns {JsonType} The feature flag payload.
      */
     getFeatureFlagPayload(key: string): JsonType {
         return this.featureFlags?.getFeatureFlagPayload(key)
@@ -1864,9 +1885,9 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {Object|String} prop Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
-     *                        If {fresh: true}, we won't return cached values from localStorage - only values loaded from the server.
+     * @param {string} key Key of the feature flag.
+     * @param {FeatureFlagOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.
+     * @returns {boolean | undefined} Whether the feature flag is enabled, or undefined if the flag is unavailable.
      */
     isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined {
         return this.featureFlags?.isFeatureEnabled(key, options)
@@ -2120,9 +2141,10 @@ export class PostHog implements PostHogInterface {
      * posthog.onSurveysLoaded((surveys, context) => { // do something })
      * ```
      *
+     * @public
      *
-     * @param {Function} callback The callback function will be called when surveys are loaded or updated.
-     * @returns {Function} A function that can be called to unsubscribe the listener.
+     * @param {SurveyCallback} callback The callback function will be called when surveys are loaded or updated.
+     * @returns A function that can be called to unsubscribe the listener.
      */
     onSurveysLoaded(callback: SurveyCallback): () => void {
         if (!this.surveys) {
@@ -2170,8 +2192,8 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {Function} [callback] Function that receives the array of surveys
-     * @param {Boolean} [forceReload] Optional boolean to force an API call for updated surveys
+     * @param {SurveyCallback} callback Function that receives the array of surveys.
+     * @param {boolean} [forceReload] Optional boolean to force an API call for updated surveys.
      */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys
@@ -2193,8 +2215,8 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {Function} [callback] The callback function will be called when the surveys are loaded or updated.
-     * @param {Boolean} [forceReload] Whether to force a reload of the surveys.
+     * @param {SurveyCallback} callback The callback function will be called when the surveys are loaded or updated.
+     * @param {boolean} [forceReload] Whether to force a reload of the surveys.
      */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys
@@ -2231,8 +2253,8 @@ export class PostHog implements PostHogInterface {
     /**
      * Display a survey programmatically as either a popover or inline element.
      *
-     * @param {string} surveyId - The survey ID to display
-     * @param {DisplaySurveyOptions} options - Display configuration
+     * @param {string} surveyId The survey ID to display.
+     * @param {DisplaySurveyOptions} [options] Display configuration. Defaults to a popover that respects dashboard conditions and delays.
      *
      * @example
      * ```js
@@ -2245,6 +2267,8 @@ export class PostHog implements PostHogInterface {
      * // Display inline in a specific element
      * posthog.displaySurvey('survey-id-123', {
      *   displayType: DisplaySurveyType.Inline,
+     *   ignoreConditions: false,
+     *   ignoreDelay: false,
      *   selector: '#survey-container'
      * })
      * ```
@@ -2260,6 +2284,8 @@ export class PostHog implements PostHogInterface {
      * ```
      *
      * {@label Surveys}
+     *
+     * @public
      */
     displaySurvey(surveyId: string, options: DisplaySurveyOptions = DEFAULT_DISPLAY_SURVEY_OPTIONS): void {
         this.surveys?.displaySurvey(surveyId, options)
@@ -2269,6 +2295,10 @@ export class PostHog implements PostHogInterface {
      * Cancels a pending survey that is waiting to be displayed (e.g., due to a popup delay).
      *
      * {@label Surveys}
+     *
+     * @public
+     *
+     * @param {string} surveyId The survey ID whose pending display should be cancelled.
      */
     cancelPendingSurvey(surveyId: string): void {
         this.surveys?.cancelPendingSurvey(surveyId)
@@ -2720,6 +2750,8 @@ export class PostHog implements PostHogInterface {
      * ```js
      * posthog.resetGroupPropertiesForFlags()
      * ```
+     *
+     * @param {string} [group_type] Optional group type to reset. If omitted, all group properties are reset.
      */
     resetGroupPropertiesForFlags(group_type?: string): void {
         this.featureFlags?.resetGroupPropertiesForFlags(group_type)
@@ -2752,6 +2784,8 @@ export class PostHog implements PostHogInterface {
      * ```
      *
      * @public
+     *
+     * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
      */
     reset(reset_device_id?: boolean): void {
         logger.info('reset')
@@ -2934,6 +2968,7 @@ export class PostHog implements PostHogInterface {
      * ```js
      * // basic usage
      * posthog.get_session_replay_url()
+     * ```
      *
      * @example
      * ```js
@@ -2950,9 +2985,10 @@ export class PostHog implements PostHogInterface {
      * })
      * ```
      *
-     * @param options Options for the url
-     * @param options.withTimestamp Whether to include the timestamp in the url (defaults to false)
-     * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
+     * @param {Object} [options] Options for the URL.
+     * @param {boolean} [options.withTimestamp] Whether to include the timestamp in the URL.
+     * @param {number} [options.timestampLookBack] How many seconds to look back for the timestamp.
+     * @returns The URL for the current session replay, or an empty string if sessions are unavailable.
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
         if (!this.sessionManager) {
@@ -3001,6 +3037,7 @@ export class PostHog implements PostHogInterface {
      *
      * @param {String} alias A unique identifier that you want to use for this user in the future.
      * @param {String} [original] The current identifier being used for this user.
+     * @returns The `$create_alias` capture result, `-1` if alias matches the current distinct ID, `-2` if aliasing would duplicate a People user, or void if person processing is disabled.
      */
     alias(alias: string, original?: string): CaptureResult | void | number {
         // If the $people_distinct_id key exists in persistence, there has been a previous
@@ -3193,6 +3230,8 @@ export class PostHog implements PostHogInterface {
      *   posthog.stopSessionRecording()
      * }
      * ```
+     *
+     * @returns Whether session recording is currently running.
      */
     sessionRecordingStarted(): boolean {
         return !!this.sessionRecording?.started
@@ -3225,9 +3264,9 @@ export class PostHog implements PostHogInterface {
      * })
      * ```
      *
-     * @param {Error} error The error to capture
-     * @param {Object} [additionalProperties] Any additional properties to add to the error event
-     * @returns {CaptureResult} The result of the capture
+     * @param {unknown} error The error or exception-like value to capture.
+     * @param {Properties} [additionalProperties] Any additional properties to add to the error event.
+     * @returns The result of the capture, or undefined if exception capture is unavailable.
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
         if (!this.exceptions) return
@@ -3256,6 +3295,9 @@ export class PostHog implements PostHogInterface {
      *   checkout_id: 'ch_123',
      * })
      * ```
+     *
+     * @param {string} message The step message.
+     * @param {Properties} [properties] Additional context for this step.
      */
     addExceptionStep(message: string, properties?: Properties): void {
         this.exceptions?.addExceptionStep(message, properties)
@@ -3355,8 +3397,8 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param toolbarParams
-     * @returns {boolean} Whether the toolbar loaded
+     * @param {ToolbarParams} params Toolbar parameters.
+     * @returns Whether the toolbar loaded.
      */
 
     loadToolbar(params: ToolbarParams): boolean {
@@ -3384,6 +3426,7 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {String} property_name The name of the super property you want to retrieve
+     * @returns The stored property value, or undefined if it is not set.
      */
     get_property(property_name: string): Property | undefined {
         return this.persistence?.props[property_name]
@@ -3413,6 +3456,7 @@ export class PostHog implements PostHogInterface {
      * ```
      *
      * @param {String} property_name The name of the session super property you want to retrieve
+     * @returns The stored session property value, or undefined if it is not set.
      */
     getSessionProperty(property_name: string): Property | undefined {
         return this.sessionPersistence?.props[property_name]
@@ -3587,9 +3631,9 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {Object} [config] A dictionary of config options to override
-     * @param {string} [config.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action. Set to `null` or `false` to skip capturing the optin event
-     * @param {Object} [config.capture_properties] Set of properties to be captured along with the opt-in action
+     * @param {Object} [options] A dictionary of opt-in options.
+     * @param {EventName | null | false} [options.captureEventName] Event name to use for capturing the opt-in action. Set to `null` or `false` to skip capturing the opt-in event. Defaults to `$opt_in`.
+     * @param {Properties} [options.captureProperties] Set of properties to capture along with the opt-in action.
      */
     opt_in_capturing(options?: {
         captureEventName?: EventName | null | false /** event name to be used for capturing the opt-in action */
@@ -3770,7 +3814,7 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @returns {boolean | null} current explicit consent status
+     * @returns The current explicit consent status.
      */
     get_explicit_consent_status(): 'granted' | 'denied' | 'pending' {
         const consent = this.consent.consent
@@ -3787,6 +3831,8 @@ export class PostHog implements PostHogInterface {
      * user has opted out or been defaulted to opt-out.
      *
      * {@label Privacy}
+     *
+     * @public
      *
      * @see {PostHogConfig.cookieless_mode}
      * @see {PostHogConfig.opt_out_persistence_by_default}
@@ -3958,7 +4004,7 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @returns {string} The current page view ID
+     * @returns The current page view ID, or undefined if no page view has been captured.
      */
     public getPageViewId(): string | undefined {
         return this.pageViewManager._currentPageview?.pageViewId
