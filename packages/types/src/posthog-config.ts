@@ -1160,30 +1160,10 @@ export interface PostHogConfig {
     __preview_deferred_init_extensions: boolean
 
     /**
-     * EXPERIMENTAL: When using `'localStorage+cookie'` persistence, prefer values from the
-     * cross-subdomain cookie over per-subdomain localStorage on conflict.
-     *
-     * In the default `'localStorage+cookie'` mode the same identity keys (distinct_id,
-     * $device_id, $session_id, $user_state, $initial_person_info, etc.) are stored in
-     * both the .eTLD+1 cookie and the per-subdomain localStorage. On load they are
-     * merged with localStorage values winning. For sites running posthog on multiple
-     * subdomains (e.g. `app.example.com` and `marketing.example.com`), a stale
-     * localStorage on one subdomain can clobber a fresh cookie written by the other —
-     * causing identified sessions to look anonymous and session IDs to disconnect on
-     * subdomain transitions.
-     *
-     * When this flag is `true`, the cookie wins on conflict for the keys it stores.
-     * localStorage-only keys (flag caches, surveys, super properties, etc.) are
-     * unaffected. Null/empty cookie values are filtered out before the merge so a
-     * malformed legacy cookie cannot override valid localStorage data. The merged
-     * value is written back to localStorage on parse, so a stale localStorage
-     * self-heals on the first load after the flag is enabled.
-     *
-     * This setting is read once at SDK init when the storage backend is built;
-     * toggling it via `posthog.set_config` after init has no effect.
-     *
-     * Has no effect for other persistence modes (`'cookie'`, `'localStorage'`,
-     * `'memory'`, `'sessionStorage'`).
+     * In `'localStorage+cookie'` persistence mode, prefer cookie values over localStorage
+     * when both stores carry the same key. Fixes cross-subdomain identify and session
+     * disconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.
+     * Read at SDK init; has no effect when toggled via `set_config` or for other persistence modes.
      *
      * @default false
      * @experimental
