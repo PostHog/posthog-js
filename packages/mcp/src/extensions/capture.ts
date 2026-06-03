@@ -7,10 +7,14 @@ import { getSessionInfo } from './session'
 /**
  * Materializes an `UnredactedEvent` against the server's tracking data + session info,
  * then hands it to the `McpEventSink` (wrapping the user's posthog-node client) for the
- * redact/sanitize/truncate pipeline and capture. No-ops if the server isn't tracked or no
- * PostHog client is attached — not passing `posthog` is how you turn capture off.
+ * sanitize/truncate/beforeSend pipeline and capture. No-ops if the server isn't tracked or
+ * no PostHog client is attached — not passing `posthog` is how you turn capture off.
+ *
+ * Returns the sink's capture promise so the user-facing `capture()` can await it.
+ * Auto-capture callers (tool calls, listings, identify) intentionally ignore the
+ * return value, keeping the tool path isolated from analytics latency/errors.
  */
-export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent): void {
+export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent): Promise<void> | undefined {
   const data = getServerTrackingData(server)
   if (!data) {
     log('Warning: Server tracking data not found. Event will not be published.')
@@ -31,6 +35,7 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     id: eventInput.id || '',
     sessionId: eventInput.sessionId || data.sessionId,
     eventType: eventInput.eventType || MCPAnalyticsEventType.custom,
+    eventName: eventInput.eventName,
     timestamp: eventInput.timestamp || new Date(),
     duration,
     ipAddress: sessionInfo.ipAddress,
@@ -43,6 +48,7 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     identifyActorGivenId: sessionInfo.identifyActorGivenId,
     identifyActorName: sessionInfo.identifyActorName,
     identifyActorData: sessionInfo.identifyActorData,
+    groups: sessionInfo.identifyActorGroups,
     resourceName: eventInput.resourceName,
     toolDescription: eventInput.toolDescription,
     listedToolNames: eventInput.listedToolNames,
@@ -53,11 +59,11 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     isError: eventInput.isError,
     error: eventInput.error,
     conversationId: eventInput.conversationId,
-    redactionFn: eventInput.redactionFn,
     properties: eventInput.properties,
   }
 
-  void sink.capture(fullEvent, {
+  return sink.capture(fullEvent, {
     enableExceptionAutocapture: data.options.enableExceptionAutocapture ?? true,
+    beforeSend: data.options.beforeSend,
   })
 }

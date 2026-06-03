@@ -5,6 +5,7 @@ import { MCPAnalyticsEventType } from './event-types'
 const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.custom]: PostHogMCPAnalyticsEvent.Custom,
   [MCPAnalyticsEventType.identify]: PostHogMCPAnalyticsEvent.Identify,
+  [MCPAnalyticsEventType.mcpMissingCapability]: PostHogMCPAnalyticsEvent.MissingCapability,
   [MCPAnalyticsEventType.mcpInitialize]: PostHogMCPAnalyticsEvent.Initialize,
   [MCPAnalyticsEventType.mcpPromptsGet]: PostHogMCPAnalyticsEvent.PromptGet,
   [MCPAnalyticsEventType.mcpPromptsList]: PostHogMCPAnalyticsEvent.PromptsList,
@@ -58,12 +59,13 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
   }
   addConversationIdProperty(event, properties)
   addPersonProcessingProperty(event, properties)
+  addGroupsProperty(event, properties)
 
   addCommonEventProperties(event, properties)
   addCustomEventProperties(event, properties)
 
   return {
-    event: BUILT_IN_EVENT_NAME_BY_TYPE[event.eventType],
+    event: event.eventName ?? BUILT_IN_EVENT_NAME_BY_TYPE[event.eventType],
     distinct_id: distinctId,
     properties,
     timestamp,
@@ -74,6 +76,12 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
 function addConversationIdProperty(event: Event, properties: Record<string, unknown>): void {
   if (event.conversationId !== undefined && event.conversationId !== '') {
     properties[PostHogMCPAnalyticsProperty.ConversationId] = event.conversationId
+  }
+}
+
+function addGroupsProperty(event: Event, properties: Record<string, unknown>): void {
+  if (event.groups && Object.keys(event.groups).length > 0) {
+    properties.$groups = event.groups
   }
 }
 
@@ -168,6 +176,7 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   }
   addConversationIdProperty(event, properties)
   addPersonProcessingProperty(event, properties)
+  addGroupsProperty(event, properties)
 
   if (event.error) {
     // Spread the core `$exception_list` / `$exception_level` properties so MCP

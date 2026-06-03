@@ -1,6 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPServerLike, RegisteredTool } from '../types'
 import { stripConversationId } from './conversation-id'
+import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
 import { createWrappedTool, getLiteralValue, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
@@ -239,6 +240,7 @@ async function handleWrappedToolsCall(
       data,
       request,
       extra,
+      eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
       execute: async () => handleReportMissing({ context }),
     })

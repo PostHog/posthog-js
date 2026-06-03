@@ -1,4 +1,4 @@
-import { publishCustomEvent, instrument } from '../index'
+import { capture, instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import type { MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
@@ -12,22 +12,22 @@ function makeMockLowLevelServer(): MCPServerLike {
   }
 }
 
-describe('publishCustomEvent', () => {
-  it('publishes a $mcp_custom event for an instrumented server', async () => {
+describe('capture', () => {
+  it('captures a $mcp_custom event by default', async () => {
     const server = makeMockLowLevelServer()
     instrument(server, { posthog: fakePostHog() })
 
-    const capture = new EventCapture()
-    await capture.start()
+    const eventCapture = new EventCapture()
+    await eventCapture.start()
 
-    await publishCustomEvent(server, {
+    await capture(server, {
       resourceName: 'custom-action',
       parameters: { action: 'user-feedback', rating: 5 },
       message: 'User provided feedback',
       properties: { source: 'survey' },
     })
 
-    const events = capture.getEvents()
+    const events = eventCapture.getEvents()
     expect(events).toHaveLength(1)
     const [event] = events
     expect(event.eventType).toBe(MCPAnalyticsEventType.custom)
@@ -36,27 +36,46 @@ describe('publishCustomEvent', () => {
     expect(event.userIntent).toBe('User provided feedback')
     expect(event.properties).toEqual({ source: 'survey' })
 
-    await capture.stop()
+    const [payload] = eventCapture.getCaptures()
+    expect(payload.event).toBe('$mcp_custom')
+
+    await eventCapture.stop()
+  })
+
+  it('allows any event name, sent verbatim (not $-prefixed)', async () => {
+    const server = makeMockLowLevelServer()
+    instrument(server, { posthog: fakePostHog() })
+
+    const eventCapture = new EventCapture()
+    await eventCapture.start()
+
+    await capture(server, { event: 'feedback_submitted', properties: { rating: 5 } })
+
+    const [payload] = eventCapture.getCaptures()
+    expect(payload.event).toBe('feedback_submitted')
+    expect(payload.properties.rating).toBe(5)
+
+    await eventCapture.stop()
   })
 
   it('records error details when isError is true', async () => {
     const server = makeMockLowLevelServer()
     instrument(server, { posthog: fakePostHog() })
 
-    const capture = new EventCapture()
-    await capture.start()
+    const eventCapture = new EventCapture()
+    await eventCapture.start()
 
-    await publishCustomEvent(server, {
+    await capture(server, {
       isError: true,
       error: { message: 'Custom error', code: 'ERR_001' },
     })
 
-    const [event] = capture.getEvents()
+    const [event] = eventCapture.getEvents()
     expect(event.isError).toBe(true)
     // resolveCustomEventError normalizes into the core $exception_list shape.
     expect(event.error?.$exception_list?.[0]?.value).toBe('Custom error')
 
-    await capture.stop()
+    await eventCapture.stop()
   })
 
   it('also works with high-level McpServer-like wrappers', async () => {
@@ -64,91 +83,58 @@ describe('publishCustomEvent', () => {
     const highLevelServer = { server: lowLevelServer, _registeredTools: {}, tool: () => {} }
     instrument(highLevelServer, { posthog: fakePostHog() })
 
-    const capture = new EventCapture()
-    await capture.start()
+    const eventCapture = new EventCapture()
+    await eventCapture.start()
 
-    await publishCustomEvent(highLevelServer, { resourceName: 'wrapper-action' })
+    await capture(highLevelServer, { resourceName: 'wrapper-action' })
 
-    const [event] = capture.getEvents()
+    const [event] = eventCapture.getEvents()
     expect(event.resourceName).toBe('wrapper-action')
 
-    await capture.stop()
+    await eventCapture.stop()
   })
 
   it('rejects when the server has not been instrumented', async () => {
-    await expect(publishCustomEvent({}, { resourceName: 'whatever' })).rejects.toThrow(
-      'Server is not instrumented. Call `instrument(server, options)` before `publishCustomEvent`.'
+    await expect(capture({}, { resourceName: 'whatever' })).rejects.toThrow(
+      'Server is not instrumented. Call `instrument(server, options)` before `capture`.'
     )
   })
 
   it('rejects when the first argument is not an object', async () => {
-    await expect(publishCustomEvent(undefined as unknown as object)).rejects.toThrow(
+    await expect(capture(undefined as unknown as object)).rejects.toThrow(
       'First argument must be an instrumented MCP server instance'
     )
-  })
-
-  it('always uses the custom event type for publishCustomEvent', async () => {
-    const server = makeMockLowLevelServer()
-    instrument(server, { posthog: fakePostHog() })
-
-    const capture = new EventCapture()
-    await capture.start()
-
-    await publishCustomEvent(server, {})
-
-    const [event] = capture.getEvents()
-    expect(event.eventType).toBe(MCPAnalyticsEventType.custom)
-
-    await capture.stop()
   })
 
   it('stamps a timestamp on the captured event', async () => {
     const server = makeMockLowLevelServer()
     instrument(server, { posthog: fakePostHog() })
 
-    const capture = new EventCapture()
-    await capture.start()
+    const eventCapture = new EventCapture()
+    await eventCapture.start()
     const before = Date.now()
 
-    await publishCustomEvent(server, {})
+    await capture(server, {})
 
-    const [event] = capture.getEvents()
+    const [event] = eventCapture.getEvents()
     expect(event.timestamp).toBeInstanceOf(Date)
     expect((event.timestamp as Date).getTime()).toBeGreaterThanOrEqual(before)
 
-    await capture.stop()
+    await eventCapture.stop()
   })
 
   it('accepts minimal event data', async () => {
     const server = makeMockLowLevelServer()
     instrument(server, { posthog: fakePostHog() })
 
-    const capture = new EventCapture()
-    await capture.start()
+    const eventCapture = new EventCapture()
+    await eventCapture.start()
 
-    await publishCustomEvent(server, {})
-    await publishCustomEvent(server)
+    await capture(server, {})
+    await capture(server)
 
-    expect(capture.getEvents()).toHaveLength(2)
+    expect(eventCapture.getEvents()).toHaveLength(2)
 
-    await capture.stop()
-  })
-
-  it('still emits when enableTracing is false (custom events are explicit, not auto-captured)', async () => {
-    // `enableTracing` gates auto-captured events (tool calls, listings, identify).
-    // A `publishCustomEvent` call is by definition user-initiated and should not
-    // be silently swallowed when the host opts out of auto-capture.
-    const server = makeMockLowLevelServer()
-    instrument(server, { posthog: fakePostHog(), enableTracing: false })
-
-    const capture = new EventCapture()
-    await capture.start()
-
-    await publishCustomEvent(server, { resourceName: 'explicit-event' })
-
-    expect(capture.getEvents()).toHaveLength(1)
-    expect(capture.getEvents()[0].resourceName).toBe('explicit-event')
-
-    await capture.stop()
+    await eventCapture.stop()
   })
 })

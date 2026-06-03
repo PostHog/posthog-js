@@ -9,7 +9,7 @@ import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './e
 import { setupToolCallTracing } from './extensions/tracing'
 import { setupTracking } from './extensions/tracing-v2'
 import type {
-  CustomEventData,
+  CaptureEventData,
   HighLevelMCPServerLike,
   MCPAnalyticsData,
   MCPAnalyticsOptions,
@@ -36,8 +36,9 @@ import type {
  * import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
  * import { instrument } from "@posthog/mcp"
  *
+ * const posthog = new PostHog(process.env.POSTHOG_PROJECT_TOKEN, { host: "https://us.i.posthog.com" })
  * const server = new McpServer({ name: "my-mcp", version: "1.0.0" })
- * instrument(server, { projectToken: "phc_..." })
+ * instrument(server, { posthog })
  * ```
  */
 function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {}): TServer {
@@ -123,33 +124,26 @@ function setupTrackedServer(
 }
 
 /**
- * Publishes a custom `$mcp_custom` event for an instrumented server. Use this to record
- * domain-specific actions that aren't captured automatically (e.g. user feedback, app-level
- * state changes). The server must already have been passed to `instrument()`.
+ * Captures an event for an instrumented server. Defaults to `$mcp_custom`, but
+ * any event name can be supplied via `event` (sent verbatim). Use this to record
+ * domain-specific actions that aren't captured automatically (e.g. user feedback,
+ * app-level state changes). The server must already have been passed to `instrument()`.
  */
-export function publishCustomEvent(server: unknown, eventData: CustomEventData = {}): Promise<void> {
-  try {
-    publishCustomEventSync(server, eventData)
-    return Promise.resolve()
-  } catch (error) {
-    return Promise.reject(error)
-  }
-}
-
-function publishCustomEventSync(serverInput: unknown, eventData: CustomEventData): void {
-  if (!serverInput || typeof serverInput !== 'object') {
+export async function capture(server: unknown, eventData: CaptureEventData = {}): Promise<void> {
+  if (!server || typeof server !== 'object') {
     throw new Error('First argument must be an instrumented MCP server instance')
   }
 
-  const lowLevelServer = getLowLevelServerFromUnknownObject(serverInput)
+  const lowLevelServer = getLowLevelServerFromUnknownObject(server)
   const trackingData = getServerTrackingData(lowLevelServer)
   if (!trackingData) {
-    throw new Error('Server is not instrumented. Call `instrument(server, options)` before `publishCustomEvent`.')
+    throw new Error('Server is not instrumented. Call `instrument(server, options)` before `capture`.')
   }
 
   const event: UnredactedEvent = {
     sessionId: trackingData.sessionId,
     eventType: MCPAnalyticsEventType.custom,
+    eventName: eventData.event,
     timestamp: new Date(),
     resourceName: eventData.resourceName,
     parameters: eventData.parameters,
@@ -158,7 +152,6 @@ function publishCustomEventSync(serverInput: unknown, eventData: CustomEventData
     duration: eventData.duration,
     isError: eventData.isError,
     error: resolveCustomEventError(eventData.error),
-    redactionFn: trackingData.options.redactSensitiveInformation,
   }
 
   if (eventData.properties && Object.keys(eventData.properties).length > 0) {
@@ -166,9 +159,9 @@ function publishCustomEventSync(serverInput: unknown, eventData: CustomEventData
   }
 
   // Re-use the same per-server publish path so the event picks up session info,
-  // identity, sdk metadata, etc.
-  captureEvent(lowLevelServer, event)
-  log(`Published custom event for session ${trackingData.sessionId}`)
+  // identity, sdk metadata, etc. Awaited so callers know the event was processed.
+  await captureEvent(lowLevelServer, event)
+  log(`Captured event "${eventData.event ?? '$mcp_custom'}" for session ${trackingData.sessionId}`)
 }
 
 function resolveCustomEventError(error: unknown): UnredactedEvent['error'] {
@@ -194,11 +187,11 @@ export {
   PostHogMCPAnalyticsProperty,
 } from './extensions/constants'
 export type {
-  CustomEventData,
+  BeforeSendFn,
+  CaptureEventData,
   MCPAnalyticsContextOptions,
   MCPAnalyticsIntentSource,
   MCPAnalyticsOptions,
-  RedactFunction,
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']

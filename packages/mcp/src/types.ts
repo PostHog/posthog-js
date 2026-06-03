@@ -3,6 +3,7 @@ import type { ErrorTracking } from '@posthog/core'
 import type { PostHog } from 'posthog-node'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
 import type { IdentityCache } from './extensions/internal'
+import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
 
@@ -75,10 +76,16 @@ export interface MCPAnalyticsOptions {
     extra?: CompatibleRequestHandlerExtra
   ) => MaybePromise<string | null | undefined>
   /**
-   * Async string redactor applied to every user-controlled string field before capture.
-   * Protected fields (session id, server name, etc.) are skipped.
+   * Inspect, modify, or drop each event right before it is sent to PostHog
+   * (matching posthog-node's `beforeSend`). Receives the fully-built capture
+   * payload — event name, `distinct_id`, and `properties` — and runs once per
+   * emitted event, including the `$exception` sibling of a failed tool call.
+   *
+   * Return the (possibly mutated) event to send it, or `null`/`undefined` to
+   * drop it. Use this to redact sensitive values, add or remove properties, or
+   * suppress specific events. A throw drops that event.
    */
-  redactSensitiveInformation?: RedactFunction
+  beforeSend?: BeforeSendFn
   /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
    * event properties as-is; values must be JSON-serializable.
@@ -107,7 +114,11 @@ export type RegisteredTool = {
   update?: (...args: unknown[]) => unknown
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
 
-export type RedactFunction = (text: string) => Promise<string>
+/**
+ * Hook invoked for every event just before it is handed to `posthog.capture()`.
+ * Return the event (optionally mutated) to send it, or a nullish value to drop it.
+ */
+export type BeforeSendFn = (event: PostHogCaptureEvent) => MaybePromise<PostHogCaptureEvent | null | undefined>
 
 export interface Event {
   actorId?: string
@@ -118,6 +129,13 @@ export interface Event {
   error?: ErrorProperties | null
   eventId?: string
   eventType: MCPAnalyticsEventType
+  groups?: Record<string, string>
+  /**
+   * Explicit PostHog event name. When set (via `capture(server, { event })`) it
+   * overrides the built-in name derived from `eventType`, so callers can emit any
+   * event name. User-supplied names are sent verbatim (not `$`-prefixed).
+   */
+  eventName?: string
   id: string
   identifyActorData?: JsonRecord
   identifyActorGivenId?: string
@@ -141,9 +159,8 @@ export interface Event {
   userIntentSource?: MCPAnalyticsIntentSource
 }
 
-export interface UnredactedEvent extends Partial<Event> {
-  redactionFn?: RedactFunction
-}
+/** A partially-built MCP event as it flows through the SDK before capture. */
+export type UnredactedEvent = Partial<Event>
 
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
@@ -179,6 +196,12 @@ export interface UserIdentity {
   userData?: JsonRecord
   userId: string
   userName?: string
+  /**
+   * PostHog group memberships as `{ groupType: groupKey }`. Stamped onto every
+   * event for the session as `$groups`, so callers never hand-write the
+   * `$groups` dollar-key themselves.
+   */
+  groups?: Record<string, string>
 }
 
 export interface SessionInfo {
@@ -186,6 +209,7 @@ export interface SessionInfo {
   clientVersion?: string
   identifyActorData?: JsonRecord
   identifyActorGivenId?: string
+  identifyActorGroups?: Record<string, string>
   identifyActorName?: string
   ipAddress?: string
   sdkLanguage?: string
@@ -206,7 +230,13 @@ export interface MCPAnalyticsData {
   toolDescriptions: Map<string, string>
 }
 
-export interface CustomEventData {
+export interface CaptureEventData {
+  /**
+   * PostHog event name. Defaults to `$mcp_custom`. Any name is allowed; a
+   * custom name is sent verbatim (not `$`-prefixed) and treated as a
+   * customer-defined event.
+   */
+  event?: string
   duration?: number
   error?: unknown
   isError?: boolean

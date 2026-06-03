@@ -116,6 +116,7 @@ export function getSessionInfo(
     identifyActorGivenId: actorInfo?.userId,
     identifyActorName: actorInfo?.userName,
     identifyActorData: actorInfo?.userData || {},
+    identifyActorGroups: actorInfo?.groups,
   }
 
   if (!data) {

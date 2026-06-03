@@ -176,6 +176,26 @@ describe('identify option', () => {
     expect(sessionInfo?.identifyActorData).toEqual({ role: 'admin', team: 'platform' })
   })
 
+  it('stamps $groups on events when identify returns groups', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    instrument(server, {
+      posthog: fakePostHog(),
+      identify: async () => ({
+        userId: 'session-user',
+        groups: { organization: 'org_123', project: 'proj_9' },
+      }),
+    })
+
+    await callAddTodo(client)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(toolCall.properties.$groups).toEqual({ organization: 'org_123', project: 'proj_9' })
+
+    await capture.stop()
+  })
+
   it('keeps person processing on and uses the userId as distinct_id once identified', async () => {
     const capture = new EventCapture()
     await capture.start()

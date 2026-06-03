@@ -61,7 +61,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
   })
 
   describe('tools/call', () => {
-    it('captures the report as a $mcp_tool_call event with context as userIntent', async () => {
+    it('captures the report as a $mcp_missing_capability event with context as userIntent', async () => {
       const capture = new EventCapture()
       await capture.start()
       instrument(server, { posthog: fakePostHog(), reportMissing: true })
@@ -77,11 +77,17 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       await new Promise((r) => setTimeout(r, 50))
       const event = capture
         .getEvents()
-        .find((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall && e.resourceName === GET_MORE_TOOLS)
+        .find((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability && e.resourceName === GET_MORE_TOOLS)
 
       expect(event?.userIntent).toBe(context)
       expect(event?.sessionId).toBeDefined()
       expect(event?.userIntentSource).toBe('context_parameter')
+
+      // It's a capability gap, not a tool invocation.
+      expect(capture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(1)
+      expect(
+        capture.findCapturesByEvent('$mcp_tool_call').some((c) => c.properties.$mcp_tool_name === GET_MORE_TOOLS)
+      ).toBe(false)
 
       await capture.stop()
     })
@@ -102,7 +108,13 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       }
 
       await new Promise((r) => setTimeout(r, 50))
-      const captured = capture.getEvents().filter((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall)
+      const captured = capture
+        .getEvents()
+        .filter(
+          (e) =>
+            e.eventType === MCPAnalyticsEventType.mcpToolsCall ||
+            e.eventType === MCPAnalyticsEventType.mcpMissingCapability
+        )
 
       expect(captured.map((e) => e.resourceName)).toEqual(['add_todo', GET_MORE_TOOLS, 'list_todos'])
       expect(new Set(captured.map((e) => e.sessionId)).size).toBe(1)

@@ -110,12 +110,13 @@ export function mergeIdentities(previous: UserIdentity | undefined, next: UserId
       ...(previous.userData || {}),
       ...(next.userData || {}),
     },
+    groups: next.groups ?? previous.groups,
   }
 }
 
 /**
- * Resolves the optional `identify` callback, dedupes against the global identity cache,
- * and publishes an `$identify` event only when the identity has materially changed.
+ * Resolves the optional `identify` callback, dedupes against the server's identity
+ * cache, and publishes an `$identify` event only when the identity has materially changed.
  */
 export async function handleIdentify(
   server: MCPServerLike,
@@ -134,7 +135,6 @@ export async function handleIdentify(
     eventType: MCPAnalyticsEventType.identify,
     parameters: { request, extra },
     timestamp: new Date(),
-    redactionFn: data.options.redactSensitiveInformation,
   }
 
   try {

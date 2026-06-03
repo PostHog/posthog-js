@@ -1,5 +1,6 @@
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
+import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
 import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
@@ -54,6 +55,7 @@ async function handleToolCallRequest(
       data,
       request,
       extra,
+      eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
       execute: async () => handleReportMissing({ context }),
     })

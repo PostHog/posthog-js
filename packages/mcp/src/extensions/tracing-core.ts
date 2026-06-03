@@ -54,6 +54,12 @@ interface TraceToolCallParams {
   extra?: CompatibleRequestHandlerExtra
   execute: ToolExecutor
   /**
+   * Event type to capture. Defaults to a tool call; the `get_more_tools` virtual
+   * tool passes `mcpMissingCapability` so it records a capability gap rather than
+   * a tool invocation.
+   */
+  eventType?: MCPAnalyticsEventType
+  /**
    * When set, used verbatim as the captured intent (source `context_parameter`)
    * instead of running `resolveToolCallIntent`. Used by the `get_more_tools`
    * virtual tool, which carries its intent in the `context` argument.
@@ -77,7 +83,7 @@ interface TraceToolCallParams {
  * throws, and the tool's own errors are always re-thrown to the caller.
  */
 export async function traceToolCall(params: TraceToolCallParams): Promise<unknown> {
-  const { server, data, request, extra, execute, explicitContextIntent, takeCapturedError } = params
+  const { server, data, request, extra, execute, eventType, explicitContextIntent, takeCapturedError } = params
 
   const conversation = resolveConversationId(
     data.options.enableConversationId ?? false,
@@ -89,7 +95,16 @@ export async function traceToolCall(params: TraceToolCallParams): Promise<unknow
   // Prepare the event in isolation: if identity/metadata/intent resolution
   // throws, we drop tracing for this call but still run the tool.
   const startTime = new Date()
-  const event = await prepareToolCallEvent(server, data, request, downstreamRequest, extra, startTime, conversation)
+  const event = await prepareToolCallEvent(
+    server,
+    data,
+    request,
+    downstreamRequest,
+    extra,
+    startTime,
+    conversation,
+    eventType ?? MCPAnalyticsEventType.mcpToolsCall
+  )
   if (event && explicitContextIntent) {
     setExplicitContextIntent(event, explicitContextIntent)
   }
@@ -114,7 +129,8 @@ async function prepareToolCallEvent(
   downstreamRequest: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
   startTime: Date,
-  conversation: ConversationIdResolution
+  conversation: ConversationIdResolution,
+  eventType: MCPAnalyticsEventType
 ): Promise<UnredactedEvent | null> {
   try {
     const sessionId = getServerSessionId(server, extra)
@@ -126,10 +142,9 @@ async function prepareToolCallEvent(
       conversationId: conversation.conversationId,
       resourceName: toolName || 'Unknown Tool Name',
       parameters: buildCapturedMcpParameters(downstreamRequest),
-      eventType: MCPAnalyticsEventType.mcpToolsCall,
+      eventType,
       timestamp: startTime,
       toolDescription: toolName ? data.toolDescriptions.get(toolName) : undefined,
-      redactionFn: data.options.redactSensitiveInformation,
     }
 
     await applyResolvedMetadata(event, data, request, extra)
@@ -267,7 +282,6 @@ async function handleListToolsRequest(
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
-    redactionFn: data?.options.redactSensitiveInformation,
   }
 
   if (data) {
@@ -395,7 +409,6 @@ export function setupInitializeTracing(server: MCPServerLike): void {
       eventType: MCPAnalyticsEventType.mcpInitialize,
       parameters: buildCapturedMcpParameters(request),
       timestamp: new Date(),
-      redactionFn: data.options.redactSensitiveInformation,
     }
 
     await applyResolvedMetadata(event, data, request, extra)
