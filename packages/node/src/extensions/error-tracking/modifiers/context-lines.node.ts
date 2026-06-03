@@ -106,7 +106,7 @@ function getContextLinesFromFile(path: string, ranges: ReadlineRange[], output: 
 
     // We need to explicitly destroy the stream to prevent memory leaks,
     // removing the listeners on the readline interface is not enough.
-    // See: https://github.com/nodejs/node/issues/9002 and https://github.com/getsentry/sentry-javascript/issues/14892
+    // Otherwise, repeated exception captures can keep opening the same files without closing them.
     function destroyStreamAndResolve(): void {
       stream.destroy()
       resolve()

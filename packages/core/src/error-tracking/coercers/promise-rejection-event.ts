@@ -59,8 +59,9 @@ export class PromiseRejectionEventCoercer implements ErrorTrackingCoercer<Reject
       // something, somewhere, (likely a browser extension) effectively casts PromiseRejectionEvents
       // to CustomEvents, moving the `promise` and `reason` attributes of the PRE into
       // the CustomEvent's `detail` attribute, since they're not part of CustomEvent's spec
-      // see https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent and
-      // https://github.com/getsentry/sentry-javascript/issues/2380
+      // Unwrap `detail.reason` so extension errors are reported as the original Error instead of
+      // a generic CustomEvent with keys like currentTarget, detail, isTrusted, and target.
+      // see https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent
       if ('detail' in error && error.detail != null && typeof error.detail === 'object' && 'reason' in error.detail) {
         return error.detail.reason
       }
