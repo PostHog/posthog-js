@@ -701,6 +701,13 @@ export default class MutationBuffer {
           return; // any removedNodes won't have been in mirror either
         }
 
+        // Debug logging for childList records. Opt-in via
+        // `window.__phDebugMutations = true` so it can be flipped on in a
+        // user's devtools without a code change. Used to diagnose cases
+        // where the recording stream shows phantom adds (an added node
+        // without a corresponding removed node from the same record).
+        debugLogChildList(m, this.mirror);
+
         m.addedNodes.forEach((n) => this.genAdds(n, m.target));
         m.removedNodes.forEach((n) => {
           const nodeId = this.mirror.getId(n);
@@ -712,12 +719,14 @@ export default class MutationBuffer {
             isIgnored(n, this.mirror, this.slimDOMOptions) ||
             !isSerialized(n, this.mirror)
           ) {
+            debugLogRemoveDrop(n, nodeId, 'early-return', this.mirror);
             return;
           }
           // removed node has not been serialized yet, just remove it from the Set
           if (this.addedSet.has(n)) {
             deepDelete(this.addedSet, n);
             this.droppedSet.add(n);
+            debugLogRemoveDrop(n, nodeId, 'added-in-same-batch', this.mirror);
           } else if (this.addedSet.has(m.target) && nodeId === -1) {
             /**
              * If target was newly added and removed child node was
@@ -726,6 +735,7 @@ export default class MutationBuffer {
              * newly added node will be serialized without child nodes.
              * TODO: verify this
              */
+            debugLogRemoveDrop(n, nodeId, 'target-added-this-batch', this.mirror);
           } else if (isAncestorRemoved(m.target, this.mirror)) {
             /**
              * If parent id was not in the mirror map any more, it
@@ -733,11 +743,13 @@ export default class MutationBuffer {
              * the node is also removed which we do not need to track
              * and replay.
              */
+            debugLogRemoveDrop(n, nodeId, 'ancestor-removed', this.mirror);
           } else if (
             this.movedSet.has(n) &&
             this.movedMap[moveKey(nodeId, parentId)]
           ) {
             deepDelete(this.movedSet, n);
+            debugLogRemoveDrop(n, nodeId, 'treated-as-move', this.mirror);
           } else {
             this.removes.push({
               parentId,
@@ -748,6 +760,7 @@ export default class MutationBuffer {
                   : undefined,
             });
             processRemoves(n, this.removesSubTreeCache);
+            debugLogRemoveEmit(n, nodeId, parentId, this.mirror);
           }
           this.mapRemoves.push(n);
         });
@@ -854,4 +867,72 @@ function _isAncestorInSet(set: Set<Node>, n: Node): boolean {
     return true;
   }
   return _isAncestorInSet(set, parent);
+}
+
+/**
+ * --- temporary debug instrumentation ---
+ * Logs every childList MutationRecord and the path each removedNode takes
+ * through processMutation. Off by default; enabled when the page sets
+ * `window.__phDebugMutations = true` (so we can ramp it to a single
+ * customer's session without a code change). Remove once we've pinned
+ * down the "phantom add, missing remove" pattern from session
+ * 019e870d-f2fd-7416-a84e-5ae82b747731 (ticket #58146).
+ */
+function debugLogEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean((window as unknown as { __phDebugMutations?: boolean }).__phDebugMutations);
+}
+
+function describeNode(n: Node, mirror: Mirror): string {
+  if (n.nodeType === 3) {
+    const v = (n as Text).data || '';
+    return `text(${mirror.getId(n)},"${v.slice(0, 40)}${v.length > 40 ? '…' : ''}")`;
+  }
+  if (n.nodeType === 1) {
+    const el = n as Element;
+    const id = el.getAttribute('id');
+    const cls = el.getAttribute('class');
+    return `<${el.tagName.toLowerCase()}${id ? `#${id}` : ''}${cls ? `.${cls.split(/\s+/).slice(0, 1).join('.')}` : ''}>(${mirror.getId(n)})`;
+  }
+  return `node(type=${n.nodeType},id=${mirror.getId(n)})`;
+}
+
+function debugLogChildList(m: mutationRecord, mirror: Mirror) {
+  if (!debugLogEnabled()) return;
+  if (m.addedNodes.length === 0 && m.removedNodes.length === 0) return;
+  // eslint-disable-next-line no-console
+  console.debug(
+    `[ph-mut] childList on ${describeNode(m.target, mirror)} ` +
+      `added=${m.addedNodes.length} removed=${m.removedNodes.length}`,
+    {
+      added: Array.from(m.addedNodes).map((n) => describeNode(n, mirror)),
+      removed: Array.from(m.removedNodes).map((n) => describeNode(n, mirror)),
+    },
+  );
+}
+
+function debugLogRemoveDrop(
+  n: Node,
+  nodeId: number,
+  reason: string,
+  mirror: Mirror,
+) {
+  if (!debugLogEnabled()) return;
+  // eslint-disable-next-line no-console
+  console.debug(
+    `[ph-mut] remove DROPPED (${reason}) ${describeNode(n, mirror)} mirrorId=${nodeId}`,
+  );
+}
+
+function debugLogRemoveEmit(
+  n: Node,
+  nodeId: number,
+  parentId: number,
+  mirror: Mirror,
+) {
+  if (!debugLogEnabled()) return;
+  // eslint-disable-next-line no-console
+  console.debug(
+    `[ph-mut] remove EMIT ${describeNode(n, mirror)} mirrorId=${nodeId} parentId=${parentId}`,
+  );
 }
