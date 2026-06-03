@@ -86,7 +86,16 @@ export function setLastActivity(server: MCPServerLike): void {
   setServerTrackingData(server, data)
 }
 
-export function getSessionInfo(server: MCPServerLike, data: MCPAnalyticsData | undefined): SessionInfo {
+/**
+ * Builds the session metadata stamped onto an event. The caller passes the
+ * session id resolved for *this* request so identity attribution can't be
+ * clobbered by a concurrent request mutating shared `data.sessionId`.
+ */
+export function getSessionInfo(
+  server: MCPServerLike,
+  data: MCPAnalyticsData | undefined,
+  sessionId?: string
+): SessionInfo {
   let clientInfo: ServerClientInfoLike | undefined = {
     name: undefined,
     version: undefined,
@@ -94,7 +103,7 @@ export function getSessionInfo(server: MCPServerLike, data: MCPAnalyticsData | u
   if (!data?.sessionInfo.clientName) {
     clientInfo = server.getClientVersion()
   }
-  const actorInfo = data?.identifiedSessions.get(data.sessionId)
+  const actorInfo = data?.identifiedSessions.get(sessionId ?? data.sessionId)
 
   const sessionInfo: SessionInfo = {
     ipAddress: undefined, // grab from django

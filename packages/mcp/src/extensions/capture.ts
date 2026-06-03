@@ -32,7 +32,7 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     return
   }
 
-  const sessionInfo = getSessionInfo(server, data)
+  const sessionInfo = getSessionInfo(server, data, eventInput.sessionId)
 
   const duration =
     eventInput.duration || (eventInput.timestamp ? Date.now() - eventInput.timestamp.getTime() : undefined)

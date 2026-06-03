@@ -1,31 +1,12 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import type {
-  CompatibleRequestHandlerExtra,
-  HighLevelMCPServerLike,
-  MCPServerLike,
-  RegisteredTool,
-  UnredactedEvent,
-} from '../types'
-import {
-  type ConversationIdResolution,
-  canInjectConversationIdPromptBack,
-  cloneRequestWithoutConversationId,
-  injectConversationIdPromptBack,
-  resolveConversationId,
-  stripConversationId,
-} from './conversation-id'
-import { captureEvent } from './capture'
-import { MCPAnalyticsEventType } from './event-types'
-import { captureException } from './exceptions'
-import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
-import { getServerTrackingData, handleIdentify } from './internal'
+import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPServerLike, RegisteredTool } from '../types'
+import { stripConversationId } from './conversation-id'
+import { getServerTrackingData } from './internal'
 import { log } from './logger'
-import { buildCapturedMcpParameters } from './mcp-payloads'
 import { createWrappedTool, getLiteralValue, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
-import { getServerSessionId } from './session'
 import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
-import { setupInitializeTracing, setupListToolsTracing } from './tracing'
-import { applyResolvedMetadata, getContextArgument, isToolResultError } from './tracing-helpers'
+import { setupInitializeTracing, setupListToolsTracing, traceToolCall } from './tracing-core'
+import { getContextArgument } from './tracing-helpers'
 
 type MCPRequestHandler = NonNullable<
   MCPServerLike['_requestHandlers'] extends Map<string, infer THandler> ? THandler : never
@@ -81,7 +62,7 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 
             const nextValue = addTracingToToolCallbackInternal(value, property, server)
 
-            setupListToolsTracing(server)
+            setupListToolsTracing(server.server as MCPServerLike)
 
             if (typeof nextValue.update === 'function') {
               const originalUpdate = nextValue.update
@@ -132,6 +113,15 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
   }
 }
 
+/**
+ * Wraps a registered tool's callback so the SDK-injected `context` and
+ * `conversation_id` arguments are stripped before the tool sees them, and any
+ * thrown error is stashed on `extra` for the request-handler wrapper to capture
+ * (the high-level SDK turns thrown errors into `isError` results otherwise).
+ *
+ * This is purely the tool-facing concern; event capture lives in
+ * {@link traceToolCall} via {@link handleWrappedToolsCall}.
+ */
 function addTracingToToolCallbackInternal(
   tool: RegisteredTool,
   toolName: string,
@@ -169,7 +159,7 @@ function addTracingToToolCallbackInternal(
       return input
     }
 
-    const cleanedArgs = toolName === 'get_more_tools' ? args : stripConversationId(removeContextFromArgs(args))
+    const cleanedArgs = toolName === GET_MORE_TOOLS_NAME ? args : stripConversationId(removeContextFromArgs(args))
 
     try {
       if (cleanedArgs === undefined) {
@@ -228,199 +218,50 @@ function createToolsCallWrapper(originalHandler: MCPRequestHandler, server: MCPS
     await handleWrappedToolsCall(originalHandler, server, request, extra)
 }
 
-interface ToolCallTracing {
-  event: UnredactedEvent | null
-  mintedConversationId: string | undefined
-  shouldPublishEvent: boolean
-}
-
 async function handleWrappedToolsCall(
   originalHandler: MCPRequestHandler,
   server: MCPServerLike,
   request: MCPRequest,
   extra: MCPRequestExtra
 ): Promise<unknown> {
-  const startTime = new Date()
-  const conversation = resolveConversationId(
-    getServerTrackingData(server)?.options.enableConversationId ?? false,
-    request.params?.arguments,
-    request.params?.name
-  )
-  const downstreamRequest = conversation.conversationId ? cloneRequestWithoutConversationId(request) : request
-  const tracing = await initializeToolCallEvent(server, request, downstreamRequest, extra, startTime, conversation)
-
-  if (request?.params?.name === GET_MORE_TOOLS_NAME) {
-    return executeReportMissingTool(server, request, tracing, startTime)
-  }
-
-  return await executeOriginalTool(originalHandler, server, request, extra, tracing, startTime)
-}
-
-async function initializeToolCallEvent(
-  server: MCPServerLike,
-  request: MCPRequest,
-  downstreamRequest: MCPRequest,
-  extra: MCPRequestExtra,
-  startTime: Date,
-  conversation: ConversationIdResolution
-): Promise<ToolCallTracing> {
-  try {
-    const data = getServerTrackingData(server)
-    if (!data) {
-      log(
-        'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
-      )
-      return {
-        event: null,
-        mintedConversationId: undefined,
-        shouldPublishEvent: false,
-      }
-    }
-
-    const toolName = request.params?.name
-    const event: UnredactedEvent = {
-      sessionId: getServerSessionId(server, extra),
-      conversationId: conversation.conversationId,
-      resourceName: toolName || 'Unknown Tool',
-      parameters: buildCapturedMcpParameters(downstreamRequest),
-      eventType: MCPAnalyticsEventType.mcpToolsCall,
-      timestamp: startTime,
-      toolDescription: toolName ? data.toolDescriptions.get(toolName) : undefined,
-      redactionFn: data.options.redactSensitiveInformation,
-    }
-
-    await handleIdentify(server, data, request, extra)
-    event.sessionId = data.sessionId
-    await applyResolvedMetadata(event, data, request, extra)
-
-    setEventIntent(event, await resolveToolCallIntent(data, request, extra))
-
-    return {
-      event,
-      mintedConversationId: conversation.minted ? conversation.conversationId : undefined,
-      shouldPublishEvent: true,
-    }
-  } catch (error) {
+  const data = getServerTrackingData(server)
+  if (!data) {
     log(
-      `Warning: PostHog MCP analytics tracing failed for tool ${request.params?.name}, falling back to original handler - ${error}`
+      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
-    return {
-      event: null,
-      mintedConversationId: undefined,
-      shouldPublishEvent: false,
-    }
+    return await originalHandler(request, extra)
   }
-}
 
-function executeReportMissingTool(
-  server: MCPServerLike,
-  request: MCPRequest,
-  tracing: ToolCallTracing,
-  startTime: Date
-): CallToolResult {
-  try {
+  if (request.params?.name === GET_MORE_TOOLS_NAME) {
     const context = getContextArgument(request) || ''
-    const result = handleReportMissing({ context })
-
-    publishSuccessfulToolEvent(server, tracing, result, startTime, {
-      userIntent: context,
-      userIntentSource: 'context_parameter',
+    return await traceToolCall({
+      server,
+      data,
+      request,
+      extra,
+      explicitContextIntent: context,
+      execute: async () => handleReportMissing({ context }),
     })
-
-    return result
-  } catch (error) {
-    publishFailedToolEvent(server, tracing, error, startTime)
-    throw error
   }
-}
 
-async function executeOriginalTool(
-  originalHandler: MCPRequestHandler,
-  server: MCPServerLike,
-  request: MCPRequest,
-  extra: MCPRequestExtra,
-  tracing: ToolCallTracing,
-  startTime: Date
-): Promise<unknown> {
-  try {
-    const result = await originalHandler(request, extra)
-    let finalResult = result
-    if (tracing.mintedConversationId) {
-      if (canInjectConversationIdPromptBack(result)) {
-        finalResult = injectConversationIdPromptBack(result, tracing.mintedConversationId)
-      } else if (tracing.event) {
-        // Minted but undeliverable — agent will never see the id; drop it
-        // from the captured event so it doesn't appear as an orphan.
-        tracing.event.conversationId = undefined
+  // The high-level handler re-derives arguments from the original request and
+  // strips the injected params inside the wrapped callback, so we hand it the
+  // original request rather than the conversation-stripped one. Errors thrown
+  // by the tool are stashed on `extra` by the callback wrapper; surface them.
+  return await traceToolCall({
+    server,
+    data,
+    request,
+    extra,
+    execute: () => originalHandler(request, extra),
+    takeCapturedError: () => {
+      const captured = extra?.__mcp_analytics_error
+      if (extra) {
+        extra.__mcp_analytics_error = undefined
       }
-    }
-    publishSuccessfulToolEvent(server, tracing, finalResult, startTime, {
-      capturedError: extra?.__mcp_analytics_error,
-      clearCapturedError: () => {
-        if (extra) {
-          extra.__mcp_analytics_error = undefined
-        }
-      },
-    })
-    return finalResult
-  } catch (error) {
-    if (tracing.mintedConversationId && tracing.event) {
-      tracing.event.conversationId = undefined
-    }
-    publishFailedToolEvent(server, tracing, error, startTime)
-    throw error
-  }
-}
-
-function publishSuccessfulToolEvent(
-  server: MCPServerLike,
-  tracing: ToolCallTracing,
-  result: unknown,
-  startTime: Date,
-  options: {
-    capturedError?: unknown
-    clearCapturedError?: () => void
-    userIntent?: string
-    userIntentSource?: UnredactedEvent['userIntentSource']
-  } = {}
-): void {
-  if (!(tracing.event && tracing.shouldPublishEvent)) {
-    return
-  }
-
-  if (options.userIntent) {
-    setExplicitContextIntent(tracing.event, options.userIntent)
-    if (options.userIntentSource) {
-      tracing.event.userIntentSource = options.userIntentSource
-    }
-  }
-  if (isToolResultError(result)) {
-    tracing.event.isError = true
-    tracing.event.error = captureException(options.capturedError || result)
-    options.clearCapturedError?.()
-  } else {
-    tracing.event.isError = false
-  }
-
-  tracing.event.response = result
-  tracing.event.duration = Date.now() - startTime.getTime()
-  captureEvent(server, tracing.event)
-}
-
-function publishFailedToolEvent(
-  server: MCPServerLike,
-  tracing: ToolCallTracing,
-  error: unknown,
-  startTime: Date
-): void {
-  if (!(tracing.event && tracing.shouldPublishEvent)) {
-    return
-  }
-
-  tracing.event.isError = true
-  tracing.event.error = captureException(error)
-  tracing.event.duration = Date.now() - startTime.getTime()
-  captureEvent(server, tracing.event)
+      return captured
+    },
+  })
 }
 
 export function setupTracking(server: HighLevelMCPServerLike): void {
@@ -437,7 +278,7 @@ export function setupTracking(server: HighLevelMCPServerLike): void {
       seedToolDescriptionsFromRegistry(mcpAnalyticsData.toolDescriptions, server._registeredTools)
     }
 
-    setupListToolsTracing(server)
+    setupListToolsTracing(server.server)
 
     setupListenerToRegisteredTools(server)
   } catch (error) {

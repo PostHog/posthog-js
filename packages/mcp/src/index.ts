@@ -6,7 +6,6 @@ import { getServerTrackingData, setServerTrackingData } from './extensions/inter
 import { log, setLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
-import { setupMCPAnalyticsTools } from './extensions/tools'
 import { setupToolCallTracing } from './extensions/tracing'
 import { setupTracking } from './extensions/tracing-v2'
 import type {
@@ -115,14 +114,6 @@ function setupTrackedServer(
     const highLevelServer = validatedServer as HighLevelMCPServerLike
     setupTracking(highLevelServer)
     return
-  }
-
-  if (mcpAnalyticsData.options.reportMissing) {
-    try {
-      setupMCPAnalyticsTools(lowLevelServer)
-    } catch (error) {
-      log(`Warning: Failed to setup report missing tool - ${error}`)
-    }
   }
 
   if (mcpAnalyticsData.options.enableTracing) {

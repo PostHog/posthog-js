@@ -124,6 +124,7 @@ export function mergeIdentities(previous: UserIdentity | undefined, next: UserId
 export async function handleIdentify(
   server: MCPServerLike,
   data: MCPAnalyticsData,
+  sessionId: string,
   request: MCPRequestLike,
   extra?: CompatibleRequestHandlerExtra
 ): Promise<void> {
@@ -131,7 +132,6 @@ export async function handleIdentify(
     return
   }
 
-  const sessionId = data.sessionId
   const identifyEvent: UnredactedEvent = {
     sessionId,
     resourceName: getRequestResourceName(request),
@@ -146,16 +146,15 @@ export async function handleIdentify(
       typeof data.options.identify === 'function' ? await data.options.identify(request, extra) : data.options.identify
 
     if (identityResult) {
-      const currentSessionId = data.sessionId
-      const previousIdentity = _globalIdentityCache.get(currentSessionId)
+      const previousIdentity = _globalIdentityCache.get(sessionId)
       const mergedIdentity = mergeIdentities(previousIdentity, identityResult)
       const hasChanged = !(previousIdentity && areIdentitiesEqual(previousIdentity, mergedIdentity))
 
-      _globalIdentityCache.set(currentSessionId, mergedIdentity)
-      data.identifiedSessions.set(data.sessionId, mergedIdentity)
+      _globalIdentityCache.set(sessionId, mergedIdentity)
+      data.identifiedSessions.set(sessionId, mergedIdentity)
 
       if (hasChanged) {
-        log(`Identified session ${currentSessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
+        log(`Identified session ${sessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
         captureEvent(server, identifyEvent)
       }
     } else {
