@@ -1,3 +1,5 @@
+import { spawnSync } from 'child_process'
+
 import {
   addPostHogWithBundledScriptsToBundleShellScript,
   disableUserScriptSandboxing,
@@ -64,6 +66,12 @@ const extractArg1 = (wrappedLine: string): string => {
   return afterPosthog.trim().split(/\s+/)[0]
 }
 
+const expectValidShellSyntax = (script: string): void => {
+  const result = spawnSync('/bin/sh', ['-n'], { input: script, encoding: 'utf8' })
+  expect(result.stderr).toBe('')
+  expect(result.status).toBe(0)
+}
+
 describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
   it('wraps the react-native-xcode.sh invocation with posthog-xcode.sh', () => {
     const original = '"../node_modules/react-native/scripts/react-native-xcode.sh"'
@@ -98,6 +106,20 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expect(arg1).toContain('react-native-xcode.sh')
     expect(arg1).not.toBe('/bin/sh')
   })
+
+  it('preserves the full Expo backtick command when wrapping react-native-xcode.sh', () => {
+    const original =
+      "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`"
+
+    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
+
+    expect(wrapped).toContain('posthog-xcode.sh')
+    expect(wrapped).toContain(
+      "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`"
+    )
+    expect(wrapped).not.toContain("` '/scripts/react-native-xcode.sh'\"`")
+    expectValidShellSyntax(wrapped)
+  })
 })
 
 describe('modifyExistingXcodeBuildScript', () => {
@@ -106,6 +128,27 @@ describe('modifyExistingXcodeBuildScript', () => {
     modifyExistingXcodeBuildScript(script)
     const parsed = JSON.parse(script.shellScript)
     expect(parsed).toContain('posthog-xcode.sh')
+  })
+
+  it('wraps Expo backtick bundle phase shellScript without creating invalid shell syntax', () => {
+    const expoBundleScript = [
+      'if [[ -z "$CLI_PATH" ]]; then',
+      '  export CLI_PATH="$("$NODE_BINARY" --print "require.resolve(\'@expo/cli\')")"',
+      'fi',
+      '',
+      "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`",
+      '',
+    ].join('\n')
+    const script = { shellScript: JSON.stringify(expoBundleScript) }
+
+    modifyExistingXcodeBuildScript(script)
+
+    const parsed = JSON.parse(script.shellScript)
+    expect(parsed).toContain('posthog-xcode.sh')
+    expect(parsed).toContain(
+      "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`"
+    )
+    expectValidShellSyntax(parsed)
   })
 
   it('is idempotent — re-running does not double-wrap', () => {

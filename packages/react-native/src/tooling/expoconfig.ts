@@ -53,14 +53,17 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase): void {
 const POSTHOG_REACT_NATIVE_XCODE_PATH =
   "`\"$NODE_BINARY\" --print \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog-xcode.sh')\"`"
 
+const REACT_NATIVE_XCODE_LINE =
+  /^([ \t]*)(?![A-Za-z_][A-Za-z0-9_]*=)(?:\/bin\/sh\s+)?([^\n]*(?:packager|scripts)\/react-native-xcode\.sh\b[^\n]*)$/m
+
 export function addPostHogWithBundledScriptsToBundleShellScript(script: string): string {
-  // Capture only the RN script path (group 1), stripping any leading shell/interpreter
-  // token (e.g. "/bin/sh") that may prefix it in Expo SDK 53+ bundle phase scripts.
-  // Without this, $1 inside posthog-xcode.sh resolves to "/bin/sh" instead of the
-  // react-native-xcode.sh path, silently breaking the PACKAGER_SOURCEMAP_FILE patch.
+  // Capture the full RN script invocation. Expo uses a backtick-wrapped
+  // node --print command, so matching only up to react-native-xcode.sh cuts the
+  // command substitution in half and leaves the generated shell invalid.
   return script.replace(
-    /^(?:.*\s)?((?:[^\s]*(?:packager|scripts)\/react-native-xcode\.sh)\s*(?:\'\\\")?)/m,
-    (_match: string, rnPath: string) => `/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${rnPath}`
+    REACT_NATIVE_XCODE_LINE,
+    (_match: string, indent: string, rnCommand: string) =>
+      `${indent}/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${rnCommand}`
   )
 }
 
