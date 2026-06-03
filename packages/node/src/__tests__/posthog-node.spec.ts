@@ -369,6 +369,47 @@ describe('PostHog Node.js', () => {
       await client.shutdown()
     })
 
+    it('should honor constructor disableGeoip: true without per-event override', async () => {
+      const client = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        disableGeoip: true,
+        disableCompression: true,
+      })
+      client.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' }, groups: { org: 123 } })
+
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0].properties).toEqual(
+        expect.objectContaining({
+          $geoip_disable: true,
+        })
+      )
+
+      await client.shutdown()
+    })
+
+    it('should honor constructor disableGeoip: true for identify', async () => {
+      const client = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        disableGeoip: true,
+        disableCompression: true,
+      })
+      client.identify({ distinctId: '123', properties: { name: 'Test' } })
+
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0].properties).toEqual(
+        expect.objectContaining({
+          $geoip_disable: true,
+        })
+      )
+
+      await client.shutdown()
+    })
+
+
     it('should include registered properties in captured events', async () => {
       posthog.register({ registered_prop: 'registered_value', another: 123 })
 
