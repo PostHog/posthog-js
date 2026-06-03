@@ -96,6 +96,7 @@ export const COOKIELESS_MODE_FLAG_PROPERTY = '$cookieless_mode'
 
 export const WEB_EXPERIMENTS = '$web_experiments'
 
+export const SDK_DIST_CHANNEL = '$sdk_dist_channel'
 export const SDK_DEBUG_EXTENSIONS_INIT_METHOD = '$sdk_debug_extensions_init_method'
 export const SDK_DEBUG_EXTENSIONS_INIT_TIME_MS = '$sdk_debug_extensions_init_time_ms'
 export const SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_script_not_loaded'

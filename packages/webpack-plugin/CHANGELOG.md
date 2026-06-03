@@ -1,5 +1,33 @@
 # @posthog/webpack-plugin
 
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.30.3
+
+## 1.5.0
+
+### Minor Changes
+
+- [#3716](https://github.com/PostHog/posthog-js/pull/3716) [`3889f02`](https://github.com/PostHog/posthog-js/commit/3889f024e6e27c2ca8444cde95fb3df6eb8a9574) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Default `sourcemaps.enabled` to `true`, matching the other PostHog bundler plugins. Previously it defaulted to `NODE_ENV === 'production'`.
+  (2026-06-02)
+
+## 1.4.43
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.30.2
+
+## 1.4.42
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.30.1
+
 ## 1.4.41
 
 ### Patch Changes

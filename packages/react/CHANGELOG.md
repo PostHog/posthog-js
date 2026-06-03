@@ -1,5 +1,12 @@
 # @posthog/react
 
+## 1.10.0
+
+### Minor Changes
+
+- [#3718](https://github.com/PostHog/posthog-js/pull/3718) [`3aff16e`](https://github.com/PostHog/posthog-js/commit/3aff16e98540e659be4158a784fe38ef755f878e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add an optional `defaultValue` argument to `useFeatureFlagEnabled`. When supplied, the hook returns that value instead of `undefined` while flags are loading or when the flag is absent, and the return type narrows to `boolean`. Omitting the argument keeps the existing `boolean | undefined` behavior.
+  (2026-06-02)
+
 ## 1.9.1
 
 ### Patch Changes

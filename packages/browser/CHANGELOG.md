@@ -1,5 +1,41 @@
 # posthog-js
 
+## 1.379.0
+
+### Minor Changes
+
+- [#3722](https://github.com/PostHog/posthog-js/pull/3722) [`c487070`](https://github.com/PostHog/posthog-js/commit/c48707071586135de3357bf94e4165605c93e321) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `$sdk_dist_channel` event property for browser SDK `npm` and `cdn` distribution channels.
+  (2026-06-02)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.379.0
+    - @posthog/core@1.30.3
+
+## 1.378.1
+
+### Patch Changes
+
+- [#3706](https://github.com/PostHog/posthog-js/pull/3706) [`8fcf40d`](https://github.com/PostHog/posthog-js/commit/8fcf40d3798a107f446dd75b13b81088eac1ab2c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix(browser): avoid exposing internally-created Request bodies to downstream fetch wrappers in Safari.
+  (2026-06-01)
+- Updated dependencies []:
+    - @posthog/types@1.378.1
+    - @posthog/core@1.30.2
+
+## 1.378.0
+
+### Minor Changes
+
+- [#3688](https://github.com/PostHog/posthog-js/pull/3688) [`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(persistence): add `persistence_save_debounce_ms` config option to coalesce rapid storage saves into a single write. Setting a positive value debounces writes to localStorage/cookie by that window; the in-memory `props` object still updates synchronously so within-tab reads see the latest values immediately, and pending writes flush on `beforeunload` and `pagehide` so no state is lost on tab close. Cross-tab `storage` events are reduced proportionally to the debounce window. Defaults to `0` (no debouncing) for backwards compatibility. On pages that capture many events per second, `250` is a reasonable starting point. The new `2026-05-30` config default opts into `persistence_save_debounce_ms: 250` automatically.
+  (2026-06-01)
+
+### Patch Changes
+
+- Updated dependencies [[`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc)]:
+    - @posthog/types@1.378.0
+    - @posthog/core@1.30.1
+
 ## 1.377.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.377.0",
+    "version": "1.379.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "engineering@posthog.com",
@@ -58,11 +58,6 @@
         "rrweb-plugin-console-record/package.json"
     ],
     "dependencies": {
-        "@opentelemetry/api": "^1.9.0",
-        "@opentelemetry/api-logs": "^0.208.0",
-        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
-        "@opentelemetry/resources": "^2.2.0",
-        "@opentelemetry/sdk-logs": "^0.208.0",
         "@posthog/core": "workspace:*",
         "@posthog/types": "workspace:*",
         "core-js": "^3.38.1",
@@ -82,6 +77,11 @@
         "@babel/preset-typescript": "catalog:",
         "@jest/globals": "^29.7.0",
         "@jridgewell/sourcemap-codec": "^1.5.5",
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/api-logs": "^0.208.0",
+        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
+        "@opentelemetry/resources": "^2.2.0",
+        "@opentelemetry/sdk-logs": "^0.208.0",
         "@playwright/test": "^1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
         "@posthog/rrweb": "workspace:*",

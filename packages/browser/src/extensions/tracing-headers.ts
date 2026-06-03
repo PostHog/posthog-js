@@ -20,6 +20,7 @@ export class TracingHeaders implements Extension {
         if (assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns) {
             // already loaded
             cb()
+            return
         }
 
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'tracing-headers', (err) => {
@@ -49,14 +50,14 @@ export class TracingHeaders implements Extension {
     private _startCapturing = () => {
         const hostnames = this._getConfiguredHostnames() || []
         if (isUndefined(this._restoreXHRPatch)) {
-            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
+            this._restoreXHRPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
                 hostnames,
                 this._instance.get_distinct_id(),
                 this._instance.sessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
-            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
+            this._restoreFetchPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
                 hostnames,
                 this._instance.get_distinct_id(),
                 this._instance.sessionManager
