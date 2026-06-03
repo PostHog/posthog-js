@@ -1,3 +1,6 @@
+// Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
+// Licensed under the MIT License
+
 import { isBuiltin, isEvent, isPrimitive } from '@/utils'
 import { CoercingContext, ErrorTrackingCoercer, ExceptionLike } from '../types'
 

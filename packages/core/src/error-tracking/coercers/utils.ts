@@ -1,3 +1,6 @@
+// Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
+// Licensed under the MIT License
+
 export function truncate(str: string, max: number = 0): string {
   if (typeof str !== 'string' || max === 0) {
     return str
