@@ -167,6 +167,12 @@ export class Replayer {
   // In the fast-forward mode, only the last selection data needs to be applied.
   private lastSelectionData: selectionData | null = null;
 
+  // In the fast-forward mode, scrolls applied mid-batch can clamp to 0 because the target's
+  // scrollable content isn't laid out yet (e.g. scroll-revealed sheets/modals whose content
+  // is positioned below the fold). Keep the last scroll per node and re-apply it once the
+  // catch-up has finished and layout has settled, in the flush stage.
+  private lastScrollMap: Map<number, scrollData> = new Map();
+
   // In the fast-forward mode using VirtualDom optimization, all stylesheetRule, and styleDeclaration events on constructed StyleSheets will be delayed to get applied until the flush stage.
   private constructedStyleMutations: (
     | styleSheetRuleData
@@ -337,6 +343,15 @@ export class Replayer {
         this.applySelection(this.lastSelectionData);
         this.lastSelectionData = null;
       }
+
+      // Re-apply the last scroll per node now that all mutations are flushed and layout has
+      // settled, so scrolls that clamped mid-fast-forward (target not yet scrollable) land.
+      if (this.lastScrollMap.size) {
+        this.lastScrollMap.forEach((d) => {
+          this.applyScroll(d, true);
+        });
+        this.lastScrollMap.clear();
+      }
     };
     this.addEmitterHandler(ReplayerEvents.Flush, flushHandler);
 
@@ -345,6 +360,7 @@ export class Replayer {
       this.mirror.reset();
       this.styleMirror.reset();
       this.mediaManager.reset();
+      this.lastScrollMap.clear();
     };
     this.addEmitterHandler(ReplayerEvents.PlayBack, playBackHandler);
 
@@ -1326,6 +1342,11 @@ export class Replayer {
          */
         if (d.id === -1) {
           break;
+        }
+        // Re-applied after the catch-up flush (covers both the virtual-dom and direct paths),
+        // so a scroll that clamps mid-fast-forward because the target isn't scrollable yet lands.
+        if (isSync) {
+          this.lastScrollMap.set(d.id, d);
         }
         if (this.usingVirtualDom) {
           const target = this.virtualDom.mirror.getNode(d.id) as RRElement;
