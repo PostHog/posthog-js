@@ -1,3 +1,6 @@
+// Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
+// Licensed under the MIT License
+
 import { isEmptyString, isError, isEvent, isString } from '@/utils'
 import { CoercingContext, ErrorTrackingCoercer, ExceptionLike, SeverityLevel, severityLevels } from '../types'
 import { extractExceptionKeysForMessage } from './utils'
