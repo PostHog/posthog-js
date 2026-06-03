@@ -1,8 +1,9 @@
 /* eslint camelcase: "off" */
 
-import { each, extend, stripEmptyProperties } from './utils'
+import { each, extend, stripEmptyProperties, addEventListener } from './utils'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
+import { window } from './utils/globals'
 import {
     ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
@@ -13,7 +14,7 @@ import {
 } from './constants'
 import { getPersistenceKeyPolicy } from './persistence-key-policy'
 
-import { isUndefined } from '@posthog/core'
+import { isNumber, isUndefined } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -70,6 +71,18 @@ export class PostHogPersistence {
     private _expire_days: number | undefined
     private _default_expiry: number | undefined
     private _cross_subdomain: boolean | undefined
+    // Serialized snapshot of `props` from the most recent successful write.
+    // Used by `_writeNow()` to skip writes that would produce an identical
+    // payload. Cleared whenever we explicitly remove the storage entry, so
+    // a save after remove always lands.
+    private _lastSavedSerialized: string | undefined
+    // Optional debounce: when `persistence_save_debounce_ms` is > 0, rapid
+    // calls to `save()` are coalesced into one write at the end of the
+    // window. The in-memory `props` is always updated synchronously, so
+    // in-tab reads see the latest values regardless. Pending writes are
+    // flushed on `beforeunload` and `pagehide` so no state is lost on
+    // tab close.
+    private _pendingSaveTimer: ReturnType<typeof setTimeout> | undefined
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -87,6 +100,24 @@ export class PostHogPersistence {
         }
         this.update_config(config, config, isDisabled)
         this.save()
+
+        // Install unload flush listeners unconditionally. They are a no-op
+        // when no debounced write is pending (see `flush()`), so it is safe
+        // to install even when `persistence_save_debounce_ms` is 0 at
+        // construction. Crucially this also handles `posthog.set_config({
+        // persistence_save_debounce_ms: 250 })` enabling debounce later —
+        // we'd otherwise miss the listener install and lose pending writes
+        // on close.
+        if (window) {
+            const flush = (): void => this.flush()
+            addEventListener(window, 'beforeunload', flush as EventListener, { capture: false })
+            addEventListener(window, 'pagehide', flush as EventListener, { capture: false })
+        }
+    }
+
+    private _saveDebounceMs(): number {
+        const value = this._config?.persistence_save_debounce_ms
+        return isNumber(value) && value > 0 ? value : 0
     }
 
     /**
@@ -194,6 +225,28 @@ export class PostHogPersistence {
     }
 
     /**
+     * Refresh a single key from on-disk storage into `this.props` without
+     * touching the rest. Used by `SessionIdManager` on the cross-tab idle
+     * path so we can pick up a sibling tab's SESSION_ID write without
+     * either:
+     *  - flushing our own (potentially stale) whole-props blob to storage
+     *    via `flush()`, which would clobber the sibling's write, or
+     *  - replacing all of `props` via `load()`, which would discard any
+     *    in-memory writes that haven't yet been debounced to storage.
+     */
+    refreshKey(prop: string): void {
+        if (this._disabled) {
+            return
+        }
+        const entry = this._storage._parse(this._name)
+        if (entry && prop in entry) {
+            this._setProp(prop, entry[prop])
+        } else {
+            this._deleteProp(prop)
+        }
+    }
+
+    /**
      * NOTE: Saving frequently causes issues with Recordings and Consent Management Platform (CMP) tools which
      * observe cookie changes, and modify their UI, often causing infinite loops.
      * As such callers of this should ideally check that the data has changed beforehand
@@ -202,6 +255,74 @@ export class PostHogPersistence {
         if (this._disabled) {
             return
         }
+
+        const debounce = this._saveDebounceMs()
+        if (debounce <= 0) {
+            this._writeNow()
+            return
+        }
+        // Coalesce: if a flush is already scheduled, the latest `props`
+        // will be picked up when the timer fires. Otherwise schedule one.
+        if (!isUndefined(this._pendingSaveTimer)) {
+            return
+        }
+        this._pendingSaveTimer = setTimeout(() => {
+            this._pendingSaveTimer = undefined
+            this._writeNow()
+        }, debounce)
+    }
+
+    /**
+     * Force any pending debounced save to land in storage immediately.
+     * No-op when there is no pending timer — crucially, this means the
+     * `beforeunload` / `pagehide` listeners installed in the constructor
+     * cannot accidentally resurrect a storage entry that `remove()` or
+     * `clear()` just deleted. Without this guard, the listener would
+     * call `_writeNow()` and write the in-memory `props` (now `{}`) back
+     * to storage, breaking `posthog.reset()` / opt-out flows.
+     */
+    flush(): void {
+        if (isUndefined(this._pendingSaveTimer)) {
+            return
+        }
+        clearTimeout(this._pendingSaveTimer)
+        this._pendingSaveTimer = undefined
+        this._writeNow()
+    }
+
+    private _writeNow(): void {
+        if (this._disabled) {
+            return
+        }
+
+        // No-op rejection: skip the write when none of the arguments to
+        // `_storage._set` have changed since the last successful write.
+        // Callers spam `save()` after every property change, and many of
+        // those changes leave the storage payload unchanged. Writing
+        // identical bytes to localStorage still fires a cross-tab `storage`
+        // event where Chrome allocates the payload buffer in mojo IPC even
+        // though no listener reacts.
+        //
+        // The fingerprint covers all four meaningful inputs to `_storage._set`:
+        // serialized props, expire_days, cross_subdomain, secure. For
+        // localStorage / sessionStorage the last three are ignored by the
+        // storage backend so including them just costs a redundant write
+        // when cookie options change on a non-cookie store — rare and cheap.
+        //
+        // JSON.stringify can throw on BigInt / circular refs. We let the
+        // underlying storage layer keep its existing try/catch behaviour
+        // (log and drop) by falling through on serialization errors.
+        try {
+            const fingerprint =
+                JSON.stringify(this.props) + '|' + this._expire_days + '|' + this._cross_subdomain + '|' + this._secure
+            if (fingerprint === this._lastSavedSerialized) {
+                return
+            }
+            this._lastSavedSerialized = fingerprint
+        } catch {
+            // fall through to storage._set, which handles the error itself
+        }
+
         this._storage._set(
             this._name,
             this.props,
@@ -213,9 +334,17 @@ export class PostHogPersistence {
     }
 
     remove(): void {
+        // Cancel any pending debounced write — the storage entry is going
+        // away so there is nothing useful to flush.
+        if (!isUndefined(this._pendingSaveTimer)) {
+            clearTimeout(this._pendingSaveTimer)
+            this._pendingSaveTimer = undefined
+        }
         // remove both domain and subdomain cookies
         this._storage._remove(this._name, false)
         this._storage._remove(this._name, true)
+        // Storage entry is gone — any future save() must write through.
+        this._lastSavedSerialized = undefined
     }
 
     // removes the storage entry and deletes all loaded data

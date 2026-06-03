@@ -1,5 +1,96 @@
 # posthog-js
 
+## 1.379.0
+
+### Minor Changes
+
+- [#3722](https://github.com/PostHog/posthog-js/pull/3722) [`c487070`](https://github.com/PostHog/posthog-js/commit/c48707071586135de3357bf94e4165605c93e321) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `$sdk_dist_channel` event property for browser SDK `npm` and `cdn` distribution channels.
+  (2026-06-02)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.379.0
+    - @posthog/core@1.30.3
+
+## 1.378.1
+
+### Patch Changes
+
+- [#3706](https://github.com/PostHog/posthog-js/pull/3706) [`8fcf40d`](https://github.com/PostHog/posthog-js/commit/8fcf40d3798a107f446dd75b13b81088eac1ab2c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix(browser): avoid exposing internally-created Request bodies to downstream fetch wrappers in Safari.
+  (2026-06-01)
+- Updated dependencies []:
+    - @posthog/types@1.378.1
+    - @posthog/core@1.30.2
+
+## 1.378.0
+
+### Minor Changes
+
+- [#3688](https://github.com/PostHog/posthog-js/pull/3688) [`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(persistence): add `persistence_save_debounce_ms` config option to coalesce rapid storage saves into a single write. Setting a positive value debounces writes to localStorage/cookie by that window; the in-memory `props` object still updates synchronously so within-tab reads see the latest values immediately, and pending writes flush on `beforeunload` and `pagehide` so no state is lost on tab close. Cross-tab `storage` events are reduced proportionally to the debounce window. Defaults to `0` (no debouncing) for backwards compatibility. On pages that capture many events per second, `250` is a reasonable starting point. The new `2026-05-30` config default opts into `persistence_save_debounce_ms: 250` automatically.
+  (2026-06-01)
+
+### Patch Changes
+
+- Updated dependencies [[`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc)]:
+    - @posthog/types@1.378.0
+    - @posthog/core@1.30.1
+
+## 1.377.0
+
+### Minor Changes
+
+- [#3708](https://github.com/PostHog/posthog-js/pull/3708) [`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect Brave (desktop, Android, iOS), Vivaldi, Yandex, Naver Whale, DuckDuckGo, Pale Moon, and Waterfox so users on these browsers no longer get bucketed as Chrome or Firefox.
+
+    `detectBrowser` / `detectBrowserVersion` now accept an optional third argument, `BrowserDetectionHints`, with a `brave` flag (set when `navigator.brave` exists). The browser SDK populates this automatically to catch desktop / Android Brave, which is Chromium-based and carries no UA marker. Brave on iOS is picked up purely from the `Brave/` UA marker — WebKit doesn't ship `navigator.brave`. The original two-argument signature still works for non-DOM callers. (2026-06-01)
+
+### Patch Changes
+
+- [#3703](https://github.com/PostHog/posthog-js/pull/3703) [`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45) Thanks [@marandaneto](https://github.com/marandaneto)! - Disable/no-op initialization paths instead of throwing or sending requests when PostHog project tokens are missing or blank.
+  (2026-06-01)
+- Updated dependencies [[`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+    - @posthog/core@1.30.0
+    - @posthog/types@1.377.0
+
+## 1.376.6
+
+### Patch Changes
+
+- [#3687](https://github.com/PostHog/posthog-js/pull/3687) [`663e250`](https://github.com/PostHog/posthog-js/commit/663e250b10df6bcadf42b7938fa3a77fb91f427b) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(persistence): skip the storage write when the serialized props are unchanged. Callers spam `save()` after every property change, and many of those changes leave the serialized payload identical (e.g. resetting a value to its current value). Writing identical bytes to localStorage still fires a cross-tab `storage` event in every same-origin tab, where Chrome allocates the payload buffer in mojo IPC even though no listener reacts. Now `save()` compares the serialized payload against the last successful write and bails out when nothing changed.
+  (2026-05-31)
+- Updated dependencies []:
+    - @posthog/types@1.376.6
+    - @posthog/core@1.29.15
+
+## 1.376.5
+
+### Patch Changes
+
+- [#3686](https://github.com/PostHog/posthog-js/pull/3686) [`66cbc59`](https://github.com/PostHog/posthog-js/commit/66cbc5987427d539999834a2db3f0110ba6bd8c5) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(persistence): throttle session-activity timestamp writes to a 5s granularity. The in-memory value still moves at full resolution; only writes to localStorage/cookie are coalesced. Activity-timestamp-only updates within the granularity window are skipped, dropping localStorage write pressure and cross-tab `storage` event broadcasts on pages that capture many events per second. The pending in-memory value is flushed on `destroy` and `beforeunload` so a tab close inside the window does not leave the persisted value up to 5s stale for sibling tabs. The flush re-reads storage first and bails out if a sibling tab has rotated the session, so the flush cannot clobber the new session with the old id/start.
+  (2026-05-31)
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+    - @posthog/core@1.29.14
+    - @posthog/types@1.376.5
+
+## 1.376.4
+
+### Patch Changes
+
+- [#3685](https://github.com/PostHog/posthog-js/pull/3685) [`f59f35a`](https://github.com/PostHog/posthog-js/commit/f59f35ac5a6a0aa98be5f3ea3b88370df8d398aa) Thanks [@ioannisj](https://github.com/ioannisj)! - fix(cookieless): enable request queue when opting out in `on_reject` mode. When using `cookieless_mode: "on_reject"`, calling `opt_out_capturing()` correctly switched the SDK into cookieless capturing but never enabled the `RequestQueue` — so batched events were enqueued but never flushed over the network. At init time the queue was not started because consent was `PENDING` and `is_capturing()` returned `false`; `opt_out_capturing()` is the first moment capturing becomes active but was missing the `_start_queue_if_opted_in()` call that `opt_in_capturing()` already had.
+  (2026-05-28)
+
+- [#3692](https://github.com/PostHog/posthog-js/pull/3692) [`f01cd93`](https://github.com/PostHog/posthog-js/commit/f01cd939e096820b84666a463a61775ef69ce4c4) Thanks [@ksvat](https://github.com/ksvat)! - fix(replay): take a fresh full snapshot after session ID rotates via `forcedIdleReset`. Previously, when the session manager's idle enforcement timer rotated the session id, the recorder tore down rrweb and set `_isIdle = 'unknown'` before the new session id was observed. Neither restart path then fired (the `_onSessionIdCallback` guard only restarted when `_isIdle === true`, and `_updateWindowAndSessionIds` could not run with rrweb stopped), so the new session received only incremental mutations until a later snapshot — leaving the player stuck on "Buffering". The restart guard now also fires when rrweb isn't running.
+  (2026-05-28)
+
+- [#3691](https://github.com/PostHog/posthog-js/pull/3691) [`cc71f3f`](https://github.com/PostHog/posthog-js/commit/cc71f3fa1f87838c28a68e593cd3f274f63db397) Thanks [@ksvat](https://github.com/ksvat)! - fix(replay): ship `ph-no-capture` absolute-position fix from #3678 to `posthog-js`. The original changeset only bumped `@posthog/rrweb` and `@posthog/rrweb-snapshot`; because `posthog-js` depends on `@posthog/rrweb` via `workspace:*`, the cascade did not bump `posthog-js`, so the rebuilt bundle containing the fix was not published. This changeset re-publishes `posthog-js` with the fix.
+  (2026-05-28)
+
+- [#3695](https://github.com/PostHog/posthog-js/pull/3695) [`e1ff722`](https://github.com/PostHog/posthog-js/commit/e1ff722bf0bd333ffdf5d077f8f60893aaf7ef5e) Thanks [@ksvat](https://github.com/ksvat)! - chore(replay): expose `$sdk_debug_rrweb_attached` and `$sdk_debug_rrweb_start_attempted` debug properties on captured events. Today the SDK already stamps several `$sdk_debug_*` properties (start reason, linked-flag trigger status, recording status) that report the SDK's _intent_ to record — they all flip to "active" as soon as the state machine evaluates the configured triggers. None of them observe whether rrweb actually attached and is producing events. The new booleans close that gap: `$sdk_debug_rrweb_start_attempted` is set when `_startRecorder()` is first entered, and `$sdk_debug_rrweb_attached` reflects whether `_stopRrweb` is currently a non-falsy stop handle (i.e. `rrwebRecord({...})` returned successfully and the recorder has not been torn down). No behavior change — this only adds two booleans to the existing `sdkDebugProperties` channel, used to diagnose cases where a session reports `trigger_activated` / `recording_status: active` but no `$snapshot` data is ever uploaded.
+  (2026-05-28)
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+    - @posthog/core@1.29.13
+    - @posthog/types@1.376.4
+
 ## 1.376.3
 
 ### Patch Changes

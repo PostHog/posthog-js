@@ -1,5 +1,24 @@
 # @posthog/types
 
+## 1.379.0
+
+## 1.378.1
+
+## 1.378.0
+
+### Minor Changes
+
+- [#3688](https://github.com/PostHog/posthog-js/pull/3688) [`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(persistence): add `persistence_save_debounce_ms` config option to coalesce rapid storage saves into a single write. Setting a positive value debounces writes to localStorage/cookie by that window; the in-memory `props` object still updates synchronously so within-tab reads see the latest values immediately, and pending writes flush on `beforeunload` and `pagehide` so no state is lost on tab close. Cross-tab `storage` events are reduced proportionally to the debounce window. Defaults to `0` (no debouncing) for backwards compatibility. On pages that capture many events per second, `250` is a reasonable starting point. The new `2026-05-30` config default opts into `persistence_save_debounce_ms: 250` automatically.
+  (2026-06-01)
+
+## 1.377.0
+
+## 1.376.6
+
+## 1.376.5
+
+## 1.376.4
+
 ## 1.376.3
 
 ## 1.376.2

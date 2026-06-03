@@ -12,11 +12,10 @@ export type ResolvedPluginConfig = CoreResolvedPluginConfig
 
 /**
  * Resolve plugin config with webpack-specific defaults.
- * Webpack defaults sourcemaps.enabled to `process.env.NODE_ENV === 'production'`.
+ * Defaults sourcemaps.enabled to `true`, matching the other PostHog bundler plugins.
  */
 export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveConfigOptions): ResolvedPluginConfig {
     return coreResolveConfig(options, {
-        defaultEnabled: process.env.NODE_ENV === 'production',
         cwd: __dirname,
         ...resolveOptions,
     })

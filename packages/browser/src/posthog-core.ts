@@ -187,12 +187,14 @@ const defaultsThatVaryByConfig = (
     | 'session_recording'
     | 'external_scripts_inject_target'
     | 'internal_or_test_user_hostname'
+    | 'persistence_save_debounce_ms'
 > => ({
     rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
+    persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -556,7 +558,8 @@ export class PostHog implements PostHogInterface {
     // code a bit cleaner, but will add some overhead.
     //
     _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog {
-        if (isUndefined(token) || isEmptyString(token)) {
+        const normalizedToken = isString(token) ? token.trim() : ''
+        if (!normalizedToken) {
             logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
             )
@@ -586,7 +589,7 @@ export class PostHog implements PostHogInterface {
         this.set_config(
             extend({}, defaultConfig(config.defaults), configRenames(config), {
                 name: name,
-                token: token,
+                token: normalizedToken,
             })
         )
 
@@ -3693,6 +3696,9 @@ export class PostHog implements PostHogInterface {
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
             this._captureInitialPageview()
+            // At init time, consent was PENDING so is_capturing() was false and _start_queue_if_opted_in() was a no-op.
+            // Now that rejection has been recorded, capturing is active — enable the queue so batched events are flushed.
+            this._start_queue_if_opted_in()
         }
     }
 
@@ -4042,6 +4048,7 @@ const add_dom_loaded_handler = function () {
 }
 
 export function init_from_snippet(): void {
+    Config.SDK_DIST_CHANNEL = 'cdn'
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     const snippetPostHog = assignableWindow['posthog']
@@ -4101,6 +4108,7 @@ export function init_from_snippet(): void {
 }
 
 export function init_as_module(): PostHog {
+    Config.SDK_DIST_CHANNEL = 'npm'
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     add_dom_loaded_handler()

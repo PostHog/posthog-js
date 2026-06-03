@@ -290,21 +290,14 @@ export const evaluateAllFlags = action({
 
 // --- Feature flag local evaluation ---
 //
-// Flag definitions are fetched on a cron registered inside this component (only when
-// `POSTHOG_PERSONAL_API_KEY` is set — see `crons.ts`) and stored in the `flagDefinitions`
-// table. Clients read them via `getFlagDefinitions` and evaluate flags locally — there is
-// no per-call action for flag evaluation.
+// Flag definitions are fetched on the cron in `crons.ts` and stored in `flagDefinitions`.
+// Clients read them via `getFlagDefinitions` and evaluate flags locally — there is no
+// per-call action for flag evaluation.
 
-/**
- * Returns the cached flag definitions plus whether local evaluation is configured at all.
- *
- * `localEvalConfigured` reflects whether `POSTHOG_PERSONAL_API_KEY` is set on the component —
- * the client uses this to distinguish "you haven't set up local eval" (throw, point the user
- * at the remote `evaluateFlag` methods) from "PAK is set but the cron hasn't fetched yet"
- * (return `undefined` gracefully). `data` is null until the first successful refresh.
- *
- * `data` is a JSON-stringified `FlagDefinitions` object (see `client/feature-flags/types.ts`).
- */
+// `localEvalConfigured` lets the client distinguish "PAK not set" (throw, point at the
+// remote `evaluateFlag` methods) from "PAK set but cron hasn't fetched yet" (return
+// `undefined`). `data` is a JSON-stringified `FlagDefinitions` (see
+// `client/feature-flags/types.ts`), null until the first successful refresh.
 export const getFlagDefinitions = query({
   args: {},
   handler: async (ctx) => {
@@ -355,9 +348,7 @@ export const refreshFlagDefinitions = action({
     const { projectToken, host, personalApiKey } = readConfig()
 
     if (!projectToken || !personalApiKey) {
-      // The cron is conditionally registered on `POSTHOG_PERSONAL_API_KEY`, so reaching this branch
-      // means either env vars were cleared after deploy (cron still scheduled) or the project token wasn't
-      // configured. Return a status rather than throwing so the cron doesn't churn on errors.
+      // The cron registers unconditionally (see `crons.ts`); this is its runtime gate.
       return { status: 'skipped' as const, reason: 'missing-keys' as const }
     }
 

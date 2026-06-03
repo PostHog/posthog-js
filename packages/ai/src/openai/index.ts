@@ -18,7 +18,7 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk } from './utils'
+import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -116,6 +116,10 @@ export class WrappedCompletions extends Completions {
         if ('tee' in value) {
           const [stream1, stream2] = value.tee()
           ;(async () => {
+            // Hoisted so the catch block can surface whatever was accumulated
+            // from the streamed chunks before the failure.
+            let completionIdFromResponse: string | undefined
+            let systemFingerprintFromResponse: string | undefined
             try {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
@@ -146,9 +150,15 @@ export class WrappedCompletions extends Completions {
               let rawUsageData: unknown
 
               for await (const chunk of stream1) {
-                // Extract model from chunk (Chat Completions chunks have model field)
+                // Extract model and completion metadata from chunk (Chat Completions chunks carry these fields)
                 if (!modelFromResponse && chunk.model) {
                   modelFromResponse = chunk.model
+                }
+                if (!completionIdFromResponse && chunk.id) {
+                  completionIdFromResponse = chunk.id
+                }
+                if (!systemFingerprintFromResponse && chunk.system_fingerprint) {
+                  systemFingerprintFromResponse = chunk.system_fingerprint
                 }
 
                 const choice = chunk?.choices?.[0]
@@ -279,6 +289,8 @@ export class WrappedCompletions extends Completions {
                 },
                 stopReason,
                 tools: availableTools,
+                completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
               })
             } catch (error: unknown) {
               await captureAiGeneration(this.phClient, {
@@ -291,6 +303,11 @@ export class WrappedCompletions extends Completions {
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
+                // If the stream fails mid-flight, surface whatever completion
+                // metadata the consumed chunks already provided so the error
+                // event can still be correlated to OpenAI's Logs dashboard.
+                completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
                 error,
               })
               throw error
@@ -329,6 +346,11 @@ export class WrappedCompletions extends Completions {
               },
               stopReason: result.choices[0]?.finish_reason ?? undefined,
               tools: availableTools,
+              completionId: result.id,
+              providerMetadata: buildProviderMetadata({
+                systemFingerprint: result.system_fingerprint,
+                requestId: extractRequestId(result),
+              }),
             })
           }
           return result
@@ -407,6 +429,9 @@ export class WrappedResponses extends Responses {
         if ('tee' in value && typeof value.tee === 'function') {
           const [stream1, stream2] = value.tee()
           ;(async () => {
+            // Hoisted so the catch block can surface the completion ID that
+            // was accumulated from the streamed chunks before the failure.
+            let completionIdFromResponse: string | undefined
             try {
               let finalContent: unknown[] = []
               let modelFromResponse: string | undefined
@@ -432,9 +457,12 @@ export class WrappedResponses extends Responses {
                 }
 
                 if ('response' in chunk && chunk.response) {
-                  // Extract model from response object in chunk (for stored prompts)
+                  // Extract model and completion ID from the response object in the chunk (for stored prompts)
                   if (!modelFromResponse && chunk.response.model) {
                     modelFromResponse = chunk.response.model
+                  }
+                  if (!completionIdFromResponse && chunk.response.id) {
+                    completionIdFromResponse = chunk.response.id
                   }
 
                   const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
@@ -493,6 +521,7 @@ export class WrappedResponses extends Responses {
                 },
                 stopReason,
                 tools: availableTools,
+                completionId: completionIdFromResponse,
               })
             } catch (error: unknown) {
               await captureAiGeneration(this.phClient, {
@@ -508,6 +537,9 @@ export class WrappedResponses extends Responses {
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
                 usage: { inputTokens: 0, outputTokens: 0 },
+                // Surface the completion ID from any chunks consumed before
+                // the stream failed so the error event remains correlatable.
+                completionId: completionIdFromResponse,
                 error,
               })
               throw error
@@ -545,6 +577,8 @@ export class WrappedResponses extends Responses {
               },
               stopReason: result.status ?? undefined,
               tools: availableTools,
+              completionId: result.id,
+              providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
             })
           }
           return result
@@ -615,6 +649,8 @@ export class WrappedResponses extends Responses {
               rawUsage: result.usage,
             },
             stopReason: result.status ?? undefined,
+            completionId: result.id,
+            providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
           })
           return result
         },

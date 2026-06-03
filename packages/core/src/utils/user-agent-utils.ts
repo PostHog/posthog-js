@@ -50,9 +50,35 @@ const GENERIC_MOBILE = GENERIC + ' ' + MOBILE.toLowerCase()
 const GENERIC_TABLET = GENERIC + ' ' + TABLET.toLowerCase()
 const KONQUEROR = 'Konqueror'
 const OCULUS_BROWSER = 'Oculus Browser'
+const VIVALDI = 'Vivaldi'
+const YANDEX = 'Yandex'
+const WHALE = 'Whale'
+const DUCKDUCKGO = 'DuckDuckGo'
+const PALE_MOON = 'Pale Moon'
+const WATERFOX = 'Waterfox'
+const BRAVE = 'Brave'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
+
+/**
+ * Hints from sources outside the User-Agent string. These let us identify Brave
+ * on desktop / Android — Chromium-based with no UA marker, but it exposes
+ * `navigator.brave`. (Brave on iOS is detected via its `Brave/X` UA marker —
+ * WebKit doesn't expose `navigator.brave` — so no hint is needed there.)
+ */
+export interface BrowserDetectionHints {
+  // Set to `true` when `navigator.brave` exists. This is the sync detection
+  // signal Brave recommends. Not available on iOS — see UA fallback below.
+  brave?: boolean
+}
+
+function browserFromHints(hints: BrowserDetectionHints | undefined): string | null {
+  if (hints?.brave) {
+    return BRAVE
+  }
+  return null
+}
 
 const XBOX_REGEX = new RegExp(XBOX, 'i')
 const PLAYSTATION_REGEX = new RegExp(PLAYSTATION + ' \\w+', 'i')
@@ -88,9 +114,26 @@ const safariCheck = (ua: string, vendor?: string) => (vendor && includes(vendor,
  * This function detects which browser is running this script.
  * The order of the checks are important since many user agents
  * include keywords used in later checks.
+ *
+ * `hints` is an optional bag of out-of-band signals (`navigator.brave`) used to
+ * detect browsers that intentionally do not identify themselves in the UA
+ * string. When omitted, only UA-string detection runs — preserving the previous
+ * behaviour.
  */
-export const detectBrowser = function (user_agent: string, vendor: string | undefined): string {
+export const detectBrowser = function (
+  user_agent: string,
+  vendor: string | undefined,
+  hints?: BrowserDetectionHints
+): string {
   vendor = vendor || '' // vendor is undefined for at least IE9
+
+  // Out-of-band signals win over UA sniffing because desktop Brave is
+  // deliberately invisible in the UA string and would otherwise be
+  // misdetected as Chrome.
+  const fromHints = browserFromHints(hints)
+  if (fromHints) {
+    return fromHints
+  }
 
   if (includes(user_agent, ' OPR/') && includes(user_agent, 'Mini')) {
     return OPERA_MINI
@@ -113,6 +156,17 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
     return SAMSUNG_INTERNET
   } else if (includes(user_agent, EDGE) || includes(user_agent, 'Edg/')) {
     return MICROSOFT_EDGE
+  }
+  // Chromium forks that DO stamp themselves into the UA. These must be
+  // checked before Chrome because their UA also contains `Chrome/`.
+  else if (includes(user_agent, VIVALDI + '/')) {
+    return VIVALDI
+  } else if (includes(user_agent, 'YaBrowser/')) {
+    return YANDEX
+  } else if (includes(user_agent, WHALE + '/')) {
+    return WHALE
+  } else if (includes(user_agent, DUCKDUCKGO + '/') || includes(user_agent, 'Ddg/')) {
+    return DUCKDUCKGO
   } else if (includes(user_agent, 'FBIOS')) {
     return FACEBOOK + ' ' + MOBILE
   } else if (includes(user_agent, 'UCWEB') || includes(user_agent, 'UCBrowser')) {
@@ -129,8 +183,21 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
     return FIREFOX_IOS
   } else if (includes(user_agent.toLowerCase(), KONQUEROR.toLowerCase())) {
     return KONQUEROR
+  }
+  // Brave on iOS does stamp itself into the UA as `Brave/X` — desktop and
+  // Android Brave intentionally do not. Must come before the Safari branch
+  // because iOS Brave's UA otherwise looks like Mobile Safari.
+  else if (includes(user_agent, BRAVE + '/')) {
+    return BRAVE
   } else if (safariCheck(user_agent, vendor)) {
     return includes(user_agent, MOBILE) ? MOBILE_SAFARI : SAFARI
+  }
+  // Firefox forks that stamp themselves into the UA. Must precede the
+  // generic Firefox check because they also include `Firefox/` (or `Gecko`).
+  else if (includes(user_agent, 'PaleMoon/')) {
+    return PALE_MOON
+  } else if (includes(user_agent, WATERFOX + '/')) {
+    return WATERFOX
   } else if (includes(user_agent, FIREFOX)) {
     return FIREFOX
   } else if (includes(user_agent, 'MSIE') || includes(user_agent, 'Trident/')) {
@@ -159,6 +226,17 @@ const versionRegexes: Record<string, RegExp[]> = {
   [ANDROID_MOBILE]: [new RegExp('android\\s' + BROWSER_VERSION_REGEX_SUFFIX, 'i')],
   [SAMSUNG_INTERNET]: [new RegExp(SAMSUNG_BROWSER + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [OCULUS_BROWSER]: [new RegExp('OculusBrowser\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [VIVALDI]: [new RegExp(VIVALDI + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [YANDEX]: [new RegExp('YaBrowser\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [WHALE]: [new RegExp(WHALE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  // Brave on iOS exposes itself as `Brave/X.X` in the UA. Desktop / Android
+  // Brave don't, which is why hint-based Brave detection returns a null
+  // version: we have no UA marker to parse.
+  [BRAVE]: [new RegExp(BRAVE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  // DuckDuckGo on iOS uses `Ddg/`, on Android/desktop preview it uses `DuckDuckGo/`.
+  [DUCKDUCKGO]: [new RegExp('(DuckDuckGo|Ddg)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [PALE_MOON]: [new RegExp('PaleMoon\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [WATERFOX]: [new RegExp(WATERFOX + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [INTERNET_EXPLORER]: [new RegExp('(rv:|MSIE )' + BROWSER_VERSION_REGEX_SUFFIX)],
   Mozilla: [new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],
 }
@@ -171,8 +249,16 @@ const versionRegexes: Record<string, RegExp[]> = {
  * `navigator.vendor` is passed in and used to help with detecting certain browsers
  * NB `navigator.vendor` is deprecated and not present in every browser
  */
-export const detectBrowserVersion = function (userAgent: string, vendor: string | undefined): number | null {
-  const browser = detectBrowser(userAgent, vendor)
+export const detectBrowserVersion = function (
+  userAgent: string,
+  vendor: string | undefined,
+  hints?: BrowserDetectionHints
+): number | null {
+  const browser = detectBrowser(userAgent, vendor, hints)
+
+  // Desktop / Android Brave has no parseable UA version, so it returns null
+  // below: its `versionRegexes` entry only matches the iOS `Brave/` marker
+  // (absent from a desktop Chrome UA).
   const regexes: RegExp[] | undefined = versionRegexes[browser as keyof typeof versionRegexes]
   if (isUndefined(regexes)) {
     return null

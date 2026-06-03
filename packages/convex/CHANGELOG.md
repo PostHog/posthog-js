@@ -1,5 +1,65 @@
 # @posthog/convex
 
+## 2.0.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.3
+  - posthog-node@5.35.12
+
+## 2.0.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.2
+  - posthog-node@5.35.11
+
+## 2.0.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.1
+  - posthog-node@5.35.10
+
+## 2.0.4
+
+### Patch Changes
+
+- Updated dependencies [[`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45), [`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+  - posthog-node@5.35.9
+  - @posthog/core@1.30.0
+
+## 2.0.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.15
+  - posthog-node@5.35.8
+
+## 2.0.2
+
+### Patch Changes
+
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+  - posthog-node@5.35.7
+
+## 2.0.1
+
+### Patch Changes
+
+- [#3684](https://github.com/PostHog/posthog-js/pull/3684) [`714ffa5`](https://github.com/PostHog/posthog-js/commit/714ffa5874aa230ab49783d2415d54b23ffa54a1) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Fix the refresh cron not registering when `POSTHOG_PERSONAL_API_KEY` is forwarded from the installing app. Convex only forwards component env vars at runtime, so the previous load-time gate saw an empty value during deploy-time module analysis and silently dropped the cron. The cron now registers unconditionally and gates at runtime.
+
+  Fixes [#3683](https://github.com/PostHog/posthog-js/issues/3683). (2026-05-28)
+
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+  - @posthog/core@1.29.13
+  - posthog-node@5.35.6
+
 ## 2.0.0
 
 ### Major Changes

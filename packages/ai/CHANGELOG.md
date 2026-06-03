@@ -1,5 +1,70 @@
 # posthog-ai
 
+## 7.20.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.3
+  - posthog-node@5.35.12
+
+## 7.20.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.2
+  - posthog-node@5.35.11
+
+## 7.20.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.1
+  - posthog-node@5.35.10
+
+## 7.20.3
+
+### Patch Changes
+
+- [#3703](https://github.com/PostHog/posthog-js/pull/3703) [`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45) Thanks [@marandaneto](https://github.com/marandaneto)! - Disable/no-op initialization paths instead of throwing or sending requests when PostHog project tokens are missing or blank.
+  (2026-06-01)
+- Updated dependencies [[`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45), [`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+  - posthog-node@5.35.9
+  - @posthog/core@1.30.0
+
+## 7.20.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.15
+  - posthog-node@5.35.8
+
+## 7.20.1
+
+### Patch Changes
+
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+  - posthog-node@5.35.7
+
+## 7.20.0
+
+### Minor Changes
+
+- [#3306](https://github.com/PostHog/posthog-js/pull/3306) [`1a2f8a8`](https://github.com/PostHog/posthog-js/commit/1a2f8a88ae6ea30cbbc6456d72fae0dca59efbff) Thanks [@johnsykim](https://github.com/johnsykim)! - Add `$ai_completion_id` and `$ai_provider_metadata` to `$ai_generation` events for the OpenAI and Azure OpenAI wrappers. `$ai_completion_id` is the provider's response ID (e.g. `chatcmpl-…` / `resp_…`); `$ai_provider_metadata` carries OpenAI-specific fields (`system_fingerprint`, `request_id`). Together they enable correlating PostHog events with OpenAI's Logs dashboard (`platform.openai.com/logs/{completion_id}`). The same options (`completionId`, `providerMetadata`) are now accepted by the public `captureAiGeneration` primitive so other provider wrappers can follow the same pattern.
+  (2026-05-29)
+
+## 7.19.7
+
+### Patch Changes
+
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+  - @posthog/core@1.29.13
+  - posthog-node@5.35.6
+
 ## 7.19.6
 
 ### Patch Changes
