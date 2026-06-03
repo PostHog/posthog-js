@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.46.10
+
+### Patch Changes
+
+- [#3734](https://github.com/PostHog/posthog-js/pull/3734) [`42b720f`](https://github.com/PostHog/posthog-js/commit/42b720f205f111c62de9435ac7315437d1e6d737) Thanks [@cat-ph](https://github.com/cat-ph)! - Fix the Expo iOS source map upload config plugin so backtick-wrapped `react-native-xcode.sh` commands are preserved when wrapping the bundle phase with `posthog-xcode.sh`.
+  (2026-06-03)
+
 ## 4.46.9
 
 ### Patch Changes
