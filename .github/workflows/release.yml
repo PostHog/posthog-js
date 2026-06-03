@@ -407,7 +407,7 @@ jobs:
                   if-no-files-found: error
 
     build-toolbar:
-        # Build the toolbar bundle from posthog/posthog@master once per region.
+        # Build the toolbar bundle from posthog/posthog's default branch once per region.
         # Each region gets its own `TOOLBAR_PUBLIC_PATH`, so asset URLs baked
         # into the JS and CSS (and the runtime CSS loader in ToolbarApp.tsx)
         # point at the region-local CDN for the SDK version being released.
@@ -441,7 +441,6 @@ jobs:
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   repository: PostHog/posthog
-                  ref: master
                   fetch-depth: 1
 
             - name: Install pnpm
@@ -512,7 +511,7 @@ jobs:
 
             # Assert the cross-repo contract: the `TOOLBAR_PUBLIC_PATH` env
             # var we passed in must actually appear in the bundle. If
-            # posthog/posthog@master doesn't yet honour TOOLBAR_PUBLIC_PATH
+            # posthog/posthog's default branch doesn't yet honour TOOLBAR_PUBLIC_PATH
             # (e.g. the matching PR hasn't landed or was reverted), esbuild
             # silently falls back to its hardcoded default `publicPath` and
             # we'd otherwise ship a bundle pointing at the wrong CDN.

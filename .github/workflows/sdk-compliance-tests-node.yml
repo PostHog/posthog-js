@@ -2,14 +2,14 @@ name: Node SDK Compliance Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
     paths:
       - 'packages/node/**'
       - 'packages/core/**'
       - 'compliance/node/**'
       - '.github/workflows/sdk-compliance-tests-node.yml'
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
     paths:
       - 'packages/node/**'
       - 'packages/core/**'
