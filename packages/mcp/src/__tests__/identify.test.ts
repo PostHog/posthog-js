@@ -40,9 +40,8 @@ describe('identify option', () => {
     await capture.start()
 
     const identity: UserIdentity = {
-      userId: 'user-1',
-      userName: 'Alice',
-      userData: { email: 'alice@example.com' },
+      distinctId: 'user-1',
+      properties: { name: 'Alice', email: 'alice@example.com' },
     }
     const identify = jest.fn(async (request: any, extra: any) => {
       expect(request).toBeDefined()
@@ -66,7 +65,7 @@ describe('identify option', () => {
   it('calls identify on every tool invocation but only publishes an event when the identity changes', async () => {
     const capture = new EventCapture()
     await capture.start()
-    const identify = jest.fn(async () => ({ userId: 'user-1', userData: { name: 'Stable' } }))
+    const identify = jest.fn(async () => ({ distinctId: 'user-1', properties: { name: 'Stable' } }))
 
     instrument(server, { posthog: fakePostHog(), identify })
 
@@ -87,7 +86,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
 
-    const identify = jest.fn(async () => ({ userId: 'late-user', userData: { name: 'Late' } }))
+    const identify = jest.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
     instrument(server, { posthog: fakePostHog(), context: true, identify })
 
     server.tool!(
@@ -110,7 +109,7 @@ describe('identify option', () => {
     expect(identify).toHaveBeenCalledTimes(1)
     const identifyEvent = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.identify)
     expect(identifyEvent?.resourceName).toBe('post_track_tool')
-    expectIdentityStored(server, { userId: 'late-user', userData: { name: 'Late' } })
+    expectIdentityStored(server, { distinctId: 'late-user', properties: { name: 'Late' } })
 
     await capture.stop()
   })
@@ -158,13 +157,12 @@ describe('identify option', () => {
     await capture.stop()
   })
 
-  it('populates session info with the resolved identity (userId, userName, userData)', async () => {
+  it('populates session info with the resolved identity (distinctId, properties)', async () => {
     instrument(server, {
       posthog: fakePostHog(),
       identify: async () => ({
-        userId: 'session-user',
-        userName: 'Session Alice',
-        userData: { role: 'admin', team: 'platform' },
+        distinctId: 'session-user',
+        properties: { name: 'Session Alice', role: 'admin', team: 'platform' },
       }),
     })
 
@@ -172,8 +170,7 @@ describe('identify option', () => {
 
     const sessionInfo = getServerTrackingData(server.server)?.sessionInfo
     expect(sessionInfo?.identifyActorGivenId).toBe('session-user')
-    expect(sessionInfo?.identifyActorName).toBe('Session Alice')
-    expect(sessionInfo?.identifyActorData).toEqual({ role: 'admin', team: 'platform' })
+    expect(sessionInfo?.identifyActorData).toEqual({ name: 'Session Alice', role: 'admin', team: 'platform' })
   })
 
   it('stamps $groups on events when identify returns groups', async () => {
@@ -182,7 +179,7 @@ describe('identify option', () => {
     instrument(server, {
       posthog: fakePostHog(),
       identify: async () => ({
-        userId: 'session-user',
+        distinctId: 'session-user',
         groups: { organization: 'org_123', project: 'proj_9' },
       }),
     })
@@ -196,15 +193,14 @@ describe('identify option', () => {
     await capture.stop()
   })
 
-  it('keeps person processing on and uses the userId as distinct_id once identified', async () => {
+  it('keeps person processing on and uses the distinctId once identified', async () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, {
       posthog: fakePostHog(),
       identify: async () => ({
-        userId: 'session-user',
-        userName: 'Session Alice',
-        userData: { role: 'admin' },
+        distinctId: 'session-user',
+        properties: { name: 'Session Alice', role: 'admin' },
       }),
     })
 
@@ -216,6 +212,7 @@ describe('identify option', () => {
     // Identity resolved → real person, so we do NOT opt out of person processing.
     expect(toolCall.properties.$process_person_profile).toBeUndefined()
     expect(toolCall.distinct_id).toBe('session-user')
+    // properties go straight to $set.
     expect(toolCall.properties.$set).toMatchObject({ name: 'Session Alice', role: 'admin' })
 
     await capture.stop()
@@ -228,7 +225,7 @@ describe('identify option', () => {
       posthog: fakePostHog(),
       identify: async () => {
         await new Promise((r) => setTimeout(r, 50))
-        return { userId: 'async-user', userData: {} }
+        return { distinctId: 'async-user' }
       },
     })
 

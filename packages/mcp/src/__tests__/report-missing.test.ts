@@ -128,7 +128,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       instrument(server, {
         posthog: fakePostHog(),
         reportMissing: true,
-        identify: async () => ({ userId: 'user-1', userData: { role: 'developer' } }),
+        identify: async () => ({ distinctId: 'user-1', properties: { role: 'developer' } }),
       })
 
       await client.request(
@@ -143,8 +143,8 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
 
       const data = getServerTrackingData(server.server)
       expect(data?.identifiedSessions.get(data.sessionId)).toEqual({
-        userId: 'user-1',
-        userData: { role: 'developer' },
+        distinctId: 'user-1',
+        properties: { role: 'developer' },
       })
 
       await capture.stop()

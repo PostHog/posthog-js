@@ -113,9 +113,8 @@ export function getSessionInfo(
     serverVersion: server._serverInfo?.version,
     clientName: clientInfo?.name,
     clientVersion: clientInfo?.version,
-    identifyActorGivenId: actorInfo?.userId,
-    identifyActorName: actorInfo?.userName,
-    identifyActorData: actorInfo?.userData || {},
+    identifyActorGivenId: actorInfo?.distinctId,
+    identifyActorData: actorInfo?.properties || {},
     identifyActorGroups: actorInfo?.groups,
   }
 

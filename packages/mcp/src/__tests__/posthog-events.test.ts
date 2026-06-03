@@ -179,8 +179,7 @@ describe('buildPostHogCaptureEvents', () => {
     const [event] = buildPostHogCaptureEvents(
       makeEvent({
         identifyActorGivenId: 'user_abc',
-        identifyActorName: 'Alice',
-        identifyActorData: { email: 'alice@example.com', plan: 'pro' },
+        identifyActorData: { name: 'Alice', email: 'alice@example.com', plan: 'pro' },
       })
     )
 

@@ -54,12 +54,24 @@ What you get in PostHog out of the box:
 | `$mcp_tools_list` | client lists tools | `$mcp_listed_tool_names` |
 | `$mcp_initialize` | client/server handshake | `$mcp_client_name`, `$mcp_client_version`, `$mcp_server_name` |
 | `$exception` | a tool throws or returns `isError` | `$exception_list`, `$exception_level` (standard PostHog error-tracking shape) |
-| `$identify` | first time `identify()` returns a non-null identity | `$set` populated from `UserIdentity.userData` |
+| `$identify` | first time `identify()` returns a non-null identity | `$set` populated from the identity's `properties` |
 | `$mcp_missing_capability` | agent calls `get_more_tools` (when `reportMissing` is on) | `$mcp_intent` — what the agent was looking for |
 
 Events for sessions with no resolved identity are sent with `$process_person_profile: false`, so anonymous MCP traffic doesn't mint a person profile per session.
 
 The full event + property catalog (including `$mcp_resources_*` / `$mcp_prompts_*`) lives in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+
+## Coming from another PostHog SDK?
+
+The surface maps onto concepts you already know — the main twist is that, because an MCP server handles many requests/sessions, the identity- and property-resolving hooks are **per-request callbacks** rather than imperative calls.
+
+| You know | Here it's | Note |
+|---|---|---|
+| BYO client in `@posthog/ai` | `instrument(server, { posthog })` | Same pattern: you construct and own the `posthog-node` client. |
+| `posthog.capture({ event, properties })` | `capture(server, { event, properties })` | `distinct_id` is derived from the session/identity for you. |
+| `posthog.identify({ distinctId, properties })` | `identify: (req) => ({ distinctId, properties, groups })` | A per-request callback. `properties` → `$set`, `groups` → `$groups`. |
+| `posthog.register(props)` (super properties) | `eventProperties: (req) => ({ … })` | Per-request instead of set-once; return constants for the "stamp on everything" case. |
+| `beforeSend` | `beforeSend(event)` | Identical contract to posthog-node. |
 
 ## Common patterns
 
@@ -83,16 +95,15 @@ instrument(server, {
     }
 
     return {
-      userId: sub, // → distinct_id for the session
-      userName: email, // → `$set.name` on the person
-      userData: { plan }, // spread into `$set` (so `plan` becomes a person property)
-      groups: { organization: 'org_123' }, // optional → `$groups` on every event
+      distinctId: sub, // → distinct_id for the session
+      properties: { name: email, plan }, // → $set on the person
+      groups: { organization: 'org_123' }, // optional → $groups on every event
     }
   },
 })
 ```
 
-`userId` becomes the `distinct_id`, `userName` is written to `$set.name`, and every key in `userData` is spread into `$set` — so to set an `email` person property, return it in `userData` (e.g. `userData: { email }`). `groups` is stamped onto every event as `$groups`, so you never hand-write the dollar-keyed properties yourself.
+This is the same shape as posthog-node's `identify({ distinctId, properties })`, just evaluated per request: `distinctId` becomes the `distinct_id`, `properties` are written to `$set` (so put `name`/`email`/etc there), and `groups` is stamped onto every event as `$groups` so you never hand-write the dollar-keyed properties yourself.
 
 ### Capture user intent
 

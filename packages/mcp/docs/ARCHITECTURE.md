@@ -81,7 +81,7 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 - **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
 - **`$identify` event**: fires only when the identity returned by `options.identify()` _changes_ for a given session. Dedupe is handled by an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id — but it is **per-server**: one instance lives on each server's tracking data via the `WeakMap` (`src/extensions/internal.ts`), so identities never bleed across server instances. An unchanged identity is silently deduped.
 - **Groups (`$groups`)**: if `options.identify()` returns a `groups?: Record<string, string>` field (groupType → groupKey), it is stamped onto every event for that session as `$groups`. Callers never hand-write the `$groups` dollar-key themselves — they just return `groups` from `identify`.
-- **Person properties (`$set`)**: built from `UserIdentity.userName` (→ `name`) and any `userData` keys.
+- **Person properties (`$set`)**: the `properties` object returned from `options.identify()` is written verbatim to `$set` (same as posthog-node's `identify({ distinctId, properties })`). Put `name`/`email`/etc in there.
 
 ## 5. Event catalog
 
@@ -131,8 +131,7 @@ All wire keys live in `PostHogMCPAnalyticsProperty` (`src/extensions/constants.t
 
 | Key                        | On                                | Source                                                                                       |
 | -------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `$set.name`                | events with a resolved identity   | `UserIdentity.userName`                                                                       |
-| `$set.<anything>`          | events with a resolved identity   | Top-level keys of `UserIdentity.userData`                                                     |
+| `$set.<anything>`          | events with a resolved identity   | Keys of `UserIdentity.properties` (e.g. `name`, `email`), written to `$set` verbatim         |
 | `$groups`                  | every event for the session       | `UserIdentity.groups` (`{ groupType: groupKey }`) — callers never hand-write the `$groups` key |
 | `$process_person_profile`  | events with **no** resolved identity | Set to `false` so anonymous sessions don't mint a person profile each (see §4)             |
 
@@ -155,7 +154,7 @@ The `eventProperties` callback returns key/value pairs that are **spread flat at
 | `reportMissing`              | `false`                                   | Register the `get_more_tools` virtual tool.                                                                                             |
 | `context`                    | `true` (object form: `{ description }`)   | Inject required `context` arg into every tool schema.                                                                                   |
 | `intentFallback`             | —                                         | Consumer-supplied callback returning a `$mcp_intent` string when the client didn't pass a `context` argument. SDK does no inference.    |
-| `identify`                   | —                                         | Async function returning `UserIdentity \| null` (may include `groups`).                                                                  |
+| `identify`                   | —                                         | Per-request callback returning `{ distinctId, properties?, groups? } \| null` — posthog-node's `identify` shape. `properties` → `$set`, `groups` → `$groups`. |
 | `beforeSend`                 | —                                         | `(event) => event \| null \| undefined` (sync or async), matching posthog-node. Runs on each fully-built payload right before `posthog.capture()` — once per emitted event, including the `$exception` sibling. Return nullish (or throw) to drop that event. |
 | `eventProperties`            | —                                         | Freeform JSON, spread flat.                                                                                                             |
 

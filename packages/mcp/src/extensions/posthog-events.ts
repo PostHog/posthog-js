@@ -147,15 +147,9 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
     properties[PostHogMCPAnalyticsProperty.Response] = event.response
   }
 
-  const $set: Record<string, unknown> = {}
-  if (event.identifyActorName) {
-    $set.name = event.identifyActorName
-  }
-  if (event.identifyActorData) {
-    Object.assign($set, event.identifyActorData)
-  }
-  if (Object.keys($set).length > 0) {
-    properties.$set = $set
+  if (event.identifyActorData && Object.keys(event.identifyActorData).length > 0) {
+    // Person properties from `identify().properties` go straight to `$set`.
+    properties.$set = { ...event.identifyActorData }
   }
 }
 

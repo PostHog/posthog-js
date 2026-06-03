@@ -69,28 +69,28 @@ export function setServerTrackingData(server: MCPServerLike, data: MCPAnalyticsD
 }
 
 export function areIdentitiesEqual(a: UserIdentity, b: UserIdentity): boolean {
-  if (a.userId !== b.userId) {
+  if (a.distinctId !== b.distinctId) {
     return false
   }
-  if (a.userName !== b.userName) {
+  if (JSON.stringify(a.groups ?? {}) !== JSON.stringify(b.groups ?? {})) {
     return false
   }
 
-  const aData = a.userData || {}
-  const bData = b.userData || {}
+  const aProps = a.properties || {}
+  const bProps = b.properties || {}
 
-  const aKeys = Object.keys(aData)
-  const bKeys = Object.keys(bData)
+  const aKeys = Object.keys(aProps)
+  const bKeys = Object.keys(bProps)
 
   if (aKeys.length !== bKeys.length) {
     return false
   }
 
   for (const key of aKeys) {
-    if (!(key in bData)) {
+    if (!(key in bProps)) {
       return false
     }
-    if (JSON.stringify(aData[key]) !== JSON.stringify(bData[key])) {
+    if (JSON.stringify(aProps[key]) !== JSON.stringify(bProps[key])) {
       return false
     }
   }
@@ -104,11 +104,10 @@ export function mergeIdentities(previous: UserIdentity | undefined, next: UserId
   }
 
   return {
-    userId: next.userId,
-    userName: next.userName,
-    userData: {
-      ...(previous.userData || {}),
-      ...(next.userData || {}),
+    distinctId: next.distinctId,
+    properties: {
+      ...(previous.properties || {}),
+      ...(next.properties || {}),
     },
     groups: next.groups ?? previous.groups,
   }

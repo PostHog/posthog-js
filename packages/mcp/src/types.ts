@@ -137,10 +137,10 @@ export interface Event {
    */
   eventName?: string
   id: string
+  /** Resolved person properties for the session, written to `$set`. */
   identifyActorData?: JsonRecord
+  /** Resolved distinct id for the session (from `identify().distinctId`). */
   identifyActorGivenId?: string
-  identifyActorName?: string
-  identifyData?: JsonRecord
   ipAddress?: string
   isError?: boolean
   listedToolNames?: string[]
@@ -193,9 +193,16 @@ export interface MCPServerLike {
 }
 
 export interface UserIdentity {
-  userData?: JsonRecord
-  userId: string
-  userName?: string
+  /**
+   * The person's distinct id (becomes `distinct_id`). Same concept as
+   * posthog-node's `identify({ distinctId })`.
+   */
+  distinctId: string
+  /**
+   * Person properties, written to `$set` (e.g. `{ name, email, plan }`) — the
+   * same `properties` you'd pass to posthog-node's `identify`.
+   */
+  properties?: JsonRecord
   /**
    * PostHog group memberships as `{ groupType: groupKey }`. Stamped onto every
    * event for the session as `$groups`, so callers never hand-write the
@@ -210,7 +217,6 @@ export interface SessionInfo {
   identifyActorData?: JsonRecord
   identifyActorGivenId?: string
   identifyActorGroups?: Record<string, string>
-  identifyActorName?: string
   ipAddress?: string
   sdkLanguage?: string
   sdkVersion?: string

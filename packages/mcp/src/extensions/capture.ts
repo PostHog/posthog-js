@@ -46,7 +46,6 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
     clientName: sessionInfo.clientName,
     clientVersion: sessionInfo.clientVersion,
     identifyActorGivenId: sessionInfo.identifyActorGivenId,
-    identifyActorName: sessionInfo.identifyActorName,
     identifyActorData: sessionInfo.identifyActorData,
     groups: sessionInfo.identifyActorGroups,
     resourceName: eventInput.resourceName,
