@@ -637,7 +637,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    super.identifyStateless(distinctId, eventProperties, { disableGeoip })
+    super.identifyStateless(distinctId, eventProperties, { disableGeoip: disableGeoip ?? this.options.disableGeoip })
   }
 
   /**
@@ -671,7 +671,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+    await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip: disableGeoip ?? this.options.disableGeoip })
   }
 
   /**
@@ -691,7 +691,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The alias data containing distinctId and alias
    */
   alias(data: { distinctId: string; alias: string; disableGeoip?: boolean }): void {
-    super.aliasStateless(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip })
+    super.aliasStateless(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip ?? this.options.disableGeoip })
   }
 
   /**
@@ -712,7 +712,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the alias is processed
    */
   async aliasImmediate(data: { distinctId: string; alias: string; disableGeoip?: boolean }): Promise<void> {
-    await super.aliasStatelessImmediate(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip })
+    await super.aliasStatelessImmediate(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip ?? this.options.disableGeoip })
   }
 
   /**
