@@ -1,4 +1,6 @@
-// inspired from https://github.com/getsentry/sentry-react-native/blob/c1981913a90fad31d8e98ec4a7dcb35c7af46a04/packages/core/plugin/src/withSentryIOS.ts#L18
+// Portions of this file are derived from getsentry/sentry-react-native
+// Copyright (c) 2017 Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
 const { withAppBuildGradle, withXcodeProject } = require('@expo/config-plugins')
 

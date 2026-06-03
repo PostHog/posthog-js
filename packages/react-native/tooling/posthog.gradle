@@ -1,4 +1,6 @@
-// adapted from https://github.com/getsentry/sentry-react-native/blob/e76d0d388228437e82f235546de00f4e748fcbda/packages/core/sentry.gradle
+// Portions of this file are derived from getsentry/sentry-react-native
+// Copyright (c) 2017 Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
 import org.apache.tools.ant.taskdefs.condition.Os
 
