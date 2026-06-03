@@ -57,7 +57,6 @@ export class IdentityCache {
   }
 }
 
-// Internal tracking storage
 const _serverTracking = new WeakMap<MCPServerLike, MCPAnalyticsData>()
 
 export function getServerTrackingData(server: MCPServerLike): MCPAnalyticsData | undefined {
@@ -160,8 +159,9 @@ export async function handleIdentify(
 }
 
 /**
- * Resolves the eventProperties callback and returns the result.
- * Returns null if no callback is configured, the callback returns nullish, or the callback throws.
+ * Resolves the `eventProperties` callback. Returns null when no callback is
+ * configured, or when it returns nullish or throws — a throw never propagates
+ * into the tool path.
  */
 export async function resolveEventProperties(
   data: MCPAnalyticsData,

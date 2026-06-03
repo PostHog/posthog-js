@@ -15,23 +15,16 @@ export function newSessionId(): string {
 }
 
 /**
- * Creates a deterministic SDK session ID from an MCP sessionId.
- * The same inputs will always produce the same session ID, enabling correlation across server restarts.
- *
- * @param mcpSessionId - The session ID from the MCP protocol
- * @returns An SDK session ID with "ses" prefix derived deterministically from the inputs
+ * Derives the SDK session id deterministically from the MCP sessionId, so the
+ * same MCP session correlates to one SDK session across server restarts.
  */
 export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
   return deterministicPrefixedId('ses', mcpSessionId)
 }
 
 /**
- * Gets or generates a session ID for the server.
- * Prioritizes MCP protocol sessionId over PostHog MCP analytics-generated sessionId.
- *
- * @param server - The MCP server instance
- * @param extra - Optional extra data containing MCP sessionId
- * @returns The session ID to use for events
+ * Resolves the session id for a request, preferring the MCP protocol sessionId
+ * over an SDK-generated one so a transport-supplied session wins.
  */
 export function getServerSessionId(server: MCPServerLike, extra?: CompatibleRequestHandlerExtra): string {
   const data = getServerTrackingData(server)
@@ -42,29 +35,25 @@ export function getServerSessionId(server: MCPServerLike, extra?: CompatibleRequ
 
   const mcpSessionId = extra?.sessionId
 
-  // If MCP sessionId is provided
   if (mcpSessionId) {
-    // Derive deterministic SDK session ID from MCP sessionId
     data.sessionId = deriveSessionIdFromMCPSession(mcpSessionId)
     data.lastMcpSessionId = mcpSessionId
     data.sessionSource = 'mcp'
     setServerTrackingData(server, data)
-    // If MCP sessionId hasn't changed, continue using the existing derived ID
     setLastActivity(server)
     return data.sessionId
   }
 
-  // No MCP sessionId provided - handle PostHog MCP analytics-generated sessions
-  // If we had an MCP sessionId before but it disappeared, keep using the last derived ID
+  // Once a session has been MCP-derived, keep that id even if a later request
+  // arrives without the MCP sessionId, so the session doesn't fragment.
   if (data.sessionSource === 'mcp' && data.lastMcpSessionId) {
     setLastActivity(server)
     return data.sessionId
   }
 
-  // For PostHog MCP analytics-generated sessions, apply timeout logic
+  // SDK-generated sessions roll over after an inactivity timeout.
   const now = Date.now()
   const timeoutMs = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
-  // If last activity timed out
   if (now - data.lastActivity.getTime() > timeoutMs) {
     data.sessionId = newSessionId()
     data.sessionSource = 'generated'
