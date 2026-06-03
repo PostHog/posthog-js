@@ -5,7 +5,7 @@ This document describes the internals of the `@posthog/mcp` SDK and the exact Po
 ## TL;DR
 
 - `instrument(server, options)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via the host's `posthog-node` client (`posthog.capture()`).
-- Every PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_custom`, `$mcp_initialize`, …) per the PostHog naming convention for SDK-owned events.
+- Every SDK-owned PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_initialize`, `$identify`, …) per the PostHog naming convention. (Custom events you emit via `capture()` keep your own verbatim name — they're customer events, not SDK-owned.)
 - Every PostHog **property key** is also `$`-prefixed (`$mcp_tool_name`, `$mcp_intent`, `$mcp_duration_ms`, …) so MCP keys never collide with PostHog autocapture, web analytics, or other product events.
 - `$session_id` ties one MCP connection to one PostHog session. `distinct_id` falls back through `identified user → session id → "anonymous"`.
 - Tool calls additionally emit a sibling `$exception` event whenever a tool errors (unless `enableExceptionAutocapture: false`).
@@ -17,7 +17,7 @@ This document describes the internals of the `@posthog/mcp` SDK and the exact Po
 The public surface in `src/index.ts`:
 
 - `instrument(server, options)` — installs the SDK on an MCP server. Idempotent per server (re-calling logs and returns early).
-- `capture(server, eventData)` — emit an event onto the same pipeline. Defaults to `$mcp_custom`, but any event name can be supplied via `eventData.event` (custom names are sent verbatim, **not** `$`-prefixed). Returns a promise that resolves once the event has been processed, so callers can `await` it. The server must already have been passed to `instrument()`.
+- `capture(server, { event, properties })` — emit a custom event onto the same pipeline. `event` is **required** and sent verbatim (a custom event is a customer event, so it is **not** `$`-prefixed). Returns a promise that resolves once the event has been processed, so callers can `await` it. The server must already have been passed to `instrument()`.
 
 The host application supplies its own `posthog-node` client via `options.posthog` (same pattern as `@posthog/ai`) and owns its lifecycle — there is no SDK-managed client to flush or shut down. Internally, `instrument()` wraps that client in an `McpEventSink` (`src/extensions/sink.ts`, not exported) that runs the pipeline and calls `posthog.capture()`.
 
@@ -97,7 +97,7 @@ All events are emitted by `buildPostHogCaptureEvents`. The main event name is co
 | `$mcp_resource_read`   | Resource fetched                                              | `$mcp_resource_name`, `$mcp_parameters`, `$mcp_response`                                                                                                                        |
 | `$mcp_prompts_list`    | Client lists prompts                                          | —                                                                                                                                                                               |
 | `$mcp_prompt_get`      | Prompt fetched                                                | `$mcp_resource_name` (= prompt name)                                                                                                                                            |
-| `$mcp_custom`          | `capture()` with no `event` (or `event: "$mcp_custom"`)       | Whatever the caller passed in `properties`. A custom `event` name routes to that name instead (sent verbatim)                                                                    |
+| _(your event name)_    | `capture(server, { event, properties })`                      | A customer event sent under the verbatim `event` name (not `$`-prefixed). Carries `$session_id`, `distinct_id`, server/client metadata, plus whatever you pass in `properties`   |
 | `$identify`            | `options.identify` returned a new identity for the session    | `$set` populated                                                                                                                                                                |
 | `$exception`           | Sibling to any errored event (unless `enableExceptionAutocapture: false`) | `$exception_list`, `$exception_level` (standard `@posthog/core` error-tracking shape)                                                                              |
 
@@ -264,7 +264,7 @@ The previous version of this SDK lived in a separate repo and depended on `posth
 | `posthogOptions` option                | Forwarded to `posthog-node`                                     | Removed — configure the `posthog-node` client you pass in directly                    |
 | `eventTags` callback                   | Constrained string map; spread flat on events                   | Removed — fold all metadata into `eventProperties`                                    |
 | `~/posthog-mcp-analytics.log`          | SDK wrote to the user's home directory                          | Removed; pass `logger?: (msg: string) => void` if you want to capture internal logs   |
-| PostHog event names                    | Plain (`mcp_tool_call`, `mcp_custom`, `posthog_identify`, …)    | `$`-prefixed (`$mcp_tool_call`, `$mcp_custom`, `$identify`, …) per PostHog convention |
+| PostHog event names                    | Plain (`mcp_tool_call`, `mcp_custom`, `posthog_identify`, …)    | SDK events `$`-prefixed (`$mcp_tool_call`, `$identify`, …); `capture()` events keep your verbatim name |
 | `POSTHOG_MCP_ANALYTICS_HOST` env var   | Read at `instrument()` time                                          | Removed; pass `host` directly                                                         |
 | Session id source                      | `uuidv4` via `node:crypto`                                      | `uuidv7` from `@posthog/core`                                                         |
 

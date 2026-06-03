@@ -1,7 +1,6 @@
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
-import { captureException } from './extensions/exceptions'
 import { IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { log, setLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
@@ -124,14 +123,19 @@ function setupTrackedServer(
 }
 
 /**
- * Captures an event for an instrumented server. Defaults to `$mcp_custom`, but
- * any event name can be supplied via `event` (sent verbatim). Use this to record
- * domain-specific actions that aren't captured automatically (e.g. user feedback,
- * app-level state changes). The server must already have been passed to `instrument()`.
+ * Captures a custom event for an instrumented server. Use this to record
+ * domain-specific actions that aren't captured automatically (e.g. user
+ * feedback, workflow milestones). The event name is required and sent verbatim
+ * (it's a customer event, so it is not `$`-prefixed). The server must already
+ * have been passed to `instrument()`. Resolves once the event is processed.
  */
-export async function capture(server: unknown, eventData: CaptureEventData = {}): Promise<void> {
+export async function capture(server: unknown, eventData: CaptureEventData): Promise<void> {
   if (!server || typeof server !== 'object') {
     throw new Error('First argument must be an instrumented MCP server instance')
+  }
+
+  if (!eventData || typeof eventData.event !== 'string' || eventData.event.length === 0) {
+    throw new Error('`capture` requires an `event` name, e.g. capture(server, { event: "feedback_submitted" })')
   }
 
   const lowLevelServer = getLowLevelServerFromUnknownObject(server)
@@ -145,33 +149,13 @@ export async function capture(server: unknown, eventData: CaptureEventData = {})
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,
     timestamp: new Date(),
-    resourceName: eventData.resourceName,
-    parameters: eventData.parameters,
-    response: eventData.response,
-    userIntent: eventData.message,
-    duration: eventData.duration,
-    isError: eventData.isError,
-    error: resolveCustomEventError(eventData.error),
-  }
-
-  if (eventData.properties && Object.keys(eventData.properties).length > 0) {
-    event.properties = eventData.properties
+    properties: eventData.properties,
   }
 
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
   await captureEvent(lowLevelServer, event)
-  log(`Captured event "${eventData.event ?? '$mcp_custom'}" for session ${trackingData.sessionId}`)
-}
-
-function resolveCustomEventError(error: unknown): UnredactedEvent['error'] {
-  if (error === undefined || error === null) {
-    return error
-  }
-
-  // Everything else (Error, string, object with `message`, etc.) is normalized
-  // by the core coercers into the `$exception_list` shape.
-  return captureException(error)
+  log(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
 }
 
 function getLowLevelServerFromUnknownObject(server: object): MCPServerLike {

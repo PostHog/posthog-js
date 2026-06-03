@@ -13,43 +13,19 @@ function makeMockLowLevelServer(): MCPServerLike {
 }
 
 describe('capture', () => {
-  it('captures a $mcp_custom event by default', async () => {
+  it('captures a custom event with the given name, sent verbatim (not $-prefixed)', async () => {
     const server = makeMockLowLevelServer()
     instrument(server, { posthog: fakePostHog() })
 
     const eventCapture = new EventCapture()
     await eventCapture.start()
 
-    await capture(server, {
-      resourceName: 'custom-action',
-      parameters: { action: 'user-feedback', rating: 5 },
-      message: 'User provided feedback',
-      properties: { source: 'survey' },
-    })
+    await capture(server, { event: 'feedback_submitted', properties: { rating: 5, source: 'survey' } })
 
     const events = eventCapture.getEvents()
     expect(events).toHaveLength(1)
-    const [event] = events
-    expect(event.eventType).toBe(MCPAnalyticsEventType.custom)
-    expect(event.resourceName).toBe('custom-action')
-    expect(event.parameters).toEqual({ action: 'user-feedback', rating: 5 })
-    expect(event.userIntent).toBe('User provided feedback')
-    expect(event.properties).toEqual({ source: 'survey' })
-
-    const [payload] = eventCapture.getCaptures()
-    expect(payload.event).toBe('$mcp_custom')
-
-    await eventCapture.stop()
-  })
-
-  it('allows any event name, sent verbatim (not $-prefixed)', async () => {
-    const server = makeMockLowLevelServer()
-    instrument(server, { posthog: fakePostHog() })
-
-    const eventCapture = new EventCapture()
-    await eventCapture.start()
-
-    await capture(server, { event: 'feedback_submitted', properties: { rating: 5 } })
+    expect(events[0].eventType).toBe(MCPAnalyticsEventType.custom)
+    expect(events[0].properties).toEqual({ rating: 5, source: 'survey' })
 
     const [payload] = eventCapture.getCaptures()
     expect(payload.event).toBe('feedback_submitted')
@@ -58,24 +34,12 @@ describe('capture', () => {
     await eventCapture.stop()
   })
 
-  it('records error details when isError is true', async () => {
+  it('requires an event name', async () => {
     const server = makeMockLowLevelServer()
     instrument(server, { posthog: fakePostHog() })
 
-    const eventCapture = new EventCapture()
-    await eventCapture.start()
-
-    await capture(server, {
-      isError: true,
-      error: { message: 'Custom error', code: 'ERR_001' },
-    })
-
-    const [event] = eventCapture.getEvents()
-    expect(event.isError).toBe(true)
-    // resolveCustomEventError normalizes into the core $exception_list shape.
-    expect(event.error?.$exception_list?.[0]?.value).toBe('Custom error')
-
-    await eventCapture.stop()
+    await expect(capture(server, {} as never)).rejects.toThrow('requires an `event` name')
+    await expect(capture(server, { event: '' })).rejects.toThrow('requires an `event` name')
   })
 
   it('also works with high-level McpServer-like wrappers', async () => {
@@ -86,22 +50,22 @@ describe('capture', () => {
     const eventCapture = new EventCapture()
     await eventCapture.start()
 
-    await capture(highLevelServer, { resourceName: 'wrapper-action' })
+    await capture(highLevelServer, { event: 'wrapper_action' })
 
-    const [event] = eventCapture.getEvents()
-    expect(event.resourceName).toBe('wrapper-action')
+    const [payload] = eventCapture.getCaptures()
+    expect(payload.event).toBe('wrapper_action')
 
     await eventCapture.stop()
   })
 
   it('rejects when the server has not been instrumented', async () => {
-    await expect(capture({}, { resourceName: 'whatever' })).rejects.toThrow(
+    await expect(capture({}, { event: 'whatever' })).rejects.toThrow(
       'Server is not instrumented. Call `instrument(server, options)` before `capture`.'
     )
   })
 
   it('rejects when the first argument is not an object', async () => {
-    await expect(capture(undefined as unknown as object)).rejects.toThrow(
+    await expect(capture(undefined as unknown as object, { event: 'x' })).rejects.toThrow(
       'First argument must be an instrumented MCP server instance'
     )
   })
@@ -114,26 +78,11 @@ describe('capture', () => {
     await eventCapture.start()
     const before = Date.now()
 
-    await capture(server, {})
+    await capture(server, { event: 'tick' })
 
     const [event] = eventCapture.getEvents()
     expect(event.timestamp).toBeInstanceOf(Date)
     expect((event.timestamp as Date).getTime()).toBeGreaterThanOrEqual(before)
-
-    await eventCapture.stop()
-  })
-
-  it('accepts minimal event data', async () => {
-    const server = makeMockLowLevelServer()
-    instrument(server, { posthog: fakePostHog() })
-
-    const eventCapture = new EventCapture()
-    await eventCapture.start()
-
-    await capture(server, {})
-    await capture(server)
-
-    expect(eventCapture.getEvents()).toHaveLength(2)
 
     await eventCapture.stop()
   })

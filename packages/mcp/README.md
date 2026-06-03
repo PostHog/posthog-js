@@ -114,20 +114,15 @@ instrument(server, {
 
 ### Capture a custom event
 
-For domain-specific events that aren't auto-captured (e.g. user feedback, workflow milestones):
+For domain-specific events that aren't auto-captured (e.g. user feedback, workflow milestones). You name the event; it's sent verbatim (it's your event, so it isn't `$`-prefixed):
 
 ```ts
 import { capture } from '@posthog/mcp'
 
-// Defaults to `$mcp_custom`...
 await capture(server, {
-  resourceName: 'user-feedback',
-  parameters: { rating: 5, comment: 'love it' },
-  message: 'User submitted feedback',
+  event: 'feedback_submitted',
+  properties: { rating: 5, comment: 'love it' },
 })
-
-// ...or pass any event name (sent verbatim, not `$`-prefixed):
-await capture(server, { event: 'feedback_submitted', properties: { rating: 5 } })
 ```
 
 The event is enriched with `$session_id`, `distinct_id`, and server/client metadata before being sent. `capture()` resolves once the event has been processed, so you can `await` it.
@@ -202,7 +197,7 @@ instrument(server, {
 ## API
 
 - **`instrument(server, options)`**: wraps a low-level `Server` or high-level `McpServer`. Idempotent per server instance (subsequent calls on the same server are skipped via a `WeakMap` lookup). Returns the same server, typed. Pass your `posthog-node` client via `options.posthog`.
-- **`capture(server, eventData)`**: emits one event (default `$mcp_custom`, or any name via `{ event }`). The server must have been passed to `instrument()` first. Returns a promise you can `await`.
+- **`capture(server, { event, properties })`**: emits one custom event. `event` is required and sent verbatim (not `$`-prefixed). The server must have been passed to `instrument()` first. Returns a promise you can `await`.
 
 The full options reference lives in [`src/types.ts`](./src/types.ts) (`MCPAnalyticsOptions`) and the design narrative + HogQL recipes live in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 

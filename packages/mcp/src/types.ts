@@ -232,17 +232,10 @@ export interface MCPAnalyticsData {
 
 export interface CaptureEventData {
   /**
-   * PostHog event name. Defaults to `$mcp_custom`. Any name is allowed; a
-   * custom name is sent verbatim (not `$`-prefixed) and treated as a
-   * customer-defined event.
+   * PostHog event name (required). Sent verbatim — a custom event is a
+   * customer-defined event, so it is NOT `$`-prefixed.
    */
-  event?: string
-  duration?: number
-  error?: unknown
-  isError?: boolean
-  message?: string
-  parameters?: unknown
+  event: string
+  /** Event properties, spread onto the PostHog event. Values must be JSON-serializable. */
   properties?: JsonRecord
-  resourceName?: string
-  response?: unknown
 }
