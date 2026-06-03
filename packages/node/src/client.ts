@@ -41,7 +41,8 @@ import {
   InconclusiveMatchError,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
-import { safeSetTimeout, PostHogEventProperties, PostHogMemoryStorage } from '@posthog/core'
+import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
+import { PostHogMemoryStorage } from './storage-memory'
 import { uuidv7 } from '@posthog/core'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 
