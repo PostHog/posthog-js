@@ -3,7 +3,7 @@ import { uuidv7 } from '@posthog/core'
 
 import type { Event, UnredactedEvent } from '../types'
 import { log } from './logger'
-import { buildPostHogCaptureEvents } from './posthog-events'
+import { type PostHogCaptureEvent, buildPostHogCaptureEvents } from './posthog-events'
 import { newPrefixedId } from './ids'
 import { redactEvent } from './redaction'
 import { sanitizeEvent } from './sanitization'
@@ -13,6 +13,57 @@ import { truncateEvent } from './truncation'
 export interface McpCaptureOptions {
   enableAITracing: boolean
   enableExceptionAutocapture: boolean
+}
+
+/**
+ * Runs an MCP event through the full transform: redact → sanitize → truncate →
+ * fan out into the `$mcp_*` / `$exception` capture payloads. Returns `null` (and
+ * logs) if any stage throws, so the event is dropped rather than partially sent.
+ *
+ * This is the single source of truth for the pipeline — both {@link McpEventSink}
+ * and the test harness call it, so tests assert on exactly the payloads that
+ * reach `posthog.capture()`.
+ */
+export async function processMcpEvent(
+  event: UnredactedEvent,
+  options: McpCaptureOptions
+): Promise<{ event: Event; captures: PostHogCaptureEvent[] } | null> {
+  let processed: UnredactedEvent = event
+
+  if (event.redactionFn) {
+    try {
+      processed = (await redactEvent(event, event.redactionFn)) as UnredactedEvent
+      processed.redactionFn = undefined
+    } catch (err) {
+      log(`Failed to redact event: ${err}`)
+      return null
+    }
+  }
+
+  try {
+    processed = sanitizeEvent(processed)
+  } catch (err) {
+    log(`Failed to sanitize event: ${err}`)
+    return null
+  }
+
+  try {
+    processed = truncateEvent(processed)
+  } catch (err) {
+    log(`Failed to truncate event: ${err}`)
+    return null
+  }
+
+  processed.id = processed.id || newPrefixedId('evt')
+  const fullEvent = processed as Event
+
+  return {
+    event: fullEvent,
+    captures: buildPostHogCaptureEvents(fullEvent, {
+      enableAITracing: options.enableAITracing,
+      enableExceptionAutocapture: options.enableExceptionAutocapture,
+    }),
+  }
 }
 
 /**
@@ -32,42 +83,14 @@ export class McpEventSink {
    * Errors at any stage are logged and the event is dropped, never re-thrown into tool code.
    */
   async capture(event: UnredactedEvent, options: McpCaptureOptions): Promise<void> {
-    const { enableAITracing, enableExceptionAutocapture } = options
-
-    let processed: UnredactedEvent = event
-
-    if (event.redactionFn) {
-      try {
-        processed = (await redactEvent(event, event.redactionFn)) as UnredactedEvent
-        processed.redactionFn = undefined
-      } catch (err) {
-        log(`Failed to redact event: ${err}`)
-        return
-      }
-    }
-
-    try {
-      processed = sanitizeEvent(processed)
-    } catch (err) {
-      log(`Failed to sanitize event: ${err}`)
+    const result = await processMcpEvent(event, options)
+    if (!result) {
       return
     }
 
+    const { event: fullEvent, captures } = result
     try {
-      processed = truncateEvent(processed)
-    } catch (err) {
-      log(`Failed to truncate event: ${err}`)
-      return
-    }
-
-    processed.id = processed.id || newPrefixedId('evt')
-    const fullEvent = processed as Event
-
-    try {
-      for (const captureEvent of buildPostHogCaptureEvents(fullEvent, {
-        enableAITracing,
-        enableExceptionAutocapture,
-      })) {
+      for (const captureEvent of captures) {
         this.posthog.capture({
           distinctId: captureEvent.distinct_id,
           event: captureEvent.event,

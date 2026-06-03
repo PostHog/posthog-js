@@ -77,6 +77,20 @@ function getLowLevelServer(server: MCPServerLike | HighLevelMCPServerLike): MCPS
   return isHighLevelServer(server) ? (server as HighLevelMCPServerLike).server : (server as MCPServerLike)
 }
 
+/**
+ * Defaults for the boolean toggles. User options are spread over these, so the
+ * resolved config is the single source of truth — adding a new option can never
+ * be silently dropped by a hand-maintained field list (the bug that left
+ * `enableExceptionAutocapture` dead). Options without a meaningful default (e.g.
+ * `enableExceptionAutocapture`) are left to their read-site fallbacks.
+ */
+const DEFAULT_OPTIONS = {
+  reportMissing: false,
+  enableAITracing: false,
+  enableTracing: true,
+  enableConversationId: false,
+} satisfies Partial<MCPAnalyticsOptions>
+
 function buildTrackingData(
   lowLevelServer: MCPServerLike,
   options: MCPAnalyticsOptions,
@@ -89,18 +103,7 @@ function buildTrackingData(
     identifiedSessions: new Map<string, UserIdentity>(),
     toolDescriptions: new Map<string, string>(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
-    options: {
-      reportMissing: options.reportMissing ?? false,
-      enableAITracing: options.enableAITracing ?? false,
-      enableTracing: options.enableTracing ?? true,
-      enableConversationId: options.enableConversationId ?? false,
-      context: options.context,
-      intentFallback: options.intentFallback,
-      identify: options.identify,
-      redactSensitiveInformation: options.redactSensitiveInformation,
-      eventProperties: options.eventProperties,
-      logger: options.logger,
-    },
+    options: { ...DEFAULT_OPTIONS, ...options },
     sessionSource: 'generated',
   }
 }

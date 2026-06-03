@@ -1,20 +1,29 @@
 import type { Event, UnredactedEvent } from '../types'
-import { McpEventSink, McpCaptureOptions } from '../extensions/sink'
-import { redactEvent } from '../extensions/redaction'
-import { sanitizeEvent } from '../extensions/sanitization'
-import { truncateEvent } from '../extensions/truncation'
+import { McpEventSink, type McpCaptureOptions, processMcpEvent } from '../extensions/sink'
+import type { PostHogCaptureEvent } from '../extensions/posthog-events'
 
 /**
- * Intercepts events on the `PostHogMCP.capture` boundary so tests can assert on the
- * post-pipeline event without making an HTTP call. Runs the same
- * redact → sanitize → truncate pipeline the real `capture` runs, so tests that
- * exercise redaction/sanitization/truncation see the transformed event.
+ * Intercepts events at the sink boundary so tests can assert on what actually
+ * reaches `posthog.capture()` without an HTTP call.
  *
- * Patches the prototype so every `PostHogMCP` instance created by `instrument()`
- * during the test is intercepted.
+ * It runs the SAME pipeline production runs — `processMcpEvent` is the single
+ * source of truth shared with `McpEventSink.capture` — so there's no risk of the
+ * harness and the sink drifting. Two views are exposed:
+ *
+ *  - `getEvents()` — the post-pipeline `UnredactedEvent` (redacted/sanitized/
+ *    truncated), one per `capture()` call. Convenient for asserting on the
+ *    SDK's internal event shape.
+ *  - `getCaptures()` — the fanned-out PostHog payloads (`$mcp_tool_call`,
+ *    `$exception`, …) exactly as handed to `posthog.capture()`: event name,
+ *    `distinct_id`, and `properties`. Use this to assert on event names,
+ *    `$set`, `$process_person_profile`, exception siblings, etc.
+ *
+ * Patches the prototype so every `McpEventSink` created by `instrument()` during
+ * the test is intercepted.
  */
 export class EventCapture {
   private capturedEvents: UnredactedEvent[] = []
+  private capturedPayloads: PostHogCaptureEvent[] = []
   private original?: (event: UnredactedEvent, options: McpCaptureOptions) => Promise<void>
 
   async start(): Promise<void> {
@@ -26,29 +35,14 @@ export class EventCapture {
     McpEventSink.prototype.capture = async function (
       this: McpEventSink,
       event: UnredactedEvent,
-      _options: McpCaptureOptions
+      options: McpCaptureOptions
     ): Promise<void> {
-      let processed: UnredactedEvent = event
-      if (event.redactionFn) {
-        try {
-          processed = (await redactEvent(event, event.redactionFn)) as UnredactedEvent
-          processed.redactionFn = undefined
-        } catch {
-          // mirror client.capture: drop event on redact failure
-          return
-        }
-      }
-      try {
-        processed = sanitizeEvent(processed)
-      } catch {
+      const result = await processMcpEvent(event, options)
+      if (!result) {
         return
       }
-      try {
-        processed = truncateEvent(processed)
-      } catch {
-        return
-      }
-      capture.capturedEvents.push(processed)
+      capture.capturedEvents.push(result.event)
+      capture.capturedPayloads.push(...result.captures)
     } as typeof McpEventSink.prototype.capture
   }
 
@@ -59,12 +53,19 @@ export class EventCapture {
     }
   }
 
+  /** Post-pipeline SDK events, one per `capture()` call. */
   getEvents(): UnredactedEvent[] {
     return [...this.capturedEvents]
   }
 
+  /** PostHog payloads as handed to `posthog.capture()` (after fan-out). */
+  getCaptures(): PostHogCaptureEvent[] {
+    return [...this.capturedPayloads]
+  }
+
   clear(): void {
     this.capturedEvents = []
+    this.capturedPayloads = []
   }
 
   findEventByType(eventType: string): Event | undefined {
@@ -73,6 +74,11 @@ export class EventCapture {
 
   findEventsByResourceName(resourceName: string): Event[] {
     return this.capturedEvents.filter((e) => e.resourceName === resourceName) as Event[]
+  }
+
+  /** PostHog payloads filtered by event name, e.g. `$mcp_tool_call`. */
+  findCapturesByEvent(eventName: string): PostHogCaptureEvent[] {
+    return this.capturedPayloads.filter((c) => c.event === eventName)
   }
 }
 
