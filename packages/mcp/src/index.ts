@@ -2,7 +2,7 @@ import { isCompatibleServerType, isHighLevelServer } from './extensions/compatib
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
 import { captureException } from './extensions/exceptions'
-import { getServerTrackingData, setServerTrackingData } from './extensions/internal'
+import { IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { log, setLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
@@ -15,7 +15,6 @@ import type {
   MCPAnalyticsOptions,
   MCPServerLike,
   UnredactedEvent,
-  UserIdentity,
 } from './types'
 
 /**
@@ -100,7 +99,7 @@ function buildTrackingData(
     sink,
     sessionId: newSessionId(),
     lastActivity: new Date(),
-    identifiedSessions: new Map<string, UserIdentity>(),
+    identifiedSessions: new IdentityCache(),
     toolDescriptions: new Map<string, string>(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
     options: { ...DEFAULT_OPTIONS, ...options },

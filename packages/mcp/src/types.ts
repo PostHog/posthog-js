@@ -2,6 +2,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ErrorTracking } from '@posthog/core'
 import type { PostHog } from 'posthog-node'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
+import type { IdentityCache } from './extensions/internal'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
 
@@ -199,7 +200,7 @@ export interface SessionInfo {
 
 export interface MCPAnalyticsData {
   sink: McpEventSink | undefined
-  identifiedSessions: Map<string, UserIdentity>
+  identifiedSessions: IdentityCache
   lastActivity: Date
   lastMcpSessionId?: string
   options: MCPAnalyticsOptions

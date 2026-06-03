@@ -62,6 +62,7 @@ function buildCaptureEvent(event: Event, options: BuildPostHogCaptureEventsOptio
     [PostHogMCPAnalyticsProperty.Source]: POSTHOG_MCP_ANALYTICS_SOURCE,
   }
   addConversationIdProperty(event, properties)
+  addPersonProcessingProperty(event, properties)
 
   addCommonEventProperties(event, properties)
   addTraceReferenceProperties(event, properties, options)
@@ -104,6 +105,19 @@ function addTraceReferenceProperties(
 function addConversationIdProperty(event: Event, properties: Record<string, unknown>): void {
   if (event.conversationId !== undefined && event.conversationId !== '') {
     properties[PostHogMCPAnalyticsProperty.ConversationId] = event.conversationId
+  }
+}
+
+/**
+ * Without a resolved identity the distinct id is just the session id, so
+ * processing a person profile would mint one anonymous person per session and
+ * inflate person counts. Opt out of person processing in that case (matching
+ * `@posthog/ai` / posthog-node). When an identity is present we keep person
+ * processing so `$set` lands on a real person.
+ */
+function addPersonProcessingProperty(event: Event, properties: Record<string, unknown>): void {
+  if (!event.identifyActorGivenId) {
+    properties.$process_person_profile = false
   }
 }
 
@@ -184,6 +198,7 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
     [PostHogMCPAnalyticsProperty.SessionId]: event.sessionId,
   }
   addConversationIdProperty(event, properties)
+  addPersonProcessingProperty(event, properties)
 
   if (event.error) {
     // Spread the core `$exception_list` / `$exception_level` properties so MCP

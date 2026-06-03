@@ -11,28 +11,28 @@ import { log } from './logger'
 import { captureEvent } from './capture'
 
 /**
- * Simple LRU cache for session identities.
- * Prevents memory leaks by capping at maxSize entries.
- * This cache persists across server instance restarts.
+ * Bounded LRU cache for session identities, capped at `maxSize` entries so a
+ * long-lived server can't accumulate identities for unboundedly many sessions.
+ * One instance lives on each server's tracking data — it is NOT shared across
+ * server instances, so identities never bleed between servers.
  */
-class IdentityCache {
-  private readonly _cache: Map<string, { identity: UserIdentity; timestamp: number }>
+export class IdentityCache {
+  private readonly _cache = new Map<string, UserIdentity>()
   private readonly _maxSize: number
 
   constructor(maxSize = 1000) {
-    this._cache = new Map()
     this._maxSize = maxSize
   }
 
   get(sessionId: string): UserIdentity | undefined {
-    const entry = this._cache.get(sessionId)
-    if (entry) {
-      entry.timestamp = Date.now()
-      this._cache.delete(sessionId)
-      this._cache.set(sessionId, entry)
-      return entry.identity
+    const identity = this._cache.get(sessionId)
+    if (identity === undefined) {
+      return
     }
-    return
+    // Touch: re-insert so it counts as most-recently-used.
+    this._cache.delete(sessionId)
+    this._cache.set(sessionId, identity)
+    return identity
   }
 
   set(sessionId: string, identity: UserIdentity): void {
@@ -45,7 +45,7 @@ class IdentityCache {
       }
     }
 
-    this._cache.set(sessionId, { identity, timestamp: Date.now() })
+    this._cache.set(sessionId, identity)
   }
 
   has(sessionId: string): boolean {
@@ -56,10 +56,6 @@ class IdentityCache {
     return this._cache.size
   }
 }
-
-// Global identity cache shared across all server instances so dedupe survives
-// server-instance recreation.
-const _globalIdentityCache = new IdentityCache(1000)
 
 // Internal tracking storage
 const _serverTracking = new WeakMap<MCPServerLike, MCPAnalyticsData>()
@@ -146,11 +142,10 @@ export async function handleIdentify(
       typeof data.options.identify === 'function' ? await data.options.identify(request, extra) : data.options.identify
 
     if (identityResult) {
-      const previousIdentity = _globalIdentityCache.get(sessionId)
+      const previousIdentity = data.identifiedSessions.get(sessionId)
       const mergedIdentity = mergeIdentities(previousIdentity, identityResult)
       const hasChanged = !(previousIdentity && areIdentitiesEqual(previousIdentity, mergedIdentity))
 
-      _globalIdentityCache.set(sessionId, mergedIdentity)
       data.identifiedSessions.set(sessionId, mergedIdentity)
 
       if (hasChanged) {

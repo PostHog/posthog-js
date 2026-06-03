@@ -146,6 +146,15 @@ describe('identify option', () => {
       expect(event.sessionId).toBeTruthy()
     }
 
+    // Anonymous sessions must opt out of person processing so we don't mint a
+    // person profile per session.
+    const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(2)
+    for (const toolCall of toolCalls) {
+      expect(toolCall.properties.$process_person_profile).toBe(false)
+      expect(toolCall.distinct_id).toBe(toolCall.properties.$session_id)
+    }
+
     await capture.stop()
   })
 
@@ -165,6 +174,31 @@ describe('identify option', () => {
     expect(sessionInfo?.identifyActorGivenId).toBe('session-user')
     expect(sessionInfo?.identifyActorName).toBe('Session Alice')
     expect(sessionInfo?.identifyActorData).toEqual({ role: 'admin', team: 'platform' })
+  })
+
+  it('keeps person processing on and uses the userId as distinct_id once identified', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    instrument(server, {
+      posthog: fakePostHog(),
+      identify: async () => ({
+        userId: 'session-user',
+        userName: 'Session Alice',
+        userData: { role: 'admin' },
+      }),
+    })
+
+    await callAddTodo(client)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(toolCall).toBeDefined()
+    // Identity resolved → real person, so we do NOT opt out of person processing.
+    expect(toolCall.properties.$process_person_profile).toBeUndefined()
+    expect(toolCall.distinct_id).toBe('session-user')
+    expect(toolCall.properties.$set).toMatchObject({ name: 'Session Alice', role: 'admin' })
+
+    await capture.stop()
   })
 
   it('awaits async identify callbacks and records a non-zero duration on the $identify event', async () => {
