@@ -3,9 +3,8 @@ import type { eventWithTime } from '@posthog/rrweb-types';
 
 const now = Date.now();
 
-// Reproduces a scroll that clamps to 0 mid-fast-forward because the target only becomes
-// scrollable once a stylesheet (applied after the DOM diff in the flush stage) gives its
-// content height. Mirrors scroll-revealed sheets/modals whose content sits below the fold.
+// Scroll that clamps to 0 mid-fast-forward: the target only becomes scrollable via a stylesheet
+// applied after the scroll. Mirrors scroll-revealed sheets/modals whose content sits below the fold.
 const events: eventWithTime[] = [
   { type: EventType.DomContentLoaded, data: {}, timestamp: now },
   { type: EventType.Load, data: {}, timestamp: now + 100 },

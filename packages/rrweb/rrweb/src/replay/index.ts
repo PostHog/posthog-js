@@ -167,10 +167,8 @@ export class Replayer {
   // In the fast-forward mode, only the last selection data needs to be applied.
   private lastSelectionData: selectionData | null = null;
 
-  // In the fast-forward mode, scrolls applied mid-batch can clamp to 0 because the target's
-  // scrollable content isn't laid out yet (e.g. scroll-revealed sheets/modals whose content
-  // is positioned below the fold). Keep the last scroll per node and re-apply it once the
-  // catch-up has finished and layout has settled, in the flush stage.
+  // Last scroll per node during fast-forward. A scroll applied before its target is scrollable
+  // clamps to 0, so it's re-applied in the flush stage once layout has settled.
   private lastScrollMap: Map<number, scrollData> = new Map();
 
   // In the fast-forward mode using VirtualDom optimization, all stylesheetRule, and styleDeclaration events on constructed StyleSheets will be delayed to get applied until the flush stage.
@@ -344,8 +342,7 @@ export class Replayer {
         this.lastSelectionData = null;
       }
 
-      // Re-apply the last scroll per node now that all mutations are flushed and layout has
-      // settled, so scrolls that clamped mid-fast-forward (target not yet scrollable) land.
+      // Re-apply scrolls that clamped mid-fast-forward, now that layout has settled.
       if (this.lastScrollMap.size) {
         this.lastScrollMap.forEach((d) => {
           this.applyScroll(d, true);
@@ -1343,8 +1340,7 @@ export class Replayer {
         if (d.id === -1) {
           break;
         }
-        // Re-applied after the catch-up flush (covers both the virtual-dom and direct paths),
-        // so a scroll that clamps mid-fast-forward because the target isn't scrollable yet lands.
+        // Recorded for the flush-stage re-apply (covers both fast-forward paths).
         if (isSync) {
           this.lastScrollMap.set(d.id, d);
         }
