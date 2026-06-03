@@ -31,6 +31,9 @@ const testableMethods = {
 } as const;
 
 const untaintedBasePrototype: Partial<BasePrototypeCache> = {};
+const untaintedBaseIframeCleanup: Partial<
+  Record<keyof BasePrototypeCache, () => void>
+> = {};
 
 type WindowWithZone = typeof globalThis & {
   Zone?: {
@@ -107,6 +110,11 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
   }
 
   const iframeEl = document.createElement('iframe');
+  iframeEl.style.display = 'none';
+  // WebKit/Safari tears down a detached iframe's ScriptExecutionContext, which
+  // silently breaks a MutationObserver constructed from it (webkit.org/b/179224).
+  // On Safari we keep the iframe attached and expose a cleanup via mutationObserverCtor.
+  let keepIframeAttached = false;
   try {
     document.body.appendChild(iframeEl);
     const win = iframeEl.contentWindow;
@@ -118,11 +126,20 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
 
     if (!untaintedObject) return defaultPrototype;
 
+    const ua = navigator.userAgent;
+    if (ua.includes('Safari') && !ua.includes('Chrome')) {
+      keepIframeAttached = true;
+      // rr-block prevents rrweb from serializing this iframe in later snapshots
+      iframeEl.classList.add('rr-block');
+      iframeEl.setAttribute('__rrwebUntaintedMutationObserver', '');
+      untaintedBaseIframeCleanup[key] = () => iframeEl.remove();
+    }
+
     return (untaintedBasePrototype[key] = untaintedObject);
   } catch {
     return defaultPrototype;
   } finally {
-    if (iframeEl.parentNode) {
+    if (!keepIframeAttached && iframeEl.parentNode) {
       document.body.removeChild(iframeEl);
     }
   }
@@ -241,8 +258,17 @@ export function querySelectorAll(
   return getUntaintedMethod('Element', n, 'querySelectorAll')(selectors);
 }
 
-export function mutationObserverCtor(): (typeof MutationObserver)['prototype']['constructor'] {
-  return getUntaintedPrototype('MutationObserver').constructor;
+export function mutationObserverCtor(): [
+  (typeof MutationObserver)['prototype']['constructor'],
+  () => void,
+] {
+  return [
+    getUntaintedPrototype('MutationObserver').constructor,
+    untaintedBaseIframeCleanup['MutationObserver'] ??
+      (() => {
+        /* no-op; a cleanup function is only needed in Safari browsers */
+      }),
+  ];
 }
 
 // copy from https://github.com/getsentry/sentry-javascript/blob/b2109071975af8bf0316d3b5b38f519bdaf5dc15/packages/utils/src/object.ts
