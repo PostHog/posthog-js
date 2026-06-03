@@ -193,6 +193,7 @@ export default class MutationBuffer {
   private canvasManager: observerParam['canvasManager'];
   private processedNodeManager: observerParam['processedNodeManager'];
   private unattachedDoc: HTMLDocument;
+  private canvasManagerReleased = false;
 
   public init(options: MutationBufferParam) {
     (
@@ -223,6 +224,8 @@ export default class MutationBuffer {
       // just a type trick, the runtime result is correct
       this[key] = options[key] as never;
     });
+    // Balanced by releaseCanvasManager() in reset().
+    this.canvasManager.acquire();
   }
 
   public freeze() {
@@ -253,6 +256,16 @@ export default class MutationBuffer {
 
   public reset() {
     this.shadowDomManager.reset();
+    this.releaseCanvasManager();
+  }
+
+  // Releases at most once even if reset() runs twice (iframe pagehide + stop). Separate from
+  // reset() so shadow-root teardown can release without re-entering shadowDomManager.reset().
+  public releaseCanvasManager() {
+    if (this.canvasManagerReleased) {
+      return;
+    }
+    this.canvasManagerReleased = true;
     this.canvasManager.reset();
     // Don't null `this.doc` here — a MutationObserver callback queued before
     // the observer was disconnected can still drain through `emit`, which

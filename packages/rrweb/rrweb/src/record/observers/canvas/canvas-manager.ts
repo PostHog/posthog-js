@@ -36,8 +36,30 @@ export class CanvasManager {
   private locked = false;
   private rafIdTimestamp: number | null = null;
   private rafIdFlush: number | null = null;
+  private refCount = 0;
+  private torndown = false;
+
+  // Shared by the main document and every iframe/shadow-root observer, so reference-count
+  // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
+  public acquire() {
+    this.refCount += 1;
+  }
 
   public reset() {
+    if (this.refCount > 0) {
+      this.refCount -= 1;
+    }
+    if (this.refCount > 0) {
+      return;
+    }
+    this.teardown();
+  }
+
+  private teardown() {
+    if (this.torndown) {
+      return;
+    }
+    this.torndown = true;
     this.pendingCanvasMutations.clear();
     this.resetObservers && this.resetObservers();
     if (this.rafIdTimestamp !== null) {

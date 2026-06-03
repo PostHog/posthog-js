@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMirror } from '@posthog/rrweb-snapshot';
 import { CanvasManager } from '../../src/record/observers/canvas/canvas-manager';
+import MutationBuffer from '../../src/record/mutation';
 
 vi.mock('../../src/record/observers/canvas/canvas', () => ({
   default: () => () => {},
@@ -275,5 +276,101 @@ describe('CanvasManager FPS observer', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(vi.mocked(createImageBitmap)).toHaveBeenCalled();
+  });
+});
+
+// A single root tearing down must not stop canvas recording for the whole page.
+describe('CanvasManager reference-counted teardown', () => {
+  const makeManager = (): {
+    manager: CanvasManager;
+    resetObservers: ReturnType<typeof vi.fn>;
+  } => {
+    const manager = new CanvasManager({
+      recordCanvas: false, // skip real observer setup; we inject a spy below
+      mutationCb: vi.fn(),
+      win: {} as never,
+      blockClass: 'rr-block',
+      blockSelector: null,
+      mirror: {} as never,
+      dataURLOptions: {},
+    });
+    const resetObservers = vi.fn();
+    (manager as unknown as { resetObservers: () => void }).resetObservers =
+      resetObservers;
+    return { manager, resetObservers };
+  };
+
+  it.each([
+    ['one acquire, one reset', (m: CanvasManager) => m.reset()],
+    [
+      'extra resets are clamped',
+      (m: CanvasManager) => {
+        m.reset();
+        m.reset();
+        m.reset();
+      },
+    ],
+  ])('tears down exactly once: %s', (_label, releaseAll) => {
+    const { manager, resetObservers } = makeManager();
+    manager.acquire();
+
+    releaseAll(manager);
+
+    expect(resetObservers).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not tear down while other consumers are still attached', () => {
+    const { manager, resetObservers } = makeManager();
+    manager.acquire(); // main document
+    manager.acquire(); // e.g. an iframe / shadow root
+
+    manager.reset(); // secondary root torn down
+
+    expect(resetObservers).not.toHaveBeenCalled();
+
+    manager.reset(); // last consumer (main document) released
+
+    expect(resetObservers).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MutationBuffer canvas reference balance', () => {
+  const makeBuffer = (): {
+    buffer: MutationBuffer;
+    canvasManager: {
+      acquire: ReturnType<typeof vi.fn>;
+      reset: ReturnType<typeof vi.fn>;
+    };
+    shadowDomManager: { reset: ReturnType<typeof vi.fn> };
+  } => {
+    const canvasManager = { acquire: vi.fn(), reset: vi.fn() };
+    const shadowDomManager = { reset: vi.fn() };
+    const buffer = new MutationBuffer();
+    buffer.init({ canvasManager, shadowDomManager } as never);
+    return { buffer, canvasManager, shadowDomManager };
+  };
+
+  it('acquires the canvas manager exactly once on init', () => {
+    const { canvasManager } = makeBuffer();
+
+    expect(canvasManager.acquire).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the canvas manager only once even if reset runs multiple times', () => {
+    const { buffer, canvasManager } = makeBuffer();
+
+    buffer.reset();
+    buffer.reset();
+
+    expect(canvasManager.reset).toHaveBeenCalledTimes(1);
+  });
+
+  it('releaseCanvasManager is idempotent with reset', () => {
+    const { buffer, canvasManager } = makeBuffer();
+
+    buffer.releaseCanvasManager();
+    buffer.reset();
+
+    expect(canvasManager.reset).toHaveBeenCalledTimes(1);
   });
 });
