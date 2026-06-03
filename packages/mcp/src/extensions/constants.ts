@@ -11,11 +11,11 @@ export const POSTHOG_MCP_ANALYTICS_SOURCE = 'posthog_mcp_analytics'
 // All PostHog-owned event names start with `$` per the PostHog convention.
 // Non-`$` names would be treated as customer-defined events and confuse the schema.
 export const PostHogMCPAnalyticsEvent = {
-  AiSpan: '$ai_span',
   Custom: '$mcp_custom',
   Exception: '$exception',
   Identify: '$identify',
   Initialize: '$mcp_initialize',
+  MissingCapability: '$mcp_missing_capability',
   PromptGet: '$mcp_prompt_get',
   PromptsList: '$mcp_prompts_list',
   ResourceRead: '$mcp_resource_read',
@@ -27,15 +27,6 @@ export const PostHogMCPAnalyticsEvent = {
 export type PostHogMCPAnalyticsEvent = (typeof PostHogMCPAnalyticsEvent)[keyof typeof PostHogMCPAnalyticsEvent]
 
 export const PostHogMCPAnalyticsProperty = {
-  AiInputState: '$ai_input_state',
-  AiIsError: '$ai_is_error',
-  AiLatency: '$ai_latency',
-  AiOutputState: '$ai_output_state',
-  AiProduct: '$ai_product',
-  AiSessionId: '$ai_session_id',
-  AiSpanId: '$ai_span_id',
-  AiSpanName: '$ai_span_name',
-  AiTraceId: '$ai_trace_id',
   ClientName: '$mcp_client_name',
   ClientVersion: '$mcp_client_version',
   ConversationId: '$mcp_conversation_id',

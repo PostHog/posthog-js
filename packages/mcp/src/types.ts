@@ -48,12 +48,8 @@ export interface MCPAnalyticsOptions {
   logger?: LoggerFn
   /** Enable the `get_more_tools` virtual tool so agents can report missing functionality. */
   reportMissing?: boolean
-  /** Emit a parallel `$ai_span` event per tool call so MCP activity appears in PostHog LLM analytics. */
-  enableAITracing?: boolean
   /** Enables the `conversation_id` tool parameter + prompt-back loop. */
   enableConversationId?: boolean
-  /** Master switch for auto-captured events. Defaults to `true`. */
-  enableTracing?: boolean
   /**
    * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.
    * Set to `false` if you handle error tracking elsewhere and don't want MCP errors

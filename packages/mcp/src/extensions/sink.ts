@@ -11,7 +11,6 @@ import { truncateEvent } from './truncation'
 
 /** Per-event toggles consulted by the sink when fanning out an event. */
 export interface McpCaptureOptions {
-  enableAITracing: boolean
   enableExceptionAutocapture: boolean
 }
 
@@ -60,7 +59,6 @@ export async function processMcpEvent(
   return {
     event: fullEvent,
     captures: buildPostHogCaptureEvents(fullEvent, {
-      enableAITracing: options.enableAITracing,
       enableExceptionAutocapture: options.enableExceptionAutocapture,
     }),
   }

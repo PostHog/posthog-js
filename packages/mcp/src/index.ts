@@ -63,7 +63,7 @@ function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {})
     const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, sink)
 
     setServerTrackingData(lowLevelServer, mcpAnalyticsData)
-    setupTrackedServer(validatedServer, lowLevelServer, mcpAnalyticsData)
+    setupTrackedServer(validatedServer, lowLevelServer)
 
     return validatedServer as TServer
   } catch (error) {
@@ -85,8 +85,6 @@ function getLowLevelServer(server: MCPServerLike | HighLevelMCPServerLike): MCPS
  */
 const DEFAULT_OPTIONS = {
   reportMissing: false,
-  enableAITracing: false,
-  enableTracing: true,
   enableConversationId: false,
 } satisfies Partial<MCPAnalyticsOptions>
 
@@ -109,8 +107,7 @@ function buildTrackingData(
 
 function setupTrackedServer(
   validatedServer: MCPServerLike | HighLevelMCPServerLike,
-  lowLevelServer: MCPServerLike,
-  mcpAnalyticsData: MCPAnalyticsData
+  lowLevelServer: MCPServerLike
 ): void {
   if (isHighLevelServer(validatedServer)) {
     const highLevelServer = validatedServer as HighLevelMCPServerLike
@@ -118,12 +115,10 @@ function setupTrackedServer(
     return
   }
 
-  if (mcpAnalyticsData.options.enableTracing) {
-    try {
-      setupToolCallTracing(lowLevelServer)
-    } catch (error) {
-      log(`Warning: Failed to setup tool call tracing - ${error}`)
-    }
+  try {
+    setupToolCallTracing(lowLevelServer)
+  } catch (error) {
+    log(`Warning: Failed to setup tool call tracing - ${error}`)
   }
 }
 

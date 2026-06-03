@@ -62,22 +62,19 @@ describe('buildPostHogCaptureEvents', () => {
   it('keeps the canonical MCP analytics event contract stable', () => {
     const events = buildPostHogCaptureEvents(
       makeEvent({
+        identifyActorGivenId: 'user_abc123',
         duration: 250,
         parameters: { city: 'London' },
         response: { temp: 15 },
         userIntent: 'Check the weather in London',
         userIntentSource: 'context_parameter',
-      }),
-      { enableAITracing: true }
+      })
     )
 
     const toolCall = findEvent(events, PostHogMCPAnalyticsEvent.ToolCall)
-    const span = findEvent(events, PostHogMCPAnalyticsEvent.AiSpan)
 
     expect(toolCall?.properties).toEqual(
       expect.objectContaining({
-        [PostHogMCPAnalyticsProperty.AiSpanId]: 'evt_test123',
-        [PostHogMCPAnalyticsProperty.AiTraceId]: 'ses_session456',
         [PostHogMCPAnalyticsProperty.DurationMs]: 250,
         [PostHogMCPAnalyticsProperty.Intent]: 'Check the weather in London',
         [PostHogMCPAnalyticsProperty.IntentSource]: 'context_parameter',
@@ -90,23 +87,8 @@ describe('buildPostHogCaptureEvents', () => {
       })
     )
     expect(toolCall?.properties).not.toHaveProperty('$mcp_context')
-
-    expect(span?.properties).toEqual(
-      expect.objectContaining({
-        [PostHogMCPAnalyticsProperty.AiInputState]: { city: 'London' },
-        [PostHogMCPAnalyticsProperty.AiIsError]: false,
-        [PostHogMCPAnalyticsProperty.AiLatency]: 0.25,
-        [PostHogMCPAnalyticsProperty.AiOutputState]: { temp: 15 },
-        [PostHogMCPAnalyticsProperty.AiSessionId]: 'posthog_mcp_analytics_ses_session456',
-        [PostHogMCPAnalyticsProperty.AiSpanId]: 'evt_test123',
-        [PostHogMCPAnalyticsProperty.AiSpanName]: 'get_weather',
-        [PostHogMCPAnalyticsProperty.AiTraceId]: 'ses_session456',
-        [PostHogMCPAnalyticsProperty.Intent]: 'Check the weather in London',
-        [PostHogMCPAnalyticsProperty.IntentSource]: 'context_parameter',
-        [PostHogMCPAnalyticsProperty.SessionId]: 'ses_session456',
-        [PostHogMCPAnalyticsProperty.Source]: POSTHOG_MCP_ANALYTICS_SOURCE,
-      })
-    )
+    // With an identity resolved we do not opt out of person processing.
+    expect(toolCall?.properties).not.toHaveProperty('$process_person_profile')
   })
 
   it('uses identifyActorGivenId as distinct_id when available', () => {
@@ -391,174 +373,5 @@ describe('buildPostHogCaptureEvents', () => {
     )
 
     expect(event.properties.$mcp_intent_source).toBe('inferred')
-  })
-
-  it('emits $ai_span alongside regular event for tool calls when enableAITracing is true', () => {
-    const events = buildPostHogCaptureEvents(
-      makeEvent({
-        eventType: MCPAnalyticsEventType.mcpToolsCall,
-        resourceName: 'get_weather',
-        duration: 250,
-        parameters: { city: 'London' },
-        response: { temp: 15 },
-      }),
-      { enableAITracing: true }
-    )
-
-    expect(events).toHaveLength(2)
-
-    const regular = findEvent(events, '$mcp_tool_call')
-    expect(regular).toBeDefined()
-
-    const span = findEvent(events, '$ai_span')
-    expect(span).toBeDefined()
-    expect(span?.type).toBe('capture')
-    expect(span?.distinct_id).toBe('ses_session456')
-    expect(span?.timestamp).toBe('2025-01-15T10:00:00.000Z')
-
-    expect(span?.properties.$ai_session_id).toBe('posthog_mcp_analytics_ses_session456')
-    expect(span?.properties.$ai_trace_id).toBeDefined()
-    expect(span?.properties.$ai_span_id).toBeDefined()
-    expect(span?.properties.$ai_trace_id).not.toBe(span?.properties.$ai_span_id)
-    expect(span?.properties.$ai_span_name).toBe('get_weather')
-    expect(span?.properties.$ai_latency).toBeCloseTo(0.25)
-    expect(span?.properties.$ai_is_error).toBe(false)
-    expect(span?.properties.$ai_input_state).toEqual({ city: 'London' })
-    expect(span?.properties.$ai_output_state).toEqual({ temp: 15 })
-    expect(span?.properties.$session_id).toBe('ses_session456')
-    expect(span?.properties.$mcp_source).toBe('posthog_mcp_analytics')
-    expect(span?.properties.$mcp_server_name).toBe('weather-server')
-    expect(span?.properties.$mcp_client_name).toBe('claude-desktop')
-
-    expect(regular?.properties.$ai_trace_id).toBe(span?.properties.$ai_trace_id)
-    expect(regular?.properties.$ai_span_id).toBe(span?.properties.$ai_span_id)
-  })
-
-  it('uses SDK event and session IDs directly for AI trace and span IDs', () => {
-    const sesId = 'ses_trace123'
-    const evtA = 'evt_a123'
-    const evtB = 'evt_b123'
-
-    const spanA = findEvent(
-      buildPostHogCaptureEvents(makeEvent({ id: evtA, sessionId: sesId }), {
-        enableAITracing: true,
-      }),
-      '$ai_span'
-    )
-    const spanB = findEvent(
-      buildPostHogCaptureEvents(makeEvent({ id: evtB, sessionId: sesId }), {
-        enableAITracing: true,
-      }),
-      '$ai_span'
-    )
-    const spanC = findEvent(
-      buildPostHogCaptureEvents(makeEvent({ id: evtA, sessionId: sesId }), {
-        enableAITracing: true,
-      }),
-      '$ai_span'
-    )
-
-    expect(spanA?.properties.$ai_session_id).toBe(`posthog_mcp_analytics_${sesId}`)
-    expect(spanA?.properties.$ai_session_id).toBe(spanB?.properties.$ai_session_id)
-    expect(spanA?.properties.$ai_trace_id).toBe(spanB?.properties.$ai_trace_id)
-    expect(spanA?.properties.$ai_span_id).not.toBe(spanB?.properties.$ai_span_id)
-    expect(spanA?.properties.$ai_span_id).toBe(spanC?.properties.$ai_span_id)
-    expect(spanA?.properties.$ai_trace_id).not.toBe(spanA?.properties.$ai_span_id)
-    expect(spanA?.properties.$ai_trace_id).toBe(sesId)
-    expect(spanA?.properties.$ai_span_id).toBe(evtA)
-  })
-
-  it('does not emit $ai_span when enableAITracing is false or unset', () => {
-    const defaultEvents = buildPostHogCaptureEvents(makeEvent({ eventType: MCPAnalyticsEventType.mcpToolsCall }))
-    expect(defaultEvents).toHaveLength(1)
-    expect(defaultEvents[0].event).toBe('$mcp_tool_call')
-
-    const disabledEvents = buildPostHogCaptureEvents(makeEvent({ eventType: MCPAnalyticsEventType.mcpToolsCall }), {
-      enableAITracing: false,
-    })
-    expect(disabledEvents).toHaveLength(1)
-    expect(disabledEvents[0].event).toBe('$mcp_tool_call')
-  })
-
-  it('does not emit $ai_span for non-tool-call events even with enableAITracing', () => {
-    const nonToolCallTypes = [
-      MCPAnalyticsEventType.mcpInitialize,
-      MCPAnalyticsEventType.mcpToolsList,
-      MCPAnalyticsEventType.mcpResourcesRead,
-      MCPAnalyticsEventType.mcpResourcesList,
-      MCPAnalyticsEventType.mcpPromptsGet,
-      MCPAnalyticsEventType.mcpPromptsList,
-    ]
-
-    for (const eventType of nonToolCallTypes) {
-      const events = buildPostHogCaptureEvents(makeEvent({ eventType }), {
-        enableAITracing: true,
-      })
-
-      expect(findEvent(events, '$ai_span')).toBeUndefined()
-    }
-  })
-
-  it('spreads customer properties directly on $ai_span', () => {
-    const events = buildPostHogCaptureEvents(
-      makeEvent({
-        eventType: MCPAnalyticsEventType.mcpToolsCall,
-        properties: {
-          env: 'production',
-          region: 'us-east',
-          feature_flag: 'new_ui',
-          count: 42,
-        },
-      }),
-      { enableAITracing: true }
-    )
-
-    const span = findEvent(events, '$ai_span')
-    expect(span?.properties.env).toBe('production')
-    expect(span?.properties.region).toBe('us-east')
-    expect(span?.properties.feature_flag).toBe('new_ui')
-    expect(span?.properties.count).toBe(42)
-
-    const regular = findEvent(events, '$mcp_tool_call')
-    expect(regular?.properties.env).toBe('production')
-    expect(regular?.properties.feature_flag).toBe('new_ui')
-    expect(regular?.properties.count).toBe(42)
-  })
-
-  it('allows customer properties to override $ai_* defaults on $ai_span', () => {
-    const customTraceId = 'custom-trace-uuid-from-customer'
-    const events = buildPostHogCaptureEvents(
-      makeEvent({
-        eventType: MCPAnalyticsEventType.mcpToolsCall,
-        properties: { $ai_trace_id: customTraceId, $ai_span_name: 'custom_name' },
-      }),
-      { enableAITracing: true }
-    )
-
-    const span = findEvent(events, '$ai_span')
-    expect(span?.properties.$ai_trace_id).toBe(customTraceId)
-    expect(span?.properties.$ai_span_name).toBe('custom_name')
-  })
-
-  it('emits regular + $exception + $ai_span for error tool calls with enableAITracing', () => {
-    const events = buildPostHogCaptureEvents(
-      makeEvent({
-        eventType: MCPAnalyticsEventType.mcpToolsCall,
-        isError: true,
-        error: makeError('Tool execution failed', 'ExecutionError'),
-      }),
-      { enableAITracing: true }
-    )
-
-    expect(events).toHaveLength(3)
-    expect(events[0].event).toBe('$mcp_tool_call')
-    expect(events[1].event).toBe('$exception')
-    expect(events[2].event).toBe('$ai_span')
-    expect(events[2].properties.$ai_is_error).toBe(true)
-    expect(events[2].properties.$ai_error).toEqual(
-      expect.objectContaining({
-        $exception_list: [expect.objectContaining({ type: 'ExecutionError', value: 'Tool execution failed' })],
-      })
-    )
   })
 })

@@ -51,11 +51,9 @@ describe('Session ID Management', () => {
     it('should use MCP sessionId when provided in extra parameter', async () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
-
-      const apiKey = 'test-project-mcp'
       const mcpSessionId = 'mcp-session-abc-123'
 
-      instrument(server, { apiKey, enableTracing: true })
+      instrument(server, { posthog: fakePostHog() })
 
       // Get the low-level server
       const lowLevelServer = server.server
@@ -82,7 +80,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      instrument(server, { posthog: fakePostHog(), enableTracing: true })
+      instrument(server, { posthog: fakePostHog() })
 
       const lowLevelServer = server.server
 
@@ -105,11 +103,9 @@ describe('Session ID Management', () => {
     it('should switch to MCP-derived sessionId when MCP sessionId appears', async () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
-
-      const apiKey = 'test-project-switch'
       const mcpSessionId = 'mcp-session-appears'
 
-      instrument(server, { apiKey, enableTracing: true })
+      instrument(server, { posthog: fakePostHog() })
 
       const lowLevelServer = server.server
 
@@ -140,11 +136,9 @@ describe('Session ID Management', () => {
     it('should keep last derived sessionId when MCP sessionId disappears', async () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
-
-      const apiKey = 'test-project-disappear'
       const mcpSessionId = 'mcp-session-disappears'
 
-      instrument(server, { apiKey, enableTracing: true })
+      instrument(server, { posthog: fakePostHog() })
 
       const lowLevelServer = server.server
 
@@ -172,12 +166,10 @@ describe('Session ID Management', () => {
     it('should regenerate sessionId when MCP sessionId changes', async () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
-
-      const apiKey = 'test-project-change'
       const mcpSessionId1 = 'mcp-session-first'
       const mcpSessionId2 = 'mcp-session-second'
 
-      instrument(server, { apiKey, enableTracing: true })
+      instrument(server, { posthog: fakePostHog() })
 
       const lowLevelServer = server.server
 
@@ -209,11 +201,9 @@ describe('Session ID Management', () => {
     it('should NOT apply timeout to MCP-derived sessions', async () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
-
-      const apiKey = 'test-project-timeout'
       const mcpSessionId = 'mcp-session-persistent'
 
-      instrument(server, { apiKey, enableTracing: true })
+      instrument(server, { posthog: fakePostHog() })
 
       const lowLevelServer = server.server
 
@@ -240,7 +230,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      instrument(server, { posthog: fakePostHog(), enableTracing: true })
+      instrument(server, { posthog: fakePostHog() })
 
       const lowLevelServer = server.server
 
@@ -268,12 +258,10 @@ describe('Session ID Management', () => {
     it('should publish events with MCP-derived session IDs', async () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
-
-      const apiKey = 'test-project-events'
       const mcpSessionId = 'mcp-session-for-events'
       expect(deriveSessionIdFromMCPSession(mcpSessionId)).toMatch(SESSION_ID_PATTERN)
 
-      instrument(server, { apiKey, enableTracing: true })
+      instrument(server, { posthog: fakePostHog() })
 
       // TODO: This test would require mocking the transport to inject sessionId into extra
       // For now, we'll verify the logic with direct function calls above

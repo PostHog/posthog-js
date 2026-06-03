@@ -31,7 +31,6 @@ export interface PostHogCaptureEvent {
 }
 
 export interface BuildPostHogCaptureEventsOptions {
-  enableAITracing?: boolean
   /** Whether to emit a `$exception` sibling alongside errored events. Defaults to `true`. */
   enableExceptionAutocapture?: boolean
 }
@@ -40,20 +39,16 @@ export function buildPostHogCaptureEvents(
   event: Event,
   options: BuildPostHogCaptureEventsOptions = {}
 ): PostHogCaptureEvent[] {
-  const batch = [buildCaptureEvent(event, options)]
+  const batch = [buildCaptureEvent(event)]
 
   if (event.isError && event.error && options.enableExceptionAutocapture !== false) {
     batch.push(buildExceptionEvent(event))
   }
 
-  if (shouldBuildAISpan(event, options)) {
-    batch.push(buildAISpanEvent(event))
-  }
-
   return batch
 }
 
-function buildCaptureEvent(event: Event, options: BuildPostHogCaptureEventsOptions): PostHogCaptureEvent {
+function buildCaptureEvent(event: Event): PostHogCaptureEvent {
   const distinctId = getDistinctId(event)
   const timestamp = getTimestamp(event)
 
@@ -65,7 +60,6 @@ function buildCaptureEvent(event: Event, options: BuildPostHogCaptureEventsOptio
   addPersonProcessingProperty(event, properties)
 
   addCommonEventProperties(event, properties)
-  addTraceReferenceProperties(event, properties, options)
   addCustomEventProperties(event, properties)
 
   return {
@@ -75,31 +69,6 @@ function buildCaptureEvent(event: Event, options: BuildPostHogCaptureEventsOptio
     timestamp,
     type: 'capture',
   }
-}
-
-function shouldBuildAISpan(event: Event, options: BuildPostHogCaptureEventsOptions): boolean {
-  return options.enableAITracing === true && event.eventType === MCPAnalyticsEventType.mcpToolsCall
-}
-
-function getAITraceId(event: Event): string {
-  return event.sessionId
-}
-
-function getAISpanId(event: Event): string {
-  return event.id
-}
-
-function addTraceReferenceProperties(
-  event: Event,
-  properties: Record<string, unknown>,
-  options: BuildPostHogCaptureEventsOptions
-): void {
-  if (!shouldBuildAISpan(event, options)) {
-    return
-  }
-
-  properties[PostHogMCPAnalyticsProperty.AiTraceId] = getAITraceId(event)
-  properties[PostHogMCPAnalyticsProperty.AiSpanId] = getAISpanId(event)
 }
 
 function addConversationIdProperty(event: Event, properties: Record<string, unknown>): void {
@@ -232,61 +201,6 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
 
   return {
     event: PostHogMCPAnalyticsEvent.Exception,
-    distinct_id: distinctId,
-    properties,
-    timestamp,
-    type: 'capture',
-  }
-}
-
-function buildAISpanEvent(event: Event): PostHogCaptureEvent {
-  const distinctId = getDistinctId(event)
-  const timestamp = getTimestamp(event)
-
-  const properties: Record<string, unknown> = {
-    [PostHogMCPAnalyticsProperty.AiSessionId]: `posthog_mcp_analytics_${event.sessionId}`,
-    [PostHogMCPAnalyticsProperty.AiTraceId]: getAITraceId(event),
-    [PostHogMCPAnalyticsProperty.AiSpanId]: getAISpanId(event),
-    [PostHogMCPAnalyticsProperty.AiSpanName]: event.resourceName || 'unknown_tool',
-    [PostHogMCPAnalyticsProperty.AiIsError]: event.isError,
-    [PostHogMCPAnalyticsProperty.SessionId]: event.sessionId,
-    [PostHogMCPAnalyticsProperty.Source]: POSTHOG_MCP_ANALYTICS_SOURCE,
-  }
-  addConversationIdProperty(event, properties)
-
-  if (event.duration !== undefined) {
-    properties[PostHogMCPAnalyticsProperty.AiLatency] = event.duration / 1000
-  }
-  if (event.isError && event.error) {
-    properties.$ai_error = event.error
-  }
-  if (event.parameters !== undefined) {
-    properties[PostHogMCPAnalyticsProperty.AiInputState] = event.parameters
-  }
-  if (event.response !== undefined) {
-    properties[PostHogMCPAnalyticsProperty.AiOutputState] = event.response
-  }
-  if (event.serverName) {
-    properties[PostHogMCPAnalyticsProperty.ServerName] = event.serverName
-  }
-  if (event.clientName) {
-    properties[PostHogMCPAnalyticsProperty.ClientName] = event.clientName
-  }
-  if (event.userIntent) {
-    properties[PostHogMCPAnalyticsProperty.Intent] = event.userIntent
-  }
-  if (event.userIntentSource) {
-    properties[PostHogMCPAnalyticsProperty.IntentSource] = event.userIntentSource
-  }
-
-  if (event.properties) {
-    for (const [key, value] of Object.entries(event.properties)) {
-      properties[key] = value
-    }
-  }
-
-  return {
-    event: PostHogMCPAnalyticsEvent.AiSpan,
     distinct_id: distinctId,
     properties,
     timestamp,

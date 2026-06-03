@@ -17,7 +17,6 @@ describe('E2E Sanitization - real MCP tool calls', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: false,
-        enableTracing: true,
         // Off: the prompt-back appended on first mint would add an extra
         // content block and break this test's response-shape assertions.
         enableConversationId: false,
@@ -87,7 +86,6 @@ describe('E2E Sanitization - real MCP tool calls', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: false,
-        enableTracing: true,
       })
 
       server.tool('get_audio_clip', 'Returns an audio clip', { clipId: z.string() }, async () => ({
@@ -139,7 +137,6 @@ describe('E2E Sanitization - real MCP tool calls', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: false,
-        enableTracing: true,
       })
 
       server.tool(
@@ -200,7 +197,6 @@ describe('E2E Sanitization - real MCP tool calls', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: false,
-        enableTracing: true,
       })
 
       // Register a tool with image response alongside existing todo tools

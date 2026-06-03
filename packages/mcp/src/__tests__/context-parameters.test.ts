@@ -310,7 +310,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
       return { content: [{ type: 'text', text: 'ok' }] }
     })
 
-    instrument(server, { posthog: fakePostHog(), enableTracing: true })
+    instrument(server, { posthog: fakePostHog() })
 
     await client.request(
       {

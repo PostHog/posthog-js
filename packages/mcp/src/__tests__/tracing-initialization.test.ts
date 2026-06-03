@@ -22,17 +22,14 @@ describe('Tracing Initialization Tests', () => {
     try {
       await instrument(server, {
         posthog: fakePostHog(),
-        enableTracing: true,
       })
 
       await instrument(server, {
         posthog: fakePostHog(),
-        enableTracing: true,
       })
 
       await instrument(server, {
         posthog: fakePostHog(),
-        enableTracing: true,
       })
 
       await client.request(
@@ -89,7 +86,6 @@ describe('Tracing Initialization Tests', () => {
     try {
       await instrument(server, {
         posthog: fakePostHog(),
-        enableTracing: true,
       })
 
       const result = await client.request(

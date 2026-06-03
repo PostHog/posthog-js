@@ -17,7 +17,6 @@ describe('E2E Truncation - real MCP tool calls', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: false,
-        enableTracing: true,
       })
 
       // Register a tool that returns a very large text response
@@ -72,7 +71,6 @@ describe('E2E Truncation - real MCP tool calls', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: false,
-        enableTracing: true,
       })
 
       // Register a tool that accepts very large parameters
@@ -131,7 +129,6 @@ describe('E2E Truncation - real MCP tool calls', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: false,
-        enableTracing: true,
       })
 
       server.tool('get_verbose_log', 'Returns a huge log dump', {}, async () => ({
@@ -193,7 +190,6 @@ describe('E2E Truncation - real MCP tool calls', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: false,
-        enableTracing: true,
       })
 
       // Tool that returns both an image block AND a huge text block

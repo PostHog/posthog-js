@@ -131,7 +131,6 @@ describe('Basic Server Test', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: true,
-        enableTracing: true,
       })
 
       // Add a new tool after instrument() has been called using server.tool()
@@ -206,7 +205,6 @@ describe('Basic Server Test', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: true,
-        enableTracing: true,
       })
 
       // Add a tool using shorthand Zod schema syntax (without description string)
@@ -276,7 +274,6 @@ describe('Basic Server Test', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: true,
-        enableTracing: true,
       })
 
       // Make multiple tool calls to generate events with unique IDs
@@ -440,7 +437,6 @@ describe('Basic Server Test', () => {
       await instrument(server, {
         posthog: fakePostHog(),
         context: true,
-        enableTracing: true,
       })
 
       // List tools to verify they have context parameter injected
@@ -525,7 +521,6 @@ describe('Basic Server Test', () => {
       const { instrument } = await import('../index')
       await instrument(server, {
         posthog: fakePostHog(),
-        enableTracing: true,
       })
 
       await client.request(
@@ -562,7 +557,6 @@ describe('Basic Server Test', () => {
       const { instrument } = await import('../index')
       await instrument(server, {
         posthog: fakePostHog(),
-        enableTracing: true,
       })
 
       await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)

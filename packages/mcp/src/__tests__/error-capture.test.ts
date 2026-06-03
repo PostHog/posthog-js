@@ -35,7 +35,7 @@ afterEach(async () => {
 
 describe('error capture on the tool-call path', () => {
   it('captures errors thrown inside the tool callback (with stack + frames)', async () => {
-    instrument(server, { posthog: fakePostHog(), enableTracing: true })
+    instrument(server, { posthog: fakePostHog() })
 
     const result = await client.request(
       {

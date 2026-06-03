@@ -6,24 +6,14 @@ import { getSessionInfo } from './session'
 
 /**
  * Materializes an `UnredactedEvent` against the server's tracking data + session info,
- * then hands it to the `McpEventSink` (wrapping the user's posthog-node client) for the redact/sanitize/truncate
- * pipeline and capture. No-ops if the server isn't tracked, no client is attached, or
- * `enableTracing` is false for an auto-captured event.
- *
- * `enableTracing: false` is the master switch for **auto-captured** events (tool calls,
- * tool listings, initialize, identify). User-initiated `publishCustomEvent()` calls land
- * here with `eventType: custom` and bypass that gate — disabling auto-capture should not
- * silently swallow events the host application explicitly chose to emit.
+ * then hands it to the `McpEventSink` (wrapping the user's posthog-node client) for the
+ * redact/sanitize/truncate pipeline and capture. No-ops if the server isn't tracked or no
+ * PostHog client is attached — not passing `posthog` is how you turn capture off.
  */
 export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent): void {
   const data = getServerTrackingData(server)
   if (!data) {
     log('Warning: Server tracking data not found. Event will not be published.')
-    return
-  }
-
-  const isCustomEvent = eventInput.eventType === MCPAnalyticsEventType.custom
-  if (!isCustomEvent && !data.options.enableTracing) {
     return
   }
 
@@ -68,7 +58,6 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
   }
 
   void sink.capture(fullEvent, {
-    enableAITracing: data.options.enableAITracing ?? false,
     enableExceptionAutocapture: data.options.enableExceptionAutocapture ?? true,
   })
 }
