@@ -1,5 +1,12 @@
 # rrweb
 
+## 0.0.69
+
+### Patch Changes
+
+- [#3726](https://github.com/PostHog/posthog-js/pull/3726) [`74345e3`](https://github.com/PostHog/posthog-js/commit/74345e355ac8d16e121ff93039dbb59240c9f5bb) Thanks [@arnohillen](https://github.com/arnohillen)! - canvas recording: reference-count CanvasManager teardown so it survives secondary-root cleanup. A single CanvasManager is shared by the main document and every iframe / shadow-root observer; previously tearing down any one of those (e.g. an iframe unloading, or a framework unmounting a subtree rrweb was observing) unpatched `HTMLCanvasElement.prototype.getContext` and cancelled the FPS loop for the whole page, silently stopping canvas recording while the session stayed active. The manager now only tears down once the last consumer releases.
+  (2026-06-03)
+
 ## 0.0.68
 
 ### Patch Changes
