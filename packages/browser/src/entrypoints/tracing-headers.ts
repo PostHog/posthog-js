@@ -3,6 +3,7 @@ import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import { isArray, isFunction, isNull, isUndefined } from '@posthog/core'
+import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
 
 const SESSION_ID_HEADER = 'X-POSTHOG-SESSION-ID'
 const WINDOW_ID_HEADER = 'X-POSTHOG-WINDOW-ID'
@@ -120,12 +121,12 @@ const createFetchInitWithHeaders = (init: RequestInit | undefined, headers: Head
     }) as RequestInit
 }
 
-type TracingHeadersHostnames = string[] | boolean | undefined
-type FetchArgs = [URL | RequestInfo] | [URL | RequestInfo, RequestInit | undefined]
+const getDistinctId = (distinctId: TracingHeadersDistinctId): string | undefined =>
+    isFunction(distinctId) ? distinctId() : distinctId
 
 const appendTracingHeaders = (
     hostnames: TracingHeadersHostnames,
-    distinctId: string,
+    distinctId: TracingHeadersDistinctId,
     sessionManager: SessionIdManager | undefined,
     url: string,
     headers: Headers
@@ -155,16 +156,19 @@ const appendTracingHeaders = (
         headers.set(WINDOW_ID_HEADER, windowId)
         hasAddedHeaders = true
     }
-    if (distinctId !== COOKIELESS_SENTINEL_VALUE) {
-        headers.set(DISTINCT_ID_HEADER, distinctId)
+    const currentDistinctId = getDistinctId(distinctId)
+    if (currentDistinctId && currentDistinctId !== COOKIELESS_SENTINEL_VALUE) {
+        headers.set(DISTINCT_ID_HEADER, currentDistinctId)
         hasAddedHeaders = true
     }
     return hasAddedHeaders
 }
 
+type FetchArgs = [URL | RequestInfo] | [URL | RequestInfo, RequestInit | undefined]
+
 const patchFetch = (
     hostnames: TracingHeadersHostnames,
-    distinctId: string,
+    distinctId: TracingHeadersDistinctId,
     sessionManager?: SessionIdManager
 ): (() => void) => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -206,7 +210,7 @@ const patchFetch = (
 
 const patchXHR = (
     hostnames: TracingHeadersHostnames,
-    distinctId: string,
+    distinctId: TracingHeadersDistinctId,
     sessionManager?: SessionIdManager
 ): (() => void) => {
     return patch(

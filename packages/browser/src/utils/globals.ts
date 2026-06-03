@@ -22,6 +22,7 @@ import type {
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
+import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
 import { eventWithTime } from '../extensions/replay/types/rrweb-types'
 import { ErrorTracking } from '@posthog/core'
 
@@ -224,8 +225,6 @@ export interface LazyLoadedConversationsInterface {
     getWidgetSessionId: () => string
 }
 
-type TracingHeadersHostnames = string[] | boolean | undefined
-
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -262,12 +261,12 @@ interface PostHogExtensions {
     tracingHeadersPatchFns?: {
         _patchFetch: (
             hostnames: TracingHeadersHostnames,
-            distinctId: string,
+            distinctId: TracingHeadersDistinctId,
             sessionManager?: SessionIdManager
         ) => () => void
         _patchXHR: (
             hostnames: TracingHeadersHostnames,
-            distinctId: string,
+            distinctId: TracingHeadersDistinctId,
             sessionManager?: SessionIdManager
         ) => () => void
     }

@@ -206,6 +206,26 @@ describe('tracing headers', () => {
             expect(sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
+        it('uses the latest distinct ID from a provider without re-patching', async () => {
+            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            setWindowFetch(originalFetch)
+            let distinctId = 'first-distinct-id'
+            restoreFetchPatch = patchFns._patchFetch(['example.com'], () => distinctId, sessionManager as any)
+
+            await window.fetch('https://example.com/path')
+            expect(new Headers(originalFetch.mock.calls[0][1]?.headers).get('X-POSTHOG-DISTINCT-ID')).toBe(
+                'first-distinct-id'
+            )
+
+            originalFetch.mockClear()
+            distinctId = 'second-distinct-id'
+
+            await window.fetch('https://example.com/path')
+            expect(new Headers(originalFetch.mock.calls[0][1]?.headers).get('X-POSTHOG-DISTINCT-ID')).toBe(
+                'second-distinct-id'
+            )
+        })
+
         it('passes the cloned Request downstream when a Request input hostname does not match', async () => {
             let downstreamRequest: Request | undefined
             const originalFetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

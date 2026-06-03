@@ -2,11 +2,10 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isArray, isUndefined } from '@posthog/core'
+import type { TracingHeadersHostnames } from './tracing-headers-types'
 import type { Extension } from './types'
 
 const logger = createLogger('[TracingHeaders]')
-
-type TracingHeadersHostnames = string[] | boolean | undefined
 
 export class TracingHeaders implements Extension {
     private _restoreXHRPatch: (() => void) | undefined = undefined
@@ -88,14 +87,14 @@ export class TracingHeaders implements Extension {
         if (isUndefined(this._restoreXHRPatch)) {
             this._restoreXHRPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
                 hostnames,
-                this._instance.get_distinct_id(),
+                () => this._instance.get_distinct_id(),
                 this._instance.sessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
             this._restoreFetchPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
                 hostnames,
-                this._instance.get_distinct_id(),
+                () => this._instance.get_distinct_id(),
                 this._instance.sessionManager
             )
         }
