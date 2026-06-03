@@ -1,5 +1,6 @@
-// Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
-// Licensed under the MIT License
+// Portions of this file are derived from getsentry/sentry-javascript
+// Copyright (c) 2012 Functional Software, Inc. dba Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
 
 // This regex matches frames that have no function name (ie. are at the top level of a module).
 // For example "at http://localhost:5000//script.js:1:126"

@@ -1,5 +1,7 @@
 #!/bin/bash
-# adapted from https://github.com/getsentry/sentry-react-native/blob/e76d0d388228437e82f235546de00f4e748fcbda/packages/core/scripts/sentry-xcode.sh
+# Portions of this file are derived from getsentry/sentry-react-native
+# Copyright (c) 2017 Sentry
+# Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 # Bundle React Native code and images
 # PWD=ios
 
