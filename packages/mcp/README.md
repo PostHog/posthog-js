@@ -2,7 +2,7 @@
 
 PostHog SDK for instrumenting [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers.
 
-One call wraps your MCP server and PostHog starts receiving structured events for every tool call, tool listing, initialize handshake, identify, and exception, with all the usual PostHog primitives (`$session_id`, `distinct_id`, `$set`, `$exception`, `$ai_span`) wired up automatically.
+One call wraps your MCP server and PostHog starts receiving structured events for every tool call, tool listing, initialize handshake, identify, and exception, with all the usual PostHog primitives (`$session_id`, `distinct_id`, `$set`, `$groups`, `$exception`) wired up automatically.
 
 ## Install
 
@@ -55,8 +55,11 @@ What you get in PostHog out of the box:
 | `$mcp_initialize` | client/server handshake | `$mcp_client_name`, `$mcp_client_version`, `$mcp_server_name` |
 | `$exception` | a tool throws or returns `isError` | `$exception_list`, `$exception_level` (standard PostHog error-tracking shape) |
 | `$identify` | first time `identify()` returns a non-null identity | `$set` populated from `UserIdentity.userData` |
+| `$mcp_missing_capability` | agent calls `get_more_tools` (when `reportMissing` is on) | `$mcp_intent` — what the agent was looking for |
 
-The full event + property catalog (including `$ai_span` for LLM analytics and `$mcp_resources_*` / `$mcp_prompts_*`) lives in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+Events for sessions with no resolved identity are sent with `$process_person_profile: false`, so anonymous MCP traffic doesn't mint a person profile per session.
+
+The full event + property catalog (including `$mcp_resources_*` / `$mcp_prompts_*`) lives in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
 ## Common patterns
 
@@ -80,13 +83,16 @@ instrument(server, {
     }
 
     return {
-      userId: sub,
-      userName: email,
-      userData: { plan }, // becomes a `$set` on subsequent events
+      userId: sub, // → distinct_id for the session
+      userName: email, // → `$set.name` on the person
+      userData: { plan }, // spread into `$set` (so `plan` becomes a person property)
+      groups: { organization: 'org_123' }, // optional → `$groups` on every event
     }
   },
 })
 ```
+
+`userId` becomes the `distinct_id`, `userName` is written to `$set.name`, and every key in `userData` is spread into `$set` — so to set an `email` person property, return it in `userData` (e.g. `userData: { email }`). `groups` is stamped onto every event as `$groups`, so you never hand-write the dollar-keyed properties yourself.
 
 ### Capture user intent
 
@@ -111,25 +117,37 @@ instrument(server, {
 For domain-specific events that aren't auto-captured (e.g. user feedback, workflow milestones):
 
 ```ts
-import { publishCustomEvent } from '@posthog/mcp'
+import { capture } from '@posthog/mcp'
 
-await publishCustomEvent(server, {
+// Defaults to `$mcp_custom`...
+await capture(server, {
   resourceName: 'user-feedback',
   parameters: { rating: 5, comment: 'love it' },
   message: 'User submitted feedback',
 })
+
+// ...or pass any event name (sent verbatim, not `$`-prefixed):
+await capture(server, { event: 'feedback_submitted', properties: { rating: 5 } })
 ```
 
-Emits `$mcp_custom` with `$session_id`, `distinct_id`, server/client metadata, and your payload. Bypasses the `enableTracing` gate (custom events are explicit, not auto-captured).
+The event is enriched with `$session_id`, `distinct_id`, and server/client metadata before being sent. `capture()` resolves once the event has been processed, so you can `await` it.
 
-### Redact sensitive strings before send
+### Inspect, modify, or drop events before send (`beforeSend`)
 
-`redactSensitiveInformation` runs against every string in the event payload before sanitization. Protected fields (`sessionId`, `id`, `resourceName`, `eventType`, …) are skipped automatically.
+`beforeSend` runs on each fully-built payload right before it reaches `posthog.capture()` (same contract as posthog-node). Return the event to send it, mutate its `properties`, or return `null` to drop it. It runs once per emitted event, including the `$exception` sibling of a failed call.
 
 ```ts
 instrument(server, {
   posthog,
-  redactSensitiveInformation: async (text) => text.replace(/api_key_\w+/g, '[REDACTED]'),
+  beforeSend: (event) => {
+    // Redact a property
+    if (typeof event.properties.$mcp_parameters === 'string') {
+      event.properties.$mcp_parameters = event.properties.$mcp_parameters.replace(/api_key_\w+/g, '[REDACTED]')
+    }
+    // Drop a whole class of events
+    if (event.event === '$exception') return null
+    return event
+  },
 })
 ```
 
@@ -150,7 +168,7 @@ Returned keys are spread flat onto event properties, sitting alongside `$mcp_*` 
 
 ### Get more tools (`reportMissing`)
 
-Register an extra `get_more_tools` virtual tool that lets the agent report functionality it couldn't find. Each report lands as a `$mcp_tool_call` with the agent's reasoning in `$mcp_intent`.
+Register an extra `get_more_tools` virtual tool that lets the agent report functionality it couldn't find. Each report lands as its own `$mcp_missing_capability` event (a capability gap, not a tool invocation) with the agent's reasoning in `$mcp_intent`.
 
 ```ts
 instrument(server, {
@@ -170,27 +188,38 @@ instrument(server, {
 })
 ```
 
-### Surface MCP activity in PostHog LLM analytics
+### Turn off exception autocapture
+
+A failed tool call emits an `$exception` sibling alongside the `$mcp_tool_call` by default. Set `enableExceptionAutocapture: false` if you track errors elsewhere and don't want MCP failures fanning into PostHog error tracking:
 
 ```ts
 instrument(server, {
   posthog,
-  enableAITracing: true,
+  enableExceptionAutocapture: false,
 })
 ```
-
-Emits a parallel `$ai_span` event per tool call with `$ai_input_state`, `$ai_output_state`, `$ai_latency` so MCP traffic shows up in the LLM analytics UI.
 
 ## API
 
 - **`instrument(server, options)`**: wraps a low-level `Server` or high-level `McpServer`. Idempotent per server instance (subsequent calls on the same server are skipped via a `WeakMap` lookup). Returns the same server, typed. Pass your `posthog-node` client via `options.posthog`.
-- **`publishCustomEvent(server, eventData)`**: emits one `$mcp_custom` event. The server must have been passed to `instrument()` first.
+- **`capture(server, eventData)`**: emits one event (default `$mcp_custom`, or any name via `{ event }`). The server must have been passed to `instrument()` first. Returns a promise you can `await`.
 
 The full options reference lives in [`src/types.ts`](./src/types.ts) (`MCPAnalyticsOptions`) and the design narrative + HogQL recipes live in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
 ## Graceful shutdown
 
 The SDK doesn't own the client, so flushing is just `posthog.shutdown()` on your `posthog-node` instance — see the Quick start above. Nothing MCP-specific to tear down.
+
+### Serverless / short-lived processes
+
+In a serverless function (Lambda, Cloudflare Workers, Vercel) the process can freeze or exit before `posthog-node` flushes its queue. Flush explicitly at the end of the invocation rather than relying on a `SIGTERM` handler:
+
+```ts
+// at the end of the request/invocation
+await posthog.flush()
+// or keep the runtime alive until the flush completes
+ctx.waitUntil(posthog.flush())
+```
 
 ## Logging in STDIO MCP servers
 

@@ -4,11 +4,11 @@ This document describes the internals of the `@posthog/mcp` SDK and the exact Po
 
 ## TL;DR
 
-- `instrument(server, options)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via `@posthog/core`.
+- `instrument(server, options)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via the host's `posthog-node` client (`posthog.capture()`).
 - Every PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_custom`, `$mcp_initialize`, …) per the PostHog naming convention for SDK-owned events.
 - Every PostHog **property key** is also `$`-prefixed (`$mcp_tool_name`, `$mcp_intent`, `$mcp_duration_ms`, …) so MCP keys never collide with PostHog autocapture, web analytics, or other product events.
 - `$session_id` ties one MCP connection to one PostHog session. `distinct_id` falls back through `identified user → session id → "anonymous"`.
-- Tool calls can additionally emit `$ai_span` for the PostHog LLM analytics UI and `$exception` whenever a tool errors.
+- Tool calls additionally emit a sibling `$exception` event whenever a tool errors (unless `enableExceptionAutocapture: false`).
 
 ---
 
@@ -17,7 +17,7 @@ This document describes the internals of the `@posthog/mcp` SDK and the exact Po
 The public surface in `src/index.ts`:
 
 - `instrument(server, options)` — installs the SDK on an MCP server. Idempotent per server (re-calling logs and returns early).
-- `publishCustomEvent(server, eventData)` — emit an arbitrary `$mcp_custom` event onto the same pipeline. The server must already have been passed to `instrument()`.
+- `capture(server, eventData)` — emit an event onto the same pipeline. Defaults to `$mcp_custom`, but any event name can be supplied via `eventData.event` (custom names are sent verbatim, **not** `$`-prefixed). Returns a promise that resolves once the event has been processed, so callers can `await` it. The server must already have been passed to `instrument()`.
 
 The host application supplies its own `posthog-node` client via `options.posthog` (same pattern as `@posthog/ai`) and owns its lifecycle — there is no SDK-managed client to flush or shut down. Internally, `instrument()` wraps that client in an `McpEventSink` (`src/extensions/sink.ts`, not exported) that runs the pipeline and calls `posthog.capture()`.
 
@@ -29,25 +29,25 @@ The host application supplies its own `posthog-node` client via `options.posthog
 4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `instrument()` is also wrapped.
 5. Optionally register the `get_more_tools` virtual tool when `options.reportMissing: true`.
 
-Two implementations exist for the two MCP server shapes:
+Two thin adapters exist for the two MCP server shapes, each wrapping the shared `traceToolCall()` lifecycle in `src/extensions/tracing-core.ts`:
 
 | Server type                              | File                       | Entry                       |
 | ---------------------------------------- | -------------------------- | --------------------------- |
 | Low-level `Server` (raw protocol SDK)    | `src/extensions/tracing.ts`   | `setupToolCallTracing()`    |
 | High-level `McpServer` (typed wrapper)   | `src/extensions/tracing-v2.ts`| `setupTracking()`           |
 
-Both converge on the same internal `UnredactedEvent` shape (`src/types.ts`) and the same publish pipeline.
+Both converge on the same internal `UnredactedEvent` shape (`src/types.ts`) and funnel through `traceToolCall` in `src/extensions/tracing-core.ts`, which owns the shared tool-call lifecycle and the same publish pipeline.
 
 ## 2. Request lifecycle (tool call, high-level path)
 
 ```
-client → MCP server → tools/call wrapper (tracing-v2.ts)
-  ├─ initializeToolCallEvent      ← build UnredactedEvent, resolve session
+client → MCP server → tools/call wrapper (tracing-v2.ts) → traceToolCall (tracing-core.ts)
+  ├─ prepareToolCallEvent         ← build UnredactedEvent, resolve session
   ├─ handleIdentify               ← fires $identify only if identity changed
   ├─ applyResolvedMetadata        ← runs eventProperties callback
   ├─ resolveToolCallIntent        ← context arg OR intentFallback callback
-  ├─ originalHandler(request,extra)
-  ├─ publishSuccessfulToolEvent   ← attaches result, duration
+  ├─ execute(request, extra)      ← run the wrapped tool handler
+  ├─ attach result, duration, error
   └─ captureEvent(server, event)  → McpEventSink.capture()
 ```
 
@@ -55,21 +55,20 @@ The wrapper strips the `context` argument from `params.arguments` before forward
 
 ## 3. Event pipeline
 
-Once an `UnredactedEvent` reaches `McpEventSink.capture()` (`src/extensions/sink.ts`), it runs through:
+The pipeline lives in an exported `processMcpEvent()` function in `src/extensions/sink.ts` that **both** `McpEventSink.capture()` and the test harness call, so it's the single source of truth for the transform. Once an `UnredactedEvent` reaches it, it runs through:
 
-1. **Customer redaction** — `redactEvent(event, redactionFn)` if `options.redactSensitiveInformation` was set (`src/extensions/redaction.ts`). The redactor is called on every string in the event _except_ a protected field allowlist (`sessionId`, `id`, `server`, identify-\* fields, `resourceName`, `eventType`, `actorId`, `properties`).
-2. **Sanitization** — `sanitizeEvent` (`src/extensions/sanitization.ts`):
+1. **Sanitization** — `sanitizeEvent` (`src/extensions/sanitization.ts`):
    - `type: "image" | "audio"` content blocks → replaced with a text stub.
    - `type: "resource"` blocks with `.blob` → replaced.
    - Long base64-looking strings (≥10KB) → `"[binary data redacted...]"`.
    - Keys matching `SENSITIVE_KEY_PATTERN` (`authorization`, `cookie`, `password`, `token`, `secret`, `api_key`, `private_key`, …) → value replaced with `"[redacted]"`.
    - PostHog API-key patterns (`ph[a-z]_...`) in string values → `"[redacted]"`.
-3. **Truncation** — `truncateEvent` (`src/extensions/truncation.ts`): per-field caps, recursive normalization (max depth 10, max breadth 100, max string 32KB), and a 100KB total event budget with progressive falloff.
-4. **Build PostHog events** — `buildPostHogCaptureEvents` (`src/extensions/posthog-events.ts`) fans one internal event out to up to **3 PostHog events**:
+2. **Truncation** — `truncateEvent` (`src/extensions/truncation.ts`): per-field caps, recursive normalization (max depth 10, max breadth 100, max string 32KB), and a 100KB total event budget with progressive falloff.
+3. **Build PostHog events** — `buildPostHogCaptureEvents` (`src/extensions/posthog-events.ts`) fans one internal event out to up to **2 PostHog events**:
    - Always: the main `$mcp_*` capture event.
-   - If `event.isError && event.error`: a sibling `$exception` event.
-   - If `enableAITracing && eventType === mcpToolsCall`: a sibling `$ai_span` event.
-5. **Dispatch** — each event is handed to the user's `posthog-node` client via `posthog.capture()`. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain — the SDK installs no process-signal handlers and owns no client lifecycle.
+   - If `event.isError && event.error` (and `enableExceptionAutocapture !== false`): a sibling `$exception` event.
+4. **`beforeSend`** — each fully-built PostHog payload (`{ event, distinct_id, properties }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch — so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it; returning a nullish value drops it; a throw drops that event (and is logged). This is the seam for customer redaction or property tweaks.
+5. **Dispatch** — each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain — the SDK installs no process-signal handlers and owns no client lifecycle.
 
 ## 4. Session & identity
 
@@ -79,7 +78,9 @@ Once an `UnredactedEvent` reaches `McpEventSink.capture()` (`src/extensions/sink
   2. If the MCP session id disappears mid-stream, keep using the last derived id (transient drops don't split sessions).
   3. Otherwise, generate `ses_<uuidv7>` and rotate after **30 minutes of inactivity** (`INACTIVITY_TIMEOUT_IN_MINUTES`).
 - **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user and PostHog's standard identity merge takes over.
-- **`$identify` event**: fires only when the identity returned by `options.identify()` _changes_ for a given session. There is a module-level LRU (max 1000 entries) keyed by session id (`src/extensions/internal.ts`), so an unchanged identity is silently deduped.
+- **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
+- **`$identify` event**: fires only when the identity returned by `options.identify()` _changes_ for a given session. Dedupe is handled by an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id — but it is **per-server**: one instance lives on each server's tracking data via the `WeakMap` (`src/extensions/internal.ts`), so identities never bleed across server instances. An unchanged identity is silently deduped.
+- **Groups (`$groups`)**: if `options.identify()` returns a `groups?: Record<string, string>` field (groupType → groupKey), it is stamped onto every event for that session as `$groups`. Callers never hand-write the `$groups` dollar-key themselves — they just return `groups` from `identify`.
 - **Person properties (`$set`)**: built from `UserIdentity.userName` (→ `name`) and any `userData` keys.
 
 ## 5. Event catalog
@@ -88,17 +89,17 @@ All events are emitted by `buildPostHogCaptureEvents`. The main event name is co
 
 | PostHog event          | When                                                          | Notable extras                                                                                                                                                                  |
 | ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `$mcp_tool_call`       | Every tool invocation                                         | `$mcp_tool_name`, `$mcp_tool_description`, `$mcp_parameters`, `$mcp_response`, `$mcp_duration_ms`, `$mcp_is_error`, optionally `$mcp_intent` / `$mcp_intent_source`, AI trace refs if AI tracing on |
+| `$mcp_tool_call`       | Every tool invocation                                         | `$mcp_tool_name`, `$mcp_tool_description`, `$mcp_parameters`, `$mcp_response`, `$mcp_duration_ms`, `$mcp_is_error`, optionally `$mcp_intent` / `$mcp_intent_source`               |
 | `$mcp_tools_list`      | Client lists tools                                            | `$mcp_listed_tool_names` (array of tool names advertised); useful for "did this client discover us?" and "which advertised tools never get called?"                              |
 | `$mcp_initialize`      | Client/server handshake                                       | `$mcp_client_name`, `$mcp_client_version`, `$mcp_server_name`, `$mcp_server_version`                                                                                            |
+| `$mcp_missing_capability` | Agent calls the `get_more_tools` virtual tool             | A capability gap, **not** a tool invocation. The `context` arg is captured as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`                                      |
 | `$mcp_resources_list`  | Client lists resources                                        | —                                                                                                                                                                               |
 | `$mcp_resource_read`   | Resource fetched                                              | `$mcp_resource_name`, `$mcp_parameters`, `$mcp_response`                                                                                                                        |
 | `$mcp_prompts_list`    | Client lists prompts                                          | —                                                                                                                                                                               |
 | `$mcp_prompt_get`      | Prompt fetched                                                | `$mcp_resource_name` (= prompt name)                                                                                                                                            |
-| `$mcp_custom`          | `publishCustomEvent()`                                        | Whatever the caller passed in `properties`                                                                                                                                      |
+| `$mcp_custom`          | `capture()` with no `event` (or `event: "$mcp_custom"`)       | Whatever the caller passed in `properties`. A custom `event` name routes to that name instead (sent verbatim)                                                                    |
 | `$identify`            | `options.identify` returned a new identity for the session    | `$set` populated                                                                                                                                                                |
-| `$exception`           | Sibling to any errored event                                  | `$exception_list`, `$exception_level` (standard `@posthog/core` error-tracking shape)                                                                                           |
-| `$ai_span`             | Sibling to `$mcp_tool_call` when `enableAITracing: true`      | Full `$ai_*` set — see §6                                                                                                                                                       |
+| `$exception`           | Sibling to any errored event (unless `enableExceptionAutocapture: false`) | `$exception_list`, `$exception_level` (standard `@posthog/core` error-tracking shape)                                                                              |
 
 ## 6. Property catalog
 
@@ -126,28 +127,14 @@ All wire keys live in `PostHogMCPAnalyticsProperty` (`src/extensions/constants.t
 | `Parameters`     | `$mcp_parameters`         | object                                | Sanitized MCP request payload (see §3)                                                                                                                                                |
 | `Response`       | `$mcp_response`           | object                                | Sanitized tool result                                                                                                                                                                 |
 
-### Person properties (`$set`)
+### Person & group properties
 
-| Key           | Source                                |
-| ------------- | ------------------------------------- |
-| `name`        | `UserIdentity.userName`               |
-| `<anything>`  | Top-level keys of `UserIdentity.userData` |
-
-### AI tracing properties (`$ai_span` event + duplicated on `$mcp_tool_call`)
-
-| Constant       | Wire key             | Type                  | Notes                                                          |
-| -------------- | -------------------- | --------------------- | -------------------------------------------------------------- |
-| `AiSessionId`  | `$ai_session_id`     | string                | `posthog_mcp_analytics_${sessionId}` — namespaced               |
-| `AiTraceId`    | `$ai_trace_id`       | string                | `event.sessionId` — all tool calls in a session share this     |
-| `AiSpanId`     | `$ai_span_id`        | string                | `event.id` — unique per tool call (`evt_…`)                    |
-| `AiSpanName`   | `$ai_span_name`      | string                | Tool name                                                      |
-| `AiIsError`    | `$ai_is_error`       | boolean               | —                                                              |
-| `AiLatency`    | `$ai_latency`        | number (**seconds**)  | `duration_ms / 1000` — different unit from `$mcp_duration_ms`  |
-| `AiInputState` | `$ai_input_state`    | object                | Same content as `$mcp_parameters`                              |
-| `AiOutputState`| `$ai_output_state`   | object                | Same content as `$mcp_response`                                |
-| `$ai_error`    | `$ai_error`          | object                | Set as a literal property, not via the constants enum          |
-
-`$ai_trace_id` and `$ai_span_id` are also stamped onto the main `$mcp_tool_call` event so the two events can be joined.
+| Key                        | On                                | Source                                                                                       |
+| -------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
+| `$set.name`                | events with a resolved identity   | `UserIdentity.userName`                                                                       |
+| `$set.<anything>`          | events with a resolved identity   | Top-level keys of `UserIdentity.userData`                                                     |
+| `$groups`                  | every event for the session       | `UserIdentity.groups` (`{ groupType: groupKey }`) — callers never hand-write the `$groups` key |
+| `$process_person_profile`  | events with **no** resolved identity | Set to `false` so anonymous sessions don't mint a person profile each (see §4)             |
 
 ### Exception properties (`$exception` event)
 
@@ -161,16 +148,15 @@ The `eventProperties` callback returns key/value pairs that are **spread flat at
 
 | Option                       | Default                                   | Use case                                                                                                                                |
 | ---------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `posthog`                    | —                                         | A `posthog-node` client you construct and own (host, project token, batching, lifecycle all configured there). Without it, no events are sent. |
+| `posthog`                    | —                                         | A `posthog-node` client you construct and own (host, project token, batching, lifecycle all configured there). Without it, the server is instrumented but no events are sent — this is how you turn capture off (instrumentation is otherwise unconditional). |
 | `logger`                     | no-op                                     | STDIO-safe log sink for SDK-internal warnings. Receives single string messages.                                                         |
-| `enableTracing`              | `true`                                    | Master kill switch for event emission.                                                                                                  |
-| `enableAITracing`            | `false`                                   | Emit `$ai_span` so MCP activity shows up in PostHog LLM analytics.                                                                      |
+| `enableExceptionAutocapture` | `true`                                    | When `false`, a failed tool call does not emit the sibling `$exception` event.                                                          |
 | `enableConversationId`       | `false`                                   | Inject the `conversation_id` parameter into every tool and stamp `$mcp_conversation_id` on events.                                      |
 | `reportMissing`              | `false`                                   | Register the `get_more_tools` virtual tool.                                                                                             |
 | `context`                    | `true` (object form: `{ description }`)   | Inject required `context` arg into every tool schema.                                                                                   |
 | `intentFallback`             | —                                         | Consumer-supplied callback returning a `$mcp_intent` string when the client didn't pass a `context` argument. SDK does no inference.    |
-| `identify`                   | —                                         | Async function returning `UserIdentity \| null`.                                                                                        |
-| `redactSensitiveInformation` | —                                         | Async string-level redactor. Runs before sanitization.                                                                                  |
+| `identify`                   | —                                         | Async function returning `UserIdentity \| null` (may include `groups`).                                                                  |
+| `beforeSend`                 | —                                         | `(event) => event \| null \| undefined` (sync or async), matching posthog-node. Runs on each fully-built payload right before `posthog.capture()` — once per emitted event, including the `$exception` sibling. Return nullish (or throw) to drop that event. |
 | `eventProperties`            | —                                         | Freeform JSON, spread flat.                                                                                                             |
 
 ## 8. Useful queries
@@ -229,23 +215,6 @@ FROM events
 WHERE event = '$mcp_tool_call' AND timestamp > now() - INTERVAL 24 HOUR
 GROUP BY source, tool
 ORDER BY calls DESC
-```
-
-### Joining `$mcp_tool_call` to its `$ai_span` sibling
-
-```sql
-SELECT
-  c.properties.$mcp_tool_name    AS tool,
-  c.properties.$mcp_duration_ms  AS duration_ms,
-  s.properties.$ai_latency       AS ai_latency_s,
-  c.properties.$mcp_intent       AS intent
-FROM events c
-INNER JOIN events s
-  ON s.event = '$ai_span'
- AND s.properties.$ai_span_id = c.properties.$ai_span_id
-WHERE c.event = '$mcp_tool_call'
-  AND c.timestamp > now() - INTERVAL 24 HOUR
-LIMIT 100
 ```
 
 ### Advertised tools that never get called
@@ -364,7 +333,7 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
 ### Known sharp edges
 
-- The `get_more_tools` virtual tool always reports `$mcp_intent_source = "context_parameter"`. It's defensible — the LLM did type a context string — but worth knowing if you segment by source.
+- The `get_more_tools` virtual tool emits its own `$mcp_missing_capability` event (a capability gap), **not** a `$mcp_tool_call`. Its `context` arg is recorded as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`. It's defensible — the LLM did type a context string — but worth knowing if you segment by source.
 - `$mcp_intent_source` is currently **only** present when an intent was captured. Events with neither a context arg nor a fallback result have no `$mcp_intent` and no `$mcp_intent_source`. Dashboards filtering on `$mcp_intent_source = "inferred"` won't see them — that's the desired behavior; just don't expect a synthetic `"none"` value.
 
 ---
@@ -378,16 +347,16 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | Property/event constants                         | `src/extensions/constants.ts`                                 |
 | Event serialization to PostHog                   | `src/extensions/posthog-events.ts`                            |
 | Internal event types                             | `src/extensions/event-types.ts`                               |
-| `McpEventSink` (wraps posthog-node) + pipeline   | `src/extensions/sink.ts`                                      |
+| `McpEventSink` + `processMcpEvent` pipeline      | `src/extensions/sink.ts`                                      |
 | Per-server `captureEvent` helper                 | `src/extensions/capture.ts`                                  |
-| High-level `McpServer` wrapping                  | `src/extensions/tracing-v2.ts`                                |
-| Low-level `Server` wrapping                      | `src/extensions/tracing.ts`                                   |
+| Shared tool-call lifecycle / list / initialize   | `src/extensions/tracing-core.ts`                              |
+| High-level `McpServer` wrapping (thin adapter over `tracing-core`) | `src/extensions/tracing-v2.ts`              |
+| Low-level `Server` wrapping (thin adapter over `tracing-core`)     | `src/extensions/tracing.ts`                 |
 | Intent resolution (context arg + fallback)       | `src/extensions/intent.ts`                                    |
 | Identity cache + identify dispatch               | `src/extensions/internal.ts`                                  |
 | Session id derivation & timeout                  | `src/extensions/session.ts`, `src/extensions/ids.ts`             |
 | `conversation_id` injection + minting            | `src/extensions/conversation-id.ts`                           |
 | `get_more_tools` virtual tool                    | `src/extensions/tools.ts`                                     |
-| Customer redaction                               | `src/extensions/redaction.ts`                                 |
 | Auto-redaction & binary stubbing                 | `src/extensions/sanitization.ts`, `src/extensions/mcp-payloads.ts` |
 | Size / depth / breadth caps                      | `src/extensions/truncation.ts`                                |
 | `context` JSON-Schema injection                  | `src/extensions/context-parameters.ts`                        |
