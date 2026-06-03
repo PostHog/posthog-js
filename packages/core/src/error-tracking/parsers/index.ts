@@ -74,18 +74,16 @@ export function createStackParser(platform: Platform, ...parsers: StackLineParse
       const line = lines[i] as string
       // Ignore lines over 1kb as they are unlikely to be stack frames.
       // Many of the regular expressions use backtracking which results in run time that increases exponentially with
-      // input size. Huge strings can result in hangs/Denial of Service:
-      // https://github.com/getsentry/sentry-javascript/issues/2286
+      // input size. Huge strings can result in long hangs or Denial of Service when parsing stack traces.
       if (line.length > 1024) {
         continue
       }
 
-      // https://github.com/getsentry/sentry-javascript/issues/5459
-      // Remove webpack (error: *) wrappers
+      // Remove webpack (error: *) wrappers so the trailing wrapper parenthesis is not parsed as part of the URL.
       const cleanedLine = WEBPACK_ERROR_REGEXP.test(line) ? line.replace(WEBPACK_ERROR_REGEXP, '$1') : line
 
-      // https://github.com/getsentry/sentry-javascript/issues/7813
-      // Skip Error: lines
+      // Skip Error: lines, including DOMException pseudo-frames such as
+      // `Error: Blocked a frame with origin ... from accessing a cross-origin frame.`
       if (cleanedLine.match(/\S*Error: /)) {
         continue
       }

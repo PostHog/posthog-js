@@ -18,8 +18,8 @@ const chromeRegex =
 const chromeEvalRegex = /\((\S*)(?::(\d+))(?::(\d+))\)/
 
 // Chromium based browsers: Chrome, Brave, new Opera, new Edge
-// We cannot call this variable `chrome` because it can conflict with global `chrome` variable in certain environments
-// See: https://github.com/getsentry/sentry-javascript/issues/6880
+// We cannot call this variable `chrome` because it can conflict with the global `chrome` variable
+// exposed in some browser environments, causing `Identifier 'chrome' has already been declared`.
 export const chromeStackLineParser: StackLineParser = (line, platform) => {
   // If the stack line has no function name, we need to parse it differently
   const noFnParts = chromeRegexNoFnName.exec(line) as null | [string, string, string, string]

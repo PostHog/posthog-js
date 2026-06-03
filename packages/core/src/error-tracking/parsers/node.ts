@@ -103,8 +103,8 @@ function filenameIsInApp(filename: string, isNative: boolean = false): boolean {
       !filename.match(/^[a-zA-Z]([a-zA-Z0-9.\-+])*:\/\//)) // Schema from: https://stackoverflow.com/a/3641782
 
   // in_app is all that's not an internal Node function or a module within node_modules
-  // note that isNative appears to return true even for node core libraries
-  // see https://github.com/getsentry/raven-node/issues/176
+  // note that isNative appears to return true even for node core libraries, which should be
+  // treated as internal frames for cleaner stack traces.
 
   return !isInternal && filename !== undefined && !filename.includes('node_modules/')
 }

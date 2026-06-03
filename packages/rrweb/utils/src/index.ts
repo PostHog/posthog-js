@@ -1,3 +1,6 @@
+// Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
+// Licensed under the MIT License
+
 type PrototypeOwner = Node | ShadowRoot | MutationObserver | Element;
 type TypeofPrototypeOwner =
   | typeof Node
@@ -279,8 +282,8 @@ export function patch(
     return () => {
       //
     };
-    // This can throw if multiple fill happens on a global object like XMLHttpRequest
-    // Fixes https://github.com/getsentry/sentry-javascript/issues/2043
+    // This can throw when multiple instrumentation layers try to wrap the same global object,
+    // such as XMLHttpRequest, and redefine the same non-configurable wrapper marker.
   }
 }
 
