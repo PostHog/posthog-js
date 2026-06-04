@@ -53,10 +53,14 @@ export class TracingHeaders implements Extension {
             return hostnames.length > 0 ? this._hostnamesForPatch : undefined
         }
 
-        // If an already-installed wrapper captured an array, empty it before switching away so it stops matching.
         if (isArray(this._hostnamesForPatch)) {
+            // we empty the array before reassignment because there may be existing
+            // fetch/XHR patches reading this array. if we're in a situation where
+            // we're reapplying a patch and it fails for any reason, we've at least
+            // avoided sending headers to stale hostnames.
             this._hostnamesForPatch.splice(0)
         }
+
         this._hostnamesForPatch = hostnames || undefined
         return this._hostnamesForPatch
     }

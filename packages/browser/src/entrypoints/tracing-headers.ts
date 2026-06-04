@@ -124,7 +124,7 @@ const createFetchInitWithHeaders = (init: RequestInit | undefined, headers: Head
 const getDistinctId = (distinctId: TracingHeadersDistinctId): string | undefined =>
     isFunction(distinctId) ? distinctId() : distinctId
 
-const appendTracingHeaders = (
+const addTracingHeaders = (
     hostnames: TracingHeadersHostnames,
     distinctId: TracingHeadersDistinctId,
     sessionManager: SessionIdManager | undefined,
@@ -144,8 +144,6 @@ const appendTracingHeaders = (
         return false
     }
     if (isArray(hostnames) && !hostnames.includes(reqHostname)) {
-        // Skip if the hostname is not in the list (also skip if hostnames is not an array,
-        // because in the earliest version of the legacy __add_tracing_headers option it was a bool)
         return false
     }
 
@@ -187,11 +185,11 @@ const patchFetch = (
                         // bodies as ReadableStreams to downstream wrappers in Safari.
                         // eslint-disable-next-line compat/compat
                         const req = new Request(url, init)
-                        appendTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
+                        addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
                         fetchArgs = [req]
                     } else {
                         const headers = new Headers(isObjectLike(init) ? init.headers : undefined)
-                        if (appendTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)) {
+                        if (addTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)) {
                             const initWithHeaders = createFetchInitWithHeaders(init, headers)
                             if (initWithHeaders) {
                                 fetchArgs = [url, initWithHeaders]
@@ -235,7 +233,7 @@ const patchXHR = (
                 const headers = new Headers()
                 const requestUrl = getRequestUrl(url)
                 if (requestUrl) {
-                    appendTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)
+                    addTracingHeaders(hostnames, distinctId, sessionManager, requestUrl, headers)
                 }
 
                 const result = originalOpen.call(xhr, method, url, async, username, password)
