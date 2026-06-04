@@ -1650,12 +1650,17 @@ export interface PostHogConfig {
      * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID). Used to link
      * frontend sessions to backend traces (see https://posthog.com/docs/llm-analytics/link-session-replay).
      */
+    tracing_headers?: string[]
+
+    /**
+     * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
+     */
     addTracingHeaders?: string[]
 
     // ------- PREVIEW CONFIGS -------
 
     /**
-     * @deprecated Use {@link addTracingHeaders} instead. Kept for backwards compatibility.
+     * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
      */
     __add_tracing_headers?: string[]
 

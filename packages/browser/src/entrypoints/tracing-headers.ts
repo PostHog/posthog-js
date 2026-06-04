@@ -3,6 +3,7 @@ import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import { isArray, isFunction, isNull, isUndefined } from '@posthog/core'
+import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
 
 const SESSION_ID_HEADER = 'X-POSTHOG-SESSION-ID'
 const WINDOW_ID_HEADER = 'X-POSTHOG-WINDOW-ID'
@@ -120,9 +121,12 @@ const createFetchInitWithHeaders = (init: RequestInit | undefined, headers: Head
     }) as RequestInit
 }
 
+const getDistinctId = (distinctId: TracingHeadersDistinctId): string | undefined =>
+    isFunction(distinctId) ? distinctId() : distinctId
+
 const addTracingHeaders = (
-    hostnames: string[],
-    distinctId: string,
+    hostnames: TracingHeadersHostnames,
+    distinctId: TracingHeadersDistinctId,
     sessionManager: SessionIdManager | undefined,
     url: string,
     headers: Headers
@@ -136,9 +140,10 @@ const addTracingHeaders = (
         // If the URL is invalid, we skip adding tracing headers
         return false
     }
+    if (!hostnames) {
+        return false
+    }
     if (isArray(hostnames) && !hostnames.includes(reqHostname)) {
-        // Skip if the hostname is not in the list (also skip if hostnames is not an array,
-        // because in the earliest version of this __add_tracing_headers was a bool)
         return false
     }
 
@@ -149,8 +154,9 @@ const addTracingHeaders = (
         headers.set(WINDOW_ID_HEADER, windowId)
         hasAddedHeaders = true
     }
-    if (distinctId !== COOKIELESS_SENTINEL_VALUE) {
-        headers.set(DISTINCT_ID_HEADER, distinctId)
+    const currentDistinctId = getDistinctId(distinctId)
+    if (currentDistinctId && currentDistinctId !== COOKIELESS_SENTINEL_VALUE) {
+        headers.set(DISTINCT_ID_HEADER, currentDistinctId)
         hasAddedHeaders = true
     }
     return hasAddedHeaders
@@ -158,7 +164,11 @@ const addTracingHeaders = (
 
 type FetchArgs = [URL | RequestInfo] | [URL | RequestInfo, RequestInit | undefined]
 
-const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
+const patchFetch = (
+    hostnames: TracingHeadersHostnames,
+    distinctId: TracingHeadersDistinctId,
+    sessionManager?: SessionIdManager
+): (() => void) => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
@@ -196,7 +206,11 @@ const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: Se
     })
 }
 
-const patchXHR = (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
+const patchXHR = (
+    hostnames: TracingHeadersHostnames,
+    distinctId: TracingHeadersDistinctId,
+    sessionManager?: SessionIdManager
+): (() => void) => {
     return patch(
         // we can assert this is present because we've checked previously
         window!.XMLHttpRequest.prototype,
