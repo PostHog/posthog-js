@@ -127,31 +127,25 @@ describe('local evaluation', () => {
         ...posthogImmediateResolveOptions,
       })
 
-    it('returns false without evaluating later groups when early_exit is enabled and rollout excludes the user', async () => {
-      mockedFetch.mockImplementation(apiImplementation({ localFlags: earlyExitFlag(true) }))
-      posthog = newPosthog()
+    it.each([
+      ['enabled', true, false],
+      ['not set', undefined, true],
+      ['explicitly disabled', false, true],
+    ])(
+      'returns correct result when early_exit is %s',
+      async (_, earlyExit, expected) => {
+        mockedFetch.mockImplementation(apiImplementation({ localFlags: earlyExitFlag(earlyExit as boolean | undefined) }))
+        posthog = newPosthog()
 
-      expect(
-        await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
-          personProperties: { region: 'USA' },
-        })
-      ).toEqual(false)
+        expect(
+          await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
+            personProperties: { region: 'USA' },
+          })
+        ).toEqual(expected)
 
-      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-    })
-
-    it('falls through to a later matching group when early_exit is not set', async () => {
-      mockedFetch.mockImplementation(apiImplementation({ localFlags: earlyExitFlag(undefined) }))
-      posthog = newPosthog()
-
-      expect(
-        await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
-          personProperties: { region: 'USA' },
-        })
-      ).toEqual(true)
-
-      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-    })
+        expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+      }
+    )
 
     it('early exits on a rollout-only group with no property filters', async () => {
       mockedFetch.mockImplementation(
