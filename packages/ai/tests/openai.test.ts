@@ -117,6 +117,8 @@ jest.mock('openai', () => {
     __esModule: true,
     default: MockOpenAI,
     OpenAI: MockOpenAI,
+    // AzureOpenAI extends OpenAI in the real SDK, so the same mock satisfies it
+    AzureOpenAI: MockOpenAI,
     Chat: MockChat,
     Responses: MockResponses,
     Embeddings: MockEmbeddings,

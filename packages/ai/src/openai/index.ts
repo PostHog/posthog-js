@@ -965,3 +965,4 @@ export class WrappedTranscriptions extends Transcriptions {
 export default PostHogOpenAI
 
 export { PostHogOpenAI as OpenAI }
+export { default as AzureOpenAI } from './azure'

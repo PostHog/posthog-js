@@ -6,14 +6,31 @@ TypeScript SDK for LLM observability with PostHog.
 
 ## Installation
 
+Provider SDKs are optional peer dependencies, so you only install the SDK for the integration you use. Install `@posthog/ai` alongside it:
+
 ```bash
-npm install @posthog/ai
+npm install @posthog/ai openai            # OpenAI / Azure OpenAI
+npm install @posthog/ai @anthropic-ai/sdk # Anthropic
+npm install @posthog/ai @google/genai     # Google Gemini
+npm install @posthog/ai @langchain/core   # LangChain
+# Vercel AI SDK (withTracing), captureAiGeneration, and OpenTelemetry need no provider SDK
 ```
+
+Import each integration from its subpath:
+
+| Integration | Import from | Peer to install |
+| --- | --- | --- |
+| OpenAI / Azure OpenAI | `@posthog/ai/openai` | `openai` |
+| Anthropic | `@posthog/ai/anthropic` | `@anthropic-ai/sdk` |
+| Google Gemini | `@posthog/ai/gemini` | `@google/genai` |
+| LangChain | `@posthog/ai/langchain` | `@langchain/core` |
+| Vercel AI SDK (`withTracing`) | `@posthog/ai` | — |
+| Custom (`captureAiGeneration`) | `@posthog/ai` | — |
 
 ## Direct Provider Usage
 
 ```typescript
-import { OpenAI } from '@posthog/ai'
+import { OpenAI } from '@posthog/ai/openai'
 import { PostHog } from 'posthog-node'
 
 const phClient = new PostHog('<YOUR_PROJECT_API_KEY>', { host: 'https://us.i.posthog.com' })

@@ -1,7 +1,7 @@
 import { EventMessage, PostHog } from 'posthog-node'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import type { Tool as GeminiTool } from '@google/genai'
-import AnthropicOriginal from '@anthropic-ai/sdk'
+import type AnthropicOriginal from '@anthropic-ai/sdk'
 import { v4 as uuidv4 } from 'uuid'
 import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { version } from '../package.json'

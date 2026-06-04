@@ -1,6 +1,6 @@
 import { PostHog } from 'posthog-node'
-import OpenAIOrignal from 'openai'
-import AnthropicOriginal from '@anthropic-ai/sdk'
+import type OpenAIOrignal from 'openai'
+import type AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
 import type { Tool as GeminiTool } from '@google/genai'

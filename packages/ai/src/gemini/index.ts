@@ -530,3 +530,4 @@ function calculateGoogleWebSearchCount(response: unknown): number {
 
 export default PostHogGoogleGenAI
 export { PostHogGoogleGenAI as Gemini }
+export { PostHogGoogleGenAI as GoogleGenAI }
