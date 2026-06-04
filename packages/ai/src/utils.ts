@@ -534,7 +534,7 @@ export function calculateWebSearchCount(result: unknown): number {
  * Extract available tool calls from the request parameters.
  * These are the tools provided to the LLM, not the tool calls in the response.
  */
-export const extractAvailableToolCalls = (provider: string, params: any): Record<string, unknown>[] | null => {
+export const extractAvailableToolCalls = (provider: string, params: any): unknown[] | null => {
   if (provider === 'anthropic') {
     if (params.tools) {
       return params.tools

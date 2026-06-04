@@ -54,7 +54,7 @@ export interface CaptureAiGenerationOptions {
   providerOverride?: string
   costOverride?: CostOverride
 
-  tools?: Record<string, unknown>[] | null
+  tools?: unknown[] | null
   stopReason?: string
 
   /**
