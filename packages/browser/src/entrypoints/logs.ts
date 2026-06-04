@@ -354,7 +354,7 @@ const initializeLogs = (posthog: PostHog) => {
             (originalConsoleLog: any) =>
             (...args: any[]) => {
                 if (args.length > 0) {
-                    if (posthog.is_captuing() {
+                    if (posthog.is_capturing()) {
                         const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
                         const logAttributes = {
                             ...attributes,
