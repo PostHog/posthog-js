@@ -153,6 +153,35 @@ describe('local evaluation', () => {
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     })
 
+    it('early exits on a rollout-only group with no property filters', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                name: 'Early Exit Feature',
+                key: 'early-exit-flag',
+                active: true,
+                filters: {
+                  early_exit: true,
+                  groups: [
+                    { rollout_percentage: 0 },
+                    { rollout_percentage: 100 },
+                  ],
+                },
+              },
+            ],
+          },
+        })
+      )
+      posthog = newPosthog()
+
+      expect(await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {})).toEqual(false)
+
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    })
+
     it('does not early exit when a group fails on a property filter rather than rollout', async () => {
       // First group fails on its property (region mismatch), not rollout — so even with early_exit
       // enabled, evaluation must continue to the second group, which matches.

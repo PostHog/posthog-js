@@ -556,8 +556,11 @@ class FeatureFlagsPoller {
           break
         } else if (earlyExitEnabled && matchResult === 'out_of_rollout_bound') {
           // The condition's property filters (if any) matched and only the rollout check failed,
-          // so re-evaluating later groups can't change the outcome. Mirror the server-side engine
-          // and return a deterministic false. Ignores any prior inconclusive state, like Rust.
+          // so re-evaluating later groups can't change the outcome. Return a deterministic false,
+          // mirroring the server-side engine. `isInconclusive` could theoretically be true here
+          // (an earlier group threw InconclusiveMatchError while this group evaluated cleanly), but
+          // in practice early_exit is only set on flags whose groups are all locally evaluable, so
+          // this combination does not arise.
           return false
         }
       } catch (e) {
