@@ -2,7 +2,7 @@
 "@posthog/ai": major
 ---
 
-Remove three long-standing deprecations, bundled into this major release.
+Clean up deprecations and inconsistent option naming, bundled into this major release.
 
 **Breaking:**
 
@@ -20,4 +20,11 @@ Remove three long-standing deprecations, bundled into this major release.
   ```diff
   - new PostHogTraceExporter({ apiKey: 'phc_...' })
   + new PostHogTraceExporter({ projectToken: 'phc_...' })
+  ```
+
+- `PostHogSpanProcessor` now takes `projectToken` instead of `apiKey`, matching `PostHogTraceExporter`:
+
+  ```diff
+  - new PostHogSpanProcessor({ apiKey: 'phc_...' })
+  + new PostHogSpanProcessor({ projectToken: 'phc_...' })
   ```

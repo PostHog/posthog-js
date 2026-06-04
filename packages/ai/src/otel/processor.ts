@@ -6,7 +6,7 @@ import { isAISpan } from './spans'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
 
-function normalizeApiKey(value?: unknown): string {
+function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -17,9 +17,9 @@ function normalizeHost(value?: unknown): string {
 
 export interface PostHogSpanProcessorOptions {
   /**
-   * Your PostHog project API key.
+   * Your PostHog project token (the `phc_...` key).
    */
-  apiKey?: string
+  projectToken?: string
 
   /**
    * PostHog host URL. Defaults to `https://us.i.posthog.com`.
@@ -50,7 +50,7 @@ class NoopSpanProcessor implements SpanProcessor {
 /**
  * An OpenTelemetry `SpanProcessor` that sends AI traces to PostHog.
  *
- * Missing or blank project API keys disable the processor.
+ * Missing or blank project tokens disable the processor.
  *
  * Internally batches spans and exports them to PostHog's OTLP ingestion
  * endpoint. Only AI-related spans (those whose name or attribute keys
@@ -67,7 +67,7 @@ class NoopSpanProcessor implements SpanProcessor {
  * import { NodeSDK } from '@opentelemetry/sdk-node'
  *
  * const sdk = new NodeSDK({
- *   spanProcessors: [new PostHogSpanProcessor({ apiKey: 'phc_...' })],
+ *   spanProcessors: [new PostHogSpanProcessor({ projectToken: 'phc_...' })],
  * })
  * sdk.start()
  * ```
@@ -76,9 +76,9 @@ export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
 
   constructor(options: PostHogSpanProcessorOptions = {}) {
-    const apiKey = normalizeApiKey(options.apiKey)
-    if (!apiKey) {
-      console.warn('[PostHogSpanProcessor] apiKey is missing or blank; the processor will be disabled.')
+    const token = normalizeToken(options.projectToken)
+    if (!token) {
+      console.warn('[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.')
       this.inner = new NoopSpanProcessor()
       return
     }
@@ -90,7 +90,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
       const exporter = new OTLPTraceExporter({
         url: `${host}/i/v0/ai/otel`,
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${token}`,
         },
       })
       this.inner = new BatchSpanProcessor(exporter)

@@ -108,7 +108,7 @@ import { openai } from '@ai-sdk/openai'
 const sdk = new NodeSDK({
   spanProcessors: [
     new PostHogSpanProcessor({
-      apiKey: '<YOUR_PROJECT_API_KEY>',
+      projectToken: '<YOUR_PROJECT_TOKEN>',
       host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
     }),
   ],
