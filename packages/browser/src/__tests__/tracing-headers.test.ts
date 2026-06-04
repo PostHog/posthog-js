@@ -80,35 +80,62 @@ describe('tracing headers', () => {
     })
 
     describe('config aliases', () => {
-        const getConfiguredHostnames = (config: Record<string, unknown>): string[] | undefined => {
+        const getConfiguredHostnames = (config: Record<string, unknown>): string[] | boolean | undefined => {
             const tracingHeaders = new TracingHeaders({ config } as any)
             return (tracingHeaders as any)._getConfiguredHostnames()
         }
 
-        it('uses the public tracing_headers option', () => {
-            expect(getConfiguredHostnames({ tracing_headers: ['example.com'] })).toEqual(['example.com'])
-        })
-
-        it('falls back to deprecated __add_tracing_headers', () => {
-            expect(getConfiguredHostnames({ __add_tracing_headers: ['legacy.example'] })).toEqual(['legacy.example'])
-        })
-
-        it('prefers tracing_headers over deprecated __add_tracing_headers', () => {
-            expect(
-                getConfiguredHostnames({
+        it.each([
+            {
+                name: 'uses the public tracing_headers option',
+                config: { tracing_headers: ['example.com'] },
+                expected: ['example.com'],
+            },
+            {
+                name: 'falls back to deprecated addTracingHeaders',
+                config: { addTracingHeaders: ['camel.example'] },
+                expected: ['camel.example'],
+            },
+            {
+                name: 'falls back to deprecated __add_tracing_headers',
+                config: { __add_tracing_headers: ['legacy.example'] },
+                expected: ['legacy.example'],
+            },
+            {
+                name: 'prefers tracing_headers over deprecated addTracingHeaders',
+                config: {
+                    tracing_headers: ['public.example'],
+                    addTracingHeaders: ['camel.example'],
+                },
+                expected: ['public.example'],
+            },
+            {
+                name: 'prefers addTracingHeaders over deprecated __add_tracing_headers',
+                config: {
+                    addTracingHeaders: ['camel.example'],
+                    __add_tracing_headers: ['legacy.example'],
+                },
+                expected: ['camel.example'],
+            },
+            {
+                name: 'prefers tracing_headers over deprecated __add_tracing_headers',
+                config: {
                     tracing_headers: ['public.example'],
                     __add_tracing_headers: ['legacy.example'],
-                })
-            ).toEqual(['public.example'])
-        })
-
-        it('allows an empty tracing_headers list to override deprecated __add_tracing_headers', () => {
-            expect(
-                getConfiguredHostnames({
+                },
+                expected: ['public.example'],
+            },
+            {
+                name: 'allows an empty tracing_headers list to override deprecated aliases',
+                config: {
                     tracing_headers: [],
+                    addTracingHeaders: ['camel.example'],
                     __add_tracing_headers: ['legacy.example'],
-                })
-            ).toEqual([])
+                },
+                expected: [],
+            },
+        ])('$name', ({ config, expected }) => {
+            expect(getConfiguredHostnames(config)).toEqual(expected)
         })
 
         it('mutates the installed hostname list when tracing_headers changes', () => {
