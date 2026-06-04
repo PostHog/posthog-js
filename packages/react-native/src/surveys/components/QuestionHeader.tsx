@@ -1,7 +1,8 @@
 import React from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
 import { SurveyQuestionDescriptionContentType } from '@posthog/core'
+import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
   defaultDescriptionOpacity,
   getContrastingTextColor,
@@ -35,7 +36,7 @@ export function QuestionHeader({
   )
 }
 
-const styles = StyleSheet.create({
+const styles = createSafeStyleSheet({
   container: {
     padding: 10,
   },

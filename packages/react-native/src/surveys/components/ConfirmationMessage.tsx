@@ -1,6 +1,7 @@
 import React from 'react'
-import { StyleSheet, Text, View, ViewStyle } from 'react-native'
+import { Text, View, ViewStyle } from 'react-native'
 
+import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
   defaultDescriptionOpacity,
   getContrastingTextColor,
@@ -49,7 +50,7 @@ export function ConfirmationMessage({
   )
 }
 
-const styles = StyleSheet.create({
+const styles = createSafeStyleSheet({
   thankYouMessageContainer: {
     padding: 10,
   },
