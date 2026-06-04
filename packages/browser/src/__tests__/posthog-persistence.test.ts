@@ -1066,6 +1066,31 @@ describe('flag storage split', () => {
             expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
         })
 
+        // Partial migration: __flags already exists on disk, but the main blob
+        // still carries a flag-group key that __flags does not (an older SDK that
+        // grouped fewer keys, or a gate-off / mixed-fleet tab that wrote a flag key
+        // back to main). The leftover must end up in __flags, not be stripped from
+        // main and lost — seeding the load fingerprint must not let the first save
+        // skip this migration write.
+        it('folds a main-blob leftover into __flags even when __flags already exists', () => {
+            localStorage.setItem(FLAGS, JSON.stringify({ [ENABLED_FEATURE_FLAGS]: { beta: true } }))
+            localStorage.setItem(
+                MAIN,
+                JSON.stringify({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-leftover', distinct_id: 'd' })
+            )
+
+            new PostHogPersistence(makeConfig())
+
+            // the leftover is migrated into __flags and stripped from main
+            expect(parse(FLAGS)[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('req-leftover')
+            expect(parse(MAIN)[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBeUndefined()
+
+            // a fresh reload still resolves it (proves it landed on disk, not just memory)
+            const reloaded = new PostHogPersistence(makeConfig())
+            expect(reloaded.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('req-leftover')
+            expect(reloaded.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: true })
+        })
+
         it('prefers the group entry over a stale value in the old main blob', () => {
             localStorage.setItem(MAIN, JSON.stringify({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'stale-main' }))
             localStorage.setItem(FLAGS, JSON.stringify({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'fresh-group' }))
@@ -1392,6 +1417,33 @@ describe('flag storage split', () => {
 
             const lib = new PostHogPersistence(makeConfig())
             expect(lib.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: 'group' })
+        })
+
+        // The stale orphan must not just lose in memory — the first save has to
+        // heal the on-disk __flags with the fresher main payload. Seeding the load
+        // fingerprint must not let the group fast-path skip that heal write.
+        it('heals a stale __flags entry on disk from the fresher main blob', () => {
+            localStorage.setItem(
+                MAIN,
+                JSON.stringify({
+                    [ENABLED_FEATURE_FLAGS]: { beta: 'fresh-main' },
+                    [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: newerTs,
+                    distinct_id: 'd',
+                })
+            )
+            localStorage.setItem(
+                FLAGS,
+                JSON.stringify({
+                    [ENABLED_FEATURE_FLAGS]: { beta: 'stale-group' },
+                    [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: olderTs,
+                })
+            )
+
+            new PostHogPersistence(makeConfig())
+
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual({ beta: 'fresh-main' })
+            const reloaded = new PostHogPersistence(makeConfig())
+            expect(reloaded.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: 'fresh-main' })
         })
     })
 })

@@ -316,10 +316,18 @@ export class PostHogPersistence {
                 // first frequent main-blob save at startup (before fresh flags
                 // return from the network) recognises an unchanged flag entry and
                 // neither re-serializes nor re-broadcasts it to every open tab.
-                // A migration leftover in the main blob (folded in below) changes
-                // the partitioned payload, so the fingerprint won't match and the
-                // entry is still rewritten once to complete the migration.
-                state.fingerprint = this._entryFingerprint(groupEntry, group)
+                // Only safe when the main blob carries no key for this group: a
+                // leftover (partial migration, or a stale tab that wrote a flag key
+                // back to main) makes the partitioned payload differ from what is on
+                // disk, so the entry must still be written. Leaving it unseeded then
+                // lets the first save's fingerprint check write the merged payload
+                // through — completing the migration / healing the orphan. The
+                // `_writeEntry` group fast-path skips on `!dirty && fingerprint set`,
+                // which would otherwise short-circuit that write before the
+                // fingerprint is even compared.
+                if (!this._mainCarriesGroupKey(group)) {
+                    state.fingerprint = this._entryFingerprint(groupEntry, group)
+                }
                 // The group entry is normally the migrated-forward home and wins
                 // over the main blob. The exception: a group that stamps a
                 // freshness timestamp (flags: $feature_flag_evaluated_at) lets us
@@ -332,6 +340,14 @@ export class PostHogPersistence {
                 }
             }
         }
+    }
+
+    // True when the already-loaded main blob still holds a key belonging to this
+    // group — a migration leftover the next save must fold into the group entry.
+    // Checked before the group entry is merged in, so it sees only the main blob's
+    // own keys (sibling groups carry a different storageGroup and never match).
+    private _mainCarriesGroupKey(group: PersistenceStorageGroup): boolean {
+        return Object.keys(this.props).some((key) => getPersistenceKeyPolicy(key)?.storageGroup === group)
     }
 
     private _groupEntryIsStale(group: PersistenceStorageGroup, groupEntry: Properties): boolean {
@@ -560,7 +576,7 @@ export class PostHogPersistence {
     // once each on every construction, transitioning the in-memory option from
     // undefined to its configured value). Opt-out / reset (set_disabled / clear)
     // pass nothing and wipe everything.
-    remove(keepGroupEntries: boolean = false): void {
+    remove({ keepGroupEntries = false }: { keepGroupEntries?: boolean } = {}): void {
         // Cancel any pending debounced write — the storage entry is going
         // away so there is nothing useful to flush.
         if (!isUndefined(this._pendingSaveTimer)) {
@@ -781,7 +797,7 @@ export class PostHogPersistence {
     set_cross_subdomain(cross_subdomain: boolean): void {
         if (cross_subdomain !== this._cross_subdomain) {
             this._cross_subdomain = cross_subdomain
-            this.remove(true)
+            this.remove({ keepGroupEntries: true })
             this.save()
         }
     }
@@ -789,7 +805,7 @@ export class PostHogPersistence {
     set_secure(secure: boolean): void {
         if (secure !== this._secure) {
             this._secure = secure
-            this.remove(true)
+            this.remove({ keepGroupEntries: true })
             this.save()
         }
     }
