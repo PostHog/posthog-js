@@ -81,6 +81,7 @@ describe('logs entrypoint', () => {
                 })),
             },
             get_distinct_id: jest.fn(() => 'user-123'),
+            is_capturing: jest.fn(() => true),
         } as unknown as PostHog
 
         // Mock assignableWindow
