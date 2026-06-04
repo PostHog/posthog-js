@@ -131,21 +131,18 @@ describe('local evaluation', () => {
       ['enabled', true, false],
       ['not set', undefined, true],
       ['explicitly disabled', false, true],
-    ])(
-      'returns correct result when early_exit is %s',
-      async (_, earlyExit, expected) => {
-        mockedFetch.mockImplementation(apiImplementation({ localFlags: earlyExitFlag(earlyExit as boolean | undefined) }))
-        posthog = newPosthog()
+    ])('returns correct result when early_exit is %s', async (_, earlyExit, expected) => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: earlyExitFlag(earlyExit as boolean | undefined) }))
+      posthog = newPosthog()
 
-        expect(
-          await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
-            personProperties: { region: 'USA' },
-          })
-        ).toEqual(expected)
+      expect(
+        await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
+          personProperties: { region: 'USA' },
+        })
+      ).toEqual(expected)
 
-        expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-      }
-    )
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    })
 
     it('early exits on a rollout-only group with no property filters', async () => {
       mockedFetch.mockImplementation(
@@ -159,10 +156,7 @@ describe('local evaluation', () => {
                 active: true,
                 filters: {
                   early_exit: true,
-                  groups: [
-                    { rollout_percentage: 0 },
-                    { rollout_percentage: 100 },
-                  ],
+                  groups: [{ rollout_percentage: 0 }, { rollout_percentage: 100 }],
                 },
               },
             ],
