@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.35.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.6
+
 ## 5.35.14
 
 ### Patch Changes

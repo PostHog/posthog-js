@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.379.3
+
+### Patch Changes
+
+- [#3741](https://github.com/PostHog/posthog-js/pull/3741) [`32de5d2`](https://github.com/PostHog/posthog-js/commit/32de5d2a061f04dc852b1cf31f63af5b86121f46) Thanks [@clr182](https://github.com/clr182)! - logs: the console-log integration now respects `opt_out_capturing()` — it checks `is_capturing()` before emitting, so log events stop on opt-out (and resume on opt-in).
+  (2026-06-04)
+- Updated dependencies []:
+    - @posthog/types@1.379.3
+    - @posthog/core@1.30.6
+
 ## 1.379.2
 
 ### Patch Changes
