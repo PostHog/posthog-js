@@ -1014,6 +1014,42 @@ describe('flag storage split', () => {
             expect(names).not.toContain(MAIN)
             setSpy.mockRestore()
         })
+
+        // A returning visitor loads __flags from disk. The frequent main-blob
+        // saves posthog fires at startup (before fresh flags return from the
+        // network) must not rewrite — and so re-broadcast to every open tab —
+        // the unchanged flag blob. Loading must seed the same fingerprint a
+        // write produces, so the very first save recognises it as unchanged.
+        //
+        // The cookie-option setters (set_cross_subdomain / set_secure) fire once
+        // each on construction as their in-memory option transitions from
+        // undefined to its configured value. They must not churn the
+        // localStorage-only group entries either, so the concrete-cookie-options
+        // case (what posthog-core actually constructs with) is covered too.
+        it.each([
+            { label: 'cookie options unset', extra: {} },
+            {
+                label: 'concrete cookie options (production)',
+                extra: { secure_cookie: true, cross_subdomain_cookie: false },
+            },
+        ])('a returning visitor does not rewrite the unchanged __flags it loaded ($label)', ({ extra }) => {
+            localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
+            localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
+
+            const setSpy = jest.spyOn(localStore, '_set')
+            const lib = new PostHogPersistence(makeConfig(extra))
+
+            // construction must not have rewritten the entry it just loaded
+            expect(setSpy.mock.calls.filter(([name]) => name === FLAGS)).toEqual([])
+
+            setSpy.mockClear()
+            lib.register({ distinct_id: 'd2' })
+
+            const names = setSpy.mock.calls.map(([name]) => name)
+            expect(names).toContain(MAIN)
+            expect(names).not.toContain(FLAGS)
+            setSpy.mockRestore()
+        })
     })
 
     describe('one-shot migration from the old main-blob location', () => {
@@ -1336,6 +1372,26 @@ describe('flag storage split', () => {
 
             const lib = new PostHogPersistence(makeConfig())
             expect(lib.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: expectedBeta })
+        })
+
+        // The freshness comparison only flips to the main blob when BOTH sides
+        // carry a numeric stamp and main's is strictly newer (the `isNumber`
+        // guards in `_groupEntryIsStale`). A missing stamp — an older SDK, or a
+        // write from before the timestamp existed — must keep the group entry as
+        // the canonical migrated-forward home, never silently lose to an
+        // undefined. Without this the cached flags would quietly change.
+        const flags = (beta: string): Record<string, any> => ({ [ENABLED_FEATURE_FLAGS]: { beta } })
+        const stamp = { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: newerTs }
+        it.each([
+            { name: 'main omits the stamp', main: flags('main'), group: { ...flags('group'), ...stamp } },
+            { name: 'group omits the stamp', main: { ...flags('main'), ...stamp }, group: flags('group') },
+            { name: 'neither side carries a stamp', main: flags('main'), group: flags('group') },
+        ])('flags: the group entry wins when $name', ({ main, group }) => {
+            localStorage.setItem(MAIN, JSON.stringify({ ...main, distinct_id: 'd' }))
+            localStorage.setItem(FLAGS, JSON.stringify(group))
+
+            const lib = new PostHogPersistence(makeConfig())
+            expect(lib.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: 'group' })
         })
     })
 })
