@@ -318,36 +318,44 @@ export function initScrollObserver({
   observerParam,
   'scrollCb' | 'doc' | 'mirror' | 'blockClass' | 'blockSelector' | 'sampling'
 >): listenerHandler {
+  const emitScrollPosition = (evt: Event) => {
+    const target = getEventTarget(evt);
+    if (!target || isBlocked(target as Node, blockClass, blockSelector, true)) {
+      return;
+    }
+    const id = mirror.getId(target as Node);
+    if (target === doc && doc.defaultView) {
+      const scrollLeftTop = getWindowScroll(doc.defaultView);
+      scrollCb({
+        id,
+        x: scrollLeftTop.left,
+        y: scrollLeftTop.top,
+      });
+    } else {
+      scrollCb({
+        id,
+        x: (target as HTMLElement).scrollLeft,
+        y: (target as HTMLElement).scrollTop,
+      });
+    }
+  };
   const updatePosition = callbackWrapper(
     throttle<UIEvent>(
-      callbackWrapper((evt) => {
-        const target = getEventTarget(evt);
-        if (
-          !target ||
-          isBlocked(target as Node, blockClass, blockSelector, true)
-        ) {
-          return;
-        }
-        const id = mirror.getId(target as Node);
-        if (target === doc && doc.defaultView) {
-          const scrollLeftTop = getWindowScroll(doc.defaultView);
-          scrollCb({
-            id,
-            x: scrollLeftTop.left,
-            y: scrollLeftTop.top,
-          });
-        } else {
-          scrollCb({
-            id,
-            x: (target as HTMLElement).scrollLeft,
-            y: (target as HTMLElement).scrollTop,
-          });
-        }
-      }),
+      callbackWrapper(emitScrollPosition),
       sampling.scroll || 100,
     ),
   );
-  return on('scroll', updatePosition, doc);
+  const handlers: listenerHandler[] = [on('scroll', updatePosition, doc)];
+  // Also capture the resting offset once scrolling settles. A scroll applied
+  // before its target is scrollable (e.g. scroll-snap-revealed sheets/modals
+  // whose content mounts the same frame, like Silk sheets) clamps to 0, so the
+  // throttled `scroll` samples miss the final snapped position. `scrollend`
+  // fires after the browser finishes snapping/animating, yielding the true
+  // resting offset that replay needs.
+  if ('onscrollend' in doc) {
+    handlers.push(on('scrollend', callbackWrapper(emitScrollPosition), doc));
+  }
+  return () => handlers.forEach((h) => h());
 }
 
 function initViewportResizeObserver(
