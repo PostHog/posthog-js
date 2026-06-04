@@ -80,14 +80,6 @@ describe('PostHogTraceExporter', () => {
     })
   })
 
-  it('accepts deprecated apiKey', () => {
-    new PostHogTraceExporter({ apiKey: DEFAULT_TOKEN })
-    expect(OTLPTraceExporter).toHaveBeenCalledWith({
-      url: 'https://us.i.posthog.com/i/v0/ai/otel',
-      headers: { Authorization: `Bearer ${DEFAULT_TOKEN}` },
-    })
-  })
-
   it.each([
     ['missing', {}],
     ['empty', { projectToken: '' }],

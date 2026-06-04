@@ -19,4 +19,4 @@ Move provider SDKs (`openai`, `@anthropic-ai/sdk`, `@google/genai`, `@langchain/
 + import { LangChainCallbackHandler } from '@posthog/ai/langchain'  // npm install @langchain/core
 ```
 
-`withTracing` (Vercel AI SDK), `captureAiGeneration`, `Prompts`, and the `@posthog/ai/otel` exports are unchanged.
+`withTracing` (Vercel AI SDK) and `captureAiGeneration` are unchanged.

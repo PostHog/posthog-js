@@ -33,14 +33,7 @@ function normalizeHost(value?: unknown): string {
  * new PostHogTraceExporter({ projectToken: 'phc_...', host: 'https://eu.i.posthog.com' })
  * ```
  */
-export type PostHogTraceExporterOptions =
-  | { projectToken?: string; apiKey?: never; host?: string }
-  | {
-      /** @deprecated Use `projectToken` instead */
-      apiKey?: string
-      projectToken?: never
-      host?: string
-    }
+export type PostHogTraceExporterOptions = { projectToken?: string; host?: string }
 
 /**
  * An OpenTelemetry `TraceExporter` that sends AI traces to PostHog's OTLP
@@ -74,7 +67,7 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
   private readonly disabled: boolean
 
   constructor(options: PostHogTraceExporterOptions = {}) {
-    const token = normalizeToken(options.projectToken) || normalizeToken(options.apiKey)
+    const token = normalizeToken(options.projectToken)
     const disabled = !token
     const host = token ? new URL(normalizeHost(options.host)).origin : DEFAULT_OTEL_HOST
     super({
