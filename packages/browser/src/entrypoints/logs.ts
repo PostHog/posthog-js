@@ -354,22 +354,24 @@ const initializeLogs = (posthog: PostHog) => {
             (originalConsoleLog: any) =>
             (...args: any[]) => {
                 if (args.length > 0) {
-                    const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
-                    const logAttributes = {
-                        ...attributes,
-                        ...(truncated ? { body_truncated: 'true' } : {}),
+                    if (posthog.is_captuing() {
+                        const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
+                        const logAttributes = {
+                            ...attributes,
+                            ...(truncated ? { body_truncated: 'true' } : {}),
+                        }
+                        logger.emit({
+                            severityText: SEVERITY_MAP[level],
+                            body: body,
+                            attributes: {
+                                'log.source': `console.${level}`,
+                                distinct_id: posthog.get_distinct_id(),
+                                'location.href': assignableWindow.location.href,
+                                ...logAttributes,
+                                ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
+                            },
+                        })
                     }
-                    logger.emit({
-                        severityText: SEVERITY_MAP[level],
-                        body: body,
-                        attributes: {
-                            'log.source': `console.${level}`,
-                            distinct_id: posthog.get_distinct_id(),
-                            'location.href': assignableWindow.location.href,
-                            ...logAttributes,
-                            ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
-                        },
-                    })
                     originalConsoleLog.apply(assignableWindow.console, args)
                 }
             }
