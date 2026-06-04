@@ -1,4 +1,4 @@
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -29,6 +29,15 @@ const runSed = (sedExpr: string, input: string): string => {
   // Shell-escape the sed expression to pass it through execSync safely.
   const escaped = sedExpr.replace(/'/g, `'\\''`)
   return execSync(`printf %s '${input}' | sed -E '${escaped}'`).toString().trim()
+}
+
+const extractCommandErrorBlock = (): string => {
+  const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
+  const match = contents.match(/print_prefixed_output\(\) \{[\s\S]+?\n\}\n\nprint_command_error\(\) \{[\s\S]+?\n\}/)
+  if (!match) {
+    throw new Error(`Could not find posthog-cli error formatting helpers in ${SCRIPT_PATH}`)
+  }
+  return match[0]
 }
 
 describe('posthog-xcode.sh remote URL parsing', () => {
@@ -107,5 +116,36 @@ describe('posthog-xcode.sh REACT_NATIVE_XCODE resolution', () => {
     const result = resolveReactNativeXcode(arg1)
     expect(result).not.toBe('/bin/sh')
     expect(result).toContain('react-native-xcode.sh')
+  })
+})
+
+describe('posthog-xcode.sh posthog-cli error formatting', () => {
+  it('uses multiline Xcode error formatting for clone and upload failures', () => {
+    const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
+
+    expect(contents).toContain('print_command_error "posthog-cli hermes clone" "$CLONE_EXIT_CODE" "$CLI_CLONE_OUTPUT"')
+    expect(contents).toContain(
+      'print_command_error "posthog-cli hermes upload" "$UPLOAD_EXIT_CODE" "$CLI_UPLOAD_OUTPUT"'
+    )
+  })
+
+  it('prefixes every captured posthog-cli failure line as an Xcode error', () => {
+    const helperBlock = extractCommandErrorBlock()
+    const script = `${helperBlock}
+CLI_OUTPUT=$(printf '%s\\n%s\\n%s\\n' \
+  '2026-06-04T20:42:06Z  INFO posthog_cli::utils::auth: Using token from environment' \
+  '2026-06-04T20:42:07Z ERROR posthog_cli::commands: msg="Oops! real failure"' \
+  'Oops! real failure')
+print_command_error "posthog-cli hermes upload" "42" "$CLI_OUTPUT"`
+
+    const output = execFileSync('/bin/bash', ['-c', script]).toString().trim().split('\n')
+
+    expect(output).toEqual([
+      'error: posthog-cli hermes upload failed with exit code 42',
+      'error: posthog-cli hermes upload - 2026-06-04T20:42:06Z  INFO posthog_cli::utils::auth: Using token from environment',
+      'error: posthog-cli hermes upload - 2026-06-04T20:42:07Z ERROR posthog_cli::commands: msg="Oops! real failure"',
+      'error: posthog-cli hermes upload - Oops! real failure',
+    ])
+    expect(output.every((line) => line.startsWith('error: '))).toBe(true)
   })
 })
