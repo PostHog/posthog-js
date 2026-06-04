@@ -15,6 +15,9 @@ describe('createSafeStyleSheet', () => {
 
     expect(createSpy).toHaveBeenCalledWith(input)
     expect(result).toBe(sentinel)
+    // clearMocks resets call counts but not the implementation; restore so the
+    // sentinel return doesn't leak into other tests in this file.
+    createSpy.mockRestore()
   })
 
   it('falls back to the raw style map when StyleSheet is unavailable', () => {
