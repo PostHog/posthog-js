@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.36.0
+
+### Minor Changes
+
+- [#3728](https://github.com/PostHog/posthog-js/pull/3728) [`9287c87`](https://github.com/PostHog/posthog-js/commit/9287c87b7d4cf00160269d0cc648074f27c0847a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add a configurable `$is_server` event property (default `true`) so PostHog can identify server-side events. Set `isServer: false` when using the SDK as a client/CLI so the device OS is attributed normally.
+  (2026-06-04)
+
 ## 5.35.15
 
 ### Patch Changes

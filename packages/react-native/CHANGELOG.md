@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.46.13
+
+### Patch Changes
+
+- [#3729](https://github.com/PostHog/posthog-js/pull/3729) [`3959c03`](https://github.com/PostHog/posthog-js/commit/3959c038505c2b1365fe1c09183cc4038e707962) Thanks [@cat-ph](https://github.com/cat-ph)! - fix(react-native): make the Android Hermes sourcemap upload tasks compatible with Gradle's configuration cache.
+  (2026-06-04)
+
 ## 4.46.12
 
 ### Patch Changes
