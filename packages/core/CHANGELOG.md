@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.30.9
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+  - @posthog/types@1.381.0
+
 ## 1.30.8
 
 ### Patch Changes

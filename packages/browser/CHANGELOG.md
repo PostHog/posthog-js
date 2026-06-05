@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.381.0
+
+### Minor Changes
+
+- [#3719](https://github.com/PostHog/posthog-js/pull/3719) [`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446) Thanks [@lricoy](https://github.com/lricoy)! - Add `__preview_cookie_wins_on_conflict` opt-in config to prefer cookie values over localStorage when merging persistence state in `localStorage+cookie` mode, fixing cross-subdomain identify and session disconnects.
+  (2026-06-05)
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+    - @posthog/types@1.381.0
+    - @posthog/core@1.30.9
+
 ## 1.380.1
 
 ### Patch Changes
