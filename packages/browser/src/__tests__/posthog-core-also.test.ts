@@ -1237,25 +1237,22 @@ describe('posthog core', () => {
             posthog.reloadFeatureFlags = jest.fn()
         })
 
-        it('resets person properties for flags and reloads by default', () => {
-            posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
+        it.each([
+            [undefined, 1],
+            [false, 0],
+        ] as const)(
+            'resets person properties for flags (reloadFeatureFlags=%s)',
+            (reloadFeatureFlags, expectedCalls) => {
+                posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
 
-            expect(posthog.persistence!.props['$stored_person_properties']).toEqual({ plan: 'pro' })
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual({ plan: 'pro' })
 
-            posthog.resetPersonPropertiesForFlags()
+                posthog.resetPersonPropertiesForFlags(reloadFeatureFlags)
 
-            expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
-            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
-        })
-
-        it('resets person properties for flags without reloading if requested', () => {
-            posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
-
-            posthog.resetPersonPropertiesForFlags(false)
-
-            expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
-            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
-        })
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
+                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
+            }
+        )
     })
 
     describe('group()', () => {
