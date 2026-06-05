@@ -250,10 +250,25 @@ describe('record', function (this: ISuite) {
     await assertSnapshot(ctx.events);
   });
 
-  it('should record the resting scroll offset on scrollend', async () => {
-    // Scroll before recording starts and drain that scroll event, so the only
-    // signal during recording is the scrollend — which must still be captured.
-    await ctx.page.evaluate(() => {
+  const scrollData = () =>
+    ctx.events
+      .filter(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          e.data.source === IncrementalSource.Scroll,
+      )
+      .map((e) => {
+        const d = e.data as { id: number; x: number; y: number };
+        return { id: d.id, x: d.x, y: d.y };
+      });
+
+  // Builds a scrollable container, appends it before recording starts (so it gets
+  // a stable mirror id from the full snapshot), scrolls it, and drains the
+  // resulting scroll event. Returns the container's mirror id.
+  const setupScrolledContainerBeforeRecord = async (
+    initialScrollTop: number,
+  ): Promise<void> => {
+    await ctx.page.evaluate((top: number) => {
       const container = document.createElement('div');
       container.setAttribute(
         'style',
@@ -263,31 +278,106 @@ describe('record', function (this: ISuite) {
       tall.setAttribute('style', 'height: 3000px; width: 50px;');
       container.appendChild(tall);
       document.body.appendChild(container);
-      container.scrollTop = 745;
+      container.scrollTop = top;
       (window as unknown as { __container: HTMLElement }).__container =
         container;
+    }, initialScrollTop);
+    await waitForRAF(ctx.page);
+  };
+
+  it('should record the resting scroll offset on scrollend', async () => {
+    // Scroll before recording starts so no `scroll` event fires during recording.
+    // The only signal is the scrollend, which must still capture the resting offset.
+    await setupScrolledContainerBeforeRecord(745);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const c = (window as unknown as { __container: HTMLElement }).__container;
+      c.dispatchEvent(new Event('scrollend'));
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(c);
+    });
+    await waitForRAF(ctx.page);
+
+    // scrollend is the sole source: exactly one Scroll event, for the right node,
+    // with the resting offset (not the clamped 0 the throttled `scroll` would log).
+    expect(expectedId).toBeGreaterThan(0);
+    expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 745 }]);
+  });
+
+  it('should not emit a duplicate scroll event when scrollend repeats the offset', async () => {
+    // Regression guard: a normal scroll already logs its resting offset, so the
+    // following scrollend (same position) must be deduped — not doubled.
+    await setupScrolledContainerBeforeRecord(300);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const c = (window as unknown as { __container: HTMLElement }).__container;
+      c.dispatchEvent(new Event('scroll')); // logs y=300
+      c.dispatchEvent(new Event('scrollend')); // same offset -> deduped
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(c);
+    });
+    await waitForRAF(ctx.page);
+
+    expect(expectedId).toBeGreaterThan(0);
+    expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 300 }]);
+  });
+
+  it('should recover the resting offset via scrollend after a scroll clamped to 0', async () => {
+    // Faithful repro: the reveal scroll is applied while the target is not yet
+    // scrollable, so scrollTop clamps to 0 and the `scroll` sample records 0.
+    // Once content grows and the browser settles, scrollend carries the real offset.
+    await ctx.page.evaluate(() => {
+      const container = document.createElement('div');
+      container.setAttribute(
+        'style',
+        'overflow: auto; height: 100px; width: 100px;',
+      );
+      const child = document.createElement('div');
+      child.setAttribute('style', 'height: 10px; width: 50px;'); // not scrollable yet
+      container.appendChild(child);
+      document.body.appendChild(container);
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__container = container;
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__child = child;
+    });
+    await waitForRAF(ctx.page);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const { __container } = window as unknown as { __container: HTMLElement };
+      __container.scrollTop = 745; // clamps to 0 (not scrollable)
+      __container.dispatchEvent(new Event('scroll')); // sample logs y=0
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(__container);
     });
     await waitForRAF(ctx.page);
 
     await ctx.page.evaluate(() => {
-      const { record } = (window as unknown as IWindow).rrweb;
-      record({
-        emit: (window as unknown as IWindow).emit,
-      });
-      const c = (window as unknown as { __container: HTMLElement }).__container;
-      c.dispatchEvent(new Event('scrollend'));
+      const { __container, __child } = window as unknown as {
+        __container: HTMLElement;
+        __child: HTMLElement;
+      };
+      __child.style.height = '3000px'; // now scrollable
+      __container.scrollTop = 745; // sticks
+      __container.dispatchEvent(new Event('scrollend'));
     });
     await waitForRAF(ctx.page);
 
-    const scrollEvents = ctx.events.filter(
-      (e) =>
-        e.type === EventType.IncrementalSnapshot &&
-        e.data.source === IncrementalSource.Scroll,
-    );
-    expect(scrollEvents.length).toBeGreaterThan(0);
-    expect(scrollEvents.some((e) => (e.data as { y: number }).y === 745)).toBe(
-      true,
-    );
+    const data = scrollData().filter((d) => d.id === expectedId);
+    expect(expectedId).toBeGreaterThan(0);
+    expect(data[0].y).toBe(0); // clamped sample
+    expect(data[data.length - 1].y).toBe(745); // resting offset recovered by scrollend
   });
 
   it('should record selection event', async () => {

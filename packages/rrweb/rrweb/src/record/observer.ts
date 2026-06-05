@@ -318,30 +318,35 @@ export function initScrollObserver({
   observerParam,
   'scrollCb' | 'doc' | 'mirror' | 'blockClass' | 'blockSelector' | 'sampling'
 >): listenerHandler {
-  const emitScrollPosition = (evt: Event) => {
+  // Tracks the last offset emitted per node so `scrollend` only fires when it
+  // carries a position `scroll` didn't already log (avoids doubling every scroll).
+  const lastEmitted = new Map<number, string>();
+  const emitScrollPosition = (evt: Event, skipIfUnchanged = false) => {
     const target = getEventTarget(evt);
     if (!target || isBlocked(target as Node, blockClass, blockSelector, true)) {
       return;
     }
     const id = mirror.getId(target as Node);
+    let x: number;
+    let y: number;
     if (target === doc && doc.defaultView) {
       const scrollLeftTop = getWindowScroll(doc.defaultView);
-      scrollCb({
-        id,
-        x: scrollLeftTop.left,
-        y: scrollLeftTop.top,
-      });
+      x = scrollLeftTop.left;
+      y = scrollLeftTop.top;
     } else {
-      scrollCb({
-        id,
-        x: (target as HTMLElement).scrollLeft,
-        y: (target as HTMLElement).scrollTop,
-      });
+      x = (target as HTMLElement).scrollLeft;
+      y = (target as HTMLElement).scrollTop;
     }
+    const key = `${x},${y}`;
+    if (skipIfUnchanged && lastEmitted.get(id) === key) {
+      return;
+    }
+    lastEmitted.set(id, key);
+    scrollCb({ id, x, y });
   };
   const updatePosition = callbackWrapper(
     throttle<UIEvent>(
-      callbackWrapper(emitScrollPosition),
+      callbackWrapper((evt) => emitScrollPosition(evt)),
       sampling.scroll || 100,
     ),
   );
@@ -349,7 +354,13 @@ export function initScrollObserver({
   // `scrollend` captures the resting offset when a scroll clamps to 0 before its
   // target is scrollable (e.g. scroll-snap-revealed sheets), which `scroll` misses.
   if ('onscrollend' in doc) {
-    handlers.push(on('scrollend', callbackWrapper(emitScrollPosition), doc));
+    handlers.push(
+      on(
+        'scrollend',
+        callbackWrapper((evt: Event) => emitScrollPosition(evt, true)),
+        doc,
+      ),
+    );
   }
   return () => handlers.forEach((h) => h());
 }
