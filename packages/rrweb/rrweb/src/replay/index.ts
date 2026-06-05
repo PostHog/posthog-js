@@ -1963,21 +1963,21 @@ export class Replayer {
       this.iframe.contentWindow?.scrollTo({
         top: d.y,
         left: d.x,
-        behavior: isSync ? 'instant' : 'smooth',
+        behavior: isSync ? 'auto' : 'smooth',
       });
     } else if (sn?.type === NodeType.Document) {
       // nest iframe content document
       (target as Document).defaultView?.scrollTo({
         top: d.y,
         left: d.x,
-        behavior: isSync ? 'instant' : 'smooth',
+        behavior: isSync ? 'auto' : 'smooth',
       });
     } else {
       try {
         (target as Element).scrollTo({
           top: d.y,
           left: d.x,
-          behavior: isSync ? 'instant' : 'smooth',
+          behavior: isSync ? 'auto' : 'smooth',
         });
       } catch (error) {
         /**

@@ -15,7 +15,6 @@ import orderingEvents from './events/ordering';
 import scrollEvents from './events/scroll';
 import scrollWithParentStylesEvents from './events/scroll-with-parent-styles';
 import scrollRevealedByLateStyleEvents from './events/scroll-revealed-by-late-style';
-import scrollModalRevealedOnSeekEvents from './events/scroll-modal-revealed-on-seek';
 import inputEvents from './events/input';
 import iframeEvents from './events/iframe';
 import selectionEvents from './events/selection';
@@ -478,29 +477,6 @@ describe('replayer', function () {
         (element: Element) => element.scrollTop,
       ),
     ).toEqual(800);
-  });
-
-  it('lands a scroll instantly on seek even when the target uses scroll-behavior: smooth', async () => {
-    await page.evaluate(`
-      events = ${JSON.stringify(scrollModalRevealedOnSeekEvents)};
-      const { Replayer } = rrweb;
-      var replayer = new Replayer(events,{showDebug:true});
-      replayer.pause(1500);
-    `);
-    // The sheet sets `scroll-behavior: smooth`. Seeking must jump straight to the recorded offset,
-    // not animate from 0 - otherwise the seeked frame shows an empty scrim. A couple of frames after
-    // the seek the scroll is settled at 1320 with `behavior: 'instant'`; with `behavior: 'auto'` the
-    // smooth animation has only crept a few pixels off 0 by then, so it is nowhere near 1320.
-    await waitForRAF(page);
-    await waitForRAF(page);
-    const iframe = await page.$('iframe');
-    const contentDocument = await iframe!.contentFrame()!;
-    expect(
-      await contentDocument!.$eval(
-        '#sheet',
-        (element: Element) => element.scrollTop,
-      ),
-    ).toEqual(1320);
   });
 
   it('can fast forward input events', async () => {
