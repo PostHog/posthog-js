@@ -1,3 +1,4 @@
+import type { PostHog } from 'posthog-node'
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
@@ -10,6 +11,7 @@ import { setupTracking } from './extensions/tracing-v2'
 import type {
   CaptureEventData,
   HighLevelMCPServerLike,
+  McpAnalytics,
   MCPAnalyticsData,
   MCPAnalyticsOptions,
   MCPServerLike,
@@ -18,57 +20,64 @@ import type {
 
 /**
  * Instruments an MCP server so PostHog auto-captures tool calls, tool listings, initialize
- * requests, identity, and exceptions.
+ * requests, identity, and exceptions. Returns a handle whose `capture()` method records
+ * custom events, so you don't pass the server around after wiring it up.
  *
- * **Idempotent per server instance.** We store per-server tracking state in a
- * module-level `WeakMap<MCPServerLike, MCPAnalyticsData>` (`internal.ts`). A
- * second `instrument()` call on the same server checks that map, logs, and
- * returns early, so handlers are never double-wrapped and events are never
- * duplicated.
+ * **Idempotent per server instance.** Per-server tracking state lives in a module-level
+ * `WeakMap<MCPServerLike, MCPAnalyticsData>` (`internal.ts`); a second `instrument()` call
+ * on the same server reuses it rather than double-wrapping handlers.
  *
- * @param server - The MCP server instance to instrument (low-level `Server` or high-level `McpServer`).
- * @param options - Configuration. See `MCPAnalyticsOptions`.
- * @returns The same server instance, typed.
+ * @param server - The MCP server to instrument (low-level `Server` or high-level `McpServer`).
+ * @param posthog - A `posthog-node` client you construct and own (matching `@posthog/ai`); call `posthog.shutdown()` on exit to flush.
+ * @param options - Optional configuration. See `MCPAnalyticsOptions`.
  *
  * @example
  * ```ts
  * import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+ * import { PostHog } from "posthog-node"
  * import { instrument } from "@posthog/mcp"
  *
  * const posthog = new PostHog(process.env.POSTHOG_PROJECT_TOKEN, { host: "https://us.i.posthog.com" })
  * const server = new McpServer({ name: "my-mcp", version: "1.0.0" })
- * instrument(server, { posthog })
+ * const analytics = instrument(server, posthog)
+ *
+ * await analytics.capture({ event: "feedback_submitted", properties: { rating: 5 } })
  * ```
  */
-function instrument<TServer>(server: TServer, options: MCPAnalyticsOptions = {}): TServer {
+function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): McpAnalytics {
   try {
     if (options.logger) {
       setLogger(options.logger)
+    }
+    if (!posthog) {
+      log('Warning: No PostHog client passed to instrument(). Events will not be sent anywhere.')
     }
 
     const validatedServer = isCompatibleServerType(server)
     const lowLevelServer = getLowLevelServer(validatedServer)
 
-    const existingData = getServerTrackingData(lowLevelServer)
-    if (existingData) {
+    if (getServerTrackingData(lowLevelServer)) {
       log('instrument() - Server already instrumented, skipping initialization')
-      return validatedServer as TServer
+      return createAnalyticsHandle(lowLevelServer)
     }
 
-    const sink = options.posthog ? new McpEventSink(options.posthog) : undefined
-    if (!sink) {
-      log('Warning: No PostHog client provided (`posthog` option). Events will not be sent anywhere.')
-    }
-
+    const sink = posthog ? new McpEventSink(posthog) : undefined
     const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, sink)
 
     setServerTrackingData(lowLevelServer, mcpAnalyticsData)
     setupTrackedServer(validatedServer, lowLevelServer)
 
-    return validatedServer as TServer
+    return createAnalyticsHandle(lowLevelServer)
   } catch (error) {
     log(`Warning: Failed to instrument server - ${error}`)
-    return server
+    // Degrade gracefully: a no-op handle so the host app keeps working.
+    return { capture: async () => undefined }
+  }
+}
+
+function createAnalyticsHandle(lowLevelServer: MCPServerLike): McpAnalytics {
+  return {
+    capture: (eventData) => captureCustomEvent(lowLevelServer, eventData),
   }
 }
 
@@ -122,26 +131,14 @@ function setupTrackedServer(
   }
 }
 
-/**
- * Captures a custom event for an instrumented server. Use this to record
- * domain-specific actions that aren't captured automatically (e.g. user
- * feedback, workflow milestones). The event name is required and sent verbatim
- * (it's a customer event, so it is not `$`-prefixed). The server must already
- * have been passed to `instrument()`. Resolves once the event is processed.
- */
-export async function capture(server: unknown, eventData: CaptureEventData): Promise<void> {
-  if (!server || typeof server !== 'object') {
-    throw new Error('First argument must be an instrumented MCP server instance')
-  }
-
+async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: CaptureEventData): Promise<void> {
   if (!eventData || typeof eventData.event !== 'string' || eventData.event.length === 0) {
-    throw new Error('`capture` requires an `event` name, e.g. capture(server, { event: "feedback_submitted" })')
+    throw new Error('`capture` requires an `event` name, e.g. analytics.capture({ event: "feedback_submitted" })')
   }
 
-  const lowLevelServer = getLowLevelServerFromUnknownObject(server)
   const trackingData = getServerTrackingData(lowLevelServer)
   if (!trackingData) {
-    throw new Error('Server is not instrumented. Call `instrument(server, options)` before `capture`.')
+    return
   }
 
   const event: UnredactedEvent = {
@@ -158,12 +155,6 @@ export async function capture(server: unknown, eventData: CaptureEventData): Pro
   log(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
 }
 
-function getLowLevelServerFromUnknownObject(server: object): MCPServerLike {
-  return 'server' in server && server.server && typeof server.server === 'object'
-    ? (server.server as MCPServerLike)
-    : (server as MCPServerLike)
-}
-
 export { deriveSessionIdFromMCPSession }
 export {
   POSTHOG_MCP_ANALYTICS_SOURCE,
@@ -173,6 +164,7 @@ export {
 export type {
   BeforeSendFn,
   CaptureEventData,
+  McpAnalytics,
   MCPAnalyticsContextOptions,
   MCPAnalyticsIntentSource,
   MCPAnalyticsOptions,

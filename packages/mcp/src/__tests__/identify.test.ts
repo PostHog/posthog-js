@@ -49,7 +49,7 @@ describe('identify option', () => {
       return identity
     })
 
-    instrument(server, { posthog: fakePostHog(), identify })
+    instrument(server, fakePostHog(), { identify })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -67,7 +67,7 @@ describe('identify option', () => {
     await capture.start()
     const identify = jest.fn(async () => ({ distinctId: 'user-1', properties: { name: 'Stable' } }))
 
-    instrument(server, { posthog: fakePostHog(), identify })
+    instrument(server, fakePostHog(), { identify })
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -87,7 +87,7 @@ describe('identify option', () => {
     await capture.start()
 
     const identify = jest.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
-    instrument(server, { posthog: fakePostHog(), context: true, identify })
+    instrument(server, fakePostHog(), { context: true, identify })
 
     server.tool!(
       'post_track_tool',
@@ -117,7 +117,7 @@ describe('identify option', () => {
   it('treats a null return as "no identity": no event published, no identity stored', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, { posthog: fakePostHog(), identify: async () => null })
+    instrument(server, fakePostHog(), { identify: async () => null })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -132,7 +132,7 @@ describe('identify option', () => {
   it('still tracks tool calls when no identify option is provided (anonymous sessions)', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, { posthog: fakePostHog() })
+    instrument(server, fakePostHog())
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -158,8 +158,7 @@ describe('identify option', () => {
   })
 
   it('populates session info with the resolved identity (distinctId, properties)', async () => {
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       identify: async () => ({
         distinctId: 'session-user',
         properties: { name: 'Session Alice', role: 'admin', team: 'platform' },
@@ -176,8 +175,7 @@ describe('identify option', () => {
   it('stamps $groups on events when identify returns groups', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       identify: async () => ({
         distinctId: 'session-user',
         groups: { organization: 'org_123', project: 'proj_9' },
@@ -196,8 +194,7 @@ describe('identify option', () => {
   it('keeps person processing on and uses the distinctId once identified', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       identify: async () => ({
         distinctId: 'session-user',
         properties: { name: 'Session Alice', role: 'admin' },
@@ -221,8 +218,7 @@ describe('identify option', () => {
   it('awaits async identify callbacks and records a non-zero duration on the $identify event', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       identify: async () => {
         await new Promise((r) => setTimeout(r, 50))
         return { distinctId: 'async-user' }
@@ -241,8 +237,7 @@ describe('identify option', () => {
   it('swallows errors thrown from identify so tool calls still succeed', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       identify: async () => {
         throw new Error('identify boom')
       },
@@ -258,8 +253,7 @@ describe('identify option', () => {
   })
 
   it('stores whatever identify returns — no schema validation', async () => {
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       // The SDK does not validate the identity shape; whatever you return ends up cached.
       identify: async () => ({ invalidField: 'invalid' }) as unknown as UserIdentity,
     })

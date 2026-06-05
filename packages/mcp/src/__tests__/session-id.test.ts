@@ -53,7 +53,7 @@ describe('Session ID Management', () => {
       await eventCapture.start()
       const mcpSessionId = 'mcp-session-abc-123'
 
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
 
       // Get the low-level server
       const lowLevelServer = server.server
@@ -80,7 +80,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
 
       const lowLevelServer = server.server
 
@@ -105,7 +105,7 @@ describe('Session ID Management', () => {
       await eventCapture.start()
       const mcpSessionId = 'mcp-session-appears'
 
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
 
       const lowLevelServer = server.server
 
@@ -138,7 +138,7 @@ describe('Session ID Management', () => {
       await eventCapture.start()
       const mcpSessionId = 'mcp-session-disappears'
 
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
 
       const lowLevelServer = server.server
 
@@ -169,7 +169,7 @@ describe('Session ID Management', () => {
       const mcpSessionId1 = 'mcp-session-first'
       const mcpSessionId2 = 'mcp-session-second'
 
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
 
       const lowLevelServer = server.server
 
@@ -203,7 +203,7 @@ describe('Session ID Management', () => {
       await eventCapture.start()
       const mcpSessionId = 'mcp-session-persistent'
 
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
 
       const lowLevelServer = server.server
 
@@ -230,7 +230,7 @@ describe('Session ID Management', () => {
       const eventCapture = new EventCapture()
       await eventCapture.start()
 
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
 
       const lowLevelServer = server.server
 
@@ -261,7 +261,7 @@ describe('Session ID Management', () => {
       const mcpSessionId = 'mcp-session-for-events'
       expect(deriveSessionIdFromMCPSession(mcpSessionId)).toMatch(SESSION_ID_PATTERN)
 
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
 
       // TODO: This test would require mocking the transport to inject sessionId into extra
       // For now, we'll verify the logic with direct function calls above

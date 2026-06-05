@@ -35,7 +35,7 @@ afterEach(async () => {
 
 describe('error capture on the tool-call path', () => {
   it('captures errors thrown inside the tool callback (with stack + frames)', async () => {
-    instrument(server, { posthog: fakePostHog() })
+    instrument(server, fakePostHog())
 
     const result = await client.request(
       {
@@ -56,7 +56,7 @@ describe('error capture on the tool-call path', () => {
   })
 
   it('still propagates the error result to the MCP client (does not swallow it)', async () => {
-    instrument(server, { posthog: fakePostHog() })
+    instrument(server, fakePostHog())
 
     const result = await client.request(
       {
@@ -71,7 +71,7 @@ describe('error capture on the tool-call path', () => {
   })
 
   it('publishes a single (non-error) event for a successful tool call', async () => {
-    instrument(server, { posthog: fakePostHog() })
+    instrument(server, fakePostHog())
 
     await client.request(
       { method: 'tools/call', params: { name: 'add_todo', arguments: { text: 'ok', context: 'test' } } },
@@ -110,7 +110,7 @@ describe('error capture on the tool-call path', () => {
     ],
   ])('captures Zod validation failures (%s) as $exception events', async (_, register, toolName, args) => {
     register()
-    instrument(server, { posthog: fakePostHog() })
+    instrument(server, fakePostHog())
 
     // MCP SDK <1.21 throws; ≥1.21 returns CallToolResult with isError: true.
     await client
@@ -125,7 +125,7 @@ describe('error capture on the tool-call path', () => {
   })
 
   it('captures errors for unknown tool names', async () => {
-    instrument(server, { posthog: fakePostHog() })
+    instrument(server, fakePostHog())
 
     await client
       .request(

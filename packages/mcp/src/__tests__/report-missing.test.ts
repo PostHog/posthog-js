@@ -27,7 +27,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
 
   describe('tools/list injection', () => {
     it('adds get_more_tools with required context when reportMissing is true', async () => {
-      instrument(server, { posthog: fakePostHog(), reportMissing: true })
+      instrument(server, fakePostHog(), { reportMissing: true })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const tool = tools.find((t: any) => t.name === GET_MORE_TOOLS)
@@ -38,14 +38,14 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     })
 
     it('omits get_more_tools when reportMissing is false', async () => {
-      instrument(server, { posthog: fakePostHog(), reportMissing: false })
+      instrument(server, fakePostHog(), { reportMissing: false })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       expect(tools.find((t: any) => t.name === GET_MORE_TOOLS)).toBeUndefined()
     })
 
     it('does not re-inject the context param into get_more_tools (it already has its own)', async () => {
-      instrument(server, { posthog: fakePostHog(), reportMissing: true, context: true })
+      instrument(server, fakePostHog(), { reportMissing: true, context: true })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const reportMissing = tools.find((t: any) => t.name === GET_MORE_TOOLS)
@@ -64,7 +64,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('captures the report as a $mcp_missing_capability event with context as userIntent', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, { posthog: fakePostHog(), reportMissing: true })
+      instrument(server, fakePostHog(), { reportMissing: true })
 
       const context = 'Need a database query tool for SQL operations'
       const result = await client.request(
@@ -95,7 +95,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('shares one session across get_more_tools and the surrounding tool calls', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, { posthog: fakePostHog(), reportMissing: true })
+      instrument(server, fakePostHog(), { reportMissing: true })
 
       const calls = [
         { name: 'add_todo', arguments: { text: 'First', context: 'Adding first todo' } },
@@ -125,8 +125,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('triggers identify on the first get_more_tools call when identify is configured', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, {
-        posthog: fakePostHog(),
+      instrument(server, fakePostHog(), {
         reportMissing: true,
         identify: async () => ({ distinctId: 'user-1', properties: { role: 'developer' } }),
       })

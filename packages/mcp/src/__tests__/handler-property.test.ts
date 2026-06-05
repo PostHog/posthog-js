@@ -52,7 +52,7 @@ describe('MCP SDK callback/handler compatibility', () => {
     const originalPropName = getToolFunctionPropertyName(toolBefore)
 
     // Call instrument() to apply PostHog MCP analytics's tracing
-    instrument(server, { posthog: fakePostHog() })
+    instrument(server, fakePostHog())
 
     const toolsAfter = (server as any)._registeredTools
     const toolAfter = toolsAfter.test_tool
@@ -79,7 +79,7 @@ describe('MCP SDK callback/handler compatibility', () => {
     const expectedPropName = getToolFunctionPropertyName((server as any)._registeredTools.initial_tool)
 
     // Call instrument() first
-    instrument(server, { posthog: fakePostHog() })
+    instrument(server, fakePostHog())
 
     // Then register a tool after instrument()
     server.tool('late_tool', { b: z.string() }, async ({ b }) => ({

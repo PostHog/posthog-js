@@ -39,8 +39,7 @@ describe('beforeSend option', () => {
 
   it('receives the built payload (event name, distinct_id, properties)', async () => {
     const seen: PostHogCaptureEvent[] = []
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       beforeSend: (event) => {
         seen.push(event)
         return event
@@ -57,8 +56,7 @@ describe('beforeSend option', () => {
   })
 
   it('can mutate properties before capture', async () => {
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       beforeSend: (event) => {
         if (event.properties.$mcp_parameters) {
           event.properties.$mcp_parameters = '[redacted]'
@@ -75,8 +73,7 @@ describe('beforeSend option', () => {
   })
 
   it('drops an event when beforeSend returns null', async () => {
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       beforeSend: () => null,
     })
 
@@ -87,8 +84,7 @@ describe('beforeSend option', () => {
   })
 
   it('runs per fanned-out payload, so it can drop the $exception but keep the tool call', async () => {
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       beforeSend: (event) => (event.event === '$exception' ? null : event),
     })
 
@@ -100,8 +96,7 @@ describe('beforeSend option', () => {
   })
 
   it('drops only the throwing payload and still sends the rest', async () => {
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       beforeSend: (event) => {
         if (event.event === '$exception') {
           throw new Error('beforeSend boom')
@@ -118,8 +113,7 @@ describe('beforeSend option', () => {
   })
 
   it('supports async beforeSend', async () => {
-    instrument(server, {
-      posthog: fakePostHog(),
+    instrument(server, fakePostHog(), {
       beforeSend: async (event) => {
         await new Promise((r) => setTimeout(r, 5))
         event.properties.redacted = true

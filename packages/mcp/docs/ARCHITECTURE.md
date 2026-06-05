@@ -4,8 +4,8 @@ This document describes the internals of the `@posthog/mcp` SDK and the exact Po
 
 ## TL;DR
 
-- `instrument(server, options)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via the host's `posthog-node` client (`posthog.capture()`).
-- Every SDK-owned PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_initialize`, `$identify`, …) per the PostHog naming convention. (Custom events you emit via `capture()` keep your own verbatim name — they're customer events, not SDK-owned.)
+- `instrument(server, posthog, options?)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via the host's `posthog-node` client (`posthog.capture()`). It returns an `McpAnalytics` handle.
+- Every SDK-owned PostHog **event name** is `$`-prefixed (`$mcp_tool_call`, `$mcp_initialize`, `$identify`, …) per the PostHog naming convention. (Custom events you emit via `analytics.capture()` keep your own verbatim name — they're customer events, not SDK-owned.)
 - Every PostHog **property key** is also `$`-prefixed (`$mcp_tool_name`, `$mcp_intent`, `$mcp_duration_ms`, …) so MCP keys never collide with PostHog autocapture, web analytics, or other product events.
 - `$session_id` ties one MCP connection to one PostHog session. `distinct_id` falls back through `identified user → session id → "anonymous"`.
 - Tool calls additionally emit a sibling `$exception` event whenever a tool errors (unless `enableExceptionAutocapture: false`).
@@ -16,15 +16,15 @@ This document describes the internals of the `@posthog/mcp` SDK and the exact Po
 
 The public surface in `src/index.ts`:
 
-- `instrument(server, options)` — installs the SDK on an MCP server. Idempotent per server (re-calling logs and returns early).
-- `capture(server, { event, properties })` — emit a custom event onto the same pipeline. `event` is **required** and sent verbatim (a custom event is a customer event, so it is **not** `$`-prefixed). Returns a promise that resolves once the event has been processed, so callers can `await` it. The server must already have been passed to `instrument()`.
+- `instrument(server, posthog, options?)` — installs the SDK on an MCP server. The `posthog-node` client is a **required positional 2nd argument**; `options` is the optional 3rd argument. Returns an `McpAnalytics` handle (exposing `.capture()`). Idempotent per server (re-calling logs and returns early).
+- `analytics.capture({ event, properties })` — a method on the `McpAnalytics` handle returned by `instrument()` that emits a custom event onto the same pipeline. `event` is **required** and sent verbatim (a custom event is a customer event, so it is **not** `$`-prefixed). Returns a promise that resolves once the event has been processed, so callers can `await` it.
 
-The host application supplies its own `posthog-node` client via `options.posthog` (same pattern as `@posthog/ai`) and owns its lifecycle — there is no SDK-managed client to flush or shut down. Internally, `instrument()` wraps that client in an `McpEventSink` (`src/extensions/sink.ts`, not exported) that runs the pipeline and calls `posthog.capture()`.
+The host application supplies its own `posthog-node` client as the positional `posthog` argument (same pattern as `@posthog/ai`) and owns its lifecycle — there is no SDK-managed client to flush or shut down. Internally, `instrument()` wraps that client in an `McpEventSink` (`src/extensions/sink.ts`, not exported) that runs the pipeline and calls `posthog.capture()`.
 
 `instrument()` does five things (`src/index.ts`):
 
 1. Validate `server` is either a low-level `Server` or a high-level `McpServer`, and unwrap the latter to get the underlying `Server`.
-2. Wrap the user-provided `options.posthog` client in an `McpEventSink`.
+2. Wrap the user-provided `posthog` client in an `McpEventSink`.
 3. Build per-server tracking state (session id, identity cache, callbacks, the sink) stored in a module-level `WeakMap`.
 4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `instrument()` is also wrapped.
 5. Optionally register the `get_more_tools` virtual tool when `options.reportMissing: true`.
@@ -97,7 +97,7 @@ All events are emitted by `buildPostHogCaptureEvents`. The main event name is co
 | `$mcp_resource_read`   | Resource fetched                                              | `$mcp_resource_name`, `$mcp_parameters`, `$mcp_response`                                                                                                                        |
 | `$mcp_prompts_list`    | Client lists prompts                                          | —                                                                                                                                                                               |
 | `$mcp_prompt_get`      | Prompt fetched                                                | `$mcp_resource_name` (= prompt name)                                                                                                                                            |
-| _(your event name)_    | `capture(server, { event, properties })`                      | A customer event sent under the verbatim `event` name (not `$`-prefixed). Carries `$session_id`, `distinct_id`, server/client metadata, plus whatever you pass in `properties`   |
+| _(your event name)_    | `analytics.capture({ event, properties })`                    | A customer event sent under the verbatim `event` name (not `$`-prefixed). Carries `$session_id`, `distinct_id`, server/client metadata, plus whatever you pass in `properties`   |
 | `$identify`            | `options.identify` returned a new identity for the session    | `$set` populated                                                                                                                                                                |
 | `$exception`           | Sibling to any errored event (unless `enableExceptionAutocapture: false`) | `$exception_list`, `$exception_level` (standard `@posthog/core` error-tracking shape)                                                                              |
 
@@ -145,9 +145,10 @@ The `eventProperties` callback returns key/value pairs that are **spread flat at
 
 ## 7. Customer extension points (`MCPAnalyticsOptions`, `src/types.ts`)
 
+The `posthog-node` client is **not** an option — it is the required positional 2nd argument to `instrument(server, posthog, options?)`. You construct and own it (host, project token, batching, lifecycle all configured there). The options below are the optional 3rd argument.
+
 | Option                       | Default                                   | Use case                                                                                                                                |
 | ---------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `posthog`                    | —                                         | A `posthog-node` client you construct and own (host, project token, batching, lifecycle all configured there). Without it, the server is instrumented but no events are sent — this is how you turn capture off (instrumentation is otherwise unconditional). |
 | `logger`                     | no-op                                     | STDIO-safe log sink for SDK-internal warnings. Receives single string messages.                                                         |
 | `enableExceptionAutocapture` | `true`                                    | When `false`, a failed tool call does not emit the sibling `$exception` event.                                                          |
 | `enableConversationId`       | `false`                                   | Inject the `conversation_id` parameter into every tool and stamp `$mcp_conversation_id` on events.                                      |

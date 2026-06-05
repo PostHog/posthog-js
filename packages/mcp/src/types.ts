@@ -1,6 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ErrorTracking } from '@posthog/core'
-import type { PostHog } from 'posthog-node'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
 import type { IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
@@ -28,20 +27,18 @@ export interface MCPRequestLike {
   [key: string]: unknown
 }
 
-export interface MCPAnalyticsOptions {
+/** Handle returned by `instrument()` — the analytics surface for an instrumented server. */
+export interface McpAnalytics {
   /**
-   * A `posthog-node` client. Construct it yourself and pass it in (matching `@posthog/ai`),
-   * so you own its configuration and lifecycle — call `posthog.shutdown()` on exit to flush.
-   * Without it, the SDK instruments the server but does not send events.
-   *
-   * @example
-   * ```ts
-   * import { PostHog } from "posthog-node"
-   * const posthog = new PostHog(process.env.POSTHOG_PROJECT_TOKEN, { host: "https://us.i.posthog.com" })
-   * instrument(server, { posthog })
-   * ```
+   * Capture a custom event for this server. The `event` name is required and sent
+   * verbatim (a customer event, so it is not `$`-prefixed). Resolves once the event
+   * has been processed. Use for domain-specific actions that aren't auto-captured
+   * (user feedback, workflow milestones, etc).
    */
-  posthog?: PostHog
+  capture(eventData: CaptureEventData): Promise<void>
+}
+
+export interface MCPAnalyticsOptions {
   /**
    * Optional STDIO-safe log sink for SDK-internal warnings. Receives single string messages.
    * Defaults to a no-op since MCP STDIO transports cannot use console.

@@ -20,17 +20,11 @@ describe('Tracing Initialization Tests', () => {
     const { server, client, cleanup } = await setupTestServerAndClient()
 
     try {
-      await instrument(server, {
-        posthog: fakePostHog(),
-      })
+      await instrument(server, fakePostHog())
 
-      await instrument(server, {
-        posthog: fakePostHog(),
-      })
+      await instrument(server, fakePostHog())
 
-      await instrument(server, {
-        posthog: fakePostHog(),
-      })
+      await instrument(server, fakePostHog())
 
       await client.request(
         {
@@ -84,9 +78,7 @@ describe('Tracing Initialization Tests', () => {
     const { server, client, cleanup } = await setupTestServerAndClient()
 
     try {
-      await instrument(server, {
-        posthog: fakePostHog(),
-      })
+      await instrument(server, fakePostHog())
 
       const result = await client.request(
         {

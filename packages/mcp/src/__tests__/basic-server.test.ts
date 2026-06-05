@@ -128,8 +128,7 @@ describe('Basic Server Test', () => {
       const { instrument } = await import('../index')
 
       // Call instrument first with a project ID
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: true,
       })
 
@@ -202,8 +201,7 @@ describe('Basic Server Test', () => {
       const { instrument } = await import('../index')
 
       // Call instrument first with a project ID
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: true,
       })
 
@@ -271,8 +269,7 @@ describe('Basic Server Test', () => {
       const { instrument } = await import('../index')
 
       // Call instrument with tracing enabled
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: true,
       })
 
@@ -434,8 +431,7 @@ describe('Basic Server Test', () => {
       const { instrument } = await import('../index')
 
       // NOW call instrument - after tools are already defined
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: true,
       })
 
@@ -519,9 +515,7 @@ describe('Basic Server Test', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
-      })
+      await instrument(server, fakePostHog())
 
       await client.request(
         {
@@ -555,9 +549,7 @@ describe('Basic Server Test', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
-      })
+      await instrument(server, fakePostHog())
 
       await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 

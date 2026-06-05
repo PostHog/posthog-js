@@ -14,8 +14,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: false,
         // Off: the prompt-back appended on first mint would add an extra
         // content block and break this test's response-shape assertions.
@@ -83,8 +82,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: false,
       })
 
@@ -134,8 +132,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: false,
       })
 
@@ -194,8 +191,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: false,
       })
 

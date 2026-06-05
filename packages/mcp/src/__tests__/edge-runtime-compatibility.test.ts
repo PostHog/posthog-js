@@ -164,9 +164,11 @@ describe('Edge Runtime Compatibility', () => {
       expect(typeof mcpAnalytics.instrument).toBe('function')
     })
 
-    it('should export capture function', async () => {
+    it('should expose instrument as the documented entrypoint', async () => {
       const mcpAnalytics = await import('../index')
-      expect(typeof mcpAnalytics.capture).toBe('function')
+      // `capture` is no longer a top-level export; the documented surface is
+      // `instrument`, which returns a handle whose `.capture()` records events.
+      expect(typeof mcpAnalytics.instrument).toBe('function')
     })
 
     it('should export type definitions', async () => {
@@ -272,7 +274,6 @@ describe('Integration: SDK in Limited Environment', () => {
 
     // Core functions should exist
     expect(mcpAnalytics.instrument).toBeDefined()
-    expect(mcpAnalytics.capture).toBeDefined()
 
     // Exception capture should work
     const { captureException: capture } = await import('../extensions/exceptions')

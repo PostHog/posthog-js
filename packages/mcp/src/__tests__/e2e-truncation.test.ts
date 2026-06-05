@@ -14,8 +14,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: false,
       })
 
@@ -68,8 +67,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: false,
       })
 
@@ -126,8 +124,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: false,
       })
 
@@ -187,8 +184,7 @@ describe('E2E Truncation - real MCP tool calls', () => {
 
     try {
       const { instrument } = await import('../index')
-      await instrument(server, {
-        posthog: fakePostHog(),
+      await instrument(server, fakePostHog(), {
         context: false,
       })
 

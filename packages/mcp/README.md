@@ -37,7 +37,7 @@ server.tool(
 
 // One line. From here on every tool call, tool listing, and initialize
 // handshake on this server is captured to PostHog.
-instrument(server, { posthog })
+const analytics = instrument(server, posthog)
 
 // You own the client lifecycle — flush before the process exits.
 process.on('SIGTERM', async () => {
@@ -67,8 +67,8 @@ The surface maps onto concepts you already know — the main twist is that, beca
 
 | You know | Here it's | Note |
 |---|---|---|
-| BYO client in `@posthog/ai` | `instrument(server, { posthog })` | Same pattern: you construct and own the `posthog-node` client. |
-| `posthog.capture({ event, properties })` | `capture(server, { event, properties })` | `distinct_id` is derived from the session/identity for you. |
+| BYO client in `@posthog/ai` | `instrument(server, posthog, options?)` → returns an `McpAnalytics` handle | Same pattern: you construct and own the `posthog-node` client and pass it positionally. |
+| `posthog.capture({ event, properties })` | `analytics.capture({ event, properties })` | A method on the handle returned by `instrument()`. `distinct_id` is derived from the session/identity for you. |
 | `posthog.identify({ distinctId, properties })` | `identify: (req) => ({ distinctId, properties, groups })` | A per-request callback. `properties` → `$set`, `groups` → `$groups`. |
 | `posthog.register(props)` (super properties) | `eventProperties: (req) => ({ … })` | Per-request instead of set-once; return constants for the "stamp on everything" case. |
 | `beforeSend` | `beforeSend(event)` | Identical contract to posthog-node. |
@@ -82,8 +82,7 @@ The surface maps onto concepts you already know — the main twist is that, beca
 ```ts
 import jwt from 'jsonwebtoken'
 
-instrument(server, {
-  posthog,
+instrument(server, posthog, {
   identify: async (request, extra) => {
     const auth = extra?.headers?.authorization
     if (!auth) return null
@@ -112,8 +111,7 @@ PostHog injects an optional `context` parameter into every tool's input schema. 
 If a client ignores the schema (raw cURL, in-house agents, JSON-blind crawlers), supply `intentFallback` and the SDK will derive an intent from the request:
 
 ```ts
-instrument(server, {
-  posthog,
+instrument(server, posthog, {
   intentFallback: (request) => {
     const tool = request.params?.name
     const args = request.params?.arguments ?? {}
@@ -125,26 +123,25 @@ instrument(server, {
 
 ### Capture a custom event
 
-For domain-specific events that aren't auto-captured (e.g. user feedback, workflow milestones). You name the event; it's sent verbatim (it's your event, so it isn't `$`-prefixed):
+For domain-specific events that aren't auto-captured (e.g. user feedback, workflow milestones). Call `.capture()` on the handle returned by `instrument()`. You name the event; it's sent verbatim (it's your event, so it isn't `$`-prefixed):
 
 ```ts
-import { capture } from '@posthog/mcp'
+const analytics = instrument(server, posthog)
 
-await capture(server, {
+await analytics.capture({
   event: 'feedback_submitted',
   properties: { rating: 5, comment: 'love it' },
 })
 ```
 
-The event is enriched with `$session_id`, `distinct_id`, and server/client metadata before being sent. `capture()` resolves once the event has been processed, so you can `await` it.
+The event is enriched with `$session_id`, `distinct_id`, and server/client metadata before being sent. `analytics.capture()` resolves once the event has been processed, so you can `await` it.
 
 ### Inspect, modify, or drop events before send (`beforeSend`)
 
 `beforeSend` runs on each fully-built payload right before it reaches `posthog.capture()` (same contract as posthog-node). Return the event to send it, mutate its `properties`, or return `null` to drop it. It runs once per emitted event, including the `$exception` sibling of a failed call.
 
 ```ts
-instrument(server, {
-  posthog,
+instrument(server, posthog, {
   beforeSend: (event) => {
     // Redact a property
     if (typeof event.properties.$mcp_parameters === 'string') {
@@ -160,8 +157,7 @@ instrument(server, {
 ### Attach extra properties to every event
 
 ```ts
-instrument(server, {
-  posthog,
+instrument(server, posthog, {
   eventProperties: (request, extra) => ({
     deployment: process.env.NODE_ENV,
     region: 'us-east-1',
@@ -177,8 +173,7 @@ Returned keys are spread flat onto event properties, sitting alongside `$mcp_*` 
 Register an extra `get_more_tools` virtual tool that lets the agent report functionality it couldn't find. Each report lands as its own `$mcp_missing_capability` event (a capability gap, not a tool invocation) with the agent's reasoning in `$mcp_intent`.
 
 ```ts
-instrument(server, {
-  posthog,
+instrument(server, posthog, {
   reportMissing: true,
 })
 ```
@@ -188,8 +183,7 @@ instrument(server, {
 Opt into `enableConversationId: true` and the SDK injects a `conversation_id` parameter into every tool, mints one when the agent omits it, and appends a prompt-back text block telling the agent to echo it on every subsequent call. Events get `$mcp_conversation_id` so you can group all calls in an agent conversation.
 
 ```ts
-instrument(server, {
-  posthog,
+instrument(server, posthog, {
   enableConversationId: true,
 })
 ```
@@ -199,16 +193,15 @@ instrument(server, {
 A failed tool call emits an `$exception` sibling alongside the `$mcp_tool_call` by default. Set `enableExceptionAutocapture: false` if you track errors elsewhere and don't want MCP failures fanning into PostHog error tracking:
 
 ```ts
-instrument(server, {
-  posthog,
+instrument(server, posthog, {
   enableExceptionAutocapture: false,
 })
 ```
 
 ## API
 
-- **`instrument(server, options)`**: wraps a low-level `Server` or high-level `McpServer`. Idempotent per server instance (subsequent calls on the same server are skipped via a `WeakMap` lookup). Returns the same server, typed. Pass your `posthog-node` client via `options.posthog`.
-- **`capture(server, { event, properties })`**: emits one custom event. `event` is required and sent verbatim (not `$`-prefixed). The server must have been passed to `instrument()` first. Returns a promise you can `await`.
+- **`instrument(server, posthog, options?)`**: wraps a low-level `Server` or high-level `McpServer`. The `posthog-node` client is a required positional 2nd argument; `options` is optional. Idempotent per server instance (subsequent calls on the same server are skipped via a `WeakMap` lookup). Returns an `McpAnalytics` handle.
+- **`analytics.capture({ event, properties })`**: a method on the handle returned by `instrument()` that emits one custom event. `event` is required and sent verbatim (not `$`-prefixed). Returns a promise you can `await`.
 
 The full options reference lives in [`src/types.ts`](./src/types.ts) (`MCPAnalyticsOptions`) and the design narrative + HogQL recipes live in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
@@ -235,8 +228,7 @@ MCP over STDIO uses stdout/stderr for protocol messages, so the SDK never logs t
 import fs from 'node:fs'
 const logStream = fs.createWriteStream('mcp.log', { flags: 'a' })
 
-instrument(server, {
-  posthog,
+instrument(server, posthog, {
   logger: (msg) => logStream.write(`${new Date().toISOString()} ${msg}\n`),
 })
 ```

@@ -86,7 +86,7 @@ describe('Low-level Server tracing (e2e)', () => {
   it('captures a single $mcp_tool_call for a successful call', async () => {
     const { server, client, connect, cleanup } = await setupLowLevelServer()
     try {
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
       await connect()
 
       const result = await client.request(
@@ -118,7 +118,7 @@ describe('Low-level Server tracing (e2e)', () => {
   it('emits $mcp_tool_call + a single $exception sibling when a tool throws', async () => {
     const { server, client, connect, cleanup } = await setupLowLevelServer()
     try {
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
       await connect()
 
       await expect(
@@ -141,7 +141,7 @@ describe('Low-level Server tracing (e2e)', () => {
   it('treats an isError result as a failure (tool_call + $exception)', async () => {
     const { server, client, connect, cleanup } = await setupLowLevelServer()
     try {
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
       await connect()
 
       await client.request({ method: 'tools/call', params: { name: 'soft_fail', arguments: {} } }, CallToolResultSchema)
@@ -159,7 +159,7 @@ describe('Low-level Server tracing (e2e)', () => {
   it('respects enableExceptionAutocapture: false (no $exception sibling)', async () => {
     const { server, client, connect, cleanup } = await setupLowLevelServer()
     try {
-      instrument(server, { posthog: fakePostHog(), enableExceptionAutocapture: false })
+      instrument(server, fakePostHog(), { enableExceptionAutocapture: false })
       await connect()
 
       await expect(
@@ -177,7 +177,7 @@ describe('Low-level Server tracing (e2e)', () => {
   it('captures $mcp_tools_list with the listed tool names', async () => {
     const { server, client, connect, cleanup } = await setupLowLevelServer()
     try {
-      instrument(server, { posthog: fakePostHog() })
+      instrument(server, fakePostHog())
       await connect()
 
       await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
