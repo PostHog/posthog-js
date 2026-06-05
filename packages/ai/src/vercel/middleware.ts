@@ -328,41 +328,29 @@ const extractTokenCount = (value: unknown): number | undefined => {
   return undefined
 }
 
-// Helper to extract reasoning tokens from V2 (usage.reasoningTokens) or V3 (usage.outputTokens.reasoning)
-const extractReasoningTokens = (usage: Record<string, unknown>): unknown => {
-  // V2 style: top-level reasoningTokens
-  if ('reasoningTokens' in usage) {
-    return usage.reasoningTokens
+const extractUsageToken = (
+  usage: Record<string, unknown>,
+  topLevelKey: string,
+  nestedObjectKey: string,
+  nestedValueKey: string
+): unknown => {
+  if (topLevelKey in usage) {
+    return usage[topLevelKey]
   }
-  // V3 style: nested in outputTokens.reasoning
-  if (
-    'outputTokens' in usage &&
-    usage.outputTokens &&
-    typeof usage.outputTokens === 'object' &&
-    'reasoning' in usage.outputTokens
-  ) {
-    return (usage.outputTokens as { reasoning: unknown }).reasoning
+  const nestedTokens = usage[nestedObjectKey]
+  if (nestedTokens && typeof nestedTokens === 'object' && nestedValueKey in nestedTokens) {
+    return (nestedTokens as Record<string, unknown>)[nestedValueKey]
   }
   return undefined
 }
 
+// Helper to extract reasoning tokens from V2 (usage.reasoningTokens) or V3 (usage.outputTokens.reasoning)
+const extractReasoningTokens = (usage: Record<string, unknown>): unknown =>
+  extractUsageToken(usage, 'reasoningTokens', 'outputTokens', 'reasoning')
+
 // Helper to extract cached input tokens from V2 (usage.cachedInputTokens) or V3 (usage.inputTokens.cacheRead)
-const extractCacheReadTokens = (usage: Record<string, unknown>): unknown => {
-  // V2 style: top-level cachedInputTokens
-  if ('cachedInputTokens' in usage) {
-    return usage.cachedInputTokens
-  }
-  // V3 style: nested in inputTokens.cacheRead
-  if (
-    'inputTokens' in usage &&
-    usage.inputTokens &&
-    typeof usage.inputTokens === 'object' &&
-    'cacheRead' in usage.inputTokens
-  ) {
-    return (usage.inputTokens as { cacheRead: unknown }).cacheRead
-  }
-  return undefined
-}
+const extractCacheReadTokens = (usage: Record<string, unknown>): unknown =>
+  extractUsageToken(usage, 'cachedInputTokens', 'inputTokens', 'cacheRead')
 
 // Helper to extract cache write tokens from V3 (usage.inputTokens.cacheWrite). Providers like
 // Amazon Bedrock populate this standardized field instead of providerMetadata.anthropic.

@@ -23,27 +23,26 @@ class ClientError extends Error {
   }
 }
 
+function setCustomErrorPrototype(error: Error, constructor: new (message: string) => Error): void {
+  error.name = constructor.name
+  Error.captureStackTrace(error, constructor)
+  // instanceof doesn't work in ES3 or ES5
+  // https://www.dannyguo.com/blog/how-to-fix-instanceof-not-working-for-custom-errors-in-typescript/
+  // this is the workaround
+  Object.setPrototypeOf(error, constructor.prototype)
+}
+
 class InconclusiveMatchError extends Error {
   constructor(message: string) {
     super(message)
-    this.name = this.constructor.name
-    Error.captureStackTrace(this, this.constructor)
-    // instanceof doesn't work in ES3 or ES5
-    // https://www.dannyguo.com/blog/how-to-fix-instanceof-not-working-for-custom-errors-in-typescript/
-    // this is the workaround
-    Object.setPrototypeOf(this, InconclusiveMatchError.prototype)
+    setCustomErrorPrototype(this, InconclusiveMatchError)
   }
 }
 
 class RequiresServerEvaluation extends Error {
   constructor(message: string) {
     super(message)
-    this.name = this.constructor.name
-    Error.captureStackTrace(this, this.constructor)
-    // instanceof doesn't work in ES3 or ES5
-    // https://www.dannyguo.com/blog/how-to-fix-instanceof-not-working-for-custom-errors-in-typescript/
-    // this is the workaround
-    Object.setPrototypeOf(this, RequiresServerEvaluation.prototype)
+    setCustomErrorPrototype(this, RequiresServerEvaluation)
   }
 }
 
