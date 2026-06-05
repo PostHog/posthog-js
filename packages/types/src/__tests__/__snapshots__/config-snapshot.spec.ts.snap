@@ -68,6 +68,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "true",
         "string[]"
       ],
+      "ignore_text_selection": [
+        "undefined",
+        "false",
+        "true"
+      ],
       "threshold_px": [
         "undefined",
         "number"
