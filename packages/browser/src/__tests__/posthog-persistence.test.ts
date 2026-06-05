@@ -1296,6 +1296,50 @@ describe('flag storage split', () => {
             Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
             expect(lib.props['distinct_id']).toBe('d')
         })
+
+        // The reverse: starting on a backend that can't host the split (memory),
+        // moving to localStorage with the gate on must adopt the split and migrate
+        // the grouped keys out of the single blob into __flags.
+        it('adopts the split when the backend becomes eligible while the gate stays on', () => {
+            const onMemory = makeConfig({ persistence: 'memory' })
+            const lib = new PostHogPersistence(onMemory)
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+            expect((lib as any)._splitStorage).toBe(false)
+            expect(parse(FLAGS)).toBeNull()
+
+            lib.update_config(makeConfig(), onMemory)
+
+            expect((lib as any)._splitStorage).toBe(true)
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            const main = parse(MAIN)
+            Object.keys(FLAG_CLUSTER).forEach((k) => expect(main[k]).toBeUndefined())
+            expect(main['distinct_id']).toBe('d')
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+        })
+
+        // A full round-trip across the eligibility boundary in both directions
+        // must never strand the flags: they follow the in-memory props the whole
+        // way and land back in __flags once the backend can host the split again.
+        it('round-trips flags across localStorage -> memory -> localStorage without stranding them', () => {
+            const onLocal = makeConfig()
+            const lib = new PostHogPersistence(onLocal)
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+            expect(parse(FLAGS)).not.toBeNull()
+
+            // -> memory: split drops, flags fold into the single blob (not stranded)
+            const onMemory = makeConfig({ persistence: 'memory' })
+            lib.update_config(onMemory, onLocal)
+            expect((lib as any)._splitStorage).toBe(false)
+            expect(parse(FLAGS)).toBeNull()
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+
+            // -> localStorage: split re-adopts, flags migrate back into __flags
+            lib.update_config(onLocal, onMemory)
+            expect((lib as any)._splitStorage).toBe(true)
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+            expect(lib.props['distinct_id']).toBe('d')
+        })
     })
 
     describe('empty group entries are not eagerly created', () => {
