@@ -1338,6 +1338,24 @@ describe('flag storage split', () => {
 
             expect(parse(ownerFlags)).not.toBeNull()
         })
+
+        // The set_config path above is saved by `keepGroupEntries` on the cookie
+        // setters, so it would still pass if the `_ownsSplitStorage` guard were
+        // deleted. This case makes that guard load-bearing: a non-owning sibling
+        // that gets disabled fires a *bare* remove() (no keepGroupEntries), and
+        // only `_ownsSplitStorage` stops it wiping the owner's localStorage entry.
+        it('a disabled non-owning sibling does not wipe the owner __flags entry', () => {
+            const owner = new PostHogPersistence(makeConfig())
+            owner.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+            expect(parse(FLAGS)).not.toBeNull()
+
+            // mirrors the sessionStorage instance posthog-core spins up: shares the
+            // storage name, but ownsSplitStorage=false (third constructor arg)
+            const sibling = new PostHogPersistence({ ...makeConfig(), persistence: 'sessionStorage' }, false, false)
+            sibling.set_disabled(true)
+
+            expect(parse(FLAGS)).not.toBeNull()
+        })
     })
 
     describe('a swallowed group write is retried, not cached as saved', () => {
