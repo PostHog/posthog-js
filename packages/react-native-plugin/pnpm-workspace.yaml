@@ -1,8 +1,0 @@
-packages:
-  - '.'
-  - 'example'
-
-onlyBuiltDependencies:
-  - '@evilmartians/lefthook'
-
-minimumReleaseAge: 10080
