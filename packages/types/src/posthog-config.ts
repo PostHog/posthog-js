@@ -1181,6 +1181,17 @@ export interface PostHogConfig {
     __preview_deferred_init_extensions: boolean
 
     /**
+     * In `'localStorage+cookie'` persistence mode, prefer cookie values over localStorage
+     * when both stores carry the same key. Fixes cross-subdomain identify and session
+     * disconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.
+     * Read at SDK init; has no effect when toggled via `set_config` or for other persistence modes.
+     *
+     * @default false
+     * @experimental
+     */
+    __preview_cookie_wins_on_conflict: boolean
+
+    /**
      * Determines the session recording options.
      *
      * For more session recording settings, see the `enable_recording_console_log` and `capture_performance` configuration option.

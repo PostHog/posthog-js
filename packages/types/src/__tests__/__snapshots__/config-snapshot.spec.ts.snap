@@ -337,6 +337,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "__preview_cookie_wins_on_conflict": [
+    "false",
+    "true"
+  ],
   "session_recording": {
     "blockClass": [
       "undefined",

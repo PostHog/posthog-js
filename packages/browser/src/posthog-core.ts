@@ -220,6 +220,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
     __preview_external_dependency_versioned_paths: false,
+    __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
