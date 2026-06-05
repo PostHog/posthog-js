@@ -262,9 +262,8 @@ describe('record', function (this: ISuite) {
         return { id: d.id, x: d.x, y: d.y };
       });
 
-  // Builds a scrollable container, appends it before recording starts (so it gets
-  // a stable mirror id from the full snapshot), scrolls it, and drains the
-  // resulting scroll event. Returns the container's mirror id.
+  // Appends a scrollable container and scrolls it before recording starts, so the
+  // node gets a mirror id (from the full snapshot) and no scroll event is recorded.
   const setupScrolledContainerBeforeRecord = async (
     initialScrollTop: number,
   ): Promise<void> => {
@@ -286,8 +285,7 @@ describe('record', function (this: ISuite) {
   };
 
   it('should record the resting scroll offset on scrollend', async () => {
-    // Scroll before recording starts so no `scroll` event fires during recording.
-    // The only signal is the scrollend, which must still capture the resting offset.
+    // No scroll event fires during recording, so scrollend is the only signal.
     await setupScrolledContainerBeforeRecord(745);
 
     const expectedId = await ctx.page.evaluate(() => {
@@ -301,15 +299,13 @@ describe('record', function (this: ISuite) {
     });
     await waitForRAF(ctx.page);
 
-    // scrollend is the sole source: exactly one Scroll event, for the right node,
-    // with the resting offset (not the clamped 0 the throttled `scroll` would log).
+    // Exactly one event, for the right node, at the resting offset.
     expect(expectedId).toBeGreaterThan(0);
     expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 745 }]);
   });
 
   it('should not emit a duplicate scroll event when scrollend repeats the offset', async () => {
-    // Regression guard: a normal scroll already logs its resting offset, so the
-    // following scrollend (same position) must be deduped — not doubled.
+    // scroll already logged this offset, so the matching scrollend must be skipped.
     await setupScrolledContainerBeforeRecord(300);
 
     const expectedId = await ctx.page.evaluate(() => {
@@ -329,9 +325,8 @@ describe('record', function (this: ISuite) {
   });
 
   it('should recover the resting offset via scrollend after a scroll clamped to 0', async () => {
-    // Faithful repro: the reveal scroll is applied while the target is not yet
-    // scrollable, so scrollTop clamps to 0 and the `scroll` sample records 0.
-    // Once content grows and the browser settles, scrollend carries the real offset.
+    // The reveal scroll lands while the element isn't scrollable yet, so it clamps
+    // to 0; once content grows and settles, scrollend reports the real offset.
     await ctx.page.evaluate(() => {
       const container = document.createElement('div');
       container.setAttribute(
