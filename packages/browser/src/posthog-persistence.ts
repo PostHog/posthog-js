@@ -455,7 +455,11 @@ export class PostHogPersistence {
     // fingerprints mean a main-blob change does not rewrite the rarely-changing
     // flag entries, and vice-versa — which is the whole bandwidth win.
     // Group entries go to `localStore` directly so they never hit the 4 KB
-    // cookie or the localPlusCookie re-write-on-parse path.
+    // cookie or the localPlusCookie re-write-on-parse path. INVARIANT: keep group
+    // entries on `localStore` — `_entryFingerprint` omits the cookie options from
+    // group fingerprints precisely because cookies can never carry a group entry;
+    // routing one to a cookie store would make a cookie-option change silently
+    // skip a needed rewrite.
     private _writeNowSplit(): void {
         const { main, groups } = this._partitionProps()
         this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
@@ -576,6 +580,14 @@ export class PostHogPersistence {
     // once each on every construction, transitioning the in-memory option from
     // undefined to its configured value). Opt-out / reset (set_disabled / clear)
     // pass nothing and wipe everything.
+    //
+    // INVARIANT for `keepGroupEntries: true`: the caller must not also mutate
+    // `props`. We keep the on-disk group entries AND their retained fingerprint;
+    // that is only safe while `props` still matches what is on disk. The cookie
+    // setters satisfy this (they touch only `_secure` / `_cross_subdomain`). A
+    // future caller that clears or rewrites `props` while keeping the entries
+    // would leave the retained fingerprint describing stale on-disk content and
+    // skip the corrective write.
     remove({ keepGroupEntries = false }: { keepGroupEntries?: boolean } = {}): void {
         // Cancel any pending debounced write — the storage entry is going
         // away so there is nothing useful to flush.

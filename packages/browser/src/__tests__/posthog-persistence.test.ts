@@ -1050,6 +1050,25 @@ describe('flag storage split', () => {
             expect(names).not.toContain(FLAGS)
             setSpy.mockRestore()
         })
+
+        // The flip side of seeding: the seed must suppress only the redundant
+        // first write, never a real subsequent flag change. A genuine mutation
+        // goes through _setProp -> _markGroupDirty, which clears the fast-path, so
+        // the changed cluster must still land in __flags after a seeded load.
+        it('still rewrites __flags when a flag changes after a seeded load', () => {
+            localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
+            localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
+
+            const lib = new PostHogPersistence(makeConfig())
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+
+            lib.register({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-new' })
+
+            expect(setSpy.mock.calls.map(([name]) => name)).toContain(FLAGS)
+            expect(parse(FLAGS)[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('req-new')
+            setSpy.mockRestore()
+        })
     })
 
     describe('one-shot migration from the old main-blob location', () => {
