@@ -346,12 +346,8 @@ export function initScrollObserver({
     ),
   );
   const handlers: listenerHandler[] = [on('scroll', updatePosition, doc)];
-  // Also capture the resting offset once scrolling settles. A scroll applied
-  // before its target is scrollable (e.g. scroll-snap-revealed sheets/modals
-  // whose content mounts the same frame, like Silk sheets) clamps to 0, so the
-  // throttled `scroll` samples miss the final snapped position. `scrollend`
-  // fires after the browser finishes snapping/animating, yielding the true
-  // resting offset that replay needs.
+  // `scrollend` captures the resting offset when a scroll clamps to 0 before its
+  // target is scrollable (e.g. scroll-snap-revealed sheets), which `scroll` misses.
   if ('onscrollend' in doc) {
     handlers.push(on('scrollend', callbackWrapper(emitScrollPosition), doc));
   }

@@ -251,12 +251,8 @@ describe('record', function (this: ISuite) {
   });
 
   it('should record the resting scroll offset on scrollend', async () => {
-    // Mirrors scroll-snap-revealed sheets/modals (e.g. Silk): the reveal scroll
-    // settles via a native scrollend without a `scroll` event the throttled
-    // observer captures, so the snapped offset is otherwise lost and the content
-    // replays scrolled to 0. We scroll the element BEFORE recording starts (and
-    // drain that scroll event) so the only signal during recording is the
-    // scrollend, which must still capture the resting offset.
+    // Scroll before recording starts and drain that scroll event, so the only
+    // signal during recording is the scrollend — which must still be captured.
     await ctx.page.evaluate(() => {
       const container = document.createElement('div');
       container.setAttribute(
