@@ -60,7 +60,7 @@ const triggerStatuses = [TRIGGER_ACTIVATED, TRIGGER_PENDING, TRIGGER_DISABLED] a
 export type TriggerStatus = (typeof triggerStatuses)[number]
 
 function persistedTriggerStatus(
-    instance: PostHog,
+    instance: PostHog | undefined,
     triggerCount: number,
     groupId: string | undefined,
     groupPrefix: string,
@@ -73,7 +73,7 @@ function persistedTriggerStatus(
 
     // V2: Use per-group persistence key if groupId is provided
     const persistenceKey = groupId ? groupPrefix + groupId : fallbackPersistenceKey
-    const currentTriggerSession = instance.get_property(persistenceKey)
+    const currentTriggerSession = instance?.get_property(persistenceKey)
     return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
 }
 
