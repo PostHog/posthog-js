@@ -8,7 +8,7 @@ import {
     getPropertiesFromElement,
     previousElementSibling,
 } from '../autocapture'
-import { shouldCaptureDomEvent } from '../autocapture-utils'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, shouldCaptureDomEvent } from '../autocapture-utils'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -562,6 +562,105 @@ describe('Autocapture system', () => {
                     // Cleanup
                     beforeSendMock.mockClear()
                     document.body.removeChild(el)
+                }
+            )
+        })
+
+        describe('rageclick suppression for intentional repeated clicks', () => {
+            const rageClickThreeTimes = (el: Element): string[] => {
+                document.body.appendChild(el)
+                const fakeEvent = makeMouseEvent({ target: el, clientX: 5, clientY: 5 })
+                Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+                autocapture['_captureEvent'](fakeEvent)
+                autocapture['_captureEvent'](fakeEvent)
+                autocapture['_captureEvent'](fakeEvent)
+                const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
+                document.body.removeChild(el)
+                return captured
+            }
+
+            describe('when ignore_text_selection is enabled', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = { ignore_text_selection: true }
+                })
+
+                test.each([
+                    ['textarea', undefined, false],
+                    ['input', undefined, false],
+                    ['input', 'text', false],
+                    ['input', 'search', false],
+                    ['input', 'email', false],
+                    ['input', 'password', false],
+                    ['input', 'url', false],
+                    ['input', 'tel', false],
+                    ['input', 'number', false],
+                    ['input', 'checkbox', true],
+                    ['input', 'button', true],
+                    ['input', 'submit', true],
+                    ['button', undefined, true],
+                    ['a', undefined, true],
+                ] as [string, string | undefined, boolean][])(
+                    'rapid clicks on <%s type=%s> capture $rageclick: %s',
+                    (tag, type, shouldRageclick) => {
+                        const el = document.createElement(tag)
+                        if (type) {
+                            el.setAttribute('type', type)
+                        }
+
+                        const captured = rageClickThreeTimes(el)
+
+                        if (shouldRageclick) {
+                            expect(captured).toContain('$rageclick')
+                        } else {
+                            expect(captured).not.toContain('$rageclick')
+                        }
+                    }
+                )
+
+                it.each(['true', ''])('rapid clicks on contenteditable="%s" do not capture $rageclick', (value) => {
+                    const el = document.createElement('div')
+                    el.setAttribute('contenteditable', value)
+
+                    expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                })
+            })
+
+            describe('when steppers are in the content ignorelist', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS }
+                })
+
+                const buttonWithText = (text: string): HTMLButtonElement => {
+                    const el = document.createElement('button')
+                    el.textContent = text
+                    return el
+                }
+
+                it.each(['+', '-', '−', '–', '>', '<'])(
+                    'rapid clicks on a "%s" stepper/nav button do not capture $rageclick',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                    }
+                )
+
+                it.each(['C++', '5 > 3', 'sign-up', 'Save'])(
+                    'rapid clicks on a "%s" button still capture $rageclick (symbol keywords match exactly)',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
+                    }
+                )
+            })
+
+            it.each([true, { content_ignorelist: true }] as PostHogConfig['rageclick'][])(
+                'does not suppress text-entry or stepper rageclicks when rageclick config is %s',
+                (rageclickConfig) => {
+                    posthog.config.rageclick = rageclickConfig
+
+                    expect(rageClickThreeTimes(document.createElement('textarea'))).toContain('$rageclick')
+
+                    const stepper = document.createElement('button')
+                    stepper.textContent = '+'
+                    expect(rageClickThreeTimes(stepper)).toContain('$rageclick')
                 }
             )
         })
