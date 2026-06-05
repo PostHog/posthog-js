@@ -1,9 +1,9 @@
-import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, UnredactedEvent } from '../types'
+import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, McpEvent } from '../types'
 import { resolveEventProperties } from './internal'
 
 /**
- * Helpers shared by the low-level (`tracing.ts`) and high-level (`tracing-v2.ts`)
- * MCP server wrappers. Extracted so both paths stay in sync — any change to
+ * Helpers shared by the low-level (`instrument-lowlevel.ts`) and high-level
+ * (`instrument-highlevel.ts`) MCP server wrappers. Extracted so both paths stay in sync — any change to
  * "what counts as an error result", "how do we resolve customer event
  * properties", "where do we find the context argument", or "how do we measure
  * duration" needs to land in one place.
@@ -22,7 +22,7 @@ export function isToolResultError(result: unknown): boolean {
  * result onto the event. No-op when the callback is absent or returns nullish.
  */
 export async function applyResolvedMetadata(
-  event: UnredactedEvent,
+  event: McpEvent,
   data: MCPAnalyticsData,
   request: MCPRequestLike,
   extra?: CompatibleRequestHandlerExtra
@@ -46,6 +46,6 @@ export function getContextArgument(request: MCPRequestLike): string | undefined 
  * Wall-clock duration of a tracked operation in milliseconds, from `event.timestamp`
  * to now. Returns `0` when timestamp is missing so callers don't have to null-check.
  */
-export function getEventDuration(event: UnredactedEvent): number {
+export function getEventDuration(event: McpEvent): number {
   return event.timestamp ? Date.now() - event.timestamp.getTime() : 0
 }

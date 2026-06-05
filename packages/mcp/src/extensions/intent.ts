@@ -3,7 +3,7 @@ import type {
   MCPAnalyticsData,
   MCPAnalyticsIntentSource,
   MCPRequestLike,
-  UnredactedEvent,
+  McpEvent,
 } from '../types'
 import { isContextEnabled } from './context-parameters'
 import { log } from './logger'
@@ -58,7 +58,7 @@ export async function resolveToolCallIntent(
   return await runIntentFallback(data, request, extra)
 }
 
-export function setEventIntent(event: UnredactedEvent, resolvedIntent: ResolvedIntent | null): void {
+export function setEventIntent(event: McpEvent, resolvedIntent: ResolvedIntent | null): void {
   if (!resolvedIntent) {
     return
   }
@@ -67,7 +67,7 @@ export function setEventIntent(event: UnredactedEvent, resolvedIntent: ResolvedI
   event.userIntentSource = resolvedIntent.source
 }
 
-export function setExplicitContextIntent(event: UnredactedEvent, context: string): void {
+export function setExplicitContextIntent(event: McpEvent, context: string): void {
   const intent = normalizeIntent(context)
   if (!intent) {
     return

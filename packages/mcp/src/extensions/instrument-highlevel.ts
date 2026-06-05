@@ -6,7 +6,7 @@ import { getServerTrackingData } from './internal'
 import { log } from './logger'
 import { createWrappedTool, getLiteralValue, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
-import { setupInitializeTracing, setupListToolsTracing, traceToolCall } from './tracing-core'
+import { instrumentInitializeHandler, instrumentToolsListHandler, captureToolCall } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
 type MCPRequestHandler = NonNullable<
@@ -63,7 +63,7 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 
             const nextValue = addTracingToToolCallbackInternal(value, property, server)
 
-            setupListToolsTracing(server.server as MCPServerLike)
+            instrumentToolsListHandler(server.server as MCPServerLike)
 
             if (typeof nextValue.update === 'function') {
               const originalUpdate = nextValue.update
@@ -121,7 +121,7 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
  * (the high-level SDK turns thrown errors into `isError` results otherwise).
  *
  * This is purely the tool-facing concern; event capture lives in
- * {@link traceToolCall} via {@link handleWrappedToolsCall}.
+ * {@link captureToolCall} via {@link handleWrappedToolsCall}.
  */
 function addTracingToToolCallbackInternal(
   tool: RegisteredTool,
@@ -235,7 +235,7 @@ async function handleWrappedToolsCall(
 
   if (request.params?.name === GET_MORE_TOOLS_NAME) {
     const context = getContextArgument(request) || ''
-    return await traceToolCall({
+    return await captureToolCall({
       server,
       data,
       request,
@@ -250,7 +250,7 @@ async function handleWrappedToolsCall(
   // strips the injected params inside the wrapped callback, so we hand it the
   // original request rather than the conversation-stripped one. Errors thrown
   // by the tool are stashed on `extra` by the callback wrapper; surface them.
-  return await traceToolCall({
+  return await captureToolCall({
     server,
     data,
     request,
@@ -266,13 +266,13 @@ async function handleWrappedToolsCall(
   })
 }
 
-export function setupTracking(server: HighLevelMCPServerLike): void {
+export function instrumentHighLevelServer(server: HighLevelMCPServerLike): void {
   try {
     const mcpAnalyticsData = getServerTrackingData(server.server)
 
     setupToolsCallHandlerWrapping(server)
 
-    setupInitializeTracing(server.server)
+    instrumentInitializeHandler(server.server)
 
     server._registeredTools = addTracingToToolRegistry(server._registeredTools, server)
 
@@ -280,11 +280,11 @@ export function setupTracking(server: HighLevelMCPServerLike): void {
       seedToolDescriptionsFromRegistry(mcpAnalyticsData.toolDescriptions, server._registeredTools)
     }
 
-    setupListToolsTracing(server.server)
+    instrumentToolsListHandler(server.server)
 
     setupListenerToRegisteredTools(server)
   } catch (error) {
-    log(`Warning: Failed to setup tool call tracing - ${error}`)
+    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
   }
 }
 

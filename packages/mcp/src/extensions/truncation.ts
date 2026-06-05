@@ -1,4 +1,4 @@
-import type { ErrorProperties, Event, StackFrame, UnredactedEvent } from '../types'
+import type { ErrorProperties, Event, StackFrame, McpEvent } from '../types'
 
 // --- Constants ---
 export const MAX_DEPTH = 10
@@ -17,7 +17,7 @@ const MAX_CONTENT_TEXT_LENGTH = 32_768
 // --- Truncation markers ---
 const TRUNCATION_SUFFIX = '...'
 
-type MutableEvent = Partial<Event | UnredactedEvent> & Record<string, unknown>
+type MutableEvent = Partial<Event | McpEvent> & Record<string, unknown>
 type MutableRecord = Record<string, unknown>
 
 /**
@@ -415,7 +415,7 @@ function truncateToSize(event: MutableEvent): MutableEvent {
  * 4. Recursive normalization on user-controlled fields
  * 5. Size-targeted truncation (progressive depth reduction + last-resort string truncation)
  */
-export function truncateEvent<T extends Event | UnredactedEvent>(event: T): T {
+export function truncateEvent<T extends Event | McpEvent>(event: T): T {
   const result: MutableEvent = { ...event }
 
   // Layer 1: Field-level string limits

@@ -1,11 +1,11 @@
-import type { MCPServerLike, UnredactedEvent } from '../types'
+import type { MCPServerLike, McpEvent } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
 import { getSessionInfo } from './session'
 
 /**
- * Materializes an `UnredactedEvent` against the server's tracking data + session info,
+ * Materializes an `McpEvent` against the server's tracking data + session info,
  * then hands it to the `McpEventSink` (wrapping the user's posthog-node client) for the
  * sanitize/truncate/beforeSend pipeline and capture. No-ops if the server isn't tracked or
  * no PostHog client is attached — not passing `posthog` is how you turn capture off.
@@ -14,7 +14,7 @@ import { getSessionInfo } from './session'
  * Auto-capture callers (tool calls, listings, identify) intentionally ignore the
  * return value, keeping the tool path isolated from analytics latency/errors.
  */
-export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent): Promise<void> | undefined {
+export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promise<void> | undefined {
   const data = getServerTrackingData(server)
   if (!data) {
     log('Warning: Server tracking data not found. Event will not be published.')
@@ -31,7 +31,7 @@ export function captureEvent(server: MCPServerLike, eventInput: UnredactedEvent)
   const duration =
     eventInput.duration || (eventInput.timestamp ? Date.now() - eventInput.timestamp.getTime() : undefined)
 
-  const fullEvent: UnredactedEvent = {
+  const fullEvent: McpEvent = {
     id: eventInput.id || '',
     sessionId: eventInput.sessionId || data.sessionId,
     eventType: eventInput.eventType || MCPAnalyticsEventType.custom,

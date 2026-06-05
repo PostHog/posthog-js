@@ -1,4 +1,4 @@
-import type { Event, UnredactedEvent } from '../types'
+import type { Event, McpEvent } from '../types'
 import { McpEventSink, type McpCaptureOptions, processMcpEvent } from '../extensions/sink'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
 
@@ -10,7 +10,7 @@ import type { PostHogCaptureEvent } from '../extensions/posthog-events'
  * source of truth shared with `McpEventSink.capture` — so there's no risk of the
  * harness and the sink drifting. Two views are exposed:
  *
- *  - `getEvents()` — the post-pipeline `UnredactedEvent` (redacted/sanitized/
+ *  - `getEvents()` — the post-pipeline `McpEvent` (redacted/sanitized/
  *    truncated), one per `capture()` call. Convenient for asserting on the
  *    SDK's internal event shape.
  *  - `getCaptures()` — the fanned-out PostHog payloads (`$mcp_tool_call`,
@@ -22,9 +22,9 @@ import type { PostHogCaptureEvent } from '../extensions/posthog-events'
  * the test is intercepted.
  */
 export class EventCapture {
-  private capturedEvents: UnredactedEvent[] = []
+  private capturedEvents: McpEvent[] = []
   private capturedPayloads: PostHogCaptureEvent[] = []
-  private original?: (event: UnredactedEvent, options: McpCaptureOptions) => Promise<void>
+  private original?: (event: McpEvent, options: McpCaptureOptions) => Promise<void>
 
   async start(): Promise<void> {
     if (this.original) {
@@ -34,7 +34,7 @@ export class EventCapture {
     const capture = this
     McpEventSink.prototype.capture = async function (
       this: McpEventSink,
-      event: UnredactedEvent,
+      event: McpEvent,
       options: McpCaptureOptions
     ): Promise<void> {
       const result = await processMcpEvent(event, options)
@@ -54,7 +54,7 @@ export class EventCapture {
   }
 
   /** Post-pipeline SDK events, one per `capture()` call. */
-  getEvents(): UnredactedEvent[] {
+  getEvents(): McpEvent[] {
     return [...this.capturedEvents]
   }
 

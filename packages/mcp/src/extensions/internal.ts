@@ -3,7 +3,7 @@ import type {
   MCPAnalyticsData,
   MCPRequestLike,
   MCPServerLike,
-  UnredactedEvent,
+  McpEvent,
   UserIdentity,
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
@@ -127,7 +127,7 @@ export async function handleIdentify(
     return
   }
 
-  const identifyEvent: UnredactedEvent = {
+  const identifyEvent: McpEvent = {
     sessionId,
     resourceName: getRequestResourceName(request),
     eventType: MCPAnalyticsEventType.identify,

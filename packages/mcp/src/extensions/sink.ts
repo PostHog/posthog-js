@@ -1,7 +1,7 @@
 import type { PostHog } from 'posthog-node'
 import { uuidv7 } from '@posthog/core'
 
-import type { BeforeSendFn, Event, UnredactedEvent } from '../types'
+import type { BeforeSendFn, Event, McpEvent } from '../types'
 import { log } from './logger'
 import { type PostHogCaptureEvent, buildPostHogCaptureEvents } from './posthog-events'
 import { newPrefixedId } from './ids'
@@ -27,10 +27,10 @@ export interface McpCaptureOptions {
  * reach `posthog.capture()`.
  */
 export async function processMcpEvent(
-  event: UnredactedEvent,
+  event: McpEvent,
   options: McpCaptureOptions
 ): Promise<{ event: Event; captures: PostHogCaptureEvent[] } | null> {
-  let processed: UnredactedEvent = event
+  let processed: McpEvent = event
 
   try {
     processed = sanitizeEvent(processed)
@@ -101,7 +101,7 @@ export class McpEventSink {
    * beforeSend → capture). Errors at any stage are logged and the event is
    * dropped, never re-thrown into tool code.
    */
-  async capture(event: UnredactedEvent, options: McpCaptureOptions): Promise<void> {
+  async capture(event: McpEvent, options: McpCaptureOptions): Promise<void> {
     const result = await processMcpEvent(event, options)
     if (!result) {
       return

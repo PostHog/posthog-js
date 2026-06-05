@@ -6,8 +6,8 @@ import { IdentityCache, getServerTrackingData, setServerTrackingData } from './e
 import { log, setLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
-import { setupToolCallTracing } from './extensions/tracing'
-import { setupTracking } from './extensions/tracing-v2'
+import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
+import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
 import type {
   CaptureEventData,
   HighLevelMCPServerLike,
@@ -15,7 +15,7 @@ import type {
   MCPAnalyticsData,
   MCPAnalyticsOptions,
   MCPServerLike,
-  UnredactedEvent,
+  McpEvent,
 } from './types'
 
 /**
@@ -120,14 +120,14 @@ function setupTrackedServer(
 ): void {
   if (isHighLevelServer(validatedServer)) {
     const highLevelServer = validatedServer as HighLevelMCPServerLike
-    setupTracking(highLevelServer)
+    instrumentHighLevelServer(highLevelServer)
     return
   }
 
   try {
-    setupToolCallTracing(lowLevelServer)
+    instrumentLowLevelServer(lowLevelServer)
   } catch (error) {
-    log(`Warning: Failed to setup tool call tracing - ${error}`)
+    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
   }
 }
 
@@ -141,7 +141,7 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
     return
   }
 
-  const event: UnredactedEvent = {
+  const event: McpEvent = {
     sessionId: trackingData.sessionId,
     eventType: MCPAnalyticsEventType.custom,
     eventName: eventData.event,

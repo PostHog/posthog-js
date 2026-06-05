@@ -29,20 +29,20 @@ The host application supplies its own `posthog-node` client as the positional `p
 4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `instrument()` is also wrapped.
 5. Optionally register the `get_more_tools` virtual tool when `options.reportMissing: true`.
 
-Two thin adapters exist for the two MCP server shapes, each wrapping the shared `traceToolCall()` lifecycle in `src/extensions/tracing-core.ts`:
+Two thin adapters exist for the two MCP server shapes, each wrapping the shared `captureToolCall()` lifecycle in `src/extensions/instrumentation.ts`:
 
 | Server type                              | File                       | Entry                       |
 | ---------------------------------------- | -------------------------- | --------------------------- |
-| Low-level `Server` (raw protocol SDK)    | `src/extensions/tracing.ts`   | `setupToolCallTracing()`    |
-| High-level `McpServer` (typed wrapper)   | `src/extensions/tracing-v2.ts`| `setupTracking()`           |
+| Low-level `Server` (raw protocol SDK)    | `src/extensions/instrument-lowlevel.ts`   | `instrumentLowLevelServer()`    |
+| High-level `McpServer` (typed wrapper)   | `src/extensions/instrument-highlevel.ts`| `instrumentHighLevelServer()`           |
 
-Both converge on the same internal `UnredactedEvent` shape (`src/types.ts`) and funnel through `traceToolCall` in `src/extensions/tracing-core.ts`, which owns the shared tool-call lifecycle and the same publish pipeline.
+Both converge on the same internal `McpEvent` shape (`src/types.ts`) and funnel through `captureToolCall` in `src/extensions/instrumentation.ts`, which owns the shared tool-call lifecycle and the same publish pipeline.
 
 ## 2. Request lifecycle (tool call, high-level path)
 
 ```
-client → MCP server → tools/call wrapper (tracing-v2.ts) → traceToolCall (tracing-core.ts)
-  ├─ prepareToolCallEvent         ← build UnredactedEvent, resolve session
+client → MCP server → tools/call wrapper (instrument-highlevel.ts) → captureToolCall (instrumentation.ts)
+  ├─ prepareToolCallEvent         ← build McpEvent, resolve session
   ├─ handleIdentify               ← fires $identify only if identity changed
   ├─ applyResolvedMetadata        ← runs eventProperties callback
   ├─ resolveToolCallIntent        ← context arg OR intentFallback callback
@@ -55,7 +55,7 @@ The wrapper strips the `context` argument from `params.arguments` before forward
 
 ## 3. Event pipeline
 
-The pipeline lives in an exported `processMcpEvent()` function in `src/extensions/sink.ts` that **both** `McpEventSink.capture()` and the test harness call, so it's the single source of truth for the transform. Once an `UnredactedEvent` reaches it, it runs through:
+The pipeline lives in an exported `processMcpEvent()` function in `src/extensions/sink.ts` that **both** `McpEventSink.capture()` and the test harness call, so it's the single source of truth for the transform. Once an `McpEvent` reaches it, it runs through:
 
 1. **Sanitization** — `sanitizeEvent` (`src/extensions/sanitization.ts`):
    - `type: "image" | "audio"` content blocks → replaced with a text stub.
@@ -349,9 +349,9 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | Internal event types                             | `src/extensions/event-types.ts`                               |
 | `McpEventSink` + `processMcpEvent` pipeline      | `src/extensions/sink.ts`                                      |
 | Per-server `captureEvent` helper                 | `src/extensions/capture.ts`                                  |
-| Shared tool-call lifecycle / list / initialize   | `src/extensions/tracing-core.ts`                              |
-| High-level `McpServer` wrapping (thin adapter over `tracing-core`) | `src/extensions/tracing-v2.ts`              |
-| Low-level `Server` wrapping (thin adapter over `tracing-core`)     | `src/extensions/tracing.ts`                 |
+| Shared tool-call lifecycle / list / initialize   | `src/extensions/instrumentation.ts`                              |
+| High-level `McpServer` wrapping (thin adapter over `instrumentation`) | `src/extensions/instrument-highlevel.ts`              |
+| Low-level `Server` wrapping (thin adapter over `instrumentation`)     | `src/extensions/instrument-lowlevel.ts`                 |
 | Intent resolution (context arg + fallback)       | `src/extensions/intent.ts`                                    |
 | Identity cache + identify dispatch               | `src/extensions/internal.ts`                                  |
 | Session id derivation & timeout                  | `src/extensions/session.ts`, `src/extensions/ids.ts`             |

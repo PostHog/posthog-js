@@ -4,7 +4,7 @@ import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
 import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
-import { setupInitializeTracing, setupListToolsTracing, traceToolCall } from './tracing-core'
+import { instrumentInitializeHandler, instrumentToolsListHandler, captureToolCall } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
 type MCPRequestHandler = NonNullable<
@@ -15,13 +15,13 @@ type MCPRequestExtra = Parameters<MCPRequestHandler>[1]
 
 /**
  * Instruments a low-level `Server`: wraps `initialize`, `tools/list`, and
- * `tools/call`. The tool-call lifecycle is delegated to {@link traceToolCall},
+ * `tools/call`. The tool-call lifecycle is delegated to {@link captureToolCall},
  * shared with the high-level wrapper.
  */
-export function setupToolCallTracing(server: MCPServerLike): void {
+export function instrumentLowLevelServer(server: MCPServerLike): void {
   try {
-    setupInitializeTracing(server)
-    setupListToolsTracing(server)
+    instrumentInitializeHandler(server)
+    instrumentToolsListHandler(server)
 
     const originalCallToolHandler = server._requestHandlers.get('tools/call')
     server.setRequestHandler(
@@ -29,7 +29,7 @@ export function setupToolCallTracing(server: MCPServerLike): void {
       async (request, extra) => await handleToolCallRequest(server, originalCallToolHandler, request, extra)
     )
   } catch (error) {
-    log(`Warning: Failed to setup tool call tracing - ${error}`)
+    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
     throw error
   }
 }
@@ -50,7 +50,7 @@ async function handleToolCallRequest(
 
   if (request.params?.name === GET_MORE_TOOLS_NAME) {
     const context = getContextArgument(request) || ''
-    return await traceToolCall({
+    return await captureToolCall({
       server,
       data,
       request,
@@ -61,7 +61,7 @@ async function handleToolCallRequest(
     })
   }
 
-  return await traceToolCall({
+  return await captureToolCall({
     server,
     data,
     request,

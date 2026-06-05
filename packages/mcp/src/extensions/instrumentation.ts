@@ -3,13 +3,7 @@ import {
   ListToolsRequestSchema,
   type ListToolsResult,
 } from '@modelcontextprotocol/sdk/types.js'
-import type {
-  CompatibleRequestHandlerExtra,
-  MCPAnalyticsData,
-  MCPRequestLike,
-  MCPServerLike,
-  UnredactedEvent,
-} from '../types'
+import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, MCPServerLike, McpEvent } from '../types'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addConversationIdToTools,
@@ -31,10 +25,10 @@ import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
 /**
- * Single tracing core shared by the low-level (`Server`) and high-level
+ * Single instrumentation core shared by the low-level (`Server`) and high-level
  * (`McpServer`) wrappers. The two entrypoints differ only in how they reach the
  * underlying tool — they both funnel the tool-call lifecycle through
- * {@link traceToolCall}, so error handling, conversation-id minting, session
+ * {@link captureToolCall}, so error handling, conversation-id minting, session
  * attribution, and event capture are defined exactly once.
  */
 
@@ -82,7 +76,7 @@ interface TraceToolCallParams {
  * preparing or publishing the event can never change what the tool returns or
  * throws, and the tool's own errors are always re-thrown to the caller.
  */
-export async function traceToolCall(params: TraceToolCallParams): Promise<unknown> {
+export async function captureToolCall(params: TraceToolCallParams): Promise<unknown> {
   const { server, data, request, extra, execute, eventType, explicitContextIntent, takeCapturedError } = params
 
   const conversation = resolveConversationId(
@@ -93,7 +87,7 @@ export async function traceToolCall(params: TraceToolCallParams): Promise<unknow
   const downstreamRequest = conversation.conversationId ? cloneRequestWithoutConversationId(request) : request
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
-  // throws, we drop tracing for this call but still run the tool.
+  // throws, we drop instrumentation for this call but still run the tool.
   const startTime = new Date()
   const event = await prepareToolCallEvent(
     server,
@@ -131,13 +125,13 @@ async function prepareToolCallEvent(
   startTime: Date,
   conversation: ConversationIdResolution,
   eventType: MCPAnalyticsEventType
-): Promise<UnredactedEvent | null> {
+): Promise<McpEvent | null> {
   try {
     const sessionId = getServerSessionId(server, extra)
     await handleIdentify(server, data, sessionId, request, extra)
 
     const toolName = request.params?.name
-    const event: UnredactedEvent = {
+    const event: McpEvent = {
       sessionId,
       conversationId: conversation.conversationId,
       resourceName: toolName || 'Unknown Tool Name',
@@ -152,7 +146,7 @@ async function prepareToolCallEvent(
     return event
   } catch (error) {
     log(
-      `Warning: PostHog MCP analytics tracing failed for tool ${request.params?.name}, the tool will still run - ${error}`
+      `Warning: PostHog MCP analytics instrumentation failed for tool ${request.params?.name}, the tool will still run - ${error}`
     )
     return null
   }
@@ -164,7 +158,7 @@ async function prepareToolCallEvent(
  * event so analytics doesn't show an orphan the agent never received.
  */
 function applyConversationPromptBack(
-  event: UnredactedEvent | null,
+  event: McpEvent | null,
   result: unknown,
   conversation: ConversationIdResolution
 ): unknown {
@@ -182,7 +176,7 @@ function applyConversationPromptBack(
 
 function publishSuccessfulToolEvent(
   server: MCPServerLike,
-  event: UnredactedEvent | null,
+  event: McpEvent | null,
   result: unknown,
   startTime: Date,
   takeCapturedError?: () => unknown
@@ -208,7 +202,7 @@ function publishSuccessfulToolEvent(
 
 function publishFailedToolEvent(
   server: MCPServerLike,
-  event: UnredactedEvent | null,
+  event: McpEvent | null,
   error: unknown,
   startTime: Date,
   conversation: ConversationIdResolution
@@ -245,7 +239,7 @@ const listToolsTracingSetup = new WeakMap<MCPServerLike, boolean>()
  * injected. Idempotent per server. Works for both low-level and high-level
  * servers — the high-level wrapper passes its underlying `server`.
  */
-export function setupListToolsTracing(server: MCPServerLike): void {
+export function instrumentToolsListHandler(server: MCPServerLike): void {
   if (!(server as MCPServerWithCapabilities)._capabilities?.tools) {
     return
   }
@@ -277,7 +271,7 @@ async function handleListToolsRequest(
 ): Promise<{ tools: ListToolsResult['tools'] }> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  const event: UnredactedEvent = {
+  const event: McpEvent = {
     sessionId: getServerSessionId(server, extra),
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
@@ -329,7 +323,7 @@ async function getTracedToolsList(
   originalListToolsHandler: MCPRequestHandler,
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
-  event: UnredactedEvent
+  event: McpEvent
 ): Promise<ListToolsResult['tools']> {
   try {
     const data = getServerTrackingData(server)
@@ -385,7 +379,7 @@ export function cacheToolDescriptions(cache: Map<string, string>, tools: ListToo
  * Wraps the server's `initialize` handler so the connection handshake is
  * captured (and identity resolved) before the original handler runs.
  */
-export function setupInitializeTracing(server: MCPServerLike): void {
+export function instrumentInitializeHandler(server: MCPServerLike): void {
   const originalInitializeHandler = server._requestHandlers.get('initialize')
   if (!originalInitializeHandler) {
     return
@@ -403,7 +397,7 @@ export function setupInitializeTracing(server: MCPServerLike): void {
     const sessionId = getServerSessionId(server, extra)
     await handleIdentify(server, data, sessionId, request, extra)
 
-    const event: UnredactedEvent = {
+    const event: McpEvent = {
       sessionId,
       resourceName: request.params?.name || 'Unknown Tool Name',
       eventType: MCPAnalyticsEventType.mcpInitialize,

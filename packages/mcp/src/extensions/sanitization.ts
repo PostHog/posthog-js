@@ -1,4 +1,4 @@
-import type { Event, UnredactedEvent } from '../types'
+import type { Event, McpEvent } from '../types'
 import { sanitizeCapturedValue } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
@@ -14,7 +14,7 @@ function isRecord(value: unknown): value is SanitizedRecord {
  * This is a synchronous operation that returns a new object without mutating the original.
  * It should run after customer redaction in the event pipeline.
  */
-export function sanitizeEvent<T extends Event | UnredactedEvent>(event: T): T {
+export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
   const result = { ...event }
 
   if (result.response != null) {

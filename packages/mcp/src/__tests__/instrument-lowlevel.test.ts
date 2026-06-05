@@ -11,8 +11,8 @@ import { instrument } from '../index'
 import { EventCapture, fakePostHog } from './test-utils'
 
 /**
- * End-to-end coverage for the low-level `Server` path (`tracing.ts` →
- * `tracing-core.ts`). These assert on the real PostHog payloads handed to
+ * End-to-end coverage for the low-level `Server` path (`instrument-lowlevel.ts` →
+ * `instrumentation.ts`). These assert on the real PostHog payloads handed to
  * `posthog.capture()` via `EventCapture.getCaptures()`, so they cover the unified
  * tool-call lifecycle the high-level tests don't reach.
  */

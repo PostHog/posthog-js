@@ -157,7 +157,7 @@ export interface Event {
 }
 
 /** A partially-built MCP event as it flows through the SDK before capture. */
-export type UnredactedEvent = Partial<Event>
+export type McpEvent = Partial<Event>
 
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
