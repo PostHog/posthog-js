@@ -511,6 +511,36 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
   })
 
+  test('chat completions create waits for captureImmediate before resolving', async () => {
+    let resolveCapture: () => void
+    const captureDelivery = new Promise<void>((resolve) => {
+      resolveCapture = resolve
+    })
+    ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(captureDelivery)
+
+    const promise = client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+      posthogCaptureImmediate: true,
+    })
+
+    let settled = false
+    promise.then(() => {
+      settled = true
+    })
+
+    await flushPromises()
+
+    expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    expect(settled).toBe(false)
+
+    resolveCapture!()
+
+    await expect(promise).resolves.toEqual(mockOpenAiChatResponse)
+    expect(settled).toBe(true)
+  })
+
   conditionalTest('groups', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',
@@ -1365,7 +1395,32 @@ describe('PostHogOpenAI - Jest test suite', () => {
       // Mock the Audio.Transcriptions.prototype.create method
       const AudioMock: any = openaiModule.Audio
       const TranscriptionsMock = AudioMock.Transcriptions
-      TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(mockTranscriptionResponse)
+      TranscriptionsMock.prototype.create = jest
+        .fn()
+        .mockImplementation(() => createMockAPIPromise(mockTranscriptionResponse))
+    })
+
+    test('audio transcriptions create preserves OpenAI APIPromise helpers', async () => {
+      const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+      mockFile.name = 'test.mp3'
+
+      const promise = client.audio.transcriptions.create({
+        file: mockFile,
+        model: 'whisper-1',
+        posthogDistinctId: 'test-transcription-user',
+      })
+
+      expect(typeof promise.asResponse).toBe('function')
+      expect(typeof promise.withResponse).toBe('function')
+
+      const rawResponse = await promise.asResponse()
+      const { data, response, request_id } = await promise.withResponse()
+
+      expect(rawResponse.headers.get('x-ratelimit-remaining-requests')).toBe('42')
+      expect(response.headers.get('x-ratelimit-remaining-requests')).toBe('42')
+      expect(request_id).toBe('req_test')
+      expect(data).toEqual(mockTranscriptionResponse)
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     })
 
     conditionalTest('basic transcription', async () => {

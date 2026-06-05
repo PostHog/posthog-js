@@ -51,6 +51,16 @@ function captureAiGenerationInBackground(...args: Parameters<typeof captureAiGen
   void captureAiGeneration(...args).catch(() => undefined)
 }
 
+async function captureAiGenerationAfterSuccess(...args: Parameters<typeof captureAiGeneration>): Promise<void> {
+  const [, options] = args
+
+  if (options.captureImmediate) {
+    await captureAiGeneration(...args)
+  } else {
+    captureAiGenerationInBackground(...args)
+  }
+}
+
 function preserveAPIPromiseHelpers<Input, Output>(
   parentPromise: APIPromise<Input>,
   wrappedPromise: Promise<Output>
@@ -353,7 +363,7 @@ export class WrappedCompletions extends Completions {
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
             const formattedOutput = formatResponseOpenAI(result)
-            captureAiGenerationInBackground(this.phClient, {
+            await captureAiGenerationAfterSuccess(this.phClient, {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'openai',
@@ -586,7 +596,7 @@ export class WrappedResponses extends Responses {
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
             const formattedOutput = formatResponseOpenAI({ output: result.output })
-            captureAiGenerationInBackground(this.phClient, {
+            await captureAiGenerationAfterSuccess(this.phClient, {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'openai',
@@ -868,7 +878,7 @@ export class WrappedTranscriptions extends Transcriptions {
       : super.create(openAIParams, options)
 
     if (openAIParams.stream) {
-      return parentPromise.then((value) => {
+      const wrappedPromise = parentPromise.then((value) => {
         if ('tee' in value && typeof (value as any).tee === 'function') {
           const [stream1, stream2] = (value as any).tee()
           ;(async () => {
@@ -941,13 +951,18 @@ export class WrappedTranscriptions extends Transcriptions {
           return stream2
         }
         return value
-      }) as APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>
+      })
+
+      return preserveAPIPromiseHelpers(
+        parentPromise as APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>,
+        wrappedPromise
+      )
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
-          if ('text' in result) {
+          if (result && typeof result === 'object' && 'text' in result) {
             const latency = (Date.now() - startTime) / 1000
-            await captureAiGeneration(this.phClient, {
+            await captureAiGenerationAfterSuccess(this.phClient, {
               ...posthogParams,
               model: openAIParams.model,
               provider: 'openai',
@@ -963,8 +978,8 @@ export class WrappedTranscriptions extends Transcriptions {
                 rawUsage: result.usage,
               },
             })
-            return result
           }
+          return result
         },
         async (error: unknown) => {
           await captureAiGeneration(this.phClient, {
@@ -984,9 +999,12 @@ export class WrappedTranscriptions extends Transcriptions {
           })
           throw error
         }
-      ) as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>
+      )
 
-      return wrappedPromise
+      return preserveAPIPromiseHelpers(
+        parentPromise as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>,
+        wrappedPromise
+      )
     }
   }
 }
