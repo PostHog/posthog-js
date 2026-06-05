@@ -250,6 +250,50 @@ describe('record', function (this: ISuite) {
     await assertSnapshot(ctx.events);
   });
 
+  it('should record the resting scroll offset on scrollend', async () => {
+    // Mirrors scroll-snap-revealed sheets/modals (e.g. Silk): the reveal scroll
+    // settles via a native scrollend without a `scroll` event the throttled
+    // observer captures, so the snapped offset is otherwise lost and the content
+    // replays scrolled to 0. We scroll the element BEFORE recording starts (and
+    // drain that scroll event) so the only signal during recording is the
+    // scrollend, which must still capture the resting offset.
+    await ctx.page.evaluate(() => {
+      const container = document.createElement('div');
+      container.setAttribute(
+        'style',
+        'overflow: auto; height: 100px; width: 100px;',
+      );
+      const tall = document.createElement('div');
+      tall.setAttribute('style', 'height: 3000px; width: 50px;');
+      container.appendChild(tall);
+      document.body.appendChild(container);
+      container.scrollTop = 745;
+      (window as unknown as { __container: HTMLElement }).__container =
+        container;
+    });
+    await waitForRAF(ctx.page);
+
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({
+        emit: (window as unknown as IWindow).emit,
+      });
+      const c = (window as unknown as { __container: HTMLElement }).__container;
+      c.dispatchEvent(new Event('scrollend'));
+    });
+    await waitForRAF(ctx.page);
+
+    const scrollEvents = ctx.events.filter(
+      (e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        e.data.source === IncrementalSource.Scroll,
+    );
+    expect(scrollEvents.length).toBeGreaterThan(0);
+    expect(scrollEvents.some((e) => (e.data as { y: number }).y === 745)).toBe(
+      true,
+    );
+  });
+
   it('should record selection event', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
