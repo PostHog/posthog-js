@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 7.20.13
+
+### Patch Changes
+
+- [#3624](https://github.com/PostHog/posthog-js/pull/3624) [`be7c3c7`](https://github.com/PostHog/posthog-js/commit/be7c3c788ac149fe7f026e03532c8dcabcd2c298) Thanks [@pntech20](https://github.com/pntech20)! - Preserve OpenAI APIPromise response helpers on instrumented OpenAI wrapper calls.
+  (2026-06-05)
+
 ## 7.20.12
 
 ### Patch Changes
