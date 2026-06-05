@@ -1276,6 +1276,26 @@ describe('flag storage split', () => {
             Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
             expect(lib.props['distinct_id']).toBe('d')
         })
+
+        // update_config can move to a backend that can't host the split
+        // (localStorage -> memory) while the gate stays on. Eligibility must
+        // re-resolve to "off" so the grouped keys fold back into the single blob
+        // instead of being stranded in an orphaned __flags entry.
+        it('drops the split when the backend becomes ineligible while the gate stays on', () => {
+            const on = makeConfig()
+            const lib = new PostHogPersistence(on)
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+            expect(parse(FLAGS)).not.toBeNull()
+
+            // still split_storage: true, but memory cannot host the split
+            lib.update_config(makeConfig({ persistence: 'memory' }), on)
+
+            expect((lib as any)._splitStorage).toBe(false)
+            expect(parse(FLAGS)).toBeNull()
+            // the flags fold back into the (single) blob in memory, not stranded
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+            expect(lib.props['distinct_id']).toBe('d')
+        })
     })
 
     describe('empty group entries are not eagerly created', () => {
