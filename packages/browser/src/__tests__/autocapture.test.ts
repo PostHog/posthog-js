@@ -568,6 +568,7 @@ describe('Autocapture system', () => {
 
         describe('rageclick suppression for intentional repeated clicks', () => {
             const rageClickThreeTimes = (el: Element): string[] => {
+                autocapture['rageclicks'].clicks = []
                 document.body.appendChild(el)
                 const fakeEvent = makeMouseEvent({ target: el, clientX: 5, clientY: 5 })
                 Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
@@ -575,6 +576,7 @@ describe('Autocapture system', () => {
                 autocapture['_captureEvent'](fakeEvent)
                 autocapture['_captureEvent'](fakeEvent)
                 const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
+                beforeSendMock.mockClear()
                 document.body.removeChild(el)
                 return captured
             }
@@ -644,6 +646,32 @@ describe('Autocapture system', () => {
                 )
 
                 it.each(['C++', '5 > 3', 'sign-up', 'Save'])(
+                    'rapid clicks on a "%s" button still capture $rageclick (symbol keywords match exactly)',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
+                    }
+                )
+            })
+
+            describe('when content_ignorelist is the legacy boolean true (DEFAULT_CONTENT_IGNORELIST)', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = { content_ignorelist: true }
+                })
+
+                const buttonWithText = (text: string): HTMLButtonElement => {
+                    const el = document.createElement('button')
+                    el.textContent = text
+                    return el
+                }
+
+                it.each(['>', '<', 'next', 'previous', 'prev'])(
+                    'rapid clicks on a "%s" button do not capture $rageclick (exact symbol/word match)',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                    }
+                )
+
+                it.each(['Learn more >', '< Back', 'Go >', 'home > settings'])(
                     'rapid clicks on a "%s" button still capture $rageclick (symbol keywords match exactly)',
                     (text) => {
                         expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
