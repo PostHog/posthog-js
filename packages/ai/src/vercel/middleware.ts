@@ -283,6 +283,35 @@ const extractProvider = (model: LanguageModel): string => {
   return providerName
 }
 
+/**
+ * Recover the base URL so gateway calls self-identify via `$ai_base_url` (dedup
+ * keys on it). The spec exposes none, so we read the off-spec provider `config`:
+ * `@ai-sdk/anthropic` keeps a `config.baseURL` string; `@ai-sdk/openai`/
+ * `openai-compatible` bury it in a `config.url({ path })` closure. Unknown shapes
+ * degrade to `''` — those providers (or a custom `fetch`) stay invisible to dedup.
+ */
+const extractBaseURL = (model: LanguageModel): string => {
+  try {
+    const config = (model as unknown as { config?: Record<string, unknown> }).config
+    if (!config) {
+      return ''
+    }
+    if (typeof config.baseURL === 'string') {
+      return config.baseURL
+    }
+    if (typeof config.url === 'function') {
+      const url = (config.url as (opts: { path: string; modelId: string }) => unknown)({
+        path: '',
+        modelId: model.modelId,
+      })
+      return typeof url === 'string' ? url : ''
+    }
+  } catch {
+    // Unknown config shape or url() threw.
+  }
+  return ''
+}
+
 // Extract web search count from provider metadata (works for both V2 and V3)
 const extractWebSearchCount = (providerMetadata: unknown, usage: any): number => {
   // Try Anthropic-specific extraction
@@ -481,13 +510,13 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           ...mapVercelParams(params),
         }
         const availableTools = extractAvailableToolCalls('vercel', params)
+        const baseURL = extractBaseURL(model)
 
         try {
           const result = await model.doGenerate(params as any)
           const modelId =
             mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
           const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
-          const baseURL = '' // cannot currently get baseURL from vercel
           // result.content is undefined when the model returns only tool calls with no text output
           const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[])
           const latency = (Date.now() - startTime) / 1000
@@ -562,7 +591,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
             output: [],
             latency: 0,
-            baseURL: '',
+            baseURL,
             modelParameters: getModelParams(mergedParams as any),
             usage: {
               inputTokens: 0,
@@ -601,7 +630,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         const modelId = mergedOptions.posthogModelOverride ?? model.modelId
         const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
         const availableTools = extractAvailableToolCalls('vercel', params)
-        const baseURL = '' // cannot currently get baseURL from vercel
+        const baseURL = extractBaseURL(model)
 
         // Map to track in-progress tool calls
         const toolCallsInProgress = new Map<
@@ -766,7 +795,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
             output: [],
             latency: 0,
-            baseURL: '',
+            baseURL,
             modelParameters: getModelParams(mergedParams as any),
             usage: {
               inputTokens: 0,

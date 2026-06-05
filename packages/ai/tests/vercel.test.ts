@@ -1140,4 +1140,76 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     })
   })
+
+  describe('base URL extraction ($ai_base_url)', () => {
+    const runGenerate = async (config: unknown): Promise<Record<string, any>> => {
+      const baseModel = {
+        specificationVersion: 'v2' as const,
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        supportedUrls: {},
+        config,
+        doGenerate: jest.fn().mockResolvedValue({
+          content: [{ type: 'text', text: 'hi' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          response: { modelId: 'gpt-4o' },
+          providerMetadata: {},
+          finishReason: 'stop' as const,
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      } as any
+
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      await model.doGenerate({ prompt: [] } as any)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      return captureCall[0].properties
+    }
+
+    it('recovers the base URL from a config.url closure (@ai-sdk/openai style)', async () => {
+      const props = await runGenerate({ url: ({ path }: { path: string }) => `https://gateway.posthog.com/v1${path}` })
+      expect(props['$ai_base_url']).toBe('https://gateway.posthog.com/v1')
+    })
+
+    it('recovers the base URL from a config.baseURL string (@ai-sdk/anthropic style)', async () => {
+      const props = await runGenerate({ baseURL: 'https://gateway.posthog.com/anthropic' })
+      expect(props['$ai_base_url']).toBe('https://gateway.posthog.com/anthropic')
+    })
+
+    it('falls back to an empty string when config is absent or unrecognized', async () => {
+      expect((await runGenerate(undefined))['$ai_base_url']).toBe('')
+      expect((await runGenerate({ somethingElse: true }))['$ai_base_url']).toBe('')
+    })
+
+    it('falls back to an empty string when config.url throws', async () => {
+      const props = await runGenerate({
+        url: () => {
+          throw new Error('internal shape changed')
+        },
+      })
+      expect(props['$ai_base_url']).toBe('')
+    })
+
+    it('recovers the base URL on the streaming path too', async () => {
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'hi' },
+        { type: 'finish', usage: v3TokenUsage(1, 1), finishReason: { unified: 'stop' as const, raw: undefined } },
+      ]
+      const baseModel = createMockStreamingModel('v3', streamParts) as any
+      baseModel.config = { baseURL: 'https://gateway.posthog.com/v1' }
+
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] }],
+      })
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // drain
+      }
+      await flushPromises()
+
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(captureCall[0].properties['$ai_base_url']).toBe('https://gateway.posthog.com/v1')
+    })
+  })
 })
