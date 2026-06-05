@@ -1,5 +1,7 @@
 # @posthog/types
 
+## 1.380.1
+
 ## 1.380.0
 
 ### Minor Changes
