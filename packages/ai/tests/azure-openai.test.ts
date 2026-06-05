@@ -252,6 +252,12 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['$ai_provider']).toBe('azure')
     expect(properties['$ai_model']).toBe('gpt-4')
     expect(properties['$ai_completion_id']).toBe('resp_test-response-id')
+    expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello' }])
+    expect(properties['$ai_output_choices']).toEqual(mockAzureResponsesResult.output)
+    expect(properties['$ai_input_tokens']).toBe(20)
+    expect(properties['$ai_output_tokens']).toBe(10)
+    expect(properties['$ai_http_status']).toBe(200)
+    expect(typeof properties['$ai_latency']).toBe('number')
     expect(properties['foo']).toBe('bar')
   })
 
