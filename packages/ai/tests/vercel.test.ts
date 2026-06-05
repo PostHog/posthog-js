@@ -1176,8 +1176,11 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(props['$ai_base_url']).toBe('https://gateway.posthog.com/anthropic')
     })
 
-    it('falls back to an empty string when config is absent or unrecognized', async () => {
+    it('falls back to an empty string when config is absent', async () => {
       expect((await runGenerate(undefined))['$ai_base_url']).toBe('')
+    })
+
+    it('falls back to an empty string when config shape is unrecognized', async () => {
       expect((await runGenerate({ somethingElse: true }))['$ai_base_url']).toBe('')
     })
 
