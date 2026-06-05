@@ -89,7 +89,7 @@ await phClient.shutdown()
 
 ## OpenTelemetry
 
-`@posthog/ai/otel` provides two ways to send AI traces to PostHog via OpenTelemetry. Both automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`) and PostHog converts them into `$ai_generation` events server-side. Missing or blank project tokens disable the OpenTelemetry integration. This works with any LLM provider SDK that supports OpenTelemetry.
+`@posthog/ai/otel` provides two ways to send AI traces to PostHog via OpenTelemetry. Both automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`) and PostHog converts them into `$ai_generation` events server-side. `projectToken` is required; a blank token disables the OpenTelemetry integration as a defensive no-op. This works with any LLM provider SDK that supports OpenTelemetry.
 
 ```bash
 npm install @posthog/ai @opentelemetry/sdk-node @opentelemetry/sdk-trace-base @opentelemetry/exporter-trace-otlp-http

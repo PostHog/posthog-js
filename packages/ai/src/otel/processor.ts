@@ -17,9 +17,10 @@ function normalizeHost(value?: unknown): string {
 
 export interface PostHogSpanProcessorOptions {
   /**
-   * Your PostHog project token (the `phc_...` key).
+   * Your PostHog project token (the `phc_...` key). Required; a blank token disables the
+   * processor as a defensive no-op.
    */
-  projectToken?: string
+  projectToken: string
 
   /**
    * PostHog host URL. Defaults to `https://us.i.posthog.com`.
@@ -50,7 +51,7 @@ class NoopSpanProcessor implements SpanProcessor {
 /**
  * An OpenTelemetry `SpanProcessor` that sends AI traces to PostHog.
  *
- * Missing or blank project tokens disable the processor.
+ * `projectToken` is required; a blank token disables the processor as a defensive no-op.
  *
  * Internally batches spans and exports them to PostHog's OTLP ingestion
  * endpoint. Only AI-related spans (those whose name or attribute keys
@@ -75,7 +76,7 @@ class NoopSpanProcessor implements SpanProcessor {
 export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
 
-  constructor(options: PostHogSpanProcessorOptions = {}) {
+  constructor(options: PostHogSpanProcessorOptions) {
     const token = normalizeToken(options.projectToken)
     if (!token) {
       console.warn('[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.')
