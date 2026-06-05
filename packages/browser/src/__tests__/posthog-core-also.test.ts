@@ -1222,6 +1222,42 @@ describe('posthog core', () => {
         })
     })
 
+    describe('person properties for flags', () => {
+        let posthog: PostHog
+
+        beforeEach(() => {
+            posthog = defaultPostHog().init(
+                'testtoken',
+                {
+                    persistence: 'memory',
+                },
+                uuidv7()
+            )!
+            posthog.persistence!.clear()
+            posthog.reloadFeatureFlags = jest.fn()
+        })
+
+        it('resets person properties for flags and reloads by default', () => {
+            posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
+
+            expect(posthog.persistence!.props['$stored_person_properties']).toEqual({ plan: 'pro' })
+
+            posthog.resetPersonPropertiesForFlags()
+
+            expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it('resets person properties for flags without reloading if requested', () => {
+            posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
+
+            posthog.resetPersonPropertiesForFlags(false)
+
+            expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+    })
+
     describe('group()', () => {
         let posthog: PostHog
 
