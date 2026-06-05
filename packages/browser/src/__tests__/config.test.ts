@@ -36,6 +36,31 @@ describe('config', () => {
             })
         })
 
+        it('merges a partial rageclick object with the date-gated defaults', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30', rageclick: { threshold_px: 50 } })
+            expect(posthog.config.rageclick).toStrictEqual({
+                content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS,
+                ignore_text_selection: true,
+                threshold_px: 50,
+            })
+        })
+
+        it('lets a partial rageclick object override a default sub-option', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30', rageclick: { content_ignorelist: false } })
+            expect(posthog.config.rageclick).toStrictEqual({
+                content_ignorelist: false,
+                ignore_text_selection: true,
+            })
+        })
+
+        it('lets a boolean rageclick replace the default object entirely', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30', rageclick: false })
+            expect(posthog.config.rageclick).toBe(false)
+        })
+
         it.each([
             ['unset', undefined, 0],
             ['2025-05-24', '2025-05-24' as const, 0],

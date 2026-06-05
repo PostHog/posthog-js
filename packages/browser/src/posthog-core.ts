@@ -594,12 +594,18 @@ export class PostHog implements PostHogInterface {
             this._initialPersonProfilesConfig = config.process_person
         }
 
-        this.set_config(
-            extend({}, defaultConfig(config.defaults), configRenames(config), {
-                name: name,
-                token: normalizedToken,
-            })
-        )
+        const baseConfig = defaultConfig(config.defaults)
+        const userConfig = configRenames(config)
+        const mergedConfig = extend({}, baseConfig, userConfig, {
+            name: name,
+            token: normalizedToken,
+        })
+        // a partial user-supplied rageclick object should keep the date-gated defaults
+        // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
+        if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
+            mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
+        }
+        this.set_config(mergedConfig)
 
         if (this.config.on_xhr_error) {
             logger.error('on_xhr_error is deprecated. Use on_request_error instead')
