@@ -1,0 +1,29 @@
+{
+  "brokenModalAtSeconds": 27.92,
+  "workingModalAtSeconds": 93.3,
+  "brokenModal": {
+    "revealContainerScroll": {
+      "id": 6244,
+      "x": 0,
+      "y": 0
+    },
+    "sentinelScroll": {
+      "id": 6240,
+      "x": 300,
+      "y": 300
+    }
+  },
+  "workingModal": {
+    "revealContainerScroll": {
+      "id": 8236,
+      "x": 0,
+      "y": 787
+    },
+    "sentinelScroll": {
+      "id": 8233,
+      "x": 300,
+      "y": 300
+    }
+  },
+  "expectedRestingOffsetY": 787
+}

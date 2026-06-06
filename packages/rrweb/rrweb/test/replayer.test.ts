@@ -15,6 +15,8 @@ import orderingEvents from './events/ordering';
 import scrollEvents from './events/scroll';
 import scrollWithParentStylesEvents from './events/scroll-with-parent-styles';
 import scrollRevealedByLateStyleEvents from './events/scroll-revealed-by-late-style';
+import silkSheetRevealBrokenEvents from './events/silk-sheet-reveal-broken';
+import silkSheetRevealFixedEvents from './events/silk-sheet-reveal-fixed';
 import inputEvents from './events/input';
 import iframeEvents from './events/iframe';
 import selectionEvents from './events/selection';
@@ -477,6 +479,40 @@ describe('replayer', function () {
         (element: Element) => element.scrollTop,
       ),
     ).toEqual(800);
+  });
+
+  it('silk sheet reveal without scrollend leaves container scrolled to 0', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(silkSheetRevealBrokenEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(750);
+    `);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval(
+        '#reveal-container',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(0);
+  });
+
+  it('silk sheet reveal with scrollend offset replays revealed content', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(silkSheetRevealFixedEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(800);
+    `);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval(
+        '#reveal-container',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(787);
   });
 
   it('can fast forward input events', async () => {

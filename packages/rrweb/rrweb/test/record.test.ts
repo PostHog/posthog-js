@@ -250,6 +250,17 @@ describe('record', function (this: ISuite) {
     await assertSnapshot(ctx.events);
   });
 
+  const silkSheetRevealMetadata = JSON.parse(
+    fs.readFileSync(
+      path.join(__dirname, 'fixtures/silk-sheet-reveal-metadata.json'),
+      'utf8',
+    ),
+  ) as {
+    brokenModal: { revealContainerScroll: { y: number } };
+    workingModal: { revealContainerScroll: { y: number } };
+    expectedRestingOffsetY: number;
+  };
+
   const scrollData = () =>
     ctx.events
       .filter(
@@ -415,6 +426,63 @@ describe('record', function (this: ISuite) {
 
     expect(expectedId).toBeGreaterThan(0);
     expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 300 }]);
+  });
+
+  it('silk sheet reveal metadata documents broken scroll at y=0', () => {
+    expect(silkSheetRevealMetadata.brokenModal.revealContainerScroll.y).toBe(0);
+    expect(silkSheetRevealMetadata.workingModal.revealContainerScroll.y).toBe(
+      silkSheetRevealMetadata.expectedRestingOffsetY,
+    );
+  });
+
+  it('should record silk sheet resting offset after clamp-to-0', async () => {
+    const restingY = silkSheetRevealMetadata.expectedRestingOffsetY;
+    await ctx.page.evaluate(() => {
+      const container = document.createElement('div');
+      container.setAttribute(
+        'style',
+        'overflow: auto; height: 100px; width: 100%;',
+      );
+      const child = document.createElement('div');
+      child.setAttribute('style', 'height: 10px;');
+      container.appendChild(child);
+      document.body.appendChild(container);
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__container = container;
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__child = child;
+    });
+    await waitForRAF(ctx.page);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const { __container } = window as unknown as { __container: HTMLElement };
+      __container.scrollTop = 787; // clamps to 0 (not scrollable yet)
+      __container.dispatchEvent(new Event('scroll'));
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(__container);
+    });
+    await waitForRAF(ctx.page);
+
+    await ctx.page.evaluate((top: number) => {
+      const { __container, __child } = window as unknown as {
+        __container: HTMLElement;
+        __child: HTMLElement;
+      };
+      __child.style.height = '3000px';
+      __container.scrollTop = top;
+      __container.dispatchEvent(new Event('scrollend'));
+    }, restingY);
+    await waitForRAF(ctx.page);
+
+    const data = scrollData().filter((d) => d.id === expectedId);
+    expect(expectedId).toBeGreaterThan(0);
+    expect(data[0].y).toBe(0);
+    expect(data[data.length - 1].y).toBe(restingY);
   });
 
   it('should record selection event', async () => {
