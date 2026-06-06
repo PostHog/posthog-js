@@ -1,5 +1,6 @@
 import { PostHog } from '../posthog-core'
 import type { PostHogConfig } from '../types'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '../autocapture-utils'
 import { isFunction } from '@posthog/core'
 
 describe('config', () => {
@@ -24,6 +25,40 @@ describe('config', () => {
             expect(posthog.config.capture_pageview).toBe('history_change')
             expect(posthog.config.session_recording.strictMinimumDuration).toBe(true)
             expect(posthog.config.rageclick).toStrictEqual({ content_ignorelist: true })
+        })
+
+        it('should set expected values when defaults is 2026-05-30', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30' })
+            expect(posthog.config.rageclick).toStrictEqual({
+                content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS,
+                ignore_text_selection: true,
+            })
+        })
+
+        it('merges a partial rageclick object with the date-gated defaults', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30', rageclick: { threshold_px: 50 } })
+            expect(posthog.config.rageclick).toStrictEqual({
+                content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS,
+                ignore_text_selection: true,
+                threshold_px: 50,
+            })
+        })
+
+        it('lets a partial rageclick object override a default sub-option', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30', rageclick: { content_ignorelist: false } })
+            expect(posthog.config.rageclick).toStrictEqual({
+                content_ignorelist: false,
+                ignore_text_selection: true,
+            })
+        })
+
+        it('lets a boolean rageclick replace the default object entirely', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30', rageclick: false })
+            expect(posthog.config.rageclick).toBe(false)
         })
 
         it.each([
