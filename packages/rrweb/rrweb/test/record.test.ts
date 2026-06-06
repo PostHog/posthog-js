@@ -98,6 +98,98 @@ describe('record', function (this: ISuite) {
     `,
   );
 
+  const silkSheetRevealMetadata = JSON.parse(
+    fs.readFileSync(
+      path.join(__dirname, 'fixtures/silk-sheet-reveal-metadata.json'),
+      'utf8',
+    ),
+  ) as {
+    brokenModal: { revealContainerScroll: { y: number } };
+    workingModal: { revealContainerScroll: { y: number } };
+    expectedRestingOffsetY: number;
+  };
+
+  const scrollData = () =>
+    ctx.events
+      .filter(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          e.data.source === IncrementalSource.Scroll,
+      )
+      .map((e) => {
+        const d = e.data as { id: number; x: number; y: number };
+        return { id: d.id, x: d.x, y: d.y };
+      });
+
+  const setupScrolledContainerBeforeRecord = async (
+    initialScrollTop: number,
+  ): Promise<void> => {
+    await ctx.page.evaluate((top: number) => {
+      const container = document.createElement('div');
+      container.setAttribute(
+        'style',
+        'overflow: auto; height: 100px; width: 100px;',
+      );
+      const tall = document.createElement('div');
+      tall.setAttribute('style', 'height: 3000px; width: 50px;');
+      container.appendChild(tall);
+      document.body.appendChild(container);
+      container.scrollTop = top;
+      (window as unknown as { __container: HTMLElement }).__container =
+        container;
+    }, initialScrollTop);
+    await waitForRAF(ctx.page);
+  };
+
+  const recordSilkSheetClampToZero = async (
+    restingY: number,
+  ): Promise<number> => {
+    await ctx.page.evaluate(() => {
+      const container = document.createElement('div');
+      container.id = 'reveal-container';
+      container.setAttribute(
+        'style',
+        'overflow: auto; height: 100px; width: 100%;',
+      );
+      const child = document.createElement('div');
+      child.setAttribute('style', 'height: 10px;');
+      container.appendChild(child);
+      document.body.appendChild(container);
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__container = container;
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__child = child;
+    });
+    await waitForRAF(ctx.page);
+
+    const expectedId = await ctx.page.evaluate((top: number) => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const { __container } = window as unknown as { __container: HTMLElement };
+      __container.scrollTop = top;
+      __container.dispatchEvent(new Event('scroll'));
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(__container);
+    }, restingY);
+    await waitForRAF(ctx.page);
+
+    await ctx.page.evaluate((top: number) => {
+      const { __container, __child } = window as unknown as {
+        __container: HTMLElement;
+        __child: HTMLElement;
+      };
+      __child.style.height = '3000px';
+      __container.scrollTop = top;
+      __container.dispatchEvent(new Event('scrollend'));
+    }, restingY);
+    await waitForRAF(ctx.page);
+
+    return expectedId;
+  };
+
   it('will only have one full snapshot without checkout config', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
@@ -250,49 +342,6 @@ describe('record', function (this: ISuite) {
     await assertSnapshot(ctx.events);
   });
 
-  const silkSheetRevealMetadata = JSON.parse(
-    fs.readFileSync(
-      path.join(__dirname, 'fixtures/silk-sheet-reveal-metadata.json'),
-      'utf8',
-    ),
-  ) as {
-    brokenModal: { revealContainerScroll: { y: number } };
-    workingModal: { revealContainerScroll: { y: number } };
-    expectedRestingOffsetY: number;
-  };
-
-  const scrollData = () =>
-    ctx.events
-      .filter(
-        (e) =>
-          e.type === EventType.IncrementalSnapshot &&
-          e.data.source === IncrementalSource.Scroll,
-      )
-      .map((e) => {
-        const d = e.data as { id: number; x: number; y: number };
-        return { id: d.id, x: d.x, y: d.y };
-      });
-
-  const setupScrolledContainerBeforeRecord = async (
-    initialScrollTop: number,
-  ): Promise<void> => {
-    await ctx.page.evaluate((top: number) => {
-      const container = document.createElement('div');
-      container.setAttribute(
-        'style',
-        'overflow: auto; height: 100px; width: 100px;',
-      );
-      const tall = document.createElement('div');
-      tall.setAttribute('style', 'height: 3000px; width: 50px;');
-      container.appendChild(tall);
-      document.body.appendChild(container);
-      container.scrollTop = top;
-      (window as unknown as { __container: HTMLElement }).__container =
-        container;
-    }, initialScrollTop);
-    await waitForRAF(ctx.page);
-  };
-
   it('should record the resting scroll offset on scrollend', async () => {
     await setupScrolledContainerBeforeRecord(745);
 
@@ -311,24 +360,29 @@ describe('record', function (this: ISuite) {
     expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 745 }]);
   });
 
-  it('should not emit a duplicate scroll event when scrollend repeats the offset', async () => {
-    await setupScrolledContainerBeforeRecord(300);
+  it.each([
+    ['scroll then scrollend', ['scroll', 'scrollend']],
+    ['scrollend then scroll', ['scrollend', 'scroll']],
+  ] as const)(
+    'should not emit a duplicate when %s fires at the same offset',
+    async (_label, eventOrder) => {
+      await setupScrolledContainerBeforeRecord(300);
 
-    const expectedId = await ctx.page.evaluate(() => {
-      const { record } = (window as unknown as IWindow).rrweb;
-      record({ emit: (window as unknown as IWindow).emit });
-      const c = (window as unknown as { __container: HTMLElement }).__container;
-      c.dispatchEvent(new Event('scroll'));
-      c.dispatchEvent(new Event('scrollend'));
-      return (
-        record as unknown as { mirror: { getId(n: Node): number } }
-      ).mirror.getId(c);
-    });
-    await waitForRAF(ctx.page);
+      const expectedId = await ctx.page.evaluate((order: string[]) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+        const c = (window as unknown as { __container: HTMLElement }).__container;
+        order.forEach((type) => c.dispatchEvent(new Event(type)));
+        return (
+          record as unknown as { mirror: { getId(n: Node): number } }
+        ).mirror.getId(c);
+      }, [...eventOrder]);
+      await waitForRAF(ctx.page);
 
-    expect(expectedId).toBeGreaterThan(0);
-    expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 300 }]);
-  });
+      expect(expectedId).toBeGreaterThan(0);
+      expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 300 }]);
+    },
+  );
 
   it('should recover the resting offset via scrollend after a scroll clamped to 0', async () => {
     await ctx.page.evaluate(() => {
@@ -400,80 +454,12 @@ describe('record', function (this: ISuite) {
     expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 500 }]);
   });
 
-  it('should not emit a duplicate when scrollend fires before the throttled scroll', async () => {
-    await setupScrolledContainerBeforeRecord(300);
-
-    const expectedId = await ctx.page.evaluate(() => {
-      const { record } = (window as unknown as IWindow).rrweb;
-      record({ emit: (window as unknown as IWindow).emit });
-      const c = (window as unknown as { __container: HTMLElement }).__container;
-      c.dispatchEvent(new Event('scrollend'));
-      c.dispatchEvent(new Event('scroll'));
-      return (
-        record as unknown as { mirror: { getId(n: Node): number } }
-      ).mirror.getId(c);
-    });
-    await waitForRAF(ctx.page);
-
-    expect(expectedId).toBeGreaterThan(0);
-    expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 300 }]);
-  });
-
   it('silk sheet reveal metadata documents broken scroll at y=0', () => {
     expect(silkSheetRevealMetadata.brokenModal.revealContainerScroll.y).toBe(0);
     expect(silkSheetRevealMetadata.workingModal.revealContainerScroll.y).toBe(
       silkSheetRevealMetadata.expectedRestingOffsetY,
     );
   });
-
-  const recordSilkSheetClampToZero = async (
-    restingY: number,
-  ): Promise<number> => {
-    await ctx.page.evaluate(() => {
-      const container = document.createElement('div');
-      container.id = 'reveal-container';
-      container.setAttribute(
-        'style',
-        'overflow: auto; height: 100px; width: 100%;',
-      );
-      const child = document.createElement('div');
-      child.setAttribute('style', 'height: 10px;');
-      container.appendChild(child);
-      document.body.appendChild(container);
-      (
-        window as unknown as { __container: HTMLElement; __child: HTMLElement }
-      ).__container = container;
-      (
-        window as unknown as { __container: HTMLElement; __child: HTMLElement }
-      ).__child = child;
-    });
-    await waitForRAF(ctx.page);
-
-    const expectedId = await ctx.page.evaluate((top: number) => {
-      const { record } = (window as unknown as IWindow).rrweb;
-      record({ emit: (window as unknown as IWindow).emit });
-      const { __container } = window as unknown as { __container: HTMLElement };
-      __container.scrollTop = top;
-      __container.dispatchEvent(new Event('scroll'));
-      return (
-        record as unknown as { mirror: { getId(n: Node): number } }
-      ).mirror.getId(__container);
-    }, restingY);
-    await waitForRAF(ctx.page);
-
-    await ctx.page.evaluate((top: number) => {
-      const { __container, __child } = window as unknown as {
-        __container: HTMLElement;
-        __child: HTMLElement;
-      };
-      __child.style.height = '3000px';
-      __container.scrollTop = top;
-      __container.dispatchEvent(new Event('scrollend'));
-    }, restingY);
-    await waitForRAF(ctx.page);
-
-    return expectedId;
-  };
 
   it('should record silk sheet resting offset after clamp-to-0', async () => {
     const restingY = silkSheetRevealMetadata.expectedRestingOffsetY;
