@@ -375,6 +375,48 @@ describe('record', function (this: ISuite) {
     expect(data[data.length - 1].y).toBe(745); // resting offset recovered by scrollend
   });
 
+  it('should record the resting window scroll offset on scrollend', async () => {
+    // Same fix for the document/window scroll path.
+    await ctx.page.evaluate(() => {
+      document.body.style.height = '5000px';
+      window.scrollTo(0, 500);
+    });
+    await waitForRAF(ctx.page);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      document.dispatchEvent(new Event('scrollend'));
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(document);
+    });
+    await waitForRAF(ctx.page);
+
+    expect(expectedId).toBeGreaterThan(0);
+    expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 500 }]);
+  });
+
+  it('should not emit a duplicate when scrollend fires before the throttled scroll', async () => {
+    // scrollend can fire before the trailing throttle flush; both paths must dedupe.
+    await setupScrolledContainerBeforeRecord(300);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const c = (window as unknown as { __container: HTMLElement }).__container;
+      c.dispatchEvent(new Event('scrollend')); // logs y=300 first
+      c.dispatchEvent(new Event('scroll')); // same offset -> deduped
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(c);
+    });
+    await waitForRAF(ctx.page);
+
+    expect(expectedId).toBeGreaterThan(0);
+    expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 300 }]);
+  });
+
   it('should record selection event', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;

@@ -318,10 +318,11 @@ export function initScrollObserver({
   observerParam,
   'scrollCb' | 'doc' | 'mirror' | 'blockClass' | 'blockSelector' | 'sampling'
 >): listenerHandler {
-  // Last offset recorded per node, so scrollend can skip a position scroll
-  // already logged (otherwise each scroll would be recorded twice).
+  // Last offset recorded per node. `scroll` (throttled, trailing) and `scrollend`
+  // both fire for one gesture, so dedupe on this to never record the same position
+  // twice regardless of which fires last.
   const lastEmitted = new Map<number, string>();
-  const emitScrollPosition = (evt: Event, skipIfUnchanged = false) => {
+  const emitScrollPosition = (evt: Event) => {
     const target = getEventTarget(evt);
     if (!target || isBlocked(target as Node, blockClass, blockSelector, true)) {
       return;
@@ -338,7 +339,7 @@ export function initScrollObserver({
       y = (target as HTMLElement).scrollTop;
     }
     const key = `${x},${y}`;
-    if (skipIfUnchanged && lastEmitted.get(id) === key) {
+    if (lastEmitted.get(id) === key) {
       return;
     }
     lastEmitted.set(id, key);
@@ -354,13 +355,7 @@ export function initScrollObserver({
   // scrollend reports the final offset after a scroll that clamped to 0 — e.g. a
   // sheet revealed before its content was scrollable — which scroll alone misses.
   if ('onscrollend' in doc) {
-    handlers.push(
-      on(
-        'scrollend',
-        callbackWrapper((evt: Event) => emitScrollPosition(evt, true)),
-        doc,
-      ),
-    );
+    handlers.push(on('scrollend', callbackWrapper(emitScrollPosition), doc));
   }
   return () => handlers.forEach((h) => h());
 }
