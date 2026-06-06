@@ -24,6 +24,7 @@ import {
     USER_STATE,
     COOKIELESS_ALWAYS,
 } from './constants'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from './autocapture-utils'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -117,6 +118,7 @@ import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
+import type { TracingHeaders } from './extensions/tracing-headers'
 import type { WebVitalsAutocapture } from './extensions/web-vitals'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
@@ -189,7 +191,12 @@ const defaultsThatVaryByConfig = (
     | 'internal_or_test_user_hostname'
     | 'persistence_save_debounce_ms'
 > => ({
-    rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
+    rageclick:
+        defaults && defaults >= '2026-05-30'
+            ? { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, ignore_text_selection: true }
+            : defaults && defaults >= '2025-11-30'
+              ? { content_ignorelist: true }
+              : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
@@ -219,6 +226,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
     __preview_external_dependency_versioned_paths: false,
+    __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -375,6 +383,7 @@ export class PostHog implements PostHogInterface {
     siteApps?: SiteApps
     autocapture?: Autocapture
     heatmaps?: Heatmaps
+    tracingHeaders?: TracingHeaders
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
@@ -586,12 +595,18 @@ export class PostHog implements PostHogInterface {
             this._initialPersonProfilesConfig = config.process_person
         }
 
-        this.set_config(
-            extend({}, defaultConfig(config.defaults), configRenames(config), {
-                name: name,
-                token: normalizedToken,
-            })
-        )
+        const baseConfig = defaultConfig(config.defaults)
+        const userConfig = configRenames(config)
+        const mergedConfig = extend({}, baseConfig, userConfig, {
+            name: name,
+            token: normalizedToken,
+        })
+        // a partial user-supplied rageclick object should keep the date-gated defaults
+        // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
+        if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
+            mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
+        }
+        this.set_config(mergedConfig)
 
         if (this.config.on_xhr_error) {
             logger.error('on_xhr_error is deprecated. Use on_request_error instead')
@@ -788,7 +803,7 @@ export class PostHog implements PostHogInterface {
             this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
         if (ext.tracingHeaders) {
-            this._extensions.push(new ext.tracingHeaders(this))
+            this._extensions.push((this.tracingHeaders = new ext.tracingHeaders(this)))
         }
         if (ext.siteApps) {
             this._extensions.push((this.siteApps = new ext.siteApps(this)))
@@ -3072,6 +3087,7 @@ export class PostHog implements PostHogInterface {
             this.exceptions?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
+            this.tracingHeaders?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.exceptionObserver?.startIfEnabledOrStop()

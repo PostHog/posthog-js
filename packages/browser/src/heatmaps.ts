@@ -3,7 +3,7 @@ import { DeadClickCandidate, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
-import { getEventTarget, getParentElement } from './autocapture-utils'
+import { getEventTarget, getParentElement, shouldCaptureRageclick } from './autocapture-utils'
 import { DOM_EVENT_BEFOREUNLOAD, DOM_EVENT_VISIBILITYCHANGE, HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isNumber, isNullish, isEmptyObject, isObject } from '@posthog/core'
 import { createLogger } from './utils/logger'
@@ -236,7 +236,10 @@ export class Heatmaps implements Extension {
 
         const properties = this._getProperties(e, type)
 
-        if (this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
+        if (
+            this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime()) &&
+            shouldCaptureRageclick(getEventTarget(e), this.instance.config.rageclick)
+        ) {
             this._capture({
                 ...properties,
                 type: 'rageclick',

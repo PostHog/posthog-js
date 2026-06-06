@@ -1,5 +1,58 @@
 # posthog-react-native
 
+## 4.46.18
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+  - @posthog/types@1.381.0
+  - @posthog/core@1.30.9
+
+## 4.46.17
+
+### Patch Changes
+
+- [#3747](https://github.com/PostHog/posthog-js/pull/3747) [`70c976e`](https://github.com/PostHog/posthog-js/commit/70c976e36eb80e55725b349c7a082043660ac504) Thanks [@cat-ph](https://github.com/cat-ph)! - Improve Xcode sourcemap upload failure logs so every captured `posthog-cli` line is reported as an Xcode error with the failing Hermes command and exit code.
+  (2026-06-05)
+
+## 4.46.16
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.380.1
+  - @posthog/core@1.30.8
+
+## 4.46.15
+
+### Patch Changes
+
+- [#3745](https://github.com/PostHog/posthog-js/pull/3745) [`33388d5`](https://github.com/PostHog/posthog-js/commit/33388d522b9db50077f82f823676315392c2fc3d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `posthog-react-native` throwing `Cannot read properties of undefined (reading 'create')` at import time in analytics-only setups and Jest `testEnvironment: node` runs without the React Native preset. The surveys UI is reachable from the package entrypoint and no longer evaluates native `StyleSheet` APIs while loading. (#3740)
+  (2026-06-04)
+
+## 4.46.14
+
+### Patch Changes
+
+- Updated dependencies [[`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7)]:
+  - @posthog/types@1.380.0
+  - @posthog/core@1.30.7
+
+## 4.46.13
+
+### Patch Changes
+
+- [#3729](https://github.com/PostHog/posthog-js/pull/3729) [`3959c03`](https://github.com/PostHog/posthog-js/commit/3959c038505c2b1365fe1c09183cc4038e707962) Thanks [@cat-ph](https://github.com/cat-ph)! - fix(react-native): make the Android Hermes sourcemap upload tasks compatible with Gradle's configuration cache.
+  (2026-06-04)
+
+## 4.46.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.3
+  - @posthog/core@1.30.6
+
 ## 4.46.11
 
 ### Patch Changes

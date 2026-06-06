@@ -98,6 +98,7 @@ describe('PostHog Node.js', () => {
             $geoip_disable: true,
             $lib: 'posthog-node',
             $lib_version: '1.2.3',
+            $is_server: true,
           },
           uuid: expect.any(String),
           timestamp: expect.any(String),
@@ -106,6 +107,34 @@ describe('PostHog Node.js', () => {
           library_version: '1.2.3',
         },
       ])
+    })
+
+    it('should not include $is_server when isServer is false (client/CLI usage)', async () => {
+      const cliClient = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        isServer: false,
+      })
+
+      try {
+        cliClient.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+
+        await waitForFlushTimer()
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents?.[0]).toEqual(
+          expect.objectContaining({
+            event: 'test-event',
+            properties: expect.objectContaining({
+              $lib: 'posthog-node',
+            }),
+          })
+        )
+        expect(batchEvents?.[0]?.properties).not.toHaveProperty('$is_server')
+      } finally {
+        await cliClient.shutdown()
+      }
     })
 
     it('shouldnt muddy subsequent capture calls', async () => {
@@ -306,6 +335,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
     })
 
@@ -326,6 +356,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       client.capture({
@@ -345,6 +376,7 @@ describe('PostHog Node.js', () => {
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
         $geoip_disable: true,
+        $is_server: true,
       })
 
       client.capture({
@@ -364,6 +396,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       await client.shutdown()
@@ -1178,6 +1211,7 @@ describe('PostHog Node.js', () => {
         '$feature/feature-variant': 'variant',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       // no calls to `/local_evaluation`

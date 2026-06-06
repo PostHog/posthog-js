@@ -1,5 +1,23 @@
 # @posthog/types
 
+## 1.381.0
+
+### Minor Changes
+
+- [#3719](https://github.com/PostHog/posthog-js/pull/3719) [`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446) Thanks [@lricoy](https://github.com/lricoy)! - Add `__preview_cookie_wins_on_conflict` opt-in config to prefer cookie values over localStorage when merging persistence state in `localStorage+cookie` mode, fixing cross-subdomain identify and session disconnects.
+  (2026-06-05)
+
+## 1.380.1
+
+## 1.380.0
+
+### Minor Changes
+
+- [#3715](https://github.com/PostHog/posthog-js/pull/3715) [`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Promote browser tracing header configuration to the public `tracing_headers` option while keeping `addTracingHeaders` and `__add_tracing_headers` as deprecated aliases.
+  (2026-06-04)
+
+## 1.379.3
+
 ## 1.379.2
 
 ## 1.379.1

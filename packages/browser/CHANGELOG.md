@@ -1,5 +1,53 @@
 # posthog-js
 
+## 1.381.0
+
+### Minor Changes
+
+- [#3719](https://github.com/PostHog/posthog-js/pull/3719) [`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446) Thanks [@lricoy](https://github.com/lricoy)! - Add `__preview_cookie_wins_on_conflict` opt-in config to prefer cookie values over localStorage when merging persistence state in `localStorage+cookie` mode, fixing cross-subdomain identify and session disconnects.
+  (2026-06-05)
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+    - @posthog/types@1.381.0
+    - @posthog/core@1.30.9
+
+## 1.380.1
+
+### Patch Changes
+
+- [#3743](https://github.com/PostHog/posthog-js/pull/3743) [`ced0039`](https://github.com/PostHog/posthog-js/commit/ced00399ed5f44018412d4b4bb214b8252e48bdb) Thanks [@robbie-c](https://github.com/robbie-c)! - fix(surveys): stop the survey CSS from using `:has(.survey-question:empty)`, which crashes some WebKit builds during text-node style invalidation while a survey renders. The empty-header margin tweak now keys off a JS-set `question-header--empty` class and a sibling selector instead.
+  (2026-06-05)
+- Updated dependencies []:
+    - @posthog/types@1.380.1
+    - @posthog/core@1.30.8
+
+## 1.380.0
+
+### Minor Changes
+
+- [#3715](https://github.com/PostHog/posthog-js/pull/3715) [`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Promote browser tracing header configuration to the public `tracing_headers` option while keeping `addTracingHeaders` and `__add_tracing_headers` as deprecated aliases.
+  (2026-06-04)
+
+### Patch Changes
+
+- [#3715](https://github.com/PostHog/posthog-js/pull/3715) [`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - When using tracing headers, `X-POSTHOG-DISTINCT-ID` is read at request time instead of when fetch/XHR is patched, ensuring it reflects bootstrap, identify, reset, and other identity changes.
+  (2026-06-04)
+- Updated dependencies [[`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7)]:
+    - @posthog/types@1.380.0
+    - @posthog/core@1.30.7
+
+## 1.379.3
+
+### Patch Changes
+
+- [#3741](https://github.com/PostHog/posthog-js/pull/3741) [`32de5d2`](https://github.com/PostHog/posthog-js/commit/32de5d2a061f04dc852b1cf31f63af5b86121f46) Thanks [@clr182](https://github.com/clr182)! - logs: the console-log integration now respects `opt_out_capturing()` — it checks `is_capturing()` before emitting, so log events stop on opt-out (and resume on opt-in).
+  (2026-06-04)
+- Updated dependencies []:
+    - @posthog/types@1.379.3
+    - @posthog/core@1.30.6
+
 ## 1.379.2
 
 ### Patch Changes

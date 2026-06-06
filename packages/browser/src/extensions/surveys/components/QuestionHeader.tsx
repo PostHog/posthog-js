@@ -14,8 +14,11 @@ export function QuestionHeader({
     htmlFor?: string
 }) {
     const TitleComponent = question.type === SurveyQuestionType.Open ? 'label' : 'h3'
+    // Flag an empty header in JS rather than via :has(.survey-question:empty) in CSS,
+    // which crashes some WebKit builds during text-node style invalidation.
+    const isHeaderEmpty = !question.question && !question.description
     return (
-        <div class="question-header">
+        <div class={isHeaderEmpty ? 'question-header question-header--empty' : 'question-header'}>
             <TitleComponent className="survey-question" htmlFor={htmlFor}>
                 {question.question}
             </TitleComponent>

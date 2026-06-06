@@ -271,9 +271,18 @@ const COOKIE_PERSISTED_PROPERTIES = [
 ]
 
 /**
- * Creates a localPlusCookieStore instance with custom cookie-persisted properties
+ * Creates a localPlusCookieStore instance with custom cookie-persisted properties.
+ *
+ * When `preferCookieOnConflict` is true, the cookie's values win over localStorage on
+ * merge for any key both stores carry. Null/empty cookie values are filtered out
+ * before the merge so a malformed legacy cookie cannot override valid localStorage
+ * data. localStorage-only keys are unaffected. See the docs for
+ * `__preview_cookie_wins_on_conflict` for context.
  */
-export const createLocalPlusCookieStore = (customCookieProperties: readonly string[] = []): PersistentStore => {
+export const createLocalPlusCookieStore = (
+    customCookieProperties: readonly string[] = [],
+    preferCookieOnConflict: boolean = false
+): PersistentStore => {
     const cookiePropertiesToPersist = [...COOKIE_PERSISTED_PROPERTIES, ...customCookieProperties]
 
     return {
@@ -285,7 +294,22 @@ export const createLocalPlusCookieStore = (customCookieProperties: readonly stri
                     // See if there's a cookie stored with data.
                     cookieProperties = cookieStore._parse(name) || {}
                 } catch {}
-                const value = extend(cookieProperties, JSON.parse(localStore._get(name) || '{}'))
+                const localStorageData: Properties = JSON.parse(localStore._get(name) || '{}')
+                let value: Properties
+                if (preferCookieOnConflict) {
+                    // Defensive: skip null / empty-string cookie values so a malformed
+                    // legacy cookie cannot wipe out valid localStorage data.
+                    const safeCookieProperties: Properties = {}
+                    for (const key in cookieProperties) {
+                        const v = cookieProperties[key]
+                        if (!isNull(v) && v !== '') {
+                            safeCookieProperties[key] = v
+                        }
+                    }
+                    value = extend(localStorageData, safeCookieProperties)
+                } else {
+                    value = extend(cookieProperties, localStorageData)
+                }
                 localStore._set(name, value)
                 return value
             } catch {

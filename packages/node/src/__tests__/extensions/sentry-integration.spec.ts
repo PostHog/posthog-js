@@ -149,6 +149,7 @@ describe('PostHogSentryIntegration', () => {
           $lib: 'posthog-node',
           $lib_version: '1.2.3',
           $geoip_disable: true,
+          $is_server: true,
         },
         type: 'capture',
         library: 'posthog-node',
