@@ -3,8 +3,7 @@ import type { eventWithTime } from '@posthog/rrweb-types';
 
 import brokenEvents from './silk-sheet-reveal-broken';
 
-// Same sequence as the broken case, but with the resting offset (y=787) that
-// scrollend would record once the sheet content is scrollable.
+// Broken case plus the resting offset scrollend would have recorded.
 const events = [
   ...brokenEvents,
   {

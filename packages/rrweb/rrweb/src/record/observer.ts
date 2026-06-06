@@ -318,9 +318,7 @@ export function initScrollObserver({
   observerParam,
   'scrollCb' | 'doc' | 'mirror' | 'blockClass' | 'blockSelector' | 'sampling'
 >): listenerHandler {
-  // Last offset recorded per node. `scroll` (throttled, trailing) and `scrollend`
-  // both fire for one gesture, so dedupe on this to never record the same position
-  // twice regardless of which fires last.
+  // Dedupe scroll and scrollend — both fire for one gesture.
   const lastEmitted = new Map<number, string>();
   const emitScrollPosition = (evt: Event) => {
     const target = getEventTarget(evt);
@@ -352,8 +350,7 @@ export function initScrollObserver({
     ),
   );
   const handlers: listenerHandler[] = [on('scroll', updatePosition, doc)];
-  // scrollend reports the final offset after a scroll that clamped to 0 — e.g. a
-  // sheet revealed before its content was scrollable — which scroll alone misses.
+  // scrollend captures the resting offset when scroll alone recorded 0.
   if ('onscrollend' in doc) {
     handlers.push(on('scrollend', callbackWrapper(emitScrollPosition), doc));
   }

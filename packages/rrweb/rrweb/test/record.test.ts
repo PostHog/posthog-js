@@ -273,8 +273,6 @@ describe('record', function (this: ISuite) {
         return { id: d.id, x: d.x, y: d.y };
       });
 
-  // Appends a scrollable container and scrolls it before recording starts, so the
-  // node gets a mirror id (from the full snapshot) and no scroll event is recorded.
   const setupScrolledContainerBeforeRecord = async (
     initialScrollTop: number,
   ): Promise<void> => {
@@ -296,7 +294,6 @@ describe('record', function (this: ISuite) {
   };
 
   it('should record the resting scroll offset on scrollend', async () => {
-    // No scroll event fires during recording, so scrollend is the only signal.
     await setupScrolledContainerBeforeRecord(745);
 
     const expectedId = await ctx.page.evaluate(() => {
@@ -310,21 +307,19 @@ describe('record', function (this: ISuite) {
     });
     await waitForRAF(ctx.page);
 
-    // Exactly one event, for the right node, at the resting offset.
     expect(expectedId).toBeGreaterThan(0);
     expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 745 }]);
   });
 
   it('should not emit a duplicate scroll event when scrollend repeats the offset', async () => {
-    // scroll already logged this offset, so the matching scrollend must be skipped.
     await setupScrolledContainerBeforeRecord(300);
 
     const expectedId = await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
       record({ emit: (window as unknown as IWindow).emit });
       const c = (window as unknown as { __container: HTMLElement }).__container;
-      c.dispatchEvent(new Event('scroll')); // logs y=300
-      c.dispatchEvent(new Event('scrollend')); // same offset -> deduped
+      c.dispatchEvent(new Event('scroll'));
+      c.dispatchEvent(new Event('scrollend'));
       return (
         record as unknown as { mirror: { getId(n: Node): number } }
       ).mirror.getId(c);
@@ -336,8 +331,6 @@ describe('record', function (this: ISuite) {
   });
 
   it('should recover the resting offset via scrollend after a scroll clamped to 0', async () => {
-    // The reveal scroll lands while the element isn't scrollable yet, so it clamps
-    // to 0; once content grows and settles, scrollend reports the real offset.
     await ctx.page.evaluate(() => {
       const container = document.createElement('div');
       container.setAttribute(
@@ -361,8 +354,8 @@ describe('record', function (this: ISuite) {
       const { record } = (window as unknown as IWindow).rrweb;
       record({ emit: (window as unknown as IWindow).emit });
       const { __container } = window as unknown as { __container: HTMLElement };
-      __container.scrollTop = 745; // clamps to 0 (not scrollable)
-      __container.dispatchEvent(new Event('scroll')); // sample logs y=0
+      __container.scrollTop = 745;
+      __container.dispatchEvent(new Event('scroll'));
       return (
         record as unknown as { mirror: { getId(n: Node): number } }
       ).mirror.getId(__container);
@@ -374,20 +367,19 @@ describe('record', function (this: ISuite) {
         __container: HTMLElement;
         __child: HTMLElement;
       };
-      __child.style.height = '3000px'; // now scrollable
-      __container.scrollTop = 745; // sticks
+      __child.style.height = '3000px';
+      __container.scrollTop = 745;
       __container.dispatchEvent(new Event('scrollend'));
     });
     await waitForRAF(ctx.page);
 
     const data = scrollData().filter((d) => d.id === expectedId);
     expect(expectedId).toBeGreaterThan(0);
-    expect(data[0].y).toBe(0); // clamped sample
-    expect(data[data.length - 1].y).toBe(745); // resting offset recovered by scrollend
+    expect(data[0].y).toBe(0);
+    expect(data[data.length - 1].y).toBe(745);
   });
 
   it('should record the resting window scroll offset on scrollend', async () => {
-    // Same fix for the document/window scroll path.
     await ctx.page.evaluate(() => {
       document.body.style.height = '5000px';
       window.scrollTo(0, 500);
@@ -409,15 +401,14 @@ describe('record', function (this: ISuite) {
   });
 
   it('should not emit a duplicate when scrollend fires before the throttled scroll', async () => {
-    // scrollend can fire before the trailing throttle flush; both paths must dedupe.
     await setupScrolledContainerBeforeRecord(300);
 
     const expectedId = await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
       record({ emit: (window as unknown as IWindow).emit });
       const c = (window as unknown as { __container: HTMLElement }).__container;
-      c.dispatchEvent(new Event('scrollend')); // logs y=300 first
-      c.dispatchEvent(new Event('scroll')); // same offset -> deduped
+      c.dispatchEvent(new Event('scrollend'));
+      c.dispatchEvent(new Event('scroll'));
       return (
         record as unknown as { mirror: { getId(n: Node): number } }
       ).mirror.getId(c);
@@ -462,7 +453,7 @@ describe('record', function (this: ISuite) {
       const { record } = (window as unknown as IWindow).rrweb;
       record({ emit: (window as unknown as IWindow).emit });
       const { __container } = window as unknown as { __container: HTMLElement };
-      __container.scrollTop = top; // clamps to 0 (not scrollable yet)
+      __container.scrollTop = top;
       __container.dispatchEvent(new Event('scroll'));
       return (
         record as unknown as { mirror: { getId(n: Node): number } }

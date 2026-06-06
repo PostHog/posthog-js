@@ -3,8 +3,7 @@ import type { eventWithTime } from '@posthog/rrweb-types';
 
 const now = Date.now();
 
-// Minimal replay of a Silk scroll-reveal sheet bug: the reveal container's scroll
-// was recorded as y=0 and no scrollend carried the resting offset.
+// Reveal container scroll recorded as y=0, no scrollend offset.
 const events: eventWithTime[] = [
   { type: EventType.DomContentLoaded, data: {}, timestamp: now },
   { type: EventType.Load, data: {}, timestamp: now + 100 },
@@ -55,7 +54,6 @@ const events: eventWithTime[] = [
     },
     timestamp: now + 100,
   },
-  // Sheet content mounts (not scrollable yet).
   {
     type: EventType.IncrementalSnapshot,
     data: {
@@ -79,13 +77,11 @@ const events: eventWithTime[] = [
     },
     timestamp: now + 500,
   },
-  // Reveal scroll recorded as y=0 (clamped).
   {
     type: EventType.IncrementalSnapshot,
     data: { source: IncrementalSource.Scroll, id: 8, x: 0, y: 0 },
     timestamp: now + 600,
   },
-  // Content grows; container is scrollable now but no follow-up scroll was recorded.
   {
     type: EventType.IncrementalSnapshot,
     data: {
