@@ -4092,6 +4092,16 @@ export class PostHog implements PostHogInterface {
                 )
             }
         }
+        // The project api_key is sent to ingest on `properties.token`. If a beforeSend
+        // hook removed it (e.g. a generic token/PII scrubber matching /token/i), every
+        // event is rejected with a 401. Re-assert it so events keep flowing, and warn
+        // so this isn't a silent footgun.
+        if (beforeSendResult?.properties && isNullish(beforeSendResult.properties['token'])) {
+            beforeSendResult.properties['token'] = this.config.token
+            logger.warn(
+                `Event '${data.event}' is missing its 'token' property after beforeSend (it may have been removed by a token or PII scrubber); re-adding it so the event can be ingested.`
+            )
+        }
         return beforeSendResult
     }
 

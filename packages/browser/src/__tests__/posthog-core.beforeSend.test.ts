@@ -174,4 +174,31 @@ describe('posthog core - before send', () => {
             `Event '${randomUnsafeEditableEvent}' was rejected in beforeSend function. This can cause unexpected behavior.`
         )
     })
+
+    it('re-asserts the token property if a beforeSend function strips it', () => {
+        // Regression test for #3438: the project api_key is sent on
+        // properties.token, so a generic token/PII scrubber that drops it would
+        // otherwise make every event 401 with "submitted without an api_key".
+        const posthog = posthogWith({
+            before_send: (cr) => {
+                if (cr.properties) {
+                    for (const key of Object.keys(cr.properties)) {
+                        if (/token/i.test(key)) {
+                            delete cr.properties[key]
+                        }
+                    }
+                }
+                return cr
+            },
+        })
+        ;(posthog._send_request as jest.Mock).mockClear()
+
+        const capturedData = posthog.capture(eventName, {}, {})
+
+        expect(capturedData).toHaveProperty(['properties', 'token'], 'testtoken')
+        expect(posthog._send_request).toHaveBeenCalled()
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+            `Event '${eventName}' is missing its 'token' property after beforeSend (it may have been removed by a token or PII scrubber); re-adding it so the event can be ingested.`
+        )
+    })
 })
