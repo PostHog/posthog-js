@@ -62,13 +62,18 @@ jobs:
         if: always() && needs.check-changesets.outputs.has-changesets == 'true'
         environment: 'NPM Release' # This will require an approval from a maintainer, they are notified in Slack above
         permissions:
-            contents: read
+            contents: write
+            actions: write
+            id-token: write
         outputs:
             commit-hash: ${{ steps.commit-version-bump.outputs.commit-hash }}
             # posthog-js SDK version after `pnpm bump`. Downstream jobs use this
             # to construct version-pinned CDN URLs (e.g. the toolbar bundle's
             # `TOOLBAR_PUBLIC_PATH`) and to double-check the S3 upload path.
             version: ${{ steps.get-version.outputs.version }}
+            packages-released: ${{ steps.publish-packages.outputs.packages-released }}
+            browser-is-new-version: ${{ steps.check-browser-version.outputs.is-new-version }}
+            browser-committed-version: ${{ steps.check-browser-version.outputs.committed-version }}
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
@@ -132,6 +137,136 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
+            - name: Sync checkout to release commit
+              if: steps.commit-version-bump.outputs.commit-hash != ''
+              env:
+                  RELEASE_COMMIT: ${{ steps.commit-version-bump.outputs.commit-hash }}
+              run: |
+                  git fetch origin main
+                  git reset --hard "$RELEASE_COMMIT"
+
+            - name: Install and build dependencies
+              if: steps.commit-version-bump.outputs.commit-hash != ''
+              run: pnpm install --frozen-lockfile && pnpm build
+
+            - name: Check posthog-js version for S3
+              id: check-browser-version
+              if: steps.commit-version-bump.outputs.commit-hash != ''
+              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
+              with:
+                  path: packages/browser
+
+            - name: Upload dist artifact
+              if: steps.check-browser-version.outputs.is-new-version == 'true'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: posthog-js-dist
+                  path: |
+                      packages/browser/dist/*.js
+                      packages/browser/dist/*.js.map
+                  retention-days: 1
+                  if-no-files-found: error
+
+            - name: Publish packages
+              id: publish-packages
+              if: steps.commit-version-bump.outputs.commit-hash != ''
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  NPM_CONFIG_PROVENANCE: true
+              run: |
+                  set -euo pipefail
+
+                  packages_released=false
+
+                  release_package() {
+                    local package_name="$1"
+                    local package_path
+                    local committed_version
+                    local last_changelog_entry
+
+                    package_path=$(pnpm list --filter="$package_name" --json | jq -r '.[0].path')
+                    if [ -z "$package_path" ] || [ "$package_path" = "null" ]; then
+                      echo "Could not find package path for $package_name" >&2
+                      exit 1
+                    fi
+
+                    committed_version=$(jq -r .version "$package_path/package.json")
+                    if [ -z "$committed_version" ] || [ "$committed_version" = "null" ]; then
+                      echo "Could not find committed version for $package_name" >&2
+                      exit 1
+                    fi
+
+                    if npm view "${package_name}@${committed_version}" version >/dev/null 2>&1; then
+                      echo "$package_name@$committed_version already exists on npm - skipping"
+                      return 0
+                    fi
+
+                    pnpm publish --filter="$package_name" --access public --no-git-checks
+
+                    gh api "repos/${{ github.repository }}/git/refs" \
+                      -f "ref=refs/tags/$package_name@$committed_version" \
+                      -f "sha=$(git rev-parse HEAD)"
+
+                    last_changelog_entry=$(
+                      cd "$package_path"
+                      awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md
+                    )
+                    gh release create "$package_name@$committed_version" \
+                      --target main \
+                      --title "$package_name@$committed_version" \
+                      --notes "$last_changelog_entry"
+
+                    if [ "$package_name" = "posthog-js" ]; then
+                      curl -f -sS -X POST \
+                           -H "Accept: application/vnd.github+json" \
+                           -H "Authorization: Bearer $GITHUB_TOKEN" \
+                           https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
+                           -d "$(jq -n \
+                             --arg ref "main" \
+                             --arg package_name "$package_name" \
+                             --arg package_version "$committed_version" \
+                             '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
+                           )"
+                    fi
+
+                    if [ "$package_name" = "@posthog/types" ]; then
+                      curl -f -sS -X POST \
+                           -H "Accept: application/vnd.github+json" \
+                           -H "Authorization: Bearer $GITHUB_TOKEN" \
+                           https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
+                           -d "$(jq -n \
+                             --arg ref "main" \
+                             --arg package_name "$package_name" \
+                             --arg package_version "$committed_version" \
+                             '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
+                           )"
+                    fi
+
+                    packages_released=true
+                  }
+
+                  release_package "posthog-react-native"
+                  release_package "posthog-node"
+                  release_package "posthog-js-lite"
+                  release_package "posthog-js"
+                  release_package "@posthog/core"
+                  release_package "@posthog/react"
+                  release_package "@posthog/ai"
+                  release_package "@posthog/convex"
+                  release_package "@posthog/next"
+                  release_package "@posthog/nextjs-config"
+                  release_package "@posthog/nuxt"
+                  release_package "@posthog/plugin-utils"
+                  release_package "@posthog/rollup-plugin"
+                  release_package "@posthog/types"
+                  release_package "@posthog/webpack-plugin"
+
+                  echo "packages-released=$packages_released" >> "$GITHUB_OUTPUT"
+
+            ####################################################
+            # Notify ourselves in case of a failure here
+            # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Send failure event to PostHog
               if: ${{ failure() }}
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
@@ -154,7 +289,7 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to bump versions for `posthog-js`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to release `posthog-js`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'x'
 
     notify-rejected:
@@ -197,215 +332,6 @@ jobs:
                   message: '${{ steps.check-rejection.outputs.message }}'
                   emoji_reaction: 'no_entry_sign'
 
-    publish:
-        name: Publish packages
-        needs: [version-bump, notify-approval-needed]
-        runs-on: ubuntu-latest
-        # Use `always()` to ensure the job runs even if the check-release-label job fails
-        # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
-        if: always() && needs.version-bump.outputs.commit-hash != ''
-        permissions:
-            contents: write
-            actions: write
-            id-token: write
-        strategy:
-            fail-fast: false
-            matrix:
-                package:
-                    - name: posthog-react-native
-                    - name: posthog-node
-                    - name: posthog-js-lite
-                    - name: posthog-js
-                    - name: '@posthog/core'
-                    - name: '@posthog/react'
-                    - name: '@posthog/ai'
-                    - name: '@posthog/convex'
-                    - name: '@posthog/next'
-                    - name: '@posthog/nextjs-config'
-                    - name: '@posthog/nuxt'
-                    - name: '@posthog/plugin-utils'
-                    - name: '@posthog/rollup-plugin'
-                    - name: '@posthog/types'
-                    - name: '@posthog/webpack-plugin'
-                    # The @posthog/rrweb* packages live in `packages/rrweb/**` and
-                    # are consumed as `workspace:*` devDependencies of `posthog-js`,
-                    # then bundled into the browser SDK at build time (see
-                    # `packages/browser/src/entrypoints/{recorder,posthog-recorder}.ts`).
-                    # We deliberately do NOT publish them to npm — they are
-                    # omitted from this matrix on purpose.
-
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-              with:
-                  ref: ${{ needs.version-bump.outputs.commit-hash }}
-                  fetch-depth: 0
-
-            - name: Setup environment
-              uses: ./.github/actions/setup
-              with:
-                  install: false
-                  build: false
-
-            - name: Get package path
-              id: get-package-path
-              run: |
-                  PACKAGE_PATH=$(pnpm list --filter=${{ matrix.package.name }} --json | jq -r '.[0].path')
-                  echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
-
-            - name: Check ${{ matrix.package.name }} version and detect an update
-              id: check-package-version
-              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
-              with:
-                  path: ${{ steps.get-package-path.outputs.path }}
-
-            - name: Install and build dependencies
-              if: steps.check-package-version.outputs.is-new-version == 'true'
-              run: pnpm install --frozen-lockfile && pnpm build
-
-            - name: Publish ${{ matrix.package.name }} to NPM
-              if: steps.check-package-version.outputs.is-new-version == 'true'
-              run: |
-                  pnpm publish --filter=${{ matrix.package.name }} --access public --no-git-checks
-              env:
-                  NPM_CONFIG_PROVENANCE: true
-
-            - name: Tag repository with package_name and package_version
-              if: steps.check-package-version.outputs.is-new-version == 'true'
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  PACKAGE_NAME: ${{ matrix.package.name }}
-                  COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-              run: |
-                  gh api "repos/${{ github.repository }}/git/refs" \
-                    -f "ref=refs/tags/$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    -f "sha=$(git rev-parse HEAD)"
-
-            - name: Create GitHub release
-              if: steps.check-package-version.outputs.is-new-version == 'true'
-              working-directory: ${{ steps.get-package-path.outputs.path }}
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  PACKAGE_NAME: ${{ matrix.package.name }}
-                  COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-              run: |
-                  # read from the first until the second header in the changelog file
-                  # this assumes the formatting of the file
-                  # and that this workflow is always running for the most recent entry in the file
-                  LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
-                  gh release create "$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    --target main \
-                    --title "$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    --notes "$LAST_CHANGELOG_ENTRY"
-
-            ########################################################
-            ############## posthog-js auto-update ##################
-            - name: Dispatch posthog upgrade for posthog-js
-              if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
-              env:
-                  PACKAGE_NAME: ${{ matrix.package.name }}
-                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  curl -f -sS -X POST \
-                       -H "Accept: application/vnd.github+json" \
-                       -H "Authorization: Bearer $GITHUB_TOKEN" \
-                       https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
-                       -d "$(jq -n \
-                         --arg ref "main" \
-                         --arg package_name "$PACKAGE_NAME" \
-                         --arg package_version "$PACKAGE_VERSION" \
-                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
-                       )"
-
-            - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
-              if: matrix.package.name == '@posthog/types' && steps.check-package-version.outputs.is-new-version == 'true'
-              env:
-                  PACKAGE_NAME: ${{ matrix.package.name }}
-                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  curl -f -sS -X POST \
-                       -H "Accept: application/vnd.github+json" \
-                       -H "Authorization: Bearer $GITHUB_TOKEN" \
-                       https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
-                       -d "$(jq -n \
-                         --arg ref "main" \
-                         --arg package_name "$PACKAGE_NAME" \
-                         --arg package_version "$PACKAGE_VERSION" \
-                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
-                       )"
-
-            ####################################################
-            # Notify ourselves in case of a failure here
-            # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
-            - name: Send failure event to PostHog
-              if: ${{ failure() }}
-              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
-              with:
-                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
-                  event: 'posthog-js-github-release-workflow-failure'
-                  properties: >-
-                      {
-                        "commitSha": "${{ github.sha }}",
-                        "jobStatus": "${{ job.status }}",
-                        "ref": "${{ github.ref }}",
-                        "packageName": "${{ matrix.package.name }}",
-                        "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
-                      }
-
-            - name: Notify Slack - Failed
-              continue-on-error: true # Slack failure shouldn't mark release as failed
-              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
-                  emoji_reaction: 'x'
-
-    build-s3-artifacts:
-        name: Build posthog-js dist for S3
-        needs: [version-bump, notify-approval-needed]
-        runs-on: ubuntu-latest
-        # Run in parallel with publish — must NOT wait for publish because
-        # check-package-version compares against npm. If publish finishes first,
-        # the version is already on the registry and is-new-version returns false.
-        if: always() && needs.version-bump.outputs.commit-hash != ''
-        permissions:
-            contents: read
-        outputs:
-            is-new-version: ${{ steps.check-version.outputs.is-new-version }}
-            committed-version: ${{ steps.check-version.outputs.committed-version }}
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-              with:
-                  ref: ${{ needs.version-bump.outputs.commit-hash }}
-                  fetch-depth: 1
-
-            - name: Check posthog-js version
-              id: check-version
-              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
-              with:
-                  path: packages/browser
-
-            - name: Setup environment
-              if: steps.check-version.outputs.is-new-version == 'true'
-              uses: ./.github/actions/setup
-
-            - name: Upload dist artifact
-              if: steps.check-version.outputs.is-new-version == 'true'
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: posthog-js-dist
-                  path: |
-                      packages/browser/dist/*.js
-                      packages/browser/dist/*.js.map
-                  retention-days: 1
-                  if-no-files-found: error
-
     build-toolbar:
         # Build the toolbar bundle from posthog/posthog@master once per region.
         # Each region gets its own `TOOLBAR_PUBLIC_PATH`, so asset URLs baked
@@ -413,12 +339,10 @@ jobs:
         # point at the region-local CDN for the SDK version being released.
         # See the matching posthog/posthog PR that wires up TOOLBAR_PUBLIC_PATH.
         #
-        # Runs in parallel with `build-s3-artifacts`. If the release turns out
-        # not to include a new posthog-js version, the artifacts produced here
-        # are simply never downloaded by `upload-s3` (which is gated on
-        # `is-new-version`). We prefer parallelism over gating because
-        # `build-s3-artifacts` does a full `pnpm install + build` that would
-        # add minutes to the critical path if it blocked the toolbar build.
+        # Runs after the gated release job. If the release turns out not to
+        # include a new posthog-js version, the artifacts produced here are
+        # simply never downloaded by `upload-s3` (which is gated on
+        # `browser-is-new-version`).
         name: Build toolbar (${{ matrix.region.name }})
         needs: [version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
@@ -555,9 +479,9 @@ jobs:
         # that was built with the matching `TOOLBAR_PUBLIC_PATH`. posthog-js's
         # own dist is region-agnostic and downloaded identically in both cells.
         name: Upload posthog-js dist to S3 (${{ matrix.region.name }})
-        needs: [build-s3-artifacts, build-toolbar, version-bump, notify-approval-needed]
+        needs: [build-toolbar, version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
-        if: always() && needs.build-s3-artifacts.outputs.is-new-version == 'true'
+        if: always() && needs.version-bump.outputs.browser-is-new-version == 'true'
         environment: 'S3 Upload' # For OIDC credential scoping only — no required reviewers (single approval at NPM Release)
         permissions:
             contents: read
@@ -628,7 +552,7 @@ jobs:
             - name: Upload immutable dist plus major and compatibility aliases
               env:
                   BUCKET: ${{ matrix.region.bucket }}
-                  VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+                  VERSION: ${{ needs.version-bump.outputs.browser-committed-version }}
               run: node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION"
 
             - name: Send failure event to PostHog
@@ -644,7 +568,7 @@ jobs:
                         "ref": "${{ github.ref }}",
                         "jobName": "upload-s3",
                         "packageName": "posthog-js",
-                        "packageVersion": "${{ needs.build-s3-artifacts.outputs.committed-version }}",
+                        "packageVersion": "${{ needs.version-bump.outputs.browser-committed-version }}",
                         "region": "${{ matrix.region.name }}",
                         "bucket": "${{ matrix.region.bucket }}"
                       }
@@ -657,16 +581,16 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to upload posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist to ${{ matrix.region.bucket }}! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to upload posthog-js v${{ needs.version-bump.outputs.browser-committed-version }} dist to ${{ matrix.region.bucket }}! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'x'
 
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish, upload-s3]
+        needs: [notify-approval-needed, version-bump, upload-s3]
         runs-on: ubuntu-latest
         if: >-
             always() &&
-            needs.publish.result == 'success' &&
+            needs.version-bump.result == 'success' && needs.version-bump.outputs.packages-released == 'true' &&
             (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') &&
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
@@ -691,12 +615,12 @@ jobs:
     # failed step is retried.
     notify-partial-release:
         name: Notify Slack - Partial Release (npm only)
-        needs: [notify-approval-needed, build-s3-artifacts, publish, upload-s3]
+        needs: [notify-approval-needed, version-bump, upload-s3]
         runs-on: ubuntu-latest
         if: >-
             always() &&
-            needs.publish.result == 'success' &&
-            needs.build-s3-artifacts.outputs.is-new-version == 'true' &&
+            needs.version-bump.result == 'success' && needs.version-bump.outputs.packages-released == 'true' &&
+            needs.version-bump.outputs.browser-is-new-version == 'true' &&
             needs.upload-s3.result == 'failure' &&
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
@@ -707,5 +631,5 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '⚠️ npm packages released, but S3 publish failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} immutable assets and/or major-version or top-level aliases need attention. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '⚠️ npm packages released, but S3 publish failed — posthog-js v${{ needs.version-bump.outputs.browser-committed-version }} immutable assets and/or major-version or top-level aliases need attention. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
                   emoji_reaction: 'warning'
