@@ -52,7 +52,10 @@ import type {
 } from '@posthog/rrweb-types';
 import MutationBuffer from './mutation';
 import { callbackWrapper } from './error-handler';
-import dom, { mutationObserverCtor } from '@posthog/rrweb-utils';
+import dom, {
+  cleanupUntaintedIframe,
+  mutationObserverCtor,
+} from '@posthog/rrweb-utils';
 
 export const mutationBuffers: MutationBuffer[] = [];
 
@@ -81,17 +84,12 @@ function getEventTarget(event: Event | NonStandardEvent): EventTarget | null {
 export function initMutationObserver(
   options: MutationBufferParam,
   rootEl: Node,
-): {
-  observer: MutationObserver;
-  buffer: MutationBuffer;
-  iframeCleanup: () => void;
-} {
+): { observer: MutationObserver; buffer: MutationBuffer } {
   const mutationBuffer = new MutationBuffer();
   mutationBuffers.push(mutationBuffer);
   // see mutation.ts for details
   mutationBuffer.init(options);
-  const [ObserverCtor, iframeCleanup] = mutationObserverCtor();
-  const observer = new (ObserverCtor as new (
+  const observer = new (mutationObserverCtor() as new (
     callback: MutationCallback,
   ) => MutationObserver)(
     callbackWrapper(mutationBuffer.processMutations.bind(mutationBuffer)),
@@ -104,7 +102,7 @@ export function initMutationObserver(
     childList: true,
     subtree: true,
   });
-  return { observer, buffer: mutationBuffer, iframeCleanup };
+  return { observer, buffer: mutationBuffer };
 }
 
 function initMoveObserver({
@@ -1338,13 +1336,10 @@ export function initObservers(
   mergeHooks(o, hooks);
   let mutationObserver: MutationObserver | undefined;
   let mutationBuffer: MutationBuffer | undefined;
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let cleanupMutationIframe: () => void = () => {};
   if (o.recordDOM) {
     const result = initMutationObserver(o, o.doc);
     mutationObserver = result.observer;
     mutationBuffer = result.buffer;
-    cleanupMutationIframe = result.iframeCleanup;
   }
   const mousemoveHandler = initMoveObserver(o);
   const mouseInteractionHandler = initMouseInteractionObserver(o);
@@ -1396,7 +1391,7 @@ export function initObservers(
       }
     }
     mutationObserver?.disconnect();
-    cleanupMutationIframe();
+    cleanupUntaintedIframe();
     mousemoveHandler();
     mouseInteractionHandler();
     scrollHandler();

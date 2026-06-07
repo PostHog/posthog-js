@@ -111,38 +111,43 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
 
   const iframeEl = document.createElement('iframe');
   iframeEl.style.display = 'none';
-  // WebKit/Safari tears down a detached iframe's ScriptExecutionContext, which
-  // silently breaks a MutationObserver constructed from it (webkit.org/b/179224).
-  // On Safari we keep the iframe attached and expose a cleanup via mutationObserverCtor.
-  let keepIframeAttached = false;
   try {
     document.body.appendChild(iframeEl);
     const win = iframeEl.contentWindow;
-    if (!win) return candidate.prototype as BasePrototypeCache[T];
+    if (!win) {
+      iframeEl.remove();
+      return candidate.prototype as BasePrototypeCache[T];
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
     const untaintedObject = (win as any)[key]
       .prototype as BasePrototypeCache[T];
 
-    if (!untaintedObject) return defaultPrototype;
+    if (!untaintedObject) {
+      iframeEl.remove();
+      return defaultPrototype;
+    }
 
     const ua = navigator.userAgent;
     if (ua.includes('Safari') && !ua.includes('Chrome')) {
-      keepIframeAttached = true;
-      // rr-block prevents rrweb from serializing this iframe in later snapshots
       iframeEl.classList.add('rr-block');
       iframeEl.setAttribute('__rrwebUntaintedMutationObserver', '');
       untaintedBaseIframeCleanup[key] = () => iframeEl.remove();
+    } else {
+      iframeEl.remove();
     }
 
     return (untaintedBasePrototype[key] = untaintedObject);
   } catch {
     return defaultPrototype;
-  } finally {
-    if (!keepIframeAttached && iframeEl.parentNode) {
-      document.body.removeChild(iframeEl);
-    }
   }
+}
+
+export function cleanupUntaintedIframe(
+  key: keyof BasePrototypeCache = 'MutationObserver',
+): void {
+  untaintedBaseIframeCleanup[key]?.();
+  delete untaintedBaseIframeCleanup[key];
 }
 
 const untaintedAccessorCache: Record<
@@ -258,17 +263,8 @@ export function querySelectorAll(
   return getUntaintedMethod('Element', n, 'querySelectorAll')(selectors);
 }
 
-export function mutationObserverCtor(): [
-  (typeof MutationObserver)['prototype']['constructor'],
-  () => void,
-] {
-  return [
-    getUntaintedPrototype('MutationObserver').constructor,
-    untaintedBaseIframeCleanup['MutationObserver'] ??
-      (() => {
-        /* no-op; a cleanup function is only needed in Safari browsers */
-      }),
-  ];
+export function mutationObserverCtor(): (typeof MutationObserver)['prototype']['constructor'] {
+  return getUntaintedPrototype('MutationObserver').constructor;
 }
 
 // copy from https://github.com/getsentry/sentry-javascript/blob/b2109071975af8bf0316d3b5b38f519bdaf5dc15/packages/utils/src/object.ts

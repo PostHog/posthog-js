@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Monkey-patched MutationObserver</title>
+    <script>
+      MutationObserver = class {
+        constructor() {
+          throw new Error('MutationObserver was hijacked by framework');
+        }
+      };
+    </script>
+  </head>
+  <body>
+    <ul id="list">
+      <li>a</li>
+    </ul>
+  </body>
+</html>
