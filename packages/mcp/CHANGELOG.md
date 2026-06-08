@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.1.16
+
+### Patch Changes
+
+- [#3772](https://github.com/PostHog/posthog-js/pull/3772) [`e243ea4`](https://github.com/PostHog/posthog-js/commit/e243ea42e93bf3b80236d6a166c05c99fcfda2ff) Thanks [@lucasheriques](https://github.com/lucasheriques)! - First release of `@posthog/mcp` from the posthog-js monorepo. Instrument an MCP server with a single `instrument(server, posthog)` call to auto-capture tool calls, tool listings, initialize, identity, and exceptions to PostHog. BYO `posthog-node` client; `beforeSend` hook; `identify({ distinctId, properties, groups })`; `$mcp_missing_capability`; anonymous sessions sent with `$process_person_profile: false`.
+  (2026-06-08)
+
 ## 0.1.15
 
 ### Patch Changes
