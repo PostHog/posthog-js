@@ -365,6 +365,30 @@ export class PostHogConversations implements Extension {
     }
 
     /**
+     * Get the human-readable ticket number for the current active ticket.
+     *
+     * Unlike the ticket ID (a UUID), this is the short, sequential number that
+     * users can quote externally — the same number shown in the PostHog support
+     * UI. Use it to display a reference in your own widget.
+     *
+     * Returns null if no conversation has been started, if conversations aren't
+     * available yet, or if the number isn't known yet (e.g. a backend that
+     * doesn't return it, or a restored ticket before its first fetch).
+     *
+     * @returns Ticket number or null
+     * @note Safe to call before conversations are available, will return null
+     *
+     * @example
+     * const ticketNumber = posthog.conversations.getCurrentTicketNumber()
+     * if (ticketNumber) {
+     *   console.log(`Your reference number is #${ticketNumber}`)
+     * }
+     */
+    getCurrentTicketNumber(): number | null {
+        return this._conversationsManager?.getCurrentTicketNumber() ?? null
+    }
+
+    /**
      * Get the widget session ID (persistent browser identifier)
      * This ID is used for access control and stays the same across page loads
      * Returns null if conversations not available yet

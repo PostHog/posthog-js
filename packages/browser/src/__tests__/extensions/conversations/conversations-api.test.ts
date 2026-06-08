@@ -47,6 +47,7 @@ describe('Conversations API Methods', () => {
             restoreFromToken: jest.fn(),
             restoreFromUrlToken: jest.fn(),
             getCurrentTicketId: jest.fn(),
+            getCurrentTicketNumber: jest.fn(),
             getWidgetSessionId: jest.fn(),
         } as unknown as ConversationsManager
 
@@ -133,6 +134,13 @@ describe('Conversations API Methods', () => {
 
         it('should return null from getCurrentTicketId when conversations not available', () => {
             const result = conversations.getCurrentTicketId()
+
+            expect(result).toBeNull()
+            expect(consoleWarnSpy).not.toHaveBeenCalled() // Safe method, no warning
+        })
+
+        it('should return null from getCurrentTicketNumber when conversations not available', () => {
+            const result = conversations.getCurrentTicketNumber()
 
             expect(result).toBeNull()
             expect(consoleWarnSpy).not.toHaveBeenCalled() // Safe method, no warning
@@ -542,6 +550,26 @@ describe('Conversations API Methods', () => {
 
                 expect(result).toBeNull()
                 expect(mockManager.getCurrentTicketId).toHaveBeenCalled()
+            })
+        })
+
+        describe('getCurrentTicketNumber', () => {
+            it('should return current ticket number when available', () => {
+                ;(mockManager.getCurrentTicketNumber as jest.Mock).mockReturnValue(1234)
+
+                const result = conversations.getCurrentTicketNumber()
+
+                expect(result).toBe(1234)
+                expect(mockManager.getCurrentTicketNumber).toHaveBeenCalled()
+            })
+
+            it('should return null when ticket number is not known', () => {
+                ;(mockManager.getCurrentTicketNumber as jest.Mock).mockReturnValue(null)
+
+                const result = conversations.getCurrentTicketNumber()
+
+                expect(result).toBeNull()
+                expect(mockManager.getCurrentTicketNumber).toHaveBeenCalled()
             })
         })
 

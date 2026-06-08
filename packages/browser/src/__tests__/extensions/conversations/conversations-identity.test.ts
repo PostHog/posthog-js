@@ -35,6 +35,7 @@ describe('Conversations Identity Verification', () => {
             restoreFromToken: jest.fn(),
             restoreFromUrlToken: jest.fn(),
             getCurrentTicketId: jest.fn(),
+            getCurrentTicketNumber: jest.fn(),
             getWidgetSessionId: jest.fn(),
             setIdentity: jest.fn(),
             clearIdentity: jest.fn(),

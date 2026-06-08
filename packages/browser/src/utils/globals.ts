@@ -222,6 +222,7 @@ export interface LazyLoadedConversationsInterface {
     restoreFromToken: (restoreToken: string) => Promise<RestoreFromTokenResponse>
     restoreFromUrlToken: () => Promise<RestoreFromTokenResponse | null>
     getCurrentTicketId: () => string | null
+    getCurrentTicketNumber: () => number | null
     getWidgetSessionId: () => string
 }
 

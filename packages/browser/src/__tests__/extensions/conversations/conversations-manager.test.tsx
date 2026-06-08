@@ -16,15 +16,19 @@ jest.mock('../../../extensions/conversations/external/persistence', () => {
     return {
         ConversationsPersistence: jest.fn().mockImplementation(() => {
             let storedTicketId: string | null = null
+            let storedTicketNumber: number | null = null
             return {
                 getOrCreateWidgetSessionId: jest.fn().mockReturnValue('test-widget-session-id'),
                 setWidgetSessionId: jest.fn(),
                 loadTicketId: jest.fn(() => storedTicketId),
-                saveTicketId: jest.fn((ticketId: string) => {
+                loadTicketNumber: jest.fn(() => storedTicketNumber),
+                saveTicketId: jest.fn((ticketId: string, ticketNumber?: number | null) => {
                     storedTicketId = ticketId
+                    storedTicketNumber = ticketNumber ?? null
                 }),
                 clearTicketId: jest.fn(() => {
                     storedTicketId = null
+                    storedTicketNumber = null
                 }),
                 loadWidgetState: jest.fn().mockReturnValue('closed'),
                 saveWidgetState: jest.fn(),
@@ -33,6 +37,7 @@ jest.mock('../../../extensions/conversations/external/persistence', () => {
                 clearWidgetSessionId: jest.fn(),
                 clearAll: jest.fn(() => {
                     storedTicketId = null
+                    storedTicketNumber = null
                 }),
             }
         }),
@@ -66,6 +71,7 @@ describe('ConversationsManager', () => {
 
     const createMockSendMessageResponse = (): SendMessageResponse => ({
         ticket_id: 'ticket-123',
+        ticket_number: 4567,
         message_id: 'msg-456',
         ticket_status: 'open',
         created_at: '2023-01-01T00:00:00Z',
@@ -527,6 +533,16 @@ describe('ConversationsManager', () => {
             })
 
             expect(manager['_currentTicketId']).toBe('ticket-123')
+        })
+
+        it('should expose the human-readable ticket number after sending first message', async () => {
+            expect(manager.getCurrentTicketNumber()).toBeNull()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+
+            expect(manager.getCurrentTicketNumber()).toBe(4567)
         })
 
         it('should include ticket ID in subsequent messages', async () => {

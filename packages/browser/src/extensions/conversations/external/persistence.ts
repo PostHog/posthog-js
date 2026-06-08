@@ -9,12 +9,14 @@ import { UserProvidedTraits } from '../../../posthog-conversations-types'
 import { createLogger } from '../../../utils/logger'
 import { window } from '../../../utils/globals'
 import { uuidv7 } from '../../../uuidv7'
+import { isNumber } from '@posthog/core'
 
 const logger = createLogger('[ConversationsPersistence]')
 
 interface ConversationsStorageData {
     widgetSessionId?: string
     ticketId?: string | null
+    ticketNumber?: number | null
     widgetState?: 'open' | 'closed'
     userTraits?: UserProvidedTraits | null
 }
@@ -93,19 +95,25 @@ export class ConversationsPersistence {
         }
     }
 
-    saveTicketId(ticketId: string): void {
+    saveTicketId(ticketId: string, ticketNumber?: number | null): void {
         const data = this._read() || {}
-        this._write({ ...data, ticketId })
+        this._write({ ...data, ticketId, ticketNumber: ticketNumber ?? null })
     }
 
     loadTicketId(): string | null {
         return this._read()?.ticketId || null
     }
 
+    loadTicketNumber(): number | null {
+        const ticketNumber = this._read()?.ticketNumber
+        return isNumber(ticketNumber) ? ticketNumber : null
+    }
+
     clearTicketId(): void {
         const data = this._read()
         if (data) {
             delete data.ticketId
+            delete data.ticketNumber
             this._write(data)
         }
     }

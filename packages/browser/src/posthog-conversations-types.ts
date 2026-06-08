@@ -166,9 +166,17 @@ export type TicketStatus = 'new' | 'open' | 'pending' | 'on_hold' | 'resolved'
  */
 export interface Ticket {
     /**
-     * Unique identifier for the ticket
+     * Unique identifier for the ticket (UUID)
      */
     id: string
+
+    /**
+     * Human-readable, sequential ticket number.
+     * Use this when displaying a reference users can quote externally
+     * (the same number shown in the PostHog support UI). May be absent
+     * on older backends that don't yet return it.
+     */
+    ticket_number?: number
 
     /**
      * Current status of the ticket
@@ -216,9 +224,17 @@ export type ConversationsWidgetState = 'open' | 'closed'
  */
 export interface SendMessageResponse {
     /**
-     * ID of the ticket this message belongs to
+     * ID of the ticket this message belongs to (UUID)
      */
     ticket_id: string
+
+    /**
+     * Human-readable, sequential ticket number.
+     * Use this when displaying a reference users can quote externally
+     * (the same number shown in the PostHog support UI). May be absent
+     * on older backends that don't yet return it.
+     */
+    ticket_number?: number
 
     /**
      * ID of the newly created message
@@ -247,9 +263,17 @@ export interface SendMessageResponse {
  */
 export interface GetMessagesResponse {
     /**
-     * ID of the ticket
+     * ID of the ticket (UUID)
      */
     ticket_id: string
+
+    /**
+     * Human-readable, sequential ticket number.
+     * Use this when displaying a reference users can quote externally
+     * (the same number shown in the PostHog support UI). May be absent
+     * on older backends that don't yet return it.
+     */
+    ticket_number?: number
 
     /**
      * Current status of the ticket

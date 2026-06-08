@@ -46,6 +46,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _widgetRef: ConversationsWidget | null = null
     private _containerElement: HTMLDivElement | null = null
     private _currentTicketId: string | null = null
+    private _currentTicketNumber: number | null = null
     private _pollIntervalId: number | null = null
     private _lastMessageTimestamp: string | null = null
     private _isPollingMessages: boolean = false
@@ -190,9 +191,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     // This happens when: 1) No ticket existed, or 2) User forced new ticket creation
                     if (isNewTicket && data.ticket_id) {
                         this._currentTicketId = data.ticket_id
-                        this._persistence.saveTicketId(data.ticket_id)
+                        this._currentTicketNumber = data.ticket_number ?? null
+                        this._persistence.saveTicketId(data.ticket_id, data.ticket_number)
                         logger.info('New ticket created', {
                             ticketId: data.ticket_id,
+                            ticketNumber: data.ticket_number,
                             forced: newTicket === true,
                         })
                     }
@@ -220,6 +223,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _switchToTicketIfNeeded(ticketId: string | undefined): void {
         if (ticketId && ticketId !== this._currentTicketId) {
             this._currentTicketId = ticketId
+            // The ticket number for the new ticket is unknown until we fetch it
+            this._currentTicketNumber = null
             this._persistence.saveTicketId(ticketId)
             // Reset last message timestamp when switching tickets
             this._lastMessageTimestamp = null
@@ -286,6 +291,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     }
 
                     const data = response.json as GetMessagesResponse
+
+                    // Keep the cached/persisted ticket number in sync for the active ticket
+                    if (data.ticket_id === this._currentTicketId && isNumber(data.ticket_number)) {
+                        this._currentTicketNumber = data.ticket_number
+                        this._persistence.saveTicketId(data.ticket_id, data.ticket_number)
+                    }
+
                     resolve(data)
                 },
             })
@@ -399,7 +411,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Load any existing ticket ID from localStorage
         this._currentTicketId = this._persistence.loadTicketId()
-        logger.info('Loaded ticket ID from storage', { ticketId: this._currentTicketId })
+        this._currentTicketNumber = this._persistence.loadTicketNumber()
+        logger.info('Loaded ticket ID from storage', {
+            ticketId: this._currentTicketId,
+            ticketNumber: this._currentTicketNumber,
+        })
 
         // Track conversations API loaded (separate from widget loaded)
         this._posthog.capture('$conversations_loaded', {
@@ -492,12 +508,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         if (data.migrated_ticket_ids?.length) {
             this._currentTicketId = data.migrated_ticket_ids[0]
+            // Number is unknown for migrated tickets; it gets refreshed on the next fetch
+            this._currentTicketNumber = null
             this._persistence.saveTicketId(this._currentTicketId)
             // Poll straight away so messages and ticket list are fresh
             void this._pollMessages()
             void this._pollTickets()
         } else {
             this._currentTicketId = null
+            this._currentTicketNumber = null
             this._persistence.clearTicketId()
         }
 
@@ -880,6 +899,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Clear current ticket
         this._currentTicketId = null
+        this._currentTicketNumber = null
         this._persistence.clearTicketId()
 
         // Reset timestamp
@@ -951,19 +971,22 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         if (tickets.length >= 2) {
             this._currentTicketId = null
+            this._currentTicketNumber = null
             return 'tickets'
         }
 
         // Single resolved ticket: show list so user can start a new conversation instead of writing to it
         if (tickets.length === 1 && tickets[0].status === 'resolved') {
             this._currentTicketId = null
+            this._currentTicketNumber = null
             this._persistence.clearTicketId()
             return 'tickets'
         }
 
         if (tickets.length === 1) {
             this._currentTicketId = tickets[0].id
-            this._persistence.saveTicketId(tickets[0].id)
+            this._currentTicketNumber = tickets[0].ticket_number ?? null
+            this._persistence.saveTicketId(tickets[0].id, tickets[0].ticket_number)
         }
 
         return 'messages'
@@ -1205,6 +1228,16 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
+     * Get the human-readable ticket number for the current active ticket.
+     * Returns null if no conversation has been started yet, or if the number
+     * is not yet known (e.g. a backend that doesn't return it, or before the
+     * first message/fetch on a restored ticket).
+     */
+    getCurrentTicketNumber(): number | null {
+        return this._currentTicketNumber
+    }
+
+    /**
      * Get the widget session ID (persistent browser identifier)
      * This ID is used for access control and stays the same across page loads
      */
@@ -1235,6 +1268,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     private _resetConversationState(): void {
         this._currentTicketId = null
+        this._currentTicketNumber = null
         this._persistence.clearTicketId()
         this._lastMessageTimestamp = null
         this._widgetRef?.clearMessages(true)
@@ -1300,6 +1334,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Reset local state
         this._currentTicketId = null
+        this._currentTicketNumber = null
         this._lastMessageTimestamp = null
         this._unreadCount = 0
 
