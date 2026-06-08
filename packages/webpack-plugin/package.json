@@ -31,7 +31,7 @@
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "jest": "catalog:",
-        "webpack": "^5"
+        "webpack": "^5.107.2"
     },
     "scripts": {
         "clean": "rimraf dist",

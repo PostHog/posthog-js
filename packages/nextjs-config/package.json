@@ -43,9 +43,9 @@
   "license": "MIT",
   "dependencies": {
     "@posthog/cli": "catalog:",
-    "semver": "^7.7.2",
     "@posthog/plugin-utils": "workspace:*",
-    "@posthog/webpack-plugin": "workspace:*"
+    "@posthog/webpack-plugin": "workspace:*",
+    "semver": "^7.8.1"
   },
   "keywords": [
     "posthog",
@@ -55,9 +55,9 @@
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
+    "@types/jest": "catalog:",
     "@types/node": "^22.15.23",
     "@types/semver": "^7.7.0",
-    "@types/jest": "catalog:",
     "jest": "catalog:",
     "next": "^15.5.7",
     "ts-jest": "catalog:"

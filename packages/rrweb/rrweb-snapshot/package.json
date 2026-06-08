@@ -66,9 +66,9 @@
     "@posthog/rrweb-types": "workspace:*",
     "@posthog/rrweb-utils": "workspace:*",
     "@types/jsdom": "^20.0.0",
+    "@types/node": "^18.15.11",
     "happy-dom": "^14.12.0",
     "jsdom": "^22.1.0",
-    "@types/node": "^18.15.11",
     "puppeteer": "^23.11.1",
     "ts-node": "^7.0.1",
     "tslib": "^1.9.3",
@@ -79,7 +79,7 @@
   },
   "dependencies": {
     "@types/postcss-safe-parser": "^5.0.4",
-    "postcss": "^8.5.1",
+    "postcss": "^8.5.15",
     "postcss-safe-parser": "^7.0.1"
   }
 }

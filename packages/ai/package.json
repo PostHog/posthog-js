@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.8",
+    "@babel/preset-env": "catalog:",
+    "@babel/preset-typescript": "catalog:",
     "@openai/agents": "^0.8.0",
     "@openai/agents-core": "^0.8.0",
     "@opentelemetry/api": "^1.9.0",
@@ -30,8 +32,6 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
     "@opentelemetry/otlp-exporter-base": "^0.200.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
-    "@babel/preset-env": "catalog:",
-    "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@types/jest": "catalog:",
@@ -55,19 +55,19 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/genai": "^1.43.0",
-    "@langchain/core": "^1.1.29",
+    "@langchain/core": "^1.1.48",
     "@posthog/core": "workspace:*",
     "langchain": "^1.2.28",
-    "openai": "^6.25.0",
+    "openai": "^6.39.1",
     "uuid": "^11.1.0",
     "zod": "^4.1.13"
   },
   "peerDependencies": {
+    "@ai-sdk/provider": "^2.0.0 || ^3.0.0",
+    "@openai/agents": "^0.8.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0 <1.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
-    "@ai-sdk/provider": "^2.0.0 || ^3.0.0",
-    "@openai/agents": "^0.8.0",
     "posthog-node": "^5.0.0"
   },
   "peerDependenciesMeta": {
