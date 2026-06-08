@@ -414,6 +414,51 @@ describe('ConversationsManager', () => {
         })
     })
 
+    describe('re-attach on SPA navigation', () => {
+        beforeEach(async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+        })
+
+        it('should re-attach the widget when its container is detached from the DOM', () => {
+            const container = document.getElementById('ph-conversations-widget-container')
+            expect(container).toBeInTheDocument()
+
+            // Simulate an SPA framework (e.g. Turbo Drive) replacing document.body,
+            // which detaches our container without any teardown call.
+            act(() => {
+                container?.remove()
+            })
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+
+            // The re-attach watcher runs every second and should put it back.
+            act(() => {
+                jest.advanceTimersByTime(1000)
+            })
+
+            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+            expect(manager.isVisible()).toBe(true)
+        })
+
+        it('should NOT re-attach the widget after hide()', () => {
+            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+
+            act(() => {
+                manager.hide()
+            })
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+
+            // Even after the watcher interval elapses, an intentionally hidden
+            // widget must stay hidden.
+            act(() => {
+                jest.advanceTimersByTime(1000)
+            })
+
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+            expect(manager.isVisible()).toBe(false)
+        })
+    })
+
     describe('isVisible', () => {
         it('should return true when widget is rendered', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
