@@ -420,42 +420,41 @@ describe('ConversationsManager', () => {
             await flushPromises()
         })
 
-        it('should re-attach the widget when its container is detached from the DOM', () => {
-            const container = document.getElementById('ph-conversations-widget-container')
-            expect(container).toBeInTheDocument()
+        it.each([
+            {
+                // SPA framework (e.g. Turbo Drive) replacing document.body detaches
+                // our container without any teardown call — the watcher re-attaches it.
+                description: 'detaches container via DOM removal (SPA navigation)',
+                setup: () => document.getElementById('ph-conversations-widget-container')?.remove(),
+                expectInDocument: true,
+                expectVisible: true,
+            },
+            {
+                // An intentionally hidden widget must stay hidden after the interval.
+                description: 'intentionally hides the widget via hide()',
+                setup: () => manager.hide(),
+                expectInDocument: false,
+                expectVisible: false,
+            },
+        ])('should handle reattach correctly when $description', ({ setup, expectInDocument, expectVisible }) => {
+            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
 
-            // Simulate an SPA framework (e.g. Turbo Drive) replacing document.body,
-            // which detaches our container without any teardown call.
             act(() => {
-                container?.remove()
+                setup()
             })
             expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
 
-            // The re-attach watcher runs every second and should put it back.
+            // The re-attach watcher runs every second.
             act(() => {
                 jest.advanceTimersByTime(1000)
             })
 
-            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
-            expect(manager.isVisible()).toBe(true)
-        })
-
-        it('should NOT re-attach the widget after hide()', () => {
-            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
-
-            act(() => {
-                manager.hide()
-            })
-            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
-
-            // Even after the watcher interval elapses, an intentionally hidden
-            // widget must stay hidden.
-            act(() => {
-                jest.advanceTimersByTime(1000)
-            })
-
-            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
-            expect(manager.isVisible()).toBe(false)
+            if (expectInDocument) {
+                expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+            } else {
+                expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+            }
+            expect(manager.isVisible()).toBe(expectVisible)
         })
     })
 
