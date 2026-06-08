@@ -1,5 +1,5 @@
 import { PostHog } from 'posthog-node'
-import PostHogOpenAI from '../src/openai'
+import PostHogOpenAI, { WrappedCompletions } from '../src/openai'
 import openaiModule from 'openai'
 import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -2036,5 +2036,34 @@ describe('PostHogOpenAI - Jest test suite', () => {
     const posthogParams = Object.keys(actualParams).filter((key) => key.startsWith('posthog'))
     expect(posthogParams).toEqual([])
     ;(ChatMock.Completions as any).prototype.create = originalCreate
+  })
+})
+
+// No API key: drive the wrapper with a fake parent to assert $ai_base_url carries its base URL.
+describe('PostHogOpenAI - $ai_base_url', () => {
+  it('emits the wrapped client base URL', async () => {
+    const ph = new (PostHog as any)()
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue({
+      id: 'chatcmpl-x',
+      model: 'gpt-4',
+      object: 'chat.completion',
+      created: 0,
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'hi', refusal: null },
+          logprobs: null,
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    })
+
+    const wrapped = new WrappedCompletions({ baseURL: 'https://gateway.posthog.com/v1' } as any, ph as any)
+    await wrapped.create({ model: 'gpt-4', messages: [{ role: 'user', content: 'hi' }] } as any)
+
+    const { properties } = (ph.capture as jest.Mock).mock.calls[0][0]
+    expect(properties['$ai_base_url']).toBe('https://gateway.posthog.com/v1')
   })
 })
