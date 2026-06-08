@@ -77,7 +77,11 @@ jobs:
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm install --frozen-lockfile=false
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # required for React Native's Android Gradle autolinking and iOS pods.
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Build example for Android
@@ -114,7 +118,11 @@ jobs:
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm install --frozen-lockfile=false
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # required for React Native's Android Gradle autolinking and iOS pods.
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods
@@ -160,7 +168,11 @@ jobs:
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm install --frozen-lockfile=false
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # required for React Native's Android Gradle autolinking and iOS pods.
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Opt example into SPM resolution
