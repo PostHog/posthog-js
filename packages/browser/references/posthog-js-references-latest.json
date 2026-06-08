@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.383.0",
+    "version": "1.382.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -2772,7 +2772,7 @@
           "name": "_remove"
         },
         {
-          "type": "(name: string, value: any, expire_days?: number | null, cross_subdomain?: boolean, secure?: boolean, debug?: boolean) => boolean",
+          "type": "(name: string, value: any, expire_days?: number | null, cross_subdomain?: boolean, secure?: boolean, debug?: boolean) => void",
           "name": "_set"
         }
       ],
