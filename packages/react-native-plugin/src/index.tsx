@@ -1,10 +1,10 @@
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native'
 
 const LINKING_ERROR =
   `The package 'posthog-react-native-plugin' doesn't seem to be linked. Make sure: \n\n` +
   Platform.select({ ios: "- You have run 'pod install'\n", default: '' }) +
   '- You rebuilt the app after installing the package\n' +
-  '- You are not using Expo Go\n';
+  '- You are not using Expo Go\n'
 
 const PosthogReactNativePlugin = NativeModules.PosthogReactNativePlugin
   ? NativeModules.PosthogReactNativePlugin
@@ -12,26 +12,26 @@ const PosthogReactNativePlugin = NativeModules.PosthogReactNativePlugin
       {},
       {
         get() {
-          throw new Error(LINKING_ERROR);
+          throw new Error(LINKING_ERROR)
         },
       }
-    );
+    )
 
-export type PostHogReactNativePluginMap = { [key: string]: any };
+export type PostHogReactNativePluginMap = { [key: string]: any }
 
 export interface PostHogReactNativePluginSessionReplayConfig {
-  enabled?: boolean;
-  sdkReplayConfig?: PostHogReactNativePluginMap;
-  decideReplayConfig?: PostHogReactNativePluginMap;
+  enabled?: boolean
+  sdkReplayConfig?: PostHogReactNativePluginMap
+  decideReplayConfig?: PostHogReactNativePluginMap
 }
 
 export interface PostHogReactNativePluginErrorTrackingConfig {
-  nativeAutocapture?: boolean;
+  nativeAutocapture?: boolean
 }
 
 export interface PostHogReactNativePluginConfig {
-  sessionReplay?: PostHogReactNativePluginSessionReplayConfig;
-  errorTracking?: PostHogReactNativePluginErrorTrackingConfig;
+  sessionReplay?: PostHogReactNativePluginSessionReplayConfig
+  errorTracking?: PostHogReactNativePluginErrorTrackingConfig
 }
 
 export function setup(
@@ -39,7 +39,7 @@ export function setup(
   sdkOptions: PostHogReactNativePluginMap,
   pluginConfig: PostHogReactNativePluginConfig = {}
 ): Promise<void> {
-  return PosthogReactNativePlugin.setup(sessionId, sdkOptions, pluginConfig);
+  return PosthogReactNativePlugin.setup(sessionId, sdkOptions, pluginConfig)
 }
 
 export function start(
@@ -48,39 +48,31 @@ export function start(
   sdkReplayConfig: PostHogReactNativePluginMap,
   decideReplayConfig: PostHogReactNativePluginMap
 ): Promise<void> {
-  return PosthogReactNativePlugin.start(
-    sessionId,
-    sdkOptions,
-    sdkReplayConfig,
-    decideReplayConfig
-  );
+  return PosthogReactNativePlugin.start(sessionId, sdkOptions, sdkReplayConfig, decideReplayConfig)
 }
 
 export function startSession(sessionId: string): Promise<void> {
-  return PosthogReactNativePlugin.startSession(sessionId);
+  return PosthogReactNativePlugin.startSession(sessionId)
 }
 
 export function endSession(): Promise<void> {
-  return PosthogReactNativePlugin.endSession();
+  return PosthogReactNativePlugin.endSession()
 }
 
 export function isEnabled(): Promise<boolean> {
-  return PosthogReactNativePlugin.isEnabled();
+  return PosthogReactNativePlugin.isEnabled()
 }
 
-export function identify(
-  distinctId: string,
-  anonymousId: string
-): Promise<void> {
-  return PosthogReactNativePlugin.identify(distinctId, anonymousId);
+export function identify(distinctId: string, anonymousId: string): Promise<void> {
+  return PosthogReactNativePlugin.identify(distinctId, anonymousId)
 }
 
 export function startRecording(resumeCurrent: boolean): Promise<void> {
-  return PosthogReactNativePlugin.startRecording(resumeCurrent);
+  return PosthogReactNativePlugin.startRecording(resumeCurrent)
 }
 
 export function stopRecording(): Promise<void> {
-  return PosthogReactNativePlugin.stopRecording();
+  return PosthogReactNativePlugin.stopRecording()
 }
 
 export interface PostHogReactNativePluginModule {
@@ -88,7 +80,7 @@ export interface PostHogReactNativePluginModule {
     sessionId: string,
     sdkOptions: PostHogReactNativePluginMap,
     pluginConfig?: PostHogReactNativePluginConfig
-  ) => Promise<void>;
+  ) => Promise<void>
 
   /**
    * Legacy session replay setup entrypoint. Prefer setup() for new native features.
@@ -98,19 +90,19 @@ export interface PostHogReactNativePluginModule {
     sdkOptions: PostHogReactNativePluginMap,
     sdkReplayConfig: PostHogReactNativePluginMap,
     decideReplayConfig: PostHogReactNativePluginMap
-  ) => Promise<void>;
+  ) => Promise<void>
 
-  startSession: (sessionId: string) => Promise<void>;
+  startSession: (sessionId: string) => Promise<void>
 
-  endSession: () => Promise<void>;
+  endSession: () => Promise<void>
 
-  isEnabled: () => Promise<boolean>;
+  isEnabled: () => Promise<boolean>
 
-  identify: (distinctId: string, anonymousId: string) => Promise<void>;
+  identify: (distinctId: string, anonymousId: string) => Promise<void>
 
-  startRecording: (resumeCurrent: boolean) => Promise<void>;
+  startRecording: (resumeCurrent: boolean) => Promise<void>
 
-  stopRecording: () => Promise<void>;
+  stopRecording: () => Promise<void>
 }
 
 const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
@@ -122,6 +114,6 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   identify,
   startRecording,
   stopRecording,
-};
+}
 
-export default PostHogReactNativePlugin;
+export default PostHogReactNativePlugin
