@@ -11,6 +11,7 @@ import {
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    SURVEYS_LOADED_AT,
 } from './constants'
 import { getPersistenceKeyPolicy, PERSISTENCE_STORAGE_GROUPS, PersistenceStorageGroup } from './persistence-key-policy'
 
@@ -21,6 +22,7 @@ import { getPersistenceKeyPolicy, PERSISTENCE_STORAGE_GROUPS, PersistenceStorage
 // signal, so the group entry wins by default (the migrated-forward home).
 const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
     flags: PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    surveys: SURVEYS_LOADED_AT,
 }
 
 import { isNumber, isUndefined } from '@posthog/core'
