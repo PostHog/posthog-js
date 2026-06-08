@@ -132,7 +132,7 @@ export const cookieStore: PersistentStore = {
 
     _set: function (name, value, days, cross_subdomain, is_secure) {
         if (!document) {
-            return
+            return false
         }
         try {
             let expires = '',
@@ -165,9 +165,9 @@ export const cookieStore: PersistentStore = {
             }
 
             document.cookie = new_cookie_val
-            return new_cookie_val
+            return true
         } catch {
-            return
+            return false
         }
     },
 
@@ -243,9 +243,11 @@ export const localStore: PersistentStore = {
     _set: function (name, value) {
         try {
             window?.localStorage.setItem(name, JSON.stringify(value))
+            return true
         } catch (err) {
             localStore._error(err)
         }
+        return false
     },
 
     _remove: function (name) {
@@ -319,8 +321,13 @@ export const createLocalPlusCookieStore = (
         },
 
         _set: function (name, value, days, cross_subdomain, is_secure, debug) {
+            // The localStorage write is the durable one and reports its own
+            // success. The cookie mirror is best-effort: a cookie failure must
+            // not flip an already-landed localStorage write to `false`, or the
+            // caller would treat the durable entry as un-persisted and re-write
+            // it on every later save.
+            const stored = localStore._set(name, value, undefined, undefined, debug)
             try {
-                localStore._set(name, value, undefined, undefined, debug)
                 const cookiePersistedProperties: Record<string, any> = {}
                 cookiePropertiesToPersist.forEach((key) => {
                     if (value[key]) {
@@ -334,6 +341,7 @@ export const createLocalPlusCookieStore = (
             } catch (err) {
                 localStore._error(err)
             }
+            return stored
         },
 
         _remove: function (name, cross_subdomain) {
@@ -369,6 +377,7 @@ export const memoryStore: PersistentStore = {
 
     _set: function (name, value) {
         memoryStorage[name] = value
+        return true
     },
 
     _remove: function (name) {
@@ -430,9 +439,11 @@ export const sessionStore: PersistentStore = {
     _set: function (name, value) {
         try {
             window?.sessionStorage.setItem(name, JSON.stringify(value))
+            return true
         } catch (err) {
             sessionStore._error(err)
         }
+        return false
     },
 
     _remove: function (name) {

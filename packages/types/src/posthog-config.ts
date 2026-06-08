@@ -928,6 +928,22 @@ export interface PostHogConfig {
     persistence_save_debounce_ms?: number
 
     /**
+     * Store the feature-flag config cluster in its own localStorage entry
+     * (`<name>__flags`) instead of the single main persistence blob. This
+     * payload is large and changes rarely, so keeping it out of the main blob
+     * stops it riding on every high-frequency main-blob write and broadcasting
+     * cross-tab `storage` events.
+     *
+     * Only applies when persistence resolves to `localStorage` / `localStorage+cookie`
+     * (the split is pointless for `memory` / `sessionStorage` and impossible for `cookie`).
+     * On load the old main-blob location is read once and migrated forward, so
+     * upgrades never miss a cached flag. The `2026-05-30` config default opts in.
+     *
+     * @default false
+     */
+    split_storage?: boolean
+
+    /**
      * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false

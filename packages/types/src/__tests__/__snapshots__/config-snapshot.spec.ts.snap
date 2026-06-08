@@ -164,6 +164,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "number"
   ],
+  "split_storage": [
+    "undefined",
+    "false",
+    "true"
+  ],
   "disable_surveys": [
     "false",
     "true"
