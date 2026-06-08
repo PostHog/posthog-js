@@ -44,7 +44,14 @@ async function stripDanglingComment(file: string): Promise<void> {
     return
   }
   const url = (match[1] ?? '').trim()
-  if (url === '' || url.startsWith('data:') || (await exists(path.resolve(path.dirname(file), url)))) {
+  if (
+    url === '' ||
+    url.startsWith('data:') ||
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('//') ||
+    (await exists(path.resolve(path.dirname(file), url)))
+  ) {
     return
   }
   let lineEnd = match.index + match[0].length

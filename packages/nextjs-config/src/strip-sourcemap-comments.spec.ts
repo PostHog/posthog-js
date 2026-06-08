@@ -77,14 +77,21 @@ describe('stripDanglingSourceMapComments', () => {
     expect(await fs.readFile(chunk, 'utf8')).toBe('console.log(5)\r\n')
   })
 
-  it('strips .mjs and .cjs chunks as well as .js', async () => {
-    const mjs = await writeFile('static/chunks/page.mjs', 'export const x = 1\n//# sourceMappingURL=page.mjs.map\n')
-    const cjs = await writeFile('static/chunks/page.cjs', 'module.exports = 1\n//# sourceMappingURL=page.cjs.map\n')
+  it.each(['mjs', 'cjs'])('strips dangling comments from .%s chunks', async (ext) => {
+    const chunk = await writeFile(`static/chunks/page.${ext}`, `const x = 1\n//# sourceMappingURL=page.${ext}.map\n`)
 
     await stripDanglingSourceMapComments(distDir)
 
-    expect(await fs.readFile(mjs, 'utf8')).toBe('export const x = 1\n')
-    expect(await fs.readFile(cjs, 'utf8')).toBe('module.exports = 1\n')
+    expect(await fs.readFile(chunk, 'utf8')).toBe('const x = 1\n')
+  })
+
+  it('leaves remote (http/https) sourceMappingURL comments untouched', async () => {
+    const original = 'console.log(7)\n//# sourceMappingURL=https://cdn.example.com/page.js.map\n'
+    const chunk = await writeFile('static/chunks/remote.js', original)
+
+    await stripDanglingSourceMapComments(distDir)
+
+    expect(await fs.readFile(chunk, 'utf8')).toBe(original)
   })
 
   it('is a no-op when there is no static directory', async () => {
