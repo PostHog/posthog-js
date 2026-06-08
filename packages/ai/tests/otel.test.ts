@@ -166,4 +166,14 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     expect(getSuperExport()).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
   })
+
+  it('redacts multimodal content before exporting', () => {
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
+    const callback = jest.fn()
+
+    exporter.export([makeSpan('gen_ai.chat', { 'gen_ai.prompt': 'data:image/png;base64,iVBORw0KGgo' })], callback)
+
+    const exported = getSuperExport().mock.calls[0][0] as ReadableSpan[]
+    expect(exported[0].attributes['gen_ai.prompt']).toBe('[base64 image/png redacted]')
+  })
 })

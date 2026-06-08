@@ -1,5 +1,35 @@
 # posthog-ai
 
+## 7.21.0
+
+### Minor Changes
+
+- [#3762](https://github.com/PostHog/posthog-js/pull/3762) [`a6234bd`](https://github.com/PostHog/posthog-js/commit/a6234bd8dc70d5ad14368337c6a3ba748cef0198) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Redact base64/binary multimodal content from AI spans in the OTel `PostHogSpanProcessor` and `PostHogTraceExporter` before export, matching the redaction already applied by the direct provider wrappers. Content is redacted by value (data URLs and large base64 blobs) across span attributes and span events, so it works regardless of which GenAI semantic convention produced the span.
+  (2026-06-08)
+
+## 7.20.14
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.10
+  - posthog-node@5.36.4
+
+## 7.20.13
+
+### Patch Changes
+
+- [#3624](https://github.com/PostHog/posthog-js/pull/3624) [`be7c3c7`](https://github.com/PostHog/posthog-js/commit/be7c3c788ac149fe7f026e03532c8dcabcd2c298) Thanks [@pntech20](https://github.com/pntech20)! - Preserve OpenAI APIPromise response helpers on instrumented OpenAI wrapper calls.
+  (2026-06-05)
+
+## 7.20.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.9
+  - posthog-node@5.36.3
+
 ## 7.20.11
 
 ### Patch Changes

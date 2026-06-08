@@ -156,4 +156,14 @@ describe('PostHogSpanProcessor AI span filtering', () => {
 
     expect(inner.onEnd).toHaveBeenCalledTimes(1)
   })
+
+  it('redacts multimodal content before forwarding', () => {
+    const inner = mockProcessor()
+    const processor = new PostHogSpanProcessor({ apiKey: 'phc_test', _spanProcessor: inner })
+
+    processor.onEnd(makeSpan('gen_ai.chat', { 'gen_ai.prompt': 'data:image/png;base64,iVBORw0KGgo' }))
+
+    const forwarded = inner.onEnd.mock.calls[0][0] as ReadableSpan
+    expect(forwarded.attributes['gen_ai.prompt']).toBe('[base64 image/png redacted]')
+  })
 })
