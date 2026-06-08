@@ -159,7 +159,7 @@ describe('PostHogSpanProcessor AI span filtering', () => {
 
   it('redacts multimodal content before forwarding', () => {
     const inner = mockProcessor()
-    const processor = new PostHogSpanProcessor({ apiKey: 'phc_test', _spanProcessor: inner })
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
 
     processor.onEnd(makeSpan('gen_ai.chat', { 'gen_ai.prompt': 'data:image/png;base64,iVBORw0KGgo' }))
 
