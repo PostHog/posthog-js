@@ -23,5 +23,5 @@ module.exports = {
       },
     },
   ],
-  ignorePatterns: ['lib/', 'example/'],
+  ignorePatterns: ['lib/'],
 }

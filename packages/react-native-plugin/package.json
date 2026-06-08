@@ -37,8 +37,7 @@
     "!**/.*"
   ],
   "scripts": {
-    "example": "pnpm --filter posthog-react-native-plugin-example",
-    "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
+    "clean": "del-cli android/build lib",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "lint:fix": "eslint \"**/*.{js,ts,tsx}\" --fix",
     "typecheck": "tsc",
@@ -82,12 +81,10 @@
   "jest": {
     "preset": "react-native",
     "modulePathIgnorePatterns": [
-      "<rootDir>/example/node_modules",
       "<rootDir>/lib/"
     ],
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "<rootDir>/example/",
       "<rootDir>/lib/"
     ]
   },
