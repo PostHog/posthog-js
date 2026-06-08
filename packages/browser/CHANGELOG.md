@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.383.1
+
+### Patch Changes
+
+- [#3770](https://github.com/PostHog/posthog-js/pull/3770) [`e481b0c`](https://github.com/PostHog/posthog-js/commit/e481b0c9c52b5f67dba351f7f140958f99da9854) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Respect `capture_pageview: false` when opting out in cookieless `on_reject` mode.
+  (2026-06-08)
+- Updated dependencies []:
+    - @posthog/types@1.383.1
+    - @posthog/core@1.30.12
+
 ## 1.383.0
 
 ### Minor Changes
