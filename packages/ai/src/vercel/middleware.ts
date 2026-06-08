@@ -24,7 +24,7 @@ import {
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl } from '../sanitization'
-import { isString } from '../typeGuards'
+import { isObject, isString } from '../typeGuards'
 
 // Union types for dual version support
 type LanguageModel = LanguageModelV2 | LanguageModelV3
@@ -292,19 +292,17 @@ const extractProvider = (model: LanguageModel): string => {
  */
 const extractBaseURL = (model: LanguageModel): string => {
   try {
-    const config = (model as unknown as { config?: Record<string, unknown> }).config
-    if (!config) {
+    const config = (model as { config?: unknown }).config
+    if (!isObject(config)) {
       return ''
     }
-    if (typeof config.baseURL === 'string') {
+    if (isString(config.baseURL)) {
       return config.baseURL
     }
-    if (typeof config.url === 'function') {
-      const url = (config.url as (opts: { path: string; modelId: string }) => unknown)({
-        path: '',
-        modelId: model.modelId,
-      })
-      return typeof url === 'string' ? url : ''
+    const urlFn = config.url
+    if (typeof urlFn === 'function') {
+      const url = urlFn({ path: '', modelId: model.modelId })
+      return isString(url) ? url : ''
     }
   } catch {
     // Unknown config shape or url() threw.
