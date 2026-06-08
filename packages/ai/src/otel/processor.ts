@@ -2,6 +2,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { Context } from '@opentelemetry/api'
 import { BatchSpanProcessor, type SpanProcessor, type ReadableSpan, type Span } from '@opentelemetry/sdk-trace-base'
 
+import { redactSpan } from './redact'
 import { isAISpan } from './spans'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
@@ -106,7 +107,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
 
   onEnd(span: ReadableSpan): void {
     if (isAISpan(span)) {
-      this.inner.onEnd(span)
+      this.inner.onEnd(redactSpan(span))
     }
   }
 
