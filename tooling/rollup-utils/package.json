@@ -19,16 +19,16 @@
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-json": "^6.1.0",
-        "@rollup/plugin-node-resolve": "^16.0.3",
-        "@rollup/plugin-typescript": "^12.3.0",
-        "rollup-plugin-dts": "^6.4.1"
+        "@rollup/plugin-node-resolve": "^16.0.1",
+        "rollup-plugin-dts": "^6.1.1",
+        "@rollup/plugin-typescript": "^12.1.4"
     },
     "peerDependencies": {
         "rollup": "catalog:",
         "typescript": "catalog:"
     },
     "devDependencies": {
-        "rollup": "catalog:",
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "rollup": "catalog:"
     }
 }
