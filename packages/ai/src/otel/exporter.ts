@@ -2,6 +2,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 import { ExportResultCode } from '@opentelemetry/core'
 
+import { redactSpan } from './redact'
 import { isAISpan } from './spans'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
@@ -105,6 +106,6 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
       resultCallback({ code: ExportResultCode.SUCCESS })
       return
     }
-    super.export(aiSpans, resultCallback)
+    super.export(aiSpans.map(redactSpan), resultCallback)
   }
 }
