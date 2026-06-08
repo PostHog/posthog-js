@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.383.0
+
+### Minor Changes
+
+- [#3721](https://github.com/PostHog/posthog-js/pull/3721) [`ac3d951`](https://github.com/PostHog/posthog-js/commit/ac3d951f51745e9d29ba50c015847a606a4ca8ac) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(persistence): add `split_storage` config option to store the feature-flag config cluster in its own localStorage entry (`<name>__flags`) instead of the single main persistence blob. This payload is large and changes rarely, so keeping it out of the main blob stops it riding on every high-frequency main-blob write and broadcasting on cross-tab `storage` events. Reads are unchanged: on load the entry is merged back into the in-memory props, and the old main-blob location is read once and migrated forward so upgrades never miss a cached flag. The split only applies when persistence resolves to `localStorage` / `localStorage+cookie` (it is pointless for `memory` / `sessionStorage` and impossible for `cookie`), and `reset()` / opt-out wipe every entry. Defaults to `false` for backwards compatibility; the new `2026-05-30` config default opts in automatically.
+  (2026-06-08)
+
 ## 1.382.0
 
 ## 1.381.0
