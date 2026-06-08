@@ -1,0 +1,193 @@
+name: React Native Plugin Native CI
+
+# Builds the posthog-react-native-plugin example app's native code (Android +
+# iOS) so the Swift/Kotlin bridge is compiled in CI before publishing. Ported
+# from the standalone posthog-react-native-session-replay repo. The example
+# lives at examples/example-rn-native-plugin and is excluded from the pnpm
+# workspace, so each job installs it standalone and invokes the native build
+# tools directly (gradlew / xcodebuild) rather than through turbo.
+#
+# All jobs are gated on `is-affected` for posthog-react-native-plugin so the
+# expensive Android/macOS runners only spin up when the plugin or its example
+# changes.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/react-native-plugin/**'
+      - 'examples/example-rn-native-plugin/**'
+      - '.github/workflows/react-native-plugin-native-ci.yml'
+  merge_group:
+    types:
+      - checks_requested
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  EXAMPLE_DIR: examples/example-rn-native-plugin
+
+jobs:
+  build-android:
+    name: Build example for Android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Check if plugin is affected
+        id: is-affected
+        uses: ./.github/actions/is-affected
+        with:
+          package-name: posthog-react-native-plugin
+
+      - name: Install JDK
+        if: steps.is-affected.outputs.is-affected == 'true'
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Finalize Android SDK
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: |
+          /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Cache Gradle
+        if: steps.is-affected.outputs.is-affected == 'true'
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.gradle/wrapper
+            ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('examples/example-rn-native-plugin/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install example dependencies
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: pnpm install --frozen-lockfile=false
+        working-directory: ${{ env.EXAMPLE_DIR }}
+
+      - name: Build example for Android
+        if: steps.is-affected.outputs.is-affected == 'true'
+        env:
+          JAVA_OPTS: '-XX:MaxHeapSize=6g'
+        run: ./gradlew assembleDebug --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
+        working-directory: ${{ env.EXAMPLE_DIR }}/android
+
+  build-ios-static-lib:
+    name: Build example for iOS (CocoaPods)
+    runs-on: macos-14-xlarge
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@1242409711ff5721add51979e9e11e23ebb7e5a4 # v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Check if plugin is affected
+        id: is-affected
+        uses: ./.github/actions/is-affected
+        with:
+          package-name: posthog-react-native-plugin
+
+      - name: Install example dependencies
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: pnpm install --frozen-lockfile=false
+        working-directory: ${{ env.EXAMPLE_DIR }}
+
+      - name: Install CocoaPods
+        if: steps.is-affected.outputs.is-affected == 'true'
+        env:
+          NO_FLIPPER: 1
+        run: pod install
+        working-directory: ${{ env.EXAMPLE_DIR }}/ios
+
+      - name: Build example for iOS
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: |
+          set -o pipefail && xcrun xcodebuild \
+            -workspace PosthogReactNativePluginExample.xcworkspace \
+            -configuration Debug \
+            -scheme posthog-react-native-plugin \
+            -destination generic/platform=iOS | xcpretty
+        working-directory: ${{ env.EXAMPLE_DIR }}/ios
+
+  build-ios-spm:
+    name: Build example for iOS (SPM opt-in)
+    # Exercises the opt-in path: `posthog.useSpm` in Podfile.properties.json
+    # routes posthog-ios through the React Native spm_dependency helper. The
+    # SPM path requires dynamic frameworks. macos-26 uses the latest Xcode
+    # shipped with the runner image.
+    runs-on: macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Check if plugin is affected
+        id: is-affected
+        uses: ./.github/actions/is-affected
+        with:
+          package-name: posthog-react-native-plugin
+
+      - name: Install example dependencies
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: pnpm install --frozen-lockfile=false
+        working-directory: ${{ env.EXAMPLE_DIR }}
+
+      - name: Opt example into SPM resolution
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: |
+          cat > ios/Podfile.properties.json <<'JSON'
+          {
+            "posthog.useSpm": "true"
+          }
+          JSON
+        working-directory: ${{ env.EXAMPLE_DIR }}
+
+      - name: Install CocoaPods
+        if: steps.is-affected.outputs.is-affected == 'true'
+        env:
+          NO_FLIPPER: 1
+          USE_FRAMEWORKS: dynamic
+        run: pod install
+        working-directory: ${{ env.EXAMPLE_DIR }}/ios
+
+      - name: Build example for iOS Simulator
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: |
+          xcodebuild \
+            -workspace PosthogReactNativePluginExample.xcworkspace \
+            -configuration Debug \
+            -scheme posthog-react-native-plugin \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator'
+        working-directory: ${{ env.EXAMPLE_DIR }}/ios
