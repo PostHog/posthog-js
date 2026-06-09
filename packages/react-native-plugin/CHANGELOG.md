@@ -1,1 +1,1 @@
-# posthog-react-native-plugin
+# @posthog/posthog-react-native-plugin

@@ -8,7 +8,7 @@ importers:
 
   .:
     dependencies:
-      posthog-react-native-plugin:
+      '@posthog/posthog-react-native-plugin':
         specifier: link:../../packages/react-native-plugin
         version: link:../../packages/react-native-plugin
       react:
@@ -4881,9 +4881,7 @@ snapshots:
       metro-runtime: 0.82.5
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.79.6': {}
 
