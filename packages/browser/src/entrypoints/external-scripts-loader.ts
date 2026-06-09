@@ -1,3 +1,4 @@
+import { isBoolean } from '@posthog/core'
 import type { PostHog } from '../posthog-core'
 import { assignableWindow, document, PostHogExtensionKind } from '../utils/globals'
 import { createLogger } from '../utils/logger'
@@ -99,10 +100,9 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
 
     let url: string
 
-    const strictScriptVersioning =
-        typeof posthog.config.strict_script_versioning === 'boolean'
-            ? posthog.config.strict_script_versioning
-            : !!posthog.config.__preview_external_dependency_versioned_paths
+    const strictScriptVersioning = isBoolean(posthog.config.strict_script_versioning)
+        ? posthog.config.strict_script_versioning
+        : !!posthog.config.__preview_external_dependency_versioned_paths
 
     if (strictScriptVersioning) {
         // posthog.version is baked into the executing array.js bundle, so this points at

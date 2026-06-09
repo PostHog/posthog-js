@@ -1,3 +1,4 @@
+import { isUndefined } from '@posthog/core'
 import { PostHog } from '../posthog-core'
 
 /**
@@ -79,10 +80,7 @@ export class RequestRouter {
         }
 
         const legacyOverride = this.instance.config.__preview_external_dependency_versioned_paths
-        const override =
-            this.instance.config.asset_host === undefined && typeof legacyOverride === 'string'
-                ? legacyOverride
-                : this.instance.config.asset_host
+        const override = isUndefined(this.instance.config.asset_host) ? legacyOverride : this.instance.config.asset_host
         if (typeof override !== 'string') {
             return undefined
         }
