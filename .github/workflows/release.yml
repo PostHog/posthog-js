@@ -213,6 +213,7 @@ jobs:
             matrix:
                 package:
                     - name: posthog-react-native
+                    - name: posthog-react-native-plugin
                     - name: posthog-node
                     - name: posthog-js-lite
                     - name: posthog-js

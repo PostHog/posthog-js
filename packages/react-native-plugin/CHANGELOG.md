@@ -1,0 +1,1 @@
+# posthog-react-native-plugin
