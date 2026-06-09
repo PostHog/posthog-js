@@ -11,7 +11,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@posthog/posthog-react-native-plugin": "link:../../packages/react-native-plugin",
+    "@posthog/react-native-plugin": "link:../../packages/react-native-plugin",
     "react": "19.0.0",
     "react-native": "0.79.6"
   },

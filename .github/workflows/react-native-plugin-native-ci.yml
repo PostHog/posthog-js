@@ -7,7 +7,7 @@ name: React Native Plugin Native CI
 # workspace, so each job installs it standalone and invokes the native build
 # tools directly (gradlew / xcodebuild) rather than through turbo.
 #
-# All jobs are gated on `is-affected` for @posthog/posthog-react-native-plugin so the
+# All jobs are gated on `is-affected` for @posthog/react-native-plugin so the
 # expensive Android/macOS runners only spin up when the plugin or its example
 # changes.
 
@@ -47,7 +47,7 @@ jobs:
         id: is-affected
         uses: ./.github/actions/is-affected
         with:
-          package-name: '@posthog/posthog-react-native-plugin'
+          package-name: '@posthog/react-native-plugin'
 
       - name: Install JDK
         if: steps.is-affected.outputs.is-affected == 'true'
@@ -113,7 +113,7 @@ jobs:
         id: is-affected
         uses: ./.github/actions/is-affected
         with:
-          package-name: '@posthog/posthog-react-native-plugin'
+          package-name: '@posthog/react-native-plugin'
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
@@ -165,7 +165,7 @@ jobs:
         id: is-affected
         uses: ./.github/actions/is-affected
         with:
-          package-name: '@posthog/posthog-react-native-plugin'
+          package-name: '@posthog/react-native-plugin'
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'

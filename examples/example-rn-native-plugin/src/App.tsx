@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Platform } from 'react-native';
-import type PostHogReactNativePlugin from '@posthog/posthog-react-native-plugin';
+import type PostHogReactNativePlugin from '@posthog/react-native-plugin';
 
 export let OptionalReactNativePlugin:
   | typeof PostHogReactNativePlugin
@@ -10,13 +10,13 @@ try {
   OptionalReactNativePlugin = Platform.select({
     macos: undefined,
     web: undefined,
-    default: require('@posthog/posthog-react-native-plugin'), // Only Android and iOS
+    default: require('@posthog/react-native-plugin'), // Only Android and iOS
   });
 } catch (e) {
   // do nothing
   console.warn(
     'PostHog Debug',
-    `Error loading @posthog/posthog-react-native-plugin: ${e}`
+    `Error loading @posthog/react-native-plugin: ${e}`
   );
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "@posthog/posthog-react-native-plugin",
+  "name": "@posthog/react-native-plugin",
   "version": "1.6.0",
   "description": "PostHog React Native plugin for iOS and Android integrations",
   "source": "./src/index.tsx",
