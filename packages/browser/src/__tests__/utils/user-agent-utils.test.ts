@@ -427,38 +427,68 @@ describe('user-agent-utils', () => {
             const chromeMacOsUA =
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-            it('is off by default — iOS GSA is reported as Mobile Safari', () => {
-                expect(detectBrowser(gsaIosUA, 'Apple Computer, Inc.')).toBe('Mobile Safari')
+            const browserCases: {
+                name: string
+                userAgent: string
+                vendor: string
+                options?: { detectGoogleSearchApp?: boolean }
+                expectedBrowser: string
+            }[] = [
+                // off by default — GSA falls through to the webview it embeds
+                {
+                    name: 'off by default, iOS GSA reads as Mobile Safari',
+                    userAgent: gsaIosUA,
+                    vendor: 'Apple Computer, Inc.',
+                    expectedBrowser: 'Mobile Safari',
+                },
+                {
+                    name: 'off by default, Android GSA reads as Chrome',
+                    userAgent: gsaAndroidUA,
+                    vendor: 'Google Inc.',
+                    expectedBrowser: 'Chrome',
+                },
+                // opted in — GSA surfaces as its own browser on both platforms
+                {
+                    name: 'opted in, detects iOS GSA',
+                    userAgent: gsaIosUA,
+                    vendor: 'Apple Computer, Inc.',
+                    options: { detectGoogleSearchApp: true },
+                    expectedBrowser: 'Google Search App',
+                },
+                {
+                    name: 'opted in, detects Android GSA',
+                    userAgent: gsaAndroidUA,
+                    vendor: 'Google Inc.',
+                    options: { detectGoogleSearchApp: true },
+                    expectedBrowser: 'Google Search App',
+                },
+                // opted in — non-GSA traffic is untouched
+                {
+                    name: 'opted in, leaves non-GSA traffic untouched',
+                    userAgent: chromeMacOsUA,
+                    vendor: 'Google Inc.',
+                    options: { detectGoogleSearchApp: true },
+                    expectedBrowser: 'Chrome',
+                },
+            ]
+
+            it.each(browserCases)('detectBrowser: $name', ({ userAgent, vendor, options, expectedBrowser }) => {
+                expect(detectBrowser(userAgent, vendor, {}, options)).toBe(expectedBrowser)
             })
 
-            it('is off by default — Android GSA is reported as Chrome', () => {
-                expect(detectBrowser(gsaAndroidUA, 'Google Inc.')).toBe('Chrome')
-            })
+            const versionCases: { platform: string; userAgent: string; vendor: string; expectedVersion: number }[] = [
+                { platform: 'iOS', userAgent: gsaIosUA, vendor: 'Apple Computer, Inc.', expectedVersion: 284.0 },
+                { platform: 'Android', userAgent: gsaAndroidUA, vendor: 'Google Inc.', expectedVersion: 14.21 },
+            ]
 
-            it('detects iOS GSA when opted in', () => {
-                expect(detectBrowser(gsaIosUA, 'Apple Computer, Inc.', {}, { detectGoogleSearchApp: true })).toBe(
-                    'Google Search App'
-                )
-            })
-
-            it('detects Android GSA when opted in', () => {
-                expect(detectBrowser(gsaAndroidUA, 'Google Inc.', {}, { detectGoogleSearchApp: true })).toBe(
-                    'Google Search App'
-                )
-            })
-
-            it('reads the GSA version from the UA marker when opted in', () => {
-                expect(
-                    detectBrowserVersion(gsaIosUA, 'Apple Computer, Inc.', {}, { detectGoogleSearchApp: true })
-                ).toBe(284.0)
-                expect(detectBrowserVersion(gsaAndroidUA, 'Google Inc.', {}, { detectGoogleSearchApp: true })).toBe(
-                    14.21
-                )
-            })
-
-            it('does not affect non-GSA traffic when opted in', () => {
-                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', {}, { detectGoogleSearchApp: true })).toBe('Chrome')
-            })
+            it.each(versionCases)(
+                'detectBrowserVersion: reads the GSA version from the $platform UA marker when opted in',
+                ({ userAgent, vendor, expectedVersion }) => {
+                    expect(detectBrowserVersion(userAgent, vendor, {}, { detectGoogleSearchApp: true })).toBe(
+                        expectedVersion
+                    )
+                }
+            )
         })
 
         describe('detectDeviceType with options', () => {
