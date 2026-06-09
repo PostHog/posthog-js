@@ -2837,20 +2837,69 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_isSampled']).toStrictEqual(false)
         })
 
-        it('keeps explicit sampling overrides when sampleRate is 0', () => {
-            posthog.persistence?.register({
-                [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
-            })
+        it.each([
+            {
+                scenario: 'keeps stored sampled-in decisions when the sampleRate is unchanged',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: 1,
+                    })
+                },
+                sampleRate: '1.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: 1,
+            },
+            {
+                scenario: 'resamples stored sampled-in decisions when the sampleRate is lowered to 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: 1,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'disabled',
+                expectedIsSampled: () => false,
+                expectedSampleRate: 0,
+            },
+            {
+                scenario: 'resamples legacy sampled-in decisions without a stored sampleRate',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'disabled',
+                expectedIsSampled: () => false,
+                expectedSampleRate: 0,
+            },
+            {
+                scenario: 'keeps explicit sampling overrides when sampleRate is 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: 0,
+            },
+        ])('$scenario', ({ setup, sampleRate, expectedStatus, expectedIsSampled, expectedSampleRate }) => {
+            setup()
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
+                    sessionRecording: { endpoint: '/s/', sampleRate },
                 })
             )
 
-            expect(sessionRecording.status).toBe('sampled')
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
-            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(0)
+            expect(sessionRecording.status).toBe(expectedStatus)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled())
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(expectedSampleRate)
         })
 
         it('does not reuse a sampled-in decision when sampleRate is lowered to 0 for URL + linked flag ALL match', () => {
