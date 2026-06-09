@@ -88,9 +88,6 @@ await analytics.captureToolCall({
 // On the initialize handshake:
 await analytics.captureInitialize({ clientName: 'claude-code', clientVersion: '1.2.3', distinctId: 'user_123' })
 
-// On a tools/list response:
-await analytics.captureToolsList({ toolNames: ['search_docs', 'run_sql'], distinctId: 'user_123' })
-
 // And custom events, same as the instrument handle:
 await analytics.capture({ event: 'feedback_submitted', distinctId: 'user_123', properties: { rating: 5 } })
 ```
@@ -238,7 +235,7 @@ instrument(server, posthog, {
 
 - **`instrument(server, posthog, options?)`**: wraps a low-level `Server` or high-level `McpServer`. The `posthog-node` client is a required positional 2nd argument; `options` is optional. Idempotent per server instance (subsequent calls on the same server are skipped via a `WeakMap` lookup). Returns an `McpAnalytics` handle.
 - **`analytics.capture({ event, properties })`**: a method on the handle returned by `instrument()` that emits one custom event. `event` is required and sent verbatim (not `$`-prefixed). Returns a promise you can `await`.
-- **`createMcpAnalytics(posthog, options?)`**: the server-agnostic counterpart for custom dispatchers (no `Server`/`McpServer` to wrap). Returns an `McpAnalyticsManual` handle with `captureToolCall`, `captureInitialize`, `captureToolsList`, and `capture` — you pass identity/session/context per call. Same pipeline and event shapes as `instrument()`.
+- **`createMcpAnalytics(posthog, options?)`**: the server-agnostic counterpart for custom dispatchers (no `Server`/`McpServer` to wrap). Returns an `McpAnalyticsManual` handle with `captureToolCall`, `captureInitialize`, and `capture` — you pass identity/session/context per call. Same pipeline and event shapes as `instrument()`.
 
 The full options reference lives in [`src/types.ts`](./src/types.ts) (`MCPAnalyticsOptions`) and the design narrative + HogQL recipes live in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 

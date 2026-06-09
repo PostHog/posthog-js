@@ -175,7 +175,6 @@ export type {
   MCPAnalyticsIntentSource,
   MCPAnalyticsOptions,
   ToolCallCaptureData,
-  ToolsListCaptureData,
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']

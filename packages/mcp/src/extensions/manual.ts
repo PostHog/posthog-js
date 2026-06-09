@@ -9,7 +9,6 @@ import type {
   McpAnalyticsManual,
   McpEvent,
   ToolCallCaptureData,
-  ToolsListCaptureData,
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
@@ -98,14 +97,6 @@ export function createMcpAnalytics(posthog: PostHog, options: CreateMcpAnalytics
       return emit(event)
     },
 
-    captureToolsList(data: ToolsListCaptureData): Promise<void> {
-      const event = baseEvent(MCPAnalyticsEventType.mcpToolsList, data)
-      event.listedToolNames = data.toolNames
-      event.parameters = data.parameters
-      event.duration = data.durationMs
-      return emit(event)
-    },
-
     capture(data: ManualCustomCaptureData): Promise<void> {
       // Never throw: this API guarantees that a capture call can't break the
       // host request, so a misuse (missing/empty event name) is logged and
@@ -123,8 +114,8 @@ export function createMcpAnalytics(posthog: PostHog, options: CreateMcpAnalytics
 
 /**
  * Builds the shared scaffold for a manual event: event type, identity/session
- * routing, groups, person `$set`, custom properties, and SDK metadata. Method
- * callers layer the event-specific fields on top.
+ * routing, groups, person `$set`, and custom properties. Method callers layer
+ * the event-specific fields on top.
  */
 function baseEvent(eventType: MCPAnalyticsEventType, common: ManualCaptureCommon): McpEvent {
   const event: McpEvent = {

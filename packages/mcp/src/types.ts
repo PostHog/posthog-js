@@ -322,16 +322,6 @@ export interface InitializeCaptureData extends ManualCaptureCommon {
   durationMs?: number
 }
 
-/** Payload for {@link McpAnalyticsManual.captureToolsList}. Emits `$mcp_tools_list`. */
-export interface ToolsListCaptureData extends ManualCaptureCommon {
-  /** Advertised tool names → `$mcp_listed_tool_names`. */
-  toolNames: string[]
-  /** Captured list params → `$mcp_parameters`. */
-  parameters?: unknown
-  /** Wall-clock duration → `$mcp_duration_ms`. */
-  durationMs?: number
-}
-
 /** Payload for {@link McpAnalyticsManual.capture}. A custom, non-`$`-prefixed event. */
 export interface ManualCustomCaptureData extends ManualCaptureCommon {
   /** Custom event name, sent verbatim (not `$`-prefixed). */
@@ -350,8 +340,6 @@ export interface McpAnalyticsManual {
   captureToolCall(data: ToolCallCaptureData): Promise<void>
   /** Capture the connection handshake. Emits `$mcp_initialize`. */
   captureInitialize(data: InitializeCaptureData): Promise<void>
-  /** Capture a tool listing. Emits `$mcp_tools_list`. */
-  captureToolsList(data: ToolsListCaptureData): Promise<void>
   /** Capture a custom event. Emits the verbatim event name. */
   capture(data: ManualCustomCaptureData): Promise<void>
 }

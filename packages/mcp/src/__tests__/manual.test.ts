@@ -129,20 +129,6 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
     })
   })
 
-  describe('captureToolsList', () => {
-    it('emits $mcp_tools_list with the advertised tool names', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureToolsList({
-        toolNames: ['execute-sql', 'feature-flag-get-all'],
-        distinctId: 'user-123',
-      })
-
-      const p = onlyCapture(PostHogMCPAnalyticsEvent.ToolsList).properties
-      expect(p[PostHogMCPAnalyticsProperty.ListedToolNames]).toEqual(['execute-sql', 'feature-flag-get-all'])
-    })
-  })
-
   describe('capture (custom)', () => {
     it('emits the verbatim event name with identity', async () => {
       const analytics = createMcpAnalytics(fakePostHog())
