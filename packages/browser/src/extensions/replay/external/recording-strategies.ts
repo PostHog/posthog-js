@@ -268,7 +268,8 @@ export class V1RecordingStrategy implements RecordingStrategy {
 
         this._instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample ? sessionId : false,
-            [SESSION_RECORDING_SAMPLE_RATE]: storedSampleRate === null && storedValue === sessionId ? null : currentSampleRate,
+            [SESSION_RECORDING_SAMPLE_RATE]:
+                isNull(storedSampleRate) && storedValue === sessionId ? null : currentSampleRate,
         })
     }
 
