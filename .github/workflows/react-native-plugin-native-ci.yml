@@ -17,9 +17,6 @@ on:
       - 'packages/react-native-plugin/**'
       - 'examples/example-rn-native-plugin/**'
       - '.github/workflows/react-native-plugin-native-ci.yml'
-  merge_group:
-    types:
-      - checks_requested
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
