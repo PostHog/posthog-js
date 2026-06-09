@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.9.55",
+  "version": "1.9.56",
   "description": "NextJS configuration helper for Posthog 🦔",
   "repository": {
     "type": "git",
