@@ -61,6 +61,42 @@ Events for sessions with no resolved identity are sent with `$process_person_pro
 
 The full event + property catalog (including `$mcp_resources_*` / `$mcp_prompts_*`) lives in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
+## No `Server`/`McpServer` to wrap? Use `createMcpAnalytics`
+
+`instrument()` works by wrapping a `@modelcontextprotocol/sdk` `Server`/`McpServer`. If your server is a custom dispatcher (e.g. a [hono](https://hono.dev/) HTTP handler) with no such object to wrap, use **`createMcpAnalytics`** instead. You resolve identity and context per request and call the capture methods yourself; each call runs through the exact same pipeline (sanitize → truncate → `$exception` fan-out → `beforeSend`) and emits the same canonical `$mcp_*` events.
+
+```ts
+import { PostHog } from 'posthog-node'
+import { createMcpAnalytics } from '@posthog/mcp'
+
+const posthog = new PostHog('phc_your_project_token', { host: 'https://us.i.posthog.com' })
+const analytics = createMcpAnalytics(posthog, { beforeSend })
+
+// In your tool dispatcher, after the tool runs:
+await analytics.captureToolCall({
+  toolName: 'search_docs',
+  parameters: { query: 'session replay' },
+  response: result,
+  durationMs: Date.now() - start,
+  isError: false,
+  distinctId: 'user_123', // → distinct_id; enables person processing
+  sessionId: mcpSessionId, // → $session_id (omitted if you don't pass one)
+  groups: { organization: 'org_123' }, // → $groups
+  properties: { $mcp_client_name: 'claude-code' }, // any extra props, spread verbatim
+})
+
+// On the initialize handshake:
+await analytics.captureInitialize({ clientName: 'claude-code', clientVersion: '1.2.3', distinctId: 'user_123' })
+
+// On a tools/list response:
+await analytics.captureToolsList({ toolNames: ['search_docs', 'run_sql'], distinctId: 'user_123' })
+
+// And custom events, same as the instrument handle:
+await analytics.capture({ event: 'feedback_submitted', distinctId: 'user_123', properties: { rating: 5 } })
+```
+
+Differences from `instrument()`: there's no wrapped server, so the SDK does **not** manage sessions, identity caching, the injected `context` parameter, `reportMissing`, or `conversation_id` — you pass `distinctId`/`sessionId`/`groups`/`properties` on each call. On an errored tool call it still fans out an `$exception` sibling (gated by `enableExceptionAutocapture`). All capture methods return a promise you can `await` and never throw — a failure to capture analytics can't break your request.
+
 ## Coming from another PostHog SDK?
 
 The surface maps onto concepts you already know — the main twist is that, because an MCP server handles many requests/sessions, the identity- and property-resolving hooks are **per-request callbacks** rather than imperative calls.
@@ -202,6 +238,7 @@ instrument(server, posthog, {
 
 - **`instrument(server, posthog, options?)`**: wraps a low-level `Server` or high-level `McpServer`. The `posthog-node` client is a required positional 2nd argument; `options` is optional. Idempotent per server instance (subsequent calls on the same server are skipped via a `WeakMap` lookup). Returns an `McpAnalytics` handle.
 - **`analytics.capture({ event, properties })`**: a method on the handle returned by `instrument()` that emits one custom event. `event` is required and sent verbatim (not `$`-prefixed). Returns a promise you can `await`.
+- **`createMcpAnalytics(posthog, options?)`**: the server-agnostic counterpart for custom dispatchers (no `Server`/`McpServer` to wrap). Returns an `McpAnalyticsManual` handle with `captureToolCall`, `captureInitialize`, `captureToolsList`, and `capture` — you pass identity/session/context per call. Same pipeline and event shapes as `instrument()`.
 
 The full options reference lives in [`src/types.ts`](./src/types.ts) (`MCPAnalyticsOptions`) and the design narrative + HogQL recipes live in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 

@@ -242,3 +242,116 @@ export interface CaptureEventData {
   /** Event properties, spread onto the PostHog event. Values must be JSON-serializable. */
   properties?: JsonRecord
 }
+
+/** Options for {@link createMcpAnalytics} — the server-agnostic capture API. */
+export interface CreateMcpAnalyticsOptions {
+  /** STDIO-safe log sink for SDK-internal warnings. Defaults to a no-op. */
+  logger?: LoggerFn
+  /**
+   * Inspect, modify, or drop each event right before it is sent to PostHog
+   * (matching posthog-node's `beforeSend`). Runs once per emitted payload,
+   * including the `$exception` sibling of a failed tool call. Return the
+   * (possibly mutated) event to send it, or a nullish value to drop it.
+   */
+  beforeSend?: BeforeSendFn
+  /**
+   * Emit a `$exception` event alongside any errored tool call. Defaults to `true`.
+   * Set to `false` to keep MCP tool errors out of PostHog error tracking.
+   */
+  enableExceptionAutocapture?: boolean
+}
+
+/**
+ * Identity + routing fields shared by every server-agnostic capture call. The
+ * caller resolves these per request (there is no wrapped server to derive them
+ * from), so they are passed explicitly on each event.
+ */
+export interface ManualCaptureCommon {
+  /**
+   * Resolved person distinct id (becomes `distinct_id`). Supplying it enables
+   * person processing so `$set` lands on a real person; omitting it falls back
+   * to an anonymous capture with `$process_person_profile: false`.
+   */
+  distinctId?: string
+  /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
+  sessionId?: string
+  /** Person properties → `$set` (e.g. `{ name, email, plan }`). */
+  setProperties?: JsonRecord
+  /** Group memberships `{ groupType: groupKey }` → `$groups`. */
+  groups?: Record<string, string>
+  /** Extra event properties, spread onto the PostHog event verbatim. */
+  properties?: JsonRecord
+  /** Event timestamp. Defaults to the time of the capture call. */
+  timestamp?: Date
+}
+
+/** Payload for {@link McpAnalyticsManual.captureToolCall}. Emits `$mcp_tool_call`. */
+export interface ToolCallCaptureData extends ManualCaptureCommon {
+  /** Tool name → `$mcp_tool_name` / `$mcp_resource_name`. */
+  toolName: string
+  /** Tool description → `$mcp_tool_description`. */
+  toolDescription?: string
+  /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
+  parameters?: unknown
+  /** Captured tool result → `$mcp_response` (sanitized + truncated). */
+  response?: unknown
+  /** Wall-clock duration → `$mcp_duration_ms`. */
+  durationMs?: number
+  /** Whether the call failed → `$mcp_is_error`. */
+  isError?: boolean
+  /**
+   * The thrown value (Error, string, object, or CallToolResult). When `isError`
+   * is true and exception autocapture is on, this is turned into the
+   * `$exception` sibling event. If omitted on an error, a generic exception is
+   * synthesized from the tool name.
+   */
+  error?: unknown
+}
+
+/** Payload for {@link McpAnalyticsManual.captureInitialize}. Emits `$mcp_initialize`. */
+export interface InitializeCaptureData extends ManualCaptureCommon {
+  /** MCP client name → `$mcp_client_name`. */
+  clientName?: string
+  /** MCP client version → `$mcp_client_version`. */
+  clientVersion?: string
+  /** Captured initialize params → `$mcp_parameters`. */
+  parameters?: unknown
+  /** Captured initialize result → `$mcp_response`. */
+  response?: unknown
+  /** Wall-clock duration → `$mcp_duration_ms`. */
+  durationMs?: number
+}
+
+/** Payload for {@link McpAnalyticsManual.captureToolsList}. Emits `$mcp_tools_list`. */
+export interface ToolsListCaptureData extends ManualCaptureCommon {
+  /** Advertised tool names → `$mcp_listed_tool_names`. */
+  toolNames: string[]
+  /** Captured list params → `$mcp_parameters`. */
+  parameters?: unknown
+  /** Wall-clock duration → `$mcp_duration_ms`. */
+  durationMs?: number
+}
+
+/** Payload for {@link McpAnalyticsManual.capture}. A custom, non-`$`-prefixed event. */
+export interface ManualCustomCaptureData extends ManualCaptureCommon {
+  /** Custom event name, sent verbatim (not `$`-prefixed). */
+  event: string
+}
+
+/**
+ * Handle returned by {@link createMcpAnalytics}. The server-agnostic counterpart
+ * to {@link McpAnalytics}: instead of auto-capturing from a wrapped server, the
+ * host calls these methods directly (e.g. from an HTTP/hono dispatcher). Every
+ * payload runs through the same sanitize → truncate → `$exception` fan-out →
+ * `beforeSend` pipeline as the auto-captured path.
+ */
+export interface McpAnalyticsManual {
+  /** Capture a tool invocation. Emits `$mcp_tool_call` (+ `$exception` on error). */
+  captureToolCall(data: ToolCallCaptureData): Promise<void>
+  /** Capture the connection handshake. Emits `$mcp_initialize`. */
+  captureInitialize(data: InitializeCaptureData): Promise<void>
+  /** Capture a tool listing. Emits `$mcp_tools_list`. */
+  captureToolsList(data: ToolsListCaptureData): Promise<void>
+  /** Capture a custom event. Emits the verbatim event name. */
+  capture(data: ManualCustomCaptureData): Promise<void>
+}

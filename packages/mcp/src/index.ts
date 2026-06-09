@@ -161,13 +161,21 @@ export {
   PostHogMCPAnalyticsEvent,
   PostHogMCPAnalyticsProperty,
 } from './extensions/constants'
+export { createMcpAnalytics } from './extensions/manual'
 export type {
   BeforeSendFn,
   CaptureEventData,
+  CreateMcpAnalyticsOptions,
+  InitializeCaptureData,
+  ManualCaptureCommon,
+  ManualCustomCaptureData,
   McpAnalytics,
+  McpAnalyticsManual,
   MCPAnalyticsContextOptions,
   MCPAnalyticsIntentSource,
   MCPAnalyticsOptions,
+  ToolCallCaptureData,
+  ToolsListCaptureData,
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']

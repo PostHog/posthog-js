@@ -54,9 +54,9 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
   const timestamp = getTimestamp(event)
 
   const properties: Record<string, unknown> = {
-    [PostHogMCPAnalyticsProperty.SessionId]: event.sessionId,
     [PostHogMCPAnalyticsProperty.Source]: POSTHOG_MCP_ANALYTICS_SOURCE,
   }
+  addSessionIdProperty(event, properties)
   addConversationIdProperty(event, properties)
   addPersonProcessingProperty(event, properties)
   addGroupsProperty(event, properties)
@@ -70,6 +70,19 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
     properties,
     timestamp,
     type: 'capture',
+  }
+}
+
+/**
+ * Stamps `$session_id` only when the event carries a session. The auto-capture
+ * (`instrument`) path always resolves a session id, but the server-agnostic
+ * `createMcpAnalytics` path leaves it unset when the caller has no session — and
+ * a fabricated `$session_id` would wrongly bucket events into a non-existent
+ * Session Replay session.
+ */
+function addSessionIdProperty(event: Event, properties: Record<string, unknown>): void {
+  if (typeof event.sessionId === 'string' && event.sessionId.length > 0) {
+    properties[PostHogMCPAnalyticsProperty.SessionId] = event.sessionId
   }
 }
 
@@ -165,9 +178,8 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   const distinctId = getDistinctId(event)
   const timestamp = getTimestamp(event)
 
-  const properties: Record<string, unknown> = {
-    [PostHogMCPAnalyticsProperty.SessionId]: event.sessionId,
-  }
+  const properties: Record<string, unknown> = {}
+  addSessionIdProperty(event, properties)
   addConversationIdProperty(event, properties)
   addPersonProcessingProperty(event, properties)
   addGroupsProperty(event, properties)
