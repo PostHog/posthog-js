@@ -5,6 +5,7 @@ import {
     LinkSurveyQuestion,
     MultipleSurveyQuestion,
     RatingSurveyQuestion,
+    SliderSurveyQuestion,
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
@@ -567,4 +568,78 @@ function getScaleNumbers(scale: number): number[] {
         default:
             return fiveScaleNumbers
     }
+}
+
+export function SliderQuestion({
+    question,
+    forceDisableHtml,
+    appearance,
+    onSubmit,
+    onPreviewSubmit,
+    initialValue,
+}: CommonQuestionProps & {
+    question: SliderSurveyQuestion
+}) {
+    const [value, setValue] = useState<number>(() => {
+        if (isNumber(initialValue)) {
+            return Math.max(question.min, Math.min(question.max, initialValue as number))
+        }
+        if (isString(initialValue) && !isNaN(Number(initialValue))) {
+            const numValue = Number(initialValue)
+            return Math.max(question.min, Math.min(question.max, numValue))
+        }
+        // Default to middle of range
+        return Math.round((question.min + question.max) / 2)
+    })
+
+    const handleSubmit = () => {
+        onSubmit(value)
+    }
+
+    const handlePreviewSubmit = () => {
+        onPreviewSubmit(value)
+    }
+
+    const handleSliderChange = (e: JSX.TargetedEvent<HTMLInputElement>) => {
+        const newValue = Number(e.currentTarget.value)
+        setValue(newValue)
+    }
+
+    const formatValue = (val: number): string => {
+        const prefix = question.prefix || ''
+        const suffix = question.suffix || ''
+        return `${prefix}${val}${suffix}`
+    }
+
+    return (
+        <Fragment>
+            <div className="question-container">
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} />
+                <div className="slider-section">
+                    <input
+                        type="range"
+                        min={question.min}
+                        max={question.max}
+                        step={question.step}
+                        value={value}
+                        onInput={handleSliderChange}
+                        className="slider-input"
+                        aria-label={`Slider from ${question.min} to ${question.max}`}
+                    />
+                    <div className="slider-row">
+                        <div className="slider-label-left">{question.lowerBoundLabel || ''}</div>
+                        <div className="slider-value">{formatValue(value)}</div>
+                        <div className="slider-label-right">{question.upperBoundLabel || ''}</div>
+                    </div>
+                </div>
+            </div>
+            <BottomSection
+                text={question.buttonText || appearance?.submitButtonText || 'Submit'}
+                submitDisabled={false}
+                appearance={appearance}
+                onSubmit={handleSubmit}
+                onPreviewSubmit={handlePreviewSubmit}
+            />
+        </Fragment>
+    )
 }

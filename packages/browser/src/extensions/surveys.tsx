@@ -39,6 +39,7 @@ import {
     MultipleChoiceQuestion,
     OpenTextQuestion,
     RatingQuestion,
+    SliderQuestion,
 } from './surveys/components/QuestionTypes'
 import {
     canActivateRepeatedly,
@@ -1514,6 +1515,8 @@ const getQuestionComponent = ({
         case SurveyQuestionType.SingleChoice:
         case SurveyQuestionType.MultipleChoice:
             return <MultipleChoiceQuestion {...baseProps} question={question} key={question.id} />
+        case SurveyQuestionType.Slider:
+            return <SliderQuestion {...baseProps} question={question} key={question.id} />
         default:
             logger.error(`Unsupported question type: ${(question as any).type}`)
             return null

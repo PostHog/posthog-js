@@ -1,7 +1,16 @@
 import { render } from 'preact'
 
-import { createShadow, style } from '../../../src/extensions/surveys/surveys-utils.tsx'
+import { getSurveyStylesheet } from '../../../src/extensions/surveys/surveys-extension-utils'
 import { List } from './list.tsx'
 
-const shadow = createShadow(style({}), 'some_id')
+const host = document.createElement('div')
+host.id = 'surveys-playground'
+document.body.appendChild(host)
+
+const shadow = host.attachShadow({ mode: 'open' })
+const stylesheet = getSurveyStylesheet()
+if (stylesheet) {
+    shadow.appendChild(stylesheet)
+}
+
 render(<List />, shadow)

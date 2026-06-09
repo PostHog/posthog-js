@@ -51,7 +51,12 @@ export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position' 
     widgetType?: SurveyWidgetType
 }
 
-export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
+export type SurveyQuestion =
+    | BasicSurveyQuestion
+    | LinkSurveyQuestion
+    | RatingSurveyQuestion
+    | MultipleSurveyQuestion
+    | SliderSurveyQuestion
 
 export type SurveyQuestionDescriptionContentType = 'html' | 'text'
 
@@ -91,6 +96,17 @@ export interface MultipleSurveyQuestion extends SurveyQuestionBase {
     hasOpenChoice?: boolean
     shuffleOptions?: boolean
     skipSubmitButton?: boolean
+}
+
+export interface SliderSurveyQuestion extends SurveyQuestionBase {
+    type: typeof SurveyQuestionType.Slider
+    min: number
+    max: number
+    step: number
+    prefix?: string
+    suffix?: string
+    lowerBoundLabel?: string
+    upperBoundLabel?: string
 }
 
 interface NextQuestionBranching {
@@ -317,6 +333,7 @@ export const SurveyQuestionType = {
     SingleChoice: 'single_choice',
     Rating: 'rating',
     Link: 'link',
+    Slider: 'slider',
 } as const
 export type SurveyQuestionType = (typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]
 
