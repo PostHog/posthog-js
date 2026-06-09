@@ -139,24 +139,6 @@ describe('external-scripts-loader', () => {
             expect(document!.getElementsByTagName('script')[0].src).toBe(expectedSrc)
         })
 
-        it('keeps the deprecated preview string behavior as an alias', () => {
-            const posthog = {
-                config: {
-                    api_host: 'https://us.posthog.com',
-                    external_scripts_inject_target: 'body',
-                    __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
-                },
-                version: '1.0.0',
-            } as PostHog
-            posthog.requestRouter = new RequestRouter(posthog)
-
-            assignableWindow.__PosthogExtensions__.loadExternalDependency(posthog, 'recorder', callback)
-
-            expect(document!.getElementsByTagName('script')[0].src).toBe(
-                'https://cdn-preview.example.com/static/1.0.0/recorder.js'
-            )
-        })
-
         it('uses eu-assets on the EU region', () => {
             const euPostHog = {
                 config: {

@@ -118,6 +118,16 @@ describe('config', () => {
             expect(posthog.config.asset_host).toBeNull()
         })
 
+        it('maps the deprecated preview boolean option to strict_script_versioning', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                __preview_external_dependency_versioned_paths: true,
+            })
+
+            expect(posthog.config.strict_script_versioning).toBe(true)
+            expect(posthog.config.asset_host).toBeNull()
+        })
+
         it('maps the deprecated preview string option to strict_script_versioning and asset_host', () => {
             const posthog = new PostHog()
             posthog._init('test-token', {

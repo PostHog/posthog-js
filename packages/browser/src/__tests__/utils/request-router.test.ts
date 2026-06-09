@@ -147,14 +147,6 @@ describe('request-router', () => {
                 'https://us-assets.i.posthog.com/array/test-token/config.js'
             )
         })
-
-        it('keeps the deprecated preview string behavior as an asset_host alias', () => {
-            expect(
-                router('https://app.posthog.com', undefined, {
-                    __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
-                }).endpointFor('assets', '/static/1.370.0/recorder.js')
-            ).toEqual('https://cdn-preview.example.com/static/1.370.0/recorder.js')
-        })
     })
 
     describe('flags_api_host configuration', () => {
