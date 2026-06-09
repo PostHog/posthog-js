@@ -944,6 +944,20 @@ export interface PostHogConfig {
     split_storage?: boolean
 
     /**
+     * Detect the Google Search App (GSA) as its own `$browser` value instead of
+     * the underlying webview it embeds — Mobile Safari on iOS, Chrome on Android.
+     * Detection keys off the `GSA/` marker present in the UA on every platform.
+     *
+     * Off by default for backwards-compatibility: enabling it reattributes
+     * existing GSA traffic away from Mobile Safari / Chrome, which would
+     * otherwise look like those browsers suddenly losing share. The `2026-05-30`
+     * config default opts in.
+     *
+     * @default false
+     */
+    detect_google_search_app?: boolean
+
+    /**
      * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false

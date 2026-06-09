@@ -169,6 +169,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "detect_google_search_app": [
+    "undefined",
+    "false",
+    "true"
+  ],
   "disable_surveys": [
     "false",
     "true"
