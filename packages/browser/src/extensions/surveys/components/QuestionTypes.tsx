@@ -580,16 +580,20 @@ export function SliderQuestion({
 }: CommonQuestionProps & {
     question: SliderSurveyQuestion
 }) {
+    const snapToStep = (val: number): number => {
+        const steps = Math.round((val - question.min) / question.step)
+        return Math.max(question.min, Math.min(question.max, question.min + steps * question.step))
+    }
+
     const [value, setValue] = useState<number>(() => {
         if (isNumber(initialValue)) {
-            return Math.max(question.min, Math.min(question.max, initialValue as number))
+            return snapToStep(Math.max(question.min, Math.min(question.max, initialValue as number)))
         }
         if (isString(initialValue) && !isNaN(Number(initialValue))) {
             const numValue = Number(initialValue)
-            return Math.max(question.min, Math.min(question.max, numValue))
+            return snapToStep(Math.max(question.min, Math.min(question.max, numValue)))
         }
-        // Default to middle of range
-        return Math.round((question.min + question.max) / 2)
+        return snapToStep((question.min + question.max) / 2)
     })
 
     const handleSubmit = () => {
