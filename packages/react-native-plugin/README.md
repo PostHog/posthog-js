@@ -1,4 +1,4 @@
-# posthog-react-native-plugin
+# @posthog/react-native-plugin
 
 PostHog React Native plugin for iOS and Android integrations.
 
@@ -7,9 +7,9 @@ This package bridges React Native to the native PostHog SDKs, enabling session r
 ## Installation
 
 ```sh
-npm install posthog-react-native posthog-react-native-plugin
+npm install posthog-react-native @posthog/react-native-plugin
 # or
-yarn add posthog-react-native posthog-react-native-plugin
+yarn add posthog-react-native @posthog/react-native-plugin
 ```
 
 iOS requires a pod install:

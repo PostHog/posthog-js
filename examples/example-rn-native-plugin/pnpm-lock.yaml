@@ -8,7 +8,7 @@ importers:
 
   .:
     dependencies:
-      posthog-react-native-plugin:
+      '@posthog/react-native-plugin':
         specifier: link:../../packages/react-native-plugin
         version: link:../../packages/react-native-plugin
       react:
