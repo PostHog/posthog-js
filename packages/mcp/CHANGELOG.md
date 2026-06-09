@@ -1,5 +1,13 @@
 # @posthog/mcp
 
+## 0.1.18
+
+### Patch Changes
+
+- Updated dependencies [[`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6)]:
+  - posthog-node@5.36.7
+  - @posthog/core@1.30.13
+
 ## 0.1.17
 
 ### Patch Changes

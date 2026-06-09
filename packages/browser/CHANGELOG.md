@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.383.2
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies []:
+    - @posthog/types@1.383.2
+    - @posthog/core@1.30.13
+
 ## 1.383.1
 
 ### Patch Changes
