@@ -51,6 +51,25 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     /** Check if item is permanently ineligible (e.g. completed/dismissed). Skip adding to activated list. */
     protected abstract _isItemPermanentlyIneligible(itemId?: string): boolean
 
+    /**
+     * Whether an item should be removed from the activated list once its "shown" event fires.
+     * Default (true) consumes the activation on display, so the item is only shown again when its
+     * trigger fires anew. Subclasses can return false to keep an item activated past the shown event
+     * (e.g. so an event-triggered survey survives a page reload and re-displays until interacted with).
+     */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    protected _shouldDeactivateOnShown(itemId: string): boolean {
+        return true
+    }
+
+    /**
+     * Event names that consume an item's activation (e.g. the user dismissed or responded to it).
+     * Used for items kept activated past their shown event so they stop re-displaying once handled.
+     */
+    protected _getInteractionEventNames(): string[] {
+        return []
+    }
+
     private _doesEventMatchFilter(
         eventConfig: SurveyEventWithFilters | undefined,
         eventPayload?: CaptureResult
@@ -184,22 +203,26 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         const shownEventName = this._getShownEventName()
 
         const existingActivatedItems: string[] = this._instance?.persistence?.props[activatedKey] || []
-        if (shownEventName === event && eventPayload && existingActivatedItems.length > 0) {
-            // remove item from activatedItems here.
-            logger.info('event matched, removing item from activated items', {
-                event,
-                eventPayload,
-                existingActivatedItems,
-            })
-            const itemId = eventPayload?.properties?.$survey_id || eventPayload?.properties?.$product_tour_id
-            if (itemId) {
-                const index = existingActivatedItems.indexOf(itemId)
-                if (index >= 0) {
-                    existingActivatedItems.splice(index, 1)
-                    this._updateActivatedItems(existingActivatedItems)
-                }
-            }
 
+        // "shown" event: by default this consumes the activation so the item is not shown again
+        // until its trigger fires anew. Subclasses can keep an item activated past the shown event.
+        if (shownEventName === event && eventPayload && existingActivatedItems.length > 0) {
+            const itemId = this._getItemIdFromPayload(eventPayload)
+            if (itemId && this._shouldDeactivateOnShown(itemId)) {
+                logger.info('shown event matched, removing item from activated items', { event, itemId })
+                this._removeActivatedItem(itemId, existingActivatedItems)
+            }
+            return
+        }
+
+        // interaction events (e.g. dismissed / responded): consume the activation for items that
+        // were kept active past their shown event, so they stop re-displaying once handled.
+        if (this._getInteractionEventNames().includes(event) && eventPayload && existingActivatedItems.length > 0) {
+            const itemId = this._getItemIdFromPayload(eventPayload)
+            if (itemId) {
+                logger.info('interaction event matched, removing item from activated items', { event, itemId })
+                this._removeActivatedItem(itemId, existingActivatedItems)
+            }
             return
         }
 
@@ -248,6 +271,18 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         const existingActivatedItems: string[] = this._instance?.persistence?.props[activatedKey] || []
         if (this._actionToItems.has(actionName)) {
             this._updateActivatedItems(existingActivatedItems.concat(this._actionToItems.get(actionName) || []))
+        }
+    }
+
+    private _getItemIdFromPayload(eventPayload: CaptureResult): string | undefined {
+        return eventPayload?.properties?.$survey_id || eventPayload?.properties?.$product_tour_id
+    }
+
+    private _removeActivatedItem(itemId: string, existingActivatedItems: string[]): void {
+        const index = existingActivatedItems.indexOf(itemId)
+        if (index >= 0) {
+            existingActivatedItems.splice(index, 1)
+            this._updateActivatedItems(existingActivatedItems)
         }
     }
 
