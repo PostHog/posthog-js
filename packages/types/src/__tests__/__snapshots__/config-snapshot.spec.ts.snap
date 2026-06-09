@@ -68,6 +68,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "true",
         "string[]"
       ],
+      "ignore_text_selection": [
+        "undefined",
+        "false",
+        "true"
+      ],
       "threshold_px": [
         "undefined",
         "number"
@@ -158,6 +163,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
   "persistence_save_debounce_ms": [
     "undefined",
     "number"
+  ],
+  "split_storage": [
+    "undefined",
+    "false",
+    "true"
   ],
   "disable_surveys": [
     "false",
@@ -334,6 +344,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "\\"unset\\""
   ],
   "__preview_deferred_init_extensions": [
+    "false",
+    "true"
+  ],
+  "__preview_cookie_wins_on_conflict": [
     "false",
     "true"
   ],

@@ -11,8 +11,19 @@ import {
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    SURVEYS_LOADED_AT,
 } from './constants'
-import { getPersistenceKeyPolicy } from './persistence-key-policy'
+import { getPersistenceKeyPolicy, PERSISTENCE_STORAGE_GROUPS, PersistenceStorageGroup } from './persistence-key-policy'
+
+// The "freshness" key each split group stamps when its server payload is
+// (re)loaded. A group entry carrying an older timestamp than the main blob is a
+// stale orphan (a gate-off / older-SDK tab wrote a fresher payload back to main)
+// and must not win on load. Groups without an entry here have no freshness
+// signal, so the group entry wins by default (the migrated-forward home).
+const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
+    flags: PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    surveys: SURVEYS_LOADED_AT,
+}
 
 import { isNumber, isUndefined } from '@posthog/core'
 import {
@@ -46,6 +57,29 @@ const parseName = (config: PostHogConfig): string => {
     }
 }
 
+// Fingerprint slot for the main persistence entry. Group entries (`flags`)
+// use their group name as the slot. See `_writeEntry`.
+const MAIN_STORAGE_SLOT = 'main'
+
+type StorageSlot = PersistenceStorageGroup | typeof MAIN_STORAGE_SLOT
+
+// Per-entry write bookkeeping (see `PostHogPersistence._slotState`).
+interface SlotWriteState {
+    // Serialized snapshot of the last confirmed-successful write to this entry;
+    // a save that reproduces it is skipped (no-op rejection — writing identical
+    // bytes still fires a cross-tab `storage` broadcast). Undefined until the
+    // first successful write.
+    fingerprint?: string
+    // A prop in this group changed since its last successful write, so the large
+    // flag/survey payload is re-serialized on the next save. Group slots only —
+    // the main slot always serializes (small, and carries cookie options).
+    dirty?: boolean
+    // This group entry has materialized on disk this session (loaded at startup
+    // or written since), so `_writeNowSplit` writes it through even when empty to
+    // clear a stale on-disk entry. Recorded only after a confirmed write.
+    persisted?: boolean
+}
+
 const isArrayContentsEqual = (arr1: readonly string[], arr2: readonly string[]): boolean => {
     if (arr1.length !== arr2.length) {
         return false
@@ -71,11 +105,24 @@ export class PostHogPersistence {
     private _expire_days: number | undefined
     private _default_expiry: number | undefined
     private _cross_subdomain: boolean | undefined
-    // Serialized snapshot of `props` from the most recent successful write.
-    // Used by `_writeNow()` to skip writes that would produce an identical
-    // payload. Cleared whenever we explicitly remove the storage entry, so
-    // a save after remove always lands.
-    private _lastSavedSerialized: string | undefined
+    // Per-storage-entry write bookkeeping, keyed by slot (`main` plus each group
+    // name): no-op-rejection fingerprint, per-group dirty flag, and on-disk
+    // materialization. Reset wholesale on remove()/clear() so a save after
+    // remove always lands. See `SlotWriteState`.
+    private _slotState: Partial<Record<StorageSlot, SlotWriteState>> = {}
+    // Whether the resolved storage backend can host the split (localStorage /
+    // localStorage+cookie). Set by `_buildStorage`.
+    private _splitStorageEligible = false
+    // Whether flag config is stored in their own entries this session:
+    // backend-eligible AND `split_storage` enabled.
+    // Re-resolved on every `update_config` (backend rebuild or a runtime flag flip).
+    private _splitStorage = false
+    // Whether this instance owns (and may clean up) the shared split group
+    // entries. The localStorage primary owns them; the sessionStorage sibling
+    // posthog-core spins up shares the primary's storage name, so it must not
+    // remove them — otherwise its remove() (fired via set_secure on every
+    // set_config reconstruction) would wipe the primary's __flags entry.
+    private readonly _ownsSplitStorage: boolean
     // Optional debounce: when `persistence_save_debounce_ms` is > 0, rapid
     // calls to `save()` are coalesced into one write at the end of the
     // window. The in-memory `props` is always updated synchronously, so
@@ -88,12 +135,14 @@ export class PostHogPersistence {
      * @param {PostHogConfig} config initial PostHog configuration
      * @param {boolean=} isDisabled should persistence be disabled (e.g. because of consent management)
      */
-    constructor(config: PostHogConfig, isDisabled?: boolean) {
+    constructor(config: PostHogConfig, isDisabled?: boolean, ownsSplitStorage: boolean = true) {
         this._config = config
+        this._ownsSplitStorage = ownsSplitStorage
         this.props = {}
         this._campaign_params_saved = false
         this._name = parseName(config)
         this._storage = this._buildStorage(config)
+        this._splitStorage = this._resolveSplitStorage(config)
         this.load()
         if (config.debug) {
             logger.info('Persistence loaded', config['persistence'], { ...this.props })
@@ -143,16 +192,26 @@ export class PostHogPersistence {
         // Create this before hand to avoid creating it multiple times
         // Creating it inside each individual condition below is too complicated and will break backwards compatibility
         // so create it once for this specific config and use it if necessary
-        const localPlusCookieStore = createLocalPlusCookieStore(config['cookie_persisted_properties'] || [])
+        const localPlusCookieStore = createLocalPlusCookieStore(
+            config['cookie_persisted_properties'] || [],
+            config['__preview_cookie_wins_on_conflict'] || false
+        )
 
         let store: PersistentStore
+
+        // The flag split is only meaningful on a localStorage-backed
+        // store: it is the one that broadcasts large cross-tab `storage` events.
+        // cookie can't hold the cluster, memory/sessionStorage don't broadcast.
+        let splitEligible = false
 
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
         if (storage_type === 'localstorage' && localStore._is_supported()) {
             store = localStore
+            splitEligible = true
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore._is_supported()) {
             store = localPlusCookieStore
+            splitEligible = true
         } else if (storage_type === 'sessionstorage' && sessionStore._is_supported()) {
             store = sessionStore
         } else if (storage_type === 'memory') {
@@ -162,11 +221,25 @@ export class PostHogPersistence {
         } else if (localPlusCookieStore._is_supported()) {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
             store = localPlusCookieStore
+            splitEligible = true
         } else {
             store = cookieStore
         }
 
+        this._splitStorageEligible = splitEligible
         return store
+    }
+
+    private _groupEntryName(group: PersistenceStorageGroup): string {
+        return `${this._name}__${group}`
+    }
+
+    // The split is on only when the resolved backend can host it (localStorage /
+    // localStorage+cookie, set by `_buildStorage` into `_splitStorageEligible`)
+    // AND the config opts in. Resolved here so the constructor and the runtime
+    // `update_config` toggle can never disagree about whether the split is active.
+    private _resolveSplitStorage(config: PostHogConfig): boolean {
+        return this._splitStorageEligible && !!config['split_storage']
     }
 
     /**
@@ -222,6 +295,74 @@ export class PostHogPersistence {
         if (entry) {
             this.props = extend({}, entry)
         }
+
+        if (this._splitStorage) {
+            this._loadGroupEntries()
+        }
+    }
+
+    // Merge each group entry over `props`, which already holds the main blob.
+    // On a first upgrade the main blob may still carry the old flag
+    // values; a present group entry wins, so we resolve
+    // `props[key] = group[key] ?? main[key]` in a single pass (the "check the
+    // old key once" migration). The first `save()` then strips the keys from
+    // the main blob. Group entries are localStorage-only (read via `localStore`
+    // directly, never the cookie or the localPlusCookie re-write-on-parse path).
+    private _loadGroupEntries(): void {
+        for (const group of PERSISTENCE_STORAGE_GROUPS) {
+            // `localStore._parse` returns `{}` (not null) for a missing key, so
+            // gate on real content: an empty/absent entry is not "persisted" and
+            // must not be tracked, or `_writeNowSplit` would re-create it as `{}`.
+            const groupEntry = localStore._parse(this._groupEntryName(group))
+            if (groupEntry && !isEmptyObject(groupEntry)) {
+                const state = this._slotWriteState(group)
+                state.persisted = true
+                // Seed the no-op fingerprint with the snapshot we just read, so the
+                // first frequent main-blob save at startup (before fresh flags
+                // return from the network) recognises an unchanged flag entry and
+                // neither re-serializes nor re-broadcasts it to every open tab.
+                // Only safe when the main blob carries no key for this group: a
+                // leftover (partial migration, or a stale tab that wrote a flag key
+                // back to main) makes the partitioned payload differ from what is on
+                // disk, so the entry must still be written. Leaving it unseeded then
+                // lets the first save's fingerprint check write the merged payload
+                // through — completing the migration / healing the orphan. The
+                // `_writeEntry` group fast-path skips on `!dirty && fingerprint set`,
+                // which would otherwise short-circuit that write before the
+                // fingerprint is even compared.
+                if (!this._mainCarriesGroupKey(group)) {
+                    state.fingerprint = this._entryFingerprint(groupEntry, group)
+                }
+                // The group entry is normally the migrated-forward home and wins
+                // over the main blob. The exception: a group that stamps a
+                // freshness timestamp (flags: $feature_flag_evaluated_at) lets us
+                // detect when a gate-off / older-SDK tab wrote a fresher payload
+                // back into the main blob — then we keep the main blob and let the
+                // next save heal the group entry. With no timestamp on either side
+                // (migration leftover) the group wins.
+                if (!this._groupEntryIsStale(group, groupEntry)) {
+                    extend(this.props, groupEntry)
+                }
+            }
+        }
+    }
+
+    // True when the already-loaded main blob still holds a key belonging to this
+    // group — a migration leftover the next save must fold into the group entry.
+    // Checked before the group entry is merged in, so it sees only the main blob's
+    // own keys (sibling groups carry a different storageGroup and never match).
+    private _mainCarriesGroupKey(group: PersistenceStorageGroup): boolean {
+        return Object.keys(this.props).some((key) => getPersistenceKeyPolicy(key)?.storageGroup === group)
+    }
+
+    private _groupEntryIsStale(group: PersistenceStorageGroup, groupEntry: Properties): boolean {
+        const freshnessKey = GROUP_FRESHNESS_KEY[group]
+        if (!freshnessKey) {
+            return false
+        }
+        const groupLoadedAt = groupEntry[freshnessKey]
+        const mainLoadedAt = this.props[freshnessKey]
+        return isNumber(groupLoadedAt) && isNumber(mainLoadedAt) && mainLoadedAt > groupLoadedAt
     }
 
     /**
@@ -238,12 +379,22 @@ export class PostHogPersistence {
         if (this._disabled) {
             return
         }
-        const entry = this._storage._parse(this._name)
+        const group = this._splitStorage ? getPersistenceKeyPolicy(prop)?.storageGroup : undefined
+        const entry = group ? localStore._parse(this._groupEntryName(group)) : this._storage._parse(this._name)
         if (entry && prop in entry) {
             this._setProp(prop, entry[prop])
-        } else {
-            this._deleteProp(prop)
+            return
         }
+        // A grouped key that has not migrated yet still lives in the main blob;
+        // check there once before concluding a sibling removed it.
+        if (group) {
+            const mainEntry = this._storage._parse(this._name)
+            if (mainEntry && prop in mainEntry) {
+                this._setProp(prop, mainEntry[prop])
+                return
+            }
+        }
+        this._deleteProp(prop)
     }
 
     /**
@@ -295,45 +446,154 @@ export class PostHogPersistence {
             return
         }
 
-        // No-op rejection: skip the write when none of the arguments to
-        // `_storage._set` have changed since the last successful write.
-        // Callers spam `save()` after every property change, and many of
-        // those changes leave the storage payload unchanged. Writing
-        // identical bytes to localStorage still fires a cross-tab `storage`
-        // event where Chrome allocates the payload buffer in mojo IPC even
-        // though no listener reacts.
-        //
-        // The fingerprint covers all four meaningful inputs to `_storage._set`:
-        // serialized props, expire_days, cross_subdomain, secure. For
-        // localStorage / sessionStorage the last three are ignored by the
-        // storage backend so including them just costs a redundant write
-        // when cookie options change on a non-cookie store — rare and cheap.
-        //
-        // JSON.stringify can throw on BigInt / circular refs. We let the
-        // underlying storage layer keep its existing try/catch behaviour
-        // (log and drop) by falling through on serialization errors.
-        try {
-            const fingerprint =
-                JSON.stringify(this.props) + '|' + this._expire_days + '|' + this._cross_subdomain + '|' + this._secure
-            if (fingerprint === this._lastSavedSerialized) {
-                return
-            }
-            this._lastSavedSerialized = fingerprint
-        } catch {
-            // fall through to storage._set, which handles the error itself
+        if (this._splitStorage) {
+            this._writeNowSplit()
+            return
         }
 
-        this._storage._set(
-            this._name,
-            this.props,
-            this._expire_days,
-            this._cross_subdomain,
-            this._secure,
-            this._config.debug
-        )
+        this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)
     }
 
-    remove(): void {
+    // Partition `props` by storage group and write each entry independently:
+    // the main blob without the grouped keys (stripping them completes the
+    // migration), plus one entry per group holding only its keys. Per-entry
+    // fingerprints mean a main-blob change does not rewrite the rarely-changing
+    // flag entries, and vice-versa — which is the whole bandwidth win.
+    // Group entries go to `localStore` directly so they never hit the 4 KB
+    // cookie or the localPlusCookie re-write-on-parse path. INVARIANT: keep group
+    // entries on `localStore` — `_entryFingerprint` omits the cookie options from
+    // group fingerprints precisely because cookies can never carry a group entry;
+    // routing one to a cookie store would make a cookie-option change silently
+    // skip a needed rewrite.
+    private _writeNowSplit(): void {
+        const { main, groups } = this._partitionProps()
+        this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
+        for (const group of PERSISTENCE_STORAGE_GROUPS) {
+            const groupProps = groups[group]
+            // Don't materialize an entry just to hold `{}`: skip a group that is
+            // empty and has never been persisted. Once a group has held content
+            // we keep writing it (even when empty) so a later clear actually lands.
+            if (isEmptyObject(groupProps) && !this._slotState[group]?.persisted) {
+                continue
+            }
+            // `_writeEntry` marks the slot `persisted` (on `_slotState`) only
+            // after a confirmed-successful `_set`, so a failed (e.g. quota) write
+            // does not falsely mark the group as materialized on disk.
+            this._writeEntry(localStore, this._groupEntryName(group), groupProps, group)
+        }
+    }
+
+    private _partitionProps(): { main: Properties; groups: Record<PersistenceStorageGroup, Properties> } {
+        const main: Properties = {}
+        const groups = {} as Record<PersistenceStorageGroup, Properties>
+        for (const group of PERSISTENCE_STORAGE_GROUPS) {
+            groups[group] = {}
+        }
+        each(this.props, (value, key) => {
+            const group = getPersistenceKeyPolicy(key)?.storageGroup
+            if (group) {
+                groups[group][key] = value
+            } else {
+                main[key] = value
+            }
+        })
+        return { main, groups }
+    }
+
+    // The no-op-rejection snapshot for an entry. The main entry can live in a
+    // cookie, so its fingerprint also covers the cookie options (expire_days,
+    // cross_subdomain, secure): a `set_config({ cookie_expiration })` must force
+    // a rewrite even when props are unchanged, otherwise the cookie keeps its old
+    // `Expires` header until some other prop changes. Group entries are
+    // localStorage-only — cookie options never reach them, so excluding those
+    // keeps a group fingerprint a pure function of its payload. That lets `load()`
+    // seed it before the cookie options are even resolved, and keeps it stable
+    // across the cookie-option setters that run during construction, so an
+    // unchanged flag entry is neither re-serialized nor re-broadcast.
+    private _entryFingerprint(props: Properties, slot: StorageSlot): string {
+        const serialized = JSON.stringify(props)
+        if (slot === MAIN_STORAGE_SLOT) {
+            return serialized + '|' + this._expire_days + '|' + this._cross_subdomain + '|' + this._secure
+        }
+        return serialized
+    }
+
+    // No-op rejection: skip the write when nothing that affects this entry has
+    // changed since the last successful write. Callers spam `save()` after every
+    // property change, and many of those changes leave the storage payload
+    // unchanged. Writing identical bytes to localStorage still fires a cross-tab
+    // `storage` event where Chrome allocates the payload buffer in mojo IPC even
+    // though no listener reacts.
+    //
+    // JSON.stringify can throw on BigInt / circular refs. We let the
+    // underlying storage layer keep its existing try/catch behaviour
+    // (log and drop) by falling through on serialization errors.
+    private _writeEntry(storage: PersistentStore, name: string, props: Properties, slot: StorageSlot): void {
+        const state = this._slotWriteState(slot)
+        // Fast path for group slots (localStorage-only): when nothing in the
+        // group changed since its last successful write, skip the JSON.stringify
+        // of the large flag payload entirely. The main slot is excluded —
+        // it is small, changes on nearly every write, and carries cookie options
+        // in its fingerprint, so it always serializes.
+        if (slot !== MAIN_STORAGE_SLOT && !state.dirty && !isUndefined(state.fingerprint)) {
+            return
+        }
+
+        let fingerprint: string | undefined
+        try {
+            fingerprint = this._entryFingerprint(props, slot)
+            if (fingerprint === state.fingerprint) {
+                state.dirty = false
+                return
+            }
+        } catch {
+            // serialization failed (BigInt / circular ref); fall through to
+            // storage._set, which handles the error itself, but don't cache an
+            // un-fingerprinted write.
+            fingerprint = undefined
+        }
+
+        // Record the fingerprint (and clear the dirty flag, mark persisted) only
+        // after a confirmed-successful durable write: localStorage / sessionStorage
+        // swallow quota errors, so caching ahead of a failed write would skip
+        // every future retry and silently lose the entry.
+        if (storage._set(name, props, this._expire_days, this._cross_subdomain, this._secure, this._config.debug)) {
+            state.dirty = false
+            if (slot !== MAIN_STORAGE_SLOT) {
+                // The group entry has now actually landed on disk — only here is
+                // it correct to record it as persisted (gates the empty-entry
+                // skip in `_writeNowSplit`).
+                state.persisted = true
+            }
+            if (!isUndefined(fingerprint)) {
+                state.fingerprint = fingerprint
+            }
+        } else if (this._config.debug) {
+            // The durable write did not land (e.g. localStorage quota). The slot
+            // stays dirty / un-fingerprinted so the next save retries it; surface
+            // it under debug so a repeated failure on a group entry — which would
+            // otherwise silently strand the flag cache — is visible.
+            logger.warn(`failed to persist storage entry "${name}"; will retry on next save`)
+        }
+    }
+
+    // `keepGroupEntries` is set by the cookie-option setters (set_secure /
+    // set_cross_subdomain). A cookie-scope change has to clear the cookie-backed
+    // main entry, but the group entries are localStorage-only and entirely
+    // scope-independent, so deleting and rewriting them would be the exact
+    // per-page-load flag-blob churn the split exists to remove (these setters fire
+    // once each on every construction, transitioning the in-memory option from
+    // undefined to its configured value). Opt-out / reset (set_disabled / clear)
+    // pass nothing and wipe everything.
+    //
+    // INVARIANT for `keepGroupEntries: true`: the caller must not also mutate
+    // `props`. We keep the on-disk group entries AND their retained fingerprint;
+    // that is only safe while `props` still matches what is on disk. The cookie
+    // setters satisfy this (they touch only `_secure` / `_cross_subdomain`). A
+    // future caller that clears or rewrites `props` while keeping the entries
+    // would leave the retained fingerprint describing stale on-disk content and
+    // skip the corrective write.
+    remove({ keepGroupEntries = false }: { keepGroupEntries?: boolean } = {}): void {
         // Cancel any pending debounced write — the storage entry is going
         // away so there is nothing useful to flush.
         if (!isUndefined(this._pendingSaveTimer)) {
@@ -343,8 +603,26 @@ export class PostHogPersistence {
         // remove both domain and subdomain cookies
         this._storage._remove(this._name, false)
         this._storage._remove(this._name, true)
-        // Storage entry is gone — any future save() must write through.
-        this._lastSavedSerialized = undefined
+        // Wipe the group entries too — even when the split is currently off — so
+        // a default flip-flop or version downgrade cannot strand an orphaned
+        // flag entry that would leak across users on reset()/opt-out.
+        // Only the owning instance does this: the sessionStorage sibling
+        // posthog-core spins up shares this instance's storage name, so it must
+        // not delete the localStorage owner's entries. localStorage-only.
+        if (!keepGroupEntries && this._ownsSplitStorage) {
+            for (const group of PERSISTENCE_STORAGE_GROUPS) {
+                localStore._remove(this._groupEntryName(group))
+            }
+        }
+        // The main entry is gone, so its bookkeeping must reset for the next
+        // save to write through. When the group entries are kept, so is their
+        // fingerprint/persisted state — that is what lets the following save
+        // recognise them as unchanged and skip the rewrite.
+        if (keepGroupEntries) {
+            delete this._slotState[MAIN_STORAGE_SLOT]
+        } else {
+            this._slotState = {}
+        }
     }
 
     // removes the storage entry and deletes all loaded data
@@ -499,19 +777,26 @@ export class PostHogPersistence {
         this.set_cross_subdomain(config['cross_subdomain_cookie'])
         this.set_secure(config['secure_cookie'])
 
-        // If the persistence type has changed, we need to migrate the data.
-        if (
+        const persistenceChanged =
             config.persistence !== oldConfig.persistence ||
             !isArrayContentsEqual(config.cookie_persisted_properties || [], oldConfig.cookie_persisted_properties || [])
-        ) {
-            const newStore = this._buildStorage(config)
+
+        // `_buildStorage` re-resolves both the backend and `_splitStorageEligible`,
+        // so on a persistence change build the new store first, then derive the
+        // split flag from the fresh eligibility. The new backend may no longer be
+        // split-eligible (e.g. localStorage -> memory).
+        const newStore = persistenceChanged ? this._buildStorage(config) : this._storage
+        const wantSplit = this._resolveSplitStorage(config)
+
+        // Migrate when the backend changed or the split routing flipped at
+        // runtime, e.g. set_config({ split_storage: true })
+        // without touching persistence. Either way we clear the old layout and
+        // re-save so subsequent reads/writes land in the right entries.
+        if (persistenceChanged || wantSplit !== this._splitStorage) {
             const props = this.props
-
-            // Clear the old store
             this.clear()
-
-            // Set up the new store data
             this._storage = newStore
+            this._splitStorage = wantSplit
             this.props = props
             this.save()
         }
@@ -529,7 +814,7 @@ export class PostHogPersistence {
     set_cross_subdomain(cross_subdomain: boolean): void {
         if (cross_subdomain !== this._cross_subdomain) {
             this._cross_subdomain = cross_subdomain
-            this.remove()
+            this.remove({ keepGroupEntries: true })
             this.save()
         }
     }
@@ -537,7 +822,7 @@ export class PostHogPersistence {
     set_secure(secure: boolean): void {
         if (secure !== this._secure) {
             this._secure = secure
-            this.remove()
+            this.remove({ keepGroupEntries: true })
             this.save()
         }
     }
@@ -571,9 +856,25 @@ export class PostHogPersistence {
 
     private _setProp(prop: string, to: any): void {
         this.props[prop] = to
+        this._markGroupDirty(prop)
     }
 
     private _deleteProp(prop: string): void {
         delete this.props[prop]
+        this._markGroupDirty(prop)
+    }
+
+    // Mark the prop's storage group dirty so its entry is re-serialized on the
+    // next write. Props with no group live in the main blob, which always writes.
+    private _markGroupDirty(prop: string): void {
+        const group = getPersistenceKeyPolicy(prop)?.storageGroup
+        if (group) {
+            this._slotWriteState(group).dirty = true
+        }
+    }
+
+    // The write-bookkeeping record for a slot, created on first access.
+    private _slotWriteState(slot: StorageSlot): SlotWriteState {
+        return this._slotState[slot] || (this._slotState[slot] = {})
     }
 }

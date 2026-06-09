@@ -1,5 +1,44 @@
 # posthog-react-native
 
+## 4.46.21
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.383.1
+  - @posthog/core@1.30.12
+
+## 4.46.20
+
+### Patch Changes
+
+- Updated dependencies [[`227c9b0`](https://github.com/PostHog/posthog-js/commit/227c9b03c19dcb93d9a15abb1ee6b9523d366767), [`393f9e2`](https://github.com/PostHog/posthog-js/commit/393f9e2a4697c6ffe52402cad6fb8550b48b5e00)]:
+  - @posthog/types@1.383.0
+  - @posthog/core@1.30.11
+
+## 4.46.19
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.382.0
+  - @posthog/core@1.30.10
+
+## 4.46.18
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+  - @posthog/types@1.381.0
+  - @posthog/core@1.30.9
+
+## 4.46.17
+
+### Patch Changes
+
+- [#3747](https://github.com/PostHog/posthog-js/pull/3747) [`70c976e`](https://github.com/PostHog/posthog-js/commit/70c976e36eb80e55725b349c7a082043660ac504) Thanks [@cat-ph](https://github.com/cat-ph)! - Improve Xcode sourcemap upload failure logs so every captured `posthog-cli` line is reported as an Xcode error with the failing Hermes command and exit code.
+  (2026-06-05)
+
 ## 4.46.16
 
 ### Patch Changes

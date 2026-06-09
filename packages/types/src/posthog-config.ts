@@ -101,10 +101,21 @@ export interface RageclickConfig {
      * - `false`: Disable content-based exclusion
      * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
      *
-     * Checks if element text content or aria-label contains any of the keywords (case-insensitive)
+     * Checks if element text content or aria-label matches any of the keywords (case-insensitive).
+     * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
+     * so they don't suppress text like "sign-up", "5 > 3", or "C++".
      * @default true
      */
     content_ignorelist?: boolean | string[]
+
+    /**
+     * Excludes text-editing surfaces (textarea, text-like inputs, and contenteditable elements)
+     * from rageclick detection, since rapid repeated clicks there are double/triple-click text
+     * selection rather than rage.
+     * Enabled by default from the 2026-05-30 config defaults onwards.
+     * @default false
+     */
+    ignore_text_selection?: boolean
 
     /**
      * Maximum pixel distance between clicks to still be considered a rage click.
@@ -917,6 +928,22 @@ export interface PostHogConfig {
     persistence_save_debounce_ms?: number
 
     /**
+     * Store the feature-flag config cluster and survey config in their own
+     * localStorage entries (`<name>__flags`, `<name>__surveys`) instead of the
+     * single main persistence blob. These payloads are large and change rarely,
+     * so keeping them out of the main blob stops them riding on every
+     * high-frequency main-blob write and broadcasting cross-tab `storage` events.
+     *
+     * Only applies when persistence resolves to `localStorage` / `localStorage+cookie`
+     * (the split is pointless for `memory` / `sessionStorage` and impossible for `cookie`).
+     * On load the old main-blob location is read once and migrated forward, so
+     * upgrades never miss a cached flag. The `2026-05-30` config default opts in.
+     *
+     * @default false
+     */
+    split_storage?: boolean
+
+    /**
      * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false
@@ -1179,6 +1206,17 @@ export interface PostHogConfig {
      * @experimental
      */
     __preview_deferred_init_extensions: boolean
+
+    /**
+     * In `'localStorage+cookie'` persistence mode, prefer cookie values over localStorage
+     * when both stores carry the same key. Fixes cross-subdomain identify and session
+     * disconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.
+     * Read at SDK init; has no effect when toggled via `set_config` or for other persistence modes.
+     *
+     * @default false
+     * @experimental
+     */
+    __preview_cookie_wins_on_conflict: boolean
 
     /**
      * Determines the session recording options.
