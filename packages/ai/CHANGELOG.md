@@ -1,10 +1,35 @@
 # posthog-ai
 
+## 8.1.1
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies [[`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6)]:
+  - posthog-node@5.36.7
+  - @posthog/core@1.30.13
+
+## 8.1.0
+
+### Minor Changes
+
+- [#3751](https://github.com/PostHog/posthog-js/pull/3751) [`9140a67`](https://github.com/PostHog/posthog-js/commit/9140a67d180c6dc2e0f20a9bf2fb006a14d14cd5) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat: populate `$ai_base_url` on the Vercel and OpenAI Agents instrumentation paths so gateway-routed `$ai_generation` events can be deduped on ingestion. The Vercel middleware recovers the base URL from the provider's internal `config` (`config.baseURL`, or the `config.url({ path })` closure used by `@ai-sdk/openai` / `openai-compatible`) instead of hardcoding an empty string. The OpenAI Agents processor emits it from `model_config.base_url` when the SDK exposes it (best-effort; the SDK omits it for Responses calls and for chat calls with model settings).
+  (2026-06-09)
+
+## 8.0.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.12
+  - posthog-node@5.36.6
+
 ## 8.0.0
 
 ### Major Changes
 
-- [#3739](https://github.com/PostHog/posthog-js/pull/3739) [`25b54c8`](https://github.com/PostHog/posthog-js/commit/25b54c8b11da656661bf9d23b2fdca21f39663b5) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Major release: move provider SDKs to optional peer dependencies and clean up staged deprecations.
+- [#3771](https://github.com/PostHog/posthog-js/pull/3771) [`227c9b0`](https://github.com/PostHog/posthog-js/commit/227c9b03c19dcb93d9a15abb1ee6b9523d366767) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Major release: move provider SDKs to optional peer dependencies and clean up staged deprecations.
 
   **Optional peer dependencies (#3610):** `openai`, `@anthropic-ai/sdk`, `@google/genai`, and `@langchain/core` are now optional peer dependencies, and the unused `langchain` dependency is dropped — you only install the SDK for the integration you use. Integration clients are no longer exported from the package root; import them from their subpaths:
 

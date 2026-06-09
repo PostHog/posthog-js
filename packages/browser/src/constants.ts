@@ -62,6 +62,7 @@ export const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_fla
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
+export const SURVEYS_LOADED_AT = '$surveys_loaded_at'
 export const SURVEYS_ACTIVATED = '$surveys_activated'
 export const PRODUCT_TOURS = 'ph_product_tours'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'

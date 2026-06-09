@@ -928,11 +928,11 @@ export interface PostHogConfig {
     persistence_save_debounce_ms?: number
 
     /**
-     * Store the feature-flag config cluster in its own localStorage entry
-     * (`<name>__flags`) instead of the single main persistence blob. This
-     * payload is large and changes rarely, so keeping it out of the main blob
-     * stops it riding on every high-frequency main-blob write and broadcasting
-     * cross-tab `storage` events.
+     * Store the feature-flag config cluster and survey config in their own
+     * localStorage entries (`<name>__flags`, `<name>__surveys`) instead of the
+     * single main persistence blob. These payloads are large and change rarely,
+     * so keeping them out of the main blob stops them riding on every
+     * high-frequency main-blob write and broadcasting cross-tab `storage` events.
      *
      * Only applies when persistence resolves to `localStorage` / `localStorage+cookie`
      * (the split is pointless for `memory` / `sessionStorage` and impossible for `cookie`).

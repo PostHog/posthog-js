@@ -23,8 +23,10 @@ import {
     estimateCompressedEventSize,
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+    splitBuffer,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
+export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
 import { addEventListener } from '../../../utils'
@@ -293,18 +295,10 @@ function buildCompressedFullSnapshotEvent(event: eventWithTime, data: string): c
     } as compressedEventWithTime
 }
 
-function buildCompressedMutationEvent(event: eventWithTime, fields: CompressedMutationFields): compressedEventWithTime {
-    return {
-        ...event,
-        cv: '2024-10' as const,
-        data: {
-            ...(event.data as Record<string, unknown>),
-            ...fields,
-        },
-    } as compressedEventWithTime
-}
-
-function buildCompressedStyleEvent(event: eventWithTime, fields: CompressedStyleFields): compressedEventWithTime {
+function buildCompressedIncrementalEvent(
+    event: eventWithTime,
+    fields: CompressedMutationFields | CompressedStyleFields
+): compressedEventWithTime {
     return {
         ...event,
         cv: '2024-10' as const,
@@ -331,7 +325,7 @@ function compressEventSync(event: eventWithTime): CompressedEventResult {
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
             return compressedResult(
-                buildCompressedMutationEvent(event, {
+                buildCompressedIncrementalEvent(event, {
                     texts: gzipField(event.data.texts),
                     attributes: gzipField(event.data.attributes),
                     removes: gzipField(event.data.removes),
@@ -341,7 +335,7 @@ function compressEventSync(event: eventWithTime): CompressedEventResult {
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
             return compressedResult(
-                buildCompressedStyleEvent(event, {
+                buildCompressedIncrementalEvent(event, {
                     adds: event.data.adds ? gzipToString(event.data.adds) : undefined,
                     removes: event.data.removes ? gzipToString(event.data.removes) : undefined,
                 })
@@ -365,14 +359,14 @@ async function compressEventAsync(event: eventWithTime): Promise<CompressedEvent
                 gzipFieldAsync(event.data.removes),
                 gzipFieldAsync(event.data.adds),
             ])
-            return compressedResult(buildCompressedMutationEvent(event, { texts, attributes, removes, adds }))
+            return compressedResult(buildCompressedIncrementalEvent(event, { texts, attributes, removes, adds }))
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
             const [adds, removes] = await Promise.all([
                 event.data.adds ? gzipToStringAsync(event.data.adds) : undefined,
                 event.data.removes ? gzipToStringAsync(event.data.removes) : undefined,
             ])
-            return compressedResult(buildCompressedStyleEvent(event, { adds, removes }))
+            return compressedResult(buildCompressedIncrementalEvent(event, { adds, removes }))
         }
     } catch (e) {
         if (isNativeAsyncGzipError(e)) {
@@ -429,36 +423,6 @@ function isAllowedWhenIdle(e: eventWithTime): boolean {
  *  so we need to manually let this one through */
 function isRecordingPausedEvent(e: eventWithTime) {
     return e.type === EventType.Custom && e.data.tag === 'recording paused'
-}
-
-export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle room)
-
-// recursively splits large buffers into smaller ones
-// uses a pretty high size limit to avoid splitting too much
-export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
-    if (buffer.size >= sizeLimit && buffer.data.length > 1) {
-        const half = Math.floor(buffer.data.length / 2)
-        const firstHalfSizes = buffer.sizes.slice(0, half)
-        const secondHalfSizes = buffer.sizes.slice(half)
-        return [
-            splitBuffer({
-                size: firstHalfSizes.reduce((a, b) => a + b, 0),
-                data: buffer.data.slice(0, half),
-                sizes: firstHalfSizes,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-            splitBuffer({
-                size: secondHalfSizes.reduce((a, b) => a + b, 0),
-                data: buffer.data.slice(half),
-                sizes: secondHalfSizes,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-        ].flatMap((x) => x)
-    } else {
-        return [buffer]
-    }
 }
 
 export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInterface {
