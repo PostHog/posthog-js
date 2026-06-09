@@ -1,6 +1,7 @@
 import { version } from './version'
 
 import {
+  EventChannel,
   FeatureFlagValue,
   isBlockedUA,
   isPlainObject,
@@ -55,6 +56,11 @@ const MAX_CACHE_SIZE = 50 * 1000
 const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
 const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
+
+const AI_EVENT_CHANNEL: EventChannel = {
+  queueKey: PostHogPersistedProperty.AiQueue,
+  path: '/i/v0/ai/batch/',
+}
 
 // Process-wide dedup for deprecation warnings — without this, calling a deprecated
 // method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
@@ -134,6 +140,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     timer: ReturnType<typeof setTimeout> | undefined
   }
 
+  private readonly _useDedicatedAiEndpoint: boolean
+
   /**
    * Initialize a new PostHog client instance.
    *
@@ -174,6 +182,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(normalizedApiKey, normalizedOptions)
 
     this.options = normalizedOptions
+    this._useDedicatedAiEndpoint = this.options._internal_dedicatedAiEndpoint === true
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -222,6 +231,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
     this.distinctIdHasSentFlagCalls = {}
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
+  }
+
+  protected override eventChannels(): readonly EventChannel[] {
+    return this._useDedicatedAiEndpoint ? [...super.eventChannels(), AI_EVENT_CHANNEL] : super.eventChannels()
+  }
+
+  protected override channelForEvent(event: unknown): EventChannel {
+    if (this._useDedicatedAiEndpoint && typeof event === 'string' && event.startsWith('$ai_')) {
+      return AI_EVENT_CHANNEL
+    }
+    return super.channelForEvent(event)
   }
 
   protected override enqueue(type: string, message: any, options?: PostHogCaptureOptions): void {

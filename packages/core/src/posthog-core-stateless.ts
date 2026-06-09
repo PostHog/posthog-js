@@ -137,6 +137,16 @@ export enum QuotaLimitedFeature {
   Recordings = 'recordings',
 }
 
+export type EventChannel = {
+  queueKey: PostHogPersistedProperty
+  path: string
+}
+
+export const DEFAULT_EVENT_CHANNEL: EventChannel = {
+  queueKey: PostHogPersistedProperty.Queue,
+  path: '/batch/',
+}
+
 export abstract class PostHogCoreStateless {
   // options
   readonly apiKey: string
@@ -959,6 +969,23 @@ export abstract class PostHogCoreStateless {
     // Default: no-op for sync storage implementations
   }
 
+  /**
+   * The set of channels this client flushes. Override to add destinations; the
+   * returned list must include every channel {@link channelForEvent} can return,
+   * otherwise events routed to a missing channel would never flush.
+   */
+  protected eventChannels(): readonly EventChannel[] {
+    return [DEFAULT_EVENT_CHANNEL]
+  }
+
+  /**
+   * Routes an event to its ingestion channel by name. Default sends everything
+   * to the main analytics channel; override to partition (e.g. `$ai_*`).
+   */
+  protected channelForEvent(_event: unknown): EventChannel {
+    return DEFAULT_EVENT_CHANNEL
+  }
+
   protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       if (this.optedOut) {
@@ -974,7 +1001,8 @@ export abstract class PostHogCoreStateless {
         return
       }
 
-      const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
+      const queueKey = this.channelForEvent(message.event).queueKey
+      const queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
 
       if (queue.length >= this.maxQueueSize) {
         queue.shift()
@@ -982,7 +1010,7 @@ export abstract class PostHogCoreStateless {
       }
 
       queue.push({ message })
-      this.setPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue, queue)
+      this.setPersistedProperty<PostHogQueueItem[]>(queueKey, queue)
 
       this._events.emit(type, message)
 
@@ -1032,7 +1060,7 @@ export abstract class PostHogCoreStateless {
 
     const payload = JSON.stringify(data)
 
-    const url = `${this.host}/batch/`
+    const url = this.host + this.channelForEvent(message.event).path
 
     const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
     const fetchOptions: PostHogFetchOptions = {
@@ -1170,7 +1198,23 @@ export abstract class PostHogCoreStateless {
     this.clearFlushTimer()
     await this._initPromise
 
-    let queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
+    // Guarantee all flushes run but errors are still thrown at the end
+    let firstError: unknown
+    for (const channel of this.eventChannels()) {
+      try {
+        await this._flushChannel(channel)
+      } catch (err) {
+        firstError ??= err
+      }
+    }
+
+    if (firstError !== undefined) {
+      throw firstError
+    }
+  }
+
+  private async _flushChannel(channel: EventChannel): Promise<void> {
+    let queue = this.getPersistedProperty<PostHogQueueItem[]>(channel.queueKey) || []
 
     if (!queue.length) {
       return
@@ -1184,9 +1228,9 @@ export abstract class PostHogCoreStateless {
       const batchMessages = batchItems.map((item) => item.message)
 
       const persistQueueChange = async (): Promise<void> => {
-        const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
+        const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(channel.queueKey) || []
         const newQueue = refreshedQueue.slice(batchItems.length)
-        this.setPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue, newQueue)
+        this.setPersistedProperty<PostHogQueueItem[]>(channel.queueKey, newQueue)
         queue = newQueue
         // Wait for storage to complete to prevent duplicate events on app crash
         await this.flushStorage()
@@ -1204,7 +1248,7 @@ export abstract class PostHogCoreStateless {
 
       const payload = JSON.stringify(data)
 
-      const url = `${this.host}/batch/`
+      const url = this.host + channel.path
 
       const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
       const fetchOptions: PostHogFetchOptions = {
@@ -1383,9 +1427,11 @@ export abstract class PostHogCoreStateless {
         await this.promiseQueue.join()
 
         while (true) {
-          const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
+          const pending = this.eventChannels().some(
+            (channel) => (this.getPersistedProperty<PostHogQueueItem[]>(channel.queueKey) || []).length > 0
+          )
 
-          if (queue.length === 0) {
+          if (!pending) {
             break
           }
 

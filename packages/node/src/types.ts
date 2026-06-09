@@ -135,6 +135,13 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   persistence?: 'memory'
   personalApiKey?: string
   privacyMode?: boolean
+  /**
+   * Routes `$ai_*` events to a dedicated capture-ai endpoint in their own batch.
+   *
+   * @internal Not ready for use — the backend endpoint and ingress routing are still being
+   * rolled out. Do not enable; behaviour and naming may change or be removed without notice.
+   */
+  _internal_dedicatedAiEndpoint?: boolean
   enableExceptionAutocapture?: boolean
   // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
   featureFlagsPollingInterval?: number

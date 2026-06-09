@@ -220,6 +220,9 @@ export enum PostHogPersistedProperty {
   BootstrapFeatureFlagPayloads = 'bootstrap_feature_flag_payloads',
   OverrideFeatureFlags = 'override_feature_flags',
   Queue = 'queue',
+  // AI events queue. `$ai_*` events are routed here so they flush to a dedicated
+  // ingestion path independently of the main analytics queue. Only used by posthog-node.
+  AiQueue = 'ai_queue',
   // Logs queue. Individual SDKs may route this key to an isolated storage
   // instance if they want to separate logs write volume from main state.
   LogsQueue = 'logs_queue',
