@@ -1027,6 +1027,25 @@ export interface PostHogConfig {
     disable_external_dependency_loading: boolean
 
     /**
+     * Determines whether PostHog should load external dependency scripts from
+     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead
+     * of the legacy /static/recorder.js?v=1.370.0 form.
+     *
+     * @default false
+     */
+    strict_script_versioning: boolean
+
+    /**
+     * Optional host override for static assets loaded by PostHog, such as
+     * recorder.js, surveys.js, or toolbar.js. Only applies to /static/* asset
+     * paths; dynamic assets like remote config continue to use the regular
+     * asset host derived from api_host.
+     *
+     * @default null
+     */
+    asset_host: string | null
+
+    /**
      * A function to be called when a script is being loaded.
      * This can be used to modify the script before it is loaded.
      * This is useful for adding a nonce to the script, for example.
@@ -1728,13 +1747,10 @@ export interface PostHogConfig {
     __preview_disable_xhr_credentials?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Loads external dependency bundles (for example recorder.js and toolbar.js) from
-     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead of the
-     * legacy /static/recorder.js?v=1.370.0 form.
-     *
-     * When set to a string, that string is treated as an asset host override for any
-     * /static/* asset path while leaving non-static asset paths unchanged.
+     * @deprecated Use {@link strict_script_versioning} and {@link asset_host} instead.
+     * When set to true, this is equivalent to strict_script_versioning: true.
+     * When set to a string, this is equivalent to strict_script_versioning: true
+     * and asset_host set to that string.
      */
     __preview_external_dependency_versioned_paths?: boolean | string
 

@@ -108,4 +108,36 @@ describe('config', () => {
             })
         })
     })
+
+    describe('external dependency asset config', () => {
+        it('defaults supported script asset config options', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token')
+
+            expect(posthog.config.strict_script_versioning).toBe(false)
+            expect(posthog.config.asset_host).toBeNull()
+        })
+
+        it('maps the deprecated preview string option to strict_script_versioning and asset_host', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
+            })
+
+            expect(posthog.config.strict_script_versioning).toBe(true)
+            expect(posthog.config.asset_host).toBe('https://cdn-preview.example.com/')
+        })
+
+        it('lets supported options take precedence over the deprecated preview option', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                strict_script_versioning: false,
+                asset_host: 'https://cdn.example.com/',
+                __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
+            })
+
+            expect(posthog.config.strict_script_versioning).toBe(false)
+            expect(posthog.config.asset_host).toBe('https://cdn.example.com/')
+        })
+    })
 })

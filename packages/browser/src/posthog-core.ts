@@ -213,6 +213,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
     flags_api_host: null,
     ui_host: null,
+    asset_host: null,
     token: '',
     autocapture: true,
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
@@ -240,6 +241,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_conversations: false,
     disable_product_tours: false,
     disable_external_dependency_loading: false,
+    strict_script_versioning: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: false,
@@ -314,6 +316,18 @@ export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostH
 
     // the original config takes priority over the renames
     const newConfig = extend({}, renames, origConfig)
+
+    // Maintain backwards compatibility for the deprecated preview option while
+    // letting the supported options take precedence when they are provided.
+    const previewExternalDependencyVersionedPaths = origConfig.__preview_external_dependency_versioned_paths
+    if (!isUndefined(previewExternalDependencyVersionedPaths)) {
+        if (isUndefined(origConfig.strict_script_versioning)) {
+            newConfig.strict_script_versioning = !!previewExternalDependencyVersionedPaths
+        }
+        if (isString(previewExternalDependencyVersionedPaths) && isUndefined(origConfig.asset_host)) {
+            newConfig.asset_host = previewExternalDependencyVersionedPaths
+        }
+    }
 
     // merge property_blacklist into property_denylist
     if (isArray(origConfig.property_blacklist)) {
