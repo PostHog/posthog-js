@@ -44,6 +44,10 @@ export class ProductTourEventReceiver extends EventReceiver<ProductTour> {
         return !!(localStore._get(completedKey) || localStore._get(dismissedKey))
     }
 
+    protected _shouldConsumeActivation(event: string): boolean {
+        return event === this._getShownEventName()
+    }
+
     getTours(): string[] {
         return this.getActivatedIds()
     }
