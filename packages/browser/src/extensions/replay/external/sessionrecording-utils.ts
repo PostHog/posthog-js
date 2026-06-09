@@ -1,7 +1,7 @@
 import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
 
 import { isArray, isNull, isObject, isUndefined } from '@posthog/core'
-import { SnapshotBuffer } from './lazy-loaded-session-recorder'
+import type { SnapshotBuffer } from './lazy-loaded-session-recorder'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
 export function circularReferenceReplacer() {

@@ -80,14 +80,6 @@ describe('PostHogTraceExporter', () => {
     })
   })
 
-  it('accepts deprecated apiKey', () => {
-    new PostHogTraceExporter({ apiKey: DEFAULT_TOKEN })
-    expect(OTLPTraceExporter).toHaveBeenCalledWith({
-      url: 'https://us.i.posthog.com/i/v0/ai/otel',
-      headers: { Authorization: `Bearer ${DEFAULT_TOKEN}` },
-    })
-  })
-
   it.each([
     ['missing', {}],
     ['empty', { projectToken: '' }],
@@ -165,5 +157,15 @@ describe('PostHogTraceExporter AI span filtering', () => {
     exporter.export([makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }), makeSpan('other.operation')], callback)
 
     expect(getSuperExport()).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
+  })
+
+  it('redacts multimodal content before exporting', () => {
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
+    const callback = jest.fn()
+
+    exporter.export([makeSpan('gen_ai.chat', { 'gen_ai.prompt': 'data:image/png;base64,iVBORw0KGgo' })], callback)
+
+    const exported = getSuperExport().mock.calls[0][0] as ReadableSpan[]
+    expect(exported[0].attributes['gen_ai.prompt']).toBe('[base64 image/png redacted]')
   })
 })

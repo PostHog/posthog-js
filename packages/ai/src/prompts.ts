@@ -60,18 +60,18 @@ function isPromptsWithPostHog(options: PromptsOptions): options is PromptsWithPo
  * })
  *
  * // Fetch with caching and fallback
- * const template = await prompts.get('support-system-prompt', {
+ * const result = await prompts.get('support-system-prompt', {
  *   cacheTtlSeconds: 300,
  *   fallback: 'You are a helpful assistant.',
  * })
  *
  * // Or fetch an exact published version
- * const v3Template = await prompts.get('support-system-prompt', {
+ * const v3 = await prompts.get('support-system-prompt', {
  *   version: 3,
  * })
  *
  * // Compile with variables
- * const systemPrompt = prompts.compile(template, {
+ * const systemPrompt = prompts.compile(result.prompt, {
  *   company: 'Acme Corp',
  *   tier: 'premium',
  * })
@@ -83,7 +83,6 @@ export class Prompts {
   private host: string
   private defaultCacheTtlSeconds: number
   private cache: Map<string, PromptVersionCache> = new Map()
-  private hasWarnedDeprecation = false
 
   constructor(options: PromptsOptions) {
     this.defaultCacheTtlSeconds = options.defaultCacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS
@@ -122,35 +121,12 @@ export class Prompts {
   /**
    * Fetch a prompt by name from the PostHog API.
    *
-   * When `withMetadata` is `true`, returns a `PromptResult` object with `source`,
-   * `name`, and `version` metadata. When omitted or `false`, returns a plain string
-   * (deprecated — will be removed in a future major version).
+   * Returns a `PromptResult` object carrying the prompt text alongside `source`,
+   * `name`, and `version` metadata. Read `result.prompt` for the template string.
    */
-  async get(name: string, options: GetPromptOptions & { withMetadata: true }): Promise<PromptResult>
-  /** @deprecated Omitting `withMetadata` is deprecated. Pass `{ withMetadata: true }` to receive a `PromptResult`. */
-  async get(name: string, options?: GetPromptOptions): Promise<string>
-  async get(name: string, options?: GetPromptOptions): Promise<string | PromptResult> {
-    const withMetadata = options?.withMetadata
-
-    if (withMetadata === undefined && !this.hasWarnedDeprecation) {
-      this.hasWarnedDeprecation = true
-      console.warn(
-        '[PostHog Prompts] Calling get() without { withMetadata: true } is deprecated and will be ' +
-          'removed in a future major version. Pass { withMetadata: true } to receive a PromptResult ' +
-          'object with source, name, and version metadata. ' +
-          'You can pass { withMetadata: false } to silence this warning, but the plain-string return ' +
-          'will still be removed in the next major version.'
-      )
-    }
-
+  async get(name: string, options?: GetPromptOptions): Promise<PromptResult> {
     try {
-      const result = await this.getInternal(name, options)
-
-      if (withMetadata) {
-        return result
-      }
-
-      return result.prompt
+      return await this.getInternal(name, options)
     } catch (error) {
       const fallback = options?.fallback
 
@@ -158,16 +134,12 @@ export class Prompts {
         const promptLabel = this.getPromptLabel(name, options?.version)
         console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}, using fallback:`, error)
 
-        if (withMetadata) {
-          return {
-            source: 'code_fallback',
-            prompt: fallback,
-            name: undefined,
-            version: undefined,
-          } satisfies PromptCodeFallbackResult
-        }
-
-        return fallback
+        return {
+          source: 'code_fallback',
+          prompt: fallback,
+          name: undefined,
+          version: undefined,
+        } satisfies PromptCodeFallbackResult
       }
 
       throw error

@@ -24,6 +24,7 @@ import {
     USER_STATE,
     COOKIELESS_ALWAYS,
 } from './constants'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from './autocapture-utils'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -189,13 +190,20 @@ const defaultsThatVaryByConfig = (
     | 'external_scripts_inject_target'
     | 'internal_or_test_user_hostname'
     | 'persistence_save_debounce_ms'
+    | 'split_storage'
 > => ({
-    rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
+    rageclick:
+        defaults && defaults >= '2026-05-30'
+            ? { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, ignore_text_selection: true }
+            : defaults && defaults >= '2025-11-30'
+              ? { content_ignorelist: true }
+              : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
+    split_storage: !!(defaults && defaults >= '2026-05-30'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -589,12 +597,18 @@ export class PostHog implements PostHogInterface {
             this._initialPersonProfilesConfig = config.process_person
         }
 
-        this.set_config(
-            extend({}, defaultConfig(config.defaults), configRenames(config), {
-                name: name,
-                token: normalizedToken,
-            })
-        )
+        const baseConfig = defaultConfig(config.defaults)
+        const userConfig = configRenames(config)
+        const mergedConfig = extend({}, baseConfig, userConfig, {
+            name: name,
+            token: normalizedToken,
+        })
+        // a partial user-supplied rageclick object should keep the date-gated defaults
+        // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
+        if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
+            mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
+        }
+        this.set_config(mergedConfig)
 
         if (this.config.on_xhr_error) {
             logger.error('on_xhr_error is deprecated. Use on_request_error instead')
@@ -608,7 +622,8 @@ export class PostHog implements PostHogInterface {
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
-                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled)
+                : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
+                  new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled, false)
 
         // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
@@ -3049,7 +3064,12 @@ export class PostHog implements PostHogInterface {
             this.sessionPersistence =
                 this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                     ? this.persistence
-                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
+                    : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
+                      new PostHogPersistence(
+                          { ...this.config, persistence: 'sessionStorage' },
+                          isPersistenceDisabled,
+                          false
+                      )
 
             const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
             if (isBoolean(debugConfigFromLocalStorage)) {
@@ -3699,7 +3719,9 @@ export class PostHog implements PostHogInterface {
             this.pageViewManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
-            this._captureInitialPageview()
+            if (this.config.capture_pageview) {
+                this._captureInitialPageview()
+            }
             // At init time, consent was PENDING so is_capturing() was false and _start_queue_if_opted_in() was a no-op.
             // Now that rejection has been recorded, capturing is active — enable the queue so batched events are flushed.
             this._start_queue_if_opted_in()
