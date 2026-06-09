@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.1.0
+
+### Minor Changes
+
+- [#3751](https://github.com/PostHog/posthog-js/pull/3751) [`9140a67`](https://github.com/PostHog/posthog-js/commit/9140a67d180c6dc2e0f20a9bf2fb006a14d14cd5) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat: populate `$ai_base_url` on the Vercel and OpenAI Agents instrumentation paths so gateway-routed `$ai_generation` events can be deduped on ingestion. The Vercel middleware recovers the base URL from the provider's internal `config` (`config.baseURL`, or the `config.url({ path })` closure used by `@ai-sdk/openai` / `openai-compatible`) instead of hardcoding an empty string. The OpenAI Agents processor emits it from `model_config.base_url` when the SDK exposes it (best-effort; the SDK omits it for Responses calls and for chat calls with model settings).
+  (2026-06-09)
+
 ## 8.0.1
 
 ### Patch Changes
