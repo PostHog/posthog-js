@@ -416,6 +416,51 @@ describe('user-agent-utils', () => {
             })
         })
 
+        describe('detectBrowser Google Search App (GSA)', () => {
+            // GSA embeds a platform webview, so its UA otherwise looks like Mobile
+            // Safari on iOS and Chrome on Android. The `GSA/` marker is the only
+            // cross-platform signal — see the example event linked from PostHog/posthog-js.
+            const gsaIosUA =
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/284.0.564099828 Mobile/15E148 Safari/604.1'
+            const gsaAndroidUA =
+                'Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36 GSA/14.21.20.28.arm64'
+            const chromeMacOsUA =
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+            it('is off by default — iOS GSA is reported as Mobile Safari', () => {
+                expect(detectBrowser(gsaIosUA, 'Apple Computer, Inc.')).toBe('Mobile Safari')
+            })
+
+            it('is off by default — Android GSA is reported as Chrome', () => {
+                expect(detectBrowser(gsaAndroidUA, 'Google Inc.')).toBe('Chrome')
+            })
+
+            it('detects iOS GSA when opted in', () => {
+                expect(detectBrowser(gsaIosUA, 'Apple Computer, Inc.', {}, { detectGoogleSearchApp: true })).toBe(
+                    'Google Search App'
+                )
+            })
+
+            it('detects Android GSA when opted in', () => {
+                expect(detectBrowser(gsaAndroidUA, 'Google Inc.', {}, { detectGoogleSearchApp: true })).toBe(
+                    'Google Search App'
+                )
+            })
+
+            it('reads the GSA version from the UA marker when opted in', () => {
+                expect(
+                    detectBrowserVersion(gsaIosUA, 'Apple Computer, Inc.', {}, { detectGoogleSearchApp: true })
+                ).toBe(284.0)
+                expect(detectBrowserVersion(gsaAndroidUA, 'Google Inc.', {}, { detectGoogleSearchApp: true })).toBe(
+                    14.21
+                )
+            })
+
+            it('does not affect non-GSA traffic when opted in', () => {
+                expect(detectBrowser(chromeMacOsUA, 'Google Inc.', {}, { detectGoogleSearchApp: true })).toBe('Chrome')
+            })
+        })
+
         describe('detectDeviceType with options', () => {
             const desktopUA =
                 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
