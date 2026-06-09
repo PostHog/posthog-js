@@ -31,8 +31,8 @@ catalogs:
       specifier: ^7.27.1
       version: 7.28.5
     '@posthog/cli':
-      specifier: ~0.7.13
-      version: 0.7.13
+      specifier: ~0.7.21
+      version: 0.7.21
     '@rslib/core':
       specifier: 0.10.6
       version: 0.10.6
@@ -667,7 +667,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.7.13
+        version: 0.7.21
       '@posthog/plugin-utils':
         specifier: workspace:*
         version: link:../plugin-utils
@@ -744,7 +744,7 @@ importers:
         version: 4.1.3(magicast@0.3.5)
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.7.13
+        version: 0.7.21
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -999,7 +999,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.7.13
+        version: 0.7.21
       '@posthog/plugin-utils':
         specifier: workspace:*
         version: link:../plugin-utils
@@ -1545,7 +1545,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.7.13
+        version: 0.7.21
       '@posthog/core':
         specifier: workspace:*
         version: link:../core
@@ -4057,37 +4057,6 @@ packages:
     resolution: {integrity: sha512-BPoegTtIdZX4gl2kxcSXAlLrrJFl1cxeRsk9DM/wlIuvyPrFwjWqrEK5NwF5diDt5XSArhQxIFaifGAl4F7fgw==}
     engines: {node: '>=20'}
 
-  '@langchain/langgraph-checkpoint@1.0.0':
-    resolution: {integrity: sha512-xrclBGvNCXDmi0Nz28t3vjpxSH6UYx6w5XAXSiiB1WEdc2xD2iY/a913I3x3a31XpInUW/GGfXXfePfaghV54A==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@langchain/core': ^1.0.1
-
-  '@langchain/langgraph-sdk@1.6.5':
-    resolution: {integrity: sha512-JjprmbhgCnoNJ9DUKcvrEU+C9FfKsNGyT3ooqWxAY5Cx2qofhXmDJOpTCqqbxfDHPKG0RjTs5HgVK3WW5M6Big==}
-    peerDependencies:
-      '@langchain/core': ^1.1.16
-      react: ^18 || ^19
-      react-dom: ^18 || ^19
-    peerDependenciesMeta:
-      '@langchain/core':
-        optional: true
-      react:
-        optional: true
-      react-dom:
-        optional: true
-
-  '@langchain/langgraph@1.2.0':
-    resolution: {integrity: sha512-wyqKIzXTAfXX3L1d8R7icM+HmRQBTbuNLWtUlpRJ/JP/ux1ei/sOSt6p8f90ARoOP2iJVlM70wOBYWaGErdBlA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@langchain/core': ^1.1.16
-      zod: ^3.25.32 || ^4.2.0
-      zod-to-json-schema: ^3.x
-    peerDependenciesMeta:
-      zod-to-json-schema:
-        optional: true
-
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
 
@@ -4859,8 +4828,8 @@ packages:
   '@poppinss/exception@1.2.2':
     resolution: {integrity: sha512-m7bpKCD4QMlFCjA/nKTs23fuvoVFoA83brRKmObCUNmi/9tVu8Ve3w4YQAnJu4q3Tjf5fr685HYIC/IA2zHRSg==}
 
-  '@posthog/cli@0.7.13':
-    resolution: {integrity: sha512-uQRhJMxjw76bDzs1NN7VUhJ2uDOCl9mi8IniNB/FR+oFGYuJbBfl9vnTiwxi+qGZuHfvXTvjHjKqgLyDqzcYDQ==}
+  '@posthog/cli@0.7.21':
+    resolution: {integrity: sha512-1Meh6BbPdwcDE/o8F41U9x/mcUGDbJ6cEedGUfwr2qw32Gle74XTIhiO6WBeJRnpHor05AshAhO1WwSGZlYSZw==}
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
@@ -5628,9 +5597,6 @@ packages:
 
   '@speed-highlight/core@1.2.7':
     resolution: {integrity: sha512-0dxmVj4gxg3Jg879kvFS/msl4s9F3T9UXC1InxgOf7t5NvcPD97u/WTA5vL/IxWHMn7qSxBozqrnnE2wvl1m8g==}
-
-  '@standard-schema/spec@1.1.0':
-    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
   '@stylistic/eslint-plugin@5.4.0':
     resolution: {integrity: sha512-UG8hdElzuBDzIbjG1QDwnYH0MQ73YLXDFHgZzB4Zh/YJfnw8XNsloVtytqzx0I2Qky9THSdpTmi8Vjn/pf/Lew==}
@@ -8695,9 +8661,6 @@ packages:
   eventemitter3@4.0.7:
     resolution: {integrity: sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==}
 
-  eventemitter3@5.0.4:
-    resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
-
   events-universal@1.0.1:
     resolution: {integrity: sha512-LUd5euvbMLpwOF8m6ivPCbhQeSiYVNb8Vs0fQ8QjXo0JTkEHpz8pxdQf0gStltaPpw0Cca8b39KxvK9cfKRiAw==}
 
@@ -10028,10 +9991,6 @@ packages:
     resolution: {integrity: sha512-5KoIu2Ngpyek75jXodFvnafB6DJgr3u8uuK0LEZJjrU19DrMD3EVERaR8sjz8CCGgpZvxPl9SuE1GMVPFHx1mw==}
     engines: {node: '>= 0.4'}
 
-  is-network-error@1.3.1:
-    resolution: {integrity: sha512-6QCxa49rQbmUWLfk0nuGqzql9U8uaV2H6279bRErPBHe/109hCzsLUBUHfbEtvLIHBd6hyXbgedBSHevm43Edw==}
-    engines: {node: '>=16'}
-
   is-node-process@1.2.0:
     resolution: {integrity: sha512-Vg4o6/fqPxIjtxgUH5QLJhwZ7gW5diGCVlXpuUfELC62CuxM1iHcRe51f2W1FDy04Ai4KJkagKjx3XaqyfRKXw==}
 
@@ -10733,12 +10692,6 @@ packages:
 
   kolorist@1.8.0:
     resolution: {integrity: sha512-Y+60/zizpJ3HRH8DCss+q95yr6145JXZo46OTpFvDZWLfRCE4qChOyk1b26nMaNpfHHgxagk9dXT5OP0Tfe+dQ==}
-
-  langchain@1.2.28:
-    resolution: {integrity: sha512-MDJO14BMXtWYchBEmMaYU2CNe1b82L+6Oba4QyIr5Z1S4oCseMtqguZiKCIkv/K99ZGoe1iVtxPtN1Ja3mHvDQ==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      '@langchain/core': ^1.1.29
 
   langsmith@0.5.7:
     resolution: {integrity: sha512-FjYf2oBGMoSXnaT4SRaFguIiGJaonZ5VKWKJDPl9awLZjz2RkN29AcQWceecSINVzXzTvtRWPOjAWT+XggqNNg==}
@@ -11972,25 +11925,13 @@ packages:
     resolution: {integrity: sha512-RwFpb72c/BhQLEXIZ5K2e+AhgNVmIejGlTgiB9MzZ0e93GRvqZ7uSi0dvRF7/XIXDeNkra2fNHBxTyPDGySpjQ==}
     engines: {node: '>=8'}
 
-  p-queue@9.1.0:
-    resolution: {integrity: sha512-O/ZPaXuQV29uSLbxWBGGZO1mCQXV2BLIwUr59JUU9SoH76mnYvtms7aafH/isNSNGwuEfP6W/4xD0/TJXxrizw==}
-    engines: {node: '>=20'}
-
   p-retry@4.6.2:
     resolution: {integrity: sha512-312Id396EbJdvRONlngUx0NydfrIQ5lsYu0znKVUzVvArzEIt08V1qhtyESbGVd1FGX7UKtiFp5uwKZdM8wIuQ==}
     engines: {node: '>=8'}
 
-  p-retry@7.1.1:
-    resolution: {integrity: sha512-J5ApzjyRkkf601HpEeykoiCvzHQjWxPAHhyjFcEUP2SWq0+35NKh8TLhpLw+Dkq5TZBFvUM6UigdE9hIVYTl5w==}
-    engines: {node: '>=20'}
-
   p-timeout@3.2.0:
     resolution: {integrity: sha512-rhIwUycgwwKcP9yTOOFK/AKsAopjjCakVqLHePO3CC6Mir1Z99xT+R63jZxAT5lFZLa2inS5h+ZS2GvR99/FBg==}
     engines: {node: '>=8'}
-
-  p-timeout@7.0.1:
-    resolution: {integrity: sha512-AxTM2wDGORHGEkPCt8yqxOTMgpfbEHqF51f/5fJCmwFC3C/zNcGT63SymH2ttOAaiIws2zVg4+izQCjrakcwHg==}
-    engines: {node: '>=20'}
 
   p-try@2.2.0:
     resolution: {integrity: sha512-R4nPAVTAU0B9D35/Gk3uJf/7XYbQcyohSKdvAxIRSNghFl4e71hVoGnBNQz9cWaXxO2I10KTC+3jMdvvoKw6dQ==}
@@ -14967,10 +14908,6 @@ packages:
 
   uuid@11.1.0:
     resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
-    hasBin: true
-
-  uuid@13.0.0:
-    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
     hasBin: true
 
   uuid@3.4.0:
@@ -19038,36 +18975,6 @@ snapshots:
       - '@opentelemetry/sdk-trace-base'
       - openai
 
-  '@langchain/langgraph-checkpoint@1.0.0(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)))':
-    dependencies:
-      '@langchain/core': 1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13))
-      uuid: 10.0.0
-
-  '@langchain/langgraph-sdk@1.6.5(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)':
-    dependencies:
-      '@types/json-schema': 7.0.15
-      p-queue: 9.1.0
-      p-retry: 7.1.1
-      uuid: 13.0.0
-    optionalDependencies:
-      '@langchain/core': 1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13))
-      react: 19.2.1
-      react-dom: 19.2.1(react@19.2.1)
-
-  '@langchain/langgraph@1.2.0(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)(zod-to-json-schema@3.25.2(zod@4.1.13))(zod@4.1.13)':
-    dependencies:
-      '@langchain/core': 1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13))
-      '@langchain/langgraph-checkpoint': 1.0.0(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)))
-      '@langchain/langgraph-sdk': 1.6.5(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
-      '@standard-schema/spec': 1.1.0
-      uuid: 10.0.0
-      zod: 4.1.13
-    optionalDependencies:
-      zod-to-json-schema: 3.25.2(zod@4.1.13)
-    transitivePeerDependencies:
-      - react
-      - react-dom
-
   '@manypkg/find-root@1.1.0':
     dependencies:
       '@babel/runtime': 7.28.6
@@ -20112,7 +20019,7 @@ snapshots:
 
   '@poppinss/exception@1.2.2': {}
 
-  '@posthog/cli@0.7.13':
+  '@posthog/cli@0.7.21':
     dependencies:
       detect-libc: 2.1.2
 
@@ -21270,8 +21177,6 @@ snapshots:
       tslib: 2.8.1
 
   '@speed-highlight/core@1.2.7': {}
-
-  '@standard-schema/spec@1.1.0': {}
 
   '@stylistic/eslint-plugin@5.4.0(eslint@9.37.0(jiti@2.6.1))':
     dependencies:
@@ -25164,8 +25069,6 @@ snapshots:
 
   eventemitter3@4.0.7: {}
 
-  eventemitter3@5.0.4: {}
-
   events-universal@1.0.1:
     dependencies:
       bare-events: 2.7.0
@@ -26777,8 +26680,6 @@ snapshots:
   is-module@1.0.0: {}
 
   is-negative-zero@2.0.3: {}
-
-  is-network-error@1.3.1: {}
 
   is-node-process@1.2.0: {}
 
@@ -28457,23 +28358,6 @@ snapshots:
   knitwork@1.2.0: {}
 
   kolorist@1.8.0: {}
-
-  langchain@1.2.28(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)))(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)(zod-to-json-schema@3.25.2(zod@4.1.13)):
-    dependencies:
-      '@langchain/core': 1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13))
-      '@langchain/langgraph': 1.2.0(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)(zod-to-json-schema@3.25.2(zod@4.1.13))(zod@4.1.13)
-      '@langchain/langgraph-checkpoint': 1.0.0(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)))
-      langsmith: 0.5.7(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13))
-      uuid: 11.1.0
-      zod: 4.1.13
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@opentelemetry/exporter-trace-otlp-proto'
-      - '@opentelemetry/sdk-trace-base'
-      - openai
-      - react
-      - react-dom
-      - zod-to-json-schema
 
   langsmith@0.5.7(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.25.0(ws@8.19.0)(zod@4.1.13)):
     dependencies:
@@ -30244,25 +30128,14 @@ snapshots:
       eventemitter3: 4.0.7
       p-timeout: 3.2.0
 
-  p-queue@9.1.0:
-    dependencies:
-      eventemitter3: 5.0.4
-      p-timeout: 7.0.1
-
   p-retry@4.6.2:
     dependencies:
       '@types/retry': 0.12.0
       retry: 0.13.1
 
-  p-retry@7.1.1:
-    dependencies:
-      is-network-error: 1.3.1
-
   p-timeout@3.2.0:
     dependencies:
       p-finally: 1.0.0
-
-  p-timeout@7.0.1: {}
 
   p-try@2.2.0: {}
 
@@ -33919,8 +33792,6 @@ snapshots:
   uuid@10.0.0: {}
 
   uuid@11.1.0: {}
-
-  uuid@13.0.0: {}
 
   uuid@3.4.0: {}
 
