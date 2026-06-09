@@ -440,6 +440,22 @@ export class PostHog {
   // hit PostHog's `/flags` endpoint via a component action, so they require an action ctx and
   // incur a per-call network round trip.
 
+  private async evaluateRemoteFlag<T>(
+    ctx: RunActionCtx,
+    action: any,
+    args: { key: string; distinctId?: string } & FeatureFlagOptions
+  ): Promise<T> {
+    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
+    return (await ctx.runAction(action, {
+      key: args.key,
+      distinctId,
+      groups: args.groups,
+      personProperties: args.personProperties,
+      groupProperties: args.groupProperties,
+      disableGeoip: args.disableGeoip,
+    })) as T
+  }
+
   /**
    * Evaluate a single flag remotely against PostHog's `/flags` endpoint. Action context only.
    * Returns the flag value, or `null` if the flag doesn't exist.
@@ -448,15 +464,7 @@ export class PostHog {
     ctx: RunActionCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
   ): Promise<FeatureFlagValue | null> {
-    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
-    return (await ctx.runAction(this.component.lib.evaluateFlag, {
-      key: args.key,
-      distinctId,
-      groups: args.groups,
-      personProperties: args.personProperties,
-      groupProperties: args.groupProperties,
-      disableGeoip: args.disableGeoip,
-    })) as FeatureFlagValue | null
+    return this.evaluateRemoteFlag<FeatureFlagValue | null>(ctx, this.component.lib.evaluateFlag, args)
   }
 
   /**
@@ -467,15 +475,8 @@ export class PostHog {
     ctx: RunActionCtx,
     args: { key: string; distinctId?: string } & FeatureFlagOptions
   ): Promise<JsonType | null> {
-    const distinctId = await this.resolveDistinctId(ctx, args.distinctId)
-    return (await ctx.runAction(this.component.lib.evaluateFlagPayload, {
-      key: args.key,
-      distinctId,
-      groups: args.groups,
-      personProperties: args.personProperties,
-      groupProperties: args.groupProperties,
-      disableGeoip: args.disableGeoip,
-    })) as JsonType | null
+    const action = this.component.lib.evaluateFlagPayload
+    return this.evaluateRemoteFlag<JsonType | null>(ctx, action, args)
   }
 
   /**
