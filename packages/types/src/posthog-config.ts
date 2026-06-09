@@ -1703,8 +1703,7 @@ export interface PostHogConfig {
     __add_tracing_headers?: string[]
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Whether to use the new /flags/ endpoint
+     * @deprecated This option is a no-op. The browser SDK already uses the `/flags/?v=2` endpoint.
      * */
     __preview_flags_v2?: boolean
 
