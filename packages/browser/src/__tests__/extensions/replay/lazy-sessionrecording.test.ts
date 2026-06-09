@@ -2877,6 +2877,19 @@ describe('Lazy SessionRecording', () => {
                 expectedSampleRate: 0,
             },
             {
+                scenario: 'keeps already-applied sampling overrides when the later sampleRate is 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: null,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: null,
+            },
+            {
                 scenario: 'keeps explicit sampling overrides when sampleRate is 0',
                 setup: () => {
                     posthog.persistence?.register({

@@ -36,7 +36,7 @@ import {
     TRIGGER_PENDING,
 } from './triggerMatching'
 import { sampleOnProperty } from '../../sampling'
-import { isBoolean, isNull, isNullish, isNumber, isObject } from '@posthog/core'
+import { isBoolean, isNull, isNullish, isNumber, isObject, isUndefined } from '@posthog/core'
 import { createLogger } from '../../../utils/logger'
 import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
 
@@ -247,9 +247,11 @@ export class V1RecordingStrategy implements RecordingStrategy {
         // Older SDK versions only stored the session ID for sampled-in sessions, not the rate. Treat
         // those sampled-in decisions as needing a fresh decision so lowering sampleRate to 0 takes
         // effect after a page reload within the same PostHog session.
+        // An explicit override from a config without sampling stores null as the rate, so only an
+        // undefined rate is considered legacy missing-rate state.
         const sessionChanged = typeof storedValue === 'string' && storedValue !== sessionId
         const sampleRateChanged = isNumber(storedSampleRate) && storedSampleRate !== currentSampleRate
-        const sampledInWithoutStoredRate = !isNumber(storedSampleRate) && storedValue === sessionId
+        const sampledInWithoutStoredRate = isUndefined(storedSampleRate) && storedValue === sessionId
         const makeDecision =
             sessionChanged || sampleRateChanged || sampledInWithoutStoredRate || !isBoolean(storedIsSampled)
         const shouldSample = makeDecision ? sampleOnProperty(sessionId, currentSampleRate) : storedIsSampled!
@@ -266,7 +268,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
 
         this._instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample ? sessionId : false,
-            [SESSION_RECORDING_SAMPLE_RATE]: currentSampleRate,
+            [SESSION_RECORDING_SAMPLE_RATE]: storedSampleRate === null && storedValue === sessionId ? null : currentSampleRate,
         })
     }
 
