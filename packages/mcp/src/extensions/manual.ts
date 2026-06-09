@@ -106,13 +106,17 @@ export function createMcpAnalytics(posthog: PostHog, options: CreateMcpAnalytics
       return emit(event)
     },
 
-    async capture(data: ManualCustomCaptureData): Promise<void> {
+    capture(data: ManualCustomCaptureData): Promise<void> {
+      // Never throw: this API guarantees that a capture call can't break the
+      // host request, so a misuse (missing/empty event name) is logged and
+      // skipped rather than rejected.
       if (!data || typeof data.event !== 'string' || data.event.length === 0) {
-        throw new Error('`capture` requires an `event` name, e.g. analytics.capture({ event: "feedback_submitted" })')
+        log('Warning: capture() requires an `event` name, e.g. capture({ event: "feedback_submitted" }); skipping.')
+        return Promise.resolve()
       }
       const event = baseEvent(MCPAnalyticsEventType.custom, data)
       event.eventName = data.event
-      await emit(event)
+      return emit(event)
     },
   }
 }

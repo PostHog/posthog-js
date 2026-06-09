@@ -154,10 +154,11 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
       expect(payload.properties.rating).toBe(5)
     })
 
-    it('requires an event name', async () => {
+    it('skips (without throwing) when no event name is given', async () => {
       const analytics = createMcpAnalytics(fakePostHog())
-      await expect(analytics.capture({} as never)).rejects.toThrow('requires an `event` name')
-      await expect(analytics.capture({ event: '' })).rejects.toThrow('requires an `event` name')
+      await expect(analytics.capture({} as never)).resolves.toBeUndefined()
+      await expect(analytics.capture({ event: '' })).resolves.toBeUndefined()
+      expect(capture.getCaptures()).toHaveLength(0)
     })
   })
 
