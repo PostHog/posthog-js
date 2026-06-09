@@ -7,7 +7,10 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_REMOTE_CONFIG,
+    SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
@@ -2834,6 +2837,61 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_isSampled']).toStrictEqual(false)
         })
 
+        it('keeps explicit sampling overrides when sampleRate is 0', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(0)
+        })
+
+        it('does not reuse a sampled-in decision when sampleRate is lowered to 0 for URL + linked flag ALL match', () => {
+            const sessionRecordingConfig = {
+                endpoint: '/s/',
+                linkedFlag: 'the-flag-key',
+                urlTriggers: [{ url: 'start-on-me', matching: 'regex' as const }],
+                triggerMatchType: 'all' as const,
+            }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { ...sessionRecordingConfig, sampleRate: '1.00' },
+                })
+            )
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+            fakeNavigateTo('https://test.com/start-on-me')
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+
+            sessionRecording.stopRecording()
+            ;(posthog.capture as jest.Mock).mockClear()
+            sessionRecording = new SessionRecording(posthog)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { ...sessionRecordingConfig, sampleRate: '0.00' },
+                })
+            )
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            expect(posthog.capture).not.toHaveBeenCalled()
+        })
+
         it('does emit to capture if the sample rate is 1', () => {
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(posthog.capture).not.toHaveBeenCalled()
@@ -4501,6 +4559,55 @@ describe('Lazy SessionRecording', () => {
                     ]),
                 })
             )
+        })
+
+        it('does not reuse a sampled-in trigger group decision when sampleRate is lowered to 0', () => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 1.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 1,
+                sampled: true,
+            })
+
+            sessionRecording.stopRecording()
+            ;(posthog.capture as jest.Mock).mockClear()
+            sessionRecording = new SessionRecording(posthog)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 0.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 0,
+                sampled: false,
+            })
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('respects sampleRate < 1.0 and samples out when triggered', () => {
