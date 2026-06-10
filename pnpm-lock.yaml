@@ -910,6 +910,9 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@posthog/react-native-plugin':
+        specifier: workspace:*
+        version: link:../react-native-plugin
       '@react-native-async-storage/async-storage':
         specifier: ^1.17.10
         version: 1.17.11(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))

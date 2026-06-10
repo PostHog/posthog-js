@@ -1,13 +1,14 @@
 import { Platform } from 'react-native'
 
-// Note: typechecking will fail here until posthog-react-native-plugin v1.0.0 is published to npm.
-// Runtime resolution is tolerant via require()/try-catch (see below).
-import type PostHogReactNativePlugin from 'posthog-react-native-plugin'
+// `@posthog/react-native-plugin` is an optional native dependency. The type import
+// resolves against the workspace package; runtime resolution is tolerant via
+// require()/try-catch (see below) so the SDK still works when it isn't installed.
+import type PostHogReactNativePlugin from '@posthog/react-native-plugin'
 
 /**
  * Extended type for the native plugin module.
  *
- * `posthog-react-native-plugin` is the primary native plugin; we fall back to
+ * `@posthog/react-native-plugin` is the primary native plugin; we fall back to
  * `posthog-react-native-session-replay` (which has the same surface minus the
  * newer methods) when only the legacy package is installed.
  *
@@ -28,7 +29,7 @@ export let OptionalReactNativePlugin: PostHogReactNativePluginExtended | undefin
 
 if (Platform.OS !== 'macos' && Platform.OS !== 'web') {
   try {
-    OptionalReactNativePlugin = require('posthog-react-native-plugin')
+    OptionalReactNativePlugin = require('@posthog/react-native-plugin')
   } catch (e) {}
 
   if (!OptionalReactNativePlugin) {

@@ -18,7 +18,7 @@ export interface ErrorTrackingOptions {
   autocapture?: AutocaptureOptions | boolean
   /**
    * Enables native iOS/Android error autocapture through the optional native plugin.
-   * Disabled by default. Requires `posthog-react-native-plugin` installed.
+   * Disabled by default. Requires `@posthog/react-native-plugin` installed.
    */
   autocaptureNative?: boolean
 }
