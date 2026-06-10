@@ -2,38 +2,43 @@ import { POSTHOG_AI_GATEWAY_HOSTS, isPostHogAiGatewayUrl, warnIfPostHogAiGateway
 
 describe('gatewayWarning', () => {
   describe('isPostHogAiGatewayUrl', () => {
-    it('detects every maintained gateway host', () => {
-      for (const host of POSTHOG_AI_GATEWAY_HOSTS) {
-        expect(isPostHogAiGatewayUrl(`https://${host}/v1`)).toBe(true)
-      }
+    it.each(POSTHOG_AI_GATEWAY_HOSTS)('detects gateway host %s', (host) => {
+      expect(isPostHogAiGatewayUrl(`https://${host}/v1`)).toBe(true)
     })
 
-    it('detects the live production host with a per-product route prefix', () => {
-      expect(isPostHogAiGatewayUrl('https://gateway.us.posthog.com/v1')).toBe(true)
-      expect(isPostHogAiGatewayUrl('https://gateway.us.posthog.com/signals/v1')).toBe(true)
-      expect(isPostHogAiGatewayUrl('https://gateway.us.posthog.com/anthropic')).toBe(true)
+    it.each([
+      'https://gateway.us.posthog.com/v1',
+      'https://gateway.us.posthog.com/signals/v1',
+      'https://gateway.us.posthog.com/anthropic',
+    ])('detects the live production host with a route prefix: %s', (url) => {
+      expect(isPostHogAiGatewayUrl(url)).toBe(true)
     })
 
-    it('matches the host regardless of scheme, casing, or a missing scheme', () => {
-      expect(isPostHogAiGatewayUrl('http://gateway.us.posthog.com/v1')).toBe(true)
-      expect(isPostHogAiGatewayUrl('https://GATEWAY.US.POSTHOG.COM/v1')).toBe(true)
-      expect(isPostHogAiGatewayUrl('gateway.us.posthog.com/v1')).toBe(true)
+    it.each([
+      ['http scheme', 'http://gateway.us.posthog.com/v1'],
+      ['uppercase host', 'https://GATEWAY.US.POSTHOG.COM/v1'],
+      ['missing scheme', 'gateway.us.posthog.com/v1'],
+    ])('matches a gateway host with %s', (_label, url) => {
+      expect(isPostHogAiGatewayUrl(url)).toBe(true)
     })
 
-    it('does not match non-gateway PostHog hosts or other providers', () => {
-      expect(isPostHogAiGatewayUrl('https://us.i.posthog.com')).toBe(false)
-      expect(isPostHogAiGatewayUrl('https://eu.posthog.com')).toBe(false)
-      expect(isPostHogAiGatewayUrl('https://api.openai.com/v1')).toBe(false)
-      expect(isPostHogAiGatewayUrl('https://api.anthropic.com')).toBe(false)
-      // A look-alike host on a different domain must not match.
-      expect(isPostHogAiGatewayUrl('https://gateway.us.posthog.com.evil.example/v1')).toBe(false)
+    it.each([
+      ['ingestion host', 'https://us.i.posthog.com'],
+      ['app host', 'https://eu.posthog.com'],
+      ['openai', 'https://api.openai.com/v1'],
+      ['anthropic', 'https://api.anthropic.com'],
+      ['look-alike domain', 'https://gateway.us.posthog.com.evil.example/v1'],
+    ])('does not match non-gateway URL (%s)', (_label, url) => {
+      expect(isPostHogAiGatewayUrl(url)).toBe(false)
     })
 
-    it('does not match empty, missing, or malformed values', () => {
-      expect(isPostHogAiGatewayUrl('')).toBe(false)
-      expect(isPostHogAiGatewayUrl(undefined)).toBe(false)
-      expect(isPostHogAiGatewayUrl(null)).toBe(false)
-      expect(isPostHogAiGatewayUrl('::::not a url')).toBe(false)
+    it.each([
+      ['empty string', ''],
+      ['undefined', undefined],
+      ['null', null],
+      ['malformed', '::::not a url'],
+    ])('does not match %s', (_label, value) => {
+      expect(isPostHogAiGatewayUrl(value)).toBe(false)
     })
   })
 
