@@ -1,5 +1,6 @@
 ---
 'posthog-js': patch
+'@posthog/types': patch
 ---
 
 fix(sessionid): keep the session id stable across tabs
