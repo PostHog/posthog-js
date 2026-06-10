@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.46.26",
+  "version": "4.46.27",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

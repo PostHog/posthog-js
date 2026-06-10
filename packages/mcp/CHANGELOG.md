@@ -1,5 +1,13 @@
 # @posthog/mcp
 
+## 0.1.23
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.3
+  - posthog-node@5.36.12
+
 ## 0.1.22
 
 ### Patch Changes

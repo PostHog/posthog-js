@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.384.3
+
+### Patch Changes
+
+- [#3791](https://github.com/PostHog/posthog-js/pull/3791) [`2d21ada`](https://github.com/PostHog/posthog-js/commit/2d21ada24479c0d4f561dd3b6f5922ce3f8e4afd) Thanks [@marandaneto](https://github.com/marandaneto)! - Deprecate `__preview_disable_beacon` in favor of `disable_beacon` and mark `__preview_disable_xhr_credentials` as a no-op.
+  (2026-06-10)
+
 ## 1.384.2
 
 ### Patch Changes
