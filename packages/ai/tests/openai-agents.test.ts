@@ -243,7 +243,7 @@ describe('PostHogTracingProcessor', () => {
           input: [{ role: 'user', content: 'Hello' }],
           output: [{ role: 'assistant', content: 'Hi there!' }],
           model: 'gpt-4o',
-          model_config: { temperature: 0.7, max_tokens: 100 },
+          model_config: { temperature: 0.7, max_tokens: 100, base_url: 'https://gateway.posthog.com/v1' },
           usage: { input_tokens: 10, output_tokens: 20 },
         },
       })
@@ -254,6 +254,7 @@ describe('PostHogTracingProcessor', () => {
       const call = mockClient.capture.mock.calls[0][0]
 
       expect(call.event).toBe('$ai_generation')
+      expect(call.properties.$ai_base_url).toBe('https://gateway.posthog.com/v1')
       expect(call.properties.$ai_trace_id).toBe('trace_123456789')
       expect(call.properties.$ai_span_id).toBe('span_987654321')
       expect(call.properties.$ai_provider).toBe('openai')
@@ -265,6 +266,17 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_input).toEqual([{ role: 'user', content: 'Hello' }])
       expect(call.properties.$ai_output_choices).toEqual([{ role: 'assistant', content: 'Hi there!' }])
       expect(call.properties.$ai_model_parameters).toEqual({ temperature: 0.7, max_tokens: 100 })
+    })
+
+    it('defaults $ai_base_url to empty when model_config has no base_url', async () => {
+      const span = createMockSpan({
+        spanData: { type: 'generation', model: 'gpt-4o', model_config: { temperature: 0.7 } },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      expect(mockClient.capture.mock.calls[0][0].properties.$ai_base_url).toBe('')
     })
 
     it('handles no usage data with zero defaults', async () => {

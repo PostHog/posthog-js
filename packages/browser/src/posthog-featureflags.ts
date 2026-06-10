@@ -288,6 +288,27 @@ export class PostHogFeatureFlags implements Extension {
         return this._getValidEvaluationEnvironments().length > 0
     }
 
+    private _getValidFlagKeys(): string[] | undefined {
+        const flagKeys = this._config.flag_keys
+
+        if (isUndefined(flagKeys)) {
+            return undefined
+        }
+
+        if (!isArray(flagKeys)) {
+            logger.error('Invalid flag_keys found:', flagKeys, 'Expected array of non-empty strings')
+            return undefined
+        }
+
+        return flagKeys.filter((flagKey: string) => {
+            const isValid = flagKey && typeof flagKey === 'string' && flagKey.trim().length > 0
+            if (!isValid) {
+                logger.error('Invalid flag key found:', flagKey, 'Expected non-empty string')
+            }
+            return isValid
+        })
+    }
+
     initialize() {
         const { config } = this._instance
         const bootstrapFlags = config.bootstrap?.featureFlags ?? {}
@@ -562,9 +583,15 @@ export class PostHogFeatureFlags implements Extension {
             data.evaluation_contexts = this._getValidEvaluationEnvironments()
         }
 
+        const flagKeys = this._getValidFlagKeys()
+        if (!isUndefined(flagKeys)) {
+            data.flag_keys = flagKeys
+        }
+
         const queryParams = this._config.advanced_only_evaluate_survey_feature_flags
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
+        const isPartialFlagsResponse = !!this._config.advanced_only_evaluate_survey_feature_flags
 
         const url = this._instance.requestRouter.endpointFor('flags', '/flags/?v=2' + queryParams)
 
@@ -634,7 +661,7 @@ export class PostHogFeatureFlags implements Extension {
 
                 if (!data.disable_flags) {
                     this.receivedFeatureFlags(response.json ?? {}, errorsLoading, {
-                        partialResponse: !!this._config.advanced_only_evaluate_survey_feature_flags,
+                        partialResponse: isPartialFlagsResponse,
                     })
                 }
 
@@ -879,6 +906,11 @@ export class PostHogFeatureFlags implements Extension {
         // Add evaluation contexts if configured
         if (this._shouldIncludeEvaluationEnvironments()) {
             data.evaluation_contexts = this._getValidEvaluationEnvironments()
+        }
+
+        const flagKeys = this._getValidFlagKeys()
+        if (!isUndefined(flagKeys)) {
+            data.flag_keys = flagKeys
         }
 
         this._instance._send_request({

@@ -706,8 +706,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
             // Sync ticket_status so an agent-side resolve flips the UI to locked state even
             // while we're polling messages (ticket polling doesn't run in messages view).
+            // Using ticketBefore (non-null, validated by the stale check above) avoids relying
+            // on TS narrowing of the mutable this._currentTicketId field.
             if (response.ticket_status) {
-                this._applyTicketStatusUpdate(this._currentTicketId, response.ticket_status)
+                this._applyTicketStatusUpdate(ticketBefore, response.ticket_status)
             }
 
             if (response.messages.length > 0) {

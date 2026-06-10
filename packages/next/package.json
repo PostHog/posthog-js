@@ -1,6 +1,6 @@
 {
     "name": "@posthog/next",
-    "version": "0.4.30",
+    "version": "0.4.88",
     "description": "PostHog integration for Next.js",
     "repository": {
         "type": "git",
@@ -33,7 +33,12 @@
         },
         "./pages": {
             "types": "./dist/pages.d.ts",
-            "default": "./dist/pages.js"
+            "edge-light": "./dist/pages.edge.js",
+            "edge": "./dist/pages.edge.js",
+            "worker": "./dist/pages.edge.js",
+            "browser": "./dist/pages.client.js",
+            "react-server": "./dist/pages.js",
+            "default": "./dist/pages.client.js"
         }
     },
     "main": "./dist/index.client.js",

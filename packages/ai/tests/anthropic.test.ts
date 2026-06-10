@@ -1,5 +1,5 @@
 import { PostHog } from 'posthog-node'
-import PostHogAnthropic from '../src/anthropic'
+import PostHogAnthropic, { WrappedMessages } from '../src/anthropic'
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import { version } from '../package.json'
 
@@ -1142,5 +1142,25 @@ describe('PostHogAnthropic', () => {
         webSearchCount: 4,
       })
     })
+  })
+})
+
+// No API key: drive the wrapper with a fake parent to assert $ai_base_url carries its base URL.
+describe('PostHogAnthropic - $ai_base_url', () => {
+  it('emits the wrapped client base URL', async () => {
+    const ph = new (PostHog as any)()
+    ;(AnthropicOriginal.Messages.prototype.create as jest.Mock) = jest
+      .fn()
+      .mockResolvedValue(createMockResponse({ content: 'hi' }))
+
+    const wrapped = new WrappedMessages({ baseURL: 'https://gateway.posthog.com/anthropic' } as any, ph as any)
+    await wrapped.create({
+      model: 'claude-3-opus-20240229',
+      max_tokens: 16,
+      messages: [{ role: 'user', content: 'hi' }],
+    } as any)
+
+    const { properties } = (ph.capture as jest.Mock).mock.calls[0][0]
+    expect(properties['$ai_base_url']).toBe('https://gateway.posthog.com/anthropic')
   })
 })

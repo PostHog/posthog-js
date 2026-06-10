@@ -20,6 +20,7 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'exclamationmark.warninglight': 'warning',
   'link': 'link',
+  'list.bullet.rectangle': 'assignment',
 } as IconMapping
 
 /**

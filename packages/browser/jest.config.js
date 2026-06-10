@@ -25,6 +25,7 @@ module.exports = {
         '^preact/jsx-runtime$': path.join(preactRoot, 'jsx-runtime/dist/jsxRuntime.js'),
         '^preact/test-utils$': path.join(preactRoot, 'test-utils/dist/testUtils.js'),
         '^@testing-library/preact$': path.join(testingLibraryPreactCjs, 'index.js'),
+        '^@posthog/core/surveys$': '<rootDir>/../core/src/surveys/index.ts',
     },
     transform: {
         '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',

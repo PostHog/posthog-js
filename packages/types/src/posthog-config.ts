@@ -101,10 +101,21 @@ export interface RageclickConfig {
      * - `false`: Disable content-based exclusion
      * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
      *
-     * Checks if element text content or aria-label contains any of the keywords (case-insensitive)
+     * Checks if element text content or aria-label matches any of the keywords (case-insensitive).
+     * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
+     * so they don't suppress text like "sign-up", "5 > 3", or "C++".
      * @default true
      */
     content_ignorelist?: boolean | string[]
+
+    /**
+     * Excludes text-editing surfaces (textarea, text-like inputs, and contenteditable elements)
+     * from rageclick detection, since rapid repeated clicks there are double/triple-click text
+     * selection rather than rage.
+     * Enabled by default from the 2026-05-30 config defaults onwards.
+     * @default false
+     */
+    ignore_text_selection?: boolean
 
     /**
      * Maximum pixel distance between clicks to still be considered a rage click.
@@ -151,6 +162,10 @@ export interface PerformanceCaptureConfig {
 
     /**
      * Use chrome's web vitals library to wrap fetch and capture web vitals
+     *
+     * When `cookieless_mode` is active, there is no client-side SessionIdManager; vitals are still
+     * captured. Nested `$web_vitals_*_event` payloads omit `$session_id` / `$window_id`; PostHog ingestion assigns
+     * `$session_id` server-side for cookieless traffic when project cookieless settings are enabled (same as other events).
      */
     web_vitals?: boolean
 
@@ -289,6 +304,20 @@ export type DeadClicksAutoCaptureConfig = {
     capture_clicks_with_modifier_keys?: boolean
 
     /**
+     * List of CSS selectors to ignore dead clicks on
+     * e.g. ['.my-download-link']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > a > svg
+     * and ignore list config `['[download]']`
+     * we will ignore the dead click if the click-target or its parents has any download attribute
+     *
+     * Nothing is ignored when there's an empty ignorelist, e.g. []
+     * If no ignorelist is set, we default to ignoring .ph-no-deadclick and .ph-no-capture
+     * A custom ignorelist fully replaces the default — include .ph-no-capture if you want it to suppress dead-click capture as well
+     */
+    css_selector_ignorelist?: string[]
+
+    /**
      * Allows setting behavior for when a dead click is captured.
      * For e.g. to support capture to heatmaps
      *
@@ -309,7 +338,7 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
-export type ConfigDefaults = '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults = '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -524,8 +553,15 @@ export interface SessionRecordingOptions {
     compress_events?: boolean
 
     /**
-     * ADVANCED: alters the threshold before a recording considers a user has become idle.
-     * Normally only altered alongside changes to session_idle_timeout_ms.
+     * ADVANCED: Controls when session recording considers the user idle.
+     *
+     * If no replay user interaction occurs for this many milliseconds, the recorder marks the recording idle,
+     * emits a `sessionIdle` replay marker, flushes buffered replay events, and drops most subsequent replay
+     * events until user activity resumes. If activity resumes before `session_idle_timeout_seconds`, recording
+     * continues under the same `$session_id`.
+     *
+     * This does not control `$session_id` rotation. Session rotation is controlled by `session_idle_timeout_seconds`,
+     * so this value should be lower than `session_idle_timeout_seconds * 1000`.
      *
      * @default 1000 * 60 * 5 (5 minutes)
      */
@@ -871,6 +907,57 @@ export interface PostHogConfig {
     disable_cookie?: boolean
 
     /**
+     * Coalesce rapid `Persistence.save()` calls into a single write.
+     *
+     * Set to a positive number (milliseconds) to debounce writes to localStorage / cookie
+     * by that window. The in-memory `props` object is always updated synchronously so
+     * within-tab reads see the latest values immediately. Cross-tab `storage` events
+     * (which carry the full persistence value as a payload) are reduced proportionally
+     * to the debounce window.
+     *
+     * Pending writes are flushed on `beforeunload` and `pagehide` so no state is lost
+     * on tab close. The cross-tab visibility delay is bounded by the configured window.
+     *
+     * Defaults to `0` (no debouncing, write synchronously) for backwards compatibility.
+     * On pages that capture many events per second, `250` is a reasonable starting point
+     * to reduce localStorage write pressure and cross-tab IPC traffic. The `2026-05-30`
+     * config default opts into `250` automatically.
+     *
+     * @default 0
+     */
+    persistence_save_debounce_ms?: number
+
+    /**
+     * Store the feature-flag config cluster and survey config in their own
+     * localStorage entries (`<name>__flags`, `<name>__surveys`) instead of the
+     * single main persistence blob. These payloads are large and change rarely,
+     * so keeping them out of the main blob stops them riding on every
+     * high-frequency main-blob write and broadcasting cross-tab `storage` events.
+     *
+     * Only applies when persistence resolves to `localStorage` / `localStorage+cookie`
+     * (the split is pointless for `memory` / `sessionStorage` and impossible for `cookie`).
+     * On load the old main-blob location is read once and migrated forward, so
+     * upgrades never miss a cached flag. The `2026-05-30` config default opts in.
+     *
+     * @default false
+     */
+    split_storage?: boolean
+
+    /**
+     * Detect the Google Search App (GSA) as its own `$browser` value instead of
+     * the underlying webview it embeds — Mobile Safari on iOS, Chrome on Android.
+     * Detection keys off the `GSA/` marker present in the UA on every platform.
+     *
+     * Off by default for backwards-compatibility: enabling it reattributes
+     * existing GSA traffic away from Mobile Safari / Chrome, which would
+     * otherwise look like those browsers suddenly losing share. The `2026-05-30`
+     * config default opts in.
+     *
+     * @default false
+     */
+    detect_google_search_app?: boolean
+
+    /**
      * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false
@@ -1135,6 +1222,17 @@ export interface PostHogConfig {
     __preview_deferred_init_extensions: boolean
 
     /**
+     * In `'localStorage+cookie'` persistence mode, prefer cookie values over localStorage
+     * when both stores carry the same key. Fixes cross-subdomain identify and session
+     * disconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.
+     * Read at SDK init; has no effect when toggled via `set_config` or for other persistence modes.
+     *
+     * @default false
+     * @experimental
+     */
+    __preview_cookie_wins_on_conflict: boolean
+
+    /**
      * Determines the session recording options.
      *
      * For more session recording settings, see the `enable_recording_console_log` and `capture_performance` configuration option.
@@ -1154,7 +1252,15 @@ export interface PostHogConfig {
 
     /**
      * Determines the session idle timeout in seconds.
-     * Any new event that's happened after this timeout will create a new session.
+     *
+     * If no events are captured for this many seconds, the next event starts a
+     * new session with a new `$session_id` (and `$window_id`). The SDK may also proactively reset the stored session
+     * after the timeout while the page is idle, so the next event creates a new session.
+     *
+     * Session recording has a separate idle threshold: `session_recording.session_idle_threshold_ms`. That setting
+     * only controls when the user is considered idle, it does not rotate `$session_id`.
+     *
+     * Must be between 60 seconds and 10 hours. Values outside this range are clamped.
      *
      * @default 30 * 60 -- 30 minutes
      */
@@ -1264,6 +1370,19 @@ export interface PostHogConfig {
      * @default undefined
      */
     evaluation_contexts?: readonly string[]
+
+    /**
+     * List of feature flag keys to remotely evaluate for this SDK instance.
+     * When set, only these flags are evaluated by `/flags`; omitted flags are not remotely evaluated.
+     * Dependencies of the requested flags may still be evaluated internally by PostHog.
+     * If unset, all eligible flags are evaluated.
+     *
+     * Examples: ['checkout-redesign', 'new-onboarding']
+     *
+     * @default undefined
+     */
+    flag_keys?: readonly string[]
+
     /**
      * Evaluation environments for feature flags.
      * @deprecated Use evaluation_contexts instead. This property will be removed in a future version.
@@ -1350,7 +1469,7 @@ export interface PostHogConfig {
      * - **Disabled (0)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
      *   Use this if you control flag updates manually or have infrequent flag changes.
      *
-     * Note: Refreshes are automatically skipped when the browser tab is hidden.
+     * Note: Refreshes are automatically skipped when the browser tab is hidden or no document is available.
      *
      * @default 300000 (5 minutes)
      */
@@ -1444,6 +1563,8 @@ export interface PostHogConfig {
     /**
      * Determines whether to capture dead clicks.
      *
+     * by default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent
+     *
      * @see {DeadClicksAutoCaptureConfig}
      * @default undefined
      */
@@ -1530,6 +1651,10 @@ export interface PostHogConfig {
     /**
      * Enables cookieless mode. In this mode, PostHog will not set any cookies, or use session or local storage. User
      * identity is handled by generating a privacy-preserving hash on PostHog's servers.
+     *
+     * Web Vitals (`capture_performance.web_vitals`) are supported: metrics are sent without client session IDs;
+     * ingestion assigns `$session_id` when cookieless mode is enabled for the project.
+     *
      * - 'always' - enable cookieless mode immediately on startup, use this if you do not intend to show a cookie banner
      * - 'on_reject' - enable cookieless mode only if the user rejects cookies, use this if you want to show a cookie banner. If the user accepts cookies, cookieless mode will not be used, and PostHog will use cookies and local storage as usual.
      *
@@ -1577,18 +1702,22 @@ export interface PostHogConfig {
      * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID). Used to link
      * frontend sessions to backend traces (see https://posthog.com/docs/llm-analytics/link-session-replay).
      */
+    tracing_headers?: string[]
+
+    /**
+     * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
+     */
     addTracingHeaders?: string[]
 
     // ------- PREVIEW CONFIGS -------
 
     /**
-     * @deprecated Use {@link addTracingHeaders} instead. Kept for backwards compatibility.
+     * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
      */
     __add_tracing_headers?: string[]
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Whether to use the new /flags/ endpoint
+     * @deprecated This option is a no-op. The browser SDK already uses the `/flags/?v=2` endpoint.
      * */
     __preview_flags_v2?: boolean
 

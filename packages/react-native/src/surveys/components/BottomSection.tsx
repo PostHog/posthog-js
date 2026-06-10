@@ -1,6 +1,7 @@
 import React from 'react'
-import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Linking, Text, TouchableOpacity, View } from 'react-native'
 
+import { createSafeStyleSheet } from '../safeStyleSheet'
 import { SurveyAppearanceTheme } from '../surveys-utils'
 
 export function BottomSection({
@@ -48,7 +49,7 @@ export function BottomSection({
   )
 }
 
-const styles = StyleSheet.create({
+const styles = createSafeStyleSheet({
   bottomSection: {
     padding: 10,
   },

@@ -142,10 +142,13 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
   conditionalTest('basic completion', async () => {
     // Set up mock response for chat completions
     const mockAzureChatResponse = {
-      id: 'test-response-id',
+      id: 'chatcmpl-test-response-id',
       model: 'gpt-4',
       object: 'chat.completion',
       created: Date.now() / 1000,
+      system_fingerprint: 'fp_test123',
+      // `_request_id` is attached by the OpenAI SDK from the `x-request-id` header.
+      _request_id: 'req_test-request-id',
       choices: [
         {
           index: 0,
@@ -202,6 +205,11 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
+    expect(properties['$ai_completion_id']).toBe('chatcmpl-test-response-id')
+    expect(properties['$ai_provider_metadata']).toEqual({
+      system_fingerprint: 'fp_test123',
+      request_id: 'req_test-request-id',
+    })
   })
 
   conditionalTest('groups', async () => {

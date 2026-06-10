@@ -68,6 +68,7 @@ module.exports = {
         {
             files: [
                 'packages/core/**',
+                'packages/mcp/**',
                 'packages/nextjs-config/**',
                 'packages/nuxt/**',
                 'packages/react-native/**',
@@ -103,6 +104,26 @@ module.exports = {
             excludedFiles: ['**/*.spec.*', '**/*.test.*'],
             rules: {
                 'posthog-js/no-unsafe-web-global': 'error',
+            },
+        },
+        {
+            files: [
+                'packages/core/src/**',
+                'packages/react-native/src/**',
+                'packages/node/src/**',
+                'packages/web/src/**',
+            ],
+            excludedFiles: ['**/*.spec.*', '**/*.test.*'],
+            rules: {
+                'no-restricted-syntax': [
+                    'error',
+                    {
+                        selector:
+                            "CallExpression[callee.object.name='Promise'][callee.property.name='allSettled']",
+                        message:
+                            'Use `allSettled` from @posthog/core (packages/core/src/utils) instead of Promise.allSettled — Promise.allSettled can be broken by runtime Promise patching on some RN environments.',
+                    },
+                ],
             },
         },
     ],

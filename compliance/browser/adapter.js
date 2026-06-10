@@ -191,6 +191,7 @@ app.get('/health', (req, res) => {
         sdk_name: 'posthog-js',
         sdk_version: require('../../packages/browser/package.json').version,
         adapter_version: '1.0.0',
+        capabilities: ['capture_v0', 'encoding_gzip'],
     })
 })
 
@@ -218,7 +219,7 @@ app.post('/init', (req, res) => {
         autocapture: false,
         disable_session_recording: true,
         disable_surveys: true,
-        advanced_disable_feature_flags: true,
+        advanced_disable_feature_flags: false,
         advanced_disable_feature_flags_on_first_load: true,
         // Test-friendly settings - use request_queue_config for batching
         request_queue_config: {
@@ -285,6 +286,90 @@ app.get('/state', (req, res) => {
         last_error: null,
         requests_made: state.requestsMade,
     })
+})
+
+app.post('/get_feature_flag', async (req, res) => {
+    if (!state.instance) {
+        return res.status(400).json({ error: 'SDK not initialized' })
+    }
+
+    const {
+        key,
+        distinct_id,
+        person_properties,
+        groups,
+        group_properties,
+        // disable_geoip is not exposed per-call by the browser SDK; accepted but ignored
+        // eslint-disable-next-line no-unused-vars
+        disable_geoip,
+        force_remote = true,
+    } = req.body || {}
+
+    if (!key) {
+        return res.status(400).json({ error: 'key is required' })
+    }
+    if (!distinct_id) {
+        return res.status(400).json({ error: 'distinct_id is required' })
+    }
+
+    try {
+        // The browser SDK is stateful; configure the instance for this user
+        // before evaluating the flag.
+        if (state.instance.get_distinct_id() !== distinct_id) {
+            state.instance.identify(distinct_id)
+        }
+
+        // Apply group memberships and properties (without triggering auto reloads)
+        if (groups && typeof groups === 'object') {
+            for (const [groupType, groupKey] of Object.entries(groups)) {
+                const props = (group_properties && group_properties[groupType]) || undefined
+                // Pass false as the 4th arg so each group() call does not
+                // trigger its own reloadFeatureFlags(); we explicitly reload
+                // below when force_remote is requested.
+                state.instance.group(groupType, groupKey, props, false)
+            }
+        }
+
+        // Apply property overrides used for flag evaluation. Pass false so the
+        // SDK does not reload flags for each call; we explicitly reload below
+        // when force_remote is requested.
+        if (person_properties && typeof person_properties === 'object') {
+            state.instance.setPersonPropertiesForFlags(person_properties, false)
+        }
+        if (group_properties && typeof group_properties === 'object') {
+            state.instance.setGroupPropertiesForFlags(group_properties, false)
+        }
+
+        if (force_remote) {
+            // Wait for the next /flags response. addFeatureFlagsHandler does
+            // not fire immediately when flags are already loaded, so the
+            // promise resolves only after the reload we trigger below
+            // completes. Reject after 10s if the reload errors silently so
+            // the request does not hang forever.
+            await new Promise((resolve, reject) => {
+                let timeoutId = null
+                const handler = () => {
+                    if (timeoutId !== null) {
+                        clearTimeout(timeoutId)
+                    }
+                    state.instance.featureFlags.removeFeatureFlagsHandler(handler)
+                    resolve()
+                }
+                timeoutId = setTimeout(() => {
+                    state.instance.featureFlags.removeFeatureFlagsHandler(handler)
+                    reject(new Error('Timed out waiting for reloadFeatureFlags response'))
+                }, 10000)
+                state.instance.featureFlags.addFeatureFlagsHandler(handler)
+                state.instance.reloadFeatureFlags()
+            })
+        }
+
+        const value = state.instance.getFeatureFlag(key)
+
+        res.json({ success: true, value })
+    } catch (error) {
+        res.status(500).json({ error: error.message })
+    }
 })
 
 app.post('/reset', (req, res) => {

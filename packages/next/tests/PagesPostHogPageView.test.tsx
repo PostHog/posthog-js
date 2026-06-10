@@ -23,15 +23,15 @@ describe('Pages PostHogPageView', () => {
     it('captures a $pageview event on mount', () => {
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: '/initial',
+            $current_url: 'http://localhost/initial',
         })
     })
 
-    it('includes query params from asPath', () => {
-        mockRouter = { asPath: '/search?q=hello&page=2', isReady: true }
+    it('includes query params and hash fragments from asPath', () => {
+        mockRouter = { asPath: '/search?q=hello&page=2#section', isReady: true }
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: '/search?q=hello&page=2',
+            $current_url: 'http://localhost/search?q=hello&page=2#section',
         })
     })
 
@@ -43,7 +43,7 @@ describe('Pages PostHogPageView', () => {
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(2)
         expect(mockCapture).toHaveBeenLastCalledWith('$pageview', {
-            $current_url: '/new-page',
+            $current_url: 'http://localhost/new-page',
         })
     })
 
@@ -68,7 +68,7 @@ describe('Pages PostHogPageView', () => {
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(1)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: '/initial',
+            $current_url: 'http://localhost/initial',
         })
     })
 })

@@ -24,7 +24,7 @@ jobs:
             has-changesets: ${{ steps.check.outputs.has-changesets }}
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   ref: main
                   fetch-depth: 0
@@ -45,7 +45,7 @@ jobs:
         name: Notify Slack - Approval Needed
         needs: check-changesets
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@main
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@5fc4680761e8ac29a61b212756230eba0e276d8c
         with:
             slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
             slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
@@ -72,7 +72,7 @@ jobs:
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
-              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -88,7 +88,7 @@ jobs:
                   private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
 
             - name: Checkout repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   ref: main
                   fetch-depth: 0
@@ -134,7 +134,7 @@ jobs:
 
             - name: Send failure event to PostHog
               if: ${{ failure() }}
-              uses: PostHog/posthog-github-action@v1
+              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
                   event: 'posthog-js-github-release-workflow-failure'
@@ -149,7 +149,7 @@ jobs:
 
             - name: Notify Slack - Failed
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -189,7 +189,7 @@ jobs:
             - name: Notify Slack - Rejected
               if: steps.check-rejection.outputs.was_rejected == 'true'
               continue-on-error: true
-              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -213,6 +213,7 @@ jobs:
             matrix:
                 package:
                     - name: posthog-react-native
+                    - name: '@posthog/react-native-plugin'
                     - name: posthog-node
                     - name: posthog-js-lite
                     - name: posthog-js
@@ -220,16 +221,24 @@ jobs:
                     - name: '@posthog/react'
                     - name: '@posthog/ai'
                     - name: '@posthog/convex'
+                    - name: '@posthog/mcp'
+                    - name: '@posthog/next'
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'
                     - name: '@posthog/plugin-utils'
                     - name: '@posthog/rollup-plugin'
                     - name: '@posthog/types'
                     - name: '@posthog/webpack-plugin'
+                    # The @posthog/rrweb* packages live in `packages/rrweb/**` and
+                    # are consumed as `workspace:*` devDependencies of `posthog-js`,
+                    # then bundled into the browser SDK at build time (see
+                    # `packages/browser/src/entrypoints/{recorder,posthog-recorder}.ts`).
+                    # We deliberately do NOT publish them to npm — they are
+                    # omitted from this matrix on purpose.
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 0
@@ -248,7 +257,7 @@ jobs:
 
             - name: Check ${{ matrix.package.name }} version and detect an update
               id: check-package-version
-              uses: PostHog/check-package-version@v2
+              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
               with:
                   path: ${{ steps.get-package-path.outputs.path }}
 
@@ -334,7 +343,7 @@ jobs:
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Send failure event to PostHog
               if: ${{ failure() }}
-              uses: PostHog/posthog-github-action@v1
+              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
                   event: 'posthog-js-github-release-workflow-failure'
@@ -350,7 +359,7 @@ jobs:
             - name: Notify Slack - Failed
               continue-on-error: true # Slack failure shouldn't mark release as failed
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -373,14 +382,14 @@ jobs:
             committed-version: ${{ steps.check-version.outputs.committed-version }}
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 1
 
             - name: Check posthog-js version
               id: check-version
-              uses: PostHog/check-package-version@v2
+              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
               with:
                   path: packages/browser
 
@@ -390,10 +399,12 @@ jobs:
 
             - name: Upload dist artifact
               if: steps.check-version.outputs.is-new-version == 'true'
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: posthog-js-dist
-                  path: packages/browser/dist/*.js
+                  path: |
+                      packages/browser/dist/*.js
+                      packages/browser/dist/*.js.map
                   retention-days: 1
                   if-no-files-found: error
 
@@ -429,7 +440,7 @@ jobs:
             TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ needs.version-bump.outputs.version }}/
         steps:
             - name: Checkout posthog/posthog
-              uses: actions/checkout@v6
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   repository: PostHog/posthog
                   ref: master
@@ -439,7 +450,7 @@ jobs:
               uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pin v5.0.0
 
             - name: Setup Node.js
-              uses: actions/setup-node@v6
+              uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
               with:
                   node-version: '24'
                   cache: 'pnpm'
@@ -471,7 +482,7 @@ jobs:
             # upload step has stable filenames. The runtime CSS loader in the
             # JS bundle expects the literal `toolbar.css`.
             #
-            # Source maps are discarded (we don't ship them to end users).
+            # Toolbar source maps are discarded (we don't ship them to end users).
             - name: Normalize toolbar output filenames
               run: |
                   set -euo pipefail
@@ -528,7 +539,7 @@ jobs:
                   echo "  built from:          PostHog/posthog@$(git rev-parse HEAD)"
 
             - name: Upload toolbar artifact
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: toolbar-dist-${{ matrix.region.name }}
                   # Least common ancestor of these paths is `frontend/dist`,
@@ -563,7 +574,7 @@ jobs:
             # Sparse checkout the release tooling plus the root pnpm files so
             # we can do a locked, filtered install for @posthog-tooling/release.
             - name: Checkout release tooling
-              uses: actions/checkout@v6
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
                   sparse-checkout: |
@@ -578,7 +589,7 @@ jobs:
               uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
 
             - name: Setup Node.js
-              uses: actions/setup-node@v5
+              uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
               with:
                   node-version: '24'
                   cache: 'pnpm'
@@ -587,7 +598,7 @@ jobs:
               run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
 
             - name: Download dist artifact
-              uses: actions/download-artifact@v8
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
               with:
                   name: posthog-js-dist
                   path: packages/browser/dist
@@ -601,7 +612,7 @@ jobs:
             # region-specific artifact is missing gives us clean per-region
             # fate-sharing.
             - name: Download toolbar artifact
-              uses: actions/download-artifact@v8
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
               with:
                   name: toolbar-dist-${{ matrix.region.name }}
                   path: packages/browser/dist
@@ -611,7 +622,7 @@ jobs:
             # right role ARN with a ternary on the region name. If you add a
             # region here, also add it below.
             - name: Configure AWS credentials
-              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
+              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
               with:
                   role-to-assume: ${{ matrix.region.name == 'us' && vars.AWS_S3_UPLOAD_ROLE_ARN_US || vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: ${{ matrix.region.aws_region }}
@@ -624,7 +635,7 @@ jobs:
 
             - name: Send failure event to PostHog
               if: ${{ failure() }}
-              uses: PostHog/posthog-github-action@v1
+              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
                   event: 'posthog-js-github-release-workflow-failure'
@@ -643,7 +654,7 @@ jobs:
             - name: Notify Slack - S3 Upload Failed
               continue-on-error: true
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -662,11 +673,11 @@ jobs:
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
             - name: Notify Slack - Released
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -693,7 +704,7 @@ jobs:
         steps:
             - name: Notify Slack - Partial Release
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              uses: PostHog/.github/.github/actions/slack-thread-reply@main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}

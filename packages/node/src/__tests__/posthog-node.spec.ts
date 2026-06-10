@@ -98,6 +98,7 @@ describe('PostHog Node.js', () => {
             $geoip_disable: true,
             $lib: 'posthog-node',
             $lib_version: '1.2.3',
+            $is_server: true,
           },
           uuid: expect.any(String),
           timestamp: expect.any(String),
@@ -106,6 +107,34 @@ describe('PostHog Node.js', () => {
           library_version: '1.2.3',
         },
       ])
+    })
+
+    it('should not include $is_server when isServer is false (client/CLI usage)', async () => {
+      const cliClient = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        isServer: false,
+      })
+
+      try {
+        cliClient.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+
+        await waitForFlushTimer()
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents?.[0]).toEqual(
+          expect.objectContaining({
+            event: 'test-event',
+            properties: expect.objectContaining({
+              $lib: 'posthog-node',
+            }),
+          })
+        )
+        expect(batchEvents?.[0]?.properties).not.toHaveProperty('$is_server')
+      } finally {
+        await cliClient.shutdown()
+      }
     })
 
     it('shouldnt muddy subsequent capture calls', async () => {
@@ -236,6 +265,28 @@ describe('PostHog Node.js', () => {
       ])
     })
 
+    it('should await the network request when identifyImmediate is awaited', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+      await posthog.identifyImmediate({ distinctId: '123', properties: { foo: 'bar' } })
+
+      // Without awaiting the underlying request, the batch endpoint would not have been hit yet
+      // (regression guard for the missing-await bug in identifyImmediate).
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toMatchObject([
+        {
+          distinct_id: '123',
+          event: '$identify',
+          properties: {
+            $set: {
+              foo: 'bar',
+            },
+            $geoip_disable: true,
+          },
+        },
+      ])
+    })
+
     it('should allow overriding timestamp', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.capture({ event: 'custom-time', distinctId: '123', timestamp: new Date('2021-02-03') })
@@ -284,6 +335,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
     })
 
@@ -304,6 +356,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       client.capture({
@@ -323,6 +376,7 @@ describe('PostHog Node.js', () => {
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
         $geoip_disable: true,
+        $is_server: true,
       })
 
       client.capture({
@@ -342,6 +396,7 @@ describe('PostHog Node.js', () => {
         foo: 'bar',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       await client.shutdown()
@@ -964,6 +1019,42 @@ describe('PostHog Node.js', () => {
       expect(posthog.options.personalApiKey).toEqual('TEST_PERSONAL_API_KEY')
     })
 
+    it('should not start local evaluation polling or fetch flags when api key is missing', async () => {
+      mockedFetch.mockClear()
+
+      posthog = new PostHog('  \n\t ', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        featureFlagsPollingInterval: 100,
+        disableCompression: true,
+      })
+
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      expect(posthog.isDisabled).toEqual(true)
+      expect(await posthog.getFeatureFlag('feature-1', 'distinct_id')).toBeUndefined()
+      expect(await posthog.getAllFlagsAndPayloads('distinct_id')).toEqual({
+        featureFlags: {},
+        featureFlagPayloads: {},
+      })
+      expect((await posthog.evaluateFlags('distinct_id')).keys).toEqual([])
+
+      posthog.capture({ distinctId: 'distinct_id', event: 'node test event', sendFeatureFlags: true })
+      await posthog.captureImmediate({
+        distinctId: 'distinct_id',
+        event: 'node immediate event',
+        sendFeatureFlags: true,
+      })
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      expect(mockedFetch).not.toHaveBeenCalled()
+    })
+
     it('should throw an error when creating SDK if a project key is passed in as personalApiKey', async () => {
       expect(() => {
         posthog = new PostHog('TEST_API_KEY', {
@@ -1120,6 +1211,7 @@ describe('PostHog Node.js', () => {
         '$feature/feature-variant': 'variant',
         $lib: 'posthog-node',
         $lib_version: '1.2.3',
+        $is_server: true,
       })
 
       // no calls to `/local_evaluation`
@@ -2734,6 +2826,19 @@ describe('PostHog Node.js', () => {
       await expect(posthogWithoutKey.getRemoteConfigPayload('test-flag')).rejects.toThrow(
         'Personal API key is required for remote config payload decryption'
       )
+    })
+
+    it('should return undefined without fetching when api key is missing', async () => {
+      const posthogWithoutProjectKey = new PostHog('  \n\t ', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+      })
+      mockedFetch.mockClear()
+
+      await expect(posthogWithoutProjectKey.getRemoteConfigPayload('test-flag')).resolves.toBeUndefined()
+      expect(mockedFetch).not.toHaveBeenCalled()
     })
 
     it('should return empty object when no payload is available', async () => {

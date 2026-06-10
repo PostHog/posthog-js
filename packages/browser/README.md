@@ -13,17 +13,6 @@ We use pnpm.
 It's best to install using `npm install -g pnpm@latest-9`
 and then `pnpm` commands as usual
 
-### Optional Dependencies
-
-This package has the following optional peer dependencies:
-
-- `@rrweb/types` (2.0.0-alpha.17): Only required if you're using Angular Compiler and need type definitions for the rrweb integration.
-- `rrweb-snapshot` (2.0.0-alpha.17): Only required if you're using Angular Compiler and need type definitions for the rrweb integration.
-
-These dependencies are marked as optional to reduce installation size for users who don't need these specific features.
-
-##
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for package-specific testing and local linking instructions.

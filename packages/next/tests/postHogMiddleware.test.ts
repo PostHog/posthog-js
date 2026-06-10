@@ -114,9 +114,18 @@ describe('postHogMiddleware', () => {
             expect(mockCookiesSet).toHaveBeenCalledWith(COOKIE_NAME, expect.any(String), expect.any(Object))
         })
 
-        it('throws when neither config nor env var provides apiKey', () => {
+        it('warns and skips cookie seeding when neither config nor env var provides apiKey', async () => {
             delete process.env.NEXT_PUBLIC_POSTHOG_KEY
-            expect(() => postHogMiddleware({})).toThrow('[PostHog Next.js] apiKey is required')
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const middleware = postHogMiddleware({})
+            const req = new MockNextRequest('https://example.com/')
+
+            await middleware(req as any)
+
+            expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+            expect(mockCookiesSet).not.toHaveBeenCalled()
+            expect(mockNextResponseNext).toHaveBeenCalled()
+            warnSpy.mockRestore()
         })
     })
 

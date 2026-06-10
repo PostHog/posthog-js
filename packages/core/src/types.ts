@@ -220,6 +220,9 @@ export enum PostHogPersistedProperty {
   BootstrapFeatureFlagPayloads = 'bootstrap_feature_flag_payloads',
   OverrideFeatureFlags = 'override_feature_flags',
   Queue = 'queue',
+  // Logs queue. Individual SDKs may route this key to an isolated storage
+  // instance if they want to separate logs write volume from main state.
+  LogsQueue = 'logs_queue',
   OptedOut = 'opted_out',
   SessionId = 'session_id',
   SessionStartTimestamp = 'session_start_timestamp',
@@ -268,6 +271,7 @@ export type PostHogFetchResponse = {
   headers?: {
     get(name: string): string | null
   }
+  body?: ReadableStream<Uint8Array> | null
 }
 
 export type PostHogQueueItem = {
@@ -337,6 +341,18 @@ export type PostHogRemoteConfig = {
    * When a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely.
    */
   capturePerformance?:
+    | boolean
+    | {
+        [key: string]: JsonType
+      }
+
+  /**
+   * Logs feature remote config. When a map, `captureConsoleLogs` (boolean)
+   * is the local opt-in flag for `console.*` autocapture (read by the JS
+   * SDK's `PostHogLogs` extension to decide whether to load the autocapture
+   * bundle).
+   */
+  logs?:
     | boolean
     | {
         [key: string]: JsonType
@@ -603,16 +619,34 @@ export interface SurveyValidationRule {
   errorMessage?: string
 }
 
+export interface SurveyTranslation {
+  name?: string
+  thankYouMessageHeader?: string
+  thankYouMessageDescription?: string
+  thankYouMessageCloseButtonText?: string
+}
+
+export interface SurveyQuestionTranslation {
+  question?: string
+  description?: string | null
+  buttonText?: string
+  link?: string | null
+  lowerBoundLabel?: string
+  upperBoundLabel?: string
+  choices?: string[]
+}
+
 type SurveyQuestionBase = {
   question: string
   id: string
-  description?: string
+  description?: string | null
   descriptionContentType?: SurveyQuestionDescriptionContentType
   optional?: boolean
   buttonText?: string
   originalQuestionIndex: number
   branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
   validation?: SurveyValidationRule[]
+  translations?: Record<string, SurveyQuestionTranslation>
 }
 
 export type BasicSurveyQuestion = SurveyQuestionBase & {
@@ -621,7 +655,7 @@ export type BasicSurveyQuestion = SurveyQuestionBase & {
 
 export type LinkSurveyQuestion = SurveyQuestionBase & {
   type: SurveyQuestionType.Link
-  link?: string
+  link?: string | null
 }
 
 export type RatingSurveyQuestion = SurveyQuestionBase & {
@@ -683,6 +717,10 @@ export type SurveyResponse = {
   surveys: Survey[]
 }
 
+export type SurveyResponseValue = string | number | string[] | null
+
+export type SurveyResponses = Record<string, SurveyResponseValue>
+
 export type SurveyCallback = (surveys: Survey[]) => void
 
 export enum SurveyMatchType {
@@ -725,6 +763,7 @@ export type Survey = {
   name: string
   description?: string
   type: SurveyType
+  translations?: Record<string, SurveyTranslation>
   feature_flag_keys?: {
     key: string
     value?: string
@@ -787,6 +826,7 @@ export type ActionStepType = {
 }
 
 export type Logger = {
+  debug: (...args: any[]) => void
   info: (...args: any[]) => void
   warn: (...args: any[]) => void
   error: (...args: any[]) => void

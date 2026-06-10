@@ -38,50 +38,66 @@ describe('PostHogSpanProcessor', () => {
   it.each([
     {
       name: 'default host',
-      apiKey: 'phc_test123',
+      projectToken: 'phc_test123',
       host: undefined,
       expectedUrl: 'https://us.i.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test123',
+      expectedToken: 'phc_test123',
     },
     {
       name: 'custom host',
-      apiKey: 'phc_test456',
+      projectToken: 'phc_test456',
       host: 'https://eu.i.posthog.com',
       expectedUrl: 'https://eu.i.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test456',
+      expectedToken: 'phc_test456',
     },
     {
       name: 'trailing slash',
-      apiKey: 'phc_test789',
+      projectToken: 'phc_test789',
       host: 'https://custom.posthog.com/',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test789',
+      expectedToken: 'phc_test789',
     },
     {
       name: 'trimmed whitespace-sensitive values',
-      apiKey: '  phc_test999\t ',
+      projectToken: '  phc_test999\t ',
       host: '  https://custom.posthog.com/\n',
       expectedUrl: 'https://custom.posthog.com/i/v0/ai/otel',
-      expectedApiKey: 'phc_test999',
+      expectedToken: 'phc_test999',
     },
-  ])('configures the OTLP exporter correctly with $name', ({ apiKey, host, expectedUrl, expectedApiKey }) => {
-    new PostHogSpanProcessor({ apiKey, host })
+  ])('configures the OTLP exporter correctly with $name', ({ projectToken, host, expectedUrl, expectedToken }) => {
+    new PostHogSpanProcessor({ projectToken, host })
 
     expect(OTLPTraceExporter).toHaveBeenCalledWith({
       url: expectedUrl,
-      headers: { Authorization: `Bearer ${expectedApiKey}` },
+      headers: { Authorization: `Bearer ${expectedToken}` },
     })
     expect(BatchSpanProcessor).toHaveBeenCalledWith(expect.any(Object))
   })
 
-  it('throws when apiKey is missing', () => {
-    expect(() => new PostHogSpanProcessor({ apiKey: '' })).toThrow('PostHogSpanProcessor requires an apiKey')
-    expect(() => new PostHogSpanProcessor({ apiKey: '  \n\t ' })).toThrow('PostHogSpanProcessor requires an apiKey')
+  it.each([
+    ['missing', {}],
+    ['empty', { projectToken: '' }],
+    ['blank', { projectToken: '  \n\t ' }],
+  ])('disables and no-ops when projectToken is %s', async (_case, options) => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const processor = new PostHogSpanProcessor(options as any)
+
+    processor.onStart({} as Span, {} as Context)
+    processor.onEnd(makeSpan('gen_ai.chat'))
+    await expect(processor.shutdown()).resolves.toBeUndefined()
+    await expect(processor.forceFlush()).resolves.toBeUndefined()
+
+    expect(OTLPTraceExporter).not.toHaveBeenCalled()
+    expect(BatchSpanProcessor).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.'
+    )
+    warnSpy.mockRestore()
   })
 
   it('delegates onStart to the inner processor', () => {
     const inner = mockProcessor()
-    const processor = new PostHogSpanProcessor({ apiKey: 'phc_test', _spanProcessor: inner })
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
 
     const span = {} as Span
     const ctx = {} as Context
@@ -92,7 +108,7 @@ describe('PostHogSpanProcessor', () => {
 
   it('delegates shutdown', async () => {
     const inner = mockProcessor()
-    const processor = new PostHogSpanProcessor({ apiKey: 'phc_test', _spanProcessor: inner })
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
 
     await processor.shutdown()
     expect(inner.shutdown).toHaveBeenCalled()
@@ -100,7 +116,7 @@ describe('PostHogSpanProcessor', () => {
 
   it('delegates forceFlush', async () => {
     const inner = mockProcessor()
-    const processor = new PostHogSpanProcessor({ apiKey: 'phc_test', _spanProcessor: inner })
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
 
     await processor.forceFlush()
     expect(inner.forceFlush).toHaveBeenCalled()
@@ -110,7 +126,7 @@ describe('PostHogSpanProcessor', () => {
 describe('PostHogSpanProcessor AI span filtering', () => {
   it('forwards spans with AI name prefixes', () => {
     const inner = mockProcessor()
-    const processor = new PostHogSpanProcessor({ apiKey: 'phc_test', _spanProcessor: inner })
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
 
     processor.onEnd(makeSpan('gen_ai.chat'))
     processor.onEnd(makeSpan('llm.completion'))
@@ -122,7 +138,7 @@ describe('PostHogSpanProcessor AI span filtering', () => {
 
   it('drops non-AI spans', () => {
     const inner = mockProcessor()
-    const processor = new PostHogSpanProcessor({ apiKey: 'phc_test', _spanProcessor: inner })
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
 
     processor.onEnd(makeSpan('http.request'))
     processor.onEnd(makeSpan('db.query'))
@@ -133,11 +149,21 @@ describe('PostHogSpanProcessor AI span filtering', () => {
 
   it('detects AI spans by attribute keys', () => {
     const inner = mockProcessor()
-    const processor = new PostHogSpanProcessor({ apiKey: 'phc_test', _spanProcessor: inner })
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
 
     processor.onEnd(makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }))
     processor.onEnd(makeSpan('other.operation', { 'http.method': 'GET' }))
 
     expect(inner.onEnd).toHaveBeenCalledTimes(1)
+  })
+
+  it('redacts multimodal content before forwarding', () => {
+    const inner = mockProcessor()
+    const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
+
+    processor.onEnd(makeSpan('gen_ai.chat', { 'gen_ai.prompt': 'data:image/png;base64,iVBORw0KGgo' }))
+
+    const forwarded = inner.onEnd.mock.calls[0][0] as ReadableSpan
+    expect(forwarded.attributes['gen_ai.prompt']).toBe('[base64 image/png redacted]')
   })
 })

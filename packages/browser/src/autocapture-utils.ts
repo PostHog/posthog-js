@@ -4,7 +4,7 @@ import { each, entries } from './utils'
 import { isNullish, isString, isUndefined, isArray, isBoolean } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
-import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
 import { includes, trim } from '@posthog/core'
 
 export function splitClassString(s: string): string[] {
@@ -152,12 +152,18 @@ export function getParentElement(curEl: Element): Element | false {
 }
 
 const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
+// +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
+export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
 const MAX_CONTENT_IGNORELIST_ENTRIES = 10
 
 interface ElementWithText {
     safeText: string
     ariaLabel: string
 }
+
+// symbol keywords (e.g. +, -, >) match exactly so we don't suppress "sign-up", "5 > 3", "C++", etc.
+const matchesContentKeyword = (text: string, keyword: string): boolean =>
+    /[a-z0-9]/i.test(keyword) ? text.includes(keyword) : text === keyword
 
 function shouldIgnoreByContent(
     contentIgnorelist: boolean | string[] | undefined,
@@ -183,13 +189,58 @@ function shouldIgnoreByContent(
     }
 
     return elementsWithText.some(({ safeText, ariaLabel }) => {
-        return keywords.some((keyword) => safeText.includes(keyword) || ariaLabel.includes(keyword))
+        return keywords.some(
+            (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
+        )
     })
+}
+
+// dead click capture does not run through autocapture's ph-no-capture check,
+// so we include it here so that ph-no-capture also suppresses dead click capture
+const DEFAULT_DEAD_CLICK_IGNORE_LIST = ['.ph-no-deadclick', '.ph-no-capture']
+export function shouldCaptureDeadClick(el: Element | null, _config: PostHogConfig['capture_dead_clicks']) {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return false
+    }
+
+    const selectorIgnoreList = isBoolean(_config)
+        ? DEFAULT_DEAD_CLICK_IGNORE_LIST
+        : (_config?.css_selector_ignorelist ?? DEFAULT_DEAD_CLICK_IGNORE_LIST)
+
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+
+    // we don't capture if we match the ignore list
+    return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
 }
 
 // autocapture check will already filter for ph-no-capture,
 // but we include it here to protect against future changes accidentally removing that check
 const DEFAULT_RAGE_CLICK_IGNORE_LIST = ['.ph-no-rageclick', '.ph-no-capture']
+
+const TEXT_SELECTION_INPUT_TYPES = ['', 'text', 'search', 'email', 'password', 'url', 'tel', 'number']
+
+function isContentEditableTarget(el: Element): boolean {
+    if ((el as Partial<HTMLElement>).isContentEditable) {
+        return true
+    }
+    const contentEditable = el.getAttribute?.('contenteditable')
+    return contentEditable === 'true' || contentEditable === ''
+}
+
+// repeated fast clicks on a text-editing surface are double/triple-click text selection, not rage
+export function isTextSelectionTarget(el: Element | null): boolean {
+    if (!el || !isElementNode(el)) {
+        return false
+    }
+    if (isTag(el, 'textarea')) {
+        return true
+    }
+    if (isTag(el, 'input')) {
+        return includes(TEXT_SELECTION_INPUT_TYPES, (el.getAttribute('type') || '').toLowerCase())
+    }
+    return isContentEditableTarget(el)
+}
+
 export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfig['rageclick']) {
     if (!window || cannotCheckForAutocapture(el)) {
         return false
@@ -197,16 +248,23 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
 
     let selectorIgnoreList: string[] | boolean
     let contentIgnorelist: boolean | string[] | undefined
+    let ignoreTextSelection: boolean
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
-        // For backward compatibility, don't enable content filtering for rageclick: true
+        // For backward compatibility, don't enable content or text-selection filtering for rageclick: true
         contentIgnorelist = undefined
+        ignoreTextSelection = false
     } else {
         selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST
         contentIgnorelist = _config?.content_ignorelist
+        ignoreTextSelection = _config?.ignore_text_selection ?? false
     }
 
     if (selectorIgnoreList === false) {
+        return false
+    }
+
+    if (ignoreTextSelection && isTextSelectionTarget(el)) {
         return false
     }
 
@@ -238,10 +296,9 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
     const targetElementList: Element[] = [el]
     let curEl: Element = el
     while (curEl.parentNode && !isTag(curEl, 'body')) {
-        // If element is a shadow root, we skip it
-        if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+        if (isShadowRoot(curEl.parentNode)) {
+            targetElementList.push(curEl.parentNode.host)
+            curEl = curEl.parentNode.host
             continue
         }
         const parentNode = getParentElement(curEl)
@@ -259,6 +316,21 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
         curEl = parentNode
     }
     return { parentIsUsefulElement, targetElementList }
+}
+
+// dead-click skips a click only when the click target is — or is inside — an <a>.
+// Anchors navigate / download / open a new window via the browser, and we have no
+// observable signal for those actions (no DOM mutation, no scroll). For every other
+// element (button, input, select, textarea, label, custom JS-handled divs, etc.) we
+// rely on the existing mutation / scroll / selection / visibility observers — if the
+// app's JS handler ran, those catch the effect; if it didn't, dead-click correctly
+// surfaces the bug. A click on a broken <button> with no handler should still flag.
+export function shouldSkipDeadClick(el: Element | null): boolean {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return false
+    }
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+    return targetElementList.some((node) => isTag(node, 'a'))
 }
 
 /*

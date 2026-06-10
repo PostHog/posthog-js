@@ -22,6 +22,7 @@ import type {
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
+import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
 import { eventWithTime } from '../extensions/replay/types/rrweb-types'
 import { ErrorTracking } from '@posthog/core'
 
@@ -258,8 +259,16 @@ interface PostHogExtensions {
      */
     loadWebVitalsCallbacks?: (useAttribution?: boolean) => PostHogExtensions['postHogWebVitalsCallbacks']
     tracingHeadersPatchFns?: {
-        _patchFetch: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
-        _patchXHR: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
+        _patchFetch: (
+            hostnames: TracingHeadersHostnames,
+            distinctId: TracingHeadersDistinctId,
+            sessionManager?: SessionIdManager
+        ) => () => void
+        _patchXHR: (
+            hostnames: TracingHeadersHostnames,
+            distinctId: TracingHeadersDistinctId,
+            sessionManager?: SessionIdManager
+        ) => () => void
     }
     initDeadClicksAutocapture?: (
         ph: PostHog,

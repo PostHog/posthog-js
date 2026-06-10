@@ -123,12 +123,6 @@ export const PostHogProvider = ({
   style,
   debug = false,
 }: PostHogProviderProps): JSX.Element | null => {
-  if (!client && !apiKey) {
-    throw new Error(
-      'Either a PostHog client or an apiKey is required. If you want to use the PostHogProvider without a client, please provide an apiKey and the options={ disabled: true }.'
-    )
-  }
-
   const captureAll = autocapture === true
   const captureNone = autocapture === false
 

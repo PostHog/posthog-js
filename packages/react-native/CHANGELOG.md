@@ -1,5 +1,469 @@
 # posthog-react-native
 
+## 4.46.25
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.384.1
+  - @posthog/core@1.31.1
+
+## 4.46.24
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/core@1.31.0
+  - @posthog/types@1.384.0
+
+## 4.46.23
+
+### Patch Changes
+
+- Updated dependencies [[`783ba46`](https://github.com/PostHog/posthog-js/commit/783ba461b0916c3f379c227d08470687d38d0768)]:
+  - @posthog/types@1.383.3
+  - @posthog/core@1.30.14
+
+## 4.46.22
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.383.2
+  - @posthog/core@1.30.13
+
+## 4.46.21
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.383.1
+  - @posthog/core@1.30.12
+
+## 4.46.20
+
+### Patch Changes
+
+- Updated dependencies [[`227c9b0`](https://github.com/PostHog/posthog-js/commit/227c9b03c19dcb93d9a15abb1ee6b9523d366767), [`393f9e2`](https://github.com/PostHog/posthog-js/commit/393f9e2a4697c6ffe52402cad6fb8550b48b5e00)]:
+  - @posthog/types@1.383.0
+  - @posthog/core@1.30.11
+
+## 4.46.19
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.382.0
+  - @posthog/core@1.30.10
+
+## 4.46.18
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+  - @posthog/types@1.381.0
+  - @posthog/core@1.30.9
+
+## 4.46.17
+
+### Patch Changes
+
+- [#3747](https://github.com/PostHog/posthog-js/pull/3747) [`70c976e`](https://github.com/PostHog/posthog-js/commit/70c976e36eb80e55725b349c7a082043660ac504) Thanks [@cat-ph](https://github.com/cat-ph)! - Improve Xcode sourcemap upload failure logs so every captured `posthog-cli` line is reported as an Xcode error with the failing Hermes command and exit code.
+  (2026-06-05)
+
+## 4.46.16
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.380.1
+  - @posthog/core@1.30.8
+
+## 4.46.15
+
+### Patch Changes
+
+- [#3745](https://github.com/PostHog/posthog-js/pull/3745) [`33388d5`](https://github.com/PostHog/posthog-js/commit/33388d522b9db50077f82f823676315392c2fc3d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `posthog-react-native` throwing `Cannot read properties of undefined (reading 'create')` at import time in analytics-only setups and Jest `testEnvironment: node` runs without the React Native preset. The surveys UI is reachable from the package entrypoint and no longer evaluates native `StyleSheet` APIs while loading. (#3740)
+  (2026-06-04)
+
+## 4.46.14
+
+### Patch Changes
+
+- Updated dependencies [[`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7)]:
+  - @posthog/types@1.380.0
+  - @posthog/core@1.30.7
+
+## 4.46.13
+
+### Patch Changes
+
+- [#3729](https://github.com/PostHog/posthog-js/pull/3729) [`3959c03`](https://github.com/PostHog/posthog-js/commit/3959c038505c2b1365fe1c09183cc4038e707962) Thanks [@cat-ph](https://github.com/cat-ph)! - fix(react-native): make the Android Hermes sourcemap upload tasks compatible with Gradle's configuration cache.
+  (2026-06-04)
+
+## 4.46.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.3
+  - @posthog/core@1.30.6
+
+## 4.46.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.2
+  - @posthog/core@1.30.5
+
+## 4.46.10
+
+### Patch Changes
+
+- [#3734](https://github.com/PostHog/posthog-js/pull/3734) [`42b720f`](https://github.com/PostHog/posthog-js/commit/42b720f205f111c62de9435ac7315437d1e6d737) Thanks [@cat-ph](https://github.com/cat-ph)! - Fix the Expo iOS source map upload config plugin so backtick-wrapped `react-native-xcode.sh` commands are preserved when wrapping the bundle phase with `posthog-xcode.sh`.
+  (2026-06-03)
+
+## 4.46.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.1
+  - @posthog/core@1.30.4
+
+## 4.46.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.0
+  - @posthog/core@1.30.3
+
+## 4.46.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.378.1
+  - @posthog/core@1.30.2
+
+## 4.46.6
+
+### Patch Changes
+
+- Updated dependencies [[`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc)]:
+  - @posthog/types@1.378.0
+  - @posthog/core@1.30.1
+
+## 4.46.5
+
+### Patch Changes
+
+- Updated dependencies [[`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+  - @posthog/core@1.30.0
+  - @posthog/types@1.377.0
+
+## 4.46.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.6
+  - @posthog/core@1.29.15
+
+## 4.46.3
+
+### Patch Changes
+
+- [#3701](https://github.com/PostHog/posthog-js/pull/3701) [`6f0caf4`](https://github.com/PostHog/posthog-js/commit/6f0caf45b169ebc33a0f6386950c75539070ad9c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Coalesce React Native storage writes into a short window so a burst of captures no longer re-serializes and rewrites the whole storage blob on every event. Login, logout, opt-in/opt-out, event flush, app background, shutdown, and fatal exceptions still persist synchronously.
+  (2026-05-31)
+
+- [#3689](https://github.com/PostHog/posthog-js/pull/3689) [`501ade6`](https://github.com/PostHog/posthog-js/commit/501ade6df6cba0f6556830244a1b708338a3c85f) Thanks [@ioannisj](https://github.com/ioannisj)! - fix(ios): iOS Release builds with Expo config plugin fail when bundle phase uses a /bin/sh prefix, causing posthog-xcode.sh to receive /bin/sh as $1 instead of the react-native-xcode.sh path. The PACKAGER_SOURCEMAP_FILE preservation patch was silently skipped, leading to posthog-cli failing with "Failed to load minified map". Fixes #3682.
+  (2026-05-31)
+
+- [#3694](https://github.com/PostHog/posthog-js/pull/3694) [`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix(react-native): preserve non-string property types (booleans, arrays, numbers, objects) when caching person and group properties for feature flag evaluation. Previously these were force-coerced to strings via `String(value)`, causing flag conditions using boolean equality or array `contains` to fail on device while the PostHog UI still evaluated correctly.
+  (2026-05-31)
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+  - @posthog/types@1.376.5
+
+## 4.46.2
+
+### Patch Changes
+
+- [#3681](https://github.com/PostHog/posthog-js/pull/3681) [`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - unify captureException in posthog core
+  (2026-05-28)
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+  - @posthog/core@1.29.13
+  - @posthog/types@1.376.4
+
+## 4.46.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.3
+  - @posthog/core@1.29.12
+
+## 4.46.0
+
+### Minor Changes
+
+- [#3673](https://github.com/PostHog/posthog-js/pull/3673) [`778205f`](https://github.com/PostHog/posthog-js/commit/778205f0bddbe02ce0aae21225d93cd119d9c19e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Bump optional peer dependency `posthog-react-native-session-replay` floor to `>= 1.6.0`. The new minor adds an opt-in path that resolves `posthog-ios` through Swift Package Manager when consumers set `"posthog.useSpm": "true"` in their app's `ios/Podfile.properties.json` (with `use_frameworks! :linkage => :dynamic`). Default behavior is unchanged: without the property, `posthog-ios` continues to resolve through CocoaPods. See the [session-replay README](https://github.com/PostHog/posthog-react-native-session-replay#ios-dependency-resolution) for the opt-in details.
+  (2026-05-27)
+
+## 4.45.16
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.2
+  - @posthog/core@1.29.11
+
+## 4.45.15
+
+### Patch Changes
+
+- [#3665](https://github.com/PostHog/posthog-js/pull/3665) [`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Don't autocapture PostHog's own `PostHogFetchNetworkError` (raised when the device is offline) as a `$exception`. These connectivity failures are expected and were flooding error tracking with internal SDK noise. Adds an `isPostHogFetchNetworkError` type guard to `@posthog/core` so SDKs can detect these errors.
+  (2026-05-26)
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+  - @posthog/core@1.29.10
+  - @posthog/types@1.376.1
+
+## 4.45.14
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+  - @posthog/types@1.376.0
+
+## 4.45.13
+
+### Patch Changes
+
+- Updated dependencies [[`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d)]:
+  - @posthog/types@1.375.0
+  - @posthog/core@1.29.8
+
+## 4.45.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.4
+  - @posthog/core@1.29.7
+
+## 4.45.11
+
+### Patch Changes
+
+- Updated dependencies [[`557b893`](https://github.com/PostHog/posthog-js/commit/557b8934aa0b990184e0376fb1fc28433ad336c6), [`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/types@1.374.3
+  - @posthog/core@1.29.6
+
+## 4.45.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.2
+  - @posthog/core@1.29.5
+
+## 4.45.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.1
+  - @posthog/core@1.29.4
+
+## 4.45.8
+
+### Patch Changes
+
+- [#3629](https://github.com/PostHog/posthog-js/pull/3629) [`9920e8b`](https://github.com/PostHog/posthog-js/commit/9920e8be5323ceaab60a097dab82656d9f1b6076) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - React Native surveys: closing a survey from Q2+ or the Thank You screen no longer flashes the first question during the fade-out. Opening another survey shortly after closing one no longer flashes the previous survey's content for the first frame on iOS — survey content unmounts one frame before the Modal dismisses so the UIKit snapshot the OS recycles is blank.
+  (2026-05-18)
+
+## 4.45.7
+
+### Patch Changes
+
+- Updated dependencies [[`594ea11`](https://github.com/PostHog/posthog-js/commit/594ea1146045d49080f6dfd951b037c13278e975)]:
+  - @posthog/types@1.374.0
+  - @posthog/core@1.29.3
+
+## 4.45.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.373.5
+  - @posthog/core@1.29.2
+
+## 4.45.5
+
+### Patch Changes
+
+- Updated dependencies [[`4b895bf`](https://github.com/PostHog/posthog-js/commit/4b895bf0151f24c0b72e8ce4cae47906795b29b8)]:
+  - @posthog/core@1.29.1
+  - @posthog/types@1.373.4
+
+## 4.45.4
+
+### Patch Changes
+
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+  - @posthog/core@1.29.0
+  - @posthog/types@1.373.3
+
+## 4.45.3
+
+### Patch Changes
+
+- Updated dependencies [[`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77)]:
+  - @posthog/core@1.28.7
+  - @posthog/types@1.373.2
+
+## 4.45.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.373.1
+  - @posthog/core@1.28.6
+
+## 4.45.1
+
+### Patch Changes
+
+- Updated dependencies [[`4c0c7d9`](https://github.com/PostHog/posthog-js/commit/4c0c7d9f48e6f4f5301f8208285191f62dc8407a), [`0a835fa`](https://github.com/PostHog/posthog-js/commit/0a835fa1d5db988d508aa023240ab5b4b50f0969)]:
+  - @posthog/types@1.373.0
+  - @posthog/core@1.28.5
+
+## 4.45.0
+
+### Minor Changes
+
+- [#3552](https://github.com/PostHog/posthog-js/pull/3552) [`387ca37`](https://github.com/PostHog/posthog-js/commit/387ca37b25dca3927678643125f2cba25778989d) Thanks [@ioannisj](https://github.com/ioannisj)! - Add support for the experimental iOS session replay option `sessionReplayConfig.screenshotModeBackgroundCapture`
+  (2026-05-09)
+
+## 4.44.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.10
+  - @posthog/core@1.28.4
+
+## 4.44.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.9
+  - @posthog/core@1.28.3
+
+## 4.44.2
+
+### Patch Changes
+
+- [#3515](https://github.com/PostHog/posthog-js/pull/3515) [`255b273`](https://github.com/PostHog/posthog-js/commit/255b27380658b450d1427d4a478e4d7a4bf773f1) Thanks [@marandaneto](https://github.com/marandaneto)! - Gate survey translation logs behind SDK debug logging to avoid production console spam.
+  (2026-05-04)
+- Updated dependencies [[`220cd61`](https://github.com/PostHog/posthog-js/commit/220cd61e332ca4982c7bc3b6f740d797ef9e4e7f), [`255b273`](https://github.com/PostHog/posthog-js/commit/255b27380658b450d1427d4a478e4d7a4bf773f1)]:
+  - @posthog/core@1.28.2
+  - @posthog/types@1.372.8
+
+## 4.44.1
+
+### Patch Changes
+
+- [#3512](https://github.com/PostHog/posthog-js/pull/3512) [`8aee3d5`](https://github.com/PostHog/posthog-js/commit/8aee3d55f8e2bf7a14a534c940327d8e08ba64f6) Thanks [@marandaneto](https://github.com/marandaneto)! - Do not crash when the React Native SDK is initialized without an API key; initialize as disabled and log an error instead. Disabled clients now also skip manual reload/flush/survey/log network calls.
+  (2026-05-04)
+- Updated dependencies [[`8aee3d5`](https://github.com/PostHog/posthog-js/commit/8aee3d55f8e2bf7a14a534c940327d8e08ba64f6)]:
+  - @posthog/core@1.28.1
+  - @posthog/types@1.372.7
+
+## 4.44.0
+
+### Minor Changes
+
+- [#3492](https://github.com/PostHog/posthog-js/pull/3492) [`cf56753`](https://github.com/PostHog/posthog-js/commit/cf56753d775225df2751dee2de7987d4a47fef8c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add translated survey rendering support in React Native and share survey translation logic through `@posthog/core`.
+  (2026-05-01)
+
+- [#3480](https://github.com/PostHog/posthog-js/pull/3480) [`04db756`](https://github.com/PostHog/posthog-js/commit/04db75663208251d1b09c80b09e5d00188e897fd) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add manual log capture API for React Native: `posthog.captureLog()`, `posthog.logger.{trace,debug,info,warn,error,fatal}()`, `posthog.flushLogs()`, and a `logs` config option on the constructor. Records ship to PostHog's logs product (`/i/v1/logs`) in OTLP format, batched on a timer / AppState change / buffer fill, and persisted to a dedicated logs-storage file.
+
+  Manual capture is unconditional — calling the API ships records, matching the events pipeline's manual `capture()` shape. Only blockers: `optedOut`, missing/empty `body`, and missing API key. The wire field `response.logs.captureConsoleLogs` is browser-only (it gates the JS SDK's `console.*` autocapture extension) and is not read by RN. When console autocapture lands on RN as a follow-up, that PR will introduce a local opt-in for the autocapture path specifically; manual capture will remain unconditional. (2026-05-01)
+
+### Patch Changes
+
+- Updated dependencies [[`cf56753`](https://github.com/PostHog/posthog-js/commit/cf56753d775225df2751dee2de7987d4a47fef8c), [`04db756`](https://github.com/PostHog/posthog-js/commit/04db75663208251d1b09c80b09e5d00188e897fd)]:
+  - @posthog/core@1.28.0
+  - @posthog/types@1.372.6
+
+## 4.43.13
+
+### Patch Changes
+
+- [#3498](https://github.com/PostHog/posthog-js/pull/3498) [`135d0ef`](https://github.com/PostHog/posthog-js/commit/135d0ef8264cd421ec7cc627c9d080d7e5a4c20b) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `SurveyModal` ignoring `appearance.position`. The modal previously hard-coded a bottom-center layout regardless of the configured position. It now honors all 9 `SurveyPosition` values, mirroring the web SDK semantics: `top_*` anchors to the top edge, `middle_*` to the vertical middle, and `left` / `center` / `right` (no prefix) to the bottom edge. The default remains bottom `center`.
+  (2026-04-29)
+
+## 4.43.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.5
+  - @posthog/core@1.27.9
+
+## 4.43.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.4
+  - @posthog/core@1.27.8
+
+## 4.43.10
+
+### Patch Changes
+
+- [`eae9407`](https://github.com/PostHog/posthog-js/commit/eae94077cd577323b4ccd5fc3f4238f98194b3f6) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Include survey response properties and partial completion state on survey dismissal events.
+  (2026-04-27)
+
+## 4.43.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.3
+  - @posthog/core@1.27.7
+
+## 4.43.8
+
+### Patch Changes
+
+- [#3486](https://github.com/PostHog/posthog-js/pull/3486) [`c95999a`](https://github.com/PostHog/posthog-js/commit/c95999a149d06d38f355b90fd213f111d262b5db) Thanks [@ioannisj](https://github.com/ioannisj)! - chore: bump posthog-react-native-session-replay dependency to 1.5.6
+  (2026-04-27)
+
+## 4.43.7
+
+### Patch Changes
+
+- [#3485](https://github.com/PostHog/posthog-js/pull/3485) [`e65331c`](https://github.com/PostHog/posthog-js/commit/e65331cf6eb0843d7e6edc980d1ee44a29d6adc3) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Metro resolution for optional react-native-svg survey icons.
+  (2026-04-27)
+- Updated dependencies []:
+  - @posthog/types@1.372.2
+  - @posthog/core@1.27.6
+
+## 4.43.6
+
+### Patch Changes
+
+- [#3482](https://github.com/PostHog/posthog-js/pull/3482) [`da1acaf`](https://github.com/PostHog/posthog-js/commit/da1acaf8af62ecdf19836347bd0029e9ca8af318) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back to text survey icons when react-native-svg is unavailable.
+  (2026-04-27)
+
 ## 4.43.5
 
 ### Patch Changes

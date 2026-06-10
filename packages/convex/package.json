@@ -1,6 +1,6 @@
 {
   "name": "@posthog/convex",
-  "description": "Send analytics events to PostHog from your Convex backend.",
+  "description": "Capture analytics events, track exceptions, and evaluate feature flags with PostHog from your Convex backend.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PostHog/posthog-js.git",
@@ -11,7 +11,7 @@
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
   "author": "PostHog Inc.",
-  "version": "0.2.12",
+  "version": "2.0.21",
   "license": "MIT",
   "keywords": [
     "convex",
@@ -20,8 +20,10 @@
     "analytics"
   ],
   "scripts": {
+    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/component/version.ts",
     "build": "tsc --project ./tsconfig.build.json",
-    "build:codegen": "npx convex codegen --component-dir ./src/component && pnpm build",
+    "setup:codegen": "test -f .env.local || npx convex dev --once --configure new --dev-deployment local --project posthog-convex-component --typecheck disable || true",
+    "build:codegen": "pnpm run setup:codegen && npx convex codegen --component-dir ./src/component --typecheck disable && pnpm build",
     "clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -64,11 +66,10 @@
     "posthog-node": "workspace:*"
   },
   "devDependencies": {
-    "@convex-dev/eslint-plugin": "^1.1.1",
     "@edge-runtime/vm": "^5.0.0",
     "@jest/globals": "^29.7.0",
     "@types/node": "^24.10.12",
-    "convex": "1.31.7",
+    "convex": "1.39.1",
     "convex-test": "0.0.41",
     "globals": "^17.3.0",
     "jest": "catalog:",
@@ -77,6 +78,6 @@
     "vite": "7.3.1"
   },
   "peerDependencies": {
-    "convex": "^1.31.7"
+    "convex": "^1.39.0"
   }
 }

@@ -81,8 +81,9 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
     // TRICKY: The init needs to happen in a useEffect rather than useMemo, as useEffect does not happen during SSR. Otherwise
     // we'd end up trying to call posthogJs.init() on the server, which can cause issues around hydration and double-init.
     useEffect(() => {
-        if (client) {
+        if (client || !apiKey) {
             // if the user has passed their own client, assume they will also handle calling init().
+            // if no apiKey was provided, assume the user will initialize the default instance manually.
             return
         }
         // See comment in useMemo above for why this indirection exists.

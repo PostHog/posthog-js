@@ -8,7 +8,7 @@ import {
     getPropertiesFromElement,
     previousElementSibling,
 } from '../autocapture'
-import { shouldCaptureDomEvent } from '../autocapture-utils'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, shouldCaptureDomEvent } from '../autocapture-utils'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -566,6 +566,133 @@ describe('Autocapture system', () => {
             )
         })
 
+        describe('rageclick suppression for intentional repeated clicks', () => {
+            const rageClickThreeTimes = (el: Element): string[] => {
+                autocapture['rageclicks'].clicks = []
+                document.body.appendChild(el)
+                const fakeEvent = makeMouseEvent({ target: el, clientX: 5, clientY: 5 })
+                Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+                autocapture['_captureEvent'](fakeEvent)
+                autocapture['_captureEvent'](fakeEvent)
+                autocapture['_captureEvent'](fakeEvent)
+                const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
+                beforeSendMock.mockClear()
+                document.body.removeChild(el)
+                return captured
+            }
+
+            describe('when ignore_text_selection is enabled', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = { ignore_text_selection: true }
+                })
+
+                test.each([
+                    ['textarea', undefined, false],
+                    ['input', undefined, false],
+                    ['input', 'text', false],
+                    ['input', 'search', false],
+                    ['input', 'email', false],
+                    ['input', 'password', false],
+                    ['input', 'url', false],
+                    ['input', 'tel', false],
+                    ['input', 'number', false],
+                    ['input', 'checkbox', true],
+                    ['input', 'button', true],
+                    ['input', 'submit', true],
+                    ['button', undefined, true],
+                    ['a', undefined, true],
+                ] as [string, string | undefined, boolean][])(
+                    'rapid clicks on <%s type=%s> capture $rageclick: %s',
+                    (tag, type, shouldRageclick) => {
+                        const el = document.createElement(tag)
+                        if (type) {
+                            el.setAttribute('type', type)
+                        }
+
+                        const captured = rageClickThreeTimes(el)
+
+                        if (shouldRageclick) {
+                            expect(captured).toContain('$rageclick')
+                        } else {
+                            expect(captured).not.toContain('$rageclick')
+                        }
+                    }
+                )
+
+                it.each(['true', ''])('rapid clicks on contenteditable="%s" do not capture $rageclick', (value) => {
+                    const el = document.createElement('div')
+                    el.setAttribute('contenteditable', value)
+
+                    expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                })
+            })
+
+            describe('when steppers are in the content ignorelist', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS }
+                })
+
+                const buttonWithText = (text: string): HTMLButtonElement => {
+                    const el = document.createElement('button')
+                    el.textContent = text
+                    return el
+                }
+
+                it.each(['+', '-', '−', '–', '>', '<'])(
+                    'rapid clicks on a "%s" stepper/nav button do not capture $rageclick',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                    }
+                )
+
+                it.each(['C++', '5 > 3', 'sign-up', 'Save'])(
+                    'rapid clicks on a "%s" button still capture $rageclick (symbol keywords match exactly)',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
+                    }
+                )
+            })
+
+            describe('when content_ignorelist is the legacy boolean true (DEFAULT_CONTENT_IGNORELIST)', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = { content_ignorelist: true }
+                })
+
+                const buttonWithText = (text: string): HTMLButtonElement => {
+                    const el = document.createElement('button')
+                    el.textContent = text
+                    return el
+                }
+
+                it.each(['>', '<', 'next', 'previous', 'prev'])(
+                    'rapid clicks on a "%s" button do not capture $rageclick (exact symbol/word match)',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                    }
+                )
+
+                it.each(['Learn more >', '< Back', 'Go >', 'home > settings'])(
+                    'rapid clicks on a "%s" button still capture $rageclick (symbol keywords match exactly)',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
+                    }
+                )
+            })
+
+            it.each([true, { content_ignorelist: true }] as PostHogConfig['rageclick'][])(
+                'does not suppress text-entry or stepper rageclicks when rageclick config is %s',
+                (rageclickConfig) => {
+                    posthog.config.rageclick = rageclickConfig
+
+                    expect(rageClickThreeTimes(document.createElement('textarea'))).toContain('$rageclick')
+
+                    const stepper = document.createElement('button')
+                    stepper.textContent = '+'
+                    expect(rageClickThreeTimes(stepper)).toContain('$rageclick')
+                }
+            )
+        })
+
         describe('clipboard autocapture', () => {
             let elTarget: HTMLDivElement
 
@@ -633,6 +760,80 @@ describe('Autocapture system', () => {
 
                 const spyArgs = beforeSendMock.mock.calls
                 expect(spyArgs.length).toBe(0)
+            })
+
+            it('walks through the shadow root host on copy from inside a web component', () => {
+                const host = document.createElement('some-element')
+                document.body.appendChild(host)
+
+                try {
+                    const shadowRoot = host.attachShadow({ mode: 'open' })
+                    const paragraph = document.createElement('p')
+                    paragraph.appendChild(document.createTextNode('some text inside shadow dom'))
+                    shadowRoot.appendChild(paragraph)
+
+                    setWindowTextSelection('some text inside shadow dom')
+
+                    const fakeEvent = makeCopyEvent({ target: paragraph })
+
+                    autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')
+
+                    expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                    const captured = beforeSendMock.mock.calls[0][0]
+                    expect(captured.event).toEqual('$copy_autocapture')
+                    expect(captured.properties.$elements_chain).toContain('some-element')
+                } finally {
+                    host.remove()
+                }
+            })
+
+            it.each([
+                {
+                    name: 'text node inside a shadow root',
+                    buildTarget: () => {
+                        const host = document.createElement('some-element')
+                        document.body.appendChild(host)
+                        const shadowRoot = host.attachShadow({ mode: 'open' })
+                        const paragraph = document.createElement('p')
+                        const text = document.createTextNode('some text inside shadow dom')
+                        paragraph.appendChild(text)
+                        shadowRoot.appendChild(paragraph)
+                        return { target: text as unknown as EventTarget, cleanup: () => host.remove() }
+                    },
+                    selectedText: 'some text inside shadow dom',
+                },
+                {
+                    name: 'element inside a plain document fragment',
+                    buildTarget: () => {
+                        const fragment = document.createDocumentFragment()
+                        const paragraph = document.createElement('p')
+                        paragraph.innerText = 'detached'
+                        fragment.appendChild(paragraph)
+                        return { target: paragraph }
+                    },
+                    selectedText: 'detached',
+                },
+            ])('does not throw on copy from $name', ({ buildTarget, selectedText }) => {
+                const { target, cleanup } = buildTarget()
+
+                try {
+                    setWindowTextSelection(selectedText)
+                    const fakeEvent = makeCopyEvent({ target })
+                    expect(() => autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')).not.toThrow()
+                } finally {
+                    cleanup?.()
+                }
+            })
+
+            it('does not throw on click whose target ancestor chain includes a plain document fragment', () => {
+                const fragment = document.createDocumentFragment()
+                const button = document.createElement('button')
+                button.innerText = 'detached button'
+                fragment.appendChild(button)
+
+                const fakeEvent = makeMouseEvent({ target: button })
+
+                expect(() => autocapture['_captureEvent'](fakeEvent)).not.toThrow()
             })
         })
 

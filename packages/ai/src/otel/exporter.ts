@@ -2,11 +2,12 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 import { ExportResultCode } from '@opentelemetry/core'
 
+import { redactSpan } from './redact'
 import { isAISpan } from './spans'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
 
-function normalizeApiKey(value?: unknown): string {
+function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -15,17 +16,25 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_OTEL_HOST
 }
 
-export interface PostHogTraceExporterOptions {
-  /**
-   * Your PostHog project API key.
-   */
-  apiKey: string
-
-  /**
-   * PostHog host URL. Defaults to `https://us.i.posthog.com`.
-   */
-  host?: string
-}
+/**
+ * Options for the PostHogTraceExporter. `projectToken` is required; a blank token disables the
+ * exporter as a defensive no-op. You can also optionally override the `host` URL. `host` defaults to `https://us.i.posthog.com`.
+ *
+ * @example
+ * ```ts
+ * import { PostHogTraceExporter } from '@posthog/ai/otel'
+ *
+ * new PostHogTraceExporter({ projectToken: 'phc_...' })
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { PostHogTraceExporter } from '@posthog/ai/otel'
+ *
+ * new PostHogTraceExporter({ projectToken: 'phc_...', host: 'https://eu.i.posthog.com' })
+ * ```
+ */
+export type PostHogTraceExporterOptions = { projectToken: string; host?: string }
 
 /**
  * An OpenTelemetry `TraceExporter` that sends AI traces to PostHog's OTLP
@@ -41,6 +50,9 @@ export interface PostHogTraceExporterOptions {
  * plug PostHog into an existing processor chain. Otherwise prefer
  * {@link PostHogSpanProcessor}, which is self-contained.
  *
+ * `projectToken` is required; a blank token disables the exporter as a defensive no-op.
+ * You can also optionally override the `host` URL.
+ *
  * @example
  * ```ts
  * import { PostHogTraceExporter } from '@posthog/ai/otel'
@@ -48,31 +60,45 @@ export interface PostHogTraceExporterOptions {
  *
  * registerOTel({
  *   serviceName: 'my-app',
- *   traceExporter: new PostHogTraceExporter({ apiKey: 'phc_...' }),
+ *   traceExporter: new PostHogTraceExporter({ projectToken: 'phc_...' }),
  * })
  * ```
  */
 export class PostHogTraceExporter extends OTLPTraceExporter {
+  private readonly disabled: boolean
+
   constructor(options: PostHogTraceExporterOptions) {
-    const apiKey = normalizeApiKey(options.apiKey)
-    if (!apiKey) {
-      throw new Error('PostHogTraceExporter requires an apiKey')
-    }
-    const host = new URL(normalizeHost(options.host)).origin
+    const token = normalizeToken(options.projectToken)
+    const disabled = !token
+    const host = token ? new URL(normalizeHost(options.host)).origin : DEFAULT_OTEL_HOST
     super({
       url: `${host}/i/v0/ai/otel`,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {},
     })
+
+    this.disabled = disabled
+    if (this.disabled) {
+      console.warn('[PostHogTraceExporter] projectToken is missing or blank; the exporter will be disabled.')
+    }
   }
 
   override export(spans: ReadableSpan[], resultCallback: (result: { code: number; error?: Error }) => void): void {
+    if (this.disabled) {
+      // Intentionally report success: missing or blank tokens disable exporting as a compatibility no-op.
+      // Reporting failure would make OpenTelemetry treat every span as an export error.
+      resultCallback({ code: ExportResultCode.SUCCESS })
+      return
+    }
+
     const aiSpans = spans.filter(isAISpan)
     if (aiSpans.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS })
       return
     }
-    super.export(aiSpans, resultCallback)
+    super.export(aiSpans.map(redactSpan), resultCallback)
   }
 }

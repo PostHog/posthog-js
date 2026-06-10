@@ -68,6 +68,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "true",
         "string[]"
       ],
+      "ignore_text_selection": [
+        "undefined",
+        "false",
+        "true"
+      ],
       "threshold_px": [
         "undefined",
         "number"
@@ -151,6 +156,20 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "true"
   ],
   "disable_cookie": [
+    "undefined",
+    "false",
+    "true"
+  ],
+  "persistence_save_debounce_ms": [
+    "undefined",
+    "number"
+  ],
+  "split_storage": [
+    "undefined",
+    "false",
+    "true"
+  ],
+  "detect_google_search_app": [
     "undefined",
     "false",
     "true"
@@ -323,12 +342,17 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "properties_string_max_length": "number",
   "defaults": [
+    "\\"2026-05-30\\"",
     "\\"2026-01-30\\"",
     "\\"2025-11-30\\"",
     "\\"2025-05-24\\"",
     "\\"unset\\""
   ],
   "__preview_deferred_init_extensions": [
+    "false",
+    "true"
+  ],
+  "__preview_cookie_wins_on_conflict": [
     "false",
     "true"
   ],
@@ -513,6 +537,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "readonly string[]"
   ],
+  "flag_keys": [
+    "undefined",
+    "readonly string[]"
+  ],
   "evaluation_environments": [
     "undefined",
     "readonly string[]"
@@ -637,7 +665,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true",
     [
-      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; capture_clicks_with_modifier_keys?: boolean | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }",
+      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; capture_clicks_with_modifier_keys?: boolean | undefined; css_selector_ignorelist?: string[] | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => vo...",
       "Pick<AutocaptureConfig, \\"element_attribute_ignorelist\\">"
     ]
   ],
@@ -705,6 +733,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "null",
     "string"
+  ],
+  "tracing_headers": [
+    "undefined",
+    "string[]"
   ],
   "addTracingHeaders": [
     "undefined",

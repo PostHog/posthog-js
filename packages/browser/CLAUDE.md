@@ -107,4 +107,4 @@ These are all available via `import { isArray, isNull, isUndefined } from '@post
 - Must run `pnpm build` before running tests
 - React/Preact components in extensions use JSX factory `h`
 - Property mangling used in production builds for size optimization
-- IE11 support maintained through Babel compilation
+- IE11 is not in our supported browsers list, but the ES5 bundle (`array.full.es5.js`) is still built with IE11-compatible Babel targets (hard-coded in `rollup.config.mjs`) and validated by `es-check` in CI as a canary for "do we need a new polyfill?". The browserstack IE11 testcafe job (`.github/workflows/testcafe.yml`) sets a `BROWSERSLIST` env var to feed IE11 into the `@babel/preset-env` that testcafe uses to transpile its injected `ClientFunction` wrappers — without that, testcafe ships modern syntax into the IE11 page and `posthog.init` hangs silently

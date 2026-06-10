@@ -14,16 +14,17 @@ import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
 import {
   CostOverride,
-  sendEventToPosthog,
   truncate,
   MAX_OUTPUT_SIZE,
+  utf8ByteLength,
   extractAvailableToolCalls,
   toContentString,
   calculateWebSearchCount,
-  sendEventWithErrorToPosthog,
+  getModelParams,
 } from '../utils'
+import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl } from '../sanitization'
-import { isString } from '../typeGuards'
+import { isObject, isString } from '../typeGuards'
 
 // Union types for dual version support
 type LanguageModel = LanguageModelV2 | LanguageModelV3
@@ -169,18 +170,26 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
   })
 
   try {
-    // Trim the inputs array until its JSON size fits within MAX_OUTPUT_SIZE
-    const encoder = new TextEncoder()
-    let serialized = JSON.stringify(inputs)
+    // Trim the inputs array until its serialized JSON size fits within MAX_OUTPUT_SIZE.
+    // Pre-compute each message's byte size once so we can shift by accumulated budget
+    // in a single linear pass, instead of re-stringifying the whole array per iteration.
+    const messageSizes = inputs.map((m) => utf8ByteLength(JSON.stringify(m)))
+    // Account for the surrounding `[` `]` plus a comma between each pair of elements.
+    let totalBytes = 2 + Math.max(0, messageSizes.length - 1)
+    for (const size of messageSizes) {
+      totalBytes += size
+    }
     let removedCount = 0
-    // We need to keep track of the initial size of the inputs array because we're going to be mutating it
-    const initialSize = inputs.length
-    for (let i = 0; i < initialSize && encoder.encode(serialized).byteLength > MAX_OUTPUT_SIZE; i++) {
-      inputs.shift()
+    while (totalBytes > MAX_OUTPUT_SIZE && removedCount < messageSizes.length) {
+      totalBytes -= messageSizes[removedCount]
+      // Each removed message past the first also drops the comma that joined it.
+      if (removedCount < messageSizes.length - 1) {
+        totalBytes -= 1
+      }
       removedCount++
-      serialized = JSON.stringify(inputs)
     }
     if (removedCount > 0) {
+      inputs.splice(0, removedCount)
       // Add one placeholder to indicate how many were removed
       inputs.unshift({
         role: 'posthog',
@@ -274,6 +283,33 @@ const extractProvider = (model: LanguageModel): string => {
   return providerName
 }
 
+/**
+ * Recover the base URL so gateway calls self-identify via `$ai_base_url` (dedup
+ * keys on it). The spec exposes none, so we read the off-spec provider `config`:
+ * `@ai-sdk/anthropic` keeps a `config.baseURL` string; `@ai-sdk/openai`/
+ * `openai-compatible` bury it in a `config.url({ path })` closure. Unknown shapes
+ * degrade to `''` — those providers (or a custom `fetch`) stay invisible to dedup.
+ */
+const extractBaseURL = (model: LanguageModel): string => {
+  try {
+    const config = (model as { config?: unknown }).config
+    if (!isObject(config)) {
+      return ''
+    }
+    if (isString(config.baseURL)) {
+      return config.baseURL
+    }
+    const urlFn = config.url
+    if (typeof urlFn === 'function') {
+      const url = urlFn({ path: '', modelId: model.modelId })
+      return isString(url) ? url : ''
+    }
+  } catch {
+    // Unknown config shape or url() threw.
+  }
+  return ''
+}
+
 // Extract web search count from provider metadata (works for both V2 and V3)
 const extractWebSearchCount = (providerMetadata: unknown, usage: any): number => {
   // Try Anthropic-specific extraction
@@ -319,41 +355,29 @@ const extractTokenCount = (value: unknown): number | undefined => {
   return undefined
 }
 
-// Helper to extract reasoning tokens from V2 (usage.reasoningTokens) or V3 (usage.outputTokens.reasoning)
-const extractReasoningTokens = (usage: Record<string, unknown>): unknown => {
-  // V2 style: top-level reasoningTokens
-  if ('reasoningTokens' in usage) {
-    return usage.reasoningTokens
+const extractUsageToken = (
+  usage: Record<string, unknown>,
+  topLevelKey: string,
+  nestedObjectKey: string,
+  nestedValueKey: string
+): unknown => {
+  if (topLevelKey in usage) {
+    return usage[topLevelKey]
   }
-  // V3 style: nested in outputTokens.reasoning
-  if (
-    'outputTokens' in usage &&
-    usage.outputTokens &&
-    typeof usage.outputTokens === 'object' &&
-    'reasoning' in usage.outputTokens
-  ) {
-    return (usage.outputTokens as { reasoning: unknown }).reasoning
+  const nestedTokens = usage[nestedObjectKey]
+  if (nestedTokens && typeof nestedTokens === 'object' && nestedValueKey in nestedTokens) {
+    return (nestedTokens as Record<string, unknown>)[nestedValueKey]
   }
   return undefined
 }
 
+// Helper to extract reasoning tokens from V2 (usage.reasoningTokens) or V3 (usage.outputTokens.reasoning)
+const extractReasoningTokens = (usage: Record<string, unknown>): unknown =>
+  extractUsageToken(usage, 'reasoningTokens', 'outputTokens', 'reasoning')
+
 // Helper to extract cached input tokens from V2 (usage.cachedInputTokens) or V3 (usage.inputTokens.cacheRead)
-const extractCacheReadTokens = (usage: Record<string, unknown>): unknown => {
-  // V2 style: top-level cachedInputTokens
-  if ('cachedInputTokens' in usage) {
-    return usage.cachedInputTokens
-  }
-  // V3 style: nested in inputTokens.cacheRead
-  if (
-    'inputTokens' in usage &&
-    usage.inputTokens &&
-    typeof usage.inputTokens === 'object' &&
-    'cacheRead' in usage.inputTokens
-  ) {
-    return (usage.inputTokens as { cacheRead: unknown }).cacheRead
-  }
-  return undefined
-}
+const extractCacheReadTokens = (usage: Record<string, unknown>): unknown =>
+  extractUsageToken(usage, 'cachedInputTokens', 'inputTokens', 'cacheRead')
 
 // Helper to extract cache write tokens from V3 (usage.inputTokens.cacheWrite). Providers like
 // Amazon Bedrock populate this standardized field instead of providerMetadata.anthropic.
@@ -448,6 +472,19 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
     },
   }
 
+  // Shared `captureAiGeneration` options for every call site in this wrapper.
+  const baseOptions = {
+    distinctId: mergedOptions.posthogDistinctId,
+    traceId,
+    properties: mergedOptions.posthogProperties,
+    groups: mergedOptions.posthogGroups,
+    privacyMode: mergedOptions.posthogPrivacyMode,
+    modelOverride: mergedOptions.posthogModelOverride,
+    providerOverride: mergedOptions.posthogProviderOverride,
+    costOverride: mergedOptions.posthogCostOverride,
+    captureImmediate: mergedOptions.posthogCaptureImmediate,
+  }
+
   // Create wrapped model using Object.create to preserve the prototype chain
   // This automatically inherits all properties (including getters) from the model
   const wrappedModel = Object.create(model, {
@@ -459,13 +496,13 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           ...mapVercelParams(params),
         }
         const availableTools = extractAvailableToolCalls('vercel', params)
+        const baseURL = extractBaseURL(model)
 
         try {
           const result = await model.doGenerate(params as any)
           const modelId =
             mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
           const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
-          const baseURL = '' // cannot currently get baseURL from vercel
           // result.content is undefined when the model returns only tool calls with no text output
           const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[])
           const latency = (Date.now() - startTime) / 1000
@@ -515,47 +552,41 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 ? String(rawFinishReason.unified)
                 : undefined
 
-          await sendEventToPosthog({
-            client: phClient,
-            distinctId: mergedOptions.posthogDistinctId,
-            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+          await captureAiGeneration(phClient, {
+            ...baseOptions,
             model: modelId,
             provider: provider,
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
             output: content,
             latency,
             baseURL,
-            params: mergedParams as any,
+            modelParameters: getModelParams(mergedParams as any),
             httpStatus: 200,
             usage,
             stopReason: finishReasonStr,
             tools: availableTools,
-            captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
 
           return result
         } catch (error: unknown) {
           const modelId = model.modelId
-          const enrichedError = await sendEventWithErrorToPosthog({
-            client: phClient,
-            distinctId: mergedOptions.posthogDistinctId,
-            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+          await captureAiGeneration(phClient, {
+            ...baseOptions,
             model: modelId,
             provider: model.provider,
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
             output: [],
             latency: 0,
-            baseURL: '',
-            params: mergedParams as any,
+            baseURL,
+            modelParameters: getModelParams(mergedParams as any),
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
             error: error,
             tools: availableTools,
-            captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
-          throw enrichedError
+          throw error
         }
       },
       writable: true,
@@ -585,7 +616,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         const modelId = mergedOptions.posthogModelOverride ?? model.modelId
         const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
         const availableTools = extractAvailableToolCalls('vercel', params)
-        const baseURL = '' // cannot currently get baseURL from vercel
+        const baseURL = extractBaseURL(model)
 
         // Map to track in-progress tool calls
         const toolCallsInProgress = new Map<
@@ -720,10 +751,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
 
               adjustAnthropicV3CacheTokens(model, modelId, provider, finalUsage)
 
-              await sendEventToPosthog({
-                client: phClient,
-                distinctId: mergedOptions.posthogDistinctId,
-                traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+              await captureAiGeneration(phClient, {
+                ...baseOptions,
                 model: modelId,
                 provider: provider,
                 input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
@@ -731,12 +760,11 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 latency,
                 timeToFirstToken,
                 baseURL,
-                params: mergedParams as any,
+                modelParameters: getModelParams(mergedParams as any),
                 httpStatus: 200,
                 usage: finalUsage,
                 stopReason,
                 tools: availableTools,
-                captureImmediate: mergedOptions.posthogCaptureImmediate,
               })
             },
           })
@@ -746,26 +774,23 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...rest,
           }
         } catch (error: unknown) {
-          const enrichedError = await sendEventWithErrorToPosthog({
-            client: phClient,
-            distinctId: mergedOptions.posthogDistinctId,
-            traceId: mergedOptions.posthogTraceId ?? uuidv4(),
+          await captureAiGeneration(phClient, {
+            ...baseOptions,
             model: modelId,
             provider: provider,
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
             output: [],
             latency: 0,
-            baseURL: '',
-            params: mergedParams as any,
+            baseURL,
+            modelParameters: getModelParams(mergedParams as any),
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
             error: error,
             tools: availableTools,
-            captureImmediate: mergedOptions.posthogCaptureImmediate,
           })
-          throw enrichedError
+          throw error
         }
       },
       writable: true,

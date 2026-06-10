@@ -7,7 +7,7 @@ import { window } from './utils/globals'
 
 import { createLogger } from './utils/logger'
 
-import { isArray, isUndefined, clampToRange, isPositiveNumber } from '@posthog/core'
+import { isArray, isNull, isUndefined, clampToRange, isPositiveNumber } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -16,8 +16,14 @@ const logger = createLogger('[SessionId]')
 
 export const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
 export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
-const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
+export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
+
+// Must stay well under MIN_SESSION_IDLE_TIMEOUT_SECONDS so idle detection on
+// other tabs cannot fire on stale persisted data (pinned by a unit test).
+// Tradeoff: sibling tabs only observe activity once it has been persisted —
+// in-memory ticks within this window are invisible across tabs.
+export const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
 
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
@@ -31,6 +37,7 @@ export class SessionIdManager {
     private _sessionStartTimestamp: number | null
 
     private _sessionActivityTimestamp: number | null
+    private _lastPersistedActivityTimestamp: number | null = null
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
     private readonly _sessionTimeoutMs: number
 
@@ -157,6 +164,16 @@ export class SessionIdManager {
         return null
     }
 
+    private _isActivityChangeBelowGranularity(newActivityTimestamp: number | null): boolean {
+        const lastPersisted = this._lastPersistedActivityTimestamp
+        if (isNull(lastPersisted) || isNull(newActivityTimestamp)) {
+            return false
+        }
+        // Math.abs guards against clock skew (NTP, devtools time travel) — a
+        // backwards jump would otherwise slip past the gate.
+        return Math.abs(newActivityTimestamp - lastPersisted) < ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS
+    }
+
     // Note: 'this.persistence.register' can be disabled in the config.
     // In that case, this works by storing sessionId and the timestamp in memory.
     private _setSessionId(
@@ -164,19 +181,87 @@ export class SessionIdManager {
         sessionActivityTimestamp: number | null,
         sessionStartTimestamp: number | null
     ): void {
-        if (
-            sessionId !== this._sessionId ||
-            sessionActivityTimestamp !== this._sessionActivityTimestamp ||
-            sessionStartTimestamp !== this._sessionStartTimestamp
-        ) {
-            this._sessionStartTimestamp = sessionStartTimestamp
-            this._sessionActivityTimestamp = sessionActivityTimestamp
-            this._sessionId = sessionId
+        const idChanged = sessionId !== this._sessionId
+        const startChanged = sessionStartTimestamp !== this._sessionStartTimestamp
+        const activityChanged = sessionActivityTimestamp !== this._sessionActivityTimestamp
+        const isActivityOnlyChange = !idChanged && !startChanged
 
-            this._persistence.register({
-                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
-            })
+        // In-memory state always tracks the freshest values, even when the
+        // write below is throttled, so in-process reads stay accurate.
+        this._sessionStartTimestamp = sessionStartTimestamp
+        this._sessionActivityTimestamp = sessionActivityTimestamp
+        this._sessionId = sessionId
+
+        if (isActivityOnlyChange && !activityChanged) {
+            return
         }
+
+        if (isActivityOnlyChange && this._isActivityChangeBelowGranularity(sessionActivityTimestamp)) {
+            return
+        }
+
+        this._lastPersistedActivityTimestamp = sessionActivityTimestamp
+        this._persistence.register({
+            [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
+        })
+    }
+
+    // Gates the per-key cross-tab refresh path. When persistence is in
+    // debounced-write mode, our pending in-memory writes plus a sibling's
+    // recent on-disk writes are both at risk if we do a whole-blob
+    // `flush() + load()` cycle. Per-key refresh avoids both clobbers. The
+    // dated default (>= 2026-05-30) enables debounce, so the new behaviour
+    // and the bug surface roll out together.
+    private _useCrossTabRefreshHardening(): boolean {
+        const debounce = this._config?.persistence_save_debounce_ms
+        return isPositiveNumber(debounce) && debounce > 0
+    }
+
+    // Called from destroy / beforeunload so a tab close inside the throttle
+    // window doesn't leave the persisted activity timestamp stale.
+    private _flushPendingActivityTimestamp(): void {
+        if (
+            isNull(this._sessionActivityTimestamp) ||
+            this._sessionActivityTimestamp === this._lastPersistedActivityTimestamp
+        ) {
+            return
+        }
+
+        if (this._useCrossTabRefreshHardening()) {
+            // Pull only the SESSION_ID slot from storage to see whether a
+            // sibling tab has rotated the session. We must NOT flush our
+            // whole props blob first — it would clobber the sibling's
+            // SESSION_ID write before we get to read it.
+            this._persistence.refreshKey(SESSION_ID)
+        } else {
+            // Legacy path for callers with debounce disabled. `flush()` is
+            // a no-op when there's no pending timer, and `load()` does a
+            // whole-blob refresh that picks up sibling SESSION_ID writes.
+            this._persistence.flush()
+            this._persistence.load()
+        }
+        const [, persistedSessionId, persistedStart] = this._getSessionId()
+        if (persistedSessionId !== this._sessionId || persistedStart !== this._sessionStartTimestamp) {
+            return
+        }
+
+        this._lastPersistedActivityTimestamp = this._sessionActivityTimestamp
+        this._persistence.register({
+            [SESSION_ID]: [this._sessionActivityTimestamp, this._sessionId ?? null, this._sessionStartTimestamp],
+        })
+        // Force the write past the debounce — destroy / unload paths cannot
+        // wait for a deferred timer that will never fire.
+        this._persistence.flush()
+    }
+
+    // `max` because either view can be ahead: the throttle holds in-memory
+    // ahead of persisted, and a sibling tab can hold persisted ahead of a
+    // frozen in-memory.
+    private _freshestActivityTimestamp(): number {
+        const [persistedActivity] = this._getSessionId()
+        const persisted = isPositiveNumber(persistedActivity) ? persistedActivity : 0
+        const inMemory = isPositiveNumber(this._sessionActivityTimestamp) ? this._sessionActivityTimestamp : 0
+        return Math.max(persisted, inMemory)
     }
 
     private _getSessionId(): [number, string, number] {
@@ -194,8 +279,12 @@ export class SessionIdManager {
     }
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
-    // new ids will be generated.
+    // new ids will be generated. Also clears the idle timer so a stale fire
+    // cannot rotate the freshly-cleared session.
     resetSessionId(): void {
+        this._lastPersistedActivityTimestamp = null
+        clearTimeout(this._enforceIdleTimeout)
+        this._enforceIdleTimeout = undefined
         this._setSessionId(null, null, null)
     }
 
@@ -204,6 +293,8 @@ export class SessionIdManager {
      * Should be called when the SessionIdManager is no longer needed to prevent memory leaks.
      */
     destroy(): void {
+        this._flushPendingActivityTimestamp()
+
         // Clear the idle timeout timer
         clearTimeout(this._enforceIdleTimeout)
         this._enforceIdleTimeout = undefined
@@ -226,6 +317,7 @@ export class SessionIdManager {
      */
     private _listenToReloadWindow(): void {
         this._beforeUnloadListener = () => {
+            this._flushPendingActivityTimestamp()
             if (this._canUseSessionStorage()) {
                 sessionStore._remove(this._primary_window_exists_storage_key)
             }
@@ -263,7 +355,8 @@ export class SessionIdManager {
         const timestamp = _timestamp || new Date().getTime()
 
         // eslint-disable-next-line prefer-const
-        let [lastActivityTimestamp, sessionId, startTimestamp] = this._getSessionId()
+        let [, sessionId, startTimestamp] = this._getSessionId()
+        const lastActivityTimestamp = this._freshestActivityTimestamp()
         let windowId = this._getWindowId()
 
         const sessionPastMaximumLength =
@@ -327,7 +420,7 @@ export class SessionIdManager {
             // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
             // we need to check session activity first in case a different window has kept the session active
             // while this window has been idle - and the timer has not progressed - e.g. window memory frozen while hidden
-            const [lastActivityTimestamp] = this._getSessionId()
+            const lastActivityTimestamp = this._freshestActivityTimestamp()
             if (this._sessionHasBeenIdleTooLong(new Date().getTime(), lastActivityTimestamp)) {
                 const idleSessionId = this._sessionId
                 this.resetSessionId()

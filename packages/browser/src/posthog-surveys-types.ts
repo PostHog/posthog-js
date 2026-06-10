@@ -5,7 +5,13 @@
  */
 
 import type { Properties, PropertyMatchType } from './types'
-import type { SurveyAppearance as CoreSurveyAppearance, SurveyValidationRule } from '@posthog/core'
+import type {
+    SurveyAppearance as CoreSurveyAppearance,
+    SurveyQuestionTranslation,
+    SurveyResponseValue as CoreSurveyResponseValue,
+    SurveyTranslation,
+    SurveyValidationRule,
+} from '@posthog/core'
 
 // Extended operator type to include numeric operators not in PropertyMatchType
 export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
@@ -58,6 +64,7 @@ interface SurveyQuestionBase {
     buttonText?: string
     branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
     validation?: SurveyValidationRule[]
+    translations?: Record<string, SurveyQuestionTranslation>
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -128,8 +135,9 @@ export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string
     name: string
-    description: string
+    description?: string
     type: SurveyType
+    translations?: Record<string, SurveyTranslation>
     feature_flag_keys:
         | {
               key: string
@@ -253,7 +261,7 @@ export interface SurveyConfig {
     autoSubmitDelay?: number
 }
 
-export type SurveyResponseValue = string | number | string[] | null
+export type SurveyResponseValue = CoreSurveyResponseValue
 
 /**
  * Surveys related enums and constants.
@@ -347,6 +355,7 @@ export const SurveyEventProperties = {
     SURVEY_COMPLETED: '$survey_completed',
     PRODUCT_TOUR_ID: '$product_tour_id',
     SURVEY_LAST_SEEN_DATE: '$survey_last_seen_date',
+    SURVEY_LANGUAGE: '$survey_language',
 } as const
 export type SurveyEventProperties = (typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]
 

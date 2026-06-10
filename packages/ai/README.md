@@ -6,14 +6,31 @@ TypeScript SDK for LLM observability with PostHog.
 
 ## Installation
 
+Provider SDKs are optional peer dependencies, so you only install the SDK for the integration you use. Install `@posthog/ai` alongside it:
+
 ```bash
-npm install @posthog/ai
+npm install @posthog/ai openai            # OpenAI / Azure OpenAI
+npm install @posthog/ai @anthropic-ai/sdk # Anthropic
+npm install @posthog/ai @google/genai     # Google Gemini
+npm install @posthog/ai @langchain/core   # LangChain
+# Vercel AI SDK (withTracing), captureAiGeneration, and OpenTelemetry need no provider SDK
 ```
+
+Import each integration from its subpath:
+
+| Integration | Import from | Peer to install |
+| --- | --- | --- |
+| OpenAI / Azure OpenAI | `@posthog/ai/openai` | `openai` |
+| Anthropic | `@posthog/ai/anthropic` | `@anthropic-ai/sdk` |
+| Google Gemini | `@posthog/ai/gemini` | `@google/genai` |
+| LangChain | `@posthog/ai/langchain` | `@langchain/core` |
+| Vercel AI SDK (`withTracing`) | `@posthog/ai` | — |
+| Custom (`captureAiGeneration`) | `@posthog/ai` | — |
 
 ## Direct Provider Usage
 
 ```typescript
-import { OpenAI } from '@posthog/ai'
+import { OpenAI } from '@posthog/ai/openai'
 import { PostHog } from 'posthog-node'
 
 const phClient = new PostHog('<YOUR_PROJECT_API_KEY>', { host: 'https://us.i.posthog.com' })
@@ -39,9 +56,40 @@ console.log(completion.choices[0].message.content)
 await phClient.shutdown()
 ```
 
+## Custom and unsupported providers
+
+For LLM calls that don't go through one of the wrapped clients — direct Cloudflare Workers AI bindings, TanStack AI adapters, custom HTTP clients — use `captureAiGeneration` to emit the same `$ai_generation` events the wrappers produce.
+
+```typescript
+import { captureAiGeneration } from '@posthog/ai'
+import { PostHog } from 'posthog-node'
+
+const phClient = new PostHog('<YOUR_PROJECT_API_KEY>', { host: 'https://us.i.posthog.com' })
+
+const start = Date.now()
+const result = await env.AI.run('@cf/zai-org/glm-4.7-flash', { messages, reasoning_effort: 'high' })
+
+await captureAiGeneration(phClient, {
+  distinctId: 'user_123',
+  traceId: 'trace_abc',
+  provider: 'cloudflare-workers-ai',
+  model: '@cf/zai-org/glm-4.7-flash',
+  input: messages,
+  output: result.response,
+  modelParameters: { reasoning_effort: 'high' },
+  usage: { inputTokens: result.usage?.prompt_tokens, outputTokens: result.usage?.completion_tokens },
+  latency: (Date.now() - start) / 1000,
+  properties: { feature: 'transcript-toc' },
+})
+
+await phClient.shutdown()
+```
+
+`captureAiGeneration` is the same primitive that every other `@posthog/ai` wrapper funnels through, so the resulting events are indistinguishable from those produced by `withTracing`, `OpenAI`, `Anthropic`, etc.
+
 ## OpenTelemetry
 
-`@posthog/ai/otel` provides two ways to send AI traces to PostHog via OpenTelemetry. Both automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`) and PostHog converts them into `$ai_generation` events server-side. This works with any LLM provider SDK that supports OpenTelemetry.
+`@posthog/ai/otel` provides two ways to send AI traces to PostHog via OpenTelemetry. Both automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`) and PostHog converts them into `$ai_generation` events server-side. `projectToken` is required; a blank token disables the OpenTelemetry integration as a defensive no-op. This works with any LLM provider SDK that supports OpenTelemetry.
 
 ```bash
 npm install @posthog/ai @opentelemetry/sdk-node @opentelemetry/sdk-trace-base @opentelemetry/exporter-trace-otlp-http
@@ -60,7 +108,7 @@ import { openai } from '@ai-sdk/openai'
 const sdk = new NodeSDK({
   spanProcessors: [
     new PostHogSpanProcessor({
-      apiKey: '<YOUR_PROJECT_API_KEY>',
+      projectToken: '<YOUR_PROJECT_TOKEN>',
       host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
     }),
   ],
@@ -94,7 +142,7 @@ import { registerOTel } from '@vercel/otel'
 registerOTel({
   serviceName: 'my-app',
   traceExporter: new PostHogTraceExporter({
-    apiKey: '<YOUR_PROJECT_API_KEY>',
+    projectToken: '<YOUR_PROJECT_TOKEN>',
     host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
   }),
 })

@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.372.1",
+    "version": "1.384.1",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "engineering@posthog.com",
@@ -12,7 +12,7 @@
         "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
         "dev": "tsc -b && NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -cw",
         "build": "tsc -b && rollup -c",
-        "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js",
+        "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js && node scripts/copy-rrweb-worker-maps.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
@@ -52,14 +52,12 @@
         "react/dist/**",
         "react/package.json",
         "react/surveys/package.json",
-        "react/slim/package.json"
+        "react/slim/package.json",
+        "rrweb/package.json",
+        "rrweb-types/package.json",
+        "rrweb-plugin-console-record/package.json"
     ],
     "dependencies": {
-        "@opentelemetry/api": "^1.9.0",
-        "@opentelemetry/api-logs": "^0.208.0",
-        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
-        "@opentelemetry/resources": "^2.2.0",
-        "@opentelemetry/sdk-logs": "^0.208.0",
         "@posthog/core": "workspace:*",
         "@posthog/types": "workspace:*",
         "core-js": "^3.38.1",
@@ -79,20 +77,23 @@
         "@babel/preset-typescript": "catalog:",
         "@jest/globals": "^29.7.0",
         "@jridgewell/sourcemap-codec": "^1.5.5",
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/api-logs": "^0.208.0",
+        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
+        "@opentelemetry/resources": "^2.2.0",
+        "@opentelemetry/sdk-logs": "^0.208.0",
         "@playwright/test": "^1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
-        "@posthog/rrweb-plugin-console-record": "^0.0.60",
-        "@posthog/rrweb-record": "^0.0.60",
-        "@posthog/rrweb-types": "^0.0.60",
+        "@posthog/rrweb": "workspace:*",
+        "@posthog/rrweb-plugin-console-record": "workspace:*",
+        "@posthog/rrweb-record": "workspace:*",
+        "@posthog/rrweb-types": "workspace:*",
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^16.0.1",
         "@rollup/plugin-terser": "^0.4.4",
         "@rollup/plugin-typescript": "^12.1.4",
-        "@rrweb/record": "2.0.0-alpha.17",
-        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.17",
-        "@rrweb/types": "2.0.0-alpha.17",
         "@sentry/types": "8.7.0",
         "@testing-library/dom": "catalog:",
         "@testing-library/jest-dom": "catalog:",
@@ -140,6 +141,6 @@
         "yargs": "^17.7.2"
     },
     "browserslist": [
-        "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
+        "> 0.5%, last 2 versions, Firefox ESR, not dead"
     ]
 }

@@ -1,6 +1,8 @@
 version: 2
 updates:
     - package-ecosystem: 'npm'
+      cooldown:
+          default-days: 7
       commit-message:
           prefix: 'chore(llma)'
       labels:
@@ -8,7 +10,8 @@ updates:
           - release
       directory: '/'
       schedule:
-          interval: 'daily'
+          interval: 'weekly'
+          day: 'monday'
           time: '10:00'
           timezone: 'UTC'
       groups:
@@ -27,7 +30,13 @@ updates:
           - dependency-name: '@ai-sdk/provider'
           - dependency-name: '@langchain/core'
           - dependency-name: 'langchain'
+      exclude-paths:
+          - 'examples/**'
+          - 'playground/**'
+          - 'compliance/**'
       ignore:
           - dependency-name: '*'
             update-types: ['version-update:semver-major']
       open-pull-requests-limit: 1
+      reviewers:
+          - 'PostHog/team-client-libraries'

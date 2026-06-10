@@ -1,5 +1,30 @@
 # @posthog/react
 
+## 1.10.1
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies [[`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6)]:
+    - posthog-js@1.383.2
+
+## 1.10.0
+
+### Minor Changes
+
+- [#3718](https://github.com/PostHog/posthog-js/pull/3718) [`3aff16e`](https://github.com/PostHog/posthog-js/commit/3aff16e98540e659be4158a784fe38ef755f878e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add an optional `defaultValue` argument to `useFeatureFlagEnabled`. When supplied, the hook returns that value instead of `undefined` while flags are loading or when the flag is absent, and the return type narrows to `boolean`. Omitting the argument keeps the existing `boolean | undefined` behavior.
+  (2026-06-02)
+
+## 1.9.1
+
+### Patch Changes
+
+- [#3646](https://github.com/PostHog/posthog-js/pull/3646) [`4f87827`](https://github.com/PostHog/posthog-js/commit/4f87827dda9c102a6deded986f2afd9fdddfb2e5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid throwing or initializing PostHogProvider when no API key or client is provided
+  (2026-05-21)
+- Updated dependencies [[`87e2145`](https://github.com/PostHog/posthog-js/commit/87e2145b5d09ed8a24df1fc337dad5c3c90c1b8a), [`4f87827`](https://github.com/PostHog/posthog-js/commit/4f87827dda9c102a6deded986f2afd9fdddfb2e5), [`280832b`](https://github.com/PostHog/posthog-js/commit/280832b50b4c058e010436c4aab861cb143577c1)]:
+    - posthog-js@1.374.4
+
 ## 1.9.0
 
 ### Minor Changes

@@ -19,10 +19,12 @@ import {
     PEOPLE_DISTINCT_ID_KEY,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
+    SESSION_RECORDING_REMOTE_CONFIG,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
     COOKIELESS_ALWAYS,
 } from './constants'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from './autocapture-utils'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -116,6 +118,7 @@ import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
+import type { TracingHeaders } from './extensions/tracing-headers'
 import type { WebVitalsAutocapture } from './extensions/web-vitals'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
@@ -186,12 +189,23 @@ const defaultsThatVaryByConfig = (
     | 'session_recording'
     | 'external_scripts_inject_target'
     | 'internal_or_test_user_hostname'
+    | 'persistence_save_debounce_ms'
+    | 'split_storage'
+    | 'detect_google_search_app'
 > => ({
-    rageclick: defaults && defaults >= '2025-11-30' ? { content_ignorelist: true } : true,
+    rageclick:
+        defaults && defaults >= '2026-05-30'
+            ? { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, ignore_text_selection: true }
+            : defaults && defaults >= '2025-11-30'
+              ? { content_ignorelist: true }
+              : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
+    persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
+    split_storage: !!(defaults && defaults >= '2026-05-30'),
+    detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -216,6 +230,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
     __preview_external_dependency_versioned_paths: false,
+    __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -372,6 +387,7 @@ export class PostHog implements PostHogInterface {
     siteApps?: SiteApps
     autocapture?: Autocapture
     heatmaps?: Heatmaps
+    tracingHeaders?: TracingHeaders
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
@@ -555,7 +571,8 @@ export class PostHog implements PostHogInterface {
     // code a bit cleaner, but will add some overhead.
     //
     _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog {
-        if (isUndefined(token) || isEmptyString(token)) {
+        const normalizedToken = isString(token) ? token.trim() : ''
+        if (!normalizedToken) {
             logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
             )
@@ -582,12 +599,18 @@ export class PostHog implements PostHogInterface {
             this._initialPersonProfilesConfig = config.process_person
         }
 
-        this.set_config(
-            extend({}, defaultConfig(config.defaults), configRenames(config), {
-                name: name,
-                token: token,
-            })
-        )
+        const baseConfig = defaultConfig(config.defaults)
+        const userConfig = configRenames(config)
+        const mergedConfig = extend({}, baseConfig, userConfig, {
+            name: name,
+            token: normalizedToken,
+        })
+        // a partial user-supplied rageclick object should keep the date-gated defaults
+        // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
+        if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
+            mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
+        }
+        this.set_config(mergedConfig)
 
         if (this.config.on_xhr_error) {
             logger.error('on_xhr_error is deprecated. Use on_request_error instead')
@@ -601,7 +624,8 @@ export class PostHog implements PostHogInterface {
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
-                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled)
+                : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
+                  new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled, false)
 
         // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
@@ -784,7 +808,7 @@ export class PostHog implements PostHogInterface {
             this._extensions.push((this.historyAutocapture = new ext.historyAutocapture(this)))
         }
         if (ext.tracingHeaders) {
-            this._extensions.push(new ext.tracingHeaders(this))
+            this._extensions.push((this.tracingHeaders = new ext.tracingHeaders(this)))
         }
         if (ext.siteApps) {
             this._extensions.push((this.siteApps = new ext.siteApps(this)))
@@ -1090,7 +1114,11 @@ export class PostHog implements PostHogInterface {
                     if (isArray(fn_name)) {
                         capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
                     } else if (isFunction(item)) {
-                        ;(item as any).call(this)
+                        try {
+                            ;(item as any).call(this)
+                        } catch (e) {
+                            logger.error('Error executing queued PostHog call', item, e)
+                        }
                     } else if (isArray(item) && fn_name === 'alias') {
                         alias_calls.push(item)
                     } else if (
@@ -1107,14 +1135,18 @@ export class PostHog implements PostHogInterface {
 
             const execute = function (calls: SnippetArrayItem[], thisArg: any) {
                 eachArray(calls, function (item) {
-                    if (isArray(item[0])) {
-                        // chained call
-                        let caller = thisArg
-                        each(item, function (call) {
-                            caller = caller[call[0]].apply(caller, call.slice(1))
-                        })
-                    } else {
-                        thisArg[item[0]].apply(thisArg, item.slice(1))
+                    try {
+                        if (isArray(item[0])) {
+                            // chained call
+                            let caller = thisArg
+                            each(item, function (call) {
+                                caller = caller[call[0]].apply(caller, call.slice(1))
+                            })
+                        } else {
+                            thisArg[item[0]].apply(thisArg, item.slice(1))
+                        }
+                    } catch (e) {
+                        logger.error('Error executing queued PostHog call', item, e)
                     }
                 })
             }
@@ -1256,7 +1288,7 @@ export class PostHog implements PostHogInterface {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
-        const uuid = uuidv7()
+        const uuid = options?.uuid || uuidv7()
         let data: CaptureResult = {
             uuid,
             event: event_name,
@@ -1356,6 +1388,7 @@ export class PostHog implements PostHogInterface {
             data,
             compression: 'best-available',
             batchKey: options?._batchKey,
+            transport: options?.transport,
         }
 
         if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
@@ -1422,7 +1455,8 @@ export class PostHog implements PostHogInterface {
 
         const infoProperties = getEventProperties(
             this.config.mask_personal_data_properties,
-            this.config.custom_personal_data_properties
+            this.config.custom_personal_data_properties,
+            this.config.detect_google_search_app
         )
 
         if (this.sessionManager) {
@@ -2746,9 +2780,21 @@ export class PostHog implements PostHogInterface {
             return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property(DEVICE_ID)
+        // Snapshot the session-recording remote config before clearing persistence.
+        // It's server-defined config (sample rate, masking, canvas, triggers, …),
+        // not user state, and must survive reset(). Otherwise start('session_id_changed')
+        // bails on the next session rotation: rrweb is torn down with no replacement
+        // and the new session opens with no FullSnapshot until the next periodic
+        // checkout (~5 min later).
+        const recordingRemoteConfig = this.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
+
+        if (!isUndefined(recordingRemoteConfig)) {
+            this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
+        }
         this.surveys?.reset()
         // Stop the refresh interval before resetting flags — featureFlags.reset() clears
         // the debouncer, so if the order were reversed a pending refresh could fire after reset.
@@ -3021,7 +3067,12 @@ export class PostHog implements PostHogInterface {
             this.sessionPersistence =
                 this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                     ? this.persistence
-                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
+                    : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
+                      new PostHogPersistence(
+                          { ...this.config, persistence: 'sessionStorage' },
+                          isPersistenceDisabled,
+                          false
+                      )
 
             const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
             if (isBoolean(debugConfigFromLocalStorage)) {
@@ -3047,6 +3098,7 @@ export class PostHog implements PostHogInterface {
             this.exceptions?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
+            this.tracingHeaders?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.exceptionObserver?.startIfEnabledOrStop()
@@ -3663,13 +3715,19 @@ export class PostHog implements PostHogInterface {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
+            // tear down rrweb observers before sessionManager goes away — late events would throw
+            this.sessionRecording?.stopRecording()
+            this.sessionRecording = undefined
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
-            this.sessionRecording?.stopRecording()
-            this.sessionRecording = undefined
-            this._captureInitialPageview()
+            if (this.config.capture_pageview) {
+                this._captureInitialPageview()
+            }
+            // At init time, consent was PENDING so is_capturing() was false and _start_queue_if_opted_in() was a no-op.
+            // Now that rejection has been recorded, capturing is active — enable the queue so batched events are flushed.
+            this._start_queue_if_opted_in()
         }
     }
 
@@ -4019,6 +4077,7 @@ const add_dom_loaded_handler = function () {
 }
 
 export function init_from_snippet(): void {
+    Config.SDK_DIST_CHANNEL = 'cdn'
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     const snippetPostHog = assignableWindow['posthog']
@@ -4078,6 +4137,7 @@ export function init_from_snippet(): void {
 }
 
 export function init_as_module(): PostHog {
+    Config.SDK_DIST_CHANNEL = 'npm'
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     add_dom_loaded_handler()

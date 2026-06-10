@@ -1,3 +1,4 @@
+import type { OtlpLogsPayload } from '@posthog/types'
 import { SimpleEventEmitter } from './eventemitter'
 import { getFeatureFlagValue, normalizeFlagsResponse } from './featureFlagUtils'
 import { gzipCompress, isGzipSupported } from './gzip'
@@ -34,6 +35,14 @@ import {
   createLogger,
 } from './utils'
 import { uuidv7 } from './vendor/uuidv7'
+import {
+  ErrorPropertiesBuilder,
+  ErrorCoercer,
+  ObjectCoercer,
+  StringCoercer,
+  PrimitiveCoercer,
+  createDefaultStackParser,
+} from './error-tracking'
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
@@ -87,12 +96,41 @@ export async function logFlushError(err: any): Promise<void> {
 }
 
 function isPostHogFetchError(err: unknown): err is PostHogFetchHttpError | PostHogFetchNetworkError {
-  return typeof err === 'object' && (err instanceof PostHogFetchHttpError || err instanceof PostHogFetchNetworkError)
+  return typeof err === 'object' && (err instanceof PostHogFetchHttpError || isPostHogFetchNetworkError(err))
+}
+
+/**
+ * True for the network error PostHog throws when a request fails to reach the server
+ * (e.g. the device is offline or the request times out). Exposed so SDKs that autocapture
+ * errors can skip these expected connectivity failures instead of reporting them as
+ * application exceptions.
+ *
+ * @public
+ */
+export function isPostHogFetchNetworkError(err: unknown): err is PostHogFetchNetworkError {
+  return err instanceof PostHogFetchNetworkError
 }
 
 function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
+
+/**
+ * Outcome of a logs batch send. Keeps HTTP error classification inside core
+ * (single source of truth — same policy events already use in `_flush()`) so
+ * PostHogLogs doesn't need to know about specific error types.
+ *
+ *   - ok            → records are accepted; drop them from the queue
+ *   - too-large     → 413; caller should halve batch size and retry same records
+ *   - retry-later   → network error; caller keeps records and retries next cycle
+ *   - fatal         → anything else (auth, malformed, etc.); caller drops the
+ *                     batch and surfaces the error
+ */
+export type SendLogsBatchOutcome =
+  | { kind: 'ok' }
+  | { kind: 'too-large' }
+  | { kind: 'retry-later'; error: unknown }
+  | { kind: 'fatal'; error: unknown }
 
 export enum QuotaLimitedFeature {
   FeatureFlags = 'feature_flags',
@@ -132,6 +170,35 @@ export abstract class PostHogCoreStateless {
   protected _isInitialized: boolean = false
   protected _remoteConfigResponsePromise?: Promise<PostHogRemoteConfig | undefined>
   protected _logger: Logger
+  private _errorPropertiesBuilder?: ErrorPropertiesBuilder
+
+  /**
+   * Returns the builder used by `captureException` to coerce arbitrary inputs into a
+   * structured `$exception_list` (with parsed stack frames).
+   *
+   * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
+   */
+  getErrorPropertiesBuilder(): ErrorPropertiesBuilder {
+    if (!this._errorPropertiesBuilder) {
+      this._errorPropertiesBuilder = this.createErrorPropertiesBuilder()
+    }
+    return this._errorPropertiesBuilder
+  }
+
+  /**
+   * Override in subclasses to plug in platform-specific stack parsers (e.g. node, hermes),
+   * additional coercers (DOMException, ErrorEvent, PromiseRejectionEvent), or async frame
+   * modifiers (source maps, context lines).
+   *
+   * The default is intentionally JS-runtime-agnostic — no DOM-typed coercers — so any SDK
+   * that just extends core gets parsed stack frames out of the box.
+   */
+  protected createErrorPropertiesBuilder(): ErrorPropertiesBuilder {
+    return new ErrorPropertiesBuilder(
+      [new ErrorCoercer(), new ObjectCoercer(), new StringCoercer(), new PrimitiveCoercer()],
+      createDefaultStackParser()
+    )
+  }
 
   // Abstract methods to be overridden by implementations
   abstract fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse>
@@ -789,6 +856,10 @@ export abstract class PostHogCoreStateless {
   public async getSurveysStateless(): Promise<SurveyResponse['surveys']> {
     await this._initPromise
 
+    if (this.disabled) {
+      return []
+    }
+
     if (this.disableSurveys === true) {
       this._logger.info('Loading surveys is disabled.')
       return []
@@ -975,7 +1046,11 @@ export abstract class PostHogCoreStateless {
     }
 
     try {
-      await this.fetchWithRetry(url, fetchOptions)
+      const response = await this.fetchWithRetry(url, fetchOptions)
+      // Consume the response body to prevent cross-request promise warnings
+      // in runtimes like Cloudflare Workers that enforce body consumption.
+      // See: https://github.com/PostHog/posthog-js/issues/3173
+      await response.body?.cancel()?.catch(() => {})
     } catch (err) {
       this._events.emit('error', err)
     }
@@ -1053,6 +1128,10 @@ export abstract class PostHogCoreStateless {
    * @throws Error
    */
   async flush(): Promise<void> {
+    if (this.disabled) {
+      return
+    }
+
     // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
     // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
     // Use a custom allSettled implementation to avoid issues with patching Promise on RN
@@ -1150,7 +1229,11 @@ export abstract class PostHogCoreStateless {
       }
 
       try {
-        await this.fetchWithRetry(url, fetchOptions, retryOptions)
+        const response = await this.fetchWithRetry(url, fetchOptions, retryOptions)
+        // Consume the response body to prevent cross-request promise warnings
+        // in runtimes like Cloudflare Workers that enforce body consumption.
+        // See: https://github.com/PostHog/posthog-js/issues/3173
+        await response.body?.cancel()?.catch(() => {})
       } catch (err) {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
@@ -1177,6 +1260,56 @@ export abstract class PostHogCoreStateless {
       sentMessages.push(...batchMessages)
     }
     this._events.emit('flush', sentMessages)
+  }
+
+  /**
+   * Sends a pre-built OTLP logs payload to `/i/v1/logs`. Returns a tagged
+   * outcome instead of throwing so PostHogLogs doesn't have to know about the
+   * core's error class hierarchy. Error classification lives here (single
+   * source of truth, same policy the events `_flush()` uses for its own
+   * 413 / network / fatal handling).
+   *
+   * 413 is passed through as `too-large` (not auto-retried) so the caller can
+   * shrink `maxBatchRecordsPerPost` and retry the same records.
+   */
+  async _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
+    if (this.disabled) {
+      return { kind: 'fatal', error: new Error('The client is disabled') }
+    }
+
+    const serialized = JSON.stringify(payload)
+    const url = `${this.host}/i/v1/logs?token=${encodeURIComponent(this.apiKey)}`
+
+    const gzippedPayload = !this.disableCompression ? await gzipCompress(serialized, this.isDebug) : null
+    const fetchOptions: PostHogFetchOptions = {
+      method: 'POST',
+      headers: {
+        ...this.getCustomHeaders(),
+        'Content-Type': 'application/json',
+        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
+      },
+      body: gzippedPayload || serialized,
+    }
+
+    try {
+      await this.fetchWithRetry(url, fetchOptions, {
+        retryCheck: (err) => {
+          if (isPostHogFetchContentTooLargeError(err)) {
+            return false
+          }
+          return isPostHogFetchError(err)
+        },
+      })
+      return { kind: 'ok' }
+    } catch (err) {
+      if (isPostHogFetchContentTooLargeError(err)) {
+        return { kind: 'too-large' }
+      }
+      if (err instanceof PostHogFetchNetworkError) {
+        return { kind: 'retry-later', error: err }
+      }
+      return { kind: 'fatal', error: err }
+    }
   }
 
   private async fetchWithRetry(
@@ -1240,6 +1373,10 @@ export abstract class PostHogCoreStateless {
     await this._initPromise
     let hasTimedOut = false
     this.clearFlushTimer()
+
+    if (this.disabled) {
+      return
+    }
 
     const doShutdown = async (): Promise<void> => {
       try {

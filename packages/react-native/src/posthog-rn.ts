@@ -1,6 +1,8 @@
-import { AppState, Dimensions, Linking, Platform } from 'react-native'
+import { AppState, type AppStateStatus, Dimensions, Linking, Platform } from 'react-native'
 
 import {
+  CaptureLogOptions,
+  CaptureLogger,
   JsonType,
   PostHogCaptureOptions,
   PostHogCore,
@@ -8,16 +10,28 @@ import {
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogLogs,
+  PostHogLogsConfig,
   PostHogPersistedProperty,
   PostHogRemoteConfig,
   Survey,
   SurveyResponse,
+  allSettled,
   logFlushError,
   maybeAdd,
   patchFetchForTracingHeaders,
+  safeSetTimeout,
   FeatureFlagValue,
+  ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
-import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
+import {
+  PostHogRNStorage,
+  createEventsStorage,
+  createLogsStorage,
+  createEventsMemoryStorage,
+  createLogsMemoryStorage,
+} from './storage'
+import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
@@ -26,12 +40,29 @@ import {
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isValidSampleRate } from './utils'
+import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isValidSampleRate } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 
 export { PostHogPersistedProperty }
+
+/**
+ * Collapses RN's broader AppState status set into the OTLP `app.state`
+ * enum (foreground|background). 'inactive' (iOS transition) and 'extension'
+ * are treated as foreground — the app is still running JS, just not the
+ * primary scene. 'unknown' returns undefined so the attribute is omitted
+ * rather than guessed.
+ */
+function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | 'background' | undefined {
+  if (state === 'background') {
+    return 'background'
+  }
+  if (!state || state === 'unknown') {
+    return undefined
+  }
+  return 'foreground'
+}
 
 export interface PostHogOptions extends PostHogCoreOptions {
   /**
@@ -106,11 +137,53 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * @default true
    */
   setDefaultPersonProperties?: boolean
+
+  /**
+   * Logs feature configuration. Enables structured log capture via
+   * `posthog.captureLog(...)` or `posthog.logger.info(...)`. Records ship to
+   * PostHog's logs product (`/i/v1/logs`) in OTLP format, batched on a timer,
+   * AppState change, buffer fill, or manual `flushLogs()`.
+   *
+   * Capture is **unconditional** — calling the API ships records as long as
+   * the SDK is initialized and the user hasn't opted out. The only blockers
+   * are `optedOut`, missing/empty `body`, and missing API key.
+   *
+   * All fields below are optional; per-SDK defaults apply (mobile defaults
+   * are tuned for cellular bandwidth and battery, ~50 logs/sec ceiling).
+   *
+   * @example Minimal — just service tagging, defaults for everything else
+   * ```ts
+   * new PostHog(key, {
+   *   logs: { serviceName: 'my-app', environment: 'production' }
+   * })
+   * ```
+   *
+   * @example Tune for higher-volume logging
+   * ```ts
+   * new PostHog(key, {
+   *   logs: {
+   *     serviceName: 'my-app',
+   *     rateCap: { maxLogs: 5000, windowMs: 60000 },
+   *     maxBufferSize: 500,
+   *     beforeSend: (r) => r.body.includes('secret') ? null : r,
+   *   }
+   * })
+   * ```
+   */
+  logs?: PostHogLogsConfig
+
+  /**
+   * Overrides the language used when rendering translated survey copy.
+   * When unset, the SDK falls back to the persisted person property `language`
+   * and then the device locale.
+   */
+  overrideDisplayLanguage?: string | null
 }
 
 export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']
-  private _storage: PostHogRNStorage
+  private _eventsStorage: PostHogRNStorage
+  private _logsStorage: PostHogRNStorage
   private _appProperties: PostHogCustomAppProperties = {}
   private _currentSessionId?: string | undefined
   private _enableSessionReplay?: boolean
@@ -120,9 +193,20 @@ export class PostHog extends PostHogCore {
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
+  private _logs: PostHogLogs
+  // Resolved logs config — kept around so lifecycle handlers (AppState
+  // background, _shutdown) can read the configured flush-time budgets without
+  // reaching back into the user's options object.
+  private _resolvedLogsConfig: ReturnType<typeof resolveLogsConfig>
+  // Cached, foreground/background view of the app's lifecycle. Read on the
+  // log-capture hot path (per record) so we tag every log with whether it
+  // happened in foreground or background. Updated by the AppState listener
+  // and seeded from `AppState.currentState` at construction.
+  private _currentAppState?: 'foreground' | 'background'
   private _surveysReadyPromise: Promise<void> | null = null
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
+  private _overrideDisplayLanguage: string | null
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -159,13 +243,19 @@ export class PostHog extends PostHogCore {
    * @param options - PostHog configuration options
    */
   constructor(apiKey: string, options?: PostHogOptions) {
-    super(apiKey, options)
+    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
+    if (!normalizedApiKey) {
+      console.error("You must pass your PostHog project's api key. The client will be disabled.")
+    }
+
+    super(normalizedApiKey, options)
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
+    this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -173,22 +263,11 @@ export class PostHog extends PostHogCore {
         ? options.customAppProperties(getAppProperties())
         : options?.customAppProperties || getAppProperties()
 
-    AppState.addEventListener('change', (state) => {
-      // ignore unknown state (usually initial state, the app might not be ready yet)
-      if (state === 'unknown') {
-        return
-      }
-
-      void this.flush().catch(async (err) => {
-        await logFlushError(err)
-      })
-
-      if (state === 'active') {
-        // rotate session id if needed (expired either 30 minutes inactive or max duration 24 hours)
-        this.getSessionId()
-      }
-    })
-
+    // Resolve storage and construct the logs module BEFORE registering the
+    // AppState listener — the listener body references `this._logs` and
+    // `this._eventsStorage`, and while AppState.addEventListener('change')
+    // only fires on changes (not at registration), the dependency direction
+    // should be explicit: dependencies first, callbacks that use them second.
     let storagePromise: Promise<void> | undefined
 
     let theStorage: PostHogCustomStorage | undefined
@@ -197,17 +276,111 @@ export class PostHog extends PostHogCore {
     }
 
     if (theStorage) {
-      this._storage = new PostHogRNStorage(theStorage)
-      storagePromise = this._storage.preloadPromise
+      this._eventsStorage = createEventsStorage(theStorage)
+      this._logsStorage = createLogsStorage(theStorage)
+      // `allSettled` so one pipeline's preload failure doesn't block the other — the failing side
+      // degrades to memory-only via PostHogRNStorage.persist()'s internal catch.
+      const preloads: Array<['events' | 'logs', Promise<void>]> = []
+      if (this._eventsStorage.preloadPromise) {
+        preloads.push(['events', this._eventsStorage.preloadPromise])
+      }
+      if (this._logsStorage.preloadPromise) {
+        preloads.push(['logs', this._logsStorage.preloadPromise])
+      }
+      if (preloads.length > 0) {
+        storagePromise = allSettled(preloads.map(([, p]) => p)).then((results) => {
+          results.forEach((r, i) => {
+            if (r.status === 'rejected') {
+              this._logger.error(`PostHog ${preloads[i][0]} storage preload failed:`, r.reason)
+            }
+          })
+        })
+      }
     } else {
-      this._storage = new PostHogRNSyncMemoryStorage()
+      this._eventsStorage = createEventsMemoryStorage()
+      this._logsStorage = createLogsMemoryStorage()
     }
 
-    if (storagePromise) {
-      storagePromise.catch((error) => {
-        console.error('PostHog storage initialization failed:', error)
+    // Seed from sync `AppState.currentState` so the very first capture (which
+    // can happen before any 'change' event fires) is already tagged. Maps
+    // RN's broader status set into the OTLP `app.state` enum's
+    // foreground/background dichotomy.
+    this._currentAppState = mapAppStateForLogs(AppState.currentState)
+
+    this._resolvedLogsConfig = resolveLogsConfig(options?.logs)
+    this._logs = new PostHogLogs(
+      this,
+      this._resolvedLogsConfig,
+      this._logger,
+      () => {
+        // Pulled at capture time so each tag reflects state at the moment
+        // the log was fired, not at flush.
+        const flags = this.getFeatureFlags()
+        const flagKeys = flags ? Object.keys(flags) : undefined
+        return {
+          distinctId: this.getDistinctId() || undefined,
+          sessionId: this.getSessionId() || undefined,
+          screenName: (this.sessionProps?.$screen_name as string | undefined) || undefined,
+          appState: this._currentAppState,
+          activeFeatureFlags: flagKeys && flagKeys.length > 0 ? flagKeys : undefined,
+        }
+      },
+      (fn) => this.wrap(fn),
+      // Block between batches on the logs-storage disk write so a crash can't
+      // replay an already-sent batch. Events do the equivalent via
+      // `flushStorage()` (events-storage side). Mirror per-pipeline so one
+      // pipeline's slow disk doesn't stall the other.
+      () => this._logsStorage.waitForPersist()
+    )
+
+    // NOTE: this listener is registered for the lifetime of the PostHog
+    // instance and is never explicitly removed. RN apps typically construct
+    // a single long-lived PostHog and keep it until process exit, so a leak
+    // doesn't matter in practice; just be aware that constructing many
+    // instances (e.g. in tests without an explicit teardown) would
+    // accumulate listeners.
+    AppState.addEventListener('change', (state) => {
+      // ignore unknown state (usually initial state, the app might not be ready yet)
+      if (state === 'unknown') {
+        return
+      }
+
+      // Update before kicking off the flush — captures that race the flush
+      // (e.g. fired in a `componentWillUnmount` triggered by backgrounding)
+      // should already see the new state.
+      const mapped = mapAppStateForLogs(state)
+      if (mapped) {
+        this._currentAppState = mapped
+      }
+
+      // Flush on every transition, including foreground→active. Foreground
+      // flush is technically redundant (the timer would catch up shortly),
+      // but it's cheap and keeps the lifecycle handler symmetric — no
+      // special-casing of which transitions should drain.
+      void this.flush().catch(async (err) => {
+        await logFlushError(err)
       })
-    }
+      // Flush buffered logs alongside events — OS may suspend or terminate the
+      // process next, and anything left in the queue won't get a second chance
+      // until the app is next foregrounded. On background, race the flush
+      // against `backgroundFlushBudgetMs` so a slow network can't run past
+      // the OS-imposed background window (~30s on iOS). Foreground/active
+      // transitions don't need a budget — the app is staying alive.
+      const isBackgrounding = mapped === 'background'
+      const logsFlushPromise = isBackgrounding
+        ? this._logs.flushWithTimeout(this._resolvedLogsConfig.backgroundFlushBudgetMs)
+        : this._logs.flush()
+      void logsFlushPromise.catch(async (err) => {
+        await logFlushError(err)
+      })
+      // Persist pending writes before the OS may suspend the process.
+      void this._eventsStorage.waitForPersist()
+      void this._logsStorage.waitForPersist()
+
+      if (state === 'active') {
+        this.getSessionId()
+      }
+    })
 
     const initAfterStorage = (): void => {
       // reset session id on app restart
@@ -220,9 +393,9 @@ export class PostHog extends PostHogCore {
 
       this.setupBootstrap(options)
 
-      // Initialize device_id if not already set. This provides a stable identifier
-      // for device-level feature flag bucketing that survives identify() and reset().
-      // We seed it from the anonymous ID at init time; once set, it's independent.
+      // Seed device_id from the anonymous id at init time so existing installs
+      // get a stable device-level identifier; once set, it survives identify()
+      // and reset() independently of anonymous_id.
       if (!this.getPersistedProperty(PostHogPersistedProperty.DeviceId)) {
         const anonId = this.getAnonymousId()
         if (anonId) {
@@ -236,6 +409,10 @@ export class PostHog extends PostHogCore {
       }
 
       this._isInitialized = true
+
+      if (this.isDisabled) {
+        return
+      }
 
       // Preload error tracking state from cached remote config.
       // This gates error tracking autocapture before the fresh remote config is fetched.
@@ -332,12 +509,24 @@ export class PostHog extends PostHogCore {
     this._errorTracking.onRemoteConfig(response.errorTracking)
   }
 
+  /**
+   * Resolves the storage instance for a given persisted-property key.
+   * `LogsQueue` routes to `_logsStorage` (dedicated `.posthog-rn-logs.json`
+   * file); every other key routes to `_eventsStorage`. Single source of
+   * truth for routing — extending to new logs-scoped keys is a one-line
+   * edit here.
+   */
+  private _storageForKey(key: PostHogPersistedProperty): PostHogRNStorage {
+    return key === PostHogPersistedProperty.LogsQueue ? this._logsStorage : this._eventsStorage
+  }
+
   getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined {
-    return this._storage.getItem(key) as T | undefined
+    return this._storageForKey(key).getItem(key) as T | undefined
   }
 
   setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
-    return value !== null ? this._storage.setItem(key, value) : this._storage.removeItem(key)
+    const storage = this._storageForKey(key)
+    return value !== null ? storage.setItem(key, value) : storage.removeItem(key)
   }
 
   /**
@@ -346,7 +535,39 @@ export class PostHog extends PostHogCore {
    * considering events as sent, preventing duplicate events on app crash/restart.
    */
   protected async flushStorage(): Promise<void> {
-    await this._storage.waitForPersist()
+    await this._eventsStorage.waitForPersist()
+  }
+
+  /**
+   * Drain both pipelines on shutdown. Run in parallel so the logs final
+   * flush + timer teardown doesn't serialize behind events (and vice-versa).
+   * `_logs.shutdown()` swallows its own errors — a transient logs failure
+   * must not break events shutdown.
+   *
+   * Logs use the smaller of `terminationFlushBudgetMs` and the caller's
+   * `shutdownTimeoutMs` so a final flush can never run past the caller's
+   * shutdown SLA, while still respecting the configured logs-specific
+   * termination budget when it's tighter.
+   *
+   * After the flushes, drain any debounced storage writes that weren't already
+   * persisted via the queue-advance path — `setPersistedProperty` calls for
+   * distinctId, sessionId, deviceId, feature flag overrides, etc. only arm a
+   * debounced write. The drain runs in `finally` so a timed-out flush still
+   * persists them, and its await is bounded by the time left in the shutdown
+   * SLA so a hung storage backend can't run past it.
+   */
+  async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    const start = Date.now()
+    const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
+    try {
+      await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
+    } finally {
+      // Sync drain runs inside waitForPersist before the race below; the race
+      // only bounds the await for in-flight async writes.
+      const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
+      const drain = Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
+      await Promise.race([drain, new Promise<void>((resolve) => safeSetTimeout(resolve, remainingMs))])
+    }
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
@@ -375,6 +596,10 @@ export class PostHog extends PostHogCore {
       $screen_height: Dimensions.get('screen').height,
       $screen_width: Dimensions.get('screen').width,
     }
+  }
+
+  getSurveyDisplayLanguageOverride(): string | null {
+    return this._overrideDisplayLanguage
   }
 
   /**
@@ -437,8 +662,9 @@ export class PostHog extends PostHogCore {
    * To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild`
    * and `PostHogPersistedProperty.InstalledAppVersion` in your array.
    *
-   * Note: The event queue (`PostHogPersistedProperty.Queue`) is always preserved regardless of
-   * what is passed in `propertiesToKeep`, to ensure pending events are not lost.
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+   * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of
+   * what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.
    *
    * {@label Identification}
    *
@@ -461,7 +687,7 @@ export class PostHog extends PostHogCore {
    * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
    *   When not provided, app lifecycle and device bucketing properties are automatically preserved.
    *   When provided, only the specified properties are preserved.
-   *   The event queue is always preserved regardless.
+   *   The event queue and logs queue are always preserved regardless.
    *
    * @public
    */
@@ -483,6 +709,9 @@ export class PostHog extends PostHogCore {
       // reloading, and allow the super.reset() call to reload the flags.
       this._setDefaultPersonPropertiesForFlags(false)
     }
+
+    // Logout must be durable so a crash in the debounce window can't resurface the previous user.
+    void this._eventsStorage.waitForPersist()
   }
 
   /**
@@ -493,7 +722,7 @@ export class PostHog extends PostHogCore {
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
   private _setDefaultPersonPropertiesForFlags(reloadFeatureFlags = true): void {
-    const defaultProps: Record<string, string> = {}
+    const defaultProps: Record<string, JsonType> = {}
     const relevantKeys = [
       '$app_version',
       '$app_build',
@@ -506,16 +735,16 @@ export class PostHog extends PostHogCore {
     relevantKeys.forEach((key) => {
       const value = this._appProperties[key]
       if (value !== null && value !== undefined) {
-        defaultProps[key] = String(value)
+        defaultProps[key] = value
       }
     })
 
     const commonProps = this.getCommonEventProperties()
     if (commonProps.$lib) {
-      defaultProps.$lib = String(commonProps.$lib)
+      defaultProps.$lib = commonProps.$lib
     }
     if (commonProps.$lib_version) {
-      defaultProps.$lib_version = String(commonProps.$lib_version)
+      defaultProps.$lib_version = commonProps.$lib_version
     }
 
     if (Object.keys(defaultProps).length > 0) {
@@ -530,6 +759,9 @@ export class PostHog extends PostHogCore {
    * Setting this to 1 will send events immediately and will use more battery. This is set to 20 by default.
    * You can also manually flush the queue. If a flush is already in progress it returns a promise for the existing flush.
    *
+   * Note: this drains the **events** pipeline only. Logs are flushed via
+   * {@link flushLogs}, and {@link shutdown} drains both before terminating.
+   *
    * {@label Capture}
    *
    * @example
@@ -538,12 +770,114 @@ export class PostHog extends PostHogCore {
    * await posthog.flush()
    * ```
    *
+   * @see flushLogs
    * @public
    *
    * @returns Promise that resolves when the flush is complete
    */
   flush(): Promise<void> {
     return super.flush()
+  }
+
+  /**
+   * Captures a structured log record and sends it to PostHog's logs product
+   * (`/i/v1/logs`). Low-level primitive — most callers will prefer
+   * `posthog.logger.info(...)` / `.warn(...)` / `.error(...)` etc., which
+   * wrap this with a level pre-set.
+   *
+   * Records are buffered per-session, rate-limited, batched into OTLP
+   * payloads, and flushed on a timer, on AppState change, or when the
+   * buffer reaches capacity. Configure flush cadence, rate cap, and a
+   * `beforeSend` filter via the `logs` option on `new PostHog(...)`.
+   *
+   * Note — naming collision: `posthog.captureLog()` (this method) is the
+   * **logs product** API. There is also a separate, pre-existing
+   * `sessionReplayConfig.captureLog` boolean that controls whether
+   * **session replay** records the device's `console.*` output. The two
+   * are unrelated: this method emits structured records to the logs
+   * pipeline regardless of whether session replay is on.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * posthog.captureLog({
+   *   body: 'checkout completed',
+   *   level: 'info',
+   *   attributes: { order_id: 'ord_789', amount_cents: 4999 },
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param options Log record. `body` is required; `level` defaults to
+   *   `'info'`. `attributes` are attached as OTLP key-value attributes
+   *   and will override auto-populated ones (distinctId, sessionId) on
+   *   key conflict.
+   */
+  captureLog(options: CaptureLogOptions): void {
+    this._logs.captureLog(options)
+  }
+
+  /**
+   * Manually flushes the logs queue.
+   *
+   * Logs flush automatically on a timer, when the buffer fills, or on
+   * AppState change — most apps never need to call this. Use it when you
+   * want a synchronous-style hand-off (e.g. before navigating away from a
+   * critical screen, in a custom crash handler, or while testing locally).
+   *
+   * If a flush is already in progress, both callers join the same in-flight
+   * promise — no double-send.
+   *
+   * Note: this drains the **logs** pipeline only. Events are flushed via
+   * {@link flush}, and {@link shutdown} drains both before terminating.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * await posthog.flushLogs()
+   * ```
+   *
+   * @see flush
+   * @public
+   *
+   * @returns Promise that resolves when the flush is complete.
+   */
+  flushLogs(): Promise<void> {
+    return this._logs.flush()
+  }
+
+  private _captureLogger?: CaptureLogger
+
+  /**
+   * Convenience per-level logger. Each method is shorthand for
+   * `posthog.captureLog({ body, level, attributes })`. Lazily constructed
+   * on first access, then reused.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+   * posthog.logger.error('payment failed', { code: 'E001' })
+   * ```
+   *
+   * @public
+   */
+  get logger(): CaptureLogger {
+    if (!this._captureLogger) {
+      this._captureLogger = {
+        trace: (body, attributes) => this.captureLog({ body, level: 'trace', attributes }),
+        debug: (body, attributes) => this.captureLog({ body, level: 'debug', attributes }),
+        info: (body, attributes) => this.captureLog({ body, level: 'info', attributes }),
+        warn: (body, attributes) => this.captureLog({ body, level: 'warn', attributes }),
+        error: (body, attributes) => this.captureLog({ body, level: 'error', attributes }),
+        fatal: (body, attributes) => this.captureLog({ body, level: 'fatal', attributes }),
+      }
+    }
+    return this._captureLogger
   }
 
   /**
@@ -563,7 +897,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optIn(): Promise<void> {
-    return super.optIn()
+    // Consent must be durable. See reset()/identify().
+    const result = super.optIn()
+    void this._eventsStorage.waitForPersist()
+    return result
   }
 
   /**
@@ -582,7 +919,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optOut(): Promise<void> {
-    return super.optOut()
+    // Consent must be durable. See reset()/identify().
+    const result = super.optOut()
+    void this._eventsStorage.waitForPersist()
+    return result
   }
 
   /**
@@ -728,11 +1068,11 @@ export class PostHog extends PostHogCore {
 
     // Automatically cache group properties for feature flag evaluation
     if (properties && Object.keys(properties).length > 0) {
-      const propsToCache: Record<string, string> = {}
+      const propsToCache: Record<string, JsonType> = {}
       Object.keys(properties).forEach((key) => {
         const value = properties[key]
         if (value !== null && value !== undefined) {
-          propsToCache[key] = String(value)
+          propsToCache[key] = value
         }
       })
       if (Object.keys(propsToCache).length > 0) {
@@ -875,7 +1215,7 @@ export class PostHog extends PostHogCore {
    * @param properties The group properties to set for flag evaluation
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setGroupPropertiesForFlags(properties: Record<string, Record<string, string>>, reloadFeatureFlags = true): void {
+  setGroupPropertiesForFlags(properties: Record<string, Record<string, JsonType>>, reloadFeatureFlags = true): void {
     super.setGroupPropertiesForFlags(properties)
 
     if (reloadFeatureFlags) {
@@ -1201,20 +1541,20 @@ export class PostHog extends PostHogCore {
 
     // Automatically cache person properties for feature flag evaluation
 
-    const propsToCache: Record<string, string> = {}
-    if (userProps) {
+    const propsToCache: Record<string, JsonType> = {}
+    if (userProps && typeof userProps === 'object' && !Array.isArray(userProps)) {
       Object.entries(userProps).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
-          propsToCache[key] = String(value)
+          propsToCache[key] = value
         }
       })
     }
 
-    const propsOnceToCache: Record<string, string> = {}
-    if (userPropsOnce && typeof userPropsOnce === 'object') {
-      Object.entries(userPropsOnce as Record<string, unknown>).forEach(([key, value]) => {
+    const propsOnceToCache: Record<string, JsonType> = {}
+    if (userPropsOnce && typeof userPropsOnce === 'object' && !Array.isArray(userPropsOnce)) {
+      Object.entries(userPropsOnce).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
-          propsOnceToCache[key] = String(value)
+          propsOnceToCache[key] = value
         }
       })
     }
@@ -1243,6 +1583,9 @@ export class PostHog extends PostHogCore {
         this._logger.error(`Native PostHog failed to identify: ${e}.`)
       }
     }
+
+    // Account-switch safety — same as reset().
+    void this._eventsStorage.waitForPersist()
   }
 
   /**
@@ -1276,15 +1619,40 @@ export class PostHog extends PostHogCore {
    * @param {Object} [additionalProperties] Any additional properties to add to the error event
    * @returns {void}
    */
-  captureException(error: Error | unknown, additionalProperties: PostHogEventProperties = {}): void {
-    const syntheticException = new Error('Synthetic Error')
-    this._errorTracking.captureException(error, additionalProperties, {
-      mechanism: {
-        handled: true,
-        type: 'generic',
-      },
-      syntheticException,
-    })
+  captureException(
+    error: Error | unknown,
+    additionalProperties: PostHogEventProperties = {},
+    hint?: CoreErrorTracking.EventHint
+  ): void {
+    const resolvedHint: CoreErrorTracking.EventHint = hint ?? {
+      mechanism: { handled: true, type: 'generic' },
+      syntheticException: new Error('Synthetic Error'),
+    }
+    super.captureException(error, additionalProperties, resolvedHint)
+
+    // On a fatal crash, persist the exception + recent logs before the app may die.
+    if (additionalProperties?.$exception_level === 'fatal') {
+      void this._eventsStorage.waitForPersist()
+      void this._logsStorage.waitForPersist()
+    }
+  }
+
+  protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
+    return new CoreErrorTracking.ErrorPropertiesBuilder(
+      [
+        new CoreErrorTracking.PromiseRejectionEventCoercer(),
+        new CoreErrorTracking.ErrorCoercer(),
+        new CoreErrorTracking.ErrorEventCoercer(),
+        new CoreErrorTracking.ObjectCoercer(),
+        new CoreErrorTracking.StringCoercer(),
+        new CoreErrorTracking.PrimitiveCoercer(),
+      ],
+      CoreErrorTracking.createStackParser(
+        isHermes() ? 'hermes' : 'web:javascript',
+        CoreErrorTracking.chromeStackLineParser,
+        CoreErrorTracking.geckoStackLineParser
+      )
+    )
   }
 
   initReactNativeNavigation(options: PostHogAutocaptureOptions): boolean {
@@ -1581,6 +1949,7 @@ export class PostHog extends PostHogCore {
       maskAllSandboxedViews = true,
       captureLog: localCaptureLog = true,
       captureNetworkTelemetry: localCaptureNetworkTelemetry = true,
+      screenshotModeBackgroundCapture = false,
       sampleRate: localSampleRate,
       iOSdebouncerDelayMs = defaultThrottleDelayMs,
       androidDebouncerDelayMs = defaultThrottleDelayMs,
@@ -1652,6 +2021,7 @@ export class PostHog extends PostHogCore {
       maskAllSandboxedViews,
       captureLog,
       captureNetworkTelemetry,
+      screenshotModeBackgroundCapture,
       sampleRate,
       iOSdebouncerDelayMs,
       androidDebouncerDelayMs,

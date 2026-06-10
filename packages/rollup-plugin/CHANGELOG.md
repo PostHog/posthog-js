@@ -1,5 +1,26 @@
 # @posthog/rollup-plugin
 
+## 1.4.5
+
+### Patch Changes
+
+- [#3775](https://github.com/PostHog/posthog-js/pull/3775) [`018001c`](https://github.com/PostHog/posthog-js/commit/018001cb2e1417aae9a38bdc9338afce2e0d2c25) Thanks [@hpouillot](https://github.com/hpouillot)! - upgrade @posthog/cli version
+  (2026-06-09)
+
+## 1.4.4
+
+### Patch Changes
+
+- [#3661](https://github.com/PostHog/posthog-js/pull/3661) [`f12ee73`](https://github.com/PostHog/posthog-js/commit/f12ee73362545c2fe946a566d76bb14b7d5aa746) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Bump `@posthog/cli` to `~0.7.13`, which drops several unused runtime dependencies (`axios`, `axios-proxy-builder`, `console.table`, `rimraf`).
+  (2026-05-22)
+
+## 1.4.3
+
+### Patch Changes
+
+- [#3519](https://github.com/PostHog/posthog-js/pull/3519) [`fbeb006`](https://github.com/PostHog/posthog-js/commit/fbeb0061ab9a15eea4fdf077b0eaa5b68af8092b) Thanks [@cat-ph](https://github.com/cat-ph)! - Set Vite build sourcemap config before transform plugins run so uploaded source maps include original sources. The plugin also no longer overrides the `sourcemap` setting when `sourcemaps.enabled` is `false`.
+  (2026-05-04)
+
 ## 1.4.2
 
 ### Patch Changes

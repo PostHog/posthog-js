@@ -38,6 +38,11 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             code: "import { something } from '../../../../extensions/replay/external/denylist'",
             filename: '/project/src/__tests__/extensions/replay/external/denylist.test.ts',
         },
+        // Allowed imports from playwright specs (also test code)
+        {
+            code: "import { csrfHeaderCases } from '../../../src/__tests__/extensions/replay/external/test_data/header-cases'",
+            filename: '/project/packages/browser/playwright/mocked/session-recording/csrf-headers-preserved.spec.ts',
+        },
         // Non-restricted imports should be allowed from anywhere
         {
             code: "import { something } from '@/utils'",
@@ -52,7 +57,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             errors: [
                 {
                     message:
-                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, or test files',
+                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
                 },
             ],
         },
@@ -63,7 +68,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             errors: [
                 {
                     message:
-                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, or test files',
+                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
                 },
             ],
         },
@@ -74,7 +79,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             errors: [
                 {
                     message:
-                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, or test files',
+                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
                 },
             ],
         },
@@ -85,7 +90,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             errors: [
                 {
                     message:
-                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, or test files',
+                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
                 },
             ],
         },

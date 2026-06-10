@@ -4,7 +4,7 @@ import * as globals from '../utils/globals'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'
-import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
+import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
 import { PostHog } from '../posthog-core'
@@ -14,7 +14,12 @@ import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
 
-let mockGetProperties: jest.Mock
+// `var` so the hoisted jest.mock factory below can assign to it without TDZ.
+// Previously masked by babel-jest transpiling `let` -> `var` because IE 11
+// was in package.json#browserslist. `jest.hoisted()` would be the modern
+// fix but needs babel-plugin-jest-hoist 30 (jest 30 catalog bump).
+// eslint-disable-next-line no-var
+var mockGetProperties: jest.Mock
 
 jest.mock('../utils/event-utils', () => {
     const originalEventUtils = jest.requireActual('../utils/event-utils')
@@ -70,14 +75,20 @@ describe('posthog core', () => {
             expect(captureData.timestamp).toEqual(baseUTCDateTime)
         })
 
-        it('captures when time is overriden by caller', () => {
+        it.each([
+            { field: 'timestamp', value: new Date(2020, 0, 2, 12, 34) },
+            { field: 'uuid', value: '0190e0a0-0000-7000-8000-000000000000' },
+        ] as const)('captures when $field is overridden by caller', ({ field, value }) => {
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, { [field]: value })
+            expect(captureData[field]).toEqual(value)
+        })
+
+        it('records override-tracking properties when timestamp is overridden', () => {
             const captureData = posthogWith(defaultConfig, defaultOverrides).capture(
                 eventName,
                 {},
                 { timestamp: new Date(2020, 0, 2, 12, 34) }
             )
-            expect(captureData).toHaveProperty('timestamp')
-            expect(captureData.timestamp).toEqual(new Date(2020, 0, 2, 12, 34))
             expect(captureData.properties['$event_time_override_provided']).toEqual(true)
             expect(captureData.properties['$event_time_override_system_time']).toEqual(baseUTCDateTime)
         })
@@ -344,6 +355,21 @@ describe('posthog core', () => {
                 })
             )
         })
+
+        it.each(['XHR', 'fetch', 'sendBeacon'] as const)(
+            'passes the %s transport override to the request',
+            (transport) => {
+                const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+                posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
+
+                expect(posthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        transport,
+                    })
+                )
+            }
+        )
 
         it('does not allow you to set complex current url', () => {
             const posthog = posthogWith(defaultConfig, defaultOverrides)
@@ -1400,6 +1426,43 @@ describe('posthog core', () => {
 
                 expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
             })
+        })
+    })
+
+    describe('reset()', () => {
+        it('preserves session-recording remote config across reset()', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+            // Simulate the recording remote config landing in persistence,
+            // as RemoteConfigLoader would do after a /decide round trip.
+            const remoteConfig = {
+                cache_timestamp: Date.now(),
+                enabled: true,
+                endpoint: '/s/',
+                sampleRate: 0.5,
+                masking: { maskAllInputs: true },
+                canvasRecording: { enabled: true, fps: 4, quality: '0.6' },
+            }
+            posthog.persistence!.register({ [SESSION_RECORDING_REMOTE_CONFIG]: remoteConfig })
+
+            // And some user state that *should* be cleared.
+            posthog.persistence!.register({ some_user_prop: 'should-be-gone' })
+
+            posthog.reset()
+
+            // Recording remote config survives — without this, start('session_id_changed')
+            // bails on the next session rotation and the new session opens with no FullSnapshot.
+            expect(posthog.persistence!.props[SESSION_RECORDING_REMOTE_CONFIG]).toEqual(remoteConfig)
+
+            // User state is still cleared.
+            expect(posthog.persistence!.props['some_user_prop']).toBeUndefined()
+        })
+
+        it('does not crash when no recording remote config has been stored', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+            expect(() => posthog.reset()).not.toThrow()
+            expect(posthog.persistence!.props[SESSION_RECORDING_REMOTE_CONFIG]).toBeUndefined()
         })
     })
 

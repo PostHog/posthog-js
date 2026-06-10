@@ -1,3 +1,4 @@
+import type { IncomingHttpHeaders } from 'node:http'
 import { of, throwError, lastValueFrom } from 'rxjs'
 
 import { PostHog } from '@/entrypoints/index.node'
@@ -26,7 +27,7 @@ const getLastBatchEvents = (): any[] | undefined => {
 }
 
 const createMockContext = (overrides?: {
-  headers?: Record<string, string>
+  headers?: IncomingHttpHeaders
   url?: string
   method?: string
   path?: string
@@ -111,6 +112,55 @@ describe('PostHogInterceptor', () => {
       expect(capturedContext.properties.$request_path).toBe('/api/test')
       expect(capturedContext.properties.$user_agent).toBe('TestAgent/1.0')
       expect(capturedContext.properties.$ip).toBe('192.168.1.1')
+    })
+
+    it('should sanitize tracing headers and only include present values', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const longDistinctId = ` ${'u'.repeat(1105)} `
+      const context = createMockContext({
+        headers: {
+          'x-posthog-session-id': [' \u0000 session-123\t ', 'ignored'],
+          'x-posthog-distinct-id': longDistinctId,
+          'user-agent': ['Test\u0000Agent/1.0'],
+        },
+      })
+
+      let capturedContext: any
+      const handler = {
+        handle: () => {
+          capturedContext = posthog.getContext()
+          return of({ success: true })
+        },
+      }
+
+      await lastValueFrom(interceptor.intercept(context, handler))
+
+      expect(capturedContext.sessionId).toBe('session-123')
+      expect(capturedContext.distinctId).toBe('u'.repeat(1000))
+      expect(capturedContext.properties.$user_agent).toBe('Test\u0000Agent/1.0')
+    })
+
+    it('should omit invalid tracing header values', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const context = createMockContext({
+        headers: {
+          'x-posthog-session-id': ' \u0000\t ',
+          'x-posthog-distinct-id': [],
+        },
+      })
+
+      let capturedContext: any
+      const handler = {
+        handle: () => {
+          capturedContext = posthog.getContext()
+          return of({ success: true })
+        },
+      }
+
+      await lastValueFrom(interceptor.intercept(context, handler))
+
+      expect(capturedContext.sessionId).toBeUndefined()
+      expect(capturedContext.distinctId).toBeUndefined()
     })
 
     it('should propagate context to capture calls in handler', async () => {

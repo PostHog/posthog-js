@@ -634,6 +634,40 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       // Input should be null in privacy mode (withPrivacyMode returns null)
       expect(captureCall[0].properties.$ai_input).toBeNull()
     })
+
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])(
+      'should trim oversized prompts and prepend a removal placeholder in %s models',
+      async (_version, createModel) => {
+        const baseModel = createModel('gpt-4')
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: 'test-trim',
+        })
+
+        // Build a prompt whose serialized JSON well exceeds MAX_OUTPUT_SIZE (200kb).
+        // Each message is ~15kb of text, totaling ~1.5MB serialized.
+        const oversizedPrompt = Array.from({ length: 100 }, (_, i) => ({
+          role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: [{ type: 'text' as const, text: 'x'.repeat(15_000) }],
+        }))
+
+        await model.doGenerate({ prompt: oversizedPrompt as any })
+
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+        const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
+        expect(input.length).toBeGreaterThan(0)
+        expect(input[0].role).toBe('posthog')
+        expect(input[0].content).toMatch(/^\[\d+ messages? removed due to size limit\]$/)
+        // Trimmed payload sits just above the 200kb cap because the placeholder
+        // (~100 bytes) is unshifted after the byte-budget loop runs.
+        expect(JSON.stringify(input).length).toBeLessThan(210_000)
+      }
+    )
   })
 
   describe('Anthropic V3 cache token handling', () => {
@@ -1104,6 +1138,81 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('base URL extraction ($ai_base_url)', () => {
+    const runGenerate = async (config: unknown): Promise<Record<string, any>> => {
+      const baseModel = {
+        specificationVersion: 'v2' as const,
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        supportedUrls: {},
+        config,
+        doGenerate: jest.fn().mockResolvedValue({
+          content: [{ type: 'text', text: 'hi' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          response: { modelId: 'gpt-4o' },
+          providerMetadata: {},
+          finishReason: 'stop' as const,
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      } as any
+
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      await model.doGenerate({ prompt: [] } as any)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      return captureCall[0].properties
+    }
+
+    it('recovers the base URL from a config.url closure (@ai-sdk/openai style)', async () => {
+      const props = await runGenerate({ url: ({ path }: { path: string }) => `https://gateway.posthog.com/v1${path}` })
+      expect(props['$ai_base_url']).toBe('https://gateway.posthog.com/v1')
+    })
+
+    it('recovers the base URL from a config.baseURL string (@ai-sdk/anthropic style)', async () => {
+      const props = await runGenerate({ baseURL: 'https://gateway.posthog.com/anthropic' })
+      expect(props['$ai_base_url']).toBe('https://gateway.posthog.com/anthropic')
+    })
+
+    it('falls back to an empty string when config is absent', async () => {
+      expect((await runGenerate(undefined))['$ai_base_url']).toBe('')
+    })
+
+    it('falls back to an empty string when config shape is unrecognized', async () => {
+      expect((await runGenerate({ somethingElse: true }))['$ai_base_url']).toBe('')
+    })
+
+    it('falls back to an empty string when config.url throws', async () => {
+      const props = await runGenerate({
+        url: () => {
+          throw new Error('internal shape changed')
+        },
+      })
+      expect(props['$ai_base_url']).toBe('')
+    })
+
+    it('recovers the base URL on the streaming path too', async () => {
+      const streamParts: LanguageModelV3StreamPart[] = [
+        { type: 'text-delta', id: 'text-1', delta: 'hi' },
+        { type: 'finish', usage: v3TokenUsage(1, 1), finishReason: { unified: 'stop' as const, raw: undefined } },
+      ]
+      const baseModel = createMockStreamingModel('v3', streamParts) as any
+      baseModel.config = { baseURL: 'https://gateway.posthog.com/v1' }
+
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] }],
+      })
+      const reader = result.stream.getReader()
+      while (!(await reader.read()).done) {
+        // drain
+      }
+      await flushPromises()
+
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(captureCall[0].properties['$ai_base_url']).toBe('https://gateway.posthog.com/v1')
     })
   })
 })

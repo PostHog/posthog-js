@@ -1,5 +1,6 @@
 import { posthog } from './posthog.js'
-import { action, mutation } from './_generated/server.js'
+import { action, mutation, query } from './_generated/server.js'
+import { components } from './_generated/api.js'
 import { v } from 'convex/values'
 
 // --- Fire-and-forget methods (mutations) ---
@@ -43,42 +44,6 @@ export const testIdentify = mutation({
         await posthog.identify(ctx, {
             distinctId: args.distinctId,
             properties: args.properties,
-            disableGeoip: args.disableGeoip,
-        })
-        return { success: true }
-    },
-})
-
-export const testGroupIdentify = mutation({
-    args: {
-        groupType: v.string(),
-        groupKey: v.string(),
-        properties: v.optional(v.any()),
-        distinctId: v.optional(v.string()),
-        disableGeoip: v.optional(v.boolean()),
-    },
-    handler: async (ctx, args) => {
-        await posthog.groupIdentify(ctx, {
-            groupType: args.groupType,
-            groupKey: args.groupKey,
-            properties: args.properties,
-            distinctId: args.distinctId || undefined,
-            disableGeoip: args.disableGeoip,
-        })
-        return { success: true }
-    },
-})
-
-export const testAlias = mutation({
-    args: {
-        distinctId: v.optional(v.string()),
-        alias: v.string(),
-        disableGeoip: v.optional(v.boolean()),
-    },
-    handler: async (ctx, args) => {
-        await posthog.alias(ctx, {
-            distinctId: args.distinctId,
-            alias: args.alias,
             disableGeoip: args.disableGeoip,
         })
         return { success: true }
@@ -132,7 +97,6 @@ const featureFlagArgs = {
     groups: v.optional(v.any()),
     personProperties: v.optional(v.any()),
     groupProperties: v.optional(v.any()),
-    sendFeatureFlagEvents: v.optional(v.boolean()),
     disableGeoip: v.optional(v.boolean()),
 }
 
@@ -140,19 +104,17 @@ function featureFlagOptions(args: {
     groups?: unknown
     personProperties?: unknown
     groupProperties?: unknown
-    sendFeatureFlagEvents?: boolean
     disableGeoip?: boolean
 }) {
     return {
         groups: args.groups as Record<string, string> | undefined,
         personProperties: args.personProperties as Record<string, string> | undefined,
         groupProperties: args.groupProperties as Record<string, Record<string, string>> | undefined,
-        sendFeatureFlagEvents: args.sendFeatureFlagEvents,
         disableGeoip: args.disableGeoip,
     }
 }
 
-export const testGetFeatureFlag = action({
+export const testGetFeatureFlag = query({
     args: featureFlagArgs,
     handler: async (ctx, args) => {
         const value = await posthog.getFeatureFlag(ctx, {
@@ -160,11 +122,11 @@ export const testGetFeatureFlag = action({
             distinctId: args.distinctId,
             ...featureFlagOptions(args),
         })
-        return { flagKey: args.flagKey, value }
+        return { flagKey: args.flagKey, value: value ?? null }
     },
 })
 
-export const testIsFeatureEnabled = action({
+export const testIsFeatureEnabled = query({
     args: featureFlagArgs,
     handler: async (ctx, args) => {
         const enabled = await posthog.isFeatureEnabled(ctx, {
@@ -172,11 +134,11 @@ export const testIsFeatureEnabled = action({
             distinctId: args.distinctId,
             ...featureFlagOptions(args),
         })
-        return { flagKey: args.flagKey, enabled }
+        return { flagKey: args.flagKey, enabled: enabled ?? null }
     },
 })
 
-export const testGetFeatureFlagPayload = action({
+export const testGetFeatureFlagPayload = query({
     args: {
         ...featureFlagArgs,
         matchValue: v.optional(v.union(v.boolean(), v.string())),
@@ -192,7 +154,7 @@ export const testGetFeatureFlagPayload = action({
     },
 })
 
-export const testGetFeatureFlagResult = action({
+export const testGetFeatureFlagResult = query({
     args: featureFlagArgs,
     handler: async (ctx, args) => {
         const result = await posthog.getFeatureFlagResult(ctx, {
@@ -200,11 +162,11 @@ export const testGetFeatureFlagResult = action({
             distinctId: args.distinctId,
             ...featureFlagOptions(args),
         })
-        return { flagKey: args.flagKey, result }
+        return { flagKey: args.flagKey, result: result ?? null }
     },
 })
 
-export const testGetAllFlags = action({
+export const testGetAllFlags = query({
     args: {
         distinctId: v.optional(v.string()),
         groups: v.optional(v.any()),
@@ -226,7 +188,104 @@ export const testGetAllFlags = action({
     },
 })
 
-export const testGetAllFlagsAndPayloads = action({
+// --- Cache inspection helpers (used by the demo UI to surface the cron's progress) ---
+
+export const flagDefinitionsStatus = query({
+    args: {},
+    handler: async (ctx) => {
+        const row = await ctx.runQuery(components.posthog.lib.getFlagDefinitions, {})
+        if (!row) return null
+        let flagKeys: string[] = []
+        try {
+            const parsed = JSON.parse(row.data) as { flags?: Array<{ key?: string }> }
+            flagKeys = parsed.flags?.map((f) => f.key ?? '<unnamed>') ?? []
+        } catch {
+            // ignore parse errors — keys list stays empty.
+        }
+        return {
+            fetchedAt: row.fetchedAt,
+            etag: row.etag ?? null,
+            flagCount: flagKeys.length,
+            flagKeys,
+        }
+    },
+})
+
+// --- Remote feature flag evaluation wrappers ---
+//
+// These are action-context actions that hit PostHog's `/flags` endpoint via the client's
+// `evaluate*` methods. Use them when local eval isn't possible (no personal API key, experience
+// continuity flags, static cohorts, properties you don't have server-side).
+
+const remoteFlagArgs = {
+    distinctId: v.optional(v.string()),
+    flagKey: v.string(),
+    groups: v.optional(v.any()),
+    personProperties: v.optional(v.any()),
+    groupProperties: v.optional(v.any()),
+    disableGeoip: v.optional(v.boolean()),
+}
+
+function remoteFlagOptions(args: {
+    groups?: unknown
+    personProperties?: unknown
+    groupProperties?: unknown
+    disableGeoip?: boolean
+}) {
+    return {
+        groups: args.groups as Record<string, string> | undefined,
+        personProperties: args.personProperties as Record<string, unknown> | undefined,
+        groupProperties: args.groupProperties as Record<string, Record<string, unknown>> | undefined,
+        disableGeoip: args.disableGeoip,
+    }
+}
+
+export const testEvaluateFlag = action({
+    args: remoteFlagArgs,
+    handler: async (ctx, args) => {
+        const value = await posthog.evaluateFlag(ctx, {
+            key: args.flagKey,
+            distinctId: args.distinctId,
+            ...remoteFlagOptions(args),
+        })
+        return { flagKey: args.flagKey, value }
+    },
+})
+
+export const testEvaluateFlagPayload = action({
+    args: remoteFlagArgs,
+    handler: async (ctx, args) => {
+        const payload = await posthog.evaluateFlagPayload(ctx, {
+            key: args.flagKey,
+            distinctId: args.distinctId,
+            ...remoteFlagOptions(args),
+        })
+        return { flagKey: args.flagKey, payload }
+    },
+})
+
+export const testEvaluateAllFlags = action({
+    args: {
+        distinctId: v.optional(v.string()),
+        groups: v.optional(v.any()),
+        personProperties: v.optional(v.any()),
+        groupProperties: v.optional(v.any()),
+        disableGeoip: v.optional(v.boolean()),
+        flagKeys: v.optional(v.array(v.string())),
+    },
+    handler: async (ctx, args) => {
+        return await posthog.evaluateAllFlags(ctx, {
+            distinctId: args.distinctId,
+            groups: args.groups as Record<string, string> | undefined,
+            personProperties: args.personProperties as Record<string, unknown> | undefined,
+            groupProperties: args.groupProperties as Record<string, Record<string, unknown>> | undefined,
+            disableGeoip: args.disableGeoip,
+            flagKeys: args.flagKeys,
+        })
+    },
+})
+
+export const testGetAllFlagsAndPayloads = query({
     args: {
         distinctId: v.optional(v.string()),
         groups: v.optional(v.any()),

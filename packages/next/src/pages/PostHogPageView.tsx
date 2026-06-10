@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/router.js'
 import { usePostHog } from '@posthog/react'
+import { getCurrentUrl } from '../shared/browser.js'
 
 /**
  * Tracks pageviews on route change in Next.js Pages Router.
@@ -30,11 +31,12 @@ export function PostHogPageView() {
     const posthog = usePostHog()
 
     useEffect(() => {
-        if (!posthog || !router.isReady) {
+        const currentUrl = getCurrentUrl(router.asPath)
+        if (!posthog || !router.isReady || !currentUrl) {
             return
         }
 
-        posthog.capture('$pageview', { $current_url: router.asPath })
+        posthog.capture('$pageview', { $current_url: currentUrl })
     }, [router.asPath, router.isReady, posthog])
 
     return null

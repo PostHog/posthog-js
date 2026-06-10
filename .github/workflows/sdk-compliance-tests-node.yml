@@ -2,16 +2,18 @@ name: Node SDK Compliance Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
     paths:
       - 'packages/node/**'
       - 'packages/core/**'
+      - 'compliance/node/**'
       - '.github/workflows/sdk-compliance-tests-node.yml'
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
     paths:
       - 'packages/node/**'
       - 'packages/core/**'
+      - 'compliance/node/**'
       - '.github/workflows/sdk-compliance-tests-node.yml'
   workflow_dispatch:
 
@@ -22,7 +24,7 @@ permissions:
 
 jobs:
   test-node-sdk:
-    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@main
+    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@39d05346c4638d24f94e591ab89c9c6fcdb52d6b
     with:
       adapter-dockerfile: compliance/node/Dockerfile
       adapter-context: .

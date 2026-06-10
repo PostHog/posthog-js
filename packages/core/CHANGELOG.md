@@ -1,5 +1,367 @@
 # @posthog/core
 
+## 1.31.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.384.1
+
+## 1.31.0
+
+### Minor Changes
+
+- [#3782](https://github.com/PostHog/posthog-js/pull/3782) [`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect the Google Search App (GSA) as its own `$browser` value (`Google Search App`) via the cross-platform `GSA/` UA marker, instead of reporting the embedded webview as Mobile Safari (iOS) or Chrome (Android). Gated behind the new `detect_google_search_app` config option, which the `2026-05-30` config defaults opt into automatically — left off otherwise to keep existing browser attribution backwards-compatible.
+
+  Note: `$browser_version` for `Google Search App` is not comparable across platforms — iOS yields a version like `284.0` (from `GSA/284.0.564099828`) while Android yields a version like `14.21` (from `GSA/14.21.20.28.arm64`), since Google maintains separate versioning schemes for the two apps. Avoid building cross-platform version dashboards on `$browser_version` for this browser. (2026-06-10)
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/types@1.384.0
+
+## 1.30.14
+
+### Patch Changes
+
+- Updated dependencies [[`783ba46`](https://github.com/PostHog/posthog-js/commit/783ba461b0916c3f379c227d08470687d38d0768)]:
+  - @posthog/types@1.383.3
+
+## 1.30.13
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.383.2
+
+## 1.30.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.383.1
+
+## 1.30.11
+
+### Patch Changes
+
+- Updated dependencies [[`227c9b0`](https://github.com/PostHog/posthog-js/commit/227c9b03c19dcb93d9a15abb1ee6b9523d366767), [`393f9e2`](https://github.com/PostHog/posthog-js/commit/393f9e2a4697c6ffe52402cad6fb8550b48b5e00)]:
+  - @posthog/types@1.383.0
+
+## 1.30.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.382.0
+
+## 1.30.9
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+  - @posthog/types@1.381.0
+
+## 1.30.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.380.1
+
+## 1.30.7
+
+### Patch Changes
+
+- Updated dependencies [[`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7)]:
+  - @posthog/types@1.380.0
+
+## 1.30.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.3
+
+## 1.30.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.2
+
+## 1.30.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.1
+
+## 1.30.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.0
+
+## 1.30.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.378.1
+
+## 1.30.1
+
+### Patch Changes
+
+- Updated dependencies [[`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc)]:
+  - @posthog/types@1.378.0
+
+## 1.30.0
+
+### Minor Changes
+
+- [#3708](https://github.com/PostHog/posthog-js/pull/3708) [`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect Brave (desktop, Android, iOS), Vivaldi, Yandex, Naver Whale, DuckDuckGo, Pale Moon, and Waterfox so users on these browsers no longer get bucketed as Chrome or Firefox.
+
+  `detectBrowser` / `detectBrowserVersion` now accept an optional third argument, `BrowserDetectionHints`, with a `brave` flag (set when `navigator.brave` exists). The browser SDK populates this automatically to catch desktop / Android Brave, which is Chromium-based and carries no UA marker. Brave on iOS is picked up purely from the `Brave/` UA marker — WebKit doesn't ship `navigator.brave`. The original two-argument signature still works for non-DOM callers. (2026-06-01)
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.377.0
+
+## 1.29.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.6
+
+## 1.29.14
+
+### Patch Changes
+
+- [#3694](https://github.com/PostHog/posthog-js/pull/3694) [`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix(react-native): preserve non-string property types (booleans, arrays, numbers, objects) when caching person and group properties for feature flag evaluation. Previously these were force-coerced to strings via `String(value)`, causing flag conditions using boolean equality or array `contains` to fail on device while the PostHog UI still evaluated correctly.
+  (2026-05-31)
+- Updated dependencies []:
+  - @posthog/types@1.376.5
+
+## 1.29.13
+
+### Patch Changes
+
+- [#3681](https://github.com/PostHog/posthog-js/pull/3681) [`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - unify captureException in posthog core
+  (2026-05-28)
+- Updated dependencies []:
+  - @posthog/types@1.376.4
+
+## 1.29.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.3
+
+## 1.29.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.2
+
+## 1.29.10
+
+### Patch Changes
+
+- [#3665](https://github.com/PostHog/posthog-js/pull/3665) [`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Don't autocapture PostHog's own `PostHogFetchNetworkError` (raised when the device is offline) as a `$exception`. These connectivity failures are expected and were flooding error tracking with internal SDK noise. Adds an `isPostHogFetchNetworkError` type guard to `@posthog/core` so SDKs can detect these errors.
+  (2026-05-26)
+- Updated dependencies []:
+  - @posthog/types@1.376.1
+
+## 1.29.9
+
+### Patch Changes
+
+- [#3639](https://github.com/PostHog/posthog-js/pull/3639) [`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda) Thanks [@marandaneto](https://github.com/marandaneto)! - Use native async gzip compression for session recording events when CompressionStream is available.
+  (2026-05-22)
+- Updated dependencies []:
+  - @posthog/types@1.376.0
+
+## 1.29.8
+
+### Patch Changes
+
+- Updated dependencies [[`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d)]:
+  - @posthog/types@1.375.0
+
+## 1.29.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.4
+
+## 1.29.6
+
+### Patch Changes
+
+- [#3581](https://github.com/PostHog/posthog-js/pull/3581) [`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587) Thanks [@Ashut0sh-mishra](https://github.com/Ashut0sh-mishra)! - Detect Oculus Browser (Meta Quest headsets) correctly instead of falling back to Chrome
+  (2026-05-20)
+- Updated dependencies [[`557b893`](https://github.com/PostHog/posthog-js/commit/557b8934aa0b990184e0376fb1fc28433ad336c6)]:
+  - @posthog/types@1.374.3
+
+## 1.29.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.2
+
+## 1.29.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.1
+
+## 1.29.3
+
+### Patch Changes
+
+- Updated dependencies [[`594ea11`](https://github.com/PostHog/posthog-js/commit/594ea1146045d49080f6dfd951b037c13278e975)]:
+  - @posthog/types@1.374.0
+
+## 1.29.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.373.5
+
+## 1.29.1
+
+### Patch Changes
+
+- [#3602](https://github.com/PostHog/posthog-js/pull/3602) [`4b895bf`](https://github.com/PostHog/posthog-js/commit/4b895bf0151f24c0b72e8ce4cae47906795b29b8) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate gzip request bodies at the browser send boundary and fall back to JSON if the outgoing body is not gzip data.
+  (2026-05-12)
+- Updated dependencies []:
+  - @posthog/types@1.373.4
+
+## 1.29.0
+
+### Minor Changes
+
+- [#3599](https://github.com/PostHog/posthog-js/pull/3599) [`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Expose UUID and cookie helpers from `@posthog/core` and `posthog-node` for users managing distinct_id outside the browser SDK (e.g. Lambda functions handing out cross-domain redirects). The helpers were already implemented in `@posthog/next` — this change lifts them to core so all SDKs can re-use them. `@posthog/next` now re-exports the same surface from `@posthog/core` to keep existing consumers working without churn. Closes #2143.
+  (2026-05-12)
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.373.3
+
+## 1.28.7
+
+### Patch Changes
+
+- [#3568](https://github.com/PostHog/posthog-js/pull/3568) [`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate native gzip output before sending requests and fall back when CompressionStream returns malformed data.
+  (2026-05-11)
+- Updated dependencies []:
+  - @posthog/types@1.373.2
+
+## 1.28.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.373.1
+
+## 1.28.5
+
+### Patch Changes
+
+- Updated dependencies [[`4c0c7d9`](https://github.com/PostHog/posthog-js/commit/4c0c7d9f48e6f4f5301f8208285191f62dc8407a), [`0a835fa`](https://github.com/PostHog/posthog-js/commit/0a835fa1d5db988d508aa023240ab5b4b50f0969)]:
+  - @posthog/types@1.373.0
+
+## 1.28.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.10
+
+## 1.28.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.9
+
+## 1.28.2
+
+### Patch Changes
+
+- [#3516](https://github.com/PostHog/posthog-js/pull/3516) [`220cd61`](https://github.com/PostHog/posthog-js/commit/220cd61e332ca4982c7bc3b6f740d797ef9e4e7f) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: consume fetch response body to prevent CF Workers runtime warnings
+  (2026-05-04)
+
+- [#3515](https://github.com/PostHog/posthog-js/pull/3515) [`255b273`](https://github.com/PostHog/posthog-js/commit/255b27380658b450d1427d4a478e4d7a4bf773f1) Thanks [@marandaneto](https://github.com/marandaneto)! - Gate survey translation logs behind SDK debug logging to avoid production console spam.
+  (2026-05-04)
+- Updated dependencies []:
+  - @posthog/types@1.372.8
+
+## 1.28.1
+
+### Patch Changes
+
+- [#3512](https://github.com/PostHog/posthog-js/pull/3512) [`8aee3d5`](https://github.com/PostHog/posthog-js/commit/8aee3d55f8e2bf7a14a534c940327d8e08ba64f6) Thanks [@marandaneto](https://github.com/marandaneto)! - Do not crash when the React Native SDK is initialized without an API key; initialize as disabled and log an error instead. Disabled clients now also skip manual reload/flush/survey/log network calls.
+  (2026-05-04)
+- Updated dependencies []:
+  - @posthog/types@1.372.7
+
+## 1.28.0
+
+### Minor Changes
+
+- [#3492](https://github.com/PostHog/posthog-js/pull/3492) [`cf56753`](https://github.com/PostHog/posthog-js/commit/cf56753d775225df2751dee2de7987d4a47fef8c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add translated survey rendering support in React Native and share survey translation logic through `@posthog/core`.
+  (2026-05-01)
+
+- [#3480](https://github.com/PostHog/posthog-js/pull/3480) [`04db756`](https://github.com/PostHog/posthog-js/commit/04db75663208251d1b09c80b09e5d00188e897fd) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add manual log capture API for React Native: `posthog.captureLog()`, `posthog.logger.{trace,debug,info,warn,error,fatal}()`, `posthog.flushLogs()`, and a `logs` config option on the constructor. Records ship to PostHog's logs product (`/i/v1/logs`) in OTLP format, batched on a timer / AppState change / buffer fill, and persisted to a dedicated logs-storage file.
+
+  Manual capture is unconditional — calling the API ships records, matching the events pipeline's manual `capture()` shape. Only blockers: `optedOut`, missing/empty `body`, and missing API key. The wire field `response.logs.captureConsoleLogs` is browser-only (it gates the JS SDK's `console.*` autocapture extension) and is not read by RN. When console autocapture lands on RN as a follow-up, that PR will introduce a local opt-in for the autocapture path specifically; manual capture will remain unconditional. (2026-05-01)
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.6
+
+## 1.27.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.5
+
+## 1.27.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.4
+
+## 1.27.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.3
+
+## 1.27.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.372.2
+
 ## 1.27.5
 
 ### Patch Changes

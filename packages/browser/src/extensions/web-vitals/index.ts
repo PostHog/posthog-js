@@ -30,7 +30,6 @@ export class WebVitalsAutocapture {
         this.startIfEnabled()
     }
 
-    /** Shorthand for performance config to reduce bundle size */
     private get _perfConfig(): PostHogConfig['capture_performance'] {
         return this._instance.config.capture_performance
     }
@@ -177,12 +176,6 @@ export class WebVitalsAutocapture {
     }
 
     private _addToBuffer = (metric: any) => {
-        const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
-        if (isUndefined(sessionIds)) {
-            logger.error('Could not read session ID. Dropping metrics!')
-            return
-        }
-
         this._buffer = this._buffer || { url: undefined, metrics: [], firstMetricTimestamp: undefined }
 
         const $currentUrl = this._currentURL()
@@ -230,13 +223,18 @@ export class WebVitalsAutocapture {
             metric.attribution.interactionTargetElement = undefined
         }
 
-        this._buffer.metrics.push({
+        const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
+        const bufferedMetric: Record<string, unknown> = {
             ...metric,
             $current_url: $currentUrl,
-            $session_id: sessionIds.sessionId,
-            $window_id: sessionIds.windowId,
             timestamp: Date.now(),
-        })
+        }
+        if (!isUndefined(sessionIds)) {
+            bufferedMetric.$session_id = sessionIds.sessionId
+            bufferedMetric.$window_id = sessionIds.windowId
+        }
+
+        this._buffer.metrics.push(bufferedMetric)
 
         if (this._buffer.metrics.length === this.allowedMetrics.length) {
             // we have all allowed metrics

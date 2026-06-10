@@ -21,7 +21,6 @@ interface MessagesViewProps {
     onSendMessage: () => void
     onStartNewConversation: () => void
     messagesEndRef: (el: HTMLDivElement | null) => void
-    inputRef: (el: HTMLTextAreaElement | null) => void
 }
 
 function MessageBubble({
@@ -73,7 +72,6 @@ export function MessagesView({
     onSendMessage,
     onStartNewConversation,
     messagesEndRef,
-    inputRef,
 }: MessagesViewProps) {
     return (
         <>
@@ -94,7 +92,6 @@ export function MessagesView({
             ) : (
                 <div style={styles.inputContainer}>
                     <textarea
-                        ref={inputRef}
                         style={styles.input}
                         placeholder={placeholderText}
                         value={inputValue}
@@ -102,6 +99,7 @@ export function MessagesView({
                         onKeyDown={onKeyDown}
                         rows={1}
                         disabled={isLoading}
+                        autoFocus
                     />
                     <SendMessageButton
                         primaryColor={primaryColor}

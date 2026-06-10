@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.43.5",
+  "version": "4.46.25",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -72,7 +72,7 @@
     "metro": "0.83.1",
     "@expo/metro-config": "~0.20.0",
     "posthog-react-native-plugin": "^1.0.0",
-    "posthog-react-native-session-replay": "^1.5.4",
+    "posthog-react-native-session-replay": "^1.6.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-native": "^0.69.1",
@@ -92,7 +92,7 @@
     "expo-file-system": ">= 13.0.0",
     "expo-localization": ">= 11.0.0",
     "posthog-react-native-plugin": ">= 1.0.0",
-    "posthog-react-native-session-replay": ">= 1.5.4",
+    "posthog-react-native-session-replay": ">= 1.6.0",
     "react-native-device-info": ">= 10.0.0",
     "react-native-localize": ">= 3.0.0",
     "react-native-navigation": ">= 6.0.0",
@@ -134,6 +134,9 @@
       "optional": true
     },
     "react-native-safe-area-context": {
+      "optional": true
+    },
+    "react-native-svg": {
       "optional": true
     }
   }

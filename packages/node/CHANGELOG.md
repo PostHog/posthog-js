@@ -1,5 +1,405 @@
 # posthog-node
 
+## 5.36.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.1
+
+## 5.36.9
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/core@1.31.0
+
+## 5.36.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.14
+
+## 5.36.7
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies []:
+  - @posthog/core@1.30.13
+
+## 5.36.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.12
+
+## 5.36.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.11
+
+## 5.36.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.10
+
+## 5.36.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.9
+
+## 5.36.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.8
+
+## 5.36.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.7
+
+## 5.36.0
+
+### Minor Changes
+
+- [#3728](https://github.com/PostHog/posthog-js/pull/3728) [`9287c87`](https://github.com/PostHog/posthog-js/commit/9287c87b7d4cf00160269d0cc648074f27c0847a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add a configurable `$is_server` event property (default `true`) so PostHog can identify server-side events. Set `isServer: false` when using the SDK as a client/CLI so the device OS is attributed normally.
+  (2026-06-04)
+
+## 5.35.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.6
+
+## 5.35.14
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.5
+
+## 5.35.13
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.4
+
+## 5.35.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.3
+
+## 5.35.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.2
+
+## 5.35.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.1
+
+## 5.35.9
+
+### Patch Changes
+
+- [#3703](https://github.com/PostHog/posthog-js/pull/3703) [`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45) Thanks [@marandaneto](https://github.com/marandaneto)! - Disable/no-op initialization paths instead of throwing or sending requests when PostHog project tokens are missing or blank.
+  (2026-06-01)
+- Updated dependencies [[`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+  - @posthog/core@1.30.0
+
+## 5.35.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.15
+
+## 5.35.7
+
+### Patch Changes
+
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+
+## 5.35.6
+
+### Patch Changes
+
+- [#3681](https://github.com/PostHog/posthog-js/pull/3681) [`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - unify captureException in posthog core
+  (2026-05-28)
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+  - @posthog/core@1.29.13
+
+## 5.35.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.12
+
+## 5.35.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.11
+
+## 5.35.3
+
+### Patch Changes
+
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+  - @posthog/core@1.29.10
+
+## 5.35.2
+
+### Patch Changes
+
+- [#3658](https://github.com/PostHog/posthog-js/pull/3658) [`5d7a2d3`](https://github.com/PostHog/posthog-js/commit/5d7a2d336befb9c2b7be9ff1961d674623d33901) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Include group context in the $feature_flag_called deduplication key in \_captureFlagCalledEventIfNeeded, so events fire independently per group combination.
+  (2026-05-25)
+
+## 5.35.1
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+
+## 5.35.0
+
+### Minor Changes
+
+- [#3642](https://github.com/PostHog/posthog-js/pull/3642) [`18ea8b5`](https://github.com/PostHog/posthog-js/commit/18ea8b53f608607075c93bc18b29be8dfd41eb3f) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Promote feature flag definition cache provider types to the main `posthog-node` export and deprecate `posthog-node/experimental` imports.
+  (2026-05-21)
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.8
+
+## 5.34.10
+
+### Patch Changes
+
+- [#3643](https://github.com/PostHog/posthog-js/pull/3643) [`f42f371`](https://github.com/PostHog/posthog-js/commit/f42f3710f8e8788ecffce742face8ad34db3ef1c) Thanks [@dmarticus](https://github.com/dmarticus)! - Reject semver values with leading zeros in local flag evaluation. Per semver 2.0.0 §2, numeric identifiers must not include leading zeros — values like `1.07.3` are not valid semver and should not match targeting conditions. Both override values and flag values are now validated; invalid inputs surface as `InconclusiveMatchError` so the condition does not match.
+  (2026-05-21)
+
+## 5.34.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.7
+
+## 5.34.8
+
+### Patch Changes
+
+- [#3640](https://github.com/PostHog/posthog-js/pull/3640) [`12ef3f6`](https://github.com/PostHog/posthog-js/commit/12ef3f63d18831b8ceffe7e81cea07d0c8a392a7) Thanks [@hpouillot](https://github.com/hpouillot)! - Fix `identifyImmediate` to await the underlying network request. Previously the returned promise resolved before the `$identify` event was sent, causing events to be dropped when called from short-lived runtimes (Vercel/Cloudflare Workers, Convex actions) that exit immediately after `await`.
+  (2026-05-21)
+
+## 5.34.7
+
+### Patch Changes
+
+- Updated dependencies [[`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/core@1.29.6
+
+## 5.34.6
+
+### Patch Changes
+
+- [#3623](https://github.com/PostHog/posthog-js/pull/3623) [`e119eec`](https://github.com/PostHog/posthog-js/commit/e119eec0e4eaa3d6501d87cb745f25bbf247dcf7) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Fix six edge cases in local feature flag evaluation. `gt`/`gte`/`lt`/`lte` now compare numerically when both sides parse as finite numbers — previously a string override like `"10"` against numeric value `9` slipped into lexicographic comparison and returned false, and `parseFloat`'s NaN return value leaked through the old `!= null` guard. `is_not_set` now resolves locally — true when the property key is absent, false when present — instead of always throwing `InconclusiveMatchError` and forcing the flag to return undefined. Flag-level condition properties with `negation: true` are now correctly inverted, matching the existing cohort-path behavior in `matchPropertyGroup`. An inactive flag (`active: false`) now short-circuits to false even when `ensure_experience_continuity: true` — previously it threw `InconclusiveMatchError` and resolved to undefined. `is_set` now returns true for properties whose value is `null` or `undefined` as long as the key is present — `is_set` is about key presence, not value. Cohort property groups containing a flag-type property no longer silently skip the dependency; the cohort eval is now marked inconclusive so the flag returns undefined instead of a wrong definitive answer.
+  (2026-05-19)
+
+## 5.34.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.5
+
+## 5.34.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.4
+
+## 5.34.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.3
+
+## 5.34.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.2
+
+## 5.34.1
+
+### Patch Changes
+
+- Updated dependencies [[`4b895bf`](https://github.com/PostHog/posthog-js/commit/4b895bf0151f24c0b72e8ce4cae47906795b29b8)]:
+  - @posthog/core@1.29.1
+
+## 5.34.0
+
+### Minor Changes
+
+- [#3599](https://github.com/PostHog/posthog-js/pull/3599) [`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Expose UUID and cookie helpers from `@posthog/core` and `posthog-node` for users managing distinct_id outside the browser SDK (e.g. Lambda functions handing out cross-domain redirects). The helpers were already implemented in `@posthog/next` — this change lifts them to core so all SDKs can re-use them. `@posthog/next` now re-exports the same surface from `@posthog/core` to keep existing consumers working without churn. Closes #2143.
+  (2026-05-12)
+
+### Patch Changes
+
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+  - @posthog/core@1.29.0
+
+## 5.33.7
+
+### Patch Changes
+
+- Updated dependencies [[`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77)]:
+  - @posthog/core@1.28.7
+
+## 5.33.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.6
+
+## 5.33.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.5
+
+## 5.33.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.4
+
+## 5.33.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.3
+
+## 5.33.2
+
+### Patch Changes
+
+- [#3516](https://github.com/PostHog/posthog-js/pull/3516) [`220cd61`](https://github.com/PostHog/posthog-js/commit/220cd61e332ca4982c7bc3b6f740d797ef9e4e7f) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: consume fetch response body to prevent CF Workers runtime warnings
+  (2026-05-04)
+- Updated dependencies [[`220cd61`](https://github.com/PostHog/posthog-js/commit/220cd61e332ca4982c7bc3b6f740d797ef9e4e7f), [`255b273`](https://github.com/PostHog/posthog-js/commit/255b27380658b450d1427d4a478e4d7a4bf773f1)]:
+  - @posthog/core@1.28.2
+
+## 5.33.1
+
+### Patch Changes
+
+- Updated dependencies [[`8aee3d5`](https://github.com/PostHog/posthog-js/commit/8aee3d55f8e2bf7a14a534c940327d8e08ba64f6)]:
+  - @posthog/core@1.28.1
+
+## 5.33.0
+
+### Minor Changes
+
+- [#3476](https://github.com/PostHog/posthog-js/pull/3476) [`f8bc02f`](https://github.com/PostHog/posthog-js/commit/f8bc02f946b51f27f55f97351ca8d81a1fa54e9d) Thanks [@dmarticus](https://github.com/dmarticus)! - Add `evaluateFlags()` and a new `flags` option on `capture()` so a single `/flags` request powers both flag branching and event enrichment per incoming request:
+
+  ```ts
+  const flags = await posthog.evaluateFlags(distinctId, { personProperties: { plan: 'enterprise' } })
+  if (flags.isEnabled('new-dashboard')) {
+    renderNewDashboard()
+  }
+  posthog.capture({ distinctId, event: 'page_viewed', flags })
+  ```
+
+  The returned `FeatureFlagEvaluations` snapshot exposes `isEnabled()`, `getFlag()`, `getFlagPayload()` for branching, plus `onlyAccessed()` and `only([keys])` for filtering which flags get attached to a captured event. Pass `flagKeys: [...]` to `evaluateFlags()` to scope the underlying `/flags` request itself. `captureException()` / `captureExceptionImmediate()` accept a `flags` argument so `$exception` events carry the same flag context as the rest of your request's events.
+
+  Deprecates `isFeatureEnabled()`, `getFeatureFlag()`, `getFeatureFlagPayload()`, and `capture({ sendFeatureFlags })`. They continue to work but now log a deduped `[PostHog] ... is deprecated` warning the first time they're used. Removal is planned for the next major version. (2026-05-02)
+
+## 5.32.1
+
+### Patch Changes
+
+- Updated dependencies [[`cf56753`](https://github.com/PostHog/posthog-js/commit/cf56753d775225df2751dee2de7987d4a47fef8c), [`04db756`](https://github.com/PostHog/posthog-js/commit/04db75663208251d1b09c80b09e5d00188e897fd)]:
+  - @posthog/core@1.28.0
+
+## 5.32.0
+
+### Minor Changes
+
+- [#3474](https://github.com/PostHog/posthog-js/pull/3474) [`70ba8f8`](https://github.com/PostHog/posthog-js/commit/70ba8f84649680a8c5e85b0deae00741075dc21b) Thanks [@patricio-posthog](https://github.com/patricio-posthog)! - feat(flags): support mixed targeting in local evaluation
+  (2026-04-30)
+
+## 5.31.0
+
+### Minor Changes
+
+- [#3491](https://github.com/PostHog/posthog-js/pull/3491) [`974e4b2`](https://github.com/PostHog/posthog-js/commit/974e4b273d36399e9491c88eb0a95aa23bca69b3) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add Express and NestJS request context support for PostHog tracing headers.
+  (2026-04-29)
+
+## 5.30.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.9
+
+## 5.30.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.8
+
+## 5.30.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.7
+
+## 5.30.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.6
+
 ## 5.30.4
 
 ### Patch Changes

@@ -33,6 +33,22 @@ describe('Pages PostHogProvider', () => {
         expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'phc_test123' }))
     })
 
+    it('warns and renders children without ClientPostHogProvider when apiKey is empty and env var is not set', () => {
+        delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+        render(
+            <PostHogProvider apiKey="">
+                <div data-testid="child">Child</div>
+            </PostHogProvider>
+        )
+
+        expect(screen.getByTestId('child')).toBeInTheDocument()
+        expect(mockClientPostHogProvider).not.toHaveBeenCalled()
+        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        warnSpy.mockRestore()
+    })
+
     it('trims apiKey and api_host before passing them to ClientPostHogProvider', () => {
         render(
             <PostHogProvider

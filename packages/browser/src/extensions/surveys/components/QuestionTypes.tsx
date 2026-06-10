@@ -8,16 +8,8 @@ import {
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import {
-    isArray,
-    isNull,
-    isNumber,
-    isString,
-    getValidationError,
-    getLengthFromRules,
-    getRequirementsHint,
-    SurveyValidationType,
-} from '@posthog/core'
+import { isArray, isNull, isNumber, isString, SurveyValidationType } from '@posthog/core'
+import { getValidationError, getLengthFromRules, getRequirementsHint } from '@posthog/core/surveys'
 import {
     dissatisfiedEmoji,
     neutralEmoji,
@@ -157,6 +149,10 @@ export function OpenTextQuestion({
                     }}
                     onKeyDown={(e) => {
                         e.stopPropagation()
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !validationError) {
+                            e.preventDefault()
+                            isPreviewMode ? handlePreviewSubmit() : handleSubmit()
+                        }
                     }}
                     value={text}
                 />

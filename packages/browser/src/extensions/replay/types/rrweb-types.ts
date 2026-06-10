@@ -1,15 +1,11 @@
-// Type definitions copied from @rrweb/types@2.0.0-alpha.17 and rrweb-snapshot@2.0.0-alpha.17
-// Both packages are MIT licensed: https://github.com/rrweb-io/rrweb
+// Type definitions copied from the in-repo @posthog/rrweb-types and @posthog/rrweb-snapshot packages
+// (a fork of upstream @rrweb/types and rrweb-snapshot, both MIT licensed: https://github.com/rrweb-io/rrweb)
 //
-// These types are copied here to avoid requiring users to install peer dependencies
+// These types are inlined here to avoid requiring users to install peer dependencies
 // solely for TypeScript type information.
-//
-// Original sources:
-// - @rrweb/types: https://github.com/rrweb-io/rrweb/tree/main/packages/@rrweb/types
-// - rrweb-snapshot: https://github.com/rrweb-io/rrweb/tree/main/packages/rrweb-snapshot
 
 // ===== Types from rrweb-snapshot =====
-// These are needed by @rrweb/types
+// These are needed by the rrweb types
 
 export type DataURLOptions = Partial<{
     type: string
@@ -113,7 +109,7 @@ export type serializedNodeWithId = serializedNode & {
     id: number
 }
 
-// ===== Types from @rrweb/types =====
+// ===== Types from rrweb-types =====
 
 export type blockClass = string | RegExp
 
