@@ -1728,12 +1728,17 @@ export interface PostHogConfig {
 
     /**
      * Prevents posthog-js from using the `navigator.sendBeacon` API to send events.
-     * Enabling this option may hurt the reliability of sending $pageleave events
+     * Enabling this option may hurt the reliability of sending $pageleave events.
+     */
+    disable_beacon?: boolean
+
+    /**
+     * @deprecated Use `disable_beacon` instead.
      */
     __preview_disable_beacon?: boolean
 
     /**
-     * Disables sending credentials when using XHR requests.
+     * @deprecated This option is a no-op. The browser SDK no longer sets `XMLHttpRequest.withCredentials`.
      */
     __preview_disable_xhr_credentials?: boolean
 

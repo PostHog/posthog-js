@@ -298,6 +298,7 @@ const CONFIG_RENAMES: [keyof PostHogConfig, keyof PostHogConfig][] = [
     ['xhr_headers', 'request_headers'],
     ['cookie_name', 'persistence_name'],
     ['disable_cookie', 'disable_persistence'],
+    ['__preview_disable_beacon', 'disable_beacon'],
     ['store_google', 'save_campaign_params'],
     ['verbose', 'debug'],
 ]
@@ -1055,8 +1056,10 @@ export class PostHog implements PostHogInterface {
             ...options.headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
-        options.disableXHRCredentials = this.config.__preview_disable_xhr_credentials
-        if (this.config.__preview_disable_beacon) {
+        const disableBeacon = isUndefined(this.config.disable_beacon)
+            ? this.config.__preview_disable_beacon
+            : this.config.disable_beacon
+        if (disableBeacon) {
             options.disableTransport = ['sendBeacon']
         }
 
