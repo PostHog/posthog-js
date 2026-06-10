@@ -7,7 +7,10 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_REMOTE_CONFIG,
+    SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
@@ -2834,6 +2837,143 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_isSampled']).toStrictEqual(false)
         })
 
+        it.each([
+            {
+                scenario: 'keeps stored sampled-in decisions when the sampleRate is unchanged',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: 1,
+                    })
+                },
+                sampleRate: '1.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: 1,
+            },
+            {
+                scenario: 'resamples stored sampled-in decisions when the sampleRate is lowered to 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: 1,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'disabled',
+                expectedIsSampled: () => false,
+                expectedSampleRate: 0,
+            },
+            {
+                scenario: 'resamples legacy sampled-in decisions without a stored sampleRate',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'disabled',
+                expectedIsSampled: () => false,
+                expectedSampleRate: 0,
+            },
+            {
+                scenario: 'keeps already-applied sampling overrides when the later sampleRate is 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: null,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: null,
+            },
+            {
+                scenario: 'keeps explicit sampling overrides when sampleRate is 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: null,
+            },
+        ])('$scenario', ({ setup, sampleRate, expectedStatus, expectedIsSampled, expectedSampleRate }) => {
+            setup()
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate },
+                })
+            )
+
+            expect(sessionRecording.status).toBe(expectedStatus)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled())
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(expectedSampleRate)
+        })
+
+        it('does not expose the sampling override null sentinel on event properties', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBeNull()
+            expect(posthog.persistence?.properties()).not.toHaveProperty(SESSION_RECORDING_SAMPLE_RATE)
+
+            posthog.persistence?.register({
+                [SESSION_RECORDING_SAMPLE_RATE]: 0,
+            })
+            expect(posthog.persistence?.properties()[SESSION_RECORDING_SAMPLE_RATE]).toBe(0)
+        })
+
+        it('does not reuse a sampled-in decision when sampleRate is lowered to 0 for URL + linked flag ALL match', () => {
+            const sessionRecordingConfig = {
+                endpoint: '/s/',
+                linkedFlag: 'the-flag-key',
+                urlTriggers: [{ url: 'start-on-me', matching: 'regex' as const }],
+                triggerMatchType: 'all' as const,
+            }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { ...sessionRecordingConfig, sampleRate: '1.00' },
+                })
+            )
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+            fakeNavigateTo('https://test.com/start-on-me')
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+
+            sessionRecording.stopRecording()
+            ;(posthog.capture as jest.Mock).mockClear()
+            sessionRecording = new SessionRecording(posthog)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { ...sessionRecordingConfig, sampleRate: '0.00' },
+                })
+            )
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            expect(posthog.capture).not.toHaveBeenCalled()
+        })
+
         it('does emit to capture if the sample rate is 1', () => {
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(posthog.capture).not.toHaveBeenCalled()
@@ -2941,18 +3081,18 @@ describe('Lazy SessionRecording', () => {
                 expect(posthog.capture).not.toHaveBeenCalled()
             })
 
-            it('preserves false from persistence (not legacy, still valid format)', () => {
+            it('re-decides when a legacy false from persistence is stored', () => {
                 posthog.persistence?.register({
                     [SESSION_RECORDING_IS_SAMPLED]: false,
                 })
 
                 sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '1.00' } })
                 )
 
-                // false is still valid format, should remain disabled
-                expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+                expect(sessionRecording.status).toBe('sampled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+                expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(1)
             })
         })
     })
@@ -4501,6 +4641,126 @@ describe('Lazy SessionRecording', () => {
                     ]),
                 })
             )
+        })
+
+        it('does not reuse a sampled-in trigger group decision when sampleRate is lowered to 0', () => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 1.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 1,
+                sampled: true,
+            })
+
+            sessionRecording.stopRecording()
+            ;(posthog.capture as jest.Mock).mockClear()
+            sessionRecording = new SessionRecording(posthog)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 0.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 0,
+                sampled: false,
+            })
+            expect(posthog.capture).not.toHaveBeenCalled()
+        })
+
+        it.each([
+            {
+                name: 'missing sampleRate',
+                storedDecision: { sessionId, sampled: true },
+            },
+            {
+                name: 'non-numeric sampleRate',
+                storedDecision: { sessionId, sampleRate: '1.0', sampled: true },
+            },
+        ])('does not reuse a trigger group decision with $name', ({ storedDecision }) => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            posthog.persistence?.register({
+                [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id]: storedDecision,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 0.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 0,
+                sampled: false,
+            })
+        })
+
+        it('does not reuse a legacy sampled-out trigger group decision when sampleRate is raised to 1', () => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            posthog.persistence?.register({
+                [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id]: false,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 1.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 1,
+                sampled: true,
+            })
         })
 
         it('respects sampleRate < 1.0 and samples out when triggered', () => {

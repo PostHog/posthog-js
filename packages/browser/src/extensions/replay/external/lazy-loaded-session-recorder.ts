@@ -50,6 +50,7 @@ import {
 import {
     SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
@@ -1494,6 +1495,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._instance.persistence?.register({
             // short-circuits the `makeSamplingDecision` function in the session recording module
             [SESSION_RECORDING_IS_SAMPLED]: this.sessionId,
+            [SESSION_RECORDING_SAMPLE_RATE]: null,
         })
         this._tryTakeFullSnapshot()
         this._reportStarted('sampling_overridden')
