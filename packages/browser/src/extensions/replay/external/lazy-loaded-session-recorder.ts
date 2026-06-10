@@ -44,7 +44,6 @@ import {
     isNativeAsyncGzipError,
     isNumber,
     isObject,
-    isString,
     isUndefined,
 } from '@posthog/core'
 import {
@@ -81,6 +80,7 @@ import {
     V1RecordingStrategy,
     V2TriggerGroupStrategy,
     RecordingStrategyContext,
+    decodeSamplingDecision,
 } from './recording-strategies'
 
 const BASE_ENDPOINT = '/s/'
@@ -493,14 +493,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isSampled(): boolean | null {
         const currentValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        // we store the session id when sampled so that we can detect session id changes
-        // and `false` when not sampled
-        // legacy SDKs stored `true` when sampled, but that is not tied to a session id
-        // so we treat it as null (unknown) and will make a fresh decision
-        if (currentValue === true) {
-            return null
-        }
-        return currentValue === false ? false : isString(currentValue) ? currentValue === this.sessionId : null
+        // anything but this session's own tagged decision decodes to null, forcing a fresh decision
+        return decodeSamplingDecision(currentValue, this.sessionId)
     }
 
     private get _sampleRate(): number | null {
@@ -514,7 +508,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
-    private _samplingSessionListener: (() => void) | undefined = undefined
     private _forceIdleSessionIdListener: (() => void) | undefined = undefined
 
     constructor(private readonly _instance: PostHog) {
@@ -1088,9 +1081,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         }
 
-        if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
-            this._strategy?.makeSamplingDecisions(sessionId)
-        }
+        // always re-decide for the new session — guarding on the persisted config here would skip
+        // V2 trigger groups and post-reset() sessions, leaving them undecided (= ACTIVE, unsampled)
+        this._strategy?.makeSamplingDecisions(sessionId)
     }
 
     private _teardown() {
@@ -1110,8 +1103,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._onSessionIdListener = undefined
         this._onSessionIdleResetForcedListener?.()
         this._onSessionIdleResetForcedListener = undefined
-        this._samplingSessionListener?.()
-        this._samplingSessionListener = undefined
         this._forceIdleSessionIdListener?.()
         this._forceIdleSessionIdListener = undefined
 
@@ -1520,6 +1511,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
+
+        // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
+        // undecided session reads as ACTIVE and would leak a batch it then decides not to record
+        this._strategy?.ensureSamplingDecision(this.sessionId)
 
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
 
