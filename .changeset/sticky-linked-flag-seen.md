@@ -1,0 +1,5 @@
+---
+'posthog-js': patch
+---
+
+fix(replay): keep session recording active when a flag reload transiently drops the linked flag. Once `LinkedFlagMatching` has observed the configured linked flag matching for the session, it now stays activated even if a later `onFeatureFlags` callback reports the flag as missing or false. Before this fix, calls to `identify()`, `group()`, or `setPersonPropertiesForFlags()` mid-session triggered a flag reload whose in-flight window could briefly omit the linked flag, flipping the recorder state machine from `active` back to `buffering`. If the user then navigated or closed the tab during that window, `_onBeforeUnload` saw `BUFFERING` and silently discarded the entire local buffer — losing the recording even though the SDK had previously decided to record. The flag listener now only sets `linkedFlagSeen` when the flag actually matches; it never un-sets it within a session. Applies to both the V1 strategy and per-group V2 trigger groups, since both use the same `LinkedFlagMatching` instance.

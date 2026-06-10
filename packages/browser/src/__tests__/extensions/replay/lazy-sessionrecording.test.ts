@@ -3262,9 +3262,13 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('active')
 
+            // Sticky: a subsequent flag reload that no longer reports the flag must NOT flip the
+            // status back to buffering. Flag reloads triggered by identify()/group() routinely
+            // produce a transient window where the flag isn't present yet; if we de-activated on
+            // that window, _onBeforeUnload would silently drop the buffer.
             onFeatureFlagsCallback?.(['different', 'keys'], { different: true, keys: true })
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-            expect(sessionRecording.status).toEqual('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
         })
 
         it('does not react to flags that are present but false', () => {
@@ -3301,9 +3305,10 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('active')
 
+            // Sticky once activated for the session — even a different variant on reload keeps recording.
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-            expect(sessionRecording.status).toEqual('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
         })
 
         it('can handle linked flags with any variants', () => {
@@ -3326,9 +3331,10 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('active')
 
+            // Sticky once activated for the session — a reload without the flag keeps recording.
             onFeatureFlagsCallback?.(['not-the-flag-key'], { 'not-the-flag-key': 'literally-anything' })
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
-            expect(sessionRecording.status).toEqual('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
         })
 
         it('can be overriden', () => {
@@ -3344,6 +3350,33 @@ describe('Lazy SessionRecording', () => {
 
             sessionRecording.overrideLinkedFlag()
 
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
+        })
+
+        // Reproduces the Sonia missing-recordings scenario: linked flag matches → SDK records →
+        // app calls identify/group, which triggers a flag reload → reload temporarily reports the
+        // flag as absent → before the next reload arrives, the user navigates → beforeunload runs
+        // while in BUFFERING and silently discards the buffer. The fix makes linkedFlagSeen
+        // sticky so a flicker doesn't drop the recording.
+        it('keeps recording when a flag reload transiently drops the flag', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+            expect(sessionRecording.status).toEqual('buffering')
+
+            // Initial flag resolution — matches, recording starts
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+            expect(sessionRecording.status).toEqual('active')
+
+            // Simulate identify/group triggering a reload that hasn't completed yet —
+            // the previous flag isn't in the result set during the in-flight window.
+            onFeatureFlagsCallback?.([], {})
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
+
+            // Even an explicit false response keeps recording — the user was authorized for this session.
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': false })
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('active')
         })

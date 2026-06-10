@@ -418,8 +418,15 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
                         linkedFlagMatches = !!variantForFlagKey
                     }
                 }
-                this.linkedFlagSeen = linkedFlagMatches
+                // Sticky: once the flag has matched for this session, keep recording even if
+                // a subsequent flag reload returns false. Reloads happen on identify() / group() /
+                // setPersonPropertiesForFlags(), and the in-flight reload window can briefly
+                // return false (e.g. before group properties have been re-sent to the server).
+                // Without stickiness, the status flips back to BUFFERING and the buffer is
+                // silently discarded on the next page unload — losing the entire recording for
+                // any session that calls identify/group mid-session.
                 if (linkedFlagMatches) {
+                    this.linkedFlagSeen = true
                     onStarted(linkedFlag, linkedVariant)
                 }
             })
