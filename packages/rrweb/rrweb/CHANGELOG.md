@@ -1,5 +1,12 @@
 # rrweb
 
+## 0.0.71
+
+### Patch Changes
+
+- [#3742](https://github.com/PostHog/posthog-js/pull/3742) [`23b2af1`](https://github.com/PostHog/posthog-js/commit/23b2af19031527c8a9934535915db5d15b6abd94) Thanks [@arnohillen](https://github.com/arnohillen)! - record: capture resting scroll offset on `scrollend` when a reveal scroll clamps to 0 before its target is scrollable (e.g. Silk sheets). Deduped against `scroll` so normal gestures don't double event volume.
+  (2026-06-10)
+
 ## 0.0.70
 
 ### Patch Changes

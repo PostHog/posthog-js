@@ -1,5 +1,17 @@
 # @posthog/types
 
+## 1.385.0
+
+### Minor Changes
+
+- [#3777](https://github.com/PostHog/posthog-js/pull/3777) [`f601c49`](https://github.com/PostHog/posthog-js/commit/f601c496338ed0be8853f94160ee3edca542ac7d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Promote external dependency script versioning to supported `strict_script_versioning` and `asset_host` config options.
+  (2026-06-10)
+
+### Patch Changes
+
+- [#3753](https://github.com/PostHog/posthog-js/pull/3753) [`c11794d`](https://github.com/PostHog/posthog-js/commit/c11794dd5fbb73d99bb88600ae487f8f08f625be) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Reload feature flags by default when resetting person properties for flags.
+  (2026-06-10)
+
 ## 1.384.3
 
 ### Patch Changes

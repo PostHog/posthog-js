@@ -1,5 +1,14 @@
 # @posthog/next
 
+## 0.4.91
+
+### Patch Changes
+
+- Updated dependencies [[`c11794d`](https://github.com/PostHog/posthog-js/commit/c11794dd5fbb73d99bb88600ae487f8f08f625be), [`23b2af1`](https://github.com/PostHog/posthog-js/commit/23b2af19031527c8a9934535915db5d15b6abd94), [`f601c49`](https://github.com/PostHog/posthog-js/commit/f601c496338ed0be8853f94160ee3edca542ac7d)]:
+    - posthog-js@1.385.0
+    - @posthog/core@1.31.4
+    - posthog-node@5.36.13
+
 ## 0.4.90
 
 ### Patch Changes

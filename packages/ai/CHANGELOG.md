@@ -1,5 +1,13 @@
 # posthog-ai
 
+## 8.1.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.4
+  - posthog-node@5.36.13
+
 ## 8.1.6
 
 ### Patch Changes
