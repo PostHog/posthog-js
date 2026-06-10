@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.384.2
+
+### Patch Changes
+
+- [#3789](https://github.com/PostHog/posthog-js/pull/3789) [`d9462b3`](https://github.com/PostHog/posthog-js/commit/d9462b3567a0b7c9b755552c303814b6fcbe3a97) Thanks [@marandaneto](https://github.com/marandaneto)! - Deprecate `__preview_eager_load_replay` as a no-op now that session replay lazy loading is the default.
+  (2026-06-10)
+
 ## 1.384.1
 
 ## 1.384.0
