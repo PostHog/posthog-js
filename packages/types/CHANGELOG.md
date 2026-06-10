@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.383.3
+
+### Patch Changes
+
+- [#3776](https://github.com/PostHog/posthog-js/pull/3776) [`783ba46`](https://github.com/PostHog/posthog-js/commit/783ba461b0916c3f379c227d08470687d38d0768) Thanks [@marandaneto](https://github.com/marandaneto)! - Deprecate the no-op `__preview_flags_v2` browser SDK config option. The SDK already uses the `/flags/?v=2` endpoint by default.
+  (2026-06-09)
+
 ## 1.383.2
 
 ## 1.383.1

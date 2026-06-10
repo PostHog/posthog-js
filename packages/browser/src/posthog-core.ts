@@ -191,6 +191,7 @@ const defaultsThatVaryByConfig = (
     | 'internal_or_test_user_hostname'
     | 'persistence_save_debounce_ms'
     | 'split_storage'
+    | 'detect_google_search_app'
 > => ({
     rageclick:
         defaults && defaults >= '2026-05-30'
@@ -204,6 +205,7 @@ const defaultsThatVaryByConfig = (
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
     split_storage: !!(defaults && defaults >= '2026-05-30'),
+    detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -1453,7 +1455,8 @@ export class PostHog implements PostHogInterface {
 
         const infoProperties = getEventProperties(
             this.config.mask_personal_data_properties,
-            this.config.custom_personal_data_properties
+            this.config.custom_personal_data_properties,
+            this.config.detect_google_search_app
         )
 
         if (this.sessionManager) {

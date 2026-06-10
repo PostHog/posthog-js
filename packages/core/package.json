@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.30.13",
+  "version": "1.30.14",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
