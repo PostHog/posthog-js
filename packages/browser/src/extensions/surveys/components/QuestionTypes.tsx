@@ -30,6 +30,8 @@ export interface CommonQuestionProps {
     onPreviewSubmit: (res: string | string[] | number | null) => void
     initialValue?: string | string[] | number | null
     displayQuestionIndex: number
+    canGoBack?: boolean
+    onBack?: () => void
 }
 
 interface OpenEndedInputState {
@@ -87,6 +89,8 @@ export function OpenTextQuestion({
     onPreviewSubmit,
     displayQuestionIndex,
     initialValue,
+    canGoBack,
+    onBack,
 }: CommonQuestionProps & {
     question: BasicSurveyQuestion
 }) {
@@ -164,6 +168,8 @@ export function OpenTextQuestion({
                 appearance={appearance}
                 onSubmit={handleSubmit}
                 onPreviewSubmit={handlePreviewSubmit}
+                canGoBack={canGoBack}
+                onBack={onBack}
             />
         </Fragment>
     )
@@ -175,6 +181,8 @@ export function LinkQuestion({
     appearance,
     onSubmit,
     onPreviewSubmit,
+    canGoBack,
+    onBack,
 }: CommonQuestionProps & {
     question: LinkSurveyQuestion
 }) {
@@ -190,6 +198,8 @@ export function LinkQuestion({
                 appearance={appearance}
                 onSubmit={() => onSubmit('link clicked')}
                 onPreviewSubmit={() => onPreviewSubmit('link clicked')}
+                canGoBack={canGoBack}
+                onBack={onBack}
             />
         </Fragment>
     )
@@ -203,6 +213,8 @@ export function RatingQuestion({
     onSubmit,
     onPreviewSubmit,
     initialValue,
+    canGoBack,
+    onBack,
 }: CommonQuestionProps & {
     question: RatingSurveyQuestion
 }) {
@@ -306,6 +318,8 @@ export function RatingQuestion({
                 onSubmit={() => onSubmit(rating)}
                 onPreviewSubmit={() => onPreviewSubmit(rating)}
                 skipSubmitButton={question.skipSubmitButton}
+                canGoBack={canGoBack}
+                onBack={onBack}
             />
         </Fragment>
     )
@@ -345,6 +359,8 @@ export function MultipleChoiceQuestion({
     onSubmit,
     onPreviewSubmit,
     initialValue,
+    canGoBack,
+    onBack,
 }: CommonQuestionProps & {
     question: MultipleSurveyQuestion
 }) {
@@ -541,6 +557,8 @@ export function MultipleChoiceQuestion({
                 onSubmit={handleSubmit}
                 onPreviewSubmit={handleSubmit}
                 skipSubmitButton={shouldSkipSubmit}
+                canGoBack={canGoBack}
+                onBack={onBack}
             />
         </Fragment>
     )
