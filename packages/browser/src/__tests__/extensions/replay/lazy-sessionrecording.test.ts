@@ -2861,7 +2861,7 @@ describe('Lazy SessionRecording', () => {
                 },
                 sampleRate: '0.00',
                 expectedStatus: 'disabled',
-                expectedIsSampled: () => false,
+                expectedIsSampled: () => '!' + sessionId,
                 expectedSampleRate: 0,
             },
             {
@@ -2873,7 +2873,7 @@ describe('Lazy SessionRecording', () => {
                 },
                 sampleRate: '0.00',
                 expectedStatus: 'disabled',
-                expectedIsSampled: () => false,
+                expectedIsSampled: () => '!' + sessionId,
                 expectedSampleRate: 0,
             },
             {
@@ -2970,7 +2970,7 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
 
             expect(sessionRecording.status).toBe('disabled')
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
@@ -3026,8 +3026,8 @@ describe('Lazy SessionRecording', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
             )
-            // then check that a session is sampled (i.e. storage is false not true or null)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            // then check that a session is sampled out (stored tagged with its session id)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
             expect(sessionRecording.status).toBe('disabled')
 
             // then turn sample rate to null
@@ -3075,13 +3075,15 @@ describe('Lazy SessionRecording', () => {
 
                 // should be disabled despite legacy true, because 0% sample rate
                 expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
             })
 
-            it('re-decides when a legacy false from persistence is stored', () => {
+            it('re-decides when a legacy untagged false is stored', () => {
+                // legacy SDKs stored a bare `false`, which cannot be tied to a session —
+                // it may have been made for a previous session, so it must not be inherited
                 posthog.persistence?.register({
                     [SESSION_RECORDING_IS_SAMPLED]: false,
                 })
@@ -3090,9 +3092,87 @@ describe('Lazy SessionRecording', () => {
                     makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '1.00' } })
                 )
 
+                // at 100% the fresh decision for this session is sampled in,
+                // proving the stale false was not reused
                 expect(sessionRecording.status).toBe('sampled')
                 expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
-                expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(1)
+            })
+
+            it('re-decides when the stored decision belongs to a different session', () => {
+                // a sampled-out decision tagged with a previous session id must not
+                // be inherited by a new session (e.g. page load after session expiry)
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_IS_SAMPLED]: '!some-previous-session-id',
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '1.00' } })
+                )
+
+                expect(sessionRecording.status).toBe('sampled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+            })
+        })
+
+        describe('missing sampling decision (posthog.reset())', () => {
+            // simpleHash('session-a') % 100 === 46 → sampled in at 50%
+            // simpleHash('session-e') % 100 === 50 → sampled out at 50%
+            const SAMPLED_IN_SESSION_ID = 'session-a'
+            const SAMPLED_OUT_SESSION_ID = 'session-e'
+
+            it('re-makes the decision before flushing when the stored decision was wiped', () => {
+                sessionId = SAMPLED_IN_SESSION_ID
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+                expect(sessionRecording.status).toBe('sampled')
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                // posthog.reset() clears persistence (including the stored decision)
+                // while rrweb keeps emitting
+                posthog.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                // the decision was re-made (deterministically, same outcome) before sending
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(SAMPLED_IN_SESSION_ID)
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({ $session_id: SAMPLED_IN_SESSION_ID }),
+                    expect.anything()
+                )
+            })
+
+            it('does not leak snapshots into a new session that is sampled out', () => {
+                sessionId = SAMPLED_IN_SESSION_ID
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+                expect(sessionRecording.status).toBe('sampled')
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                // posthog.reset() wipes the stored decision and the persisted remote
+                // config is unavailable at session-change time, then rotates the session
+                posthog.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+                posthog.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                sessionManager.resetSessionId()
+                sessionId = SAMPLED_OUT_SESSION_ID
+                ;(posthog.capture as Mock).mockClear()
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                // the new session must have a (negative) decision, not record unsampled
+                expect(sessionRecording.status).toBe('disabled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + SAMPLED_OUT_SESSION_ID)
+
+                // and nothing is ever sent for the sampled-out session
+                expect(posthog.capture).not.toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({ $session_id: SAMPLED_OUT_SESSION_ID }),
+                    expect.anything()
+                )
             })
         })
     })
