@@ -98,16 +98,8 @@ describe('record', function (this: ISuite) {
     `,
   );
 
-  const silkSheetRevealMetadata = JSON.parse(
-    fs.readFileSync(
-      path.join(__dirname, 'fixtures/silk-sheet-reveal-metadata.json'),
-      'utf8',
-    ),
-  ) as {
-    brokenModal: { revealContainerScroll: { y: number } };
-    workingModal: { revealContainerScroll: { y: number } };
-    expectedRestingOffsetY: number;
-  };
+  // Resting offset from a real silk-sheet recording where the reveal scroll clamped to 0.
+  const SILK_SHEET_RESTING_Y = 787;
 
   const scrollData = () =>
     ctx.events
@@ -454,15 +446,8 @@ describe('record', function (this: ISuite) {
     expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 500 }]);
   });
 
-  it('silk sheet reveal metadata documents broken scroll at y=0', () => {
-    expect(silkSheetRevealMetadata.brokenModal.revealContainerScroll.y).toBe(0);
-    expect(silkSheetRevealMetadata.workingModal.revealContainerScroll.y).toBe(
-      silkSheetRevealMetadata.expectedRestingOffsetY,
-    );
-  });
-
   it('should record silk sheet resting offset after clamp-to-0', async () => {
-    const restingY = silkSheetRevealMetadata.expectedRestingOffsetY;
+    const restingY = SILK_SHEET_RESTING_Y;
     const expectedId = await recordSilkSheetClampToZero(restingY);
 
     const data = scrollData().filter((d) => d.id === expectedId);
@@ -474,7 +459,7 @@ describe('record', function (this: ISuite) {
   });
 
   it('should record a later scroll offset after scrollend recovery', async () => {
-    const restingY = silkSheetRevealMetadata.expectedRestingOffsetY;
+    const restingY = SILK_SHEET_RESTING_Y;
     const expectedId = await recordSilkSheetClampToZero(restingY);
 
     await ctx.page.evaluate(() => {
@@ -493,7 +478,7 @@ describe('record', function (this: ISuite) {
   });
 
   it('should replay recorded silk sheet reveal offset end-to-end', async () => {
-    const restingY = silkSheetRevealMetadata.expectedRestingOffsetY;
+    const restingY = SILK_SHEET_RESTING_Y;
     await recordSilkSheetClampToZero(restingY);
 
     const recordedEvents = [...ctx.events];
