@@ -263,10 +263,11 @@ describe('cross-tab persistence interactions', () => {
                 expect(result.windowId).toBe('window-B')
             })
 
-            it(`${hardened ? 'fires' : 'does NOT fire'} onSessionId handlers on the adopted rotation`, () => {
-                // Both paths ADOPT the sibling's new session id. Only the
-                // hardened path fires handlers — handler emit on a cross-tab
-                // observed change is part of the gated hardening.
+            it('fires onSessionId handlers with crossTabAdoption on the adopted rotation', () => {
+                // Both paths ADOPT the sibling's new session id, so both must
+                // fire handlers — a session id change that handlers don't hear
+                // about leaves consumers (page-view state, a stopped recorder,
+                // session-scoped props) on the old session.
                 const { tabB, newSessionId, activeAt } = setupSiblingRotation()
 
                 const handler = jest.fn()
@@ -276,11 +277,13 @@ describe('cross-tab persistence interactions', () => {
                 const result = tabB.manager.checkAndGetSessionAndWindowId(false, activeAt + TIMEOUT_MS - 5_000)
 
                 expect(result.sessionId).toBe(newSessionId)
-                if (hardened) {
-                    expect(handler).toHaveBeenCalledWith(newSessionId, expect.any(String), expect.any(Object))
-                } else {
-                    expect(handler).not.toHaveBeenCalled()
-                }
+                expect(handler).toHaveBeenCalledWith(newSessionId, expect.any(String), {
+                    noSessionId: false,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: false,
+                    crossTabAdoption: true,
+                })
+                expect(result.changeReason?.crossTabAdoption).toBe(true)
             })
         })
 

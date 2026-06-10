@@ -169,6 +169,7 @@ describe('Session ID manager', () => {
                     activityTimeout: false,
                     noSessionId: false,
                     sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
                 },
             })
             expect(persistence.register).toHaveBeenCalledWith({
@@ -190,6 +191,7 @@ describe('Session ID manager', () => {
                     activityTimeout: true,
                     noSessionId: false,
                     sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
                 },
             })
             expect(persistence.register).toHaveBeenCalledWith({
@@ -213,6 +215,7 @@ describe('Session ID manager', () => {
                     activityTimeout: true,
                     noSessionId: false,
                     sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
                 },
             })
 
@@ -238,6 +241,7 @@ describe('Session ID manager', () => {
                     activityTimeout: false,
                     noSessionId: false,
                     sessionPastMaximumLength: true,
+                    crossTabAdoption: false,
                 },
             })
 
@@ -261,6 +265,7 @@ describe('Session ID manager', () => {
                     activityTimeout: true,
                     noSessionId: false,
                     sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
                 },
             })
             expect(persistence.register).toHaveBeenCalledWith({
@@ -1082,8 +1087,9 @@ describe('Session ID manager', () => {
 
     describe('cross-tab refresh legacy path (debounce disabled)', () => {
         // Without `persistence_save_debounce_ms`, the cross-tab refresh
-        // path falls back to the prior `flush() + load()` cycle and does
-        // NOT emit handlers when it observes a sibling rotation.
+        // path falls back to the prior `flush() + load()` cycle. Handler
+        // emission is NOT gated: an adopted session id that handlers don't
+        // hear about leaves consumers on the old session.
 
         it('falls back to flush + load when debounce is disabled', () => {
             ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
@@ -1098,7 +1104,7 @@ describe('Session ID manager', () => {
             expect(persistence.refreshKey).not.toHaveBeenCalled()
         })
 
-        it('does NOT emit onSessionId handlers when observing a sibling rotation (debounce disabled)', () => {
+        it('emits onSessionId handlers with crossTabAdoption when observing a sibling rotation (debounce disabled)', () => {
             ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
@@ -1115,7 +1121,12 @@ describe('Session ID manager', () => {
 
             sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
 
-            expect(handler).not.toHaveBeenCalled()
+            expect(handler).toHaveBeenCalledWith('sessionB', 'stable-window-id', {
+                noSessionId: false,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: true,
+            })
         })
     })
 

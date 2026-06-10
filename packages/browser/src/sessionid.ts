@@ -209,14 +209,14 @@ export class SessionIdManager {
         })
     }
 
-    // Gates the debounce-specific cross-tab behaviour. The cross-tab refresh
-    // on the idle path (and the idle-timer re-arm) run for all callers — only
-    // two things are gated on debounce being enabled: the per-key SESSION_ID
-    // refresh (vs the legacy whole-blob flush()+load(), which can only clobber
-    // a sibling when there is a pending debounced write), and firing
-    // `onSessionId` handlers when we adopt a sibling's rotation. The dated
-    // default (>= 2026-05-30) enables debounce, so the per-key path ships with
-    // it; debounce-disabled callers keep the safe legacy refresh.
+    // Gates the debounce-specific cross-tab storage mechanics. The cross-tab
+    // refresh on the idle path, the idle-timer re-arm, sibling-session
+    // adoption, and `onSessionId` emission all run for all callers — only the
+    // per-key SESSION_ID refresh (vs the legacy whole-blob flush()+load(),
+    // which can only clobber a sibling when there is a pending debounced
+    // write) is gated on debounce being enabled. The dated default
+    // (>= 2026-05-30) enables debounce, so the per-key path ships with it;
+    // debounce-disabled callers keep the safe legacy refresh.
     private _useCrossTabRefreshHardening(): boolean {
         const debounce = this._config?.persistence_save_debounce_ms
         return isPositiveNumber(debounce) && debounce > 0
@@ -383,6 +383,7 @@ export class SessionIdManager {
             isPositiveNumber(startTimestamp) && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
 
         let valuesChanged = false
+        let crossTabAdoption = false
         const noSessionId = !sessionId
         const preRefreshSessionId = sessionId
         let activityTimeout =
@@ -420,10 +421,13 @@ export class SessionIdManager {
                 windowId = this._windowIdGenerator()
                 valuesChanged = true
             }
-            // Gated to debounce>0 to tie handler emission to the same dated
-            // default as the rest of the hardening.
-            const adoptedSiblingSession = this._useCrossTabRefreshHardening() && sessionId !== preRefreshSessionId
-            if (adoptedSiblingSession) {
+            // Not gated on debounce: the refresh + re-sample above run for all
+            // callers, so adoption can happen for all callers — and a session id
+            // change that handlers don't hear about leaves consumers (page-view
+            // state, a stopped recorder, session-scoped props) on the old
+            // session. If we adopted, we must notify.
+            crossTabAdoption = sessionId !== preRefreshSessionId
+            if (crossTabAdoption) {
                 // We took a sibling tab's session id (keeping our own window
                 // id). Fire handlers so downstream consumers (session
                 // recorder, session-scoped props, $pageview) follow the new
@@ -447,7 +451,7 @@ export class SessionIdManager {
             this._resetIdleTimer()
         }
 
-        const changeReason = { noSessionId, activityTimeout, sessionPastMaximumLength }
+        const changeReason = { noSessionId, activityTimeout, sessionPastMaximumLength, crossTabAdoption }
         if (valuesChanged) {
             this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId, changeReason))
         }
