@@ -513,7 +513,6 @@
         "_rrwebStartAttempted",
         "_runBeforeSend",
         "_sampleRate",
-        "_samplingSessionListener",
         "_saveDebounceMs",
         "_saveSessionState",
         "_scheduleFlush",

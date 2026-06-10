@@ -43,15 +43,9 @@ import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
 const logger = createLogger('[SessionRecording]')
 
 /**
- * Sampling decisions are persisted tagged with the session id they were made for,
- * so that a decision can never be inherited by a different session:
- * - `sessionId` = sampled in for that session
- * - `'!' + sessionId` = sampled out for that session
- *
- * Anything else (legacy `true`/`false`, another session's decision) decodes to
- * null and the decision is re-made. That is always safe: `sampleOnProperty` is a
- * deterministic hash of the session id, so re-deciding can never flip the
- * outcome for the same session.
+ * Decisions are stored as `sessionId` (sampled in) or `'!' + sessionId` (sampled out), so another
+ * session can never inherit them. Anything else (legacy `true`/`false`, another session's decision)
+ * decodes to null and is re-decided — safe, since `sampleOnProperty` is deterministic per session id.
  */
 const NOT_SAMPLED_PREFIX = '!'
 
@@ -128,11 +122,10 @@ export interface RecordingStrategy {
     makeSamplingDecisions(sessionId: string): void
 
     /**
-     * Whether session-level sampling is configured, read from the strategy's own
-     * copy of the config — reliable even when the persisted remote config has
-     * been wiped (e.g. by posthog.reset())
+     * Ensure a sampling decision exists for this session, re-deciding from the strategy's own
+     * config when it is missing (e.g. wiped by posthog.reset()). No-op when sampling isn't configured.
      */
-    isSamplingConfigured(): boolean
+    ensureSamplingDecision(sessionId: string): void
 
     /**
      * Called after the initial buffer flush (performance optimization hook)
@@ -267,19 +260,10 @@ export class V1RecordingStrategy implements RecordingStrategy {
         const storedValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
         const storedSampleRate = this._instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
 
-        // Only a decision stored for this exact session is reusable; anything else
-        // (no decision, another session's decision, legacy formats) is re-decided
         const storedIsSampled = decodeSamplingDecision(storedValue, sessionId)
 
-        // Re-decide when:
-        // 1. there is no reusable decision for this session (covers another session's
-        //    decision and legacy formats, which decode to null), OR
-        // 2. the sample rate changed since the stored decision was made, OR
-        // 3. the decision predates rate storage — older SDK versions stored only the
-        //    session id for sampled-in sessions, not the rate — so lowering sampleRate
-        //    to 0 takes effect after a page reload within the same PostHog session.
-        // An explicit override from a config without sampling stores null as the rate, so only an
-        // undefined rate is considered legacy missing-rate state.
+        // Re-decide when the rate changed, or a legacy sampled-in decision predates rate storage.
+        // An explicit override stores null as the rate, so only undefined means legacy missing-rate.
         const sampleRateChanged = isNumber(storedSampleRate) && storedSampleRate !== currentSampleRate
         const sampledInWithoutStoredRate = isUndefined(storedSampleRate) && storedValue === sessionId
         const makeDecision = sampleRateChanged || sampledInWithoutStoredRate || !isBoolean(storedIsSampled)
@@ -302,8 +286,14 @@ export class V1RecordingStrategy implements RecordingStrategy {
         })
     }
 
-    isSamplingConfigured(): boolean {
-        return isNumber(this._sampleRate)
+    ensureSamplingDecision(sessionId: string): void {
+        if (!isNumber(this._sampleRate)) {
+            return
+        }
+        const storedValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        if (!isBoolean(decodeSamplingDecision(storedValue, sessionId))) {
+            this.makeSamplingDecisions(sessionId)
+        }
     }
 
     onFlushComplete(): void {
@@ -570,10 +560,10 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         this.updateActiveTriggers(sessionId)
     }
 
-    isSamplingConfigured(): boolean {
+    ensureSamplingDecision(sessionId: string): void {
         // V2 sampling is per trigger group and safe by default — a missing group
         // decision reads as not sampled, so it can never leak an undecided flush
-        return false
+        void sessionId
     }
 
     onFlushComplete(): void {

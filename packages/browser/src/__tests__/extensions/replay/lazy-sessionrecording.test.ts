@@ -3081,11 +3081,15 @@ describe('Lazy SessionRecording', () => {
                 expect(posthog.capture).not.toHaveBeenCalled()
             })
 
-            it('re-decides when a legacy untagged false is stored', () => {
-                // legacy SDKs stored a bare `false`, which cannot be tied to a session —
-                // it may have been made for a previous session, so it must not be inherited
+            it.each([
+                ['a legacy untagged false', false],
+                ["a different session's sampled-out decision", '!some-previous-session-id'],
+                ["a different session's sampled-in decision", 'some-previous-session-id'],
+            ])('re-decides when %s is stored', (_name, storedValue) => {
+                // a decision that cannot be tied to the current session must not be
+                // inherited (e.g. page load after session expiry, or legacy SDK formats)
                 posthog.persistence?.register({
-                    [SESSION_RECORDING_IS_SAMPLED]: false,
+                    [SESSION_RECORDING_IS_SAMPLED]: storedValue,
                 })
 
                 sessionRecording.onRemoteConfig(
@@ -3093,22 +3097,7 @@ describe('Lazy SessionRecording', () => {
                 )
 
                 // at 100% the fresh decision for this session is sampled in,
-                // proving the stale false was not reused
-                expect(sessionRecording.status).toBe('sampled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
-            })
-
-            it('re-decides when the stored decision belongs to a different session', () => {
-                // a sampled-out decision tagged with a previous session id must not
-                // be inherited by a new session (e.g. page load after session expiry)
-                posthog.persistence?.register({
-                    [SESSION_RECORDING_IS_SAMPLED]: '!some-previous-session-id',
-                })
-
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '1.00' } })
-                )
-
+                // proving the stale value was not reused
                 expect(sessionRecording.status).toBe('sampled')
                 expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
             })

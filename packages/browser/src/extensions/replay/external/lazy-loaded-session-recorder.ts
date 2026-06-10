@@ -493,9 +493,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isSampled(): boolean | null {
         const currentValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        // decisions are stored tagged with the session id they were made for —
-        // anything else (legacy `true`/`false`, another session's decision) decodes
-        // to null (unknown) so that a fresh decision is made for this session
+        // anything but this session's own tagged decision decodes to null, forcing a fresh decision
         return decodeSamplingDecision(currentValue, this.sessionId)
     }
 
@@ -1083,11 +1081,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         }
 
-        // always re-make sampling decisions for the new session — each strategy no-ops
-        // when sampling isn't configured. Guarding on `isNumber(this._sampleRate)` here
-        // would skip V2 trigger-group sampling (no top-level sampleRate) and any session
-        // where the persisted remote config is unavailable, leaving the session with no
-        // decision at all — which reads as ACTIVE and records unsampled.
+        // always re-decide for the new session — guarding on the persisted config here would skip
+        // V2 trigger groups and post-reset() sessions, leaving them undecided (= ACTIVE, unsampled)
         this._strategy?.makeSamplingDecisions(sessionId)
     }
 
@@ -1517,16 +1512,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
-        // a buffer must never be flushed while a sampling decision is missing —
-        // e.g. posthog.reset() wipes the stored decision while rrweb keeps emitting,
-        // and an undecided session reads as ACTIVE, so without this it leaks a batch
-        // from a session that then decides not to record. The decision is a
-        // deterministic hash of the session id, so deciding here is idempotent.
-        // The strategy keeps its own copy of the sample rate, so this works even
-        // when the persisted remote config has been wiped.
-        if (this._strategy?.isSamplingConfigured() && isNullish(this._isSampled)) {
-            this._strategy.makeSamplingDecisions(this.sessionId)
-        }
+        // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
+        // undecided session reads as ACTIVE and would leak a batch it then decides not to record
+        this._strategy?.ensureSamplingDecision(this.sessionId)
 
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
 
