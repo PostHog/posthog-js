@@ -62,25 +62,19 @@ describe('posthog core', () => {
     })
 
     describe('configRenames()', () => {
-        it('maps deprecated preview beacon option to the stable config name', () => {
-            expect(
-                configRenames({
-                    __preview_disable_beacon: true,
-                })
-            ).toMatchObject({
-                disable_beacon: true,
-            })
-        })
-
-        it('prioritizes stable beacon option name over deprecated preview name', () => {
-            expect(
-                configRenames({
-                    disable_beacon: false,
-                    __preview_disable_beacon: true,
-                })
-            ).toMatchObject({
-                disable_beacon: false,
-            })
+        it.each([
+            [
+                'maps deprecated preview beacon option to the stable config name',
+                { __preview_disable_beacon: true },
+                { disable_beacon: true },
+            ],
+            [
+                'prioritizes stable beacon option name over deprecated preview name',
+                { disable_beacon: false, __preview_disable_beacon: true },
+                { disable_beacon: false },
+            ],
+        ] as [string, Partial<PostHogConfig>, Partial<PostHogConfig>][])('%s', (_description, input, expected) => {
+            expect(configRenames(input)).toMatchObject(expected)
         })
     })
 
