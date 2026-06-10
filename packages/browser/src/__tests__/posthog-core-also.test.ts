@@ -62,29 +62,24 @@ describe('posthog core', () => {
     })
 
     describe('configRenames()', () => {
-        it('maps deprecated preview request options to stable config names', () => {
+        it('maps deprecated preview beacon option to the stable config name', () => {
             expect(
                 configRenames({
                     __preview_disable_beacon: true,
-                    __preview_disable_xhr_credentials: true,
                 })
             ).toMatchObject({
                 disable_beacon: true,
-                disable_xhr_credentials: true,
             })
         })
 
-        it('prioritizes stable request option names over deprecated preview names', () => {
+        it('prioritizes stable beacon option name over deprecated preview name', () => {
             expect(
                 configRenames({
                     disable_beacon: false,
                     __preview_disable_beacon: true,
-                    disable_xhr_credentials: false,
-                    __preview_disable_xhr_credentials: true,
                 })
             ).toMatchObject({
                 disable_beacon: false,
-                disable_xhr_credentials: false,
             })
         })
     })

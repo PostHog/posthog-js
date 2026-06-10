@@ -1733,17 +1733,12 @@ export interface PostHogConfig {
     disable_beacon?: boolean
 
     /**
-     * Disables sending credentials when using XHR requests.
-     */
-    disable_xhr_credentials?: boolean
-
-    /**
      * @deprecated Use `disable_beacon` instead.
      */
     __preview_disable_beacon?: boolean
 
     /**
-     * @deprecated Use `disable_xhr_credentials` instead.
+     * @deprecated This option is a no-op. The browser SDK no longer sets `XMLHttpRequest.withCredentials`.
      */
     __preview_disable_xhr_credentials?: boolean
 
