@@ -880,6 +880,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // Invalidate any in-flight async cleanup queued by a prior stop(). On a session-id
+        // rotation, _updateWindowAndSessionIds calls stop() then start() synchronously; if
+        // stop() took the _stopAfterCompressionQueueDrains path (non-empty compression queue),
+        // its async cleanup would later call _teardown() and silently tear down THIS new
+        // recorder once the drain promise resolves. Bumping the generation here causes that
+        // pending cleanup to bail at its generation check.
+        this._compressionQueueGeneration += 1
+
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
