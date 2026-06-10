@@ -1,7 +1,7 @@
-// Warn (once) when a wrapper's base_url points at the PostHog AI Gateway: the
-// gateway emits its own $ai_generation, so each call would be captured (and, for
-// billable products, billed) twice. We only warn — the wrapper's event carries
-// data the gateway never sees (groups, custom properties, trace hierarchy).
+// Warn when a wrapper's base_url points at the PostHog AI Gateway: the gateway
+// emits its own $ai_generation, so each call would be captured (and, for billable
+// products, billed) twice. We only warn — the wrapper's event carries data the
+// gateway never sees (groups, custom properties, trace hierarchy).
 
 // Keep in sync with the gateway's deployed hosts (see services/llm-gateway in the
 // main repo). gateway.us.posthog.com is live today; the rest are listed ahead of
@@ -35,22 +35,15 @@ export const isPostHogAiGatewayUrl = (baseURL: string | undefined | null): boole
   return host !== undefined && POSTHOG_AI_GATEWAY_HOSTS.includes(host)
 }
 
-let hasWarned = false
-
-// Safe to call on every generation: short-circuits after the first warning.
+// Warns on every gateway call by design: the misconfiguration is impossible to
+// miss that way, and a doubled bill is worse than noisy logs.
 export const warnIfPostHogAiGateway = (baseURL: string | undefined | null): void => {
-  if (hasWarned || !isPostHogAiGatewayUrl(baseURL)) {
+  if (!isPostHogAiGatewayUrl(baseURL)) {
     return
   }
-  hasWarned = true
   console.warn(
     '[PostHog] The PostHog AI wrapper is pointed at the PostHog AI Gateway. ' +
       'Both capture $ai_generation, so every call is double-counted and double-billed. ' +
       `Use one or the other — see ${GATEWAY_DOCS_URL}.`
   )
-}
-
-/** Test-only: reset the once-per-process warning latch. */
-export const resetGatewayWarningForTesting = (): void => {
-  hasWarned = false
 }

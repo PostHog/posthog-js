@@ -1,9 +1,4 @@
-import {
-  POSTHOG_AI_GATEWAY_HOSTS,
-  isPostHogAiGatewayUrl,
-  warnIfPostHogAiGateway,
-  resetGatewayWarningForTesting,
-} from '../src/gatewayWarning'
+import { POSTHOG_AI_GATEWAY_HOSTS, isPostHogAiGatewayUrl, warnIfPostHogAiGateway } from '../src/gatewayWarning'
 
 describe('gatewayWarning', () => {
   describe('isPostHogAiGatewayUrl', () => {
@@ -46,7 +41,6 @@ describe('gatewayWarning', () => {
     let warnSpy: jest.SpyInstance
 
     beforeEach(() => {
-      resetGatewayWarningForTesting()
       warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     })
 
@@ -54,7 +48,7 @@ describe('gatewayWarning', () => {
       warnSpy.mockRestore()
     })
 
-    it('warns once with the double-counting message when pointed at the gateway', () => {
+    it('warns with the double-counting message when pointed at the gateway', () => {
       warnIfPostHogAiGateway('https://gateway.us.posthog.com/v1')
 
       expect(warnSpy).toHaveBeenCalledTimes(1)
@@ -66,14 +60,12 @@ describe('gatewayWarning', () => {
       expect(message).toContain('https://posthog.com/docs/ai-observability')
     })
 
-    it('warns only once across many gateway calls', () => {
+    it('warns on every gateway call so the misconfiguration cannot be missed', () => {
       for (let i = 0; i < 5; i++) {
         warnIfPostHogAiGateway('https://gateway.us.posthog.com/v1')
       }
-      // A second host should not re-trigger the warning either.
-      warnIfPostHogAiGateway('https://gateway.eu.posthog.com/v1')
 
-      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledTimes(5)
     })
 
     it('does not warn for non-gateway base URLs', () => {
