@@ -560,6 +560,7 @@
         "_severityText",
         "_sharedState",
         "_shouldCapturePageleave",
+        "_shouldConsumeActivation",
         "_shouldDisableFlags",
         "_shouldIncludeEvaluationEnvironments",
         "_showOrQueueTour",

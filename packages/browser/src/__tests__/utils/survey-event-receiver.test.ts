@@ -192,7 +192,7 @@ describe('survey-event-receiver', () => {
                 ...overrides,
             }) as unknown as Survey
 
-        const shownPayload = (surveyId: string, event: string): CaptureResult =>
+        const surveyEventPayload = (surveyId: string, event: string): CaptureResult =>
             ({
                 event,
                 properties: { $survey_id: surveyId },
@@ -225,58 +225,41 @@ describe('survey-event-receiver', () => {
         })
 
         it('keeps a non-repeatable survey activated after it is shown (survives reload)', () => {
-            const survey = makeSurvey({})
-            const { receiver, hook } = setup(survey)
+            const { receiver, hook } = setup(makeSurvey({}))
 
             hook('trigger_event')
             expect(receiver.getSurveys()).toContain('lifecycle-survey')
 
-            hook(SurveyEventName.SHOWN, shownPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
             // still activated: a reload re-reads persistence and re-displays it
             expect(receiver.getSurveys()).toContain('lifecycle-survey')
         })
 
-        it('removes a non-repeatable survey from activated once it is dismissed', () => {
-            const survey = makeSurvey({})
-            const { receiver, hook } = setup(survey)
+        it.each([
+            ['dismissed', SurveyEventName.DISMISSED],
+            ['sent', SurveyEventName.SENT],
+        ])('removes a non-repeatable survey from activated once it is %s', (_label, interactionEvent) => {
+            const { receiver, hook } = setup(makeSurvey({}))
 
             hook('trigger_event')
-            hook(SurveyEventName.SHOWN, shownPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
             expect(receiver.getSurveys()).toContain('lifecycle-survey')
 
-            hook(SurveyEventName.DISMISSED, shownPayload('lifecycle-survey', SurveyEventName.DISMISSED))
+            hook(interactionEvent, surveyEventPayload('lifecycle-survey', interactionEvent))
             expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
         })
 
-        it('removes a non-repeatable survey from activated once it is sent', () => {
-            const survey = makeSurvey({})
-            const { receiver, hook } = setup(survey)
+        it.each([
+            [
+                'repeatedActivation',
+                { conditions: { events: { values: [{ name: 'trigger_event' }], repeatedActivation: true } } },
+            ],
+            ['always schedule', { schedule: SurveySchedule.Always }],
+        ])('consumes a repeatable survey (%s) when it is shown', (_label, overrides) => {
+            const { receiver, hook } = setup(makeSurvey(overrides as unknown as Partial<Survey>))
 
             hook('trigger_event')
-            hook(SurveyEventName.SHOWN, shownPayload('lifecycle-survey', SurveyEventName.SHOWN))
-            expect(receiver.getSurveys()).toContain('lifecycle-survey')
-
-            hook(SurveyEventName.SENT, shownPayload('lifecycle-survey', SurveyEventName.SENT))
-            expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
-        })
-
-        it('still consumes a repeatedActivation survey when it is shown', () => {
-            const survey = makeSurvey({
-                conditions: { events: { values: [{ name: 'trigger_event' }], repeatedActivation: true } },
-            } as unknown as Partial<Survey>)
-            const { receiver, hook } = setup(survey)
-
-            hook('trigger_event')
-            hook(SurveyEventName.SHOWN, shownPayload('lifecycle-survey', SurveyEventName.SHOWN))
-            expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
-        })
-
-        it('still consumes an "always" scheduled survey when it is shown', () => {
-            const survey = makeSurvey({ schedule: SurveySchedule.Always })
-            const { receiver, hook } = setup(survey)
-
-            hook('trigger_event')
-            hook(SurveyEventName.SHOWN, shownPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
             expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
         })
     })
