@@ -1379,8 +1379,7 @@ export function Questions({
     }
 
     const canGoBack =
-        !!survey.appearance?.allowGoBack &&
-        (isPreviewMode ? (previewPageIndex ?? 0) > 0 : visitedIndices.length > 0)
+        !!survey.appearance?.allowGoBack && (isPreviewMode ? (previewPageIndex ?? 0) > 0 : visitedIndices.length > 0)
 
     const currentQuestion = surveyQuestions.at(currentQuestionIndex)
 
