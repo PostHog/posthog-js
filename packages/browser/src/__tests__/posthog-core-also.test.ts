@@ -1239,6 +1239,39 @@ describe('posthog core', () => {
         })
     })
 
+    describe('person properties for flags', () => {
+        let posthog: PostHog
+
+        beforeEach(() => {
+            posthog = defaultPostHog().init(
+                'testtoken',
+                {
+                    persistence: 'memory',
+                },
+                uuidv7()
+            )!
+            posthog.persistence!.clear()
+            posthog.reloadFeatureFlags = jest.fn()
+        })
+
+        it.each([
+            [undefined, 1],
+            [false, 0],
+        ] as const)(
+            'resets person properties for flags (reloadFeatureFlags=%s)',
+            (reloadFeatureFlags, expectedCalls) => {
+                posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
+
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual({ plan: 'pro' })
+
+                posthog.resetPersonPropertiesForFlags(reloadFeatureFlags)
+
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
+                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
+            }
+        )
+    })
+
     describe('group()', () => {
         let posthog: PostHog
 

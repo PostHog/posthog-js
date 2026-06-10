@@ -2693,9 +2693,17 @@ export class PostHog implements PostHogInterface {
      * ```js
      * posthog.resetPersonPropertiesForFlags()
      * ```
+     *
+     * @example
+     * ```js
+     * // Reset properties without reloading
+     * posthog.resetPersonPropertiesForFlags(false)
+     * ```
+     *
+     * @param {Boolean} [reloadFeatureFlags=true] Whether to reload feature flags.
      */
-    resetPersonPropertiesForFlags(): void {
-        this.featureFlags?.resetPersonPropertiesForFlags()
+    resetPersonPropertiesForFlags(reloadFeatureFlags = true): void {
+        this.featureFlags?.resetPersonPropertiesForFlags(reloadFeatureFlags)
     }
 
     /**

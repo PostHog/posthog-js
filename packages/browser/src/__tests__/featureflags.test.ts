@@ -2030,7 +2030,7 @@ describe('featureflags', () => {
             expect(instance._send_request).not.toHaveBeenCalled()
         })
 
-        it('resetPersonProperties resets all properties', () => {
+        it('resetPersonProperties resets all properties and reloads flags by default', () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
             featureFlags.setPersonPropertiesForFlags({ x: 'y', c: 'e' }, false)
             jest.runAllTimers()
@@ -2038,8 +2038,9 @@ describe('featureflags', () => {
             expect(instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'e', x: 'y' })
 
             featureFlags.resetPersonPropertiesForFlags()
-            featureFlags.reloadFeatureFlags()
             jest.runAllTimers()
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual(undefined)
 
             // check the request did not send person properties
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -2053,8 +2054,38 @@ describe('featureflags', () => {
             })
         })
 
-        it('set_once properties skip keys that already exist in the cache', () => {
+        it('doesnt reload flags when resetting person properties if explicitly asked not to', () => {
+            featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
+            jest.runAllTimers()
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'd' })
+
+            featureFlags.resetPersonPropertiesForFlags(false)
+            jest.runAllTimers()
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual(undefined)
+            expect(instance._send_request).not.toHaveBeenCalled()
+        })
+
+        it('coalesces the default reset reload with an explicit reloadFeatureFlags call', () => {
+            featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
+            jest.runAllTimers()
+
+            expect(instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'd' })
+
             featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            // this ensures backwards compatibility with users who would previously call
+            // resetPersonPropertiesForFlags followed by reloadFeatureFlags. we will still
+            // guarantee a single /flags request.
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.person_properties).toEqual({})
+        })
+
+        it('set_once properties skip keys that already exist in the cache', () => {
+            featureFlags.resetPersonPropertiesForFlags(false)
             featureFlags.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01', plan: 'free' } }, false)
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({
@@ -2076,7 +2107,7 @@ describe('featureflags', () => {
         })
 
         it('set properties overwrite existing keys even when set_once does not', () => {
-            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.resetPersonPropertiesForFlags(false)
             featureFlags.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01' } }, false)
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({
@@ -2095,7 +2126,7 @@ describe('featureflags', () => {
         })
 
         it('set_once properties are included in /flags request', () => {
-            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.resetPersonPropertiesForFlags(false)
             featureFlags.setPersonPropertiesForFlags(
                 { $set: { plan: 'pro' }, $set_once: { first_date: '2025-01-01' } },
                 false
@@ -2120,7 +2151,7 @@ describe('featureflags', () => {
             })
 
             // Clean up to avoid leaking into subsequent tests
-            featureFlags.resetPersonPropertiesForFlags()
+            featureFlags.resetPersonPropertiesForFlags(false)
         })
 
         it('on providing groupProperties updates properties successively', () => {
