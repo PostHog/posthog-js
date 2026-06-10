@@ -161,16 +161,13 @@ export {
   PostHogMCPAnalyticsEvent,
   PostHogMCPAnalyticsProperty,
 } from './extensions/constants'
-export { createMcpAnalytics } from './extensions/manual'
+export { PostHogMCP } from './extensions/posthog-mcp'
 export type {
   BeforeSendFn,
   CaptureEventData,
-  CreateMcpAnalyticsOptions,
   InitializeCaptureData,
-  ManualCaptureCommon,
-  ManualCustomCaptureData,
   McpAnalytics,
-  McpAnalyticsManual,
+  McpCaptureCommon,
   MCPAnalyticsContextOptions,
   MCPAnalyticsIntentSource,
   MCPAnalyticsOptions,

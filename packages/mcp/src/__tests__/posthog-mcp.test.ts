@@ -1,19 +1,32 @@
-import { createMcpAnalytics } from '../index'
+import { PostHogMCP } from '../index'
 import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extensions/constants'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
-import { EventCapture, fakePostHog } from './test-utils'
+import { EventCapture } from './test-utils'
 
-describe('createMcpAnalytics (server-agnostic capture API)', () => {
+// The capture methods are fire-and-forget (mirroring posthog-node's `capture()`),
+// so let the microtask/timer queue drain before asserting on what the sink saw.
+function tick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+describe('PostHogMCP', () => {
   let capture: EventCapture
+  let posthog: PostHogMCP
 
   beforeEach(async () => {
     capture = new EventCapture()
     await capture.start()
+    posthog = new PostHogMCP('phc_test', { host: 'http://localhost', flushAt: 1, fetchRetryCount: 0 })
   })
 
   afterEach(async () => {
     await capture.stop()
+    await posthog.shutdown()
   })
+
+  function newClient(options?: ConstructorParameters<typeof PostHogMCP>[1]): PostHogMCP {
+    return new PostHogMCP('phc_test', { host: 'http://localhost', flushAt: 1, fetchRetryCount: 0, ...options })
+  }
 
   function onlyCapture(eventName: string): PostHogCaptureEvent {
     const matches = capture.findCapturesByEvent(eventName)
@@ -21,11 +34,15 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
     return matches[0]
   }
 
+  it('is a drop-in PostHog client (inherits capture/identify/etc.)', () => {
+    expect(typeof posthog.capture).toBe('function')
+    expect(typeof posthog.identify).toBe('function')
+    expect(typeof posthog.shutdown).toBe('function')
+  })
+
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureToolCall({
+      posthog.captureToolCall({
         toolName: 'execute-sql',
         toolDescription: 'Run a HogQL/SQL query against PostHog.',
         durationMs: 42,
@@ -35,6 +52,7 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
         groups: { organization: 'org-1', project: 'proj-1' },
         properties: { $mcp_client_name: 'claude-code', custom_flag: true },
       })
+      await tick()
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
       expect(payload.distinct_id).toBe('user-123')
@@ -54,15 +72,14 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
     })
 
     it('captures parameters and response (sanitized + truncated by the pipeline)', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureToolCall({
+      posthog.captureToolCall({
         toolName: 'execute-sql',
         distinctId: 'user-123',
         parameters: { query: 'select 1' },
         response: { rows: 1 },
         isError: false,
       })
+      await tick()
 
       const p = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
       expect(p[PostHogMCPAnalyticsProperty.Parameters]).toEqual({ query: 'select 1' })
@@ -70,14 +87,13 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
     })
 
     it('fans out an $exception sibling on error, carrying the error message', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureToolCall({
+      posthog.captureToolCall({
         toolName: 'execute-sql',
         distinctId: 'user-123',
         isError: true,
         error: new Error('query failed'),
       })
+      await tick()
 
       const toolCall = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
       expect(toolCall.properties[PostHogMCPAnalyticsProperty.IsError]).toBe(true)
@@ -88,39 +104,41 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
     })
 
     it('synthesizes an exception from the tool name when isError is set without an error', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: true })
+      posthog.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: true })
+      await tick()
 
       const exception = onlyCapture(PostHogMCPAnalyticsEvent.Exception)
       expect(JSON.stringify(exception.properties.$exception_list)).toContain('execute-sql')
     })
 
     it('suppresses the $exception sibling when enableExceptionAutocapture is false', async () => {
-      const analytics = createMcpAnalytics(fakePostHog(), { enableExceptionAutocapture: false })
+      const client = newClient({ enableExceptionAutocapture: false })
+      try {
+        client.captureToolCall({
+          toolName: 'execute-sql',
+          distinctId: 'user-123',
+          isError: true,
+          error: new Error('boom'),
+        })
+        await tick()
 
-      await analytics.captureToolCall({
-        toolName: 'execute-sql',
-        distinctId: 'user-123',
-        isError: true,
-        error: new Error('boom'),
-      })
-
-      expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.ToolCall)).toHaveLength(1)
-      expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Exception)).toHaveLength(0)
+        expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.ToolCall)).toHaveLength(1)
+        expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Exception)).toHaveLength(0)
+      } finally {
+        await client.shutdown()
+      }
     })
   })
 
   describe('captureInitialize', () => {
     it('emits $mcp_initialize with client metadata', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureInitialize({
+      posthog.captureInitialize({
         clientName: 'claude-code',
         clientVersion: '1.2.3',
         distinctId: 'user-123',
         durationMs: 7,
       })
+      await tick()
 
       const p = onlyCapture(PostHogMCPAnalyticsEvent.Initialize).properties
       expect(p[PostHogMCPAnalyticsProperty.ClientName]).toBe('claude-code')
@@ -129,44 +147,23 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
     })
   })
 
-  describe('capture (custom)', () => {
-    it('emits the verbatim event name with identity', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.capture({ event: 'feedback_submitted', distinctId: 'user-123', properties: { rating: 5 } })
-
-      const payload = onlyCapture('feedback_submitted')
-      expect(payload.distinct_id).toBe('user-123')
-      expect(payload.properties.rating).toBe(5)
-    })
-
-    it('skips (without throwing) when no event name is given', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-      await expect(analytics.capture({} as never)).resolves.toBeUndefined()
-      await expect(analytics.capture({ event: '' })).resolves.toBeUndefined()
-      expect(capture.getCaptures()).toHaveLength(0)
-    })
-  })
-
   describe('identity + session handling', () => {
     it('writes setProperties to $set', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureToolCall({
+      posthog.captureToolCall({
         toolName: 'execute-sql',
         distinctId: 'user-123',
         setProperties: { email: 'a@b.com', plan: 'pro' },
         isError: false,
       })
+      await tick()
 
       const p = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
       expect(p.$set).toEqual({ email: 'a@b.com', plan: 'pro' })
     })
 
     it('marks anonymous and skips person processing when no distinctId is given', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureToolCall({ toolName: 'execute-sql', isError: false })
+      posthog.captureToolCall({ toolName: 'execute-sql', isError: false })
+      await tick()
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
       expect(payload.distinct_id).toBe('anonymous')
@@ -174,32 +171,11 @@ describe('createMcpAnalytics (server-agnostic capture API)', () => {
     })
 
     it('omits $session_id entirely when no session is supplied', async () => {
-      const analytics = createMcpAnalytics(fakePostHog())
-
-      await analytics.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: false })
+      posthog.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: false })
+      await tick()
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
       expect(payload.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.SessionId)
-    })
-  })
-
-  describe('beforeSend', () => {
-    it('can mutate the payload before capture', async () => {
-      const analytics = createMcpAnalytics(fakePostHog(), {
-        beforeSend: (event) => ({ ...event, properties: { ...event.properties, redacted: true } }),
-      })
-
-      await analytics.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: false })
-
-      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.redacted).toBe(true)
-    })
-
-    it('can drop a payload by returning null', async () => {
-      const analytics = createMcpAnalytics(fakePostHog(), { beforeSend: () => null })
-
-      await analytics.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: false })
-
-      expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.ToolCall)).toHaveLength(0)
     })
   })
 })
