@@ -215,10 +215,15 @@ test.describe('Session recording - idle timeout behavior', () => {
             // Set the lastActivityTimestamp to 35 minutes ago
             // This simulates a frozen tab where no activity was recorded
             const thirtyFiveMinutesAgo = Date.now() - 35 * 60 * 1000
-            currentSessionData[0] = thirtyFiveMinutesAgo
 
-            // Write back the modified session data
-            persistence.register({ [sessionIdKey]: currentSessionData })
+            // Write back the modified session data as a NEW array: register()
+            // skips reference-equal values, and the doctored timestamp must
+            // reach localStorage because the cross-tab refresh re-reads it
+            // from storage before declaring the session idle
+            persistence.register({
+                [sessionIdKey]: [thirtyFiveMinutesAgo, currentSessionData[1], currentSessionData[2]],
+            })
+            persistence.flush?.()
 
             // Also clear the session manager's in-memory cache so it reads from persistence
             // This simulates what happens when a tab unfreezes and state needs to be re-read
