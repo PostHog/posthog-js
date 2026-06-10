@@ -1879,7 +1879,9 @@ export class PostHog extends PostHogCore {
   }
 
   private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {
-    return !this.isDisabled && options?.errorTracking?.autocaptureNative === true
+    const autocapture = options?.errorTracking?.autocapture
+    const nativeCrashes = typeof autocapture === 'object' && autocapture.nativeCrashes === true
+    return !this.isDisabled && nativeCrashes
   }
 
   private _isNativePluginInitialized(): boolean {

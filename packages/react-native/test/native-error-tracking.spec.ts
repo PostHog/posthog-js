@@ -56,7 +56,7 @@ describe('native error tracking', () => {
     const posthog = new PostHog('test-token', {
       persistence: 'memory',
       flushInterval: 0,
-      errorTracking: { autocaptureNative: true },
+      errorTracking: { autocapture: { nativeCrashes: true } },
     })
 
     await posthog.ready()
@@ -78,7 +78,7 @@ describe('native error tracking', () => {
       persistence: 'memory',
       flushInterval: 0,
       enableSessionReplay: true,
-      errorTracking: { autocaptureNative: true },
+      errorTracking: { autocapture: { nativeCrashes: true } },
     })
 
     await posthog.ready()
