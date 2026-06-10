@@ -122,6 +122,9 @@ jobs:
                   echo "version=$VERSION" >> "$GITHUB_OUTPUT"
                   echo "Resolved posthog-js version: $VERSION"
 
+            - name: Update to latest main before committing
+              run: git pull --ff-only --autostash origin main
+
             - name: Commit version bump and lockfile
               id: commit-version-bump
               uses: planetscale/ghcommit-action@25309d8005ac7c3bcd61d3fe19b69e0fe47dbdde # v0.2.20
