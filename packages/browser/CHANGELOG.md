@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.386.0
+
+### Minor Changes
+
+- [#3634](https://github.com/PostHog/posthog-js/pull/3634) [`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat(surveys): add opt-in `appearance.allowGoBack` for multi-question surveys, and make button labels translatable
+
+    Renders a "Back" button on web surveys after the first question. Default is off — existing surveys are unchanged. Uses a visited-index history stack so back-navigation respects branching paths (`response_based`, `specific_question`), and abandoned-branch responses are pruned before submission so analytics aren't polluted. Returning to a question pre-fills the prior answer. `appearance.backButtonText` overrides the default label. The button uses the survey's text color so it stays readable on any background, and it also shows in survey previews.
+
+    Also adds `submitButtonText` and `backButtonText` to survey-level translations, so both the submit and back button labels can be localized via `appearance` translations (previously only the per-question button text was translatable). (2026-06-10)
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+    - @posthog/core@1.32.0
+    - @posthog/types@1.386.0
+
 ## 1.385.0
 
 ### Minor Changes
