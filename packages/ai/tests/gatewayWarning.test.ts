@@ -63,7 +63,7 @@ describe('gatewayWarning', () => {
       expect(message).toContain('PostHog AI Gateway')
       expect(message).toContain('$ai_generation')
       expect(message).toContain('double-counted and double-billed')
-      expect(message).toContain('https://posthog.com/docs/llm-analytics')
+      expect(message).toContain('https://posthog.com/docs/ai-observability')
     })
 
     it('warns only once across many gateway calls', () => {
