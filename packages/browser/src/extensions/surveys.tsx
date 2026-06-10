@@ -785,6 +785,7 @@ export const renderSurveysPreview = ({
     previewPageIndex,
     forceDisableHtml,
     onPreviewSubmit,
+    onPreviewBack,
     positionStyles = DEFAULT_PREVIEW_POSITION_STYLES,
 }: {
     survey: Survey
@@ -792,6 +793,7 @@ export const renderSurveysPreview = ({
     previewPageIndex: number
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    onPreviewBack?: () => void
     posthog?: PostHog
     positionStyles?: JSX.CSSProperties
 }) => {
@@ -810,6 +812,7 @@ export const renderSurveysPreview = ({
             forceDisableHtml={forceDisableHtml}
             style={positionStyles}
             onPreviewSubmit={onPreviewSubmit}
+            onPreviewBack={onPreviewBack}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
         />,
@@ -1096,6 +1099,7 @@ interface SurveyPopupProps {
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    onPreviewBack?: () => void
     onPopupSurveyDismissed?: () => void
     onCloseConfirmationMessage?: () => void
     /** Additional properties to include in all survey events */
@@ -1137,6 +1141,7 @@ export function SurveyPopup({
     removeSurveyFromFocus = () => {},
     isPopup = true,
     onPreviewSubmit = () => {},
+    onPreviewBack = () => {},
     onPopupSurveyDismissed = () => {},
     onCloseConfirmationMessage = () => {},
     properties,
@@ -1188,6 +1193,7 @@ export function SurveyPopup({
             isPopup: isPopup || false,
             surveySubmissionId,
             onPreviewSubmit,
+            onPreviewBack,
             posthog,
             properties,
             surveyLanguage,
@@ -1200,6 +1206,7 @@ export function SurveyPopup({
         survey,
         onPopupSurveyDismissed,
         onPreviewSubmit,
+        onPreviewBack,
         properties,
         surveyLanguage,
     ])
@@ -1260,6 +1267,7 @@ export function Questions({
         onPopupSurveyDismissed,
         isPopup,
         onPreviewSubmit,
+        onPreviewBack,
         surveySubmissionId,
         isPreviewMode,
         properties,
@@ -1349,6 +1357,11 @@ export function Questions({
     }
 
     const onBackButtonClick = () => {
+        // In preview mode the parent owns navigation (via previewPageIndex), so delegate to it.
+        if (isPreviewMode) {
+            onPreviewBack()
+            return
+        }
         if (visitedIndices.length === 0) {
             return
         }
@@ -1365,7 +1378,9 @@ export function Questions({
         })
     }
 
-    const canGoBack = !!survey.appearance?.allowGoBack && visitedIndices.length > 0 && !isPreviewMode
+    const canGoBack =
+        !!survey.appearance?.allowGoBack &&
+        (isPreviewMode ? (previewPageIndex ?? 0) > 0 : visitedIndices.length > 0)
 
     const currentQuestion = surveyQuestions.at(currentQuestionIndex)
 

@@ -628,6 +628,8 @@ export interface SurveyTranslation {
   thankYouMessageHeader?: string
   thankYouMessageDescription?: string
   thankYouMessageCloseButtonText?: string
+  submitButtonText?: string
+  backButtonText?: string
 }
 
 export interface SurveyQuestionTranslation {

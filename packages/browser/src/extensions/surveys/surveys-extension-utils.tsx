@@ -615,6 +615,7 @@ interface SurveyContextProps {
     onPopupSurveyDismissed: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
+    onPreviewBack: () => void
     surveySubmissionId: string
     /** Additional properties to include in all survey events */
     properties?: Properties
@@ -628,6 +629,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     onPopupSurveyDismissed: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
+    onPreviewBack: () => {},
     surveySubmissionId: '',
     properties: undefined,
     surveyLanguage: null,

@@ -595,12 +595,16 @@
     padding: 12px 16px;
     border-radius: 6px;
     background: transparent;
-    color: var(--ph-survey-submit-button-color);
+    /* Use the question text color (auto-contrasted against the background) so the label
+       is always as readable as the survey's own text, including on dark backgrounds. */
+    color: var(--ph-survey-text-primary-color);
     border: 1.5px solid var(--ph-survey-border-color);
     flex: 0 0 auto;
 
+    /* Transform-only hover (matches the submit button) so colors stay fully opaque and
+       contrast is never reduced. */
     &:hover {
-        background: var(--ph-survey-rating-bg-color);
+        transform: scale(1.02);
     }
 
     &:active {

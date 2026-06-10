@@ -255,4 +255,67 @@ describe('Surveys: back button', () => {
         await waitFor(() => expect(screen.getByText('Question 2')).toBeVisible())
         expect(screen.getByRole('button', { name: /go to previous question/i })).toHaveTextContent('Previous')
     })
+
+    test('preview mode: back button is hidden on the first question', () => {
+        render(
+            <SurveyPopup
+                survey={baseSurvey}
+                removeSurveyFromFocus={jest.fn()}
+                previewPageIndex={0}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        expect(screen.getByText('Question 1')).toBeVisible()
+        expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
+    })
+
+    test('preview mode: back button is shown on questions after the first, with custom text', () => {
+        const survey = { ...baseSurvey, appearance: { ...baseSurvey.appearance, backButtonText: 'Previous' } }
+        render(
+            <SurveyPopup
+                survey={survey}
+                removeSurveyFromFocus={jest.fn()}
+                previewPageIndex={1}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        expect(screen.getByText('Question 2')).toBeVisible()
+        expect(screen.getByRole('button', { name: /go to previous question/i })).toHaveTextContent('Previous')
+    })
+
+    test('preview mode: clicking back delegates to onPreviewBack instead of mutating local state', () => {
+        const onPreviewBack = jest.fn()
+        render(
+            <SurveyPopup
+                survey={baseSurvey}
+                removeSurveyFromFocus={jest.fn()}
+                previewPageIndex={1}
+                onPreviewBack={onPreviewBack}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: /go to previous question/i }))
+
+        expect(onPreviewBack).toHaveBeenCalledTimes(1)
+        // The parent owns navigation in preview, so the rendered question shouldn't change on its own.
+        expect(screen.getByText('Question 2')).toBeVisible()
+    })
+
+    test('preview mode: back button stays hidden when allowGoBack is not set', () => {
+        const survey = { ...baseSurvey, appearance: { ...baseSurvey.appearance, allowGoBack: false } }
+        render(
+            <SurveyPopup
+                survey={survey}
+                removeSurveyFromFocus={jest.fn()}
+                previewPageIndex={1}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        expect(screen.getByText('Question 2')).toBeVisible()
+        expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
+    })
 })
