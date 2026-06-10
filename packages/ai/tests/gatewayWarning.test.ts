@@ -1,4 +1,9 @@
-import { POSTHOG_AI_GATEWAY_HOSTS, isPostHogAiGatewayUrl, warnIfPostHogAiGateway } from '../src/gatewayWarning'
+import {
+  POSTHOG_AI_GATEWAY_HOSTS,
+  isPostHogAiGatewayUrl,
+  warnIfPostHogAiGateway,
+  warnIfPostHogAiGatewayOtelAttributes,
+} from '../src/gatewayWarning'
 
 describe('gatewayWarning', () => {
   describe('isPostHogAiGatewayUrl', () => {
@@ -77,6 +82,47 @@ describe('gatewayWarning', () => {
       warnIfPostHogAiGateway('https://api.openai.com/v1')
       warnIfPostHogAiGateway(undefined)
       warnIfPostHogAiGateway('')
+
+      expect(warnSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('warnIfPostHogAiGatewayOtelAttributes', () => {
+    let warnSpy: jest.SpyInstance
+
+    beforeEach(() => {
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+      warnSpy.mockRestore()
+    })
+
+    it.each([
+      ['server.address bare host', { 'server.address': 'gateway.us.posthog.com' }],
+      ['url.full full URL', { 'url.full': 'https://gateway.us.posthog.com/v1/chat/completions' }],
+    ])('warns when a gateway is detected via %s', (_label, attributes) => {
+      warnIfPostHogAiGatewayOtelAttributes(attributes)
+
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy.mock.calls[0][0]).toContain('PostHog AI Gateway')
+    })
+
+    it('warns at most once per span even when several attributes point at the gateway', () => {
+      warnIfPostHogAiGatewayOtelAttributes({
+        'server.address': 'gateway.us.posthog.com',
+        'url.full': 'https://gateway.us.posthog.com/v1',
+      })
+
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['a non-gateway host', { 'server.address': 'api.openai.com', 'url.full': 'https://api.openai.com/v1' }],
+      ['no relevant attributes', { 'gen_ai.model': 'gpt-4o' }],
+      ['undefined attributes', undefined],
+    ])('does not warn for %s', (_label, attributes) => {
+      warnIfPostHogAiGatewayOtelAttributes(attributes)
 
       expect(warnSpy).not.toHaveBeenCalled()
     })

@@ -47,3 +47,22 @@ export const warnIfPostHogAiGateway = (baseURL: string | undefined | null): void
       `Use one or the other — see ${GATEWAY_DOCS_URL}.`
   )
 }
+
+// OTel spans don't pass through captureAiGeneration, so detect the gateway from
+// the span's host/URL attributes instead. These follow the GenAI / HTTP semantic
+// conventions: `server.address` is a bare host, `url.full` a full URL, both of
+// which isPostHogAiGatewayUrl accepts.
+const OTEL_GATEWAY_URL_ATTRIBUTES = ['server.address', 'url.full'] as const
+
+export const warnIfPostHogAiGatewayOtelAttributes = (attributes: Record<string, unknown> | undefined): void => {
+  if (!attributes) {
+    return
+  }
+  for (const key of OTEL_GATEWAY_URL_ATTRIBUTES) {
+    const value = attributes[key]
+    if (typeof value === 'string' && isPostHogAiGatewayUrl(value)) {
+      warnIfPostHogAiGateway(value)
+      return
+    }
+  }
+}
