@@ -1249,8 +1249,12 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    resetPersonPropertiesForFlags(): void {
+    resetPersonPropertiesForFlags(reloadFeatureFlags = true): void {
         this._instance.unregister(STORED_PERSON_PROPERTIES_KEY)
+
+        if (reloadFeatureFlags) {
+            this._instance.reloadFeatureFlags()
+        }
     }
 
     /**

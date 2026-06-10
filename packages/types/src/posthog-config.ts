@@ -928,11 +928,11 @@ export interface PostHogConfig {
     persistence_save_debounce_ms?: number
 
     /**
-     * Store the feature-flag config cluster in its own localStorage entry
-     * (`<name>__flags`) instead of the single main persistence blob. This
-     * payload is large and changes rarely, so keeping it out of the main blob
-     * stops it riding on every high-frequency main-blob write and broadcasting
-     * cross-tab `storage` events.
+     * Store the feature-flag config cluster and survey config in their own
+     * localStorage entries (`<name>__flags`, `<name>__surveys`) instead of the
+     * single main persistence blob. These payloads are large and change rarely,
+     * so keeping them out of the main blob stops them riding on every
+     * high-frequency main-blob write and broadcasting cross-tab `storage` events.
      *
      * Only applies when persistence resolves to `localStorage` / `localStorage+cookie`
      * (the split is pointless for `memory` / `sessionStorage` and impossible for `cookie`).
@@ -942,6 +942,20 @@ export interface PostHogConfig {
      * @default false
      */
     split_storage?: boolean
+
+    /**
+     * Detect the Google Search App (GSA) as its own `$browser` value instead of
+     * the underlying webview it embeds — Mobile Safari on iOS, Chrome on Android.
+     * Detection keys off the `GSA/` marker present in the UA on every platform.
+     *
+     * Off by default for backwards-compatibility: enabling it reattributes
+     * existing GSA traffic away from Mobile Safari / Chrome, which would
+     * otherwise look like those browsers suddenly losing share. The `2026-05-30`
+     * config default opts in.
+     *
+     * @default false
+     */
+    detect_google_search_app?: boolean
 
     /**
      * Determines whether PostHog should disable all surveys functionality.
@@ -1025,6 +1039,25 @@ export interface PostHogConfig {
      * @default false
      */
     disable_external_dependency_loading: boolean
+
+    /**
+     * Determines whether PostHog should load external dependency scripts from
+     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead
+     * of the legacy /static/recorder.js?v=1.370.0 form.
+     *
+     * @default false
+     */
+    strict_script_versioning: boolean
+
+    /**
+     * Optional host override for static assets loaded by PostHog, such as
+     * recorder.js, surveys.js, or toolbar.js. Only applies to /static/* asset
+     * paths; dynamic assets like remote config continue to use the regular
+     * asset host derived from api_host.
+     *
+     * @default null
+     */
+    asset_host: string | null
 
     /**
      * A function to be called when a script is being loaded.
@@ -1703,38 +1736,36 @@ export interface PostHogConfig {
     __add_tracing_headers?: string[]
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Whether to use the new /flags/ endpoint
+     * @deprecated This option is a no-op. The browser SDK already uses the `/flags/?v=2` endpoint.
      * */
     __preview_flags_v2?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - ONLY USE WHEN TALKING TO POSTHOG SUPPORT
-     * Enables deprecated eager loading of session recording code, not just rrweb and network plugin
-     * we are switching the default to lazy loading because the bundle will ultimately be 18% smaller then
-     * keeping this around for a few days in case there are unexpected consequences that testing did not uncover
+     * @deprecated This option is a no-op. Session replay is lazy-loaded by default.
      * */
     __preview_eager_load_replay?: boolean
 
     /**
      * Prevents posthog-js from using the `navigator.sendBeacon` API to send events.
-     * Enabling this option may hurt the reliability of sending $pageleave events
+     * Enabling this option may hurt the reliability of sending $pageleave events.
+     */
+    disable_beacon?: boolean
+
+    /**
+     * @deprecated Use `disable_beacon` instead.
      */
     __preview_disable_beacon?: boolean
 
     /**
-     * Disables sending credentials when using XHR requests.
+     * @deprecated This option is a no-op. The browser SDK no longer sets `XMLHttpRequest.withCredentials`.
      */
     __preview_disable_xhr_credentials?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Loads external dependency bundles (for example recorder.js and toolbar.js) from
-     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead of the
-     * legacy /static/recorder.js?v=1.370.0 form.
-     *
-     * When set to a string, that string is treated as an asset host override for any
-     * /static/* asset path while leaving non-static asset paths unchanged.
+     * @deprecated Use {@link strict_script_versioning} and {@link asset_host} instead.
+     * When set to true, this is equivalent to strict_script_versioning: true.
+     * When set to a string, this is equivalent to strict_script_versioning: true
+     * and asset_host set to that string.
      */
     __preview_external_dependency_versioned_paths?: boolean | string
 

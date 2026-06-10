@@ -509,6 +509,40 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.featureFlagsPoller?.debug(enabled)
   }
 
+  private _warnIfInvalidCapture(
+    props: EventMessage,
+    stringArgumentWarning: string,
+    exceptionCaptureWarning: string
+  ): void {
+    if (typeof props === 'string') {
+      this._logger.warn(stringArgumentWarning)
+    }
+    if (props.event === '$exception' && !props._originatedFromCaptureException) {
+      this._logger.warn(exceptionCaptureWarning)
+    }
+  }
+
+  private _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+    return this.addPendingPromise(
+      this.prepareEventMessage(props)
+        .then(({ distinctId, event, properties, options }) => {
+          const captureOptions: PostHogCaptureOptions = {
+            timestamp: options.timestamp,
+            disableGeoip: options.disableGeoip,
+            uuid: options.uuid,
+          }
+          return immediate
+            ? super.captureStatelessImmediate(distinctId, event, properties, captureOptions)
+            : super.captureStateless(distinctId, event, properties, captureOptions)
+        })
+        .catch((err) => {
+          if (err) {
+            console.error(err)
+          }
+        })
+    )
+  }
+
   /**
    * Capture an event manually.
    *
@@ -528,29 +562,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns void
    */
   capture(props: EventMessage): void {
-    if (typeof props === 'string') {
-      this._logger.warn('Called capture() with a string as the first argument when an object was expected.')
-    }
-    if (props.event === '$exception' && !props._originatedFromCaptureException) {
-      this._logger.warn(
-        "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
-      )
-    }
-    this.addPendingPromise(
-      this.prepareEventMessage(props)
-        .then(({ distinctId, event, properties, options }) => {
-          return super.captureStateless(distinctId, event, properties, {
-            timestamp: options.timestamp,
-            disableGeoip: options.disableGeoip,
-            uuid: options.uuid,
-          })
-        })
-        .catch((err) => {
-          if (err) {
-            console.error(err)
-          }
-        })
+    this._warnIfInvalidCapture(
+      props,
+      'Called capture() with a string as the first argument when an object was expected.',
+      "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
     )
+    this._capturePreparedEvent(props, false)
   }
 
   /**
@@ -597,29 +614,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the event is captured
    */
   async captureImmediate(props: EventMessage): Promise<void> {
-    if (typeof props === 'string') {
-      this._logger.warn('Called captureImmediate() with a string as the first argument when an object was expected.')
-    }
-    if (props.event === '$exception' && !props._originatedFromCaptureException) {
-      this._logger.warn(
-        "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
-      )
-    }
-    return this.addPendingPromise(
-      this.prepareEventMessage(props)
-        .then(({ distinctId, event, properties, options }) => {
-          return super.captureStatelessImmediate(distinctId, event, properties, {
-            timestamp: options.timestamp,
-            disableGeoip: options.disableGeoip,
-            uuid: options.uuid,
-          })
-        })
-        .catch((err) => {
-          if (err) {
-            console.error(err)
-          }
-        })
+    this._warnIfInvalidCapture(
+      props,
+      'Called captureImmediate() with a string as the first argument when an object was expected.',
+      "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
     )
+    return this._capturePreparedEvent(props, true)
   }
 
   /**

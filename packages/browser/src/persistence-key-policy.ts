@@ -53,6 +53,7 @@ import {
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
+    SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
@@ -63,12 +64,14 @@ import {
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     SURVEYS_ACTIVATED,
+    SURVEYS_LOADED_AT,
     USER_STATE,
     WEB_VITALS_ALLOWED_METRICS,
     WEB_VITALS_ENABLED_SERVER_SIDE,
 } from './constants'
 import { transformEnabledFeatureFlagsToEventProperties } from './persistence-key-transforms'
 import type { Properties, Property } from './types'
+import { isNull } from '@posthog/core'
 
 /**
  * - `event`: include the stored key/value on captured events as-is.
@@ -86,9 +89,9 @@ export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
  * stay in the main blob. Members of one group are written in a single entry so
  * an atomic `register` of the whole group lands as one write (no torn state).
  */
-export type PersistenceStorageGroup = 'flags'
+export type PersistenceStorageGroup = 'flags' | 'surveys'
 
-export const PERSISTENCE_STORAGE_GROUPS: readonly PersistenceStorageGroup[] = ['flags']
+export const PERSISTENCE_STORAGE_GROUPS: readonly PersistenceStorageGroup[] = ['flags', 'surveys']
 
 interface PersistenceKeyPolicyEntry {
     exposure: PersistenceKeyExposure
@@ -115,6 +118,10 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
     [SESSION_ID]: { exposure: 'hidden' },
     [SESSION_RECORDING_IS_SAMPLED]: { exposure: 'event' },
+    [SESSION_RECORDING_SAMPLE_RATE]: {
+        exposure: 'event',
+        shouldSkipFromEventProperties: (value) => isNull(value),
+    },
     [SESSION_RECORDING_PAST_MINIMUM_DURATION]: { exposure: 'event' },
     [SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
     [SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
@@ -134,7 +141,8 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden' },
     [STORED_PERSON_PROPERTIES_KEY]: { exposure: 'hidden' },
     [STORED_GROUP_PROPERTIES_KEY]: { exposure: 'hidden' },
-    [SURVEYS]: { exposure: 'hidden' },
+    [SURVEYS]: { exposure: 'hidden', storageGroup: 'surveys' },
+    [SURVEYS_LOADED_AT]: { exposure: 'hidden', storageGroup: 'surveys' },
     [SURVEYS_ACTIVATED]: { exposure: 'event' },
     [PRODUCT_TOURS]: { exposure: 'hidden' },
     [PRODUCT_TOURS_ACTIVATED]: { exposure: 'hidden' },

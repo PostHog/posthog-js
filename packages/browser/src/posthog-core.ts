@@ -191,6 +191,7 @@ const defaultsThatVaryByConfig = (
     | 'internal_or_test_user_hostname'
     | 'persistence_save_debounce_ms'
     | 'split_storage'
+    | 'detect_google_search_app'
 > => ({
     rageclick:
         defaults && defaults >= '2026-05-30'
@@ -204,6 +205,7 @@ const defaultsThatVaryByConfig = (
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
     split_storage: !!(defaults && defaults >= '2026-05-30'),
+    detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -213,6 +215,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
     flags_api_host: null,
     ui_host: null,
+    asset_host: null,
     token: '',
     autocapture: true,
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
@@ -240,6 +243,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_conversations: false,
     disable_product_tours: false,
     disable_external_dependency_loading: false,
+    strict_script_versioning: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: false,
@@ -288,9 +292,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     // Used for internal testing
     _onCapture: __NOOP,
 
-    // make the default be lazy loading replay
-    __preview_eager_load_replay: false,
-
     ...defaultsThatVaryByConfig(defaults),
 })
 
@@ -299,6 +300,7 @@ const CONFIG_RENAMES: [keyof PostHogConfig, keyof PostHogConfig][] = [
     ['xhr_headers', 'request_headers'],
     ['cookie_name', 'persistence_name'],
     ['disable_cookie', 'disable_persistence'],
+    ['__preview_disable_beacon', 'disable_beacon'],
     ['store_google', 'save_campaign_params'],
     ['verbose', 'debug'],
 ]
@@ -314,6 +316,18 @@ export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostH
 
     // the original config takes priority over the renames
     const newConfig = extend({}, renames, origConfig)
+
+    // Maintain backwards compatibility for the deprecated preview option while
+    // letting the supported options take precedence when they are provided.
+    const previewExternalDependencyVersionedPaths = origConfig.__preview_external_dependency_versioned_paths
+    if (!isUndefined(previewExternalDependencyVersionedPaths)) {
+        if (isUndefined(origConfig.strict_script_versioning)) {
+            newConfig.strict_script_versioning = !!previewExternalDependencyVersionedPaths
+        }
+        if (isString(previewExternalDependencyVersionedPaths) && isUndefined(origConfig.asset_host)) {
+            newConfig.asset_host = previewExternalDependencyVersionedPaths
+        }
+    }
 
     // merge property_blacklist into property_denylist
     if (isArray(origConfig.property_blacklist)) {
@@ -1056,8 +1070,10 @@ export class PostHog implements PostHogInterface {
             ...options.headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
-        options.disableXHRCredentials = this.config.__preview_disable_xhr_credentials
-        if (this.config.__preview_disable_beacon) {
+        const disableBeacon = isUndefined(this.config.disable_beacon)
+            ? this.config.__preview_disable_beacon
+            : this.config.disable_beacon
+        if (disableBeacon) {
             options.disableTransport = ['sendBeacon']
         }
 
@@ -1453,7 +1469,8 @@ export class PostHog implements PostHogInterface {
 
         const infoProperties = getEventProperties(
             this.config.mask_personal_data_properties,
-            this.config.custom_personal_data_properties
+            this.config.custom_personal_data_properties,
+            this.config.detect_google_search_app
         )
 
         if (this.sessionManager) {
@@ -2690,9 +2707,17 @@ export class PostHog implements PostHogInterface {
      * ```js
      * posthog.resetPersonPropertiesForFlags()
      * ```
+     *
+     * @example
+     * ```js
+     * // Reset properties without reloading
+     * posthog.resetPersonPropertiesForFlags(false)
+     * ```
+     *
+     * @param {Boolean} [reloadFeatureFlags=true] Whether to reload feature flags.
      */
-    resetPersonPropertiesForFlags(): void {
-        this.featureFlags?.resetPersonPropertiesForFlags()
+    resetPersonPropertiesForFlags(reloadFeatureFlags = true): void {
+        this.featureFlags?.resetPersonPropertiesForFlags(reloadFeatureFlags)
     }
 
     /**
@@ -3719,7 +3744,9 @@ export class PostHog implements PostHogInterface {
             this.pageViewManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
-            this._captureInitialPageview()
+            if (this.config.capture_pageview) {
+                this._captureInitialPageview()
+            }
             // At init time, consent was PENDING so is_capturing() was false and _start_queue_if_opted_in() was a no-op.
             // Now that rejection has been recorded, capturing is active — enable the queue so batched events are flushed.
             this._start_queue_if_opted_in()

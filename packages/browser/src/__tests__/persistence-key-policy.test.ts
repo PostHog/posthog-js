@@ -27,6 +27,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set<string>([
     constants.STORED_GROUP_PROPERTIES_KEY,
     constants.STORED_PERSON_PROPERTIES_KEY,
     constants.SURVEYS,
+    constants.SURVEYS_LOADED_AT,
     constants.FLAG_CALL_REPORTED,
     constants.FLAG_CALL_REPORTED_SESSION_ID,
     constants.PERSISTENCE_FEATURE_FLAG_ERRORS,
@@ -506,6 +507,10 @@ describe('persistence key policy', () => {
                     constants.PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
                 ].sort()
             )
+        })
+
+        it('tags $surveys and its freshness stamp as the surveys group', () => {
+            expect(keysInGroup('surveys')).toEqual([constants.SURVEYS, constants.SURVEYS_LOADED_AT].sort())
         })
 
         it.each([

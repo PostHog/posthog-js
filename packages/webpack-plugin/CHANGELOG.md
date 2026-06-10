@@ -1,5 +1,82 @@
 # @posthog/webpack-plugin
 
+## 1.5.19
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+    - @posthog/core@1.32.0
+
+## 1.5.18
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.31.4
+
+## 1.5.17
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.31.3
+
+## 1.5.16
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.31.2
+
+## 1.5.15
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.31.1
+
+## 1.5.14
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+    - @posthog/core@1.31.0
+
+## 1.5.13
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.30.14
+
+## 1.5.12
+
+### Patch Changes
+
+- [#3775](https://github.com/PostHog/posthog-js/pull/3775) [`018001c`](https://github.com/PostHog/posthog-js/commit/018001cb2e1417aae9a38bdc9338afce2e0d2c25) Thanks [@hpouillot](https://github.com/hpouillot)! - upgrade @posthog/cli version
+  (2026-06-09)
+
+## 1.5.11
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.30.13
+
+## 1.5.10
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.30.12
+
+## 1.5.9
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.30.11
+
 ## 1.5.8
 
 ### Patch Changes

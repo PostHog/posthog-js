@@ -1,9 +1,7 @@
 import { PostHog } from 'posthog-node'
-import OpenAIOrignal from 'openai'
-import AnthropicOriginal from '@anthropic-ai/sdk'
-import type { ChatCompletionTool } from 'openai/resources/chat/completions'
+import type OpenAIOrignal from 'openai'
+import type AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
-import type { Tool as GeminiTool } from '@google/genai'
 import type {
   FormattedMessage,
   FormattedContent,
@@ -20,7 +18,6 @@ type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
 type ResponseCreateParams = OpenAIOrignal.Responses.ResponseCreateParams
 type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 type TranscriptionCreateParams = OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateParams
-type AnthropicTool = AnthropicOriginal.Tool
 
 const TOKEN_PROPERTY_KEYS = new Set([
   '$ai_input_tokens',
@@ -537,10 +534,7 @@ export function calculateWebSearchCount(result: unknown): number {
  * Extract available tool calls from the request parameters.
  * These are the tools provided to the LLM, not the tool calls in the response.
  */
-export const extractAvailableToolCalls = (
-  provider: string,
-  params: any
-): ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null => {
+export const extractAvailableToolCalls = (provider: string, params: any): unknown[] | null => {
   if (provider === 'anthropic') {
     if (params.tools) {
       return params.tools

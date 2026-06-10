@@ -213,6 +213,7 @@ jobs:
             matrix:
                 package:
                     - name: posthog-react-native
+                    - name: '@posthog/react-native-plugin'
                     - name: posthog-node
                     - name: posthog-js-lite
                     - name: posthog-js
@@ -220,6 +221,7 @@ jobs:
                     - name: '@posthog/react'
                     - name: '@posthog/ai'
                     - name: '@posthog/convex'
+                    - name: '@posthog/mcp'
                     - name: '@posthog/next'
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'

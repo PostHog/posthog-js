@@ -9,6 +9,7 @@ import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
@@ -35,11 +36,32 @@ import {
     TRIGGER_PENDING,
 } from './triggerMatching'
 import { sampleOnProperty } from '../../sampling'
-import { isBoolean, isNull, isNullish, isNumber } from '@posthog/core'
+import { isBoolean, isNull, isNullish, isNumber, isObject, isUndefined } from '@posthog/core'
 import { createLogger } from '../../../utils/logger'
 import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
 
 const logger = createLogger('[SessionRecording]')
+
+/**
+ * Decisions are stored as `sessionId` (sampled in) or `'!' + sessionId` (sampled out), so another
+ * session can never inherit them. Anything else (legacy `true`/`false`, another session's decision)
+ * decodes to null and is re-decided — safe, since `sampleOnProperty` is deterministic per session id.
+ */
+const NOT_SAMPLED_PREFIX = '!'
+
+export function encodeSamplingDecision(sessionId: string, isSampled: boolean): string {
+    return isSampled ? sessionId : NOT_SAMPLED_PREFIX + sessionId
+}
+
+export function decodeSamplingDecision(storedValue: unknown, sessionId: string): boolean | null {
+    if (storedValue === sessionId) {
+        return true
+    }
+    if (storedValue === NOT_SAMPLED_PREFIX + sessionId) {
+        return false
+    }
+    return null
+}
 
 /**
  * Shared context that strategies need to access from the recorder
@@ -98,6 +120,12 @@ export interface RecordingStrategy {
      * Make sampling decisions for the session
      */
     makeSamplingDecisions(sessionId: string): void
+
+    /**
+     * Ensure a sampling decision exists for this session, re-deciding from the strategy's own
+     * config when it is missing (e.g. wiped by posthog.reset()). No-op when sampling isn't configured.
+     */
+    ensureSamplingDecision(sessionId: string): void
 
     /**
      * Called after the initial buffer flush (performance optimization hook)
@@ -225,22 +253,20 @@ export class V1RecordingStrategy implements RecordingStrategy {
 
         if (!isNumber(currentSampleRate)) {
             this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+            this._instance.persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
             return
         }
 
         const storedValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        const storedSampleRate = this._instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
 
-        // Parse stored decision:
-        // - sessionId string = sampled in for that session
-        // - false = sampled out (persistent across navigations in same session)
-        // - undefined/null = no decision yet
-        const storedIsSampled = storedValue === sessionId ? true : storedValue === false ? false : null
+        const storedIsSampled = decodeSamplingDecision(storedValue, sessionId)
 
-        // Make new decision only if:
-        // 1. No stored decision exists (storedIsSampled is null/undefined), OR
-        // 2. Session changed (stored sessionId doesn't match current)
-        const sessionChanged = typeof storedValue === 'string' && storedValue !== sessionId
-        const makeDecision = sessionChanged || !isBoolean(storedIsSampled)
+        // Re-decide when the rate changed, or a legacy sampled-in decision predates rate storage.
+        // An explicit override stores null as the rate, so only undefined means legacy missing-rate.
+        const sampleRateChanged = isNumber(storedSampleRate) && storedSampleRate !== currentSampleRate
+        const sampledInWithoutStoredRate = isUndefined(storedSampleRate) && storedValue === sessionId
+        const makeDecision = sampleRateChanged || sampledInWithoutStoredRate || !isBoolean(storedIsSampled)
         const shouldSample = makeDecision ? sampleOnProperty(sessionId, currentSampleRate) : storedIsSampled!
 
         if (makeDecision) {
@@ -254,8 +280,20 @@ export class V1RecordingStrategy implements RecordingStrategy {
         }
 
         this._instance.persistence?.register({
-            [SESSION_RECORDING_IS_SAMPLED]: shouldSample ? sessionId : false,
+            [SESSION_RECORDING_IS_SAMPLED]: encodeSamplingDecision(sessionId, shouldSample),
+            [SESSION_RECORDING_SAMPLE_RATE]:
+                isNull(storedSampleRate) && storedValue === sessionId ? null : currentSampleRate,
         })
+    }
+
+    ensureSamplingDecision(sessionId: string): void {
+        if (!isNumber(this._sampleRate)) {
+            return
+        }
+        const storedValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        if (!isBoolean(decodeSamplingDecision(storedValue, sessionId))) {
+            this.makeSamplingDecisions(sessionId)
+        }
     }
 
     onFlushComplete(): void {
@@ -266,6 +304,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
         this._instance.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
         this._instance.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
         this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._instance.persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
         this._instance.persistence?.unregister(SESSION_RECORDING_PAST_MINIMUM_DURATION)
     }
 
@@ -461,16 +500,40 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
             const storedValue = this._instance.get_property(storageKey)
 
             // Parse stored decision:
-            // - sessionId string = sampled in for that session
-            // - false = sampled out (persistent across navigations in same session)
+            // - object = current format with session ID, sample rate, and decision
+            // - sessionId string = legacy sampled-in decision for that session
+            // - false = legacy sampled-out decision without session/rate context (re-decide)
             // - undefined/null = no decision yet
-            const storedDecision = storedValue === sessionId ? true : storedValue === false ? false : null
+            let storedDecision: boolean | null = null
+            let sessionChanged = false
+            let sampleRateChanged = false
+            let sampledInWithoutStoredRate = false
+
+            if (isObject(storedValue)) {
+                const storedSessionId = storedValue.sessionId
+                const storedSampleRate = storedValue.sampleRate
+                const storedSampled = storedValue.sampled
+                sessionChanged = typeof storedSessionId === 'string' && storedSessionId !== sessionId
+                sampleRateChanged = isNumber(storedSampleRate) && storedSampleRate !== sampleRate
+                storedDecision =
+                    storedSessionId === sessionId &&
+                    isNumber(storedSampleRate) &&
+                    storedSampleRate === sampleRate &&
+                    isBoolean(storedSampled)
+                        ? storedSampled
+                        : null
+            } else {
+                storedDecision = storedValue === sessionId ? true : null
+                sessionChanged = typeof storedValue === 'string' && storedValue !== sessionId
+                sampledInWithoutStoredRate = storedValue === sessionId
+            }
 
             // Make new decision only if:
             // 1. No stored decision exists (storedDecision is null/undefined), OR
-            // 2. Session changed (stored sessionId doesn't match current)
-            const sessionChanged = typeof storedValue === 'string' && storedValue !== sessionId
-            const makeDecision = sessionChanged || !isBoolean(storedDecision)
+            // 2. Session changed (stored sessionId doesn't match current), OR
+            // 3. Sample rate changed since the stored decision was made
+            const makeDecision =
+                sessionChanged || sampleRateChanged || sampledInWithoutStoredRate || !isBoolean(storedDecision)
             const shouldSample = makeDecision ? sampleOnProperty(sessionId + groupId, sampleRate) : storedDecision!
 
             if (makeDecision) {
@@ -485,12 +548,22 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
             // Store the decision
             this._triggerGroupSamplingResults.set(groupId, shouldSample)
             this._instance.persistence?.register({
-                [storageKey]: shouldSample ? sessionId : false,
+                [storageKey]: {
+                    sessionId,
+                    sampleRate,
+                    sampled: shouldSample,
+                },
             })
         }
 
         // After all sampling decisions, register which groups are actively recording
         this.updateActiveTriggers(sessionId)
+    }
+
+    ensureSamplingDecision(sessionId: string): void {
+        // V2 sampling is per trigger group and safe by default — a missing group
+        // decision reads as not sampled, so it can never leak an undecided flush
+        void sessionId
     }
 
     onFlushComplete(): void {
@@ -499,6 +572,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
     clearConditionalRecordingPersistence(): void {
         this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._instance.persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
         this._instance.persistence?.unregister(SESSION_RECORDING_PAST_MINIMUM_DURATION)
 
         // V2: Clear per-group trigger keys

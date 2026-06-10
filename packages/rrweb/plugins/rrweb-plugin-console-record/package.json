@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rrweb-plugin-console-record",
-    "version": "0.0.69",
+    "version": "0.0.71",
     "description": "",
     "type": "module",
     "main": "./dist/rrweb-plugin-console-record.umd.cjs",

@@ -86,7 +86,6 @@ const startOptions = {
         },
         capturePerformance: true,
         autocapture_opt_out: true,
-        __preview_eager_load_replay: false,
     },
     url: './playground/cypress/index.html',
 }

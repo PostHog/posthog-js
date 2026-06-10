@@ -661,7 +661,13 @@ export class Replayer {
       this.mouse.classList.add('touch-device');
     }
     void Promise.resolve().then(() =>
-      this.service.send({ type: 'ADD_EVENT', payload: { event } }),
+      this.service.send({
+        type: 'ADD_EVENT',
+        payload: {
+          event,
+          applyPastEventSynchronously: this.config.liveMode,
+        },
+      }),
     );
   }
 
@@ -1511,7 +1517,10 @@ export class Replayer {
     const mirror = this.usingVirtualDom ? this.virtualDom.mirror : this.mirror;
     type TNode = typeof mirror extends Mirror ? Node : RRNode;
 
-    d.removes = d.removes.filter((mutation) => {
+    // filter into a local copy — never mutate the event data itself, as the
+    // caller's events array must stay intact for later seeks (a rebuild from
+    // an event whose removes were dropped renders accumulated stale nodes)
+    const validRemoves = d.removes.filter((mutation) => {
       // warn of absence from mirror before we start applying each removal
       // as earlier removals could remove a tree that includes a later removal
       if (!mirror.getNode(mutation.id)) {
@@ -1520,7 +1529,7 @@ export class Replayer {
       }
       return true;
     });
-    d.removes.forEach((mutation) => {
+    validRemoves.forEach((mutation) => {
       const target = mirror.getNode(mutation.id);
       if (!target) {
         // no need to warn here, an ancestor may have already been removed

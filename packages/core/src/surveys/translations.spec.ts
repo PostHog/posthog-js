@@ -143,6 +143,23 @@ describe('survey translations', () => {
       expect(result.matchedKey).toBe('fr')
     })
 
+    it('applies translations for the submit and back button labels', () => {
+      const survey = createBaseSurvey()
+      survey.appearance = { ...survey.appearance, submitButtonText: 'Submit', backButtonText: 'Back' }
+      survey.translations = {
+        fr: {
+          submitButtonText: 'Envoyer',
+          backButtonText: 'Retour',
+        },
+      }
+
+      const result = applySurveyTranslation(survey, 'fr')
+
+      expect(result.survey.appearance?.submitButtonText).toBe('Envoyer')
+      expect(result.survey.appearance?.backButtonText).toBe('Retour')
+      expect(result.matchedKey).toBe('fr')
+    })
+
     it('applies question-level translations', () => {
       const survey = createBaseSurvey()
       survey.questions = [
