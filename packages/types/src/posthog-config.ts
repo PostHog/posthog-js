@@ -1722,10 +1722,7 @@ export interface PostHogConfig {
     __preview_flags_v2?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - ONLY USE WHEN TALKING TO POSTHOG SUPPORT
-     * Enables deprecated eager loading of session recording code, not just rrweb and network plugin
-     * we are switching the default to lazy loading because the bundle will ultimately be 18% smaller then
-     * keeping this around for a few days in case there are unexpected consequences that testing did not uncover
+     * @deprecated This option is a no-op. Session replay is lazy-loaded by default.
      * */
     __preview_eager_load_replay?: boolean
 

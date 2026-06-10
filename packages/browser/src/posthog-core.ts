@@ -290,9 +290,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     // Used for internal testing
     _onCapture: __NOOP,
 
-    // make the default be lazy loading replay
-    __preview_eager_load_replay: false,
-
     ...defaultsThatVaryByConfig(defaults),
 })
 
