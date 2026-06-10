@@ -263,6 +263,14 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "strict_script_versioning": [
+    "false",
+    "true"
+  ],
+  "asset_host": [
+    "null",
+    "string"
+  ],
   "prepare_external_dependency_script": [
     "undefined",
     "(script: HTMLScriptElement) => HTMLScriptElement | null"
