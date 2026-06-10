@@ -200,7 +200,7 @@ describe('external-scripts-loader', () => {
 
             const scripts = document!.getElementsByTagName('script')
             expect(scripts.length).toBe(1)
-            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/array/test-token/config.js')
+            expect(scripts[0].src).toBe('https://us.i.posthog.com/array/test-token/config.js')
         })
     })
 })

@@ -92,7 +92,7 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
 ): void => {
     // remote-config always loads from the token-specific path
     if (kind === 'remote-config') {
-        const url = posthog.requestRouter.endpointFor('assets', `/array/${posthog.config.token}/config.js`)
+        const url = posthog.requestRouter.endpointFor('api', `/array/${posthog.config.token}/config.js`)
         loadScript(posthog, url, callback)
         return
     }

@@ -33,7 +33,7 @@ export class RemoteConfigLoader {
     private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
         this._instance._send_request({
             method: 'GET',
-            url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
+            url: this._instance.requestRouter.endpointFor('api', `/array/${this._instance.config.token}/config`),
             callback: (response) => {
                 cb(response.json as RemoteConfig | undefined)
             },
