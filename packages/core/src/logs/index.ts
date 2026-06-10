@@ -92,9 +92,7 @@ export class PostHogLogs {
    * Runs the configured `beforeSend` hook(s) on a capture record:
    *   - single fn OR array of fns (chain, left-to-right)
    *   - returning `null` drops the record (logged at info)
-   *   - a thrown error is logged and the chain *continues* with the previous
-   *     result — a buggy user filter must never crash the caller's
-   *     `captureLog()` call
+   *   - a thrown error is logged and the record is dropped
    */
   private _runBeforeSend(options: CaptureLogOptions): CaptureLogOptions | null {
     const beforeSend = this._config.beforeSend
@@ -112,9 +110,8 @@ export class PostHogLogs {
         }
         result = next
       } catch (e) {
-        // Swallow the throw — the chain continues with `result` unchanged so
-        // a buggy filter degrades to a no-op rather than crashing the app.
         this._logger.error(`Error in beforeSend function for log:`, e)
+        return null
       }
     }
     return result
