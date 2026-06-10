@@ -20,6 +20,8 @@ import { getPersistenceKeyPolicy, PERSISTENCE_STORAGE_GROUPS, PersistenceStorage
 // stale orphan (a gate-off / older-SDK tab wrote a fresher payload back to main)
 // and must not win on load. Groups without an entry here have no freshness
 // signal, so the group entry wins by default (the migrated-forward home).
+const VOLATILE_FINGERPRINT_PLACEHOLDER = '__volatile__'
+
 const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
     flags: PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     surveys: SURVEYS_LOADED_AT,
@@ -511,11 +513,18 @@ export class PostHogPersistence {
     // across the cookie-option setters that run during construction, so an
     // unchanged flag entry is neither re-serialized nor re-broadcast.
     private _entryFingerprint(props: Properties, slot: StorageSlot): string {
-        const serialized = JSON.stringify(props)
         if (slot === MAIN_STORAGE_SLOT) {
-            return serialized + '|' + this._expire_days + '|' + this._cross_subdomain + '|' + this._secure
+            return JSON.stringify(props) + '|' + this._expire_days + '|' + this._cross_subdomain + '|' + this._secure
         }
-        return serialized
+        // Volatile keys count by presence only: a write triggered by a real
+        // content change records a fingerprint that stays valid while the
+        // volatile values keep moving between writes, but adding or deleting a
+        // volatile key still changes the fingerprint so the entry writes through.
+        const stable: Properties = {}
+        each(props, (value, key) => {
+            stable[key] = getPersistenceKeyPolicy(key)?.volatile ? VOLATILE_FINGERPRINT_PLACEHOLDER : value
+        })
+        return JSON.stringify(stable)
     }
 
     // No-op rejection: skip the write when nothing that affects this entry has
@@ -856,7 +865,13 @@ export class PostHogPersistence {
 
     private _setProp(prop: string, to: any): void {
         this.props[prop] = to
-        this._markGroupDirty(prop)
+        // A volatile value change never dirties its group — it changes on every
+        // remote load and would otherwise force a rewrite of the large entry per
+        // load. Deletions still dirty (see _deleteProp): presence is part of the
+        // fingerprint, the moving value is not.
+        if (!getPersistenceKeyPolicy(prop)?.volatile) {
+            this._markGroupDirty(prop)
+        }
     }
 
     private _deleteProp(prop: string): void {
