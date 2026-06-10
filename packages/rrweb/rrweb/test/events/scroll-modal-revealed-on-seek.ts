@@ -3,12 +3,8 @@ import type { eventWithTime } from '@posthog/rrweb-types';
 
 const now = Date.now();
 
-// Reproduces a scroll-revealed modal (e.g. a Silk bottom sheet) whose scroll container uses
-// `scroll-behavior: smooth`. The sheet is revealed by scrolling its track to the "Chimichanga" item.
-// On seek/fast-forward the recorded scroll must land instantly: with `behavior: 'auto'` it inherits
-// the CSS smooth behavior and animates from 0, so the seeked frame shows an empty scrim instead of
-// the open sheet. The sheet lives in the full snapshot so it is laid out (and scrollable) well before
-// the scroll event applies, isolating the smooth-vs-instant behavior from any layout-timing effects.
+// Scroll-revealed modal (e.g. a Silk bottom sheet) whose container sets `scroll-behavior: smooth`.
+// The sheet is in the full snapshot so layout timing can't mask the smooth-vs-instant behavior.
 const events: eventWithTime[] = [
   { type: EventType.DomContentLoaded, data: {}, timestamp: now },
   { type: EventType.Load, data: {}, timestamp: now + 100 },

@@ -437,9 +437,11 @@ export class Replayer {
         this.rebuildFullSnapshot(
           firstFullsnapshot as fullSnapshotEvent & { timestamp: number },
         );
-        this.iframe.contentWindow?.scrollTo(
-          (firstFullsnapshot as fullSnapshotEvent).data.initialOffset,
-        );
+        // 'instant' so the offset is not animated when the page sets scroll-behavior: smooth
+        this.iframe.contentWindow?.scrollTo({
+          ...(firstFullsnapshot as fullSnapshotEvent).data.initialOffset,
+          behavior: 'instant',
+        });
       }, 1);
     }
     if (this.service.state.context.events.find(indicatesTouchDevice)) {
@@ -786,7 +788,11 @@ export class Replayer {
           this.mediaManager.reset();
           this.styleMirror.reset();
           this.rebuildFullSnapshot(event, isSync);
-          this.iframe.contentWindow?.scrollTo(event.data.initialOffset);
+          // 'instant' so the offset is not animated when the page sets scroll-behavior: smooth
+          this.iframe.contentWindow?.scrollTo({
+            ...event.data.initialOffset,
+            behavior: 'instant',
+          });
         };
         break;
       case EventType.IncrementalSnapshot:
