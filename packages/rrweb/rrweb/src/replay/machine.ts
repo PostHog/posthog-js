@@ -40,6 +40,14 @@ export type PlayerEvent =
       type: 'ADD_EVENT';
       payload: {
         event: eventWithTime;
+        /**
+         * Whether an event whose timestamp is before the current baseline
+         * may be applied synchronously onto the current DOM. Only safe in
+         * live mode (catch-up on a DOM that is at the stream's tail); in
+         * on-demand playback the current DOM is at an arbitrary position,
+         * so applying a past event there corrupts the rendered state.
+         */
+        applyPastEventSynchronously?: boolean;
       };
     }
   | {
@@ -263,10 +271,15 @@ export function createPlayerService(
             }
 
             const isSync = event.timestamp < baselineTime;
-            const castFn = getCastFn(event, isSync);
             if (isSync) {
-              castFn();
+              // a past event can only be applied onto the current DOM in
+              // live mode; otherwise just insert it — the next seek/play
+              // rebuild will pick it up from the events array
+              if (machineEvent.payload.applyPastEventSynchronously) {
+                getCastFn(event, true)();
+              }
             } else if (timer.isActive()) {
+              const castFn = getCastFn(event, false);
               timer.addAction({
                 doAction: () => {
                   castFn();
