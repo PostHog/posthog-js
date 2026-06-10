@@ -87,9 +87,8 @@ describe('addEvent', () => {
   };
 
   it('does not apply a past event onto the current DOM by default', () => {
-    // a block of events loading after the user seeked ahead must not be
-    // cast onto the current DOM — that DOM is at a different position, so
-    // the mutations would target nodes that don't exist there
+    // a chunk loading after the user seeked ahead must not be cast onto a
+    // DOM that is at a different position
     const { service, getCastFn } = createService();
     const event = makeMutationEvent(BASELINE - 5000);
 
@@ -100,9 +99,7 @@ describe('addEvent', () => {
   });
 
   it('applies a past event synchronously when explicitly allowed (live mode)', () => {
-    const castFn = vi.fn();
     const { service, getCastFn } = createService();
-    getCastFn.mockReturnValue(castFn);
     const event = makeMutationEvent(BASELINE - 5000);
 
     service.send({
@@ -111,7 +108,7 @@ describe('addEvent', () => {
     });
 
     expect(getCastFn).toHaveBeenCalledWith(event, true);
-    expect(castFn).toHaveBeenCalled();
+    expect(getCastFn.mock.results[0].value).toHaveBeenCalled();
     expect(service.state.context.events).toEqual([event]);
   });
 
