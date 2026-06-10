@@ -7,7 +7,7 @@ import { isUndefined } from '@posthog/core'
 import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
-import { PostHog } from '../posthog-core'
+import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
@@ -59,6 +59,34 @@ describe('posthog core', () => {
 
     afterEach(() => {
         jest.useRealTimers()
+    })
+
+    describe('configRenames()', () => {
+        it('maps deprecated preview request options to stable config names', () => {
+            expect(
+                configRenames({
+                    __preview_disable_beacon: true,
+                    __preview_disable_xhr_credentials: true,
+                })
+            ).toMatchObject({
+                disable_beacon: true,
+                disable_xhr_credentials: true,
+            })
+        })
+
+        it('prioritizes stable request option names over deprecated preview names', () => {
+            expect(
+                configRenames({
+                    disable_beacon: false,
+                    __preview_disable_beacon: true,
+                    disable_xhr_credentials: false,
+                    __preview_disable_xhr_credentials: true,
+                })
+            ).toMatchObject({
+                disable_beacon: false,
+                disable_xhr_credentials: false,
+            })
+        })
     })
 
     describe('capture()', () => {
