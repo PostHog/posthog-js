@@ -22,6 +22,10 @@ import { getPersistenceKeyPolicy, PERSISTENCE_STORAGE_GROUPS, PersistenceStorage
 // signal, so the group entry wins by default (the migrated-forward home).
 const VOLATILE_FINGERPRINT_PLACEHOLDER = '__volatile__'
 
+// Both freshness keys are volatile (their on-disk value lags the last content
+// change). That is safe: when only the stamp moved, both the group entry and the
+// main blob hold identical content, so whichever side wins still produces the
+// same values. A mixed-fleet race at most causes one extra /flags cycle.
 const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
     flags: PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     surveys: SURVEYS_LOADED_AT,
