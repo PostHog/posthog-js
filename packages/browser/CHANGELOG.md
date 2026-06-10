@@ -1,5 +1,20 @@
 # posthog-js
 
+## 1.386.1
+
+### Patch Changes
+
+- [#3780](https://github.com/PostHog/posthog-js/pull/3780) [`93e0461`](https://github.com/PostHog/posthog-js/commit/93e046108d889a9b5b322f7083d81e29f88bc8a3) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix stale sampled-in session replay decisions after the configured replay sample rate changes.
+  (2026-06-10)
+
+- [#3788](https://github.com/PostHog/posthog-js/pull/3788) [`6da86d0`](https://github.com/PostHog/posthog-js/commit/6da86d047414029c91b9b6f9b24dd4ebc36709ad) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): never record or flush snapshots while the sampling decision is missing
+
+    When the stored sampling decision was wiped while the recorder was running (e.g. by `posthog.reset()`), the undecided session reported an `active` status and could leak short junk recordings from sessions that then decided not to record. Sampling decisions are now persisted tagged with the session id they were made for (`'!' + sessionId` when sampled out), are re-made on every session id change regardless of config availability, and a buffer is never flushed without a decision when sampling is configured. Because the decision is a deterministic hash of the session id, re-deciding never flips the outcome for the same session. This also stops a stale `false` decision from a previous session being inherited by a new session, which chronically under-recorded returning visitors. (2026-06-10)
+
+- Updated dependencies []:
+    - @posthog/types@1.386.1
+    - @posthog/core@1.32.1
+
 ## 1.386.0
 
 ### Minor Changes
