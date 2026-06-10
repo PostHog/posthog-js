@@ -71,6 +71,7 @@ import {
 } from './constants'
 import { transformEnabledFeatureFlagsToEventProperties } from './persistence-key-transforms'
 import type { Properties, Property } from './types'
+import { isNull } from '@posthog/core'
 
 /**
  * - `event`: include the stored key/value on captured events as-is.
@@ -117,7 +118,10 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
     [SESSION_ID]: { exposure: 'hidden' },
     [SESSION_RECORDING_IS_SAMPLED]: { exposure: 'event' },
-    [SESSION_RECORDING_SAMPLE_RATE]: { exposure: 'event' },
+    [SESSION_RECORDING_SAMPLE_RATE]: {
+        exposure: 'event',
+        shouldSkipFromEventProperties: (value) => isNull(value),
+    },
     [SESSION_RECORDING_PAST_MINIMUM_DURATION]: { exposure: 'event' },
     [SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
     [SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },

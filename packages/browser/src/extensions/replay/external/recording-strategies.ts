@@ -235,9 +235,9 @@ export class V1RecordingStrategy implements RecordingStrategy {
 
         // Parse stored decision:
         // - sessionId string = sampled in for that session
-        // - false = sampled out (persistent across navigations in same session)
+        // - false = legacy sampled out decision without session/rate context (re-decide)
         // - undefined/null = no decision yet
-        const storedIsSampled = storedValue === sessionId ? true : storedValue === false ? false : null
+        const storedIsSampled = storedValue === sessionId ? true : null
 
         // Make new decision only if:
         // 1. No stored decision exists (storedIsSampled is null/undefined), OR
@@ -479,7 +479,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
             // Parse stored decision:
             // - object = current format with session ID, sample rate, and decision
             // - sessionId string = legacy sampled-in decision for that session
-            // - false = legacy sampled-out decision (persistent across navigations in same session)
+            // - false = legacy sampled-out decision without session/rate context (re-decide)
             // - undefined/null = no decision yet
             let storedDecision: boolean | null = null
             let sessionChanged = false
@@ -493,11 +493,14 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                 sessionChanged = typeof storedSessionId === 'string' && storedSessionId !== sessionId
                 sampleRateChanged = isNumber(storedSampleRate) && storedSampleRate !== sampleRate
                 storedDecision =
-                    storedSessionId === sessionId && !sampleRateChanged && isBoolean(storedSampled)
+                    storedSessionId === sessionId &&
+                    isNumber(storedSampleRate) &&
+                    storedSampleRate === sampleRate &&
+                    isBoolean(storedSampled)
                         ? storedSampled
                         : null
             } else {
-                storedDecision = storedValue === sessionId ? true : storedValue === false ? false : null
+                storedDecision = storedValue === sessionId ? true : null
                 sessionChanged = typeof storedValue === 'string' && storedValue !== sessionId
                 sampledInWithoutStoredRate = storedValue === sessionId
             }

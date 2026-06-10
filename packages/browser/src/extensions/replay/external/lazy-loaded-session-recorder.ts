@@ -1495,7 +1495,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._instance.persistence?.register({
             // short-circuits the `makeSamplingDecision` function in the session recording module
             [SESSION_RECORDING_IS_SAMPLED]: this.sessionId,
-            [SESSION_RECORDING_SAMPLE_RATE]: this._sampleRate,
+            [SESSION_RECORDING_SAMPLE_RATE]: null,
         })
         this._tryTakeFullSnapshot()
         this._reportStarted('sampling_overridden')
@@ -1817,7 +1817,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         return {
             $recording_status: this.status,
-            [SESSION_RECORDING_SAMPLE_RATE]: this._sampleRate,
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_current_session_duration: this._sessionDuration,
