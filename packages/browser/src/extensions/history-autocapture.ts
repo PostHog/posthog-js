@@ -51,39 +51,36 @@ export class HistoryAutocapture implements Extension {
             return
         }
 
+        this._patchHistoryMethod('pushState')
+        this._patchHistoryMethod('replaceState')
+
+        this._setupPopstateListener()
+    }
+
+    private _patchHistoryMethod(method: 'pushState' | 'replaceState'): void {
+        if (!window || (window.history[method] as any)?.__posthog_wrapped__) {
+            return
+        }
+
         // Old fashioned, we could also use arrow functions but I think the closure for a patch is more reliable
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         const self = this
-
-        if (!(window.history.pushState as any)?.__posthog_wrapped__) {
-            patch(window.history, 'pushState', (originalPushState) => {
-                return function patchedPushState(
-                    this: History,
-                    state: any,
-                    title: string,
-                    url?: string | URL | null
-                ): void {
-                    ;(originalPushState as History['pushState']).call(this, state, title, url)
-                    self._capturePageview('pushState')
-                }
-            })
-        }
-
-        if (!(window.history.replaceState as any)?.__posthog_wrapped__) {
-            patch(window.history, 'replaceState', (originalReplaceState) => {
-                return function patchedReplaceState(
-                    this: History,
-                    state: any,
-                    title: string,
-                    url?: string | URL | null
-                ): void {
-                    ;(originalReplaceState as History['replaceState']).call(this, state, title, url)
-                    self._capturePageview('replaceState')
-                }
-            })
-        }
-
-        this._setupPopstateListener()
+        patch(window.history, method, (originalMethod) => {
+            return function patchedHistoryMethod(
+                this: History,
+                state: any,
+                title: string,
+                url?: string | URL | null
+            ): void {
+                ;(originalMethod as (state: any, title: string, url?: string | URL | null) => void).call(
+                    this,
+                    state,
+                    title,
+                    url
+                )
+                self._capturePageview(method)
+            }
+        })
     }
 
     private _capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate'): void {

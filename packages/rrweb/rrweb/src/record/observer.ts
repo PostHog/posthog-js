@@ -376,10 +376,20 @@ function initViewportResizeObserver(
   return on('resize', updateDimension, win);
 }
 
-export function findAndRemoveIframeBuffer(iframeEl: HTMLIFrameElement) {
+// `knownDocs` matches buffers whose iframe.contentDocument has been swapped
+// before removal — bufferBelongsToIframe alone misses them.
+export function findAndRemoveIframeBuffer(
+  iframeEl: HTMLIFrameElement,
+  knownDocs?: Set<Document>,
+) {
   for (let i = mutationBuffers.length - 1; i >= 0; i--) {
     const buf = mutationBuffers[i];
-    if (buf?.bufferBelongsToIframe(iframeEl)) {
+    if (!buf) continue;
+    let match = buf.bufferBelongsToIframe(iframeEl);
+    if (!match && knownDocs && knownDocs.has(buf.bufferDoc())) {
+      match = true;
+    }
+    if (match) {
       buf.reset();
       mutationBuffers.splice(i, 1);
     }

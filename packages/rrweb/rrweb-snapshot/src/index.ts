@@ -11,6 +11,7 @@ import snapshot, {
   DEFAULT_MAX_DEPTH,
   wasMaxDepthReached,
   resetMaxDepthState,
+  resetStylesheetLoadTracking,
   genId,
 } from './snapshot';
 import rebuild, {
@@ -39,5 +40,6 @@ export {
   DEFAULT_MAX_DEPTH,
   wasMaxDepthReached,
   resetMaxDepthState,
+  resetStylesheetLoadTracking,
   genId,
 };

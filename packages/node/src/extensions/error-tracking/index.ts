@@ -14,8 +14,6 @@ export default class ErrorTracking {
   private _rateLimiter: BucketedRateLimiter<string>
   private _logger: Logger
 
-  static errorPropertiesBuilder: CoreErrorTracking.ErrorPropertiesBuilder
-
   constructor(client: PostHogBackendClient, options: PostHogOptions, _logger: Logger) {
     this.client = client
     this._exceptionAutocaptureEnabled = options.enableExceptionAutocapture || false
@@ -39,6 +37,7 @@ export default class ErrorTracking {
   }
 
   static async buildEventMessage(
+    builder: CoreErrorTracking.ErrorPropertiesBuilder,
     error: unknown,
     hint: CoreErrorTracking.EventHint,
     distinctId?: string,
@@ -46,10 +45,8 @@ export default class ErrorTracking {
   ): Promise<EventMessage> {
     const properties: EventMessage['properties'] = { ...additionalProperties }
 
-    const exceptionProperties = this.errorPropertiesBuilder.buildFromUnknown(error, hint)
-    exceptionProperties.$exception_list = await this.errorPropertiesBuilder.modifyFrames(
-      exceptionProperties.$exception_list
-    )
+    const exceptionProperties = builder.buildFromUnknown(error, hint)
+    exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
 
     return {
       event: '$exception',
@@ -75,7 +72,11 @@ export default class ErrorTracking {
     this.client.addPendingPromise(
       (async () => {
         if (!ErrorTracking.isPreviouslyCapturedError(exception)) {
-          const eventMessage = await ErrorTracking.buildEventMessage(exception, hint)
+          const eventMessage = await ErrorTracking.buildEventMessage(
+            this.client.getErrorPropertiesBuilder(),
+            exception,
+            hint
+          )
           const exceptionProperties = eventMessage.properties
           const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
           const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)

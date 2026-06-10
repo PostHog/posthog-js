@@ -1,5 +1,54 @@
 # rrweb
 
+## 0.0.70
+
+### Patch Changes
+
+- [#3787](https://github.com/PostHog/posthog-js/pull/3787) [`0e22d77`](https://github.com/PostHog/posthog-js/commit/0e22d778a439188f32294b5932194efe86ad1e6a) Thanks [@TueHaulund](https://github.com/TueHaulund)! - replayer: stop corrupting recordings when events are added behind the playhead. `addEvent()` used to apply any event older than the playback baseline synchronously onto the current DOM — correct for live-mode catch-up, but wrong for on-demand playback where snapshot chunks can finish loading after the user has seeked ahead. Applying those past mutations onto a DOM at a different position made their `removes` fail mirror lookups, and `applyMutation` then deleted the failed entries from the event objects themselves, so every later seek rebuilt from corrupted data (DOM nodes accumulating, e.g. duplicated text) and exports serialized the stripped events. Past events are now only applied synchronously in live mode (otherwise they are just inserted for the next seek to pick up), and `applyMutation` filters removes into a local copy instead of mutating the event data.
+  (2026-06-10)
+
+## 0.0.69
+
+### Patch Changes
+
+- [#3726](https://github.com/PostHog/posthog-js/pull/3726) [`74345e3`](https://github.com/PostHog/posthog-js/commit/74345e355ac8d16e121ff93039dbb59240c9f5bb) Thanks [@arnohillen](https://github.com/arnohillen)! - canvas recording: reference-count CanvasManager teardown so it survives secondary-root cleanup. A single CanvasManager is shared by the main document and every iframe / shadow-root observer; previously tearing down any one of those (e.g. an iframe unloading, or a framework unmounting a subtree rrweb was observing) unpatched `HTMLCanvasElement.prototype.getContext` and cancelled the FPS loop for the whole page, silently stopping canvas recording while the session stayed active. The manager now only tears down once the last consumer releases.
+  (2026-06-03)
+
+## 0.0.68
+
+### Patch Changes
+
+- [#3736](https://github.com/PostHog/posthog-js/pull/3736) [`374962a`](https://github.com/PostHog/posthog-js/commit/374962a01267a37e9dedf44e0848ece4b3562749) Thanks [@arnohillen](https://github.com/arnohillen)! - replay: re-apply scroll positions after fast-forward/seek. Scrolls applied mid-catch-up could clamp to 0 when the target wasn't scrollable yet (e.g. scroll-revealed sheets/modals whose content sits below the fold), leaving the content scrolled out of view on replay. The last scroll per node is now re-applied in the flush stage once layout has settled. `posthog-js` is bumped too so the rebuilt bundle containing the fix is published.
+  (2026-06-03)
+
+## 0.0.67
+
+### Patch Changes
+
+- [#3678](https://github.com/PostHog/posthog-js/pull/3678) [`add2fae`](https://github.com/PostHog/posthog-js/commit/add2fae385046aa95452db12acb0f7deb91e84b3) Thanks [@ksvat](https://github.com/ksvat)! - fix(replay): keep `ph-no-capture` placeholders in normal flow during replay. Blocked elements were rebuilt with `position: absolute` + recorded `left/top` regardless of how they were originally positioned, pulling in-flow elements (flex/grid children, inline spans) out of flow and collapsing sibling layout. Snapshot now captures the element's computed `position`, `transform`, and `display`; rebuild only forces absolute positioning when the original was non-static or contributed a transform, and promotes inline placeholders to `inline-block` so the redacted slot is preserved. Old recordings without the new attributes keep the legacy absolute behavior.
+  (2026-05-27)
+- Updated dependencies [[`add2fae`](https://github.com/PostHog/posthog-js/commit/add2fae385046aa95452db12acb0f7deb91e84b3)]:
+    - @posthog/rrweb-snapshot@0.0.65
+    - @posthog/rrdom@0.0.65
+
+## 0.0.66
+
+### Patch Changes
+
+- [#3667](https://github.com/PostHog/posthog-js/pull/3667) [`cafa9cc`](https://github.com/PostHog/posthog-js/commit/cafa9cc786a07613677ec16f2fc9f0c4e833a12c) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(replay): stop polling preload-as-style `<link>` elements forever. Session recorder treated `<link rel="preload" as="style" href="*.css">` as if it were a stylesheet and waited for `link.sheet` to populate. Per spec preload links never instantiate a `CSSStyleSheet`, so the wait timed out, re-serialized the link, scheduled another wait, and leaked a `load` listener on every cycle — multiplying further on every real `load` event. Pages with Next.js-style CSS preloads accumulated thousands of active polling chains, saturating the main thread and freezing the tab on refocus
+  (2026-05-26)
+- Updated dependencies [[`cafa9cc`](https://github.com/PostHog/posthog-js/commit/cafa9cc786a07613677ec16f2fc9f0c4e833a12c)]:
+    - @posthog/rrweb-snapshot@0.0.64
+    - @posthog/rrdom@0.0.64
+
+## 0.0.65
+
+### Patch Changes
+
+- Updated dependencies [[`5fb74b6`](https://github.com/PostHog/posthog-js/commit/5fb74b60bb31394d6511845cc902daf8810dbf3f)]:
+    - @posthog/rrweb-snapshot@0.0.63
+    - @posthog/rrdom@0.0.63
+
 ## 0.0.64
 
 ### Patch Changes

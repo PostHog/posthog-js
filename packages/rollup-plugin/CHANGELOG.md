@@ -1,5 +1,19 @@
 # @posthog/rollup-plugin
 
+## 1.4.5
+
+### Patch Changes
+
+- [#3775](https://github.com/PostHog/posthog-js/pull/3775) [`018001c`](https://github.com/PostHog/posthog-js/commit/018001cb2e1417aae9a38bdc9338afce2e0d2c25) Thanks [@hpouillot](https://github.com/hpouillot)! - upgrade @posthog/cli version
+  (2026-06-09)
+
+## 1.4.4
+
+### Patch Changes
+
+- [#3661](https://github.com/PostHog/posthog-js/pull/3661) [`f12ee73`](https://github.com/PostHog/posthog-js/commit/f12ee73362545c2fe946a566d76bb14b7d5aa746) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Bump `@posthog/cli` to `~0.7.13`, which drops several unused runtime dependencies (`axios`, `axios-proxy-builder`, `console.table`, `rimraf`).
+  (2026-05-22)
+
 ## 1.4.3
 
 ### Patch Changes

@@ -1,4 +1,5 @@
 import {
+    getBrowserDetectionHints,
     getBrowserLanguage,
     getBrowserLanguagePrefix,
     getEventProperties,
@@ -158,6 +159,66 @@ describe(`event-utils`, () => {
 
             const properties = getEventProperties()
             expect(properties['$device_type']).toBe('Desktop')
+        })
+    })
+
+    describe('getBrowserDetectionHints', () => {
+        const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
+
+        afterEach(() => {
+            if (originalBrave) {
+                Object.defineProperty(window.navigator, 'brave', originalBrave)
+            } else {
+                delete (window.navigator as any).brave
+            }
+        })
+
+        it('returns empty hints when navigator.brave is absent', () => {
+            delete (window.navigator as any).brave
+            expect(getBrowserDetectionHints()).toEqual({})
+        })
+
+        it('flags brave when navigator.brave exists', () => {
+            Object.defineProperty(window.navigator, 'brave', {
+                value: { isBrave: () => Promise.resolve(true) },
+                configurable: true,
+            })
+            expect(getBrowserDetectionHints()).toEqual({ brave: true })
+        })
+    })
+
+    describe('Brave detection end-to-end', () => {
+        const chromeMacOsUA =
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
+
+        beforeEach(() => {
+            // @ts-expect-error ok to set global in test
+            globals['userAgent'] = chromeMacOsUA
+        })
+
+        afterEach(() => {
+            if (originalBrave) {
+                Object.defineProperty(window.navigator, 'brave', originalBrave)
+            } else {
+                delete (window.navigator as any).brave
+            }
+        })
+
+        it('reports $browser as Brave when navigator.brave exists, even on a Chrome UA', () => {
+            Object.defineProperty(window.navigator, 'brave', { value: {}, configurable: true })
+            const properties = getEventProperties()
+            expect(properties['$browser']).toBe('Brave')
+            // Desktop Brave has no UA version marker, so honest null beats a
+            // Chrome version stamped under `Brave`.
+            expect(properties['$browser_version']).toBeNull()
+        })
+
+        it('reports $browser as Chrome when navigator.brave is absent', () => {
+            delete (window.navigator as any).brave
+            const properties = getEventProperties()
+            expect(properties['$browser']).toBe('Chrome')
+            expect(properties['$browser_version']).toBe(120.0)
         })
     })
 

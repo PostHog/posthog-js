@@ -19,6 +19,7 @@ concurrency:
 jobs:
   browsers:
     name: Test on ${{ matrix.name }}
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-22.04
 
     strategy:
@@ -30,7 +31,7 @@ jobs:
             name: IE11
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -58,6 +59,7 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.browser }}
+          BROWSERSLIST: "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
         run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
         working-directory: packages/browser
 

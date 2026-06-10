@@ -1,5 +1,276 @@
 # posthog-react-native
 
+## 4.46.26
+
+### Patch Changes
+
+- Updated dependencies [[`d9462b3`](https://github.com/PostHog/posthog-js/commit/d9462b3567a0b7c9b755552c303814b6fcbe3a97)]:
+  - @posthog/types@1.384.2
+  - @posthog/core@1.31.2
+
+## 4.46.25
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.384.1
+  - @posthog/core@1.31.1
+
+## 4.46.24
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/core@1.31.0
+  - @posthog/types@1.384.0
+
+## 4.46.23
+
+### Patch Changes
+
+- Updated dependencies [[`783ba46`](https://github.com/PostHog/posthog-js/commit/783ba461b0916c3f379c227d08470687d38d0768)]:
+  - @posthog/types@1.383.3
+  - @posthog/core@1.30.14
+
+## 4.46.22
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.383.2
+  - @posthog/core@1.30.13
+
+## 4.46.21
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.383.1
+  - @posthog/core@1.30.12
+
+## 4.46.20
+
+### Patch Changes
+
+- Updated dependencies [[`227c9b0`](https://github.com/PostHog/posthog-js/commit/227c9b03c19dcb93d9a15abb1ee6b9523d366767), [`393f9e2`](https://github.com/PostHog/posthog-js/commit/393f9e2a4697c6ffe52402cad6fb8550b48b5e00)]:
+  - @posthog/types@1.383.0
+  - @posthog/core@1.30.11
+
+## 4.46.19
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.382.0
+  - @posthog/core@1.30.10
+
+## 4.46.18
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+  - @posthog/types@1.381.0
+  - @posthog/core@1.30.9
+
+## 4.46.17
+
+### Patch Changes
+
+- [#3747](https://github.com/PostHog/posthog-js/pull/3747) [`70c976e`](https://github.com/PostHog/posthog-js/commit/70c976e36eb80e55725b349c7a082043660ac504) Thanks [@cat-ph](https://github.com/cat-ph)! - Improve Xcode sourcemap upload failure logs so every captured `posthog-cli` line is reported as an Xcode error with the failing Hermes command and exit code.
+  (2026-06-05)
+
+## 4.46.16
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.380.1
+  - @posthog/core@1.30.8
+
+## 4.46.15
+
+### Patch Changes
+
+- [#3745](https://github.com/PostHog/posthog-js/pull/3745) [`33388d5`](https://github.com/PostHog/posthog-js/commit/33388d522b9db50077f82f823676315392c2fc3d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `posthog-react-native` throwing `Cannot read properties of undefined (reading 'create')` at import time in analytics-only setups and Jest `testEnvironment: node` runs without the React Native preset. The surveys UI is reachable from the package entrypoint and no longer evaluates native `StyleSheet` APIs while loading. (#3740)
+  (2026-06-04)
+
+## 4.46.14
+
+### Patch Changes
+
+- Updated dependencies [[`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7)]:
+  - @posthog/types@1.380.0
+  - @posthog/core@1.30.7
+
+## 4.46.13
+
+### Patch Changes
+
+- [#3729](https://github.com/PostHog/posthog-js/pull/3729) [`3959c03`](https://github.com/PostHog/posthog-js/commit/3959c038505c2b1365fe1c09183cc4038e707962) Thanks [@cat-ph](https://github.com/cat-ph)! - fix(react-native): make the Android Hermes sourcemap upload tasks compatible with Gradle's configuration cache.
+  (2026-06-04)
+
+## 4.46.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.3
+  - @posthog/core@1.30.6
+
+## 4.46.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.2
+  - @posthog/core@1.30.5
+
+## 4.46.10
+
+### Patch Changes
+
+- [#3734](https://github.com/PostHog/posthog-js/pull/3734) [`42b720f`](https://github.com/PostHog/posthog-js/commit/42b720f205f111c62de9435ac7315437d1e6d737) Thanks [@cat-ph](https://github.com/cat-ph)! - Fix the Expo iOS source map upload config plugin so backtick-wrapped `react-native-xcode.sh` commands are preserved when wrapping the bundle phase with `posthog-xcode.sh`.
+  (2026-06-03)
+
+## 4.46.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.1
+  - @posthog/core@1.30.4
+
+## 4.46.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.379.0
+  - @posthog/core@1.30.3
+
+## 4.46.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.378.1
+  - @posthog/core@1.30.2
+
+## 4.46.6
+
+### Patch Changes
+
+- Updated dependencies [[`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc)]:
+  - @posthog/types@1.378.0
+  - @posthog/core@1.30.1
+
+## 4.46.5
+
+### Patch Changes
+
+- Updated dependencies [[`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+  - @posthog/core@1.30.0
+  - @posthog/types@1.377.0
+
+## 4.46.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.6
+  - @posthog/core@1.29.15
+
+## 4.46.3
+
+### Patch Changes
+
+- [#3701](https://github.com/PostHog/posthog-js/pull/3701) [`6f0caf4`](https://github.com/PostHog/posthog-js/commit/6f0caf45b169ebc33a0f6386950c75539070ad9c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Coalesce React Native storage writes into a short window so a burst of captures no longer re-serializes and rewrites the whole storage blob on every event. Login, logout, opt-in/opt-out, event flush, app background, shutdown, and fatal exceptions still persist synchronously.
+  (2026-05-31)
+
+- [#3689](https://github.com/PostHog/posthog-js/pull/3689) [`501ade6`](https://github.com/PostHog/posthog-js/commit/501ade6df6cba0f6556830244a1b708338a3c85f) Thanks [@ioannisj](https://github.com/ioannisj)! - fix(ios): iOS Release builds with Expo config plugin fail when bundle phase uses a /bin/sh prefix, causing posthog-xcode.sh to receive /bin/sh as $1 instead of the react-native-xcode.sh path. The PACKAGER_SOURCEMAP_FILE preservation patch was silently skipped, leading to posthog-cli failing with "Failed to load minified map". Fixes #3682.
+  (2026-05-31)
+
+- [#3694](https://github.com/PostHog/posthog-js/pull/3694) [`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - fix(react-native): preserve non-string property types (booleans, arrays, numbers, objects) when caching person and group properties for feature flag evaluation. Previously these were force-coerced to strings via `String(value)`, causing flag conditions using boolean equality or array `contains` to fail on device while the PostHog UI still evaluated correctly.
+  (2026-05-31)
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+  - @posthog/types@1.376.5
+
+## 4.46.2
+
+### Patch Changes
+
+- [#3681](https://github.com/PostHog/posthog-js/pull/3681) [`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - unify captureException in posthog core
+  (2026-05-28)
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+  - @posthog/core@1.29.13
+  - @posthog/types@1.376.4
+
+## 4.46.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.3
+  - @posthog/core@1.29.12
+
+## 4.46.0
+
+### Minor Changes
+
+- [#3673](https://github.com/PostHog/posthog-js/pull/3673) [`778205f`](https://github.com/PostHog/posthog-js/commit/778205f0bddbe02ce0aae21225d93cd119d9c19e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Bump optional peer dependency `posthog-react-native-session-replay` floor to `>= 1.6.0`. The new minor adds an opt-in path that resolves `posthog-ios` through Swift Package Manager when consumers set `"posthog.useSpm": "true"` in their app's `ios/Podfile.properties.json` (with `use_frameworks! :linkage => :dynamic`). Default behavior is unchanged: without the property, `posthog-ios` continues to resolve through CocoaPods. See the [session-replay README](https://github.com/PostHog/posthog-react-native-session-replay#ios-dependency-resolution) for the opt-in details.
+  (2026-05-27)
+
+## 4.45.16
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.376.2
+  - @posthog/core@1.29.11
+
+## 4.45.15
+
+### Patch Changes
+
+- [#3665](https://github.com/PostHog/posthog-js/pull/3665) [`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Don't autocapture PostHog's own `PostHogFetchNetworkError` (raised when the device is offline) as a `$exception`. These connectivity failures are expected and were flooding error tracking with internal SDK noise. Adds an `isPostHogFetchNetworkError` type guard to `@posthog/core` so SDKs can detect these errors.
+  (2026-05-26)
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+  - @posthog/core@1.29.10
+  - @posthog/types@1.376.1
+
+## 4.45.14
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+  - @posthog/types@1.376.0
+
+## 4.45.13
+
+### Patch Changes
+
+- Updated dependencies [[`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d)]:
+  - @posthog/types@1.375.0
+  - @posthog/core@1.29.8
+
+## 4.45.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.374.4
+  - @posthog/core@1.29.7
+
+## 4.45.11
+
+### Patch Changes
+
+- Updated dependencies [[`557b893`](https://github.com/PostHog/posthog-js/commit/557b8934aa0b990184e0376fb1fc28433ad336c6), [`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/types@1.374.3
+  - @posthog/core@1.29.6
+
 ## 4.45.10
 
 ### Patch Changes

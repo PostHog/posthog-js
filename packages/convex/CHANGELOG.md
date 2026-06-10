@@ -1,5 +1,281 @@
 # @posthog/convex
 
+## 2.0.22
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.2
+  - posthog-node@5.36.11
+
+## 2.0.21
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.1
+  - posthog-node@5.36.10
+
+## 2.0.20
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/core@1.31.0
+  - posthog-node@5.36.9
+
+## 2.0.19
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.14
+  - posthog-node@5.36.8
+
+## 2.0.18
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies [[`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6)]:
+  - posthog-node@5.36.7
+  - @posthog/core@1.30.13
+
+## 2.0.17
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.12
+  - posthog-node@5.36.6
+
+## 2.0.16
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.11
+  - posthog-node@5.36.5
+
+## 2.0.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.10
+  - posthog-node@5.36.4
+
+## 2.0.14
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.9
+  - posthog-node@5.36.3
+
+## 2.0.13
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.8
+  - posthog-node@5.36.2
+
+## 2.0.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.7
+  - posthog-node@5.36.1
+
+## 2.0.11
+
+### Patch Changes
+
+- Updated dependencies [[`9287c87`](https://github.com/PostHog/posthog-js/commit/9287c87b7d4cf00160269d0cc648074f27c0847a)]:
+  - posthog-node@5.36.0
+
+## 2.0.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.6
+  - posthog-node@5.35.15
+
+## 2.0.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.5
+  - posthog-node@5.35.14
+
+## 2.0.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.4
+  - posthog-node@5.35.13
+
+## 2.0.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.3
+  - posthog-node@5.35.12
+
+## 2.0.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.2
+  - posthog-node@5.35.11
+
+## 2.0.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.1
+  - posthog-node@5.35.10
+
+## 2.0.4
+
+### Patch Changes
+
+- Updated dependencies [[`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45), [`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+  - posthog-node@5.35.9
+  - @posthog/core@1.30.0
+
+## 2.0.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.15
+  - posthog-node@5.35.8
+
+## 2.0.2
+
+### Patch Changes
+
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+  - posthog-node@5.35.7
+
+## 2.0.1
+
+### Patch Changes
+
+- [#3684](https://github.com/PostHog/posthog-js/pull/3684) [`714ffa5`](https://github.com/PostHog/posthog-js/commit/714ffa5874aa230ab49783d2415d54b23ffa54a1) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Fix the refresh cron not registering when `POSTHOG_PERSONAL_API_KEY` is forwarded from the installing app. Convex only forwards component env vars at runtime, so the previous load-time gate saw an empty value during deploy-time module analysis and silently dropped the cron. The cron now registers unconditionally and gates at runtime.
+
+  Fixes [#3683](https://github.com/PostHog/posthog-js/issues/3683). (2026-05-28)
+
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+  - @posthog/core@1.29.13
+  - posthog-node@5.35.6
+
+## 2.0.0
+
+### Major Changes
+
+- [#3662](https://github.com/PostHog/posthog-js/pull/3662) [`4285c40`](https://github.com/PostHog/posthog-js/commit/4285c406c5d68874a1da5aabfe52e3faa18903ae) Thanks [@richardsolomou](https://github.com/richardsolomou)! - v2 moves credentials onto the component via [Convex 1.39's typed env-var config](https://docs.convex.dev/components/authoring#environment-variables), bundles the flag-definitions refresh cron inside the component, and renames `POSTHOG_API_KEY` → `POSTHOG_PROJECT_TOKEN`.
+
+  **Breaking changes:**
+  - Requires Convex `^1.39.0` (peer dependency bumped).
+  - `POSTHOG_API_KEY` env var renamed to `POSTHOG_PROJECT_TOKEN`, to clearly differentiate the project token (`phc_…`) from `POSTHOG_PERSONAL_API_KEY` (`phx_…` / `phs_…`). `POSTHOG_PROJECT_TOKEN` is now required at deploy time (Convex env validation enforces it); v1 silently no-op'd missing-token event sends at runtime.
+  - `apiKey`, `host`, and `personalApiKey` no longer accepted on the `PostHog` client constructor — declare them as env vars on the component instead.
+  - `apiKey` and `host` are no longer arguments to the component's actions (`capture`, `identify`, `evaluateFlag`, etc.). `refreshFlagDefinitions` no longer takes any arguments.
+  - The refresh cron is now registered inside the component and only fires when `POSTHOG_PERSONAL_API_KEY` is set — delete any app-level `convex/crons.ts` that existed only to refresh PostHog flags.
+  - `posthog.refreshFlagDefinitions(ctx)` renamed to `posthog.reloadFeatureFlags(ctx)` for parity with `posthog-node`.
+  - Local-eval methods (`getFeatureFlag`, `isFeatureEnabled`, etc.) now **throw** when `POSTHOG_PERSONAL_API_KEY` isn't configured, pointing callers at the remote `evaluateFlag` methods. They still return `undefined` during the warm-up window when PAK is set but the cron hasn't fetched yet.
+  - New optional `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` env var lets you tune the cron cadence (default 60 seconds). Raise it on free-tier dev deployments to reduce function-call usage.
+
+  See the migration guide in the README for the full diff. (2026-05-27)
+
+## 1.0.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.12
+  - posthog-node@5.35.5
+
+## 1.0.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.11
+  - posthog-node@5.35.4
+
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+  - @posthog/core@1.29.10
+  - posthog-node@5.35.3
+
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [[`5d7a2d3`](https://github.com/PostHog/posthog-js/commit/5d7a2d336befb9c2b7be9ff1961d674623d33901)]:
+  - posthog-node@5.35.2
+
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+  - posthog-node@5.35.1
+
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [[`18ea8b5`](https://github.com/PostHog/posthog-js/commit/18ea8b53f608607075c93bc18b29be8dfd41eb3f)]:
+  - posthog-node@5.35.0
+  - @posthog/core@1.29.8
+
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [[`f42f371`](https://github.com/PostHog/posthog-js/commit/f42f3710f8e8788ecffce742face8ad34db3ef1c)]:
+  - posthog-node@5.34.10
+
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.7
+  - posthog-node@5.34.9
+
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [[`12ef3f6`](https://github.com/PostHog/posthog-js/commit/12ef3f63d18831b8ceffe7e81cea07d0c8a392a7)]:
+  - posthog-node@5.34.8
+
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/core@1.29.6
+  - posthog-node@5.34.7
+
 ## 1.0.0
 
 ### Major Changes

@@ -85,21 +85,26 @@ export class ScrollManager {
         }
     }
 
-    public scrollY(): number {
+    private _scrollPosition(axis: 'x' | 'y'): number {
+        const elementKey = axis === 'y' ? 'scrollTop' : 'scrollLeft'
         if (this._scrollRoot) {
             const element = this.scrollElement()
-            return (element && element.scrollTop) || 0
-        } else {
-            return window ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0 : 0
+            return (element && element[elementKey]) || 0
         }
+
+        if (!window) {
+            return 0
+        }
+        return axis === 'y'
+            ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0
+            : window.scrollX || window.pageXOffset || window.document.documentElement.scrollLeft || 0
+    }
+
+    public scrollY(): number {
+        return this._scrollPosition('y')
     }
 
     public scrollX(): number {
-        if (this._scrollRoot) {
-            const element = this.scrollElement()
-            return (element && element.scrollLeft) || 0
-        } else {
-            return window ? window.scrollX || window.pageXOffset || window.document.documentElement.scrollLeft || 0 : 0
-        }
+        return this._scrollPosition('x')
     }
 }

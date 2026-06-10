@@ -1,5 +1,353 @@
 # posthog-js
 
+## 1.384.2
+
+### Patch Changes
+
+- [#3789](https://github.com/PostHog/posthog-js/pull/3789) [`d9462b3`](https://github.com/PostHog/posthog-js/commit/d9462b3567a0b7c9b755552c303814b6fcbe3a97) Thanks [@marandaneto](https://github.com/marandaneto)! - Deprecate `__preview_eager_load_replay` as a no-op now that session replay lazy loading is the default.
+  (2026-06-10)
+- Updated dependencies [[`d9462b3`](https://github.com/PostHog/posthog-js/commit/d9462b3567a0b7c9b755552c303814b6fcbe3a97)]:
+    - @posthog/types@1.384.2
+    - @posthog/core@1.31.2
+
+## 1.384.1
+
+### Patch Changes
+
+- [#3787](https://github.com/PostHog/posthog-js/pull/3787) [`0e22d77`](https://github.com/PostHog/posthog-js/commit/0e22d778a439188f32294b5932194efe86ad1e6a) Thanks [@TueHaulund](https://github.com/TueHaulund)! - replayer: stop corrupting recordings when events are added behind the playhead. `addEvent()` used to apply any event older than the playback baseline synchronously onto the current DOM — correct for live-mode catch-up, but wrong for on-demand playback where snapshot chunks can finish loading after the user has seeked ahead. Applying those past mutations onto a DOM at a different position made their `removes` fail mirror lookups, and `applyMutation` then deleted the failed entries from the event objects themselves, so every later seek rebuilt from corrupted data (DOM nodes accumulating, e.g. duplicated text) and exports serialized the stripped events. Past events are now only applied synchronously in live mode (otherwise they are just inserted for the next seek to pick up), and `applyMutation` filters removes into a local copy instead of mutating the event data.
+  (2026-06-10)
+- Updated dependencies []:
+    - @posthog/types@1.384.1
+    - @posthog/core@1.31.1
+
+## 1.384.0
+
+### Minor Changes
+
+- [#3782](https://github.com/PostHog/posthog-js/pull/3782) [`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect the Google Search App (GSA) as its own `$browser` value (`Google Search App`) via the cross-platform `GSA/` UA marker, instead of reporting the embedded webview as Mobile Safari (iOS) or Chrome (Android). Gated behind the new `detect_google_search_app` config option, which the `2026-05-30` config defaults opt into automatically — left off otherwise to keep existing browser attribution backwards-compatible.
+
+    Note: `$browser_version` for `Google Search App` is not comparable across platforms — iOS yields a version like `284.0` (from `GSA/284.0.564099828`) while Android yields a version like `14.21` (from `GSA/14.21.20.28.arm64`), since Google maintains separate versioning schemes for the two apps. Avoid building cross-platform version dashboards on `$browser_version` for this browser. (2026-06-10)
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+    - @posthog/core@1.31.0
+    - @posthog/types@1.384.0
+
+## 1.383.3
+
+### Patch Changes
+
+- [#3776](https://github.com/PostHog/posthog-js/pull/3776) [`783ba46`](https://github.com/PostHog/posthog-js/commit/783ba461b0916c3f379c227d08470687d38d0768) Thanks [@marandaneto](https://github.com/marandaneto)! - Deprecate the no-op `__preview_flags_v2` browser SDK config option. The SDK already uses the `/flags/?v=2` endpoint by default.
+  (2026-06-09)
+- Updated dependencies [[`783ba46`](https://github.com/PostHog/posthog-js/commit/783ba461b0916c3f379c227d08470687d38d0768)]:
+    - @posthog/types@1.383.3
+    - @posthog/core@1.30.14
+
+## 1.383.2
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies []:
+    - @posthog/types@1.383.2
+    - @posthog/core@1.30.13
+
+## 1.383.1
+
+### Patch Changes
+
+- [#3770](https://github.com/PostHog/posthog-js/pull/3770) [`e481b0c`](https://github.com/PostHog/posthog-js/commit/e481b0c9c52b5f67dba351f7f140958f99da9854) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Respect `capture_pageview: false` when opting out in cookieless `on_reject` mode.
+  (2026-06-08)
+- Updated dependencies []:
+    - @posthog/types@1.383.1
+    - @posthog/core@1.30.12
+
+## 1.383.0
+
+### Minor Changes
+
+- [#3771](https://github.com/PostHog/posthog-js/pull/3771) [`227c9b0`](https://github.com/PostHog/posthog-js/commit/227c9b03c19dcb93d9a15abb1ee6b9523d366767) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - feat(persistence): add `split_storage` config option to store the feature-flag config cluster in its own localStorage entry (`<name>__flags`) instead of the single main persistence blob. This payload is large and changes rarely, so keeping it out of the main blob stops it riding on every high-frequency main-blob write and broadcasting on cross-tab `storage` events. Reads are unchanged: on load the entry is merged back into the in-memory props, and the old main-blob location is read once and migrated forward so upgrades never miss a cached flag. The split only applies when persistence resolves to `localStorage` / `localStorage+cookie` (it is pointless for `memory` / `sessionStorage` and impossible for `cookie`), and `reset()` / opt-out wipe every entry. Defaults to `false` for backwards compatibility; the new `2026-05-30` config default opts in automatically.
+  (2026-06-08)
+
+- [#3727](https://github.com/PostHog/posthog-js/pull/3727) [`393f9e2`](https://github.com/PostHog/posthog-js/commit/393f9e2a4697c6ffe52402cad6fb8550b48b5e00) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(surveys): extend `split_storage` to also move the survey config (`$surveys`) out of the main persistence blob into its own `<name>__surveys` localStorage entry, on top of the feature-flag split. Surveys now stamp a `$surveys_loaded_at` freshness timestamp on every `/surveys` load — the survey analogue of `$feature_flag_evaluated_at` — so a stale `__surveys` entry can no longer win over a fresher survey payload written back into the main blob by a gate-off / older-SDK tab. With no timestamp on either side (migration leftover) the group entry still wins, so the migration path is unchanged. Same backend and `reset()` / opt-out semantics as the flag split.
+  (2026-06-08)
+
+### Patch Changes
+
+- Updated dependencies [[`227c9b0`](https://github.com/PostHog/posthog-js/commit/227c9b03c19dcb93d9a15abb1ee6b9523d366767), [`393f9e2`](https://github.com/PostHog/posthog-js/commit/393f9e2a4697c6ffe52402cad6fb8550b48b5e00)]:
+    - @posthog/types@1.383.0
+    - @posthog/core@1.30.11
+
+## 1.382.0
+
+### Minor Changes
+
+- [#3749](https://github.com/PostHog/posthog-js/pull/3749) [`9877710`](https://github.com/PostHog/posthog-js/commit/98777104a586651f27c0838c7377209e556d5511) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop classifying intentional repeated clicks as rageclicks. From the `2026-05-30` config defaults, rageclick detection now ignores:
+    - text-editing surfaces (`textarea`, text-like `input`s, and `contenteditable` elements), where rapid clicks are double/triple-click text selection rather than rage (`rageclick.ignore_text_selection`)
+    - `+`/`-` stepper buttons, added to the default `content_ignorelist`
+
+    Symbol-only keywords in `content_ignorelist` (e.g. `+`, `-`, `>`, `<`) now match the element's text exactly instead of as a substring, so labels like `sign-up`, `5 > 3`, or `C++` are no longer treated as repeatedly-clicked controls. The heatmaps rageclick marker now applies the same suppression as the `$rageclick` event.
+
+    A partial `rageclick` config object is now merged with the date-gated defaults instead of replacing them, so e.g. `rageclick: { threshold_px: 50 }` keeps the default `content_ignorelist` / `ignore_text_selection`. Pass an explicit value (e.g. `content_ignorelist: false`) to override a specific default, or a boolean to opt out entirely.
+
+    **Behaviour change for existing `content_ignorelist: true` users (available since `2025-11-30`):** the default list already includes `>` and `<`. After this release, buttons whose text _contains_ `>` or `<` but is not exactly that symbol (e.g. `Learn more >`, `< Back`, `home > settings`) will no longer be suppressed. Bare `>` and `<` buttons remain suppressed. This is the intended fix, but if you rely on the old substring behaviour for those keywords, replace `content_ignorelist: true` with an explicit array listing the exact terms you want to suppress. (2026-06-06)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.382.0
+    - @posthog/core@1.30.10
+
+## 1.381.0
+
+### Minor Changes
+
+- [#3719](https://github.com/PostHog/posthog-js/pull/3719) [`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446) Thanks [@lricoy](https://github.com/lricoy)! - Add `__preview_cookie_wins_on_conflict` opt-in config to prefer cookie values over localStorage when merging persistence state in `localStorage+cookie` mode, fixing cross-subdomain identify and session disconnects.
+  (2026-06-05)
+
+### Patch Changes
+
+- Updated dependencies [[`a7bd828`](https://github.com/PostHog/posthog-js/commit/a7bd828050d070e1b88eb69c3f9db71c5d08f446)]:
+    - @posthog/types@1.381.0
+    - @posthog/core@1.30.9
+
+## 1.380.1
+
+### Patch Changes
+
+- [#3743](https://github.com/PostHog/posthog-js/pull/3743) [`ced0039`](https://github.com/PostHog/posthog-js/commit/ced00399ed5f44018412d4b4bb214b8252e48bdb) Thanks [@robbie-c](https://github.com/robbie-c)! - fix(surveys): stop the survey CSS from using `:has(.survey-question:empty)`, which crashes some WebKit builds during text-node style invalidation while a survey renders. The empty-header margin tweak now keys off a JS-set `question-header--empty` class and a sibling selector instead.
+  (2026-06-05)
+- Updated dependencies []:
+    - @posthog/types@1.380.1
+    - @posthog/core@1.30.8
+
+## 1.380.0
+
+### Minor Changes
+
+- [#3715](https://github.com/PostHog/posthog-js/pull/3715) [`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Promote browser tracing header configuration to the public `tracing_headers` option while keeping `addTracingHeaders` and `__add_tracing_headers` as deprecated aliases.
+  (2026-06-04)
+
+### Patch Changes
+
+- [#3715](https://github.com/PostHog/posthog-js/pull/3715) [`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - When using tracing headers, `X-POSTHOG-DISTINCT-ID` is read at request time instead of when fetch/XHR is patched, ensuring it reflects bootstrap, identify, reset, and other identity changes.
+  (2026-06-04)
+- Updated dependencies [[`2387084`](https://github.com/PostHog/posthog-js/commit/2387084d4d7e28c606a0b0ab23ac0762dcf904d7)]:
+    - @posthog/types@1.380.0
+    - @posthog/core@1.30.7
+
+## 1.379.3
+
+### Patch Changes
+
+- [#3741](https://github.com/PostHog/posthog-js/pull/3741) [`32de5d2`](https://github.com/PostHog/posthog-js/commit/32de5d2a061f04dc852b1cf31f63af5b86121f46) Thanks [@clr182](https://github.com/clr182)! - logs: the console-log integration now respects `opt_out_capturing()` — it checks `is_capturing()` before emitting, so log events stop on opt-out (and resume on opt-in).
+  (2026-06-04)
+- Updated dependencies []:
+    - @posthog/types@1.379.3
+    - @posthog/core@1.30.6
+
+## 1.379.2
+
+### Patch Changes
+
+- [#3736](https://github.com/PostHog/posthog-js/pull/3736) [`374962a`](https://github.com/PostHog/posthog-js/commit/374962a01267a37e9dedf44e0848ece4b3562749) Thanks [@arnohillen](https://github.com/arnohillen)! - replay: re-apply scroll positions after fast-forward/seek. Scrolls applied mid-catch-up could clamp to 0 when the target wasn't scrollable yet (e.g. scroll-revealed sheets/modals whose content sits below the fold), leaving the content scrolled out of view on replay. The last scroll per node is now re-applied in the flush stage once layout has settled. `posthog-js` is bumped too so the rebuilt bundle containing the fix is published.
+  (2026-06-03)
+- Updated dependencies []:
+    - @posthog/types@1.379.2
+    - @posthog/core@1.30.5
+
+## 1.379.1
+
+### Patch Changes
+
+- [#3570](https://github.com/PostHog/posthog-js/pull/3570) [`4a27ced`](https://github.com/PostHog/posthog-js/commit/4a27ced9567cf6aa6d5044fe3a0378f730661cfe) Thanks [@gruessi](https://github.com/gruessi)! - fix(record): release iframe documents and observers on iframe removal — same-origin iframes mounted and unmounted while session recording is active no longer leak their `Document`, every node serialized into the mirror, or one `MutationObserver` per mount. Closes eight retainer chains: load-listener disposers, named pagehide handlers, the `recordCrossOriginIframes` cleanup gate (now applied to same-origin too), captured `Document` / `Window` sets that survive `iframe.src` swap-to-`about:blank` before removal, and the global `mutationBuffers[]` / `handlers[]` arrays which previously accumulated forever. Validated end-to-end: a host page that mounts/unmounts 5 blob-URL iframes every 2s for 110s went from +118 MB / +390 leaked `HTMLDocument`s to ~0 MB / 0.
+  (2026-06-03)
+
+- [#3717](https://github.com/PostHog/posthog-js/pull/3717) [`1688b38`](https://github.com/PostHog/posthog-js/commit/1688b380a27a57d6439d0bca936019a3fd6d63e2) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Move the OpenTelemetry logs dependencies to `devDependencies`. They are only used to build the CDN-served `logs` extension chunk, which inlines them, so consumers no longer install the transitive `protobufjs` (whose `eval("require")` tripped `unsafe-eval` Content Security Policies).
+
+    If you imported `@opentelemetry/*` directly while relying on it being hoisted from `posthog-js`, add it to your own dependencies. (2026-06-03)
+
+- Updated dependencies []:
+    - @posthog/types@1.379.1
+    - @posthog/core@1.30.4
+
+## 1.379.0
+
+### Minor Changes
+
+- [#3722](https://github.com/PostHog/posthog-js/pull/3722) [`c487070`](https://github.com/PostHog/posthog-js/commit/c48707071586135de3357bf94e4165605c93e321) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `$sdk_dist_channel` event property for browser SDK `npm` and `cdn` distribution channels.
+  (2026-06-02)
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/types@1.379.0
+    - @posthog/core@1.30.3
+
+## 1.378.1
+
+### Patch Changes
+
+- [#3706](https://github.com/PostHog/posthog-js/pull/3706) [`8fcf40d`](https://github.com/PostHog/posthog-js/commit/8fcf40d3798a107f446dd75b13b81088eac1ab2c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix(browser): avoid exposing internally-created Request bodies to downstream fetch wrappers in Safari.
+  (2026-06-01)
+- Updated dependencies []:
+    - @posthog/types@1.378.1
+    - @posthog/core@1.30.2
+
+## 1.378.0
+
+### Minor Changes
+
+- [#3688](https://github.com/PostHog/posthog-js/pull/3688) [`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(persistence): add `persistence_save_debounce_ms` config option to coalesce rapid storage saves into a single write. Setting a positive value debounces writes to localStorage/cookie by that window; the in-memory `props` object still updates synchronously so within-tab reads see the latest values immediately, and pending writes flush on `beforeunload` and `pagehide` so no state is lost on tab close. Cross-tab `storage` events are reduced proportionally to the debounce window. Defaults to `0` (no debouncing) for backwards compatibility. On pages that capture many events per second, `250` is a reasonable starting point. The new `2026-05-30` config default opts into `persistence_save_debounce_ms: 250` automatically.
+  (2026-06-01)
+
+### Patch Changes
+
+- Updated dependencies [[`8181354`](https://github.com/PostHog/posthog-js/commit/8181354cae602f3f2b5e8c5b5bcd2e090e25edcc)]:
+    - @posthog/types@1.378.0
+    - @posthog/core@1.30.1
+
+## 1.377.0
+
+### Minor Changes
+
+- [#3708](https://github.com/PostHog/posthog-js/pull/3708) [`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect Brave (desktop, Android, iOS), Vivaldi, Yandex, Naver Whale, DuckDuckGo, Pale Moon, and Waterfox so users on these browsers no longer get bucketed as Chrome or Firefox.
+
+    `detectBrowser` / `detectBrowserVersion` now accept an optional third argument, `BrowserDetectionHints`, with a `brave` flag (set when `navigator.brave` exists). The browser SDK populates this automatically to catch desktop / Android Brave, which is Chromium-based and carries no UA marker. Brave on iOS is picked up purely from the `Brave/` UA marker — WebKit doesn't ship `navigator.brave`. The original two-argument signature still works for non-DOM callers. (2026-06-01)
+
+### Patch Changes
+
+- [#3703](https://github.com/PostHog/posthog-js/pull/3703) [`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45) Thanks [@marandaneto](https://github.com/marandaneto)! - Disable/no-op initialization paths instead of throwing or sending requests when PostHog project tokens are missing or blank.
+  (2026-06-01)
+- Updated dependencies [[`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+    - @posthog/core@1.30.0
+    - @posthog/types@1.377.0
+
+## 1.376.6
+
+### Patch Changes
+
+- [#3687](https://github.com/PostHog/posthog-js/pull/3687) [`663e250`](https://github.com/PostHog/posthog-js/commit/663e250b10df6bcadf42b7938fa3a77fb91f427b) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(persistence): skip the storage write when the serialized props are unchanged. Callers spam `save()` after every property change, and many of those changes leave the serialized payload identical (e.g. resetting a value to its current value). Writing identical bytes to localStorage still fires a cross-tab `storage` event in every same-origin tab, where Chrome allocates the payload buffer in mojo IPC even though no listener reacts. Now `save()` compares the serialized payload against the last successful write and bails out when nothing changed.
+  (2026-05-31)
+- Updated dependencies []:
+    - @posthog/types@1.376.6
+    - @posthog/core@1.29.15
+
+## 1.376.5
+
+### Patch Changes
+
+- [#3686](https://github.com/PostHog/posthog-js/pull/3686) [`66cbc59`](https://github.com/PostHog/posthog-js/commit/66cbc5987427d539999834a2db3f0110ba6bd8c5) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(persistence): throttle session-activity timestamp writes to a 5s granularity. The in-memory value still moves at full resolution; only writes to localStorage/cookie are coalesced. Activity-timestamp-only updates within the granularity window are skipped, dropping localStorage write pressure and cross-tab `storage` event broadcasts on pages that capture many events per second. The pending in-memory value is flushed on `destroy` and `beforeunload` so a tab close inside the window does not leave the persisted value up to 5s stale for sibling tabs. The flush re-reads storage first and bails out if a sibling tab has rotated the session, so the flush cannot clobber the new session with the old id/start.
+  (2026-05-31)
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+    - @posthog/core@1.29.14
+    - @posthog/types@1.376.5
+
+## 1.376.4
+
+### Patch Changes
+
+- [#3685](https://github.com/PostHog/posthog-js/pull/3685) [`f59f35a`](https://github.com/PostHog/posthog-js/commit/f59f35ac5a6a0aa98be5f3ea3b88370df8d398aa) Thanks [@ioannisj](https://github.com/ioannisj)! - fix(cookieless): enable request queue when opting out in `on_reject` mode. When using `cookieless_mode: "on_reject"`, calling `opt_out_capturing()` correctly switched the SDK into cookieless capturing but never enabled the `RequestQueue` — so batched events were enqueued but never flushed over the network. At init time the queue was not started because consent was `PENDING` and `is_capturing()` returned `false`; `opt_out_capturing()` is the first moment capturing becomes active but was missing the `_start_queue_if_opted_in()` call that `opt_in_capturing()` already had.
+  (2026-05-28)
+
+- [#3692](https://github.com/PostHog/posthog-js/pull/3692) [`f01cd93`](https://github.com/PostHog/posthog-js/commit/f01cd939e096820b84666a463a61775ef69ce4c4) Thanks [@ksvat](https://github.com/ksvat)! - fix(replay): take a fresh full snapshot after session ID rotates via `forcedIdleReset`. Previously, when the session manager's idle enforcement timer rotated the session id, the recorder tore down rrweb and set `_isIdle = 'unknown'` before the new session id was observed. Neither restart path then fired (the `_onSessionIdCallback` guard only restarted when `_isIdle === true`, and `_updateWindowAndSessionIds` could not run with rrweb stopped), so the new session received only incremental mutations until a later snapshot — leaving the player stuck on "Buffering". The restart guard now also fires when rrweb isn't running.
+  (2026-05-28)
+
+- [#3691](https://github.com/PostHog/posthog-js/pull/3691) [`cc71f3f`](https://github.com/PostHog/posthog-js/commit/cc71f3fa1f87838c28a68e593cd3f274f63db397) Thanks [@ksvat](https://github.com/ksvat)! - fix(replay): ship `ph-no-capture` absolute-position fix from #3678 to `posthog-js`. The original changeset only bumped `@posthog/rrweb` and `@posthog/rrweb-snapshot`; because `posthog-js` depends on `@posthog/rrweb` via `workspace:*`, the cascade did not bump `posthog-js`, so the rebuilt bundle containing the fix was not published. This changeset re-publishes `posthog-js` with the fix.
+  (2026-05-28)
+
+- [#3695](https://github.com/PostHog/posthog-js/pull/3695) [`e1ff722`](https://github.com/PostHog/posthog-js/commit/e1ff722bf0bd333ffdf5d077f8f60893aaf7ef5e) Thanks [@ksvat](https://github.com/ksvat)! - chore(replay): expose `$sdk_debug_rrweb_attached` and `$sdk_debug_rrweb_start_attempted` debug properties on captured events. Today the SDK already stamps several `$sdk_debug_*` properties (start reason, linked-flag trigger status, recording status) that report the SDK's _intent_ to record — they all flip to "active" as soon as the state machine evaluates the configured triggers. None of them observe whether rrweb actually attached and is producing events. The new booleans close that gap: `$sdk_debug_rrweb_start_attempted` is set when `_startRecorder()` is first entered, and `$sdk_debug_rrweb_attached` reflects whether `_stopRrweb` is currently a non-falsy stop handle (i.e. `rrwebRecord({...})` returned successfully and the recorder has not been torn down). No behavior change — this only adds two booleans to the existing `sdkDebugProperties` channel, used to diagnose cases where a session reports `trigger_activated` / `recording_status: active` but no `$snapshot` data is ever uploaded.
+  (2026-05-28)
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+    - @posthog/core@1.29.13
+    - @posthog/types@1.376.4
+
+## 1.376.3
+
+### Patch Changes
+
+- [#3649](https://github.com/PostHog/posthog-js/pull/3649) [`9cac1f6`](https://github.com/PostHog/posthog-js/commit/9cac1f650ed994a067bbffc5ec16b6d4dc65254f) Thanks [@marandaneto](https://github.com/marandaneto)! - Improve console log serialization performance for large objects.
+  (2026-05-27)
+- Updated dependencies []:
+    - @posthog/types@1.376.3
+    - @posthog/core@1.29.12
+
+## 1.376.2
+
+### Patch Changes
+
+- [#3667](https://github.com/PostHog/posthog-js/pull/3667) [`cafa9cc`](https://github.com/PostHog/posthog-js/commit/cafa9cc786a07613677ec16f2fc9f0c4e833a12c) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(replay): stop polling preload-as-style `<link>` elements forever. Session recorder treated `<link rel="preload" as="style" href="*.css">` as if it were a stylesheet and waited for `link.sheet` to populate. Per spec preload links never instantiate a `CSSStyleSheet`, so the wait timed out, re-serialized the link, scheduled another wait, and leaked a `load` listener on every cycle — multiplying further on every real `load` event. Pages with Next.js-style CSS preloads accumulated thousands of active polling chains, saturating the main thread and freezing the tab on refocus
+  (2026-05-26)
+- Updated dependencies []:
+    - @posthog/types@1.376.2
+    - @posthog/core@1.29.11
+
+## 1.376.1
+
+### Patch Changes
+
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+    - @posthog/core@1.29.10
+    - @posthog/types@1.376.1
+
+## 1.376.0
+
+### Minor Changes
+
+- [#3655](https://github.com/PostHog/posthog-js/pull/3655) [`6e8d349`](https://github.com/PostHog/posthog-js/commit/6e8d3495d0a29076aeea5220e19e646aeb7f063f) Thanks [@arnaudhillen](https://github.com/arnaudhillen)! - Expose the in-repo `@posthog/rrweb`, `@posthog/rrweb-types`, and `@posthog/rrweb-plugin-console-record` packages as subpath entry points on `posthog-js`. Consumers can now `import { Replayer } from 'posthog-js/rrweb'`, `import type { eventWithTime } from 'posthog-js/rrweb-types'`, and `import { LogLevel } from 'posthog-js/rrweb-plugin-console-record'` instead of installing the underlying rrweb packages directly. The rrweb worker sourcemap (`image-bitmap-data-url-worker-*.js.map`) is also shipped from `posthog-js/dist/` so downstream bundlers no longer need to reach into `node_modules/@posthog/rrweb`.
+  (2026-05-22)
+
+### Patch Changes
+
+- [#3639](https://github.com/PostHog/posthog-js/pull/3639) [`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda) Thanks [@marandaneto](https://github.com/marandaneto)! - Use native async gzip compression for session recording events when CompressionStream is available.
+  (2026-05-22)
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+    - @posthog/core@1.29.9
+    - @posthog/types@1.376.0
+
+## 1.375.0
+
+### Minor Changes
+
+- [#3641](https://github.com/PostHog/posthog-js/pull/3641) [`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `flag_keys` config to restrict browser feature flag remote evaluation to specific flag keys.
+  (2026-05-21)
+
+### Patch Changes
+
+- Updated dependencies [[`2e1d5f4`](https://github.com/PostHog/posthog-js/commit/2e1d5f4081c98a04e6a16f57e42491911453994d)]:
+    - @posthog/types@1.375.0
+    - @posthog/core@1.29.8
+
+## 1.374.4
+
+### Patch Changes
+
+- [#3638](https://github.com/PostHog/posthog-js/pull/3638) [`87e2145`](https://github.com/PostHog/posthog-js/commit/87e2145b5d09ed8a24df1fc337dad5c3c90c1b8a) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply tracing headers to matching XMLHttpRequest requests
+  (2026-05-21)
+
+- [#3646](https://github.com/PostHog/posthog-js/pull/3646) [`4f87827`](https://github.com/PostHog/posthog-js/commit/4f87827dda9c102a6deded986f2afd9fdddfb2e5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid throwing or initializing PostHogProvider when no API key or client is provided
+  (2026-05-21)
+
+- [#3645](https://github.com/PostHog/posthog-js/pull/3645) [`280832b`](https://github.com/PostHog/posthog-js/commit/280832b50b4c058e010436c4aab861cb143577c1) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Capture `<link rel="stylesheet">` URLs from `link.sheet.href` and try `link.sheet` directly for inlining, so recordings survive SPA `history.pushState` navigations between routes of different path depths (where `link.href` re-resolves against a new baseURI but `link.sheet.href` preserves the URL the browser actually fetched).
+
+    Ships the fix landed in #3635, which only bumped the internal `@posthog/rrweb-snapshot` package — that package is bundled into `posthog-js` at build time but is not published to npm on its own, so a `posthog-js` bump is needed to actually deliver the change. (2026-05-21)
+
+- Updated dependencies []:
+    - @posthog/types@1.374.4
+    - @posthog/core@1.29.7
+
+## 1.374.3
+
+### Patch Changes
+
+- [#3607](https://github.com/PostHog/posthog-js/pull/3607) [`557b893`](https://github.com/PostHog/posthog-js/commit/557b8934aa0b990184e0376fb1fc28433ad336c6) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Enable $web_vitals reporting when cookieless mode is enabled
+  (2026-05-20)
+- Updated dependencies [[`557b893`](https://github.com/PostHog/posthog-js/commit/557b8934aa0b990184e0376fb1fc28433ad336c6), [`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+    - @posthog/types@1.374.3
+    - @posthog/core@1.29.6
+
 ## 1.374.2
 
 ### Patch Changes

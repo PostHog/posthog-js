@@ -286,10 +286,12 @@
 }
 
 .survey-box {
-    /* Adjust margin if question/description is empty */
-    &:has(.survey-question:empty):not(:has(.survey-question-description)) {
-        & .multiple-choice-options,
-        & textarea {
+    /* Adjust margin when the question header is empty (no title or description).
+       Keyed off a JS-set class rather than :has(.survey-question:empty), which
+       crashes some WebKit builds during text-node style invalidation. */
+    & .question-header--empty {
+        & ~ .multiple-choice-options,
+        & ~ textarea {
             margin-top: 0;
         }
     }

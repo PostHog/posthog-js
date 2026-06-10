@@ -167,6 +167,10 @@ export class Replayer {
   // In the fast-forward mode, only the last selection data needs to be applied.
   private lastSelectionData: selectionData | null = null;
 
+  // Last scroll per node during fast-forward. A scroll applied before its target is scrollable
+  // clamps to 0, so it's re-applied in the flush stage once layout has settled.
+  private lastScrollMap: Map<number, scrollData> = new Map();
+
   // In the fast-forward mode using VirtualDom optimization, all stylesheetRule, and styleDeclaration events on constructed StyleSheets will be delayed to get applied until the flush stage.
   private constructedStyleMutations: (
     | styleSheetRuleData
@@ -337,6 +341,14 @@ export class Replayer {
         this.applySelection(this.lastSelectionData);
         this.lastSelectionData = null;
       }
+
+      // Re-apply scrolls that clamped mid-fast-forward, now that layout has settled.
+      if (this.lastScrollMap.size) {
+        this.lastScrollMap.forEach((d) => {
+          this.applyScroll(d, true);
+        });
+        this.lastScrollMap.clear();
+      }
     };
     this.addEmitterHandler(ReplayerEvents.Flush, flushHandler);
 
@@ -345,6 +357,7 @@ export class Replayer {
       this.mirror.reset();
       this.styleMirror.reset();
       this.mediaManager.reset();
+      this.lastScrollMap.clear();
     };
     this.addEmitterHandler(ReplayerEvents.PlayBack, playBackHandler);
 
@@ -646,7 +659,13 @@ export class Replayer {
       this.mouse.classList.add('touch-device');
     }
     void Promise.resolve().then(() =>
-      this.service.send({ type: 'ADD_EVENT', payload: { event } }),
+      this.service.send({
+        type: 'ADD_EVENT',
+        payload: {
+          event,
+          applyPastEventSynchronously: this.config.liveMode,
+        },
+      }),
     );
   }
 
@@ -1327,6 +1346,10 @@ export class Replayer {
         if (d.id === -1) {
           break;
         }
+        // Recorded for the flush-stage re-apply (covers both fast-forward paths).
+        if (isSync) {
+          this.lastScrollMap.set(d.id, d);
+        }
         if (this.usingVirtualDom) {
           const target = this.virtualDom.mirror.getNode(d.id) as RRElement;
           if (!target) {
@@ -1488,7 +1511,10 @@ export class Replayer {
     const mirror = this.usingVirtualDom ? this.virtualDom.mirror : this.mirror;
     type TNode = typeof mirror extends Mirror ? Node : RRNode;
 
-    d.removes = d.removes.filter((mutation) => {
+    // filter into a local copy — never mutate the event data itself, as the
+    // caller's events array must stay intact for later seeks (a rebuild from
+    // an event whose removes were dropped renders accumulated stale nodes)
+    const validRemoves = d.removes.filter((mutation) => {
       // warn of absence from mirror before we start applying each removal
       // as earlier removals could remove a tree that includes a later removal
       if (!mirror.getNode(mutation.id)) {
@@ -1497,7 +1523,7 @@ export class Replayer {
       }
       return true;
     });
-    d.removes.forEach((mutation) => {
+    validRemoves.forEach((mutation) => {
       const target = mirror.getNode(mutation.id);
       if (!target) {
         // no need to warn here, an ancestor may have already been removed

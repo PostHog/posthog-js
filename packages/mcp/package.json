@@ -1,0 +1,74 @@
+{
+  "name": "@posthog/mcp",
+  "version": "0.1.22",
+  "description": "PostHog SDK for Model Context Protocol (MCP) servers — tracks tool usage, intent, and identity",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/mcp"
+  },
+  "scripts": {
+    "clean": "rimraf dist coverage",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "generate-version": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "pretest:unit": "pnpm generate-version",
+    "test:unit": "jest",
+    "prebuild": "pnpm generate-version",
+    "build": "rslib build",
+    "dev": "rslib build -w",
+    "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "engines": {
+    "node": "^20.20.0 || >=22.22.0"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/__tests__"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "PostHog",
+    "email": "engineering@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@posthog/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "catalog:",
+    "@babel/preset-typescript": "catalog:",
+    "@modelcontextprotocol/sdk": "~1.29.0",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@rslib/core": "catalog:",
+    "@types/jest": "catalog:",
+    "@types/node": "^20.0.0",
+    "jest": "catalog:",
+    "posthog-node": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": ">=1.26.0",
+    "posthog-node": "^5.0.0"
+  },
+  "keywords": [
+    "posthog",
+    "mcp",
+    "model-context-protocol",
+    "analytics",
+    "llm"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  }
+}

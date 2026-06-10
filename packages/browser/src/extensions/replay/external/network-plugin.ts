@@ -1,3 +1,7 @@
+// Portions of this file are derived from getsentry/sentry-javascript
+// Copyright (c) 2012 Functional Software, Inc. dba Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
+
 /// <reference lib="dom" />
 
 // rrweb/network@1 code starts
@@ -11,7 +15,17 @@
 
 import type { IWindow, listenerHandler, RecordPlugin } from '../types/rrweb-types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
-import { isArray, isBoolean, isFormData, isNull, isNullish, isString, isUndefined, isObject } from '@posthog/core'
+import {
+    isArray,
+    isBoolean,
+    isFormData,
+    isFunction,
+    isNull,
+    isNullish,
+    isString,
+    isUndefined,
+    isObject,
+} from '@posthog/core'
 import { isDocument } from '../../../utils/type-utils'
 import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
@@ -108,6 +122,20 @@ function shouldRecordHeaders(type: 'request' | 'response', recordHeaders: Networ
     return !!recordHeaders && (isBoolean(recordHeaders) || recordHeaders[type])
 }
 
+function isRequest(value: unknown): value is Request {
+    if (typeof Request === 'undefined') {
+        return false
+    }
+    if (value instanceof Request) {
+        return true
+    }
+    try {
+        return Object.prototype.toString.call(value) === '[object Request]'
+    } catch {
+        return false
+    }
+}
+
 export function shouldRecordBody({
     type,
     recordBody,
@@ -139,7 +167,7 @@ export function shouldRecordBody({
             if (url instanceof URL) {
                 return url.protocol === 'blob:'
             }
-            if (url instanceof Request) {
+            if (isRequest(url)) {
                 return isBlobURL(url.url)
             }
             return false
@@ -489,6 +517,10 @@ function _checkForCannotReadResponseBody({
     return null
 }
 
+function isReadableStreamBody(body: unknown): body is ReadableStream<Uint8Array> {
+    return isObject(body) && isFunction(body.getReader) && isFunction(body.tee)
+}
+
 function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
@@ -576,7 +608,11 @@ function initFetchObserver(
                 if (recordRequestHeaders) {
                     networkRequest.requestHeaders = requestHeaders
                 }
+                // Check the caller-supplied body, not req.body: Request normalizes all non-null bodies
+                // to a ReadableStream, but only an original ReadableStream would be locked by req.clone().text().
+                const requestBodyIsReadableStream = isReadableStreamBody(init?.body)
                 if (
+                    !requestBodyIsReadableStream &&
                     shouldRecordBody({
                         type: 'request',
                         headers: requestHeaders,
@@ -588,7 +624,11 @@ function initFetchObserver(
                 }
 
                 start = win.performance.now()
-                res = await originalFetch(req)
+                // Use `req` for recording metadata/body only. For fetch(url, init), do not pass this internally-created
+                // Request downstream: it exposes request.body as a ReadableStream, and wrappers that forward that body
+                // can trigger Safari's "ReadableStream uploading is not supported" error. For fetch(Request), we must
+                // pass the cloned Request because constructing `req` may consume the original Request body.
+                res = isRequest(url) ? await originalFetch(req) : await originalFetch(url, init)
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}

@@ -1,11 +1,14 @@
 /**
- * Experimental APIs
- *
- * This module exports experimental features that may change or be removed in minor versions.
- * Use these APIs with caution and be prepared for breaking changes.
+ * Deprecated experimental APIs.
  *
  * @packageDocumentation
- * @experimental
+ * @deprecated Use `import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'` instead.
  */
+
+const postHogNodeExperimentalDeprecationWarning =
+  "[PostHog] `posthog-node/experimental` is deprecated. Use `import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'` instead."
+
+// eslint-disable-next-line no-console
+console.warn(postHogNodeExperimentalDeprecationWarning)
 
 export type { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './extensions/feature-flags/cache'

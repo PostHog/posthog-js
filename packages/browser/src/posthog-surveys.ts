@@ -1,4 +1,4 @@
-import { LOAD_EXT_NOT_FOUND, SURVEYS } from './constants'
+import { LOAD_EXT_NOT_FOUND, SURVEYS, SURVEYS_LOADED_AT } from './constants'
 
 const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
 const SURVEY_DISABLED = 'Disabled. Not loading surveys.'
@@ -264,7 +264,10 @@ export class PostHogSurveys implements Extension {
                     this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
                 }
 
-                this._instance.persistence?.register({ [SURVEYS]: surveys })
+                // Stamp when these definitions were fetched so the split-storage
+                // loader can tell a fresher main-blob write-back from a stale
+                // `__surveys` entry (the survey analogue of $feature_flag_evaluated_at).
+                this._instance.persistence?.register({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
                 const context = { isLoaded: true }
                 callback(surveys, context)
                 resolvePromise?.({ surveys, context })

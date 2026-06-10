@@ -4,6 +4,9 @@ import {
     seekFirstNonPublicSubDomain,
     resetSubDomainCache,
     sessionStore,
+    createLocalPlusCookieStore,
+    cookieStore,
+    resetLocalStorageSupported,
 } from '../storage'
 
 describe('sessionStore', () => {
@@ -90,5 +93,26 @@ describe('sessionStore', () => {
         it('returns true by default', () => {
             expect(sessionStore._is_supported()).toEqual(true)
         })
+    })
+})
+
+describe('createLocalPlusCookieStore._set', () => {
+    beforeEach(() => {
+        resetLocalStorageSupported()
+        window?.localStorage.clear()
+    })
+
+    it('reports the localStorage write succeeded even when the cookie mirror throws', () => {
+        const store = createLocalPlusCookieStore()
+        // distinct_id is a cookie-persisted property, so the cookie path runs
+        const cookieSpy = jest.spyOn(cookieStore, '_set').mockImplementation(() => {
+            throw new Error('cookie write blew up')
+        })
+
+        const result = store._set('ph_x_posthog', { distinct_id: 'abc' }, undefined, undefined, undefined, false)
+
+        expect(result).toBe(true)
+        expect(JSON.parse(window?.localStorage.getItem('ph_x_posthog') as string)).toEqual({ distinct_id: 'abc' })
+        cookieSpy.mockRestore()
     })
 })

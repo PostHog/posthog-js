@@ -12,10 +12,23 @@ function mockSchedulerCtx() {
 }
 
 describe('PostHog client', () => {
-  test('constructor uses defaults from env', async () => {
-    process.env.POSTHOG_API_KEY = '  test-key\n'
-    process.env.POSTHOG_HOST = '  https://test.posthog.com\t '
+  test('constructor accepts no options', () => {
+    const posthog = new PostHog({} as never)
+    expect(posthog).toBeInstanceOf(PostHog)
+  })
 
+  test('constructor accepts identify and beforeSend callbacks', () => {
+    const posthog = new PostHog({} as never, {
+      identify: async () => null,
+      beforeSend: (event) => event,
+    })
+    expect(posthog).toBeInstanceOf(PostHog)
+  })
+
+  test('does not forward credentials to component calls (env-driven config)', async () => {
+    // Credentials live on the component as env vars (POSTHOG_PROJECT_TOKEN, POSTHOG_HOST,
+    // POSTHOG_PERSONAL_API_KEY) declared in convex.config.ts and read inside each action.
+    // The client must not plumb them through every call site.
     const component = { lib: { capture: 'capture_ref' } }
     const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
@@ -26,41 +39,13 @@ describe('PostHog client', () => {
     })
 
     const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
-    expect(args.apiKey).toBe('test-key')
-    expect(args.host).toBe('https://test.posthog.com')
-
-    delete process.env.POSTHOG_API_KEY
-    delete process.env.POSTHOG_HOST
-  })
-
-  test('constructor accepts explicit options', () => {
-    const posthog = new PostHog({} as never, {
-      apiKey: 'explicit-key',
-      host: 'https://custom.posthog.com',
-    })
-    expect(posthog).toBeInstanceOf(PostHog)
-  })
-
-  test('trims apiKey and host before scheduling events', async () => {
-    const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, {
-      apiKey: '  explicit-key\n',
-      host: '  https://custom.posthog.com/\t ',
-    })
-    const ctx = mockSchedulerCtx()
-
-    await posthog.capture(ctx as never, {
-      distinctId: 'user-1',
-      event: 'test-event',
-    })
-
-    const [, , args] = ctx.scheduler.runAfter.mock.calls[0]
-    expect(args.apiKey).toBe('explicit-key')
-    expect(args.host).toBe('https://custom.posthog.com/')
+    expect(args).not.toHaveProperty('apiKey')
+    expect(args).not.toHaveProperty('host')
+    expect(args).not.toHaveProperty('personalApiKey')
   })
 
   test('exposes capture, identify, groupIdentify, alias, captureException methods', () => {
-    const posthog = new PostHog({} as never, { apiKey: 'test' })
+    const posthog = new PostHog({} as never)
 
     expect(typeof posthog.capture).toBe('function')
     expect(typeof posthog.identify).toBe('function')
@@ -70,7 +55,7 @@ describe('PostHog client', () => {
   })
 
   test('exposes feature flag methods', () => {
-    const posthog = new PostHog({} as never, { apiKey: 'test' })
+    const posthog = new PostHog({} as never)
 
     expect(typeof posthog.getFeatureFlag).toBe('function')
     expect(typeof posthog.isFeatureEnabled).toBe('function')
@@ -78,6 +63,21 @@ describe('PostHog client', () => {
     expect(typeof posthog.getFeatureFlagResult).toBe('function')
     expect(typeof posthog.getAllFlags).toBe('function')
     expect(typeof posthog.getAllFlagsAndPayloads).toBe('function')
+  })
+
+  test('exposes reloadFeatureFlags method (parity with posthog-node)', () => {
+    const posthog = new PostHog({} as never)
+    expect(typeof posthog.reloadFeatureFlags).toBe('function')
+  })
+
+  test('reloadFeatureFlags forwards to the component refresh action with no args', async () => {
+    const component = { lib: { refreshFlagDefinitions: 'refresh_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = { runAction: jest.fn(async () => ({ status: 'updated' })) }
+
+    await posthog.reloadFeatureFlags(ctx as never)
+
+    expect(ctx.runAction).toHaveBeenCalledWith('refresh_ref', {})
   })
 
   test('getFeatureFlagPayload with matchValue does not require a distinctId', async () => {
@@ -105,13 +105,51 @@ describe('PostHog client', () => {
       cohorts: {},
     })
     const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = {
-      runQuery: jest.fn(async () => ({ data: definitions, fetchedAt: Date.now() })),
+      runQuery: jest.fn(async () => ({ localEvalConfigured: true, data: definitions, fetchedAt: Date.now() })),
     }
 
     const payload = await posthog.getFeatureFlagPayload(ctx as never, { key: 'flag', matchValue: 'red' })
     expect(payload).toBe('red-payload')
+  })
+})
+
+describe('local-eval configuration', () => {
+  // When `POSTHOG_PERSONAL_API_KEY` isn't set on the component the cron never runs and local eval
+  // can never produce a verdict. The client throws so callers don't silently get `undefined` and
+  // wonder why their flag rollouts aren't taking effect.
+  test('throws when local eval is not configured (no PAK)', async () => {
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = {
+      runQuery: jest.fn(async () => ({
+        localEvalConfigured: false,
+        data: null,
+        fetchedAt: null,
+      })),
+    }
+
+    await expect(posthog.getFeatureFlag(ctx as never, { key: 'my-flag', distinctId: 'u1' })).rejects.toThrow(
+      'local feature flag evaluation is not configured'
+    )
+  })
+
+  // PAK *is* set but the first cron tick hasn't landed yet — graceful degradation rather than
+  // throwing, so callers' fallback paths still work during the brief warm-up window.
+  test('returns undefined when PAK is configured but definitions have not been cached yet', async () => {
+    const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
+    const posthog = new PostHog(component as never)
+    const ctx = {
+      runQuery: jest.fn(async () => ({
+        localEvalConfigured: true,
+        data: null,
+        fetchedAt: null,
+      })),
+    }
+
+    const value = await posthog.getFeatureFlag(ctx as never, { key: 'my-flag', distinctId: 'u1' })
+    expect(value).toBeUndefined()
   })
 })
 
@@ -170,7 +208,7 @@ describe('captureException', () => {
     const component = {
       lib: { captureException: 'captureException_ref' },
     }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.captureException(ctx as never, {
@@ -194,7 +232,7 @@ describe('captureException', () => {
     const component = {
       lib: { captureException: 'captureException_ref' },
     }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.captureException(ctx as never, {
@@ -211,7 +249,7 @@ describe('captureException', () => {
 describe('$-prefixed property serialization', () => {
   test('serializes properties with $-prefixed keys as JSON strings', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.capture(ctx as never, {
@@ -237,7 +275,7 @@ describe('$-prefixed property serialization', () => {
 
   test('serializes identify properties with $set and $set_once', async () => {
     const component = { lib: { identify: 'identify_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.identify(ctx as never, {
@@ -258,7 +296,7 @@ describe('$-prefixed property serialization', () => {
 
   test('passes undefined when properties are not provided', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.capture(ctx as never, {
@@ -272,7 +310,7 @@ describe('$-prefixed property serialization', () => {
 
   test('preserves nested objects and arrays through serialization', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     const properties = {
@@ -296,7 +334,7 @@ describe('$-prefixed property serialization', () => {
 
   test('serializes groups with string and number values', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.capture(ctx as never, {
@@ -312,7 +350,7 @@ describe('$-prefixed property serialization', () => {
 
   test('serializes captureException additionalProperties', async () => {
     const component = { lib: { captureException: 'captureException_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.captureException(ctx as never, {
@@ -331,7 +369,7 @@ describe('$-prefixed property serialization', () => {
 
   test('handles empty objects', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.capture(ctx as never, {
@@ -350,7 +388,7 @@ describe('$-prefixed property serialization', () => {
 describe('beforeSend', () => {
   test('allows events through when no beforeSend is configured', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.capture(ctx as never, {
@@ -365,7 +403,6 @@ describe('beforeSend', () => {
     const component = { lib: { capture: 'capture_ref' } }
     const beforeSend: BeforeSendFn = () => null
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       beforeSend,
     })
     const ctx = mockSchedulerCtx()
@@ -385,7 +422,6 @@ describe('beforeSend', () => {
       properties: { ...event.properties, injected: true },
     })
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       beforeSend,
     })
     const ctx = mockSchedulerCtx()
@@ -411,7 +447,6 @@ describe('beforeSend', () => {
       properties: { ...event.properties, second: true },
     })
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       beforeSend: [fn1, fn2],
     })
     const ctx = mockSchedulerCtx()
@@ -430,7 +465,6 @@ describe('beforeSend', () => {
     const fn1: BeforeSendFn = () => null
     const fn2: BeforeSendFn = jest.fn((event) => event)
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       beforeSend: [fn1, fn2],
     })
     const ctx = mockSchedulerCtx()
@@ -451,7 +485,6 @@ describe('beforeSend', () => {
       return null
     }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       beforeSend,
     })
     const ctx = mockSchedulerCtx()
@@ -470,7 +503,6 @@ describe('beforeSend', () => {
       return event
     }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       beforeSend,
     })
     const ctx = mockSchedulerCtx()
@@ -492,7 +524,6 @@ describe('beforeSend', () => {
       return null
     }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       beforeSend,
     })
     const ctx = mockSchedulerCtx()
@@ -513,7 +544,6 @@ describe('beforeSend', () => {
       return event
     }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       beforeSend,
     })
     const ctx = mockSchedulerCtx()
@@ -535,7 +565,6 @@ describe('identify callback', () => {
   test('uses identify callback result for capture', async () => {
     const component = { lib: { capture: 'capture_ref' } }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       identify: identifyReturning('auth-user-1'),
     })
     const ctx = mockSchedulerCtx()
@@ -549,7 +578,6 @@ describe('identify callback', () => {
   test('falls back to explicit distinctId when identify returns null', async () => {
     const component = { lib: { capture: 'capture_ref' } }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       identify: identifyReturningNull,
     })
     const ctx = mockSchedulerCtx()
@@ -566,7 +594,6 @@ describe('identify callback', () => {
   test('throws when neither identify nor explicit distinctId resolves', async () => {
     const component = { lib: { capture: 'capture_ref' } }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       identify: identifyReturningNull,
     })
     const ctx = mockSchedulerCtx()
@@ -576,7 +603,7 @@ describe('identify callback', () => {
 
   test('throws when no identify configured and no explicit distinctId', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await expect(posthog.capture(ctx as never, { event: 'test_event' })).rejects.toThrow('Could not resolve distinctId')
@@ -585,7 +612,6 @@ describe('identify callback', () => {
   test('identify callback takes precedence over explicit distinctId', async () => {
     const component = { lib: { capture: 'capture_ref' } }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       identify: identifyReturning('auth-user'),
     })
     const ctx = mockSchedulerCtx()
@@ -603,7 +629,6 @@ describe('identify callback', () => {
     const component = { lib: { capture: 'capture_ref' } }
     const identify = jest.fn(async () => ({ distinctId: 'resolved' }))
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       identify,
     })
     const ctx = mockSchedulerCtx()
@@ -616,7 +641,6 @@ describe('identify callback', () => {
   test('works with identify method', async () => {
     const component = { lib: { identify: 'identify_ref' } }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       identify: identifyReturning('auth-user'),
     })
     const ctx = mockSchedulerCtx()
@@ -630,7 +654,6 @@ describe('identify callback', () => {
   test('works with alias method', async () => {
     const component = { lib: { alias: 'alias_ref' } }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       identify: identifyReturning('auth-user'),
     })
     const ctx = mockSchedulerCtx()
@@ -645,7 +668,7 @@ describe('identify callback', () => {
     const component = {
       lib: { captureException: 'captureException_ref' },
     }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.captureException(ctx as never, {
@@ -662,7 +685,6 @@ describe('identify callback', () => {
       lib: { captureException: 'captureException_ref' },
     }
     const posthog = new PostHog(component as never, {
-      apiKey: 'key',
       identify: identifyReturning('auth-user'),
     })
     const ctx = mockSchedulerCtx()
@@ -682,11 +704,11 @@ describe('identify callback', () => {
     try {
       const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
       const posthog = new PostHog(component as never, {
-        apiKey: 'key',
         identify: identifyReturning('auth-user'),
       })
       // Stub real-looking flag definitions so `loadEvaluator` returns an instance.
       const definitions = {
+        localEvalConfigured: true,
         data: JSON.stringify({ flags: [], groupTypeMapping: {}, cohorts: {} }),
         fetchedAt: Date.now(),
       }
@@ -706,7 +728,7 @@ describe('identify callback', () => {
 
   test('explicit distinctId still works without identify callback', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const posthog = new PostHog(component as never, { apiKey: 'key' })
+    const posthog = new PostHog(component as never)
     const ctx = mockSchedulerCtx()
 
     await posthog.capture(ctx as never, {

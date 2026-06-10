@@ -2,9 +2,17 @@ import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
+import { SDK_DIST_CHANNEL } from '../constants'
 import { each, extend, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
-import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from '@posthog/core'
+import {
+    BrowserDetectionHints,
+    detectBrowser,
+    detectBrowserVersion,
+    detectDevice,
+    detectDeviceType,
+    detectOS,
+} from '@posthog/core'
 import { cookieStore } from '../storage'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
@@ -261,9 +269,19 @@ export function getTimezoneOffset(): number | undefined {
     }
 }
 
+// Gathers signals that aren't in the UA string. Desktop / Android Brave is
+// Chromium-based and exposes `navigator.brave` rather than a UA marker. (Brave
+// on iOS is picked up via the `Brave/` UA marker by `detectBrowser` itself, so
+// no hint is needed there.)
+export function getBrowserDetectionHints(): BrowserDetectionHints {
+    const nav = typeof navigator !== 'undefined' ? (navigator as Record<string, any>) : undefined
+    return nav?.brave ? { brave: true } : {}
+}
+
 export function getEventProperties(
     maskPersonalDataProperties?: boolean,
-    customPersonalDataProperties?: string[]
+    customPersonalDataProperties?: string[],
+    detectGoogleSearchApp?: boolean
 ): Properties {
     if (!userAgent) {
         return {}
@@ -272,12 +290,14 @@ export function getEventProperties(
         ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const [os_name, os_version] = detectOS(userAgent)
+    const browserHints = getBrowserDetectionHints()
+    const browserOptions = { detectGoogleSearchApp }
 
-    return extend(
+    const properties = extend(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator.vendor),
+            $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions),
             $device: detectDevice(userAgent),
             $device_type: detectDeviceType(userAgent, {
                 // eslint-disable-next-line compat/compat
@@ -295,7 +315,7 @@ export function getEventProperties(
             $host: location?.host,
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-            $browser_version: detectBrowserVersion(userAgent, navigator.vendor),
+            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints, browserOptions),
             $browser_language: getBrowserLanguage(),
             $browser_language_prefix: getBrowserLanguagePrefix(),
             $screen_height: window?.screen.height,
@@ -308,4 +328,10 @@ export function getEventProperties(
             $time: Date.now() / 1000, // epoch time in seconds
         }
     )
+
+    if (Config.SDK_DIST_CHANNEL) {
+        properties[SDK_DIST_CHANNEL] = Config.SDK_DIST_CHANNEL
+    }
+
+    return properties
 }

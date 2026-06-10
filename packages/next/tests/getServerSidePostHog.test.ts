@@ -83,9 +83,20 @@ describe('getServerSidePostHog', () => {
         })
     })
 
-    it('throws when no apiKey provided and env not set', async () => {
+    it('warns and returns a disabled client when no apiKey provided and env not set', async () => {
+        const { PostHog } = require('posthog-node')
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
         const ctx = createMockContext({})
-        await expect(getServerSidePostHog(ctx)).rejects.toThrow('apiKey is required')
+
+        const posthog = await getServerSidePostHog(ctx)
+
+        expect(posthog).toBeDefined()
+        expect(PostHog).toHaveBeenCalledWith('', {
+            host: 'https://us.i.posthog.com',
+        })
+        expect(mockEnterContext).not.toHaveBeenCalled()
+        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+        warnSpy.mockRestore()
     })
 
     it('trims apiKey and host before creating the node client', async () => {

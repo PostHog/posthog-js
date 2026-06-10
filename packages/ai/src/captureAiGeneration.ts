@@ -1,14 +1,10 @@
 import { EventMessage, PostHog } from 'posthog-node'
-import type { ChatCompletionTool } from 'openai/resources/chat/completions'
-import type { Tool as GeminiTool } from '@google/genai'
-import AnthropicOriginal from '@anthropic-ai/sdk'
 import { v4 as uuidv4 } from 'uuid'
 import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
+import { stringifyError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, sanitizeValues, withPrivacyMode } from './utils'
-
-type AnthropicTool = AnthropicOriginal.Tool
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -58,8 +54,23 @@ export interface CaptureAiGenerationOptions {
   providerOverride?: string
   costOverride?: CostOverride
 
-  tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
+  tools?: unknown[] | null
   stopReason?: string
+
+  /**
+   * Provider-assigned ID for the generation (e.g. OpenAI's `chatcmpl-…` /
+   * `resp_…`). Maps to `$ai_completion_id`. Response IDs generalize across
+   * providers, so this lives in the shared schema rather than under
+   * `providerMetadata`.
+   */
+  completionId?: string
+  /**
+   * Provider-specific response metadata that has no place in the shared,
+   * provider-agnostic `$ai_*` schema (e.g. OpenAI's `system_fingerprint` and
+   * `request_id`). Maps to `$ai_provider_metadata`; omitted when empty.
+   */
+  providerMetadata?: Record<string, unknown>
+
   /** When set, the event is captured as an error. */
   error?: unknown
 
@@ -115,7 +126,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
 
     errorData = {
       $ai_is_error: true,
-      $ai_error: sanitizeValues(JSON.stringify(options.error)),
+      $ai_error: stringifyError(options.error),
       $exception_event_id: exceptionId,
     }
   }
@@ -161,6 +172,10 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     ...(options.distinctId ? {} : { $process_person_profile: false }),
     ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
     ...(options.tools ? { $ai_tools: options.tools } : {}),
+    ...(options.completionId ? { $ai_completion_id: options.completionId } : {}),
+    ...(options.providerMetadata && Object.keys(options.providerMetadata).length > 0
+      ? { $ai_provider_metadata: options.providerMetadata }
+      : {}),
     ...errorData,
     ...costOverrideData,
   }

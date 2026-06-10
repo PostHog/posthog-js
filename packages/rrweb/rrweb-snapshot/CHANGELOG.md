@@ -1,5 +1,26 @@
 # rrweb-snapshot
 
+## 0.0.65
+
+### Patch Changes
+
+- [#3678](https://github.com/PostHog/posthog-js/pull/3678) [`add2fae`](https://github.com/PostHog/posthog-js/commit/add2fae385046aa95452db12acb0f7deb91e84b3) Thanks [@ksvat](https://github.com/ksvat)! - fix(replay): keep `ph-no-capture` placeholders in normal flow during replay. Blocked elements were rebuilt with `position: absolute` + recorded `left/top` regardless of how they were originally positioned, pulling in-flow elements (flex/grid children, inline spans) out of flow and collapsing sibling layout. Snapshot now captures the element's computed `position`, `transform`, and `display`; rebuild only forces absolute positioning when the original was non-static or contributed a transform, and promotes inline placeholders to `inline-block` so the redacted slot is preserved. Old recordings without the new attributes keep the legacy absolute behavior.
+  (2026-05-27)
+
+## 0.0.64
+
+### Patch Changes
+
+- [#3667](https://github.com/PostHog/posthog-js/pull/3667) [`cafa9cc`](https://github.com/PostHog/posthog-js/commit/cafa9cc786a07613677ec16f2fc9f0c4e833a12c) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(replay): stop polling preload-as-style `<link>` elements forever. Session recorder treated `<link rel="preload" as="style" href="*.css">` as if it were a stylesheet and waited for `link.sheet` to populate. Per spec preload links never instantiate a `CSSStyleSheet`, so the wait timed out, re-serialized the link, scheduled another wait, and leaked a `load` listener on every cycle — multiplying further on every real `load` event. Pages with Next.js-style CSS preloads accumulated thousands of active polling chains, saturating the main thread and freezing the tab on refocus
+  (2026-05-26)
+
+## 0.0.63
+
+### Patch Changes
+
+- [#3635](https://github.com/PostHog/posthog-js/pull/3635) [`5fb74b6`](https://github.com/PostHog/posthog-js/commit/5fb74b60bb31394d6511845cc902daf8810dbf3f) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Capture `<link rel="stylesheet">` URLs from `link.sheet.href` and try `link.sheet` directly for inlining, so recordings survive SPA `history.pushState` navigations between routes of different path depths (where `link.href` re-resolves against a new baseURI but `link.sheet.href` preserves the URL the browser actually fetched).
+  (2026-05-21)
+
 ## 0.0.62
 
 ### Patch Changes

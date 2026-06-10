@@ -125,7 +125,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _flagOverrides?: Record<string, FeatureFlagValue>
   private _payloadOverrides?: Record<string, JsonType>
 
-  distinctIdHasSentFlagCalls: Record<string, string[]>
+  distinctIdHasSentFlagCalls: Record<string, Set<string>>
 
   // waitUntil debounce state (per-instance)
   private _waitUntilCycle?: {
@@ -188,7 +188,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
     }
 
-    if (normalizedOptions.personalApiKey) {
+    if (!this.disabled && normalizedOptions.personalApiKey) {
       if (normalizedOptions.personalApiKey.includes('phc_')) {
         throw new Error(
           'Your Personal API key is invalid. These keys are prefixed with "phx_" and can be created in PostHog project settings.'
@@ -421,6 +421,35 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Returns the common properties attached to every captured event.
+   *
+   * @remarks
+   * Extends the shared core properties (`$lib`, `$lib_version`) with
+   * `$is_server: true` so that events emitted from the server-side SDKs
+   * (posthog-node and posthog-edge, which both extend this class) are
+   * distinguishable from browser and react-native events. Browser and
+   * react-native clients do not extend `PostHogBackendClient`, so they
+   * never receive this property.
+   *
+   * This is controlled by the `isServer` option, which defaults to `true`.
+   * When `isServer` is `false` (e.g. when using the SDK as a client/CLI), the
+   * `$is_server` property is omitted entirely so the device OS is attributed
+   * normally.
+   *
+   * @returns The common event properties, including `$is_server: true` when
+   * the `isServer` option is enabled.
+   */
+  protected override getCommonEventProperties(): PostHogEventProperties {
+    const commonProperties = super.getCommonEventProperties()
+
+    if (this.options.isServer ?? true) {
+      commonProperties.$is_server = true
+    }
+
+    return commonProperties
+  }
+
+  /**
    * Enable the PostHog client (opt-in).
    *
    * @example
@@ -480,6 +509,40 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.featureFlagsPoller?.debug(enabled)
   }
 
+  private _warnIfInvalidCapture(
+    props: EventMessage,
+    stringArgumentWarning: string,
+    exceptionCaptureWarning: string
+  ): void {
+    if (typeof props === 'string') {
+      this._logger.warn(stringArgumentWarning)
+    }
+    if (props.event === '$exception' && !props._originatedFromCaptureException) {
+      this._logger.warn(exceptionCaptureWarning)
+    }
+  }
+
+  private _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+    return this.addPendingPromise(
+      this.prepareEventMessage(props)
+        .then(({ distinctId, event, properties, options }) => {
+          const captureOptions: PostHogCaptureOptions = {
+            timestamp: options.timestamp,
+            disableGeoip: options.disableGeoip,
+            uuid: options.uuid,
+          }
+          return immediate
+            ? super.captureStatelessImmediate(distinctId, event, properties, captureOptions)
+            : super.captureStateless(distinctId, event, properties, captureOptions)
+        })
+        .catch((err) => {
+          if (err) {
+            console.error(err)
+          }
+        })
+    )
+  }
+
   /**
    * Capture an event manually.
    *
@@ -499,29 +562,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns void
    */
   capture(props: EventMessage): void {
-    if (typeof props === 'string') {
-      this._logger.warn('Called capture() with a string as the first argument when an object was expected.')
-    }
-    if (props.event === '$exception' && !props._originatedFromCaptureException) {
-      this._logger.warn(
-        "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
-      )
-    }
-    this.addPendingPromise(
-      this.prepareEventMessage(props)
-        .then(({ distinctId, event, properties, options }) => {
-          return super.captureStateless(distinctId, event, properties, {
-            timestamp: options.timestamp,
-            disableGeoip: options.disableGeoip,
-            uuid: options.uuid,
-          })
-        })
-        .catch((err) => {
-          if (err) {
-            console.error(err)
-          }
-        })
+    this._warnIfInvalidCapture(
+      props,
+      'Called capture() with a string as the first argument when an object was expected.',
+      "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
     )
+    this._capturePreparedEvent(props, false)
   }
 
   /**
@@ -568,29 +614,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the event is captured
    */
   async captureImmediate(props: EventMessage): Promise<void> {
-    if (typeof props === 'string') {
-      this._logger.warn('Called captureImmediate() with a string as the first argument when an object was expected.')
-    }
-    if (props.event === '$exception' && !props._originatedFromCaptureException) {
-      this._logger.warn(
-        "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
-      )
-    }
-    return this.addPendingPromise(
-      this.prepareEventMessage(props)
-        .then(({ distinctId, event, properties, options }) => {
-          return super.captureStatelessImmediate(distinctId, event, properties, {
-            timestamp: options.timestamp,
-            disableGeoip: options.disableGeoip,
-            uuid: options.uuid,
-          })
-        })
-        .catch((err) => {
-          if (err) {
-            console.error(err)
-          }
-        })
+    this._warnIfInvalidCapture(
+      props,
+      'Called captureImmediate() with a string as the first argument when an object was expected.',
+      "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
     )
+    return this._capturePreparedEvent(props, true)
   }
 
   /**
@@ -671,7 +700,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+    await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
   }
 
   /**
@@ -819,6 +848,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     } = {},
     matchValue?: FeatureFlagValue
   ): Promise<FeatureFlagResult | undefined> {
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     const sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
     // Check for overrides first - they take precedence over all evaluation
     if (this._flagOverrides !== undefined && key in this._flagOverrides) {
@@ -1252,6 +1286,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @throws Error if personal API key is not provided
    */
   async getRemoteConfigPayload(flagKey: string): Promise<JsonType | undefined> {
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     if (!this.options.personalApiKey) {
       throw new Error('Personal API key is required for remote config payload decryption')
     }
@@ -1451,6 +1490,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return { featureFlags: {}, featureFlagPayloads: {} }
     }
 
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return { featureFlags: {}, featureFlagPayloads: {} }
+    }
+
     const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
@@ -1610,6 +1654,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
     }
 
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return new FeatureFlagEvaluations({
+        host: this._getFeatureFlagEvaluationsHost(),
+        distinctId: resolvedDistinctId,
+        flags: {},
+      })
+    }
+
     const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
@@ -1757,11 +1810,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   protected _captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void {
     const { distinctId, key, response, groups, disableGeoip, properties } = params
-    const featureFlagReportedKey = `${key}_${response}`
+    const groupSuffix =
+      groups && Object.keys(groups).length > 0
+        ? `_${JSON.stringify(Object.entries(groups).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))}`
+        : ''
+    const featureFlagReportedKey = `${key}_${response}${groupSuffix}`
 
     if (
       distinctId in this.distinctIdHasSentFlagCalls &&
-      this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey)
+      this.distinctIdHasSentFlagCalls[distinctId].has(featureFlagReportedKey)
     ) {
       return
     }
@@ -1769,10 +1826,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
       this.distinctIdHasSentFlagCalls = {}
     }
-    if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
-      this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
+    if (this.distinctIdHasSentFlagCalls[distinctId] instanceof Set) {
+      this.distinctIdHasSentFlagCalls[distinctId].add(featureFlagReportedKey)
     } else {
-      this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
+      this.distinctIdHasSentFlagCalls[distinctId] = new Set([featureFlagReportedKey])
     }
 
     this.capture({
@@ -2079,7 +2136,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   private async _requestRemoteConfigPayload(flagKey: string): Promise<PostHogFetchResponse | undefined> {
-    if (!this.options.personalApiKey) {
+    if (this.disabled || !this.apiKey || !this.options.personalApiKey) {
       return undefined
     }
 
@@ -2152,6 +2209,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     disableGeoip?: boolean,
     sendFeatureFlagsOptions?: SendFeatureFlagsOptions
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
+    if (this.disabled || !this.apiKey) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     // Use properties directly from options if they exist
     const finalPersonProperties = sendFeatureFlagsOptions?.personProperties || {}
     const finalGroupProperties = sendFeatureFlagsOptions?.groupProperties || {}
@@ -2294,9 +2356,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
-        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.capture({ ...msg, uuid, flags })
-        )
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties
+        ).then((msg) => this.capture({ ...msg, uuid, flags }))
       )
     }
   }
@@ -2346,9 +2412,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       return this.addPendingPromise(
-        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.captureImmediate({ ...msg, flags })
-        )
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties
+        ).then((msg) => this.captureImmediate({ ...msg, flags }))
       )
     }
   }

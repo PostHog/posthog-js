@@ -35,6 +35,14 @@ import {
   createLogger,
 } from './utils'
 import { uuidv7 } from './vendor/uuidv7'
+import {
+  ErrorPropertiesBuilder,
+  ErrorCoercer,
+  ObjectCoercer,
+  StringCoercer,
+  PrimitiveCoercer,
+  createDefaultStackParser,
+} from './error-tracking'
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
@@ -88,7 +96,19 @@ export async function logFlushError(err: any): Promise<void> {
 }
 
 function isPostHogFetchError(err: unknown): err is PostHogFetchHttpError | PostHogFetchNetworkError {
-  return typeof err === 'object' && (err instanceof PostHogFetchHttpError || err instanceof PostHogFetchNetworkError)
+  return typeof err === 'object' && (err instanceof PostHogFetchHttpError || isPostHogFetchNetworkError(err))
+}
+
+/**
+ * True for the network error PostHog throws when a request fails to reach the server
+ * (e.g. the device is offline or the request times out). Exposed so SDKs that autocapture
+ * errors can skip these expected connectivity failures instead of reporting them as
+ * application exceptions.
+ *
+ * @public
+ */
+export function isPostHogFetchNetworkError(err: unknown): err is PostHogFetchNetworkError {
+  return err instanceof PostHogFetchNetworkError
 }
 
 function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
@@ -150,6 +170,35 @@ export abstract class PostHogCoreStateless {
   protected _isInitialized: boolean = false
   protected _remoteConfigResponsePromise?: Promise<PostHogRemoteConfig | undefined>
   protected _logger: Logger
+  private _errorPropertiesBuilder?: ErrorPropertiesBuilder
+
+  /**
+   * Returns the builder used by `captureException` to coerce arbitrary inputs into a
+   * structured `$exception_list` (with parsed stack frames).
+   *
+   * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
+   */
+  getErrorPropertiesBuilder(): ErrorPropertiesBuilder {
+    if (!this._errorPropertiesBuilder) {
+      this._errorPropertiesBuilder = this.createErrorPropertiesBuilder()
+    }
+    return this._errorPropertiesBuilder
+  }
+
+  /**
+   * Override in subclasses to plug in platform-specific stack parsers (e.g. node, hermes),
+   * additional coercers (DOMException, ErrorEvent, PromiseRejectionEvent), or async frame
+   * modifiers (source maps, context lines).
+   *
+   * The default is intentionally JS-runtime-agnostic — no DOM-typed coercers — so any SDK
+   * that just extends core gets parsed stack frames out of the box.
+   */
+  protected createErrorPropertiesBuilder(): ErrorPropertiesBuilder {
+    return new ErrorPropertiesBuilder(
+      [new ErrorCoercer(), new ObjectCoercer(), new StringCoercer(), new PrimitiveCoercer()],
+      createDefaultStackParser()
+    )
+  }
 
   // Abstract methods to be overridden by implementations
   abstract fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse>

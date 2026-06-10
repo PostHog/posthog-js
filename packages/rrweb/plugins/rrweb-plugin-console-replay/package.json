@@ -1,6 +1,6 @@
 {
   "name": "@posthog/rrweb-plugin-console-replay",
-  "version": "0.0.3",
+  "version": "0.0.9",
   "description": "",
   "type": "module",
   "main": "./dist/rrweb-plugin-console-replay.umd.cjs",

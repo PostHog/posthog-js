@@ -1,5 +1,5 @@
 import { PostHog as PostHogEdge } from 'posthog-node/edge'
-import { action, internalMutation, internalQuery, query } from './_generated/server.js'
+import { action, env, internalMutation, internalQuery, query } from './_generated/server.js'
 import { api, internal } from './_generated/api.js'
 import { v } from 'convex/values'
 import { version } from './version.js'
@@ -18,6 +18,33 @@ class PostHog extends PostHogEdge {
   }
 }
 
+const DEFAULT_HOST = 'https://us.i.posthog.com'
+
+/**
+ * Resolve the credentials and host the component was configured with.
+ *
+ * Reads the typed `env` from `_generated/server` (declared in `convex.config.ts`). The
+ * installing app wires the values via `app.use(posthog, { env: { ... } })`, typically
+ * threading them straight through from its own deployment env vars. Trimming guards
+ * against accidental whitespace from `npx convex env set`.
+ */
+function readConfig(): { projectToken: string; host: string; personalApiKey: string } {
+  const projectToken = (env.POSTHOG_PROJECT_TOKEN ?? '').trim()
+  const host = (env.POSTHOG_HOST ?? '').trim() || DEFAULT_HOST
+  const personalApiKey = (env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
+  if (!projectToken) {
+    // Convex's typed env-var validation should prevent an empty `POSTHOG_PROJECT_TOKEN` at deploy time,
+    // but the gate is enforced at the app's `convex.config.ts`. Log loudly here so anyone hitting
+    // an unexpected empty value (e.g. the token was cleared post-deploy on a stale isolate) has a trail
+    // to follow rather than silently dropped events.
+    console.warn(
+      '[PostHog] POSTHOG_PROJECT_TOKEN is not configured; this event will be dropped. ' +
+        'Set it with `npx convex env set POSTHOG_PROJECT_TOKEN phc_…` and redeploy.'
+    )
+  }
+  return { projectToken, host, personalApiKey }
+}
+
 /**
  * Cache PostHog clients across action invocations within the same Convex isolate.
  *
@@ -25,15 +52,16 @@ class PostHog extends PostHogEdge {
  * a fresh client per call (and tearing it down with `shutdown()`) is wasted work — the client
  * carries no per-invocation state once `flush()` has drained its queue.
  *
- * Keyed by `apiKey|host` to support the rare case of multiple credentials sharing one isolate.
+ * Keyed by `projectToken|host` so a deployment that rotates its env vars (via `npx convex env set`)
+ * picks up the new client without restarting the isolate.
  */
 const clientCache = new Map<string, PostHog>()
 
-function getClient(apiKey: string, host: string): PostHog {
-  const key = `${apiKey}|${host}`
+function getClient(projectToken: string, host: string): PostHog {
+  const key = `${projectToken}|${host}`
   let client = clientCache.get(key)
   if (!client) {
-    client = new PostHog(apiKey, { host, flushAt: 1, flushInterval: 0 })
+    client = new PostHog(projectToken, { host, flushAt: 1, flushInterval: 0 })
     clientCache.set(key, client)
   }
   return client
@@ -52,8 +80,6 @@ function parseProperties(json: string | undefined): Record<string, unknown> | un
 
 export const capture = action({
   args: {
-    apiKey: v.string(),
-    host: v.string(),
     distinctId: v.string(),
     event: v.string(),
     properties: v.optional(v.string()),
@@ -64,7 +90,9 @@ export const capture = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = getClient(args.apiKey, args.host)
+    const { projectToken, host } = readConfig()
+    if (!projectToken) return
+    const client = getClient(projectToken, host)
     await client.captureImmediate({
       distinctId: args.distinctId,
       event: args.event,
@@ -80,14 +108,14 @@ export const capture = action({
 
 export const identify = action({
   args: {
-    apiKey: v.string(),
-    host: v.string(),
     distinctId: v.string(),
     properties: v.optional(v.string()),
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = getClient(args.apiKey, args.host)
+    const { projectToken, host } = readConfig()
+    if (!projectToken) return
+    const client = getClient(projectToken, host)
     // posthog-node's `identifyImmediate` is missing an `await` on `identifyStatelessImmediate`
     // (packages/node/src/client.ts:674), so the returned promise resolves before the event hits
     // the wire. We sidestep that by composing the `$identify` event the same way `identifyImmediate`
@@ -113,8 +141,6 @@ export const identify = action({
 
 export const groupIdentify = action({
   args: {
-    apiKey: v.string(),
-    host: v.string(),
     groupType: v.string(),
     groupKey: v.string(),
     properties: v.optional(v.string()),
@@ -122,7 +148,9 @@ export const groupIdentify = action({
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = getClient(args.apiKey, args.host)
+    const { projectToken, host } = readConfig()
+    if (!projectToken) return
+    const client = getClient(projectToken, host)
     // posthog-node doesn't expose a `groupIdentifyImmediate`, so we send the same `$groupidentify`
     // event via `captureImmediate` to keep parity with capture/identify/alias/captureException —
     // resolve when the network call completes, without resorting to shutdown().
@@ -141,14 +169,14 @@ export const groupIdentify = action({
 
 export const alias = action({
   args: {
-    apiKey: v.string(),
-    host: v.string(),
     distinctId: v.string(),
     alias: v.string(),
     disableGeoip: v.optional(v.boolean()),
   },
   handler: async (_ctx, args) => {
-    const client = getClient(args.apiKey, args.host)
+    const { projectToken, host } = readConfig()
+    if (!projectToken) return
+    const client = getClient(projectToken, host)
     await client.aliasImmediate({
       distinctId: args.distinctId,
       alias: args.alias,
@@ -159,8 +187,6 @@ export const alias = action({
 
 export const captureException = action({
   args: {
-    apiKey: v.string(),
-    host: v.string(),
     distinctId: v.optional(v.string()),
     errorMessage: v.string(),
     errorStack: v.optional(v.string()),
@@ -168,7 +194,9 @@ export const captureException = action({
     additionalProperties: v.optional(v.string()),
   },
   handler: async (_ctx, args) => {
-    const client = getClient(args.apiKey, args.host)
+    const { projectToken, host } = readConfig()
+    if (!projectToken) return
+    const client = getClient(projectToken, host)
     const error = new Error(args.errorMessage)
     if (args.errorName) error.name = args.errorName
     if (args.errorStack) error.stack = args.errorStack
@@ -184,8 +212,6 @@ export const captureException = action({
 // require an action context — that's the trade for not needing flag definitions cached upfront.
 
 const remoteFlagsArgs = {
-  apiKey: v.string(),
-  host: v.string(),
   distinctId: v.string(),
   groups: v.optional(v.any()),
   personProperties: v.optional(v.any()),
@@ -214,7 +240,9 @@ function remoteFlagsOptions(args: {
 export const evaluateFlag = action({
   args: { ...remoteFlagsArgs, key: v.string() },
   handler: async (_ctx, args) => {
-    const client = getClient(args.apiKey, args.host)
+    const { projectToken, host } = readConfig()
+    if (!projectToken) return null
+    const client = getClient(projectToken, host)
     // Scope the request to just the flag the caller asked about — otherwise PostHog evaluates
     // every flag in the project on every call. Honour an explicit `flagKeys` override when given.
     const snapshot = await client.evaluateFlags(args.distinctId, {
@@ -229,7 +257,9 @@ export const evaluateFlag = action({
 export const evaluateFlagPayload = action({
   args: { ...remoteFlagsArgs, key: v.string() },
   handler: async (_ctx, args) => {
-    const client = getClient(args.apiKey, args.host)
+    const { projectToken, host } = readConfig()
+    if (!projectToken) return null
+    const client = getClient(projectToken, host)
     const snapshot = await client.evaluateFlags(args.distinctId, {
       ...remoteFlagsOptions(args),
       flagKeys: args.flagKeys ?? [args.key],
@@ -242,7 +272,9 @@ export const evaluateFlagPayload = action({
 export const evaluateAllFlags = action({
   args: remoteFlagsArgs,
   handler: async (_ctx, args) => {
-    const client = getClient(args.apiKey, args.host)
+    const { projectToken, host } = readConfig()
+    if (!projectToken) return { featureFlags: {}, featureFlagPayloads: {} }
+    const client = getClient(projectToken, host)
     const snapshot = await client.evaluateFlags(args.distinctId, remoteFlagsOptions(args))
     const featureFlags: Record<string, unknown> = {}
     const featureFlagPayloads: Record<string, unknown> = {}
@@ -258,25 +290,23 @@ export const evaluateAllFlags = action({
 
 // --- Feature flag local evaluation ---
 //
-// Feature flag definitions are fetched on demand by `refreshFlagDefinitions` and stored in the
-// `flagDefinitions` table. Clients read them via `getFlagDefinitions` and evaluate flags locally
-// — there is no per-call action for flag evaluation.
-//
-// The action takes credentials as args. The consumer's app schedules the refresh cron and passes
-// them in — typically via `posthog.refreshFlagDefinitions(ctx)` on the client class, which
-// forwards the keys it was constructed with.
+// Flag definitions are fetched on the cron in `crons.ts` and stored in `flagDefinitions`.
+// Clients read them via `getFlagDefinitions` and evaluate flags locally — there is no
+// per-call action for flag evaluation.
 
-/**
- * Returns the latest cached flag definitions, or `null` if none have been fetched yet.
- *
- * The `data` field is a JSON-stringified `FlagDefinitions` object (see `client/feature-flags/types.ts`).
- */
+// `localEvalConfigured` lets the client distinguish "PAK not set" (throw, point at the
+// remote `evaluateFlag` methods) from "PAK set but cron hasn't fetched yet" (return
+// `undefined`). `data` is a JSON-stringified `FlagDefinitions` (see
+// `client/feature-flags/types.ts`), null until the first successful refresh.
 export const getFlagDefinitions = query({
   args: {},
   handler: async (ctx) => {
+    const localEvalConfigured = !!(env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
     const row = await ctx.db.query('flagDefinitions').order('desc').first()
-    if (!row) return null
-    return { data: row.data, fetchedAt: row.fetchedAt, etag: row.etag }
+    if (!row) {
+      return { localEvalConfigured, data: null, fetchedAt: null, etag: undefined }
+    }
+    return { localEvalConfigured, data: row.data, fetchedAt: row.fetchedAt, etag: row.etag }
   },
 })
 
@@ -308,35 +338,23 @@ export const _getCurrentEtag = internalQuery({
 
 /**
  * Fetches flag definitions from PostHog's local-evaluation endpoint and stores them in the
- * `flagDefinitions` table. Called by the consumer app's own cron — they pass in the keys via the
- * `PostHog` client class which knows them already.
- *
- * Args:
- *   - `apiKey` — the project API key (`phc_…`)
- *   - `personalApiKey` — a feature flags secure API key (`phs_…`, recommended) or personal API
- *     key (`phx_…`) with feature-flag read access; local eval is disabled if missing
- *   - `host` — optional, defaults to `https://us.i.posthog.com`
+ * `flagDefinitions` table. Called automatically by the cron registered in `crons.ts` when
+ * `POSTHOG_PERSONAL_API_KEY` is set, and also exposed publicly so the client's
+ * `reloadFeatureFlags(ctx)` method (parity with `posthog-node`) can trigger an on-demand refresh.
  */
 export const refreshFlagDefinitions = action({
-  args: {
-    apiKey: v.string(),
-    personalApiKey: v.string(),
-    host: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const projectApiKey = args.apiKey.trim()
-    const personalApiKey = args.personalApiKey.trim()
-    const host = (args.host?.trim() || '').replace(/\/$/, '') || 'https://us.i.posthog.com'
+  args: {},
+  handler: async (ctx) => {
+    const { projectToken, host, personalApiKey } = readConfig()
 
-    if (!projectApiKey || !personalApiKey) {
-      // Local evaluation requires both keys. Return a status rather than throwing so the caller
-      // (typically a cron) can surface it cleanly.
+    if (!projectToken || !personalApiKey) {
+      // The cron registers unconditionally (see `crons.ts`); this is its runtime gate.
       return { status: 'skipped' as const, reason: 'missing-keys' as const }
     }
 
     const etag = await ctx.runQuery(internal.lib._getCurrentEtag, {})
 
-    const url = `${host}/flags/definitions?token=${projectApiKey}&send_cohorts`
+    const url = `${host.replace(/\/$/, '')}/flags/definitions?token=${projectToken}&send_cohorts`
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${personalApiKey}`,
@@ -419,7 +437,7 @@ export const refreshFlagDefinitions = action({
       if (looksCacheCold) {
         const existing = await ctx.runQuery(api.lib.getFlagDefinitions, {})
         const STALE_AFTER_MS = 5 * 60 * 1000
-        if (existing === null) {
+        if (existing.fetchedAt === null) {
           // No prior cache — write an empty snapshot so subsequent reads are deterministic and
           // the UI shows "no flags" instead of "loading".
           await ctx.runMutation(internal.lib._setFlagDefinitions, {
@@ -449,7 +467,7 @@ export const refreshFlagDefinitions = action({
       }
 
       console.warn(
-        `[PostHog] Unexpected status ${response.status} fetching flag definitions from ${url.replace(projectApiKey, '<token>')}. ` +
+        `[PostHog] Unexpected status ${response.status} fetching flag definitions from ${url.replace(projectToken, '<token>')}. ` +
           `Response body: ${bodyText}`
       )
       return { status: 'error' as const, reason: 'unexpected-status' as const }

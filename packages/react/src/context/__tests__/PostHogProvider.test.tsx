@@ -42,6 +42,23 @@ describe('PostHogProvider component', () => {
             jest.clearAllMocks()
         })
 
+        it('does not initialize when apiKey is missing', () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+            render(
+                <PostHogProvider apiKey={undefined as any} options={initialOptions}>
+                    <div>Test</div>
+                </PostHogProvider>
+            )
+
+            expect(posthogJs.init).not.toHaveBeenCalled()
+            expect(consoleSpy).toHaveBeenCalledWith(
+                '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
+            )
+
+            consoleSpy.mockRestore()
+        })
+
         it('should call set_config when options change', () => {
             const { rerender } = render(
                 <PostHogProvider apiKey={apiKey} options={initialOptions}>

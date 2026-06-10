@@ -145,8 +145,6 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
-   * @experimental This API is experimental and may change in minor versions.
-   *
    * Optional cache provider for feature flag definitions.
    *
    * Allows custom caching strategies (Redis, database, etc.) for flag definitions
@@ -157,7 +155,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    *
    * @example
    * ```typescript
-   * import { FlagDefinitionCacheProvider } from 'posthog-node/experimental'
+   * import type { FlagDefinitionCacheProvider } from 'posthog-node'
    *
    * class RedisCacheProvider implements FlagDefinitionCacheProvider {
    *   // ... implementation
@@ -265,6 +263,23 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * @default 500
    */
   waitUntilMaxWaitMs?: number
+  /**
+   * Whether to attach the `$is_server: true` property to every captured event.
+   *
+   * @remarks
+   * Defaults to `true` because this SDK is intended for server-side use, where
+   * the property lets PostHog distinguish server events from browser and
+   * react-native events. Set this to `false` when running the SDK as a
+   * client/CLI so the event is attributed to the device OS normally instead of
+   * being marked as a server event. When `false`, the `$is_server` property is
+   * omitted entirely.
+   *
+   * @default true
+   * @example
+   * // CLI usage: don't mark events as server-side
+   * new PostHog('key', { isServer: false })
+   */
+  isServer?: boolean
 }
 
 export type PostHogFeatureFlag = {

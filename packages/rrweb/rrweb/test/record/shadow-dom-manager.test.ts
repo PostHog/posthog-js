@@ -43,6 +43,7 @@ describe('ShadowDomManager', () => {
           adoptStyleSheets: vi.fn(),
         } as any,
         canvasManager: {
+          acquire: vi.fn(),
           reset: vi.fn(),
           lock: vi.fn(),
           unlock: vi.fn(),
