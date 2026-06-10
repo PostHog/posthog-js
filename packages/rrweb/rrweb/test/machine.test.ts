@@ -86,17 +86,26 @@ describe('addEvent', () => {
     return { service, getCastFn };
   };
 
-  it('does not apply a past event onto the current DOM by default', () => {
-    // a chunk loading after the user seeked ahead must not be cast onto a
-    // DOM that is at a different position
-    const { service, getCastFn } = createService();
-    const event = makeMutationEvent(BASELINE - 5000);
+  it.each([
+    { label: 'absent', applyPastEventSynchronously: undefined },
+    { label: 'false', applyPastEventSynchronously: false },
+  ])(
+    'does not apply a past event onto the current DOM when applyPastEventSynchronously is $label',
+    ({ applyPastEventSynchronously }) => {
+      // a chunk loading after the user seeked ahead must not be cast onto a
+      // DOM that is at a different position
+      const { service, getCastFn } = createService();
+      const event = makeMutationEvent(BASELINE - 5000);
 
-    service.send({ type: 'ADD_EVENT', payload: { event } });
+      service.send({
+        type: 'ADD_EVENT',
+        payload: { event, applyPastEventSynchronously },
+      });
 
-    expect(getCastFn).not.toHaveBeenCalled();
-    expect(service.state.context.events).toEqual([event]);
-  });
+      expect(getCastFn).not.toHaveBeenCalled();
+      expect(service.state.context.events).toEqual([event]);
+    },
+  );
 
   it('applies a past event synchronously when explicitly allowed (live mode)', () => {
     const { service, getCastFn } = createService();
