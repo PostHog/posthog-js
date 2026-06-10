@@ -87,6 +87,11 @@
         "require": "./dist/entrypoints/index.edge.js",
         "default": "./dist/entrypoints/index.edge.js"
       },
+      "convex": {
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
+      },
       "import": "./dist/entrypoints/index.node.mjs",
       "require": "./dist/entrypoints/index.node.js"
     },
