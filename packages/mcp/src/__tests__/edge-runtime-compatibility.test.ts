@@ -260,10 +260,17 @@ describe('Integration: SDK in Limited Environment', () => {
   })
 
   it('should work when process has limited functionality', async () => {
-    // Simulate limited process object (like some edge runtimes)
+    // Simulate a limited process object (like some edge runtimes). `argv` and
+    // `cwd` are present because importing the top-level index now eagerly
+    // evaluates posthog-node (via the `PostHogMCP` subclass), and posthog-node's
+    // node entrypoint reads `process.argv[1]` / `process.cwd()` at module load.
+    // Real edge runtimes resolve posthog-node's edge build instead, so this only
+    // matters for the node build exercised here.
     const limitedProcess = {
       env: {},
-      // Missing: cwd, once, versions, etc.
+      argv: ['node', '/app/server.js'],
+      cwd: () => '/app',
+      // Missing: once, versions, etc.
     } as unknown as typeof process
 
     globalThis.process = limitedProcess
