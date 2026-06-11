@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.2.0
+
+### Minor Changes
+
+- [#3781](https://github.com/PostHog/posthog-js/pull/3781) [`b732ecb`](https://github.com/PostHog/posthog-js/commit/b732ecb0ce83b656782b525eefbdfde42555d9c9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add `PostHogMCP`, a `posthog-node` client subclass with first-class MCP analytics for servers that have no `Server`/`McpServer` to wrap (e.g. custom hono/HTTP dispatchers). It extends `PostHog` — so `capture`, `identify`, `flush`, `shutdown`, and feature flags all work unchanged — and adds `captureToolCall` / `captureInitialize`, which build the canonical `$mcp_*` events and run them through the same sanitize → truncate → `$exception` fan-out pipeline as `instrument()` before handing them to the inherited `capture()` (so the client's own `beforeSend` applies). The caller passes `distinctId`/`sessionId`/`groups`/`properties` per call. `$session_id` is now omitted from events when no session is supplied (previously always set), so stateless captures don't bucket into a non-existent Session Replay session.
+  (2026-06-11)
+
 ## 0.1.28
 
 ### Patch Changes
