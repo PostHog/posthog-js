@@ -281,6 +281,19 @@ type RemovedDeprecatedConfigKeys =
     | 'property_blacklist'
     | '__preview_disable_beacon'
     | '__preview_external_dependency_versioned_paths'
+    | '__preview_flags_v2'
+    | '__preview_eager_load_replay'
+    | '__preview_lazy_load_replay'
+    | '__preview_disable_xhr_credentials'
+    | 'api_method'
+    | 'inapp_protocol'
+    | 'inapp_link_new_window'
+    | '__add_tracing_headers'
+    | 'addTracingHeaders'
+    | '_onCapture'
+    | 'evaluation_environments'
+    | 'enable_heatmaps'
+    | 'opt_out_capturing_cookie_prefix'
 
 /*
  * Specify that `loaded` should be using the PostHog instance type
@@ -291,29 +304,11 @@ type SnakeToCamelCase<S extends string> = S extends `${infer Head}_${infer Tail}
     : S
 
 /**
- * Config keys that are @deprecated in @posthog/types and slated for removal
- * from v2 (not rename): they keep their snake_case names until they are dropped.
- */
-type KeptSnakeCaseConfigKeys =
-    | 'evaluation_environments'
-    | 'opt_out_capturing_cookie_prefix'
-    | 'enable_heatmaps'
-    | 'api_method'
-    | 'inapp_protocol'
-    | 'inapp_link_new_window'
-
-/**
  * Top-level config keys renamed to camelCase for v2. Keys with a leading
  * underscore (internal/preview) are excluded from the generic mapping; the
  * renamed `__preview_*` keys are redeclared explicitly below.
  */
-type CamelizeConfigKey<K> = K extends KeptSnakeCaseConfigKeys
-    ? K
-    : K extends `_${string}`
-      ? K
-      : K extends string
-        ? SnakeToCamelCase<K>
-        : K
+type CamelizeConfigKey<K> = K extends `_${string}` ? K : K extends string ? SnakeToCamelCase<K> : K
 
 type RenamedDunderConfigKeys =
     | '__preview_deferred_init_extensions'

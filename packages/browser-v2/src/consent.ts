@@ -75,18 +75,8 @@ export class ConsentManager {
     }
 
     private get _storageKey() {
-        const { token, opt_out_capturing_cookie_prefix, consentPersistenceName } = this._instance.config
-        if (consentPersistenceName) {
-            return consentPersistenceName
-        } else if (opt_out_capturing_cookie_prefix) {
-            // Deprecated, but we still support it for backwards compatibility.
-            // This was deprecated because it differed in behaviour from storage.ts, and appends the token.
-            // This meant it was not possible to share the same consent state across multiple PostHog instances,
-            // and made it harder for people to migrate from other systems.
-            return opt_out_capturing_cookie_prefix + token
-        } else {
-            return OPT_OUT_PREFIX + token
-        }
+        const { token, consentPersistenceName } = this._instance.config
+        return consentPersistenceName || OPT_OUT_PREFIX + token
     }
 
     private get _storedConsent(): ConsentStatus {

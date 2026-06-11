@@ -1122,15 +1122,6 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
         })
-
-        it('should support deprecated evaluation_environments field', () => {
-            instance.config.evaluation_environments = ['production', 'web']
-            featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
-        })
     })
 
     describe('onFeatureFlags', () => {
@@ -3230,34 +3221,6 @@ describe('getRemoteConfigPayload', () => {
 
         // Verify evaluation_contexts is not in the data
         expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBeUndefined()
-    })
-
-    it('should support deprecated evaluation_environments field', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-
-        instance.config.evaluation_environments = ['staging', 'backend']
-
-        const callback = jest.fn()
-        featureFlags.getRemoteConfigPayload('test-flag', callback)
-
-        expect(warnSpy).toHaveBeenCalledWith(
-            expect.any(String),
-            expect.stringContaining('evaluation_environments is deprecated')
-        )
-
-        expect(instance._send_request).toHaveBeenCalledWith(
-            expect.objectContaining({
-                method: 'POST',
-                url: 'flags/flags/?v=2',
-                data: expect.objectContaining({
-                    distinct_id: 'test-distinct-id',
-                    token: 'test-token',
-                    evaluation_contexts: ['staging', 'backend'],
-                }),
-            })
-        )
-
-        warnSpy.mockRestore()
     })
 
     describe('flagsApiHost configuration', () => {

@@ -9,7 +9,7 @@ import { document, assignableWindow, navigator } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
 const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
-const CUSTOM_PERSISTENCE_PREFIX = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
+const CUSTOM_PERSISTENCE_NAME = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
 
 function deleteAllCookies() {
     const cookies = document!.cookie.split(';')
@@ -216,12 +216,8 @@ describe('consentManager', () => {
     describe.each([`cookie`, `localStorage`] as PostHogConfig['optOutCapturingPersistenceType'][])(
         `%s`,
         (persistenceType) => {
-            function assertPersistenceValue(
-                value: string | number | null,
-                persistencePrefix = DEFAULT_PERSISTENCE_PREFIX
-            ) {
-                const token = posthog.config.token
-                const expected = persistencePrefix + token
+            function assertPersistenceValue(value: string | number | null, persistenceName?: string) {
+                const expected = persistenceName ?? DEFAULT_PERSISTENCE_PREFIX + posthog.config.token
                 if (persistenceType === `cookie`) {
                     if (isNull(value)) {
                         expect(document!.cookie).not.toContain(expected + `=`)
@@ -275,21 +271,21 @@ describe('consentManager', () => {
                     )
                 })
 
-                it(`should allow use of a custom "persistence prefix" string (with correct default behavior)`, async () => {
+                it(`should allow use of a custom "consentPersistenceName" string (with correct default behavior)`, async () => {
                     posthog = await createPostHog({
                         optOutCapturingPersistenceType: persistenceType,
-                        opt_out_capturing_cookie_prefix: CUSTOM_PERSISTENCE_PREFIX,
+                        consentPersistenceName: CUSTOM_PERSISTENCE_NAME,
                     })
                     posthog.optOutCapturing()
                     posthog.optInCapturing()
 
                     assertPersistenceValue(null)
-                    assertPersistenceValue(1, CUSTOM_PERSISTENCE_PREFIX)
+                    assertPersistenceValue(1, CUSTOM_PERSISTENCE_NAME)
 
                     posthog.optOutCapturing()
 
                     assertPersistenceValue(null)
-                    assertPersistenceValue(0, CUSTOM_PERSISTENCE_PREFIX)
+                    assertPersistenceValue(0, CUSTOM_PERSISTENCE_NAME)
                 })
 
                 it(`should clear the persisted value`, () => {

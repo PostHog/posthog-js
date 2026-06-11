@@ -212,7 +212,6 @@ export class PostHogFeatureFlags implements Extension {
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
     private _flagsLoadedFromRemote: boolean = false
-    private _hasLoggedDeprecationWarning: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
 
     constructor(private _instance: PostHog) {
@@ -256,20 +255,7 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _getValidEvaluationEnvironments(): string[] {
-        // Support both evaluationContexts (new) and evaluation_environments (deprecated)
-        const envs = this._config.evaluationContexts ?? this._config.evaluation_environments
-
-        // Log deprecation warning if using old field (only once)
-        if (
-            this._config.evaluation_environments &&
-            !this._config.evaluationContexts &&
-            !this._hasLoggedDeprecationWarning
-        ) {
-            logger.warn(
-                'evaluation_environments is deprecated. Use evaluationContexts instead. evaluation_environments will be removed in a future version.'
-            )
-            this._hasLoggedDeprecationWarning = true
-        }
+        const envs = this._config.evaluationContexts
 
         if (!envs?.length) {
             return []

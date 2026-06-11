@@ -247,7 +247,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     optOutUseragentFilter: false,
     optOutCapturingPersistenceType: 'localStorage',
     consentPersistenceName: null,
-    opt_out_capturing_cookie_prefix: null,
     optInSiteApps: false,
     propertyDenylist: [],
     respectDnt: false,
@@ -283,7 +282,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     errorTracking: {},
 
     // Used for internal testing
-    _onCapture: __NOOP,
 
     ...defaultsThatVaryByConfig(defaults),
 })
@@ -679,11 +677,6 @@ export class PostHog implements PostHogInterface {
             setupSegmentIntegration(this, () => this._loaded())
         } else {
             this._loaded()
-        }
-
-        if (isFunction(this.config._onCapture) && this.config._onCapture !== __NOOP) {
-            logger.warn('onCapture is deprecated. Please use `beforeSend` instead')
-            this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
         return this

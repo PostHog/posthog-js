@@ -79,7 +79,7 @@ describe('tracing headers', () => {
         sessionManager.checkAndGetSessionAndWindowId.mockClear()
     })
 
-    describe('config aliases', () => {
+    describe('config', () => {
         const getConfiguredHostnames = (config: Record<string, unknown>): string[] | boolean | undefined => {
             const tracingHeaders = new TracingHeaders({ config } as any)
             return (tracingHeaders as any)._getConfiguredHostnames()
@@ -92,46 +92,8 @@ describe('tracing headers', () => {
                 expected: ['example.com'],
             },
             {
-                name: 'falls back to deprecated addTracingHeaders',
-                config: { addTracingHeaders: ['camel.example'] },
-                expected: ['camel.example'],
-            },
-            {
-                name: 'falls back to deprecated __add_tracing_headers',
-                config: { __add_tracing_headers: ['legacy.example'] },
-                expected: ['legacy.example'],
-            },
-            {
-                name: 'prefers tracingHeaders over deprecated addTracingHeaders',
-                config: {
-                    tracingHeaders: ['public.example'],
-                    addTracingHeaders: ['camel.example'],
-                },
-                expected: ['public.example'],
-            },
-            {
-                name: 'prefers addTracingHeaders over deprecated __add_tracing_headers',
-                config: {
-                    addTracingHeaders: ['camel.example'],
-                    __add_tracing_headers: ['legacy.example'],
-                },
-                expected: ['camel.example'],
-            },
-            {
-                name: 'prefers tracingHeaders over deprecated __add_tracing_headers',
-                config: {
-                    tracingHeaders: ['public.example'],
-                    __add_tracing_headers: ['legacy.example'],
-                },
-                expected: ['public.example'],
-            },
-            {
-                name: 'allows an empty tracingHeaders list to override deprecated aliases',
-                config: {
-                    tracingHeaders: [],
-                    addTracingHeaders: ['camel.example'],
-                    __add_tracing_headers: ['legacy.example'],
-                },
+                name: 'returns an empty tracingHeaders list as-is',
+                config: { tracingHeaders: [] },
                 expected: [],
             },
         ])('$name', ({ config, expected }) => {

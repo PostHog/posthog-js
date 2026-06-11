@@ -93,9 +93,6 @@ export class Heatmaps implements Extension {
         if (!isNullish(this._config.captureHeatmaps)) {
             return this._config.captureHeatmaps !== false
         }
-        if (!isNullish(this._config.enable_heatmaps)) {
-            return this._config.enable_heatmaps
-        }
         return this._enabledServerSide
     }
 

@@ -256,7 +256,6 @@ describe('heatmaps', () => {
             [false, false],
         ])('when stored remote config is %p - heatmaps enabled should be %p', (stored, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: stored })
-            posthog.config.enable_heatmaps = undefined
             posthog.config.captureHeatmaps = undefined
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
@@ -267,58 +266,28 @@ describe('heatmaps', () => {
             [null, false],
             [true, true],
             [false, false],
-        ])('when local deprecated config is %p - heatmaps enabled should be %p', (deprecatedConfig, expected) => {
+        ])('when local config is %p - heatmaps enabled should be %p', (localConfig, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
-            posthog.config.enable_heatmaps = deprecatedConfig
-            posthog.config.captureHeatmaps = undefined
+            posthog.config.captureHeatmaps = localConfig
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
         })
 
         it.each([
-            [undefined, false],
-            [null, false],
-            [true, true],
-            [false, false],
-        ])('when local current config is %p - heatmaps enabled should be %p', (localConfig, expected) => {
-            posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
-            posthog.config.enable_heatmaps = localConfig
-            posthog.config.captureHeatmaps = undefined
-            const heatmaps = new Heatmaps(posthog)
-            expect(heatmaps.isEnabled).toBe(expected)
-        })
-
-        it.each([
-            // deprecated client side not defined
-            [undefined, undefined, false, false],
-            [undefined, undefined, true, true],
-            [undefined, true, false, true],
-            [undefined, false, false, false],
+            // client side config not defined - remote decides
+            [undefined, false, false],
+            [undefined, true, true],
             // null config values should fall through like undefined
-            [null, undefined, false, false],
-            [null, undefined, true, true],
-            [undefined, null, false, false],
-            [undefined, null, true, true],
-            [null, null, false, false],
-            [null, null, true, true],
-            // deprecated client false
-            [false, undefined, false, false],
-            [false, undefined, true, false],
-            [false, false, false, false],
-            [false, false, true, false],
-            [false, true, false, true],
-            [false, true, true, true],
-
-            // deprecated client true
-            [true, undefined, false, true],
-            [true, undefined, true, true],
-            // current config overrides deprecated
-            [true, false, false, false],
-            [true, true, true, true],
+            [null, false, false],
+            [null, true, true],
+            // client side config overrides remote
+            [false, false, false],
+            [false, true, false],
+            [true, false, true],
+            [true, true, true],
         ])(
-            'when deprecated client side config is %p, current client side config is %p, and remote opt in is %p - heatmaps enabled should be %p',
-            (deprecatedclientSideOptIn, clientSideOptIn, serverSideOptIn, expected) => {
-                posthog.config.enable_heatmaps = deprecatedclientSideOptIn
+            'when client side config is %p and remote opt in is %p - heatmaps enabled should be %p',
+            (clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.captureHeatmaps = clientSideOptIn
                 posthog.heatmaps!.onRemoteConfig({
                     heatmaps: serverSideOptIn,
