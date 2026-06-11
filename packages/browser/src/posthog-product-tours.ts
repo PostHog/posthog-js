@@ -58,6 +58,13 @@ export class PostHogProductTours implements Extension {
             })
         }
         if (!isProductToursEnabled(this._instance)) {
+            if (this._productTourManager || !isNullish(this._persistence?.props[PRODUCT_TOURS])) {
+                logger.info('product tours disabled; stopping and clearing cached tours')
+            }
+            // a manager started from the previously-persisted enabled flag keeps
+            // serving tours until told to stop
+            this._productTourManager?.stop()
+            this._productTourManager = null
             // tours cached while enabled would otherwise ride along in the main
             // persistence blob (and every cross-tab storage broadcast) forever
             this.clearCache()
@@ -117,6 +124,12 @@ export class PostHogProductTours implements Extension {
             ),
             method: 'GET',
             callback: (response) => {
+                if (!isProductToursEnabled(this._instance)) {
+                    // a disable can land while this request is in flight; honouring
+                    // the response would re-create the cache the disable just cleared
+                    callback([], { isLoaded: true })
+                    return
+                }
                 const statusCode = response.statusCode
                 if (statusCode !== 200 || !response.json) {
                     const error = `Product Tours API could not be loaded, status: ${statusCode}`

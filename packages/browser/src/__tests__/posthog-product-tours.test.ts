@@ -91,6 +91,34 @@ describe('PostHogProductTours', () => {
             expect(instance.persistence?.props[PRODUCT_TOURS]).toEqual(tours)
         })
 
+        it('ignores an in-flight tours response that lands after product tours is disabled', () => {
+            const requests: { callback: (response: any) => void }[] = []
+            instance._send_request = jest.fn((req) => requests.push(req)) as any
+            instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
+
+            const consumer = jest.fn()
+            instance.productTours.getProductTours(consumer, true)
+            expect(requests).toHaveLength(1)
+
+            instance.productTours.onRemoteConfig({ productTours: false } as RemoteConfig)
+
+            requests[0].callback({ statusCode: 200, json: { product_tours: [{ id: 'tour-1' }] } })
+
+            expect(instance.persistence?.props[PRODUCT_TOURS]).toBeUndefined()
+            expect(consumer).toHaveBeenCalledWith([], { isLoaded: true })
+        })
+
+        it('stops a running tour manager when product tours is disabled mid-session', () => {
+            const stop = jest.fn()
+            ;(instance.productTours as any)._productTourManager = { stop }
+            instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
+
+            instance.productTours.onRemoteConfig({ productTours: false } as RemoteConfig)
+
+            expect(stop).toHaveBeenCalled()
+            expect((instance.productTours as any)._productTourManager).toBeNull()
+        })
+
         it('does not drop stored tours when the response carries no productTours key', () => {
             const tours = [{ id: 'tour-1', name: 'cached tour' }]
             instance.persistence?.register({
