@@ -50,4 +50,10 @@ supportedArchitectures:
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
+# Old versions that predate their package's provenance attestations are flagged
+# as downgrades on fresh installs even though they are legitimate. Once the repo
+# is on pnpm >= 10.27.0, replace this list with trustPolicyIgnoreAfter.
+trustPolicyExclude:
+  - "semver@5.7.2 || 6.3.1"
+  - "undici-types@6.21.0"
 enableGlobalVirtualStore: true
