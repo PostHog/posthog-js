@@ -16,11 +16,7 @@ import type PostHogReactNativePlugin from '@posthog/react-native-plugin'
  * The SDK checks for their availability at runtime before calling them.
  */
 export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin & {
-  setup?: (
-    sessionId: string,
-    sdkOptions: { [key: string]: any },
-    pluginConfig: { [key: string]: any }
-  ) => Promise<void>
+  setup?: (sessionId: string, sdkOptions: { [key: string]: any }, pluginConfig: { [key: string]: any }) => Promise<void>
   startRecording?: (resumeCurrent: boolean) => Promise<void>
   stopRecording?: () => Promise<void>
 }

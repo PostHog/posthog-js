@@ -1297,10 +1297,7 @@ export class PostHog extends PostHogCore {
     return !this.isDisabled && (this._enableSessionReplay ?? false)
   }
 
-  _resetSessionId(
-    reactNativeSessionReplay: typeof OptionalReactNativePlugin | undefined,
-    sessionId: string
-  ): void {
+  _resetSessionId(reactNativeSessionReplay: typeof OptionalReactNativePlugin | undefined, sessionId: string): void {
     // _resetSessionId is only called if reactNativeSessionReplay not undefined, but the linter wasn't happy
     if (reactNativeSessionReplay) {
       reactNativeSessionReplay.endSession()
