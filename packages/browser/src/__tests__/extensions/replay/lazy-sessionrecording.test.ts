@@ -1359,6 +1359,111 @@ describe('Lazy SessionRecording', () => {
                     delete config.persistence_save_debounce_ms
                 }
             })
+
+            // Verifies the suspected teardown-race between stop()'s async compression-queue
+            // drain and the synchronous start('session_id_changed') that follows. If the
+            // pending cleanup proceeds (its generation check passes because nothing bumped
+            // it during start()), it calls _teardown() on the recorder — silently undoing
+            // the restart. The recorder then appears to be in an ACTIVE strategy state but
+            // rrweb is dead, no listeners are attached, and snapshots never reach the server.
+            it('keeps the new recorder alive when stop() had an in-flight compression queue', async () => {
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                // Establish a recording session and pretend the compression queue is non-empty.
+                emitActiveEvent(startingTimestamp + 100)
+                expect(recordMock).toHaveBeenCalledTimes(1)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                let resolveDrain: () => void = () => {}
+                lazyRecorder['_compressionQueue'] = new Promise<void>((resolve) => {
+                    resolveDrain = resolve
+                })
+
+                // Rotate the session — _updateWindowAndSessionIds runs stop()+start().
+                // stop() takes the _stopAfterCompressionQueueDrains path because the queue
+                // is non-empty, queueing async cleanup. start() then synchronously restarts
+                // the recorder.
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                const rotationTimestamp = startingTimestamp + 100 + sessionManager['_sessionTimeoutMs'] + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                emitActiveEvent(rotationTimestamp)
+
+                expect(recordMock).toHaveBeenCalledTimes(2)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+                expect(lazyRecorder['_sessionId']).toEqual('rotated-session-id')
+
+                // Resolve the queued drain — this fires the async cleanup from the prior
+                // stop(). With the bug, the cleanup calls _teardown() on the new recorder.
+                resolveDrain()
+                await Promise.resolve()
+                await Promise.resolve()
+
+                // The new recorder must still be alive. If the teardown race fired, isStarted
+                // would be false (rrweb stopped) and the V2 strategy would have its matchers
+                // cleared so status returns 'disabled'.
+                expect(lazyRecorder['isStarted']).toEqual(true)
+                expect(['active', 'sampled', 'buffering']).toContain(sessionRecording.status)
+            })
+
+            // The rotation must not leave behind stale stop-in-progress state. If start()
+            // only invalidated the generation, _isStoppingAfterCompression would stay true
+            // (the bailed-out drain never resets it) and _queuedCompressionEvents would stay
+            // counted (stale-generation events never decrement it) — so every later stop()
+            // would hit the in-progress guard in _stopAfterCompressionQueueDrains and
+            // silently no-op, leaving rrweb running forever.
+            it('can still stop the new recorder after surviving an in-flight compression queue', async () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                let resolveDrain: () => void = () => {}
+                lazyRecorder['_compressionQueue'] = new Promise<void>((resolve) => {
+                    resolveDrain = resolve
+                })
+
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                const rotationTimestamp = startingTimestamp + 100 + sessionManager['_sessionTimeoutMs'] + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                emitActiveEvent(rotationTimestamp)
+
+                resolveDrain()
+                await Promise.resolve()
+                await Promise.resolve()
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder.stop()
+
+                expect(lazyRecorder['isStarted']).toEqual(false)
+            })
+
+            // start() is also called re-entrantly on a live recorder (e.g. opt-in calls
+            // _startCapturing twice) with no stop() in between. There is no stale cleanup
+            // to invalidate then — the compression queue holds the CURRENT session's events
+            // (rrweb's FullSnapshot among them) and resetting it would drop them, leaving
+            // a replay with a meta event but no full snapshot.
+            it('re-entrant start() preserves the live compression queue', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 2
+                const liveQueue = Promise.resolve()
+                lazyRecorder['_compressionQueue'] = liveQueue
+                const generationBefore = lazyRecorder['_compressionQueueGeneration']
+
+                lazyRecorder.start()
+
+                expect(lazyRecorder['_queuedCompressionEvents']).toEqual(2)
+                expect(lazyRecorder['_compressionQueue']).toBe(liveQueue)
+                expect(lazyRecorder['_compressionQueueGeneration']).toEqual(generationBefore)
+            })
         })
 
         describe('scheduled full snapshots', () => {

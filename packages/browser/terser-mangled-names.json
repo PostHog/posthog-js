@@ -266,6 +266,7 @@
         "_internalFlagCheckSatisfied",
         "_intervalLogCount",
         "_intervalWindowStart",
+        "_invalidateCompressionQueue",
         "_isActivatingTrigger",
         "_isActivityChangeBelowGranularity",
         "_isBelowMinimumDuration",
