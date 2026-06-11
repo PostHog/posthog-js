@@ -19,6 +19,7 @@ import type {
 } from '@openai/agents-core'
 import { MAX_OUTPUT_SIZE, truncate, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
+import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
 /**
  * Normalize OpenAI Responses API input items to include a `role` field.
@@ -453,6 +454,10 @@ export class PostHogTracingProcessor implements TracingProcessor {
       if (param in modelConfig) {
         modelParams[param] = modelConfig[param]
       }
+    }
+
+    if (typeof modelConfig.base_url === 'string') {
+      warnIfPostHogAiGateway(modelConfig.base_url)
     }
 
     const properties: Record<string, any> = {

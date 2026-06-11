@@ -38,7 +38,7 @@
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:^"
   },
   "devDependencies": {
     "@babel/preset-env": "catalog:",
@@ -49,7 +49,7 @@
     "@types/jest": "catalog:",
     "@types/node": "^20.0.0",
     "jest": "catalog:",
-    "posthog-node": "workspace:*",
+    "posthog-node": "workspace:^",
     "zod": "^3.25.0"
   },
   "peerDependencies": {
