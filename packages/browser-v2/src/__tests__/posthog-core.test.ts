@@ -91,7 +91,13 @@ describe('posthog core', () => {
         }
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
-            const posthog = defaultPostHog().init(token, { ...config, beforeSend: beforeSendMock }, token)!
+            const posthog = defaultPostHog().init(
+                token,
+                // these tests create second instances that read what the first persisted,
+                // so write persistence immediately rather than debounced
+                { persistenceSaveDebounceMs: 0, ...config, beforeSend: beforeSendMock },
+                token
+            )!
             posthog.debug()
             return { posthog, beforeSendMock }
         }
@@ -519,7 +525,6 @@ describe('posthog core', () => {
                 mockHostName.mockReturnValue('localhost')
                 const { posthog, beforeSendMock } = setup({
                     personProfiles: 'identified_only',
-                    defaults: '2026-01-30',
                     internalOrTestUserHostname: null,
                 })
 

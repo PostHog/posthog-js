@@ -25,6 +25,7 @@ describe('identify()', () => {
                 apiHost: 'https://test.com',
                 beforeSend: beforeSendMock,
                 disableSurveys: true,
+                internalOrTestUserHostname: null, // jsdom hostname (localhost) matches the default pattern
             },
             token
         )

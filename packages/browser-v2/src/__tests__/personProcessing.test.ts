@@ -127,6 +127,9 @@ describe('person processing', () => {
             beforeSend: beforeSendMock,
             personProfiles,
             persistenceName,
+            // these tests create a second instance that reads what the first persisted,
+            // so write persistence immediately rather than debounced
+            persistenceSaveDebounceMs: 0,
         })
         return { token, beforeSendMock, posthog }
     }

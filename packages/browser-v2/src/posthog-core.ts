@@ -52,7 +52,6 @@ import {
     CaptureOptions,
     CaptureResult,
     Compression,
-    ConfigDefaults,
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureStage,
     EventName,
@@ -177,38 +176,9 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 // should only be true for Opera<12
 let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
-const defaultsThatVaryByConfig = (
-    defaults?: ConfigDefaults
-): Pick<
-    PostHogConfig,
-    | 'rageclick'
-    | 'capturePageview'
-    | 'sessionRecording'
-    | 'externalScriptsInjectTarget'
-    | 'internalOrTestUserHostname'
-    | 'persistenceSaveDebounceMs'
-    | 'splitStorage'
-    | 'detectGoogleSearchApp'
-> => ({
-    rageclick:
-        defaults && defaults >= '2026-05-30'
-            ? { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, ignore_text_selection: true }
-            : defaults && defaults >= '2025-11-30'
-              ? { content_ignorelist: true }
-              : true,
-    capturePageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    sessionRecording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
-    externalScriptsInjectTarget: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
-    internalOrTestUserHostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
-    persistenceSaveDebounceMs: defaults && defaults >= '2026-05-30' ? 250 : 0,
-    splitStorage: !!(defaults && defaults >= '2026-05-30'),
-    detectGoogleSearchApp: !!(defaults && defaults >= '2026-05-30'),
-})
-
 // NOTE: Remember to update `types.ts` when changing a default value
 // to guarantee documentation is up to date, make sure to also update our website docs
-// NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
-export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
+export const defaultConfig = (): PostHogConfig => ({
     apiHost: 'https://us.i.posthog.com',
     flagsApiHost: null,
     uiHost: null,
@@ -225,7 +195,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     customBlockedUseragents: [],
     saveReferrer: true,
     capturePageleave: 'if_capture_pageview', // We'll only capture pageleave events if capturePageview is also true
-    defaults: defaults ?? 'unset',
     __previewDeferredInitExtensions: false, // Opt-in only for now
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookieExpiration: 365,
@@ -279,10 +248,14 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     beforeSend: undefined,
     requestQueueConfig: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
     errorTracking: {},
-
-    // Used for internal testing
-
-    ...defaultsThatVaryByConfig(defaults),
+    rageclick: { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, ignore_text_selection: true },
+    capturePageview: 'history_change',
+    sessionRecording: { strictMinimumDuration: true },
+    externalScriptsInjectTarget: 'head',
+    internalOrTestUserHostname: /^(localhost|127\.0\.0\.1)$/,
+    persistenceSaveDebounceMs: 250,
+    splitStorage: true,
+    detectGoogleSearchApp: true,
 })
 
 /**
@@ -507,12 +480,12 @@ export class PostHog implements PostHogInterface {
             this._initialPersonProfilesConfig = config.personProfiles
         }
 
-        const baseConfig = defaultConfig(config.defaults)
+        const baseConfig = defaultConfig()
         const mergedConfig = extend({}, baseConfig, config, {
             name: name,
             token: normalizedToken,
         })
-        // a partial user-supplied rageclick object should keep the date-gated defaults
+        // a partial user-supplied rageclick object should keep the built-in defaults
         // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
         if (isObject(baseConfig.rageclick) && isObject(config.rageclick)) {
             mergedConfig.rageclick = extend({}, baseConfig.rageclick, config.rageclick)
@@ -1313,7 +1286,7 @@ export class PostHog implements PostHogInterface {
         const startTimestamp = readOnly ? undefined : this.persistence.removeEventTimer(eventName)
         let properties = { ...eventProperties }
         properties['token'] = this.config.token
-        properties['$config_defaults'] = this.config.defaults
+        properties['$config_defaults'] = 'v2'
 
         if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode

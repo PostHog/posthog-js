@@ -783,6 +783,8 @@ describe('persistence', () => {
                 {
                     persistence: 'localStorage+cookie',
                     cookiePersistedProperties: [customProp],
+                    // this test asserts storage contents synchronously
+                    persistenceSaveDebounceMs: 0,
                 },
                 uuidv7()
             )
@@ -1003,6 +1005,8 @@ describe('persistence', () => {
             const persistenceKey = `ph_${token}_posthog`
             const posthog = new PostHog().init(token, {
                 persistence: 'sessionStorage',
+                // this test asserts storage contents synchronously
+                persistenceSaveDebounceMs: 0,
             })
             posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
             posthog.capture('test_event')
@@ -1029,6 +1033,8 @@ describe('persistence', () => {
             const persistenceKey = `ph_${token}_posthog`
             const posthog = new PostHog().init(token, {
                 persistence: 'localStorage',
+                // this test asserts storage contents synchronously
+                persistenceSaveDebounceMs: 0,
             })
             posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
             posthog.capture('test_event')
@@ -1612,6 +1618,8 @@ describe('flag and survey storage split', () => {
                 persistence: 'localStorage+cookie',
                 splitStorage: true,
                 secureCookie: false,
+                // this test asserts storage contents synchronously
+                persistenceSaveDebounceMs: 0,
             })
             posthog.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
             expect(parse(ownerFlags)).not.toBeNull()
@@ -1862,6 +1870,8 @@ describe('posthog instance persistence', () => {
                 optOutPersistenceByDefault: false,
                 optOutCapturingByDefault: false,
                 persistence: 'localStorage+cookie',
+                // this test asserts storage writes synchronously
+                persistenceSaveDebounceMs: 0,
             },
             uuidv7()
         )

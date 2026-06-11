@@ -40,6 +40,7 @@ describe(`Module-based loader in Node env`, () => {
             debug: true,
             persistence: `localStorage`,
             apiHost: `https://test.com`,
+            internalOrTestUserHostname: null, // jsdom hostname (localhost) matches the default pattern
             loaded: function () {
                 loaded = true
             },

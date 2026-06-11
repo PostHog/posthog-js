@@ -19,6 +19,7 @@ describe('bot detection and pageview collection', () => {
                     'testtoken',
                     {
                         capturePageview: false, // Disable auto-capture to avoid race conditions
+                        internalOrTestUserHostname: null, // jsdom hostname (localhost) matches the default pattern
                         beforeSend: beforeSendMock,
                         ...config,
                         loaded: (posthog) => resolve(posthog),

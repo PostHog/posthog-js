@@ -92,6 +92,26 @@ Not yet renamed (deliberately):
 | `__add_tracing_headers`, `addTracingHeaders` | `tracingHeaders` |
 | `api_method`, `inapp_protocol`, `inapp_link_new_window` | (v1 fossils, nothing read them) |
 | `__preview_flags_v2`, `__preview_eager_load_replay`, `__preview_lazy_load_replay`, `__preview_disable_xhr_credentials` | (concluded experiments, nothing read them) |
+| `__preview_cookie_wins_on_conflict` | (now the only behavior: the cross-subdomain cookie wins over stale localStorage on merge) |
+| `__preview_capture_bot_pageviews` | (removed; bot events are always dropped unless `optOutUseragentFilter` is set — `$bot_pageview` routing is gone) |
+| `defaults` | (removed; v2 always uses the latest defaults — see below) |
+
+## Changed defaults (`defaults` version-gating collapsed)
+
+v1 staged new default behaviors behind the `defaults: '<date>'` option. v2 bakes the latest in unconditionally; each remains overridable via its own config key:
+
+| Key | v2 default (was, with `defaults: 'unset'`) |
+| --- | --- |
+| `capturePageview` | `'history_change'` (was `true`) — SPA navigations captured by default |
+| `rageclick` | `{ content_ignorelist: ..., ignore_text_selection: true }` (was `true`) |
+| `sessionRecording` | `{ strictMinimumDuration: true }` (was `{}`) |
+| `externalScriptsInjectTarget` | `'head'` (was `'body'`) |
+| `internalOrTestUserHostname` | `/^(localhost\|127\.0\.0\.1)$/` (was `undefined`) |
+| `persistenceSaveDebounceMs` | `250` (was `0`) |
+| `splitStorage` | `true` (was `false`) |
+| `detectGoogleSearchApp` | `true` (was `false`) |
+
+The `$config_defaults` event property is still sent, with the constant value `'v2'`.
 
 ## Wire-protocol fields that look like config keys (do not rename)
 

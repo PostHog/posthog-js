@@ -29,7 +29,16 @@ describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
         const posthog = await new Promise<PostHog>(
             (resolve) =>
-                defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
+                defaultPostHog().init(
+                    'testtoken',
+                    {
+                        // jsdom hostname (localhost) matches the default pattern
+                        internalOrTestUserHostname: null,
+                        ...config,
+                        loaded: (posthog) => resolve(posthog),
+                    },
+                    uuidv7()
+                )!
         )
         posthog.debug()
         return posthog

@@ -34,6 +34,9 @@ export const createPosthogInstance = async (
             {
                 requestBatching: false,
                 apiHost: 'http://localhost',
+                // jsdom runs at localhost, which matches the default internal/test user pattern;
+                // disable it so tests don't get a $set event on every init
+                internalOrTestUserHostname: null,
                 disableSurveys: true,
                 disableSurveysAutomaticDisplay: false,
                 disableConversations: true,

@@ -68,6 +68,8 @@ describe('cookieless', () => {
     const setup = async (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
         const beforeSendMock = jest.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
+            // these tests assert document.cookie synchronously, so write persistence immediately
+            persistenceSaveDebounceMs: 0,
             ...config,
             beforeSend: beforeSendMock,
         })!

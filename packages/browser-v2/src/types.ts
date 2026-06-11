@@ -86,7 +86,6 @@ export type {
     ExceptionStepsConfig,
     DeadClicksAutoCaptureConfig,
     HeatmapConfig,
-    ConfigDefaults,
     ExternalIntegrationKind,
     ErrorTrackingOptions,
     MaskInputOptions,
@@ -268,6 +267,7 @@ export type PostHogInterface = Omit<
  * The deprecated keys are kept in @posthog/types for the benefit of the v1 SDK.
  */
 type RemovedDeprecatedConfigKeys =
+    | 'defaults'
     | 'sanitize_properties'
     | 'ip'
     | 'on_xhr_error'

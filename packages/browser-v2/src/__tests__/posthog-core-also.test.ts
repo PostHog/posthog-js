@@ -49,7 +49,13 @@ describe('posthog core', () => {
                 siteApps: [],
             },
         } as any
-        const posthog = defaultPostHog().init(token, config, uuidv7())
+        const posthog = defaultPostHog().init(
+            token,
+            // jsdom hostname (localhost) matches the default internal/test user pattern, which would
+            // fire a $set on init; second-instance tests also need synchronous persistence writes
+            { internalOrTestUserHostname: null, persistenceSaveDebounceMs: 0, ...config },
+            uuidv7()
+        )
         return Object.assign(posthog, overrides || {})
     }
 
@@ -489,7 +495,7 @@ describe('posthog core', () => {
                 $process_person_profile: false,
                 $recording_status: 'disabled',
                 $sdk_debug_retry_queue_size: 0,
-                $config_defaults: 'unset',
+                $config_defaults: 'v2',
             })
         })
 
@@ -515,7 +521,7 @@ describe('posthog core', () => {
                 $process_person_profile: false,
                 $recording_status: 'disabled',
                 $sdk_debug_retry_queue_size: 0,
-                $config_defaults: 'unset',
+                $config_defaults: 'v2',
             })
         })
 
@@ -547,7 +553,7 @@ describe('posthog core', () => {
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
-                $config_defaults: 'unset',
+                $config_defaults: 'v2',
             })
             expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
@@ -611,7 +617,7 @@ describe('posthog core', () => {
                 token: 'testtoken',
                 $snapshot_data: {},
                 distinct_id: 'abc',
-                $config_defaults: 'unset',
+                $config_defaults: 'v2',
             })
         })
 
