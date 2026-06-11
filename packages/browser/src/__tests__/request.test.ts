@@ -129,13 +129,9 @@ describe('request', () => {
             })
         })
 
-        it('respects disableXHRCredentials=true', () => {
-            request(createRequest({ disableXHRCredentials: true }))
+        it('does not set XHR credentials', () => {
+            request(createRequest())
             expect(mockedXHR.withCredentials).toBe(false)
-        })
-        it('respects disableXHRCredentials=false', () => {
-            request(createRequest({ disableXHRCredentials: false }))
-            expect(mockedXHR.withCredentials).toBe(true)
         })
     })
 

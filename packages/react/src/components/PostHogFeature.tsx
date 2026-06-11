@@ -52,40 +52,30 @@ export function PostHogFeature({
     return <>{fallback}</>
 }
 
-export function captureFeatureInteraction({
-    flag,
-    posthog,
-    flagVariant,
-}: {
+type CaptureFeatureOptions = {
     flag: string
     posthog: PostHog
     flagVariant?: string | boolean
-}) {
-    const properties: Record<string, any> = {
-        feature_flag: flag,
-        $set: { [`$feature_interaction/${flag}`]: flagVariant ?? true },
-    }
-    if (typeof flagVariant === 'string') {
-        properties.feature_flag_variant = flagVariant
-    }
-    posthog.capture('$feature_interaction', properties)
 }
 
-export function captureFeatureView({
-    flag,
-    posthog,
-    flagVariant,
-}: {
-    flag: string
-    posthog: PostHog
-    flagVariant?: string | boolean
-}) {
+function captureFeatureEvent(
+    event: '$feature_interaction' | '$feature_view',
+    { flag, posthog, flagVariant }: CaptureFeatureOptions
+) {
     const properties: Record<string, any> = {
         feature_flag: flag,
-        $set: { [`$feature_view/${flag}`]: flagVariant ?? true },
+        $set: { [`${event}/${flag}`]: flagVariant ?? true },
     }
     if (typeof flagVariant === 'string') {
         properties.feature_flag_variant = flagVariant
     }
-    posthog.capture('$feature_view', properties)
+    posthog.capture(event, properties)
+}
+
+export function captureFeatureInteraction(options: CaptureFeatureOptions) {
+    captureFeatureEvent('$feature_interaction', options)
+}
+
+export function captureFeatureView(options: CaptureFeatureOptions) {
+    captureFeatureEvent('$feature_view', options)
 }

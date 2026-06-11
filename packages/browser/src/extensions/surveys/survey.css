@@ -286,10 +286,12 @@
 }
 
 .survey-box {
-    /* Adjust margin if question/description is empty */
-    &:has(.survey-question:empty):not(:has(.survey-question-description)) {
-        & .multiple-choice-options,
-        & textarea {
+    /* Adjust margin when the question header is empty (no title or description).
+       Keyed off a JS-set class rather than :has(.survey-question:empty), which
+       crashes some WebKit builds during text-node style invalidation. */
+    & .question-header--empty {
+        & ~ .multiple-choice-options,
+        & ~ textarea {
             margin-top: 0;
         }
     }
@@ -539,6 +541,19 @@
 }
 
 /* --- Buttons --- */
+/* Form buttons row (Submit, optional Back) */
+.form-buttons {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    width: 100%;
+}
+
+.form-buttons-with-back > .form-submit {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 /* Submit Button */
 .form-submit {
     font-weight: 700;
@@ -568,6 +583,32 @@
     &[disabled] {
         opacity: var(--ph-survey-disabled-button-opacity);
         cursor: not-allowed;
+    }
+}
+
+/* Back Button (secondary, optional, sits next to Submit) */
+.form-back {
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    padding: 12px 16px;
+    border-radius: 6px;
+    background: transparent;
+    /* Use the question text color (auto-contrasted against the background) so the label
+       is always as readable as the survey's own text, including on dark backgrounds. */
+    color: var(--ph-survey-text-primary-color);
+    border: 1.5px solid var(--ph-survey-border-color);
+    flex: 0 0 auto;
+
+    /* Transform-only hover (matches the submit button) so colors stay fully opaque and
+       contrast is never reduced. */
+    &:hover {
+        transform: scale(1.02);
+    }
+
+    &:active {
+        transform: scale(0.98);
     }
 }
 

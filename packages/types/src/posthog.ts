@@ -351,8 +351,10 @@ export interface PostHog {
 
     /**
      * Reset person properties used for feature flag evaluation.
+     *
+     * @param reloadFeatureFlags - Whether to reload feature flags after resetting
      */
-    resetPersonPropertiesForFlags(): void
+    resetPersonPropertiesForFlags(reloadFeatureFlags?: boolean): void
 
     /**
      * Set group properties to be used for feature flag evaluation.

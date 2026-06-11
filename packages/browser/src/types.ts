@@ -1,3 +1,7 @@
+// Portions of this file are derived from getsentry/sentry-javascript
+// Copyright (c) 2012 Functional Software, Inc. dba Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
+
 import { PostHog } from './posthog-core'
 import { Survey } from './posthog-surveys-types'
 import { ConversationsRemoteConfig } from './posthog-conversations-types'
@@ -190,7 +194,6 @@ export interface RequestWithOptions {
     timeout?: number
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
-    disableXHRCredentials?: boolean
     compression?: Compression | 'best-available'
     fetchOptions?: {
         cache?: RequestInit['cache']
@@ -453,6 +456,11 @@ export interface PersistentStore {
     _error: (error: any) => void
     _parse: (name: string) => any
     _get: (name: string) => any
+    // Returns whether the write was accepted without throwing. Backends that
+    // swallow quota/serialization errors return false so callers can avoid
+    // caching a write that never landed. This is best-effort, not a durable
+    // -persistence guarantee — e.g. Safari private mode has historically
+    // reported success on a write that did not persist.
     _set: (
         name: string,
         value: any,
@@ -460,7 +468,7 @@ export interface PersistentStore {
         cross_subdomain?: boolean,
         secure?: boolean,
         debug?: boolean
-    ) => void
+    ) => boolean
     _remove: (name: string, cross_subdomain?: boolean) => void
 }
 

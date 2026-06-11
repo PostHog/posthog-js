@@ -106,14 +106,6 @@ export interface GetPromptOptions {
   cacheTtlSeconds?: number
   fallback?: string
   version?: number
-  /**
-   * When true, returns a `PromptResult` object with metadata (source, name, version)
-   * instead of a plain string.
-   *
-   * Omitting this option or setting it to false is deprecated and will be removed
-   * in a future major version.
-   */
-  withMetadata?: boolean
 }
 
 /**
@@ -163,7 +155,7 @@ export interface PromptCodeFallbackResult {
 }
 
 /**
- * Discriminated union returned by `Prompts.get()` when `withMetadata: true`.
+ * Discriminated union returned by `Prompts.get()`.
  *
  * Narrow on `source` to guarantee metadata, or access `result.name` /
  * `result.version` directly as `string | undefined` / `number | undefined`.

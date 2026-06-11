@@ -416,6 +416,81 @@ describe('user-agent-utils', () => {
             })
         })
 
+        describe('detectBrowser Google Search App (GSA)', () => {
+            // GSA embeds a platform webview, so its UA otherwise looks like Mobile
+            // Safari on iOS and Chrome on Android. The `GSA/` marker is the only
+            // cross-platform signal — see the example event linked from PostHog/posthog-js.
+            const gsaIosUA =
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/284.0.564099828 Mobile/15E148 Safari/604.1'
+            const gsaAndroidUA =
+                'Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36 GSA/14.21.20.28.arm64'
+            const chromeMacOsUA =
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+            const browserCases: {
+                name: string
+                userAgent: string
+                vendor: string
+                options?: { detectGoogleSearchApp?: boolean }
+                expectedBrowser: string
+            }[] = [
+                // off by default — GSA falls through to the webview it embeds
+                {
+                    name: 'off by default, iOS GSA reads as Mobile Safari',
+                    userAgent: gsaIosUA,
+                    vendor: 'Apple Computer, Inc.',
+                    expectedBrowser: 'Mobile Safari',
+                },
+                {
+                    name: 'off by default, Android GSA reads as Chrome',
+                    userAgent: gsaAndroidUA,
+                    vendor: 'Google Inc.',
+                    expectedBrowser: 'Chrome',
+                },
+                // opted in — GSA surfaces as its own browser on both platforms
+                {
+                    name: 'opted in, detects iOS GSA',
+                    userAgent: gsaIosUA,
+                    vendor: 'Apple Computer, Inc.',
+                    options: { detectGoogleSearchApp: true },
+                    expectedBrowser: 'Google Search App',
+                },
+                {
+                    name: 'opted in, detects Android GSA',
+                    userAgent: gsaAndroidUA,
+                    vendor: 'Google Inc.',
+                    options: { detectGoogleSearchApp: true },
+                    expectedBrowser: 'Google Search App',
+                },
+                // opted in — non-GSA traffic is untouched
+                {
+                    name: 'opted in, leaves non-GSA traffic untouched',
+                    userAgent: chromeMacOsUA,
+                    vendor: 'Google Inc.',
+                    options: { detectGoogleSearchApp: true },
+                    expectedBrowser: 'Chrome',
+                },
+            ]
+
+            it.each(browserCases)('detectBrowser: $name', ({ userAgent, vendor, options, expectedBrowser }) => {
+                expect(detectBrowser(userAgent, vendor, {}, options)).toBe(expectedBrowser)
+            })
+
+            const versionCases: { platform: string; userAgent: string; vendor: string; expectedVersion: number }[] = [
+                { platform: 'iOS', userAgent: gsaIosUA, vendor: 'Apple Computer, Inc.', expectedVersion: 284.0 },
+                { platform: 'Android', userAgent: gsaAndroidUA, vendor: 'Google Inc.', expectedVersion: 14.21 },
+            ]
+
+            it.each(versionCases)(
+                'detectBrowserVersion: reads the GSA version from the $platform UA marker when opted in',
+                ({ userAgent, vendor, expectedVersion }) => {
+                    expect(detectBrowserVersion(userAgent, vendor, {}, { detectGoogleSearchApp: true })).toBe(
+                        expectedVersion
+                    )
+                }
+            )
+        })
+
         describe('detectDeviceType with options', () => {
             const desktopUA =
                 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'

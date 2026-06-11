@@ -2,7 +2,9 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 import { ExportResultCode } from '@opentelemetry/core'
 
+import { redactSpan } from './redact'
 import { isAISpan } from './spans'
+import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
 
@@ -16,8 +18,8 @@ function normalizeHost(value?: unknown): string {
 }
 
 /**
- * Options for the PostHogTraceExporter. Provide `projectToken` to enable exporting. Missing or blank
- * tokens disable the exporter. You can also optionally override the `host` URL. `host` defaults to `https://us.i.posthog.com`.
+ * Options for the PostHogTraceExporter. `projectToken` is required; a blank token disables the
+ * exporter as a defensive no-op. You can also optionally override the `host` URL. `host` defaults to `https://us.i.posthog.com`.
  *
  * @example
  * ```ts
@@ -33,14 +35,7 @@ function normalizeHost(value?: unknown): string {
  * new PostHogTraceExporter({ projectToken: 'phc_...', host: 'https://eu.i.posthog.com' })
  * ```
  */
-export type PostHogTraceExporterOptions =
-  | { projectToken?: string; apiKey?: never; host?: string }
-  | {
-      /** @deprecated Use `projectToken` instead */
-      apiKey?: string
-      projectToken?: never
-      host?: string
-    }
+export type PostHogTraceExporterOptions = { projectToken: string; host?: string }
 
 /**
  * An OpenTelemetry `TraceExporter` that sends AI traces to PostHog's OTLP
@@ -56,7 +51,7 @@ export type PostHogTraceExporterOptions =
  * plug PostHog into an existing processor chain. Otherwise prefer
  * {@link PostHogSpanProcessor}, which is self-contained.
  *
- * Provide `projectToken` to enable exporting. Missing or blank tokens disable the exporter.
+ * `projectToken` is required; a blank token disables the exporter as a defensive no-op.
  * You can also optionally override the `host` URL.
  *
  * @example
@@ -73,8 +68,8 @@ export type PostHogTraceExporterOptions =
 export class PostHogTraceExporter extends OTLPTraceExporter {
   private readonly disabled: boolean
 
-  constructor(options: PostHogTraceExporterOptions = {}) {
-    const token = normalizeToken(options.projectToken) || normalizeToken(options.apiKey)
+  constructor(options: PostHogTraceExporterOptions) {
+    const token = normalizeToken(options.projectToken)
     const disabled = !token
     const host = token ? new URL(normalizeHost(options.host)).origin : DEFAULT_OTEL_HOST
     super({
@@ -105,6 +100,9 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
       resultCallback({ code: ExportResultCode.SUCCESS })
       return
     }
-    super.export(aiSpans, resultCallback)
+    for (const span of aiSpans) {
+      warnIfPostHogAiGatewayOtelAttributes(span.attributes)
+    }
+    super.export(aiSpans.map(redactSpan), resultCallback)
   }
 }

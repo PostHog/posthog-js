@@ -99,7 +99,7 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
 
     let url: string
 
-    if (posthog.config.__preview_external_dependency_versioned_paths) {
+    if (posthog.config.strict_script_versioning) {
         // posthog.version is baked into the executing array.js bundle, so this points at
         // the exact semver-qualified sibling asset without relying on alias redirects.
         url = posthog.requestRouter.endpointFor('assets', `/static/${posthog.version}/${kind}.js`)

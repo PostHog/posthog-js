@@ -57,6 +57,7 @@ const DUCKDUCKGO = 'DuckDuckGo'
 const PALE_MOON = 'Pale Moon'
 const WATERFOX = 'Waterfox'
 const BRAVE = 'Brave'
+const GOOGLE_SEARCH_APP = 'Google Search App'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
@@ -78,6 +79,18 @@ function browserFromHints(hints: BrowserDetectionHints | undefined): string | nu
     return BRAVE
   }
   return null
+}
+
+/**
+ * Opt-in tweaks to UA-string detection. These change how existing traffic is
+ * attributed, so the host SDK gates them (behind its `2026-05-30` config
+ * defaults) rather than enabling them unconditionally — turning one on
+ * reattributes browsers that were previously reported as something else.
+ */
+export interface BrowserDetectionOptions {
+  // Surface the Google Search App as its own browser via its `GSA/` UA marker
+  // instead of the underlying webview (Mobile Safari on iOS, Chrome on Android).
+  detectGoogleSearchApp?: boolean
 }
 
 const XBOX_REGEX = new RegExp(XBOX, 'i')
@@ -119,11 +132,14 @@ const safariCheck = (ua: string, vendor?: string) => (vendor && includes(vendor,
  * detect browsers that intentionally do not identify themselves in the UA
  * string. When omitted, only UA-string detection runs — preserving the previous
  * behaviour.
+ *
+ * `options` toggles opt-in UA-detection tweaks (see `BrowserDetectionOptions`).
  */
 export const detectBrowser = function (
   user_agent: string,
   vendor: string | undefined,
-  hints?: BrowserDetectionHints
+  hints?: BrowserDetectionHints,
+  options?: BrowserDetectionOptions
 ): string {
   vendor = vendor || '' // vendor is undefined for at least IE9
 
@@ -133,6 +149,14 @@ export const detectBrowser = function (
   const fromHints = browserFromHints(hints)
   if (fromHints) {
     return fromHints
+  }
+
+  // The Google Search App embeds a platform webview, so its UA otherwise looks
+  // like Mobile Safari (iOS) or Chrome (Android). The `GSA/` marker is present
+  // on every platform, so checking it first lets us attribute GSA consistently
+  // — it must precede the Chrome and Safari branches that would match instead.
+  if (options?.detectGoogleSearchApp && includes(user_agent, 'GSA/')) {
+    return GOOGLE_SEARCH_APP
   }
 
   if (includes(user_agent, ' OPR/') && includes(user_agent, 'Mini')) {
@@ -237,6 +261,7 @@ const versionRegexes: Record<string, RegExp[]> = {
   [DUCKDUCKGO]: [new RegExp('(DuckDuckGo|Ddg)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [PALE_MOON]: [new RegExp('PaleMoon\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [WATERFOX]: [new RegExp(WATERFOX + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [GOOGLE_SEARCH_APP]: [new RegExp('GSA\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [INTERNET_EXPLORER]: [new RegExp('(rv:|MSIE )' + BROWSER_VERSION_REGEX_SUFFIX)],
   Mozilla: [new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],
 }
@@ -252,9 +277,10 @@ const versionRegexes: Record<string, RegExp[]> = {
 export const detectBrowserVersion = function (
   userAgent: string,
   vendor: string | undefined,
-  hints?: BrowserDetectionHints
+  hints?: BrowserDetectionHints,
+  options?: BrowserDetectionOptions
 ): number | null {
-  const browser = detectBrowser(userAgent, vendor, hints)
+  const browser = detectBrowser(userAgent, vendor, hints, options)
 
   // Desktop / Android Brave has no parseable UA version, so it returns null
   // below: its `versionRegexes` entry only matches the iOS `Brave/` marker

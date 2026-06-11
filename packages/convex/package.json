@@ -11,7 +11,7 @@
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
   "author": "PostHog Inc.",
-  "version": "2.0.6",
+  "version": "2.0.28",
   "license": "MIT",
   "keywords": [
     "convex",
@@ -62,8 +62,8 @@
   "types": "./dist/client/index.d.ts",
   "module": "./dist/client/index.js",
   "dependencies": {
-    "@posthog/core": "workspace:*",
-    "posthog-node": "workspace:*"
+    "@posthog/core": "workspace:^",
+    "posthog-node": "workspace:^"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",

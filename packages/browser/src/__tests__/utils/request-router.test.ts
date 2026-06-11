@@ -86,64 +86,64 @@ describe('request-router', () => {
         expect(router.endpointFor('api')).toEqual('https://eu.i.posthog.com')
     })
 
-    describe('preview versioned asset host routing', () => {
+    describe('asset_host configuration', () => {
         it.each([
             [
-                'keeps exact semver asset paths on the normal US asset host when enabled as a boolean',
+                'keeps exact semver asset paths on the normal US asset host when asset_host is not configured',
                 'https://app.posthog.com',
-                true,
+                undefined,
                 '/static/1.370.0/recorder.js',
                 'https://us-assets.i.posthog.com/static/1.370.0/recorder.js',
             ],
             [
-                'keeps exact semver asset paths on the normal EU asset host when enabled as a boolean',
+                'keeps exact semver asset paths on the normal EU asset host when asset_host is not configured',
                 'https://eu.posthog.com',
-                true,
+                undefined,
                 '/static/1.370.0/recorder.js',
                 'https://eu-assets.i.posthog.com/static/1.370.0/recorder.js',
             ],
             [
-                'accepts a string asset host override for exact semver asset paths',
+                'accepts asset_host for exact semver asset paths',
                 'https://app.posthog.com',
                 'https://cdn-preview.example.com/',
                 '/static/1.370.0/recorder.js',
                 'https://cdn-preview.example.com/static/1.370.0/recorder.js',
             ],
             [
-                'accepts a string asset host override for compatibility asset paths',
+                'accepts asset_host for compatibility asset paths',
                 'https://app.posthog.com',
                 'https://cdn-preview.example.com/',
                 '/static/recorder.js?v=1.370.0',
                 'https://cdn-preview.example.com/static/recorder.js?v=1.370.0',
             ],
             [
-                'lets a string asset host override win even when api_host is custom',
+                'lets asset_host win even when api_host is custom',
                 'https://my-proxy.example.com',
                 'https://cdn-preview.example.com',
                 '/static/1.370.0/recorder.js',
                 'https://cdn-preview.example.com/static/1.370.0/recorder.js',
             ],
             [
-                'keeps custom asset hosts unchanged when enabled as a boolean',
+                'keeps custom asset hosts unchanged when asset_host is not configured',
                 'https://my-proxy.example.com',
-                true,
+                undefined,
                 '/static/1.370.0/recorder.js',
                 'https://my-proxy.example.com/static/1.370.0/recorder.js',
             ],
-        ])('%s', (_, apiHost, override, path, expected) => {
+        ])('%s', (_, apiHost, assetHost, path, expected) => {
             expect(
                 router(apiHost, undefined, {
-                    __preview_external_dependency_versioned_paths: override,
+                    asset_host: assetHost,
                 }).endpointFor('assets', path)
             ).toEqual(expected)
         })
 
-        it('keeps non-static asset paths on the normal asset host even when a preview override is configured', () => {
-            const previewRouter = router('https://app.posthog.com', undefined, {
-                __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
+        it('keeps non-static asset paths on the normal asset host even when asset_host is configured', () => {
+            const assetHostRouter = router('https://app.posthog.com', undefined, {
+                asset_host: 'https://cdn-preview.example.com/',
             })
 
-            expect(previewRouter.endpointFor('assets', '/array/test-token/config.js')).toEqual(
+            expect(assetHostRouter.endpointFor('assets', '/array/test-token/config.js')).toEqual(
                 'https://us-assets.i.posthog.com/array/test-token/config.js'
             )
         })

@@ -73,6 +73,7 @@ describe('logs entrypoint', () => {
                 })),
             },
             get_distinct_id: jest.fn(() => 'user-123'),
+            is_capturing: jest.fn(() => true),
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -577,6 +578,62 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+        })
+    })
+
+    describe('consent / opt-out handling', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('should not emit logs when capturing is opted out', () => {
+            const originalConsoleLog = assignableWindow.console.log as jest.Mock
+            ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('should not be captured')
+
+            expect(mockEmit).not.toHaveBeenCalled()
+            // the original console method must still be called so local output isn't suppressed
+            expect(originalConsoleLog).toHaveBeenCalledWith('should not be captured')
+        })
+
+        it('should resume emitting once capturing is opted back in', () => {
+            const isCapturing = mockPostHog.is_capturing as jest.Mock
+            isCapturing.mockReturnValue(false)
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('while opted out')
+            expect(mockEmit).not.toHaveBeenCalled()
+
+            isCapturing.mockReturnValue(true)
+            assignableWindow.console.log('after opt back in')
+
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: '"after opt back in"',
+                })
+            )
+        })
+
+        it('should check capturing status on every log, not just at init', () => {
+            const isCapturing = mockPostHog.is_capturing as jest.Mock
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('captured')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+
+            isCapturing.mockReturnValue(false)
+            assignableWindow.console.log('not captured')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
         })
     })
 

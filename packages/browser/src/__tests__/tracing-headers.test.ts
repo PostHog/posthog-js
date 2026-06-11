@@ -1,6 +1,7 @@
 import { isNull, isUndefined } from '@posthog/core'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import patchFns from '../entrypoints/tracing-headers'
+import { TracingHeaders } from '../extensions/tracing-headers'
 
 class TestRequest {
     body?: BodyInit | null
@@ -78,6 +79,79 @@ describe('tracing headers', () => {
         sessionManager.checkAndGetSessionAndWindowId.mockClear()
     })
 
+    describe('config aliases', () => {
+        const getConfiguredHostnames = (config: Record<string, unknown>): string[] | boolean | undefined => {
+            const tracingHeaders = new TracingHeaders({ config } as any)
+            return (tracingHeaders as any)._getConfiguredHostnames()
+        }
+
+        it.each([
+            {
+                name: 'uses the public tracing_headers option',
+                config: { tracing_headers: ['example.com'] },
+                expected: ['example.com'],
+            },
+            {
+                name: 'falls back to deprecated addTracingHeaders',
+                config: { addTracingHeaders: ['camel.example'] },
+                expected: ['camel.example'],
+            },
+            {
+                name: 'falls back to deprecated __add_tracing_headers',
+                config: { __add_tracing_headers: ['legacy.example'] },
+                expected: ['legacy.example'],
+            },
+            {
+                name: 'prefers tracing_headers over deprecated addTracingHeaders',
+                config: {
+                    tracing_headers: ['public.example'],
+                    addTracingHeaders: ['camel.example'],
+                },
+                expected: ['public.example'],
+            },
+            {
+                name: 'prefers addTracingHeaders over deprecated __add_tracing_headers',
+                config: {
+                    addTracingHeaders: ['camel.example'],
+                    __add_tracing_headers: ['legacy.example'],
+                },
+                expected: ['camel.example'],
+            },
+            {
+                name: 'prefers tracing_headers over deprecated __add_tracing_headers',
+                config: {
+                    tracing_headers: ['public.example'],
+                    __add_tracing_headers: ['legacy.example'],
+                },
+                expected: ['public.example'],
+            },
+            {
+                name: 'allows an empty tracing_headers list to override deprecated aliases',
+                config: {
+                    tracing_headers: [],
+                    addTracingHeaders: ['camel.example'],
+                    __add_tracing_headers: ['legacy.example'],
+                },
+                expected: [],
+            },
+        ])('$name', ({ config, expected }) => {
+            expect(getConfiguredHostnames(config)).toEqual(expected)
+        })
+
+        it('mutates the installed hostname list when tracing_headers changes', () => {
+            const config = { tracing_headers: ['example.com'] }
+            const tracingHeaders = new TracingHeaders({ config } as any)
+            const hostnames = (tracingHeaders as any)._syncHostnamesForPatch()
+
+            expect(hostnames).toEqual(['example.com'])
+
+            config.tracing_headers = []
+
+            expect((tracingHeaders as any)._syncHostnamesForPatch()).toBeUndefined()
+            expect(hostnames).toEqual([])
+        })
+    })
+
     describe('fetch', () => {
         it('adds tracing headers without spreading init or mutating caller headers', async () => {
             const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
@@ -136,6 +210,47 @@ describe('tracing headers', () => {
 
             expect(originalFetch).toHaveBeenCalledWith('https://other.example/path', init)
             expect(sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+        })
+
+        it('uses the latest configured hostnames from a mutated hostname list without re-patching', async () => {
+            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            setWindowFetch(originalFetch)
+            const hostnames = ['example.com']
+            restoreFetchPatch = patchFns._patchFetch(hostnames, 'distinct-id', sessionManager as any)
+
+            await window.fetch('https://example.com/path')
+            expect(new Headers(originalFetch.mock.calls[0][1]?.headers).get('X-POSTHOG-DISTINCT-ID')).toBe(
+                'distinct-id'
+            )
+
+            originalFetch.mockClear()
+            sessionManager.checkAndGetSessionAndWindowId.mockClear()
+            hostnames.splice(0)
+
+            await window.fetch('https://example.com/path')
+
+            expect(originalFetch).toHaveBeenCalledWith('https://example.com/path')
+            expect(sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+        })
+
+        it('uses the latest distinct ID from a provider without re-patching', async () => {
+            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            setWindowFetch(originalFetch)
+            let distinctId = 'first-distinct-id'
+            restoreFetchPatch = patchFns._patchFetch(['example.com'], () => distinctId, sessionManager as any)
+
+            await window.fetch('https://example.com/path')
+            expect(new Headers(originalFetch.mock.calls[0][1]?.headers).get('X-POSTHOG-DISTINCT-ID')).toBe(
+                'first-distinct-id'
+            )
+
+            originalFetch.mockClear()
+            distinctId = 'second-distinct-id'
+
+            await window.fetch('https://example.com/path')
+            expect(new Headers(originalFetch.mock.calls[0][1]?.headers).get('X-POSTHOG-DISTINCT-ID')).toBe(
+                'second-distinct-id'
+            )
         })
 
         it('passes the cloned Request downstream when a Request input hostname does not match', async () => {

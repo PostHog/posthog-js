@@ -2,6 +2,7 @@ import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
+import { SDK_DIST_CHANNEL } from '../constants'
 import { each, extend, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import {
@@ -279,7 +280,8 @@ export function getBrowserDetectionHints(): BrowserDetectionHints {
 
 export function getEventProperties(
     maskPersonalDataProperties?: boolean,
-    customPersonalDataProperties?: string[]
+    customPersonalDataProperties?: string[],
+    detectGoogleSearchApp?: boolean
 ): Properties {
     if (!userAgent) {
         return {}
@@ -289,12 +291,13 @@ export function getEventProperties(
         : []
     const [os_name, os_version] = detectOS(userAgent)
     const browserHints = getBrowserDetectionHints()
+    const browserOptions = { detectGoogleSearchApp }
 
-    return extend(
+    const properties = extend(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator.vendor, browserHints),
+            $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions),
             $device: detectDevice(userAgent),
             $device_type: detectDeviceType(userAgent, {
                 // eslint-disable-next-line compat/compat
@@ -312,7 +315,7 @@ export function getEventProperties(
             $host: location?.host,
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints),
+            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints, browserOptions),
             $browser_language: getBrowserLanguage(),
             $browser_language_prefix: getBrowserLanguagePrefix(),
             $screen_height: window?.screen.height,
@@ -325,4 +328,10 @@ export function getEventProperties(
             $time: Date.now() / 1000, // epoch time in seconds
         }
     )
+
+    if (Config.SDK_DIST_CHANNEL) {
+        properties[SDK_DIST_CHANNEL] = Config.SDK_DIST_CHANNEL
+    }
+
+    return properties
 }

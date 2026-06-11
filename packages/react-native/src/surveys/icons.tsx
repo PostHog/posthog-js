@@ -1,8 +1,9 @@
 import React, { JSX } from 'react'
-import { StyleSheet, Text } from 'react-native'
+import { Text } from 'react-native'
 import type { SvgProps } from 'react-native-svg'
 
 import { OptionalReactNativeSvg } from '../optional/OptionalReactNativeSvg'
+import { createSafeStyleSheet } from './safeStyleSheet'
 
 const Svg = OptionalReactNativeSvg?.Svg as React.ComponentType<SvgProps> | undefined
 const Path = OptionalReactNativeSvg?.Path as React.ComponentType<Record<string, unknown>> | undefined
@@ -194,7 +195,7 @@ export const CancelSVG = (props: SvgProps): JSX.Element =>
     },
   })
 
-const styles = StyleSheet.create({
+const styles = createSafeStyleSheet({
   fallbackIcon: {
     textAlign: 'center',
   },

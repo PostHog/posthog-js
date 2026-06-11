@@ -19,6 +19,7 @@ import type {
 } from '@openai/agents-core'
 import { MAX_OUTPUT_SIZE, truncate, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
+import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
 /**
  * Normalize OpenAI Responses API input items to include a `role` field.
@@ -455,9 +456,16 @@ export class PostHogTracingProcessor implements TracingProcessor {
       }
     }
 
+    if (typeof modelConfig.base_url === 'string') {
+      warnIfPostHogAiGateway(modelConfig.base_url)
+    }
+
     const properties: Record<string, any> = {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_model: spanData.model,
+      // Best-effort: Agents SDK only sets model_config.base_url for chat-completions
+      // calls with no model settings; Responses and normal chat calls omit it, so ''.
+      $ai_base_url: typeof modelConfig.base_url === 'string' ? modelConfig.base_url : '',
       $ai_model_parameters: Object.keys(modelParams).length > 0 ? modelParams : null,
       $ai_input: this._prepareCapturedValue(normalizeInputRoles(spanData.input)),
       $ai_output_choices: this._prepareCapturedValue(spanData.output),
@@ -517,6 +525,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     // Extract model from response
     const model = response?.model as string | undefined
 
+    // No $ai_base_url: ResponseSpanData carries no base URL, so dedup can't see these.
     const properties: Record<string, any> = {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_model: model,

@@ -1,6 +1,6 @@
 {
     "name": "@posthog/webpack-plugin",
-    "version": "1.5.0",
+    "version": "1.5.22",
     "description": "Webpack plugin for Posthog 🦔",
     "repository": {
         "type": "git",
@@ -17,8 +17,8 @@
     "types": "./dist/index.d.ts",
     "dependencies": {
         "@posthog/cli": "catalog:",
-        "@posthog/core": "workspace:*",
-        "@posthog/plugin-utils": "workspace:*"
+        "@posthog/core": "workspace:^",
+        "@posthog/plugin-utils": "workspace:^"
     },
     "files": [
         "dist",

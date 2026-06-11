@@ -91,7 +91,7 @@ test.describe('fetch wrappers preserve POST string bodies', () => {
 
         await start(
             {
-                options: { __add_tracing_headers: ['localhost'] },
+                options: { tracing_headers: ['localhost'] },
                 url: '/playground/cypress/index.html',
             },
             page,

@@ -92,11 +92,13 @@ function isTranslatedChoices(
   return isArray(questionTranslation.choices)
 }
 
-function hasThankYouTranslation(translation: SurveyTranslation): boolean {
+function hasAppearanceTranslation(translation: SurveyTranslation): boolean {
   return (
     !isUndefined(translation.thankYouMessageHeader) ||
     !isUndefined(translation.thankYouMessageDescription) ||
-    !isUndefined(translation.thankYouMessageCloseButtonText)
+    !isUndefined(translation.thankYouMessageCloseButtonText) ||
+    !isUndefined(translation.submitButtonText) ||
+    !isUndefined(translation.backButtonText)
   )
 }
 
@@ -104,6 +106,8 @@ type TranslatableSurveyAppearance = {
   thankYouMessageHeader?: string
   thankYouMessageDescription?: string | null
   thankYouMessageCloseButtonText?: string
+  submitButtonText?: string
+  backButtonText?: string
 }
 
 type TranslatableSurveyQuestion = {
@@ -215,7 +219,15 @@ export function applySurveyTranslation<
           translated.appearance.thankYouMessageCloseButtonText = translation.thankYouMessageCloseButtonText
           hasTranslation = true
         }
-      } else if (hasThankYouTranslation(translation)) {
+        if (!isUndefined(translation.submitButtonText)) {
+          translated.appearance.submitButtonText = translation.submitButtonText
+          hasTranslation = true
+        }
+        if (!isUndefined(translation.backButtonText)) {
+          translated.appearance.backButtonText = translation.backButtonText
+          hasTranslation = true
+        }
+      } else if (hasAppearanceTranslation(translation)) {
         hasTranslation = true
       }
     }

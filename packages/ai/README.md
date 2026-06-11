@@ -6,14 +6,31 @@ TypeScript SDK for LLM observability with PostHog.
 
 ## Installation
 
+Provider SDKs are optional peer dependencies, so you only install the SDK for the integration you use. Install `@posthog/ai` alongside it:
+
 ```bash
-npm install @posthog/ai
+npm install @posthog/ai openai            # OpenAI / Azure OpenAI
+npm install @posthog/ai @anthropic-ai/sdk # Anthropic
+npm install @posthog/ai @google/genai     # Google Gemini
+npm install @posthog/ai @langchain/core   # LangChain
+# Vercel AI SDK (withTracing), captureAiGeneration, and OpenTelemetry need no provider SDK
 ```
+
+Import each integration from its subpath:
+
+| Integration | Import from | Peer to install |
+| --- | --- | --- |
+| OpenAI / Azure OpenAI | `@posthog/ai/openai` | `openai` |
+| Anthropic | `@posthog/ai/anthropic` | `@anthropic-ai/sdk` |
+| Google Gemini | `@posthog/ai/gemini` | `@google/genai` |
+| LangChain | `@posthog/ai/langchain` | `@langchain/core` |
+| Vercel AI SDK (`withTracing`) | `@posthog/ai` | — |
+| Custom (`captureAiGeneration`) | `@posthog/ai` | — |
 
 ## Direct Provider Usage
 
 ```typescript
-import { OpenAI } from '@posthog/ai'
+import { OpenAI } from '@posthog/ai/openai'
 import { PostHog } from 'posthog-node'
 
 const phClient = new PostHog('<YOUR_PROJECT_API_KEY>', { host: 'https://us.i.posthog.com' })
@@ -72,7 +89,7 @@ await phClient.shutdown()
 
 ## OpenTelemetry
 
-`@posthog/ai/otel` provides two ways to send AI traces to PostHog via OpenTelemetry. Both automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`) and PostHog converts them into `$ai_generation` events server-side. Missing or blank project tokens disable the OpenTelemetry integration. This works with any LLM provider SDK that supports OpenTelemetry.
+`@posthog/ai/otel` provides two ways to send AI traces to PostHog via OpenTelemetry. Both automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`) and PostHog converts them into `$ai_generation` events server-side. `projectToken` is required; a blank token disables the OpenTelemetry integration as a defensive no-op. This works with any LLM provider SDK that supports OpenTelemetry.
 
 ```bash
 npm install @posthog/ai @opentelemetry/sdk-node @opentelemetry/sdk-trace-base @opentelemetry/exporter-trace-otlp-http
@@ -91,7 +108,7 @@ import { openai } from '@ai-sdk/openai'
 const sdk = new NodeSDK({
   spanProcessors: [
     new PostHogSpanProcessor({
-      apiKey: '<YOUR_PROJECT_API_KEY>',
+      projectToken: '<YOUR_PROJECT_TOKEN>',
       host: 'https://us.i.posthog.com', // optional, defaults to https://us.i.posthog.com
     }),
   ],

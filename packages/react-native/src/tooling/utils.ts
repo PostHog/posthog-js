@@ -1,4 +1,6 @@
-// copied from https://github.com/getsentry/sentry-react-native/blob/14f576eeb6c444281bff03a323b0aed836002cce/packages/core/src/js/tools/utils.ts
+// Portions of this file are derived from getsentry/sentry-react-native
+// Copyright (c) 2017 Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
 import * as crypto from 'crypto'
 // eslint-disable-next-line import/no-extraneous-dependencies
