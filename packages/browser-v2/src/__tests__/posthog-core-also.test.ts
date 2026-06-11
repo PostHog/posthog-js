@@ -37,7 +37,7 @@ describe('posthog core', () => {
     const defaultConfig = {}
 
     const defaultOverrides = {
-        _send_request: jest.fn(),
+        sendRequest: jest.fn(),
     }
 
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
@@ -110,10 +110,10 @@ describe('posthog core', () => {
             ).not.toThrow()
         })
 
-        it('calls callbacks added via _addCaptureHook', () => {
+        it('calls callbacks added via addCaptureHook', () => {
             const hook = jest.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)
-            posthog._addCaptureHook(hook)
+            posthog.addCaptureHook(hook)
 
             posthog.capture(eventName, {}, {})
             expect(hook).toHaveBeenCalledWith(
@@ -154,7 +154,7 @@ describe('posthog core', () => {
             const hook = jest.fn()
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
-            posthog._addCaptureHook(hook)
+            posthog.addCaptureHook(hook)
 
             expect(() => posthog.capture(undefined)).not.toThrow()
             expect(hook).not.toHaveBeenCalled()
@@ -165,7 +165,7 @@ describe('posthog core', () => {
             const hook = jest.fn()
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
-            posthog._addCaptureHook(hook)
+            posthog.addCaptureHook(hook)
 
             // @ts-expect-error - testing invalid input
             expect(() => posthog.capture({ event: 'object as name' })).not.toThrow()
@@ -182,7 +182,7 @@ describe('posthog core', () => {
             }
             const hook = jest.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)
-            posthog._addCaptureHook(hook)
+            posthog.addCaptureHook(hook)
 
             posthog.capture(eventName, {}, {})
             expect(hook).not.toHaveBeenCalledWith('$event')
@@ -205,7 +205,7 @@ describe('posthog core', () => {
                 },
                 defaultOverrides
             )
-            posthog._addCaptureHook(hook)
+            posthog.addCaptureHook(hook)
 
             const event = posthog.capture(eventName, {}, {})
 
@@ -312,7 +312,7 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/e/',
                 })
@@ -321,11 +321,11 @@ describe('posthog core', () => {
 
         it('sends payloads to alternative endpoint if given', () => {
             const posthog = posthogWith({ ...defaultConfig, requestBatching: false }, defaultOverrides)
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog.onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/i/v0/e/',
                 })
@@ -337,7 +337,7 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
                 })
@@ -346,11 +346,11 @@ describe('posthog core', () => {
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, requestBatching: false }, defaultOverrides)
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog.onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
                 })
@@ -364,7 +364,7 @@ describe('posthog core', () => {
 
                 posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
 
-                expect(posthog._send_request).toHaveBeenCalledWith(
+                expect(posthog.sendRequest).toHaveBeenCalledWith(
                     expect.objectContaining({
                         transport,
                     })
@@ -384,32 +384,32 @@ describe('posthog core', () => {
         it('enables compression from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
+            posthog.onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual('gzip-js')
         })
         it('ignores legacy field defaultIdentifiedOnly from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
+            posthog.onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
             expect(posthog.config.personProfiles).toEqual('identified_only')
 
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog.onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             expect(posthog.config.personProfiles).toEqual('identified_only')
 
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog.onRemoteConfig({} as RemoteConfig)
             expect(posthog.config.personProfiles).toEqual('identified_only')
         })
         it('defaultIdentifiedOnly does not override personProfiles if already set', () => {
             const posthog = posthogWith({ personProfiles: 'always' })
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
+            posthog.onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
             expect(posthog.config.personProfiles).toEqual('always')
         })
 
         it('enables compression from flags response when only one received', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ supportedCompression: ['base64'] } as RemoteConfig)
+            posthog.onRemoteConfig({ supportedCompression: ['base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual('base64')
         })
@@ -417,7 +417,7 @@ describe('posthog core', () => {
         it('does not enable compression from flags response if compression is disabled', () => {
             const posthog = posthogWith({ disableCompression: true, persistence: 'memory' })
 
-            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
+            posthog.onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual(undefined)
         })
@@ -425,7 +425,7 @@ describe('posthog core', () => {
         it('defaults to /e if no endpoint is given', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog.onRemoteConfig({} as RemoteConfig)
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
         })
@@ -433,7 +433,7 @@ describe('posthog core', () => {
         it('uses the specified analytics endpoint if given', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog.onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
@@ -577,23 +577,23 @@ describe('posthog core', () => {
 
             it('$identify as first event includes initial props and marks as sent', () => {
                 const posthog = setupPosthogWithInitialProps()
-                expect(posthog._personProcessingSetOncePropertiesSent).toBe(false)
+                expect((posthog as any)._personProcessingSetOncePropertiesSent).toBe(false)
 
-                const result = posthog._calculate_set_once_properties(undefined, true, true)
+                const result = (posthog as any)._calculateSetOnceProperties(undefined, true, true)
                 expect(result).toEqual({ $initial_current_url: 'https://posthog.com' })
-                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+                expect((posthog as any)._personProcessingSetOncePropertiesSent).toBe(true)
             })
 
             it('$identify after another event has already sent props still includes initial props', () => {
                 const posthog = setupPosthogWithInitialProps()
 
                 // First normal event sends and marks initial props
-                const firstResult = posthog._calculate_set_once_properties(undefined, true, false)
+                const firstResult = (posthog as any)._calculateSetOnceProperties(undefined, true, false)
                 expect(firstResult).toEqual({ $initial_current_url: 'https://posthog.com' })
-                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+                expect((posthog as any)._personProcessingSetOncePropertiesSent).toBe(true)
 
                 // $identify still includes them even though they've been sent
-                const identifyResult = posthog._calculate_set_once_properties(undefined, true, true)
+                const identifyResult = (posthog as any)._calculateSetOnceProperties(undefined, true, true)
                 expect(identifyResult).toEqual({ $initial_current_url: 'https://posthog.com' })
             })
 
@@ -601,11 +601,11 @@ describe('posthog core', () => {
                 const posthog = setupPosthogWithInitialProps()
 
                 // First event sends initial props
-                posthog._calculate_set_once_properties(undefined, true, false)
-                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+                ;(posthog as any)._calculateSetOnceProperties(undefined, true, false)
+                expect((posthog as any)._personProcessingSetOncePropertiesSent).toBe(true)
 
                 // Second normal event should NOT include initial props
-                const result = posthog._calculate_set_once_properties(undefined, true, false)
+                const result = (posthog as any)._calculateSetOnceProperties(undefined, true, false)
                 expect(result).toBeUndefined()
             })
         })
@@ -657,7 +657,7 @@ describe('posthog core', () => {
         })
     })
 
-    describe('_handle_unload()', () => {
+    describe('_handleUnload()', () => {
         it('captures $pageleave', () => {
             const posthog = posthogWith(
                 {
@@ -668,7 +668,7 @@ describe('posthog core', () => {
                 { capture: jest.fn() }
             )
 
-            posthog._handle_unload()
+            ;(posthog as any)._handleUnload()
 
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
@@ -683,7 +683,7 @@ describe('posthog core', () => {
                 { capture: jest.fn() }
             )
 
-            posthog._handle_unload()
+            ;(posthog as any)._handleUnload()
 
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
@@ -698,7 +698,7 @@ describe('posthog core', () => {
                 { capture: jest.fn() }
             )
 
-            posthog._handle_unload()
+            ;(posthog as any)._handleUnload()
 
             expect(posthog.capture).not.toHaveBeenCalled()
         })
@@ -713,7 +713,7 @@ describe('posthog core', () => {
                 { capture: jest.fn() }
             )
 
-            posthog._handle_unload()
+            ;(posthog as any)._handleUnload()
 
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
@@ -725,12 +725,14 @@ describe('posthog core', () => {
                     capturePageleave: 'if_capture_pageview',
                     requestBatching: true,
                 },
-                { _requestQueue: { enqueue: jest.fn(), unload: jest.fn() } as unknown as RequestQueue }
+                {
+                    _requestQueue: { enqueue: jest.fn(), unload: jest.fn() } as unknown as RequestQueue,
+                } as unknown as Partial<PostHog>
             )
 
-            posthog._handle_unload()
+            ;(posthog as any)._handleUnload()
 
-            expect(posthog._requestQueue.unload).toHaveBeenCalledTimes(1)
+            expect((posthog as any)._requestQueue.unload).toHaveBeenCalledTimes(1)
         })
 
         describe('without batching', () => {
@@ -743,7 +745,7 @@ describe('posthog core', () => {
                     },
                     { capture: jest.fn() }
                 )
-                posthog._handle_unload()
+                ;(posthog as any)._handleUnload()
 
                 expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
             })
@@ -757,7 +759,7 @@ describe('posthog core', () => {
                     },
                     { capture: jest.fn() }
                 )
-                posthog._handle_unload()
+                ;(posthog as any)._handleUnload()
 
                 expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
             })
@@ -771,7 +773,7 @@ describe('posthog core', () => {
                     },
                     { capture: jest.fn() }
                 )
-                posthog._handle_unload()
+                ;(posthog as any)._handleUnload()
 
                 expect(posthog.capture).not.toHaveBeenCalled()
             })
@@ -1350,7 +1352,7 @@ describe('posthog core', () => {
                 )!
                 posthog.persistence!.clear()
                 // mock this internal queue - not capture
-                posthog._requestQueue = {
+                ;(posthog as any)._requestQueue = {
                     enqueue: jest.fn(),
                 } as unknown as RequestQueue
             })
@@ -1362,9 +1364,9 @@ describe('posthog core', () => {
                 posthog.capture('some_event', { prop: 5 })
 
                 // 2 $groupidentify calls from group() + 1 some_event
-                expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(3)
+                expect((posthog as any)._requestQueue!.enqueue).toHaveBeenCalledTimes(3)
 
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[2][0]
+                const eventPayload = jest.mocked((posthog as any)._requestQueue!.enqueue).mock.calls[2][0]
                 // need to help TS know event payload data is not an array
                 // eslint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
@@ -1463,12 +1465,12 @@ describe('posthog core', () => {
     describe('config migration', () => {
         it('uses advancedDisableFlags when set', () => {
             const posthog = posthogWith({ advancedDisableFlags: true })
-            expect(posthog._shouldDisableFlags()).toBe(true)
+            expect(posthog.shouldDisableFlags()).toBe(true)
         })
 
         it('returns false when the field is not set', () => {
             const posthog = posthogWith({})
-            expect(posthog._shouldDisableFlags()).toBe(false)
+            expect(posthog.shouldDisableFlags()).toBe(false)
         })
     })
 
@@ -1476,7 +1478,7 @@ describe('posthog core', () => {
         it('calls loaded config option', () => {
             const posthog = posthogWith({ loaded: jest.fn() })
 
-            posthog._loaded()
+            ;(posthog as any)._loaded()
 
             expect(posthog.config.loaded).toHaveBeenCalledWith(posthog)
         })
@@ -1488,7 +1490,7 @@ describe('posthog core', () => {
                 },
             })
 
-            posthog._loaded()
+            ;(posthog as any)._loaded()
 
             expect(mockLogger.critical).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
         })
@@ -1506,7 +1508,7 @@ describe('posthog core', () => {
                 const sendRequestMock = jest.fn()
                 await createPosthogInstance(uuidv7(), {
                     loaded: (ph) => {
-                        ph._send_request = sendRequestMock
+                        ph.sendRequest = sendRequestMock
                     },
                 })
 
@@ -1523,7 +1525,7 @@ describe('posthog core', () => {
                 await createPosthogInstance(uuidv7(), {
                     advancedDisableFlags: true,
                     loaded: (ph) => {
-                        ph._send_request = sendRequestMock
+                        ph.sendRequest = sendRequestMock
                     },
                 })
 

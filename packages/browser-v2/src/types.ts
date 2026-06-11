@@ -172,14 +172,35 @@ type RenamedSnakeCasePostHogMembers =
     | 'clear_opt_in_out_capturing'
     | 'set_config'
 
+/**
+ * Underscore-prefixed members of the base interface from @posthog/types that v2 renamed.
+ * The base declarations are kept in @posthog/types for the benefit of the v1 SDK and
+ * redeclared under their new names below.
+ */
+type RenamedInternalPostHogMembers = '__loaded'
+
 /* Small override from the base class to make it more specific to the browser/src/posthog-core.ts file
  * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
  * using the proper `loaded` function signature.
  */
 export type PostHogInterface = Omit<
     BasePostHogInterface,
-    'config' | 'init' | 'featureFlags' | RemovedDeprecatedPostHogMembers | RenamedSnakeCasePostHogMembers
+    | 'config'
+    | 'init'
+    | 'featureFlags'
+    | RemovedDeprecatedPostHogMembers
+    | RenamedSnakeCasePostHogMembers
+    | RenamedInternalPostHogMembers
 > & {
+    /** @internal Not part of the public API — may change without notice. Renamed from `__loaded`. */
+    isLoaded: boolean
+
+    /**
+     * Returns whether the current user has been identified via `identify()` (or `alias()`).
+     * Returns `false` for anonymous users and after `reset()` is called.
+     */
+    isIdentified(): boolean
+
     /**
      * The feature flags instance. Provides access to feature flag override methods.
      */

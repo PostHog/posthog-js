@@ -461,7 +461,7 @@ describe('PostHogConversations', () => {
 
     describe('identity handling', () => {
         it('should pass PostHog instance to initConversations for identity checks', () => {
-            // Create a PostHog instance where _isIdentified returns true
+            // Create a PostHog instance where isIdentified returns true
             const identifiedPostHog = createMockPostHog({
                 config: createMockConfig({
                     apiHost: 'https://test.posthog.com',
@@ -480,7 +480,7 @@ describe('PostHogConversations', () => {
                 getDistinctId: jest.fn().mockReturnValue('identified-user-123'),
                 on: jest.fn().mockReturnValue(jest.fn()),
                 capture: jest.fn(),
-                _isIdentified: jest.fn().mockReturnValue(true),
+                isIdentified: jest.fn().mockReturnValue(true),
             })
 
             const mockInit = jest.fn().mockReturnValue(mockManager)
@@ -500,7 +500,7 @@ describe('PostHogConversations', () => {
             identifiedConversations.onRemoteConfig(remoteConfig as RemoteConfig)
 
             // The initConversations is called with the PostHog instance
-            // The ConversationsManager will use posthog._isIdentified() to determine
+            // The ConversationsManager will use posthog.isIdentified() to determine
             // if the identification form should be shown
             expect(mockInit).toHaveBeenCalledWith(
                 expect.objectContaining({ enabled: true, token: 'test-token' }),

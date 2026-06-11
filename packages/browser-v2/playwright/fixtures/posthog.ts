@@ -67,7 +67,7 @@ export class PosthogPage {
 
     async waitForLoaded() {
         await this.page.waitForFunction(() => {
-            return (window as WindowWithPostHog).posthog?.__loaded ?? false
+            return (window as WindowWithPostHog).posthog?.isLoaded ?? false
         })
     }
 

@@ -22,7 +22,7 @@ describe('posthog-surveys', () => {
     describe('PostHogSurveys Class', () => {
         let mockPostHog: PostHog & {
             getProperty: jest.Mock
-            _send_request: jest.Mock
+            sendRequest: jest.Mock
         }
         let surveys: PostHogSurveys
         let mockGenerateSurveys: jest.Mock
@@ -100,7 +100,7 @@ describe('posthog-surveys', () => {
                 requestRouter: {
                     endpointFor: jest.fn().mockReturnValue('https://test.com/api/surveys'),
                 },
-                _send_request: jest.fn(),
+                sendRequest: jest.fn(),
                 getProperty: jest.fn(),
                 consent: {
                     _instance: {} as any,
@@ -116,7 +116,7 @@ describe('posthog-surveys', () => {
                     onConsentChange: jest.fn(),
                 },
                 featureFlags: {
-                    _send_request: jest
+                    sendRequest: jest
                         .fn()
                         .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
                     getFeatureFlag: jest
@@ -128,7 +128,7 @@ describe('posthog-surveys', () => {
                 },
             }) as PostHog & {
                 getProperty: jest.Mock
-                _send_request: jest.Mock
+                sendRequest: jest.Mock
             }
 
             // Create surveys instance
@@ -536,8 +536,8 @@ describe('posthog-surveys', () => {
                 // No cached surveys (simulating first page load)
                 mockPostHog.getProperty.mockReturnValue(undefined)
 
-                // Mock _send_request to simulate async API call
-                mockPostHog._send_request.mockImplementation(({ callback: reqCallback }) => {
+                // Mock sendRequest to simulate async API call
+                mockPostHog.sendRequest.mockImplementation(({ callback: reqCallback }) => {
                     setTimeout(() => {
                         reqCallback({ statusCode: 200, json: { surveys: mockSurveys } })
                     }, 100)
@@ -604,7 +604,7 @@ describe('posthog-surveys', () => {
 
                 surveys.getSurveys(mockCallback)
 
-                expect(mockPostHog._send_request).not.toHaveBeenCalled()
+                expect(mockPostHog.sendRequest).not.toHaveBeenCalled()
                 expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
                     isLoaded: true,
                 })
@@ -612,7 +612,7 @@ describe('posthog-surveys', () => {
 
             it('should reuse in-flight promise when fetch is in progress', async () => {
                 // Start a fetch that doesn't complete immediately
-                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                mockPostHog.sendRequest.mockImplementation(({ callback }) => {
                     setTimeout(() => {
                         callback({ statusCode: 200, json: { surveys: mockSurveys } })
                     }, 100)
@@ -627,7 +627,7 @@ describe('posthog-surveys', () => {
 
                 // Second call should reuse the promise, not start a new request
                 surveys.getSurveys(callback2)
-                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+                expect(mockPostHog.sendRequest).toHaveBeenCalledTimes(1)
 
                 // Complete the request
                 jest.advanceTimersByTime(100)
@@ -643,7 +643,7 @@ describe('posthog-surveys', () => {
 
             it('should propagate errors to all promise subscribers', async () => {
                 // Start a fetch that will fail
-                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                mockPostHog.sendRequest.mockImplementation(({ callback }) => {
                     setTimeout(() => {
                         callback({ statusCode: 500 })
                     }, 100)
@@ -667,7 +667,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should clear promise after successful API call', () => {
-                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                mockPostHog.sendRequest.mockImplementation(({ callback }) => {
                     callback({ statusCode: 200, json: { surveys: mockSurveys } })
                 })
 
@@ -684,7 +684,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should clear promise after failed API call (non-200 status)', () => {
-                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                mockPostHog.sendRequest.mockImplementation(({ callback }) => {
                     callback({ statusCode: 500 })
                 })
 
@@ -699,7 +699,7 @@ describe('posthog-surveys', () => {
 
             it('should clear promise when request times out', () => {
                 // Mock a request that will timeout
-                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                mockPostHog.sendRequest.mockImplementation(({ callback }) => {
                     // Simulate a timeout by calling callback with status 0
                     callback({ statusCode: 0, text: 'timeout' })
                 })
@@ -717,7 +717,7 @@ describe('posthog-surveys', () => {
                 const delayedSurveys = [{ id: 'delayed-survey' }]
 
                 // Mock a request that takes some time to respond
-                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                mockPostHog.sendRequest.mockImplementation(({ callback }) => {
                     setTimeout(() => {
                         callback({
                             statusCode: 200,
@@ -747,7 +747,7 @@ describe('posthog-surveys', () => {
             it('should set correct timeout value in request', () => {
                 surveys.getSurveys(mockCallback)
 
-                expect(mockPostHog._send_request).toHaveBeenCalledWith(
+                expect(mockPostHog.sendRequest).toHaveBeenCalledWith(
                     expect.objectContaining({
                         timeout: SURVEYS_REQUEST_TIMEOUT_MS,
                     })
@@ -759,7 +759,7 @@ describe('posthog-surveys', () => {
 
                 surveys.getSurveys(mockCallback, true)
 
-                expect(mockPostHog._send_request).toHaveBeenCalled()
+                expect(mockPostHog.sendRequest).toHaveBeenCalled()
             })
         })
     })

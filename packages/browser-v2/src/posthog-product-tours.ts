@@ -104,7 +104,7 @@ export class PostHogProductTours implements Extension {
             }
         }
 
-        this._instance._send_request({
+        this._instance.sendRequest({
             url: this._instance.requestRouter.endpointFor(
                 'api',
                 `/api/product_tours/?token=${this._instance.config.token}`

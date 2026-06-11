@@ -106,7 +106,7 @@ async function captureRequestHeaders(
         context
     )
 
-    await page.waitForFunction(() => (window as any).posthog?.__loaded === true)
+    await page.waitForFunction(() => (window as any).posthog?.isLoaded === true)
 
     // Wait for whichever wrappers this scenario enables to actually be
     // installed before triggering the request. Without this the test

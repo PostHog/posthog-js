@@ -55,13 +55,13 @@ describe('SiteApps', () => {
             unregister: (key: string) => posthog.persistence!.unregister(key),
             getProperty: (key: string) => posthog.persistence!.props[key],
             capture: jest.fn(),
-            _addCaptureHook: jest.fn((cb) => {
+            addCaptureHook: jest.fn((cb) => {
                 emitCaptureEvent = cb
                 return removeCaptureHook
             }),
             _afterFlagsResponse: jest.fn(),
             getDistinctId: jest.fn().mockImplementation(() => 'distinctid'),
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
+            sendRequest: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {
                 receivedFeatureFlags: jest.fn(),
                 setReloadingPaused: jest.fn(),
@@ -112,7 +112,7 @@ describe('SiteApps', () => {
             expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
             siteAppsInstance.initialize()
 
-            expect(posthog._addCaptureHook).toHaveBeenCalledWith(expect.any(Function))
+            expect(posthog.addCaptureHook).toHaveBeenCalledWith(expect.any(Function))
             expect(siteAppsInstance['_stopBuffering']).toEqual(expect.any(Function))
         })
 
@@ -120,7 +120,7 @@ describe('SiteApps', () => {
             posthog.config.optInSiteApps = false
             siteAppsInstance.initialize()
 
-            expect(posthog._addCaptureHook).not.toHaveBeenCalled()
+            expect(posthog.addCaptureHook).not.toHaveBeenCalled()
             expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
         })
     })

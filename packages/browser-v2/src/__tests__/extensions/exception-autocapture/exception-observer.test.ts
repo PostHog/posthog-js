@@ -62,7 +62,7 @@ describe('Exception Observer', () => {
             loadExternalDependency: loadScriptMock,
         }
 
-        sendRequestSpy = jest.spyOn(posthog, '_send_request')
+        sendRequestSpy = jest.spyOn(posthog, 'sendRequest')
 
         exceptionObserver = new ExceptionObserver(posthog)
     })

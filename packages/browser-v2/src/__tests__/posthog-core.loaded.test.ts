@@ -15,8 +15,8 @@ describe('loaded() with flags', () => {
             ...config,
             loaded: (ph) => {
                 ph.capture = jest.fn()
-                ph._send_request = jest.fn(({ callback }) => callback?.({ statusCode: 200, json: {} }))
-                ph._start_queue_if_opted_in = jest.fn()
+                ph.sendRequest = jest.fn(({ callback }) => callback?.({ statusCode: 200, json: {} }))
+                ;(ph as any)._startQueueIfOptedIn = jest.fn()
 
                 jest.spyOn(ph.featureFlags, 'setGroupPropertiesForFlags')
                 jest.spyOn(ph.featureFlags, 'setReloadingPaused')
@@ -59,16 +59,16 @@ describe('loaded() with flags', () => {
             // Advance past the 5ms debounce timer from reloadFeatureFlags
             jest.advanceTimersByTime(10)
 
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance.sendRequest).toHaveBeenCalledTimes(1)
 
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+            expect(instance.sendRequest.mock.calls[0][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
                 },
             })
             jest.advanceTimersByTime(10) // Ensure no additional debounce
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance.sendRequest).toHaveBeenCalledTimes(1)
         })
 
         it('does add follow up call due to group change', async () => {
@@ -85,9 +85,9 @@ describe('loaded() with flags', () => {
             jest.advanceTimersByTime(10)
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance.sendRequest).toHaveBeenCalledTimes(1)
 
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+            expect(instance.sendRequest.mock.calls[0][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
@@ -98,9 +98,9 @@ describe('loaded() with flags', () => {
             jest.advanceTimersByTime(10) // Fire the debounce for the second group call
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(2)
-            expect(instance._send_request).toHaveBeenCalledTimes(2)
+            expect(instance.sendRequest).toHaveBeenCalledTimes(2)
 
-            expect(instance._send_request.mock.calls[1][0]).toMatchObject({
+            expect(instance.sendRequest.mock.calls[1][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga2' },
@@ -119,8 +119,8 @@ describe('loaded() with flags', () => {
             // Advance past the 5ms debounce timer
             jest.advanceTimersByTime(10)
 
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+            expect(instance.sendRequest).toHaveBeenCalledTimes(1)
+            expect(instance.sendRequest.mock.calls[0][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2&only_evaluate_survey_feature_flags=true',
                 data: {
                     groups: { org: 'bazinga' },
@@ -142,14 +142,14 @@ describe('loaded() with flags', () => {
             jest.advanceTimersByTime(10)
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance.sendRequest).toHaveBeenCalledTimes(1)
 
             // The group() triggered reload doesn't set disable_flags
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toEqual(undefined)
+            expect(instance.sendRequest.mock.calls[0][0].data.disable_flags).toEqual(undefined)
 
             jest.advanceTimersByTime(10) // Ensure no additional calls
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance.sendRequest).toHaveBeenCalledTimes(1)
         })
     })
 
@@ -186,7 +186,7 @@ describe('loaded() with flags', () => {
                 expectedArgs: { quotaLimited: ['recordings'], featureFlags: { 'test-flag': true } },
             },
         ])('$name', async ({ response, expectedCall, expectedArgs }) => {
-            instance._send_request = jest.fn(({ callback }) =>
+            instance.sendRequest = jest.fn(({ callback }) =>
                 callback?.({
                     statusCode: 200,
                     json: response,

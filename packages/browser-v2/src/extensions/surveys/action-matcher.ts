@@ -19,16 +19,16 @@ export class ActionMatcher {
     }
 
     init() {
-        if (!isUndefined(this._instance?._addCaptureHook)) {
+        if (!isUndefined(this._instance?.addCaptureHook)) {
             const matchEventToAction = (eventName: string, eventPayload: any) => {
                 this.on(eventName, eventPayload)
             }
-            this._instance?._addCaptureHook(matchEventToAction)
+            this._instance?.addCaptureHook(matchEventToAction)
         }
     }
 
     register(actions: SurveyActionType[]): void {
-        if (isUndefined(this._instance?._addCaptureHook)) {
+        if (isUndefined(this._instance?.addCaptureHook)) {
             return
         }
 

@@ -21,11 +21,11 @@ describe('Evaluation Tags/Contexts', () => {
             requestRouter: {
                 endpointFor: jest.fn().mockReturnValue('/flags/?v=2'),
             },
-            _send_request: jest.fn(),
-            _shouldDisableFlags: jest.fn().mockReturnValue(false),
+            sendRequest: jest.fn(),
+            shouldDisableFlags: jest.fn().mockReturnValue(false),
         } as any
 
-        mockSendRequest = posthog._send_request as jest.Mock
+        mockSendRequest = posthog.sendRequest as jest.Mock
 
         featureFlags = new PostHogFeatureFlags(posthog)
     })

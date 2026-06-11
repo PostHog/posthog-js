@@ -87,7 +87,7 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config: config,
                 persistence: new PostHogPersistence(config),
-                _addCaptureHook: mockAddCaptureHook,
+                addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback(surveysWithEvents)),
             })
         })
@@ -220,7 +220,7 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config: config,
                 persistence: new PostHogPersistence(config),
-                _addCaptureHook: mockAddCaptureHook,
+                addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback([])),
             })
         })
@@ -409,7 +409,7 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config: config,
                 persistence: new PostHogPersistence(config),
-                _addCaptureHook: jest.fn(),
+                addCaptureHook: jest.fn(),
                 getSurveys: jest.fn((callback) => callback([])),
             })
         })
@@ -577,7 +577,7 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config: config,
                 persistence: new PostHogPersistence(config),
-                _addCaptureHook: mockAddCaptureHook,
+                addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback([surveyWithCancelEvent])),
                 cancelPendingSurvey: mockCancelPendingSurvey,
             })

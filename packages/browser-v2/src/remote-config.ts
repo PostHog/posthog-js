@@ -31,7 +31,7 @@ export class RemoteConfigLoader {
     }
 
     private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
-        this._instance._send_request({
+        this._instance.sendRequest({
             method: 'GET',
             url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
             callback: (response) => {
@@ -50,7 +50,7 @@ export class RemoteConfigLoader {
                 return
             }
 
-            if (this._instance._shouldDisableFlags()) {
+            if (this._instance.shouldDisableFlags()) {
                 // This setting is essentially saying "dont call external APIs" hence we respect it here
                 logger.warn('Remote config is disabled. Falling back to local config.')
                 return
@@ -90,7 +90,7 @@ export class RemoteConfigLoader {
      * is a no-op when flags are disabled. This avoids an unnecessary network round-trip.
      */
     refresh(): void {
-        if (this._instance._shouldDisableFlags() || !document || document.visibilityState === 'hidden') {
+        if (this._instance.shouldDisableFlags() || !document || document.visibilityState === 'hidden') {
             return
         }
 
@@ -128,7 +128,7 @@ export class RemoteConfigLoader {
         //
         // Even when config fails, we pass an empty object so extensions (autocapture,
         // session recording, etc.) still initialize with their defaults.
-        this._instance._onRemoteConfig(config ?? ({} as RemoteConfig))
+        this._instance.onRemoteConfig(config ?? ({} as RemoteConfig))
 
         if (config?.hasFeatureFlags !== false) {
             if (!this._instance.config.advancedDisableFeatureFlagsOnFirstLoad) {

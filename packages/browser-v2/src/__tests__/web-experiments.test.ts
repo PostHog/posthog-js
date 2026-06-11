@@ -121,7 +121,7 @@ describe('Web Experimentation', () => {
             persistence: persistence,
             getProperty: jest.fn(),
             capture: jest.fn(),
-            _send_request: jest
+            sendRequest: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: experimentsResponse })),
             consent: { isOptedOut: () => true } as unknown as ConsentManager,
@@ -189,7 +189,7 @@ describe('Web Experimentation', () => {
                 experiments: [buttonWebExperimentWithUrlConditions],
             }
             const webExperiment = new WebExperiments(posthog)
-            webExperiment._is_bot = () => true
+            webExperiment.isBot = () => true
             const elParent = createTestDocument()
 
             simulateFeatureFlags({
@@ -256,7 +256,7 @@ describe('Web Experimentation', () => {
                 }),
                 persistence: persistence,
                 getProperty: jest.fn(),
-                _send_request: jest
+                sendRequest: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: expResponse })),
                 consent: { isOptedOut: () => true } as unknown as ConsentManager,

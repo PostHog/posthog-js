@@ -179,7 +179,7 @@ export class PostHogLogs implements Extension {
             '?token=' +
             encodeURIComponent(this._instance.config.token)
 
-        this._instance._send_retriable_request({
+        this._instance.sendRetriableRequest({
             method: 'POST',
             url,
             data: payload,

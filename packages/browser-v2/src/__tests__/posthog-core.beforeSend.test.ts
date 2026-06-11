@@ -31,7 +31,7 @@ describe('posthog core - before send', () => {
     const posthogWith = (configOverride: Pick<Partial<PostHogConfig>, 'beforeSend'>): PostHog => {
         const posthog = defaultPostHog().init('testtoken', configOverride, uuidv7())
         return Object.assign(posthog, {
-            _send_request: jest.fn(),
+            sendRequest: jest.fn(),
         })
     }
 
@@ -47,12 +47,12 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             beforeSend: rejectingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog.sendRequest as jest.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
         expect(capturedData).toBeUndefined()
-        expect(posthog._send_request).not.toHaveBeenCalled()
+        expect(posthog.sendRequest).not.toHaveBeenCalled()
         expect(mockLogger.info).toHaveBeenCalledWith(`Event '${eventName}' was rejected in beforeSend function`)
     })
 
@@ -60,13 +60,13 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             beforeSend: editingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog.sendRequest as jest.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
         expect(capturedData).toHaveProperty(['properties', 'edited'], true)
         expect(capturedData).toHaveProperty(['$set', 'edited'], true)
-        expect(posthog._send_request).toHaveBeenCalledWith({
+        expect(posthog.sendRequest).toHaveBeenCalledWith({
             batchKey: undefined,
             callback: expect.any(Function),
             compression: 'best-available',
@@ -95,14 +95,14 @@ describe('posthog core - before send', () => {
                 },
             ],
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog.sendRequest as jest.Mock).mockClear()
 
         const capturedData = [posthog.capture(eventName, {}, {}), posthog.capture('to reject', {}, {})]
 
         expect(capturedData.filter((cd) => !!cd)).toHaveLength(1)
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
-        expect(posthog._send_request).toHaveBeenCalledWith({
+        expect(posthog.sendRequest).toHaveBeenCalledWith({
             batchKey: undefined,
             callback: expect.any(Function),
             compression: 'best-available',
@@ -119,12 +119,12 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog.sendRequest as jest.Mock).mockClear()
 
         const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
 
         expect(capturedData).toHaveProperty(['$set', 'value'], 'edited')
-        expect(posthog._send_request).toHaveBeenCalledWith({
+        expect(posthog.sendRequest).toHaveBeenCalledWith({
             batchKey: undefined,
             callback: expect.any(Function),
             compression: 'best-available',
@@ -141,12 +141,12 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog.sendRequest as jest.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, { value: 'provided' }, {})
 
         expect(capturedData).not.toHaveProperty(['properties', 'value'], 'provided')
-        expect(posthog._send_request).toHaveBeenCalledWith({
+        expect(posthog.sendRequest).toHaveBeenCalledWith({
             batchKey: undefined,
             callback: expect.any(Function),
             compression: 'best-available',
@@ -163,7 +163,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             beforeSend: rejectingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog.sendRequest as jest.Mock).mockClear()
         // chooses a random string from knownUnEditableEvent
         const randomUnsafeEditableEvent =
             knownUnsafeEditableEvent[Math.floor(Math.random() * knownUnsafeEditableEvent.length)]

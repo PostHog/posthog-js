@@ -284,7 +284,7 @@ describe('Lazy SessionRecording', () => {
                 },
             } as unknown as ConsentManager,
             registerForSession() {},
-            _internalEventEmitter: simpleEventEmitter,
+            internalEventEmitter: simpleEventEmitter,
             on: jest.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
                 return removePageviewCaptureHookMock.mockImplementation(unsubscribe)
@@ -1246,7 +1246,7 @@ describe('Lazy SessionRecording', () => {
 
                 // Step 4: simulate what happens when an analytics event (e.g. $pageleave)
                 // triggers session rotation. In production, posthog-core calls
-                // checkAndGetSessionAndWindowId() during _calculate_event_properties,
+                // checkAndGetSessionAndWindowId() during calculateEventProperties,
                 // which rotates the session in the session manager and then fires the
                 // _onSessionIdCallback synchronously.
                 jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))

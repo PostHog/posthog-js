@@ -126,7 +126,7 @@ describe('ConversationsManager', () => {
                 token: 'test-token',
                 apiHost: 'https://test.posthog.com',
             },
-            _send_request: jest.fn((options) => {
+            sendRequest: jest.fn((options) => {
                 // Call callback synchronously to avoid fake timer issues
                 const url = options.url as string
                 const method = options.method as string
@@ -178,7 +178,7 @@ describe('ConversationsManager', () => {
             },
             capture: jest.fn(),
             on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
-            _isIdentified: jest.fn().mockReturnValue(false), // Default to anonymous user
+            isIdentified: jest.fn().mockReturnValue(false), // Default to anonymous user
         } as unknown as PostHog
     })
 
@@ -275,7 +275,7 @@ describe('ConversationsManager', () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
 
-            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+            expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     method: 'POST',
                     url: expect.stringContaining('/api/conversations/v1/widget/restore'),
@@ -492,7 +492,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('Hello!')
             })
 
-            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+            expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: expect.stringContaining('/api/conversations/v1/widget/message'),
                     method: 'POST',
@@ -539,7 +539,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('Second message')
             })
 
-            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+            expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     data: expect.objectContaining({
                         ticket_id: 'ticket-123',
@@ -554,7 +554,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('First message')
             })
 
-            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+            expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     data: expect.objectContaining({
                         session_id: 'test-session-id-123',
@@ -579,7 +579,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('Second message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog.sendRequest as jest.Mock).mock.calls[0][0]
             // session_id and replay_url should be included for debugging context
             expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
             expect(sendRequestCall.data.session_context).toEqual({
@@ -600,7 +600,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('New ticket message', undefined, true)
             })
 
-            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+            expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     data: expect.objectContaining({
                         ticket_id: null,
@@ -622,7 +622,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('First message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog.sendRequest as jest.Mock).mock.calls[0][0]
             expect(sendRequestCall.data.session_id).toBeUndefined()
             // session_context should still be present (has current_url)
             expect(sendRequestCall.data.session_context).toBeDefined()
@@ -636,7 +636,7 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('First message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog.sendRequest as jest.Mock).mock.calls[0][0]
             // session_id should still be present
             expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
             // session_context should have current_url, replay_url is undefined when empty
@@ -669,7 +669,7 @@ describe('ConversationsManager', () => {
             })
 
             // Verify message was sent even though session capture failed
-            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+            expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     data: expect.objectContaining({
                         message: 'First message',
@@ -709,7 +709,7 @@ describe('ConversationsManager', () => {
             })
 
             // Should have made a getMessages request
-            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+            expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: expect.stringContaining('/widget/messages/ticket-123'),
                     method: 'GET',
@@ -722,7 +722,7 @@ describe('ConversationsManager', () => {
                 jest.advanceTimersByTime(5000)
             })
 
-            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+            expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: expect.stringContaining('widget_session_id='),
                 })
@@ -734,7 +734,7 @@ describe('ConversationsManager', () => {
                 jest.advanceTimersByTime(5000)
             })
 
-            const calls = (mockPosthog._send_request as jest.Mock).mock.calls
+            const calls = (mockPosthog.sendRequest as jest.Mock).mock.calls
             const getMessagesCall = calls.find((call) => call[0].url.includes('/widget/messages/'))
             expect(getMessagesCall[0].url).not.toContain('distinct_id=')
         })
@@ -746,7 +746,7 @@ describe('ConversationsManager', () => {
                 jest.advanceTimersByTime(5000)
             })
 
-            expect(mockPosthog._send_request).not.toHaveBeenCalled()
+            expect(mockPosthog.sendRequest).not.toHaveBeenCalled()
         })
     })
 
@@ -810,7 +810,7 @@ describe('ConversationsManager', () => {
                     await manager.sendMessage('Hello!')
                 })
 
-                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'POST',
                         url: expect.stringContaining('/api/conversations/v1/widget/message'),
@@ -844,7 +844,7 @@ describe('ConversationsManager', () => {
                     jest.advanceTimersByTime(5000)
                 })
 
-                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'GET',
                         url: expect.stringContaining('/api/conversations/v1/widget/messages/ticket-123'),
@@ -855,7 +855,7 @@ describe('ConversationsManager', () => {
                 )
 
                 // Verify widget_session_id is in URL
-                const callArgs = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+                const callArgs = (mockPosthog.sendRequest as jest.Mock).mock.calls[0][0]
                 expect(callArgs.url).toContain('widget_session_id=')
             })
 
@@ -908,7 +908,7 @@ describe('ConversationsManager', () => {
                     await manager.sendMessage('Message after switch')
                 })
 
-                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                     expect.objectContaining({
                         data: expect.objectContaining({
                             ticket_id: 'switched-ticket-999',
@@ -954,7 +954,7 @@ describe('ConversationsManager', () => {
                     expect(response).toEqual({ ok: true })
                 })
 
-                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'POST',
                         url: expect.stringContaining('/api/conversations/v1/widget/restore/request'),
@@ -971,7 +971,7 @@ describe('ConversationsManager', () => {
                     await manager.requestRestoreLink('test@example.com')
                 })
 
-                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect(mockPosthog.sendRequest).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'POST',
                         url: expect.not.stringContaining('request_url='),

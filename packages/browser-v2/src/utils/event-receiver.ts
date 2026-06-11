@@ -100,7 +100,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     }
 
     register(items: T[]): void {
-        if (isUndefined(this._instance?._addCaptureHook)) {
+        if (isUndefined(this._instance?.addCaptureHook)) {
             return
         }
 
@@ -172,7 +172,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         const matchEventToItem = (eventName: string, eventPayload?: CaptureResult) => {
             this.onEvent(eventName, eventPayload)
         }
-        this._instance?._addCaptureHook(matchEventToItem)
+        this._instance?.addCaptureHook(matchEventToItem)
 
         this._eventToItems = this._buildEventToItemMap(items, SurveyEventType.Activation)
         this._cancelEventToItems = this._buildEventToItemMap(items, SurveyEventType.Cancellation)

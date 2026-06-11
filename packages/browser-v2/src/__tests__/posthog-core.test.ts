@@ -535,14 +535,14 @@ describe('posthog core', () => {
         })
     })
 
-    describe('_execute_array and push re-entrancy guard', () => {
+    describe('executeArray and push re-entrancy guard', () => {
         it('should not infinitely recurse when push is called re-entrantly (e.g., TikTok Proxy)', () => {
             const posthog = defaultPostHog()
 
             // Simulate TikTok's in-app browser Proxy behavior:
-            // When _execute_array dispatches a method via this[method](),
+            // When executeArray dispatches a method via this[method](),
             // a Proxy intercepts it and calls push() instead, which would
-            // re-enter _execute_array and cause infinite recursion.
+            // re-enter executeArray and cause infinite recursion.
             const origCapture = posthog.capture.bind(posthog)
             let callCount = 0
             posthog.capture = function (...args: any[]) {
@@ -574,12 +574,12 @@ describe('posthog core', () => {
             captureSpy.mockRestore()
         })
 
-        it('should handle _execute_array with array of commands', () => {
+        it('should handle executeArray with array of commands', () => {
             const posthog = defaultPostHog()
             const registerSpy = jest.spyOn(posthog, 'register').mockImplementation()
             const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
 
-            posthog._execute_array([
+            posthog.executeArray([
                 ['register', { key: 'value' }],
                 ['capture', 'test-event'],
             ])
@@ -596,7 +596,7 @@ describe('posthog core', () => {
             ;(posthog as any).parseInvalidJson = (payload: string) => JSON.parse(payload)
 
             expect(() => {
-                posthog._execute_array([
+                posthog.executeArray([
                     ['parseInvalidJson', '{not json'],
                     ['capture', 'test-event'],
                 ])

@@ -67,7 +67,7 @@ describe('posthog-logs', () => {
                 requestRouter: {
                     endpointFor: jest.fn(() => 'https://us.i.posthog.com'),
                 },
-                _send_retriable_request: jest.fn(),
+                sendRetriableRequest: jest.fn(),
                 getProperty: jest.fn(),
                 isCapturing: jest.fn(() => true),
                 getDistinctId: jest.fn(() => 'distinct-id-123'),
@@ -91,7 +91,7 @@ describe('posthog-logs', () => {
                     onConsentChange: jest.fn(),
                 },
                 featureFlags: {
-                    _send_retriable_request: jest.fn((_url, _params, callback) => {
+                    sendRetriableRequest: jest.fn((_url, _params, callback) => {
                         callback({ statusCode: 200, json: flagsResponse })
                     }),
                     getFeatureFlag: jest.fn((flag) => {
@@ -453,7 +453,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'should not be captured' })
 
                 expect((logs as any)._logBuffer).toHaveLength(0)
-                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
+                expect(mockPostHog.sendRetriableRequest).not.toHaveBeenCalled()
             })
 
             it('should warn and skip if no body provided', () => {
@@ -487,7 +487,7 @@ describe('posthog-logs', () => {
 
                 jest.advanceTimersByTime(3000)
 
-                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
+                expect(mockPostHog.sendRetriableRequest).toHaveBeenCalledTimes(1)
                 expect((logs as any)._logBuffer).toHaveLength(0)
             })
 
@@ -496,7 +496,7 @@ describe('posthog-logs', () => {
                     logs.captureLog({ body: `message ${i}` })
                 }
 
-                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
+                expect(mockPostHog.sendRetriableRequest).toHaveBeenCalledTimes(1)
                 expect((logs as any)._logBuffer).toHaveLength(0)
             })
 
@@ -505,7 +505,7 @@ describe('posthog-logs', () => {
                 jest.advanceTimersByTime(3000)
 
                 expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 expect(call.url).toContain('token=test-token')
             })
 
@@ -513,7 +513,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test', level: 'error' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 expect(call.data.resourceLogs).toBeDefined()
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(1)
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords[0].severityText).toBe('ERROR')
@@ -523,7 +523,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 expect(call.batchKey).toBe('logs')
             })
 
@@ -531,7 +531,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 expect(call.compression).toBe('best-available')
             })
 
@@ -541,8 +541,8 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'log 3' })
                 jest.advanceTimersByTime(3000)
 
-                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                expect(mockPostHog.sendRetriableRequest).toHaveBeenCalledTimes(1)
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(3)
             })
 
@@ -550,7 +550,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -571,7 +571,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -591,7 +591,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -607,7 +607,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'log 2' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -619,7 +619,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -629,7 +629,7 @@ describe('posthog-logs', () => {
             it('should not send anything if buffer is empty on flush', () => {
                 logs.flushLogs()
 
-                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
+                expect(mockPostHog.sendRetriableRequest).not.toHaveBeenCalled()
             })
 
             it('should drop logs that exceed maxLogsPerInterval and warn once', () => {
@@ -673,14 +673,14 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'works without autocapture' })
                 jest.advanceTimersByTime(3000)
 
-                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
+                expect(mockPostHog.sendRetriableRequest).toHaveBeenCalledTimes(1)
             })
 
             it('should support transport override for unload', () => {
                 logs.captureLog({ body: 'unload log' })
                 logs.flushLogs('sendBeacon')
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 expect(call.transport).toBe('sendBeacon')
             })
         })
@@ -696,7 +696,7 @@ describe('posthog-logs', () => {
                     logs.logger[level]('test message', { key: 'value' })
                     jest.advanceTimersByTime(3000)
 
-                    const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                    const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                     const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
 
                     expect(record.body.stringValue).toBe('test message')
@@ -709,7 +709,7 @@ describe('posthog-logs', () => {
                 logs.logger.info('no attrs')
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog.sendRetriableRequest as jest.Mock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 expect(record.body.stringValue).toBe('no attrs')
             })
@@ -737,7 +737,7 @@ describe('posthog-logs', () => {
 
                 // Advancing time should not trigger a flush
                 jest.advanceTimersByTime(5000)
-                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
+                expect(mockPostHog.sendRetriableRequest).not.toHaveBeenCalled()
             })
         })
 

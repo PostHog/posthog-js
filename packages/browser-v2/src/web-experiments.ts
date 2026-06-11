@@ -49,7 +49,7 @@ export class WebExperiments implements Extension {
     initialize() {}
 
     onFeatureFlags(flags: string[]) {
-        if (this._is_bot()) {
+        if (this.isBot()) {
             WebExperiments._logInfo(BOT_REFUSE_MSG)
             return
         }
@@ -156,7 +156,7 @@ export class WebExperiments implements Extension {
             return callback(existingWebExperiments)
         }
 
-        this._instance._send_request({
+        this._instance.sendRequest({
             url: this._instance.requestRouter.endpointFor('api', `/api/web_experiments/?token=${this._config.token}`),
             method: 'GET',
             callback: (response) => {
@@ -246,7 +246,7 @@ export class WebExperiments implements Extension {
     }
 
     private _applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
-        if (this._is_bot()) {
+        if (this.isBot()) {
             WebExperiments._logInfo(BOT_REFUSE_MSG)
             return
         }
@@ -279,7 +279,7 @@ export class WebExperiments implements Extension {
         })
     }
 
-    _is_bot(): boolean | undefined {
+    isBot(): boolean | undefined {
         if (navigator && this._instance) {
             return isLikelyBot(navigator, this._config.customBlockedUseragents)
         } else {

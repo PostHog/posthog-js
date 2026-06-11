@@ -24,9 +24,9 @@ describe('RemoteConfigLoader', () => {
 
         posthog = createMockPostHog({
             config: { ...defaultConfig },
-            _onRemoteConfig: jest.fn(),
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            _shouldDisableFlags: () => posthog.config.advancedDisableFlags || false,
+            onRemoteConfig: jest.fn(),
+            sendRequest: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
+            shouldDisableFlags: () => posthog.config.advancedDisableFlags || false,
             featureFlags: {
                 ensureFlagsLoaded: jest.fn(),
             },
@@ -57,7 +57,7 @@ describe('RemoteConfigLoader', () => {
                 }
             )
 
-            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: config }))
+            posthog.sendRequest = jest.fn().mockImplementation(({ callback }) => callback?.({ json: config }))
         })
 
         it('properly pulls from the window and uses it if set', () => {
@@ -70,9 +70,9 @@ describe('RemoteConfigLoader', () => {
             new RemoteConfigLoader(posthog).load()
 
             expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
-            expect(posthog._send_request).not.toHaveBeenCalled()
+            expect(posthog.sendRequest).not.toHaveBeenCalled()
 
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog.onRemoteConfig).toHaveBeenCalledWith(config)
         })
 
         it('loads the script if window config not set', () => {
@@ -83,8 +83,8 @@ describe('RemoteConfigLoader', () => {
                 'remote-config',
                 expect.any(Function)
             )
-            expect(posthog._send_request).not.toHaveBeenCalled()
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog.sendRequest).not.toHaveBeenCalled()
+            expect(posthog.onRemoteConfig).toHaveBeenCalledWith(config)
         })
 
         it('loads the json if window config not set and js failed', () => {
@@ -97,12 +97,12 @@ describe('RemoteConfigLoader', () => {
             new RemoteConfigLoader(posthog).load()
 
             expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).toHaveBeenCalled()
-            expect(posthog._send_request).toHaveBeenCalledWith({
+            expect(posthog.sendRequest).toHaveBeenCalledWith({
                 method: 'GET',
                 url: 'https://test.com/array/testtoken/config',
                 callback: expect.any(Function),
             })
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog.onRemoteConfig).toHaveBeenCalledWith(config)
         })
 
         it.each([
@@ -132,12 +132,12 @@ describe('RemoteConfigLoader', () => {
                     cb()
                 }
             )
-            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: undefined }))
+            posthog.sendRequest = jest.fn().mockImplementation(({ callback }) => callback?.({ json: undefined }))
 
             new RemoteConfigLoader(posthog).load()
 
-            // Should still call _onRemoteConfig with empty object so extensions start
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({})
+            // Should still call onRemoteConfig with empty object so extensions start
+            expect(posthog.onRemoteConfig).toHaveBeenCalledWith({})
             // Should still attempt to load flags
             expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
         })
@@ -154,7 +154,7 @@ describe('RemoteConfigLoader', () => {
 
             new RemoteConfigLoader(posthog).load()
 
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ...config, hasFeatureFlags: true })
+            expect(posthog.onRemoteConfig).toHaveBeenCalledWith({ ...config, hasFeatureFlags: true })
             expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
         })
     })
@@ -165,12 +165,12 @@ describe('RemoteConfigLoader', () => {
             loader.refresh()
 
             expect(posthog.reloadFeatureFlags).toHaveBeenCalled()
-            expect(posthog._send_request).not.toHaveBeenCalled()
-            expect(posthog._onRemoteConfig).not.toHaveBeenCalled()
+            expect(posthog.sendRequest).not.toHaveBeenCalled()
+            expect(posthog.onRemoteConfig).not.toHaveBeenCalled()
         })
 
         it('is a no-op when flags are disabled', () => {
-            posthog._shouldDisableFlags = () => true
+            posthog.shouldDisableFlags = () => true
 
             const loader = new RemoteConfigLoader(posthog)
             loader.refresh()
@@ -260,7 +260,7 @@ describe('RemoteConfigLoader', () => {
                     const reloadFeatureFlags = jest.fn()
 
                     new NoDocumentRemoteConfigLoader({
-                        _shouldDisableFlags: () => false,
+                        shouldDisableFlags: () => false,
                         reloadFeatureFlags,
                     } as any).refresh()
 

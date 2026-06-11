@@ -9,7 +9,7 @@ const PERSISTENCE_OBJECT_METHODS = new Set(['register', 'registerOnce'])
 const PERSISTENCE_SINGLE_KEY_METHODS = new Set(['setProperty', 'unregister'])
 const SESSION_OBJECT_METHODS = new Set(['registerForSession'])
 const SESSION_SINGLE_KEY_METHODS = new Set(['unregisterForSession'])
-const INTERNAL_SINGLE_KEY_METHODS = new Set(['_register_single', '_setProp', '_deleteProp'])
+const INTERNAL_SINGLE_KEY_METHODS = new Set(['_registerSingle', '_setProp', '_deleteProp'])
 
 const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set<string>([
     constants.PEOPLE_DISTINCT_ID_KEY,

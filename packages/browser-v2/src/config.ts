@@ -14,7 +14,7 @@ const Config: {
     DEBUG: false,
     LIB_VERSION: packageInfo.version,
     LIB_NAME: 'web',
-    /** The actual JS SDK version, unaffected by _overrideSDKInfo. Used for the `ver` request param. */
+    /** The actual JS SDK version, unaffected by overrideSDKInfo. Used for the `ver` request param. */
     JS_SDK_VERSION: packageInfo.version,
 }
 

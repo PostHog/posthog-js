@@ -498,7 +498,7 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         // Emit event so consumers know flags are being reloaded
-        this._instance._internalEventEmitter.emit('featureFlagsReloading', true)
+        this._instance.internalEventEmitter.emit('featureFlagsReloading', true)
 
         // Debounce multiple calls on the same tick
         this._reloadDebouncer = setTimeout(() => {
@@ -531,7 +531,7 @@ export class PostHogFeatureFlags implements Extension {
     _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
         // Ensure we don't have double queued /flags requests
         this._clearDebouncer()
-        if (this._instance._shouldDisableFlags()) {
+        if (this._instance.shouldDisableFlags()) {
             // The way this is documented is essentially used to refuse to ever call the /flags endpoint.
             return
         }
@@ -582,7 +582,7 @@ export class PostHogFeatureFlags implements Extension {
         const url = this._instance.requestRouter.endpointFor('flags', '/flags/?v=2' + queryParams)
 
         this._requestInFlight = true
-        this._instance._send_request({
+        this._instance.sendRequest({
             method: 'POST',
             url,
             data,
@@ -888,7 +888,7 @@ export class PostHogFeatureFlags implements Extension {
             data.flag_keys = flagKeys
         }
 
-        this._instance._send_request({
+        this._instance.sendRequest({
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
@@ -986,7 +986,7 @@ export class PostHogFeatureFlags implements Extension {
      *       })
      */
     overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void {
-        if (!this._instance.__loaded || !this._persistence) {
+        if (!this._instance.isLoaded || !this._persistence) {
             return logger.uninitializedWarning('posthog.featureFlags.overrideFeatureFlags')
         }
 
@@ -1128,7 +1128,7 @@ export class PostHogFeatureFlags implements Extension {
         const stageParams = stages ? `&${stages.map((s) => `stage=${s}`).join('&')}` : ''
 
         if (!existing_early_access_features || force_reload) {
-            this._instance._send_request({
+            this._instance.sendRequest({
                 url: this._instance.requestRouter.endpointFor(
                     'api',
                     `/api/early_access_features/?token=${this._config.token}${stageParams}`

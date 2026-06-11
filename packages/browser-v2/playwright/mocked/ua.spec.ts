@@ -20,7 +20,7 @@ test.describe('User Agent Blocking', () => {
 
         const isLikelyBot = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?._is_bot()
+            return ph?.isBot()
         })
         expect(isLikelyBot).toEqual(true)
     })

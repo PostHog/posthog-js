@@ -73,6 +73,30 @@ Removed legacy globals; the `__PosthogExtensions__` contract is the only path: `
 
 `PostHogPersistence` methods were renamed the same way (`get_property` → `getProperty`, `update_config` → `updateConfig`, etc.). These are internal but technically reachable.
 
+## Internal API renamed (underscore prefix dropped)
+
+Internal members of the `PostHog` class that are consumed across modules (or by external bundles, wrapper SDKs, and the snippet) lost their underscore prefix so they are excluded from terser property mangling by name rather than via the reserved list. They are documented as `@internal` and may change without notice — except `isIdentified()`, which is now public.
+
+| v1 | v2 |
+| --- | --- |
+| `_send_request()` | `sendRequest()` |
+| `_send_retriable_request()` | `sendRetriableRequest()` |
+| `_onRemoteConfig()` | `onRemoteConfig()` |
+| `_shouldDisableFlags()` | `shouldDisableFlags()` |
+| `_addCaptureHook()` | `addCaptureHook()` |
+| `_internalEventEmitter` | `internalEventEmitter` |
+| `_dom_loaded()` | `domLoaded()` |
+| `_execute_array()` | `executeArray()` |
+| `_init()` | `internalInit()` |
+| `_is_bot()` | `isBot()` |
+| `_overrideSDKInfo()` | `overrideSDKInfo()` |
+| `__loaded` | `isLoaded` |
+| `_isIdentified()` | `isIdentified()` (now public) |
+
+Wrapper SDKs (e.g. posthog-flutter, posthog-react-native) that called `_overrideSDKInfo()` must use `overrideSDKInfo()`.
+
+The remaining `_`-prefixed members of the `PostHog` class (e.g. `_requestQueue`, `_retryQueue`, `_handleUnload()`, `_calculateSetOnceProperties()`) are now explicitly `private` and are mangled in production builds — they are not reachable from outside the SDK.
+
 ## Renamed: config keys (snake_case → camelCase)
 
 All 85 non-deprecated top-level `PostHogConfig` keys, mechanically: `api_host` → `apiHost`, `capture_pageview` → `capturePageview`, `session_recording` → `sessionRecording`, `before_send` → `beforeSend`, `person_profiles` → `personProfiles`, `opt_out_capturing_by_default` → `optOutCapturingByDefault`, `feature_flag_request_timeout_ms` → `featureFlagRequestTimeoutMs`, `__preview_deferred_init_extensions` → `__previewDeferredInitExtensions`, and so on. The full map is the `SnakeToCamelCase` mapped type in `src/types.ts`.

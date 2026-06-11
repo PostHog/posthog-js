@@ -159,7 +159,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 logger.warn('Failed to capture session context', error)
             }
 
-            this._posthog._send_request({
+            this._posthog.sendRequest({
                 url: this._posthog.requestRouter.endpointFor('api', '/api/conversations/v1/widget/message'),
                 method: 'POST',
                 data: payload,
@@ -258,7 +258,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 queryParams.after = after
             }
 
-            this._posthog._send_request({
+            this._posthog.sendRequest({
                 url: this._posthog.requestRouter.endpointFor(
                     'api',
                     `/api/conversations/v1/widget/messages/${targetTicketId}?${formDataToQuery(queryParams)}`
@@ -315,7 +315,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 ? { identity_distinct_id: identity.identity_distinct_id, identity_hash: identity.identity_hash }
                 : { widget_session_id: this._widgetSessionId }
 
-            this._posthog._send_request({
+            this._posthog.sendRequest({
                 url: this._posthog.requestRouter.endpointFor(
                     'api',
                     `/api/conversations/v1/widget/messages/${targetTicketId}/read`
@@ -443,7 +443,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // eslint-disable-next-line compat/compat
         const data = await new Promise<RestoreFromTokenResponse>((resolve, reject) => {
-            this._posthog._send_request({
+            this._posthog.sendRequest({
                 url: this._posthog.requestRouter.endpointFor('api', RESTORE_EXCHANGE_ENDPOINT),
                 method: 'POST',
                 data: payload,
@@ -1078,7 +1078,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
-            this._posthog._send_request({
+            this._posthog.sendRequest({
                 url: this._posthog.requestRouter.endpointFor(
                     'api',
                     `/api/conversations/v1/widget/tickets?${formDataToQuery(queryParams)}`
@@ -1130,7 +1130,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
-            this._posthog._send_request({
+            this._posthog.sendRequest({
                 url: this._posthog.requestRouter.endpointFor('api', RESTORE_REQUEST_ENDPOINT),
                 method: 'POST',
                 data: payload,
@@ -1341,7 +1341,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 config={this._config}
                 initialState={initialState}
                 initialUserTraits={initialUserTraits}
-                isUserIdentified={this._posthog._isIdentified()}
+                isUserIdentified={this._posthog.isIdentified()}
                 isIdentityMode={!isNull(this._identityFields())}
                 initialView={initialView}
                 initialTickets={initialTickets}

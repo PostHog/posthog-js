@@ -81,7 +81,7 @@ export function createEventProcessor(
 ): (event: _SentryEvent) => _SentryEvent {
     return (event) => {
         const shouldProcessLevel = severityAllowList === '*' || severityAllowList.includes(event.level as SeverityLevel)
-        if (!shouldProcessLevel || !_posthog.__loaded) return event
+        if (!shouldProcessLevel || !_posthog.isLoaded) return event
         if (!event.tags) event.tags = {}
 
         const personUrl = _posthog.requestRouter.endpointFor(

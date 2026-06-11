@@ -25,7 +25,7 @@ describe(`Module-based loader in Node env`, () => {
         // assignableWindow.__PosthogExtensions__ = {}
 
         jest.useFakeTimers()
-        jest.spyOn(posthog, '_send_request').mockReturnValue()
+        jest.spyOn(posthog, 'sendRequest').mockReturnValue()
         jest.spyOn(window!.console, 'log').mockImplementation()
     })
 
@@ -79,7 +79,7 @@ describe(`Module-based loader in Node env`, () => {
             'sdk-null'
         )
         expect(nullTokenInstance).toBeInstanceOf(PostHog)
-        expect((nullTokenInstance as any).__loaded).toBe(false)
+        expect((nullTokenInstance as any).isLoaded).toBe(false)
 
         expect(console.error).toHaveBeenCalledWith(
             '[PostHog.js]',

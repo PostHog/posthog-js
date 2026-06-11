@@ -242,7 +242,7 @@ describe('extension lifecycle', () => {
             onRemoteConfigSpy.mockClear()
 
             const remoteConfig = { supportedCompression: [] } as unknown as RemoteConfig
-            posthog._onRemoteConfig(remoteConfig)
+            posthog.onRemoteConfig(remoteConfig)
 
             // Two extensions, each should get onRemoteConfig called once
             expect(onRemoteConfigSpy).toHaveBeenCalledTimes(2)

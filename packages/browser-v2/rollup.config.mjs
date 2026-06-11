@@ -172,20 +172,9 @@ const plugins = (es5, noExternal) => [
                               // used in conversations - external bundle needs to access these on the posthog instance
                               '_conversationsManager',
                               '_conversations',
-                              '_send_request', // called by conversations external bundle
-
-                              // used in product-tours - external bundle needs to access this on the posthog instance
-                              '_addCaptureHook',
-
-                              // part of setup/teardown code, preserve these out of caution
-                              '_init',
-                              '_dom_loaded',
-                              '_execute_array',
-                              '_handle_unload',
 
                               // playwright uses these
                               '_forceAllowLocalhostNetworkCapture',
-                              '_is_bot',
                               '__ph_loaded',
                               '_sessionActivityTimestamp',
                               '_sessionStartTimestamp',
@@ -226,14 +215,6 @@ const plugins = (es5, noExternal) => [
                               'version',
                               'surveys',
                               'calculateEventProperties',
-
-                              // used by wrapper SDKs (e.g. posthog-flutter, posthog-react-native) to override $lib and $lib_version
-                              '_overrideSDKInfo',
-
-                              // possibly used by naughty users - we should decide if we want make these part of the public API, but be cautious for now
-                              '_isIdentified',
-                              '_is_bot',
-                              '_calculate_event_properties', // deprecated in favour of calculateEventProperties
 
                               // URL parameters
                               '__posthog_debug',

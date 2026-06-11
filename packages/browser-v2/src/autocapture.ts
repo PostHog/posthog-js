@@ -356,7 +356,7 @@ export class Autocapture implements Extension {
         const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
         const memoryDisabled = this._isDisabledServerSide
 
-        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this.instance._shouldDisableFlags()) {
+        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this.instance.shouldDisableFlags()) {
             // We only enable if we know that the server has not disabled it (unless /flags is disabled)
             return false
         }

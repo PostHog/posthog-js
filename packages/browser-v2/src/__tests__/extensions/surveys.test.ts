@@ -313,7 +313,7 @@ describe('SurveyManager', () => {
             getSessionReplayUrl: jest.fn(),
             capture: jest.fn(),
             featureFlags: {
-                _send_request: jest
+                sendRequest: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
                 getFeatureFlag: jest.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),

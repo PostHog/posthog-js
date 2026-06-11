@@ -40,7 +40,7 @@ export class SiteApps implements Extension {
 
     initialize() {
         if (this.isEnabled) {
-            const stop = this._instance._addCaptureHook(this._eventCollector.bind(this))
+            const stop = this._instance.addCaptureHook(this._eventCollector.bind(this))
             this._stopBuffering = () => {
                 stop()
                 this._bufferedInvocations = []

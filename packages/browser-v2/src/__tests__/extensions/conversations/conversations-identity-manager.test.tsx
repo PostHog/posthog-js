@@ -62,7 +62,7 @@ describe('ConversationsManager Identity Verification', () => {
                 token: 'test-token',
                 apiHost: 'https://test.posthog.com',
             },
-            _send_request: jest.fn((options) => {
+            sendRequest: jest.fn((options) => {
                 const url = options.url as string
                 const method = options.method as string
                 if (url.includes('/widget/tickets') && method === 'GET') {
@@ -115,7 +115,7 @@ describe('ConversationsManager Identity Verification', () => {
             },
             capture: jest.fn(),
             on: jest.fn().mockReturnValue(jest.fn()),
-            _isIdentified: jest.fn().mockReturnValue(false),
+            isIdentified: jest.fn().mockReturnValue(false),
         } as unknown as PostHog
     })
 
@@ -145,7 +145,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -164,7 +164,7 @@ describe('ConversationsManager Identity Verification', () => {
             await flushPromises()
 
             // Should NOT call the restore endpoint
-            const calls = (mockPosthog._send_request as jest.Mock).mock.calls
+            const calls = (mockPosthog.sendRequest as jest.Mock).mock.calls
             const restoreCalls = calls.filter(
                 (c: any) => c[0].url?.includes('/widget/restore') && c[0].method === 'POST'
             )
@@ -179,7 +179,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -198,7 +198,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -220,7 +220,7 @@ describe('ConversationsManager Identity Verification', () => {
 
             manager.setIdentity()
 
-            const calls = (mockPosthog._send_request as jest.Mock).mock.calls
+            const calls = (mockPosthog.sendRequest as jest.Mock).mock.calls
             const ticketCalls = calls.filter((c: any) => c[0].url?.includes('/widget/tickets'))
             expect(ticketCalls.length).toBeGreaterThan(0)
         })
@@ -240,7 +240,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -263,7 +263,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.sendMessage('Hello!')
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/message') && c[0].method === 'POST'
             )
             expect(call).toBeDefined()
@@ -279,7 +279,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getMessages('ticket-123')
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/messages/ticket-123') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -294,7 +294,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.markAsRead('ticket-123')
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/read') && c[0].method === 'POST'
             )
             expect(call).toBeDefined()
@@ -309,7 +309,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -331,7 +331,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.sendMessage('Hello!')
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/message') && c[0].method === 'POST'
             )
             expect(call).toBeDefined()
@@ -347,7 +347,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+            const call = (mockPosthog.sendRequest as jest.Mock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()

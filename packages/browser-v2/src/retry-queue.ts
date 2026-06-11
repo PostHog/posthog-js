@@ -72,7 +72,7 @@ export class RetryQueue {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
-        this._instance._send_request({
+        this._instance.sendRequest({
             ...options,
             callback: (response) => {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
@@ -171,7 +171,7 @@ export class RetryQueue {
             try {
                 // we've had send beacon in place for at least 2 years
                 // eslint-disable-next-line compat/compat
-                this._instance._send_request({
+                this._instance.sendRequest({
                     ...requestOptions,
                     transport: 'sendBeacon',
                 })

@@ -21,7 +21,7 @@ describe('action-matcher', () => {
         instance = createMockPostHog({
             config: config,
             persistence: new PostHogPersistence(config),
-            _addCaptureHook: jest.fn(),
+            addCaptureHook: jest.fn(),
         })
     })
 

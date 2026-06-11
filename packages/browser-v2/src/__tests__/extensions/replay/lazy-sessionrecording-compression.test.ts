@@ -89,7 +89,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
             requestRouter: new RequestRouter({ config } as any),
             consent: { isOptedOut: () => false },
             registerForSession: jest.fn(),
-            _internalEventEmitter: simpleEventEmitter,
+            internalEventEmitter: simpleEventEmitter,
             on: jest.fn((event, cb) => simpleEventEmitter.on(event, cb)),
         }
 

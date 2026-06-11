@@ -467,7 +467,7 @@ describe('person processing', () => {
 
             // act
             posthog.capture('custom event before identify')
-            posthog._requirePersonProcessing('test')
+            ;(posthog as any)._requirePersonProcessing('test')
             posthog.capture('custom event after identify')
 
             // assert
@@ -498,7 +498,7 @@ describe('person processing', () => {
 
             // act
             posthog.capture('custom event before identify')
-            posthog._requirePersonProcessing('test')
+            ;(posthog as any)._requirePersonProcessing('test')
             posthog.capture('custom event after identify')
 
             // assert
@@ -717,7 +717,7 @@ describe('person processing', () => {
             posthog.capture('custom event after reset')
 
             // assert
-            expect(posthog._isIdentified()).toBe(false)
+            expect(posthog.isIdentified()).toBe(false)
             expect(beforeSendMock.mock.calls.length).toEqual(3)
             expect(beforeSendMock.mock.calls[2][0].properties.$process_person_profile).toEqual(false)
         })
@@ -782,7 +782,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog.onRemoteConfig({} as RemoteConfig)
             posthog.capture('custom event')
 
             // assert
@@ -797,7 +797,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog.onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog.capture('custom event')
 
             // assert

@@ -5,7 +5,7 @@ import { assignableWindow } from '../utils/globals'
 
 describe('RetryQueue', () => {
     const mockPosthog = {
-        _send_request: jest.fn(),
+        sendRequest: jest.fn(),
     }
     let retryQueue: RetryQueue
     let now = Date.now()
@@ -25,7 +25,7 @@ describe('RetryQueue', () => {
     }
 
     const enqueueRequests = () => {
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockPosthog.sendRequest.mockImplementation(({ callback }) => {
             // Force a retry
             callback?.({ statusCode: 502 })
         })
@@ -47,12 +47,12 @@ describe('RetryQueue', () => {
             data: { event: 'fizz', timestamp: now },
         })
 
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockPosthog.sendRequest.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 200 })
         })
 
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
-        mockPosthog._send_request.mockClear()
+        expect(mockPosthog.sendRequest).toHaveBeenCalledTimes(4)
+        mockPosthog.sendRequest.mockClear()
     }
 
     it('processes retry requests', () => {
@@ -99,9 +99,9 @@ describe('RetryQueue', () => {
 
         // clears queue
         expect(retryQueue.length).toEqual(0)
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        expect(mockPosthog.sendRequest).toHaveBeenCalledTimes(4)
         // Check the retry count is added
-        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
+        expect(mockPosthog.sendRequest.mock.calls.map(([arg1]) => arg1.url)).toEqual([
             '/e?retry_count=1',
             '/e?retry_count=1',
             '/e?retry_count=1',
@@ -113,7 +113,7 @@ describe('RetryQueue', () => {
         enqueueRequests()
         fastForwardTimeAndRunTimer(3500)
 
-        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
+        expect(mockPosthog.sendRequest.mock.calls.map(([arg1]) => arg1.url)).toEqual([
             '/e?retry_count=1',
             '/e?retry_count=1',
             '/e?retry_count=1',
@@ -127,8 +127,8 @@ describe('RetryQueue', () => {
         retryQueue.unload()
 
         expect(retryQueue.length).toEqual(0)
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
-        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.transport)).toEqual([
+        expect(mockPosthog.sendRequest).toHaveBeenCalledTimes(4)
+        expect(mockPosthog.sendRequest.mock.calls.map(([arg1]) => arg1.transport)).toEqual([
             'sendBeacon',
             'sendBeacon',
             'sendBeacon',
@@ -144,7 +144,7 @@ describe('RetryQueue', () => {
         fastForwardTimeAndRunTimer()
 
         // requests aren't attempted when we're offline
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(0)
+        expect(mockPosthog.sendRequest).toHaveBeenCalledTimes(0)
 
         // queue stays the same
         expect(retryQueue.length).toEqual(4)
@@ -153,7 +153,7 @@ describe('RetryQueue', () => {
 
         expect(retryQueue['_areWeOnline']).toEqual(true)
         expect(retryQueue.length).toEqual(0)
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        expect(mockPosthog.sendRequest).toHaveBeenCalledTimes(4)
     })
 
     it('does not enqueue a request after 10 retries', () => {
@@ -168,7 +168,7 @@ describe('RetryQueue', () => {
 
     it('only calls the callback when successful', () => {
         const cb = jest.fn()
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockPosthog.sendRequest.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
 
@@ -178,7 +178,7 @@ describe('RetryQueue', () => {
             callback: cb,
         })
 
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockPosthog.sendRequest.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 200, text: 'it worked!' })
         })
 
@@ -191,7 +191,7 @@ describe('RetryQueue', () => {
 
     it('only calls the callback when retries are exhausted', () => {
         const cb = jest.fn()
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockPosthog.sendRequest.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
 
@@ -209,7 +209,7 @@ describe('RetryQueue', () => {
 
     it('increments the retry count each attempt', () => {
         const cb = jest.fn()
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockPosthog.sendRequest.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
 
@@ -275,7 +275,7 @@ describe('RetryQueue', () => {
             expect(retryQueue['_isPolling']).toBe(false)
             expect(retryQueue['_poller']).toBeUndefined()
 
-            mockPosthog._send_request.mockImplementation(({ callback }) => {
+            mockPosthog.sendRequest.mockImplementation(({ callback }) => {
                 callback?.({ statusCode: 502 })
             })
 

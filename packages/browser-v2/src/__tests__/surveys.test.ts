@@ -194,15 +194,15 @@ describe('surveys', () => {
             config: config,
             persistence: new PostHogPersistence(config),
             requestRouter: new RequestRouter({ config } as any),
-            _addCaptureHook: jest.fn(),
+            addCaptureHook: jest.fn(),
             register: (props: Properties) => instance.persistence?.register(props),
             unregister: (key: string) => instance.persistence?.unregister(key),
             getProperty: (key: string) => instance.persistence?.props[key],
-            _send_request: jest
+            sendRequest: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
             featureFlags: {
-                _send_request: jest
+                sendRequest: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
                 getFeatureFlag: jest.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
@@ -222,7 +222,7 @@ describe('surveys', () => {
         instance.getActiveMatchingSurveys = instance.surveys.getActiveMatchingSurveys.bind(instance.surveys)
         instance.canRenderSurveyAsync = instance.surveys.canRenderSurveyAsync.bind(instance.surveys)
 
-        // mock loadIfEnabled so posthog.surveys.loadIfEnabled() doesn't call _send_request
+        // mock loadIfEnabled so posthog.surveys.loadIfEnabled() doesn't call sendRequest
         // and it instantiates the survey event receiver
         const loadIfEnabledMock = jest.fn()
         loadIfEnabledMock.mockImplementation(() => {
@@ -255,21 +255,21 @@ describe('surveys', () => {
         surveys.getSurveys((data) => {
             expect(data).toEqual(firstSurveys)
         })
-        expect(instance._send_request).toHaveBeenCalledWith({
+        expect(instance.sendRequest).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
             callback: expect.any(Function),
         })
-        expect(instance._send_request).toHaveBeenCalledTimes(1)
+        expect(instance.sendRequest).toHaveBeenCalledTimes(1)
         expect(instance.persistence?.props.$surveys).toEqual(firstSurveys)
 
         surveysResponse = { surveys: secondSurveys }
         surveys.getSurveys((data) => {
             expect(data).toEqual(firstSurveys)
         })
-        // request again, shouldn't call _send_request again, so 1 total call instead of 2
-        expect(instance._send_request).toHaveBeenCalledTimes(1)
+        // request again, shouldn't call sendRequest again, so 1 total call instead of 2
+        expect(instance.sendRequest).toHaveBeenCalledTimes(1)
     })
 
     it('posthog.reset() removes surveys tracking properties from storage', () => {
@@ -301,13 +301,13 @@ describe('surveys', () => {
         surveys.getSurveys((data) => {
             expect(data).toEqual(firstSurveys)
         })
-        expect(instance._send_request).toHaveBeenCalledWith({
+        expect(instance.sendRequest).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
             callback: expect.any(Function),
         })
-        expect(instance._send_request).toHaveBeenCalledTimes(1)
+        expect(instance.sendRequest).toHaveBeenCalledTimes(1)
         expect(instance.persistence?.props.$surveys).toEqual(firstSurveys)
 
         surveysResponse = { surveys: secondSurveys }
@@ -316,7 +316,7 @@ describe('surveys', () => {
             expect(data).toEqual(secondSurveys)
         }, true)
         expect(instance.persistence?.props.$surveys).toEqual(secondSurveys)
-        expect(instance._send_request).toHaveBeenCalledTimes(2)
+        expect(instance.sendRequest).toHaveBeenCalledTimes(2)
     })
 
     it('getSurveys returns empty array if surveys are undefined', () => {
@@ -331,7 +331,7 @@ describe('surveys', () => {
         surveys.getSurveys((data) => {
             expect(data).toEqual([])
         })
-        expect(instance._send_request).not.toHaveBeenCalled()
+        expect(instance.sendRequest).not.toHaveBeenCalled()
     })
 
     it('can render survey async', async () => {

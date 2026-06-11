@@ -10,7 +10,7 @@ import { PostHog } from '@/posthog-core'
  * cause crashes because the two files are compiled as separate rollup entries and
  * terser may mangle `_`-prefixed properties to different names in each bundle.
  *
- * For example, `_internalEventEmitter` might be mangled to `ti` in extension-bundles
+ * For example, `internalEventEmitter` might be mangled to `ti` in extension-bundles
  * but `oe` in module.slim, so `PostHogFeatureFlags.reloadFeatureFlags()` crashes with:
  *   TypeError: Cannot read properties of undefined (reading 'emit')
  */
@@ -290,7 +290,7 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
     // ── AnalyticsExtensions (Autocapture) ─────────────────────────────
 
     test('AnalyticsExtensions: autocapture init does not crash', async ({ page }) => {
-        // Autocapture accesses this.instance._shouldDisableFlags() which is mangled
+        // Autocapture accesses this.instance.shouldDisableFlags() which is mangled
         const errors: string[] = []
         page.on('pageerror', (error) => errors.push(error.message))
 
