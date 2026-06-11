@@ -100,7 +100,13 @@ export type CapturedNetworkRequest = Writable<Omit<PerformanceEntry, 'toJSON'>> 
 export type SessionIdChangedCallback = (
     sessionId: string,
     windowId: string | null | undefined,
-    changeReason?: { noSessionId: boolean; activityTimeout: boolean; sessionPastMaximumLength: boolean }
+    changeReason?: {
+        noSessionId: boolean
+        activityTimeout: boolean
+        sessionPastMaximumLength: boolean
+        /** This tab picked up a session rotation another tab had already written to storage, instead of minting its own. */
+        crossTabAdoption?: boolean
+    }
 ) => void
 
 // levels originally copied from Sentry to work with the sentry integration
