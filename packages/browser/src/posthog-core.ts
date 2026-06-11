@@ -459,9 +459,13 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * Whether the feature flags endpoint has been hit for this instance.
+     * Whether feature flags have been initialized for this instance.
      *
-     * @returns True once feature flags have been loaded or attempted.
+     * @remarks
+     * Despite the name, this is a proxy for processed feature flag values. It may be true for
+     * bootstrapped flags before a network request completes.
+     *
+     * @returns True once the SDK has processed feature flag values.
      */
     public get flagsEndpointWasHit(): boolean {
         return this.featureFlags?.hasLoadedFlags ?? false

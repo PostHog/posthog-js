@@ -105,7 +105,8 @@ export interface RageclickConfig {
      * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
      * so they don't suppress text like "sign-up", "5 > 3", or "C++".
      *
-     * @default undefined (or `true` when `defaults` is `'2025-11-30'` or later)
+     * @default undefined (or `true` when `defaults` is `'2025-11-30'` or later;
+     * `['next', 'previous', 'prev', '>', '<', '+', '-', '−', '–']` when `defaults` is `'2026-05-30'` or later)
      */
     content_ignorelist?: boolean | string[]
 
@@ -781,6 +782,7 @@ export interface PostHogConfig {
      *
      * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.
      * When `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`.
+     * When `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.
      *
      * @default true
      */
@@ -1249,7 +1251,7 @@ export interface PostHogConfig {
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
-     * - `'2026-05-30'`: Defaults from '2026-01-30' plus persistence_save_debounce_ms defaults to 250
+     * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      *
      * @default 'unset'
      */
@@ -1510,10 +1512,10 @@ export interface PostHogConfig {
     surveys_request_timeout_ms: number
 
     /**
-     * Controls how often feature flags and remote configuration are automatically refreshed in long-running sessions.
+     * Controls how often feature flags are automatically refreshed in long-running sessions after remote configuration has loaded.
      *
-     * By default, feature flags and remote configuration are refreshed every 5 minutes (300000ms) to pick up server-side
-     * changes without requiring a page reload. This is useful for SPAs and long-running tabs.
+     * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
+     * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
      *
      * **Tradeoffs:**
      * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
