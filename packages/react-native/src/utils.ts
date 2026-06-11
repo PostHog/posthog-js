@@ -27,19 +27,27 @@ const _globalThis: typeof globalThis | undefined = typeof globalThis !== 'undefi
 
 export const GLOBAL_OBJ = (_globalThis ?? _global) as unknown as ReactNativeGlobal
 
+export function getPlatformOS(): string | undefined {
+  try {
+    return Platform?.OS
+  } catch {
+    return undefined
+  }
+}
+
 /** Checks if the current platform is web */
 export function isWeb(): boolean {
-  return Platform.OS === 'web'
+  return getPlatformOS() === 'web'
 }
 
 /** Checks if the current platform is macOS */
 export function isMacOS(): boolean {
-  return Platform.OS === 'macos'
+  return getPlatformOS() === 'macos'
 }
 
 /** Checks if the current platform is Windows */
 export function isWindows(): boolean {
-  return Platform.OS === 'windows'
+  return getPlatformOS() === 'windows'
 }
 
 export const isHermes = () => !!GLOBAL_OBJ.HermesInternal
