@@ -1387,9 +1387,8 @@ export class PostHog extends PostHogCore {
         return
       }
 
-      // Lazily initialize native SDK if session replay not already initialized.
-      // Uses initializeNativePlugin so that if only error tracking is active,
-      // we add session replay to the existing native instance rather than re-initializing.
+      // If only error tracking is active, add replay to the existing native instance
+      // rather than re-initializing.
       if (!this._sessionReplayNativeInitialized) {
         this._logger.info('Native session replay SDK not initialized, initializing now...')
         const initialized = await this.initializeNativePlugin(this._sessionReplayOptions, undefined, true)
@@ -1925,10 +1924,9 @@ export class PostHog extends PostHogCore {
       return true
     }
 
-    // The native iOS/Android PostHog SDKs cannot be re-initialized — calling setup() again would
-    // reset the running instance. If error tracking is already running and the user now wants
-    // session replay, skip setup() and let the caller (e.g. startSessionRecording) start replay
-    // on the already-running native instance.
+    // The native SDKs can't be re-initialized — a second setup() would reset the running
+    // instance. If error tracking is already running, skip setup() and let the caller
+    // (e.g. startSessionRecording) start replay on the existing native instance.
     if (this._isNativePluginInitialized() && enableSessionReplay && !this._sessionReplayNativeInitialized) {
       this._sessionReplayNativeInitialized = true
       return true

@@ -4,9 +4,8 @@
 
 const { withAppBuildGradle, withProjectBuildGradle, withXcodeProject } = require('@expo/config-plugins')
 
-// Pinned version of the official PostHog Android Gradle plugin (com.posthog.android),
-// published to Maven Central. It uploads ProGuard/R8 mapping files and injects a
-// matching map-id into the app assets so native crash stack traces can be deobfuscated.
+// com.posthog.android uploads R8 mapping files and injects a matching map-id so native
+// crash stack traces can be deobfuscated.
 const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.2.0'
 
 const resolvePostHogReactNativePackageJsonPath =
@@ -38,17 +37,14 @@ const withAndroidPlugin = (config: any) => {
   })
 }
 
-// Adds the PostHog Android Gradle plugin to the project-level buildscript
-// classpath. The plugin is published to Maven Central (not the Gradle Plugin
-// Portal), so we use the legacy classpath + apply route, which is the most
-// reliable across React Native / Expo project layouts. Idempotent.
+// The plugin is published to Maven Central, not the Gradle Plugin Portal, so we use the
+// legacy buildscript classpath + apply route for broad RN/Expo compatibility. Idempotent.
 export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: string): string {
   if (projectBuildGradle.includes('posthog-android-gradle-plugin')) {
     return projectBuildGradle
   }
 
   const classpathLine = `        classpath("com.posthog:posthog-android-gradle-plugin:${POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION}")`
-  // Insert into the first dependencies { } block inside buildscript { }.
   const pattern = /(buildscript\s*\{[\s\S]*?dependencies\s*\{)/
 
   if (!pattern.test(projectBuildGradle)) {
@@ -144,15 +140,9 @@ export function addPostHogWithBundledScriptsToBundleShellScript(script: string):
 
 const POSTHOG_DSYM_BUILD_PHASE_NAME = 'Upload PostHog Debug Symbols'
 
-// Shell script for the dSYM upload build phase. It reuses upload-symbols.sh
-// shipped inside the posthog-ios dependency rather than re-implementing dSYM
-// upload here. The script self-guards to Release builds, locates posthog-cli,
-// and reads $DWARF_DSYM_FOLDER_PATH itself — we only need to locate it for the
-// two supported integrations (CocoaPods and SwiftPM).
-//
-// `includeSource` opts into POSTHOG_INCLUDE_SOURCE (read by upload-symbols.sh),
-// which uploads native source files for source-code context around crashes.
-// This is iOS only — the Android proguard upload has no source-inclusion flag.
+// Shell script for the dSYM upload build phase. It locates and runs posthog-ios's
+// upload-symbols.sh (CocoaPods or SwiftPM) rather than re-implementing dSYM upload.
+// `includeSource` (iOS only) opts into POSTHOG_INCLUDE_SOURCE to also upload native source.
 export function buildDsymUploadShellScript(includeSource = false): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
@@ -181,9 +171,8 @@ export function buildDsymUploadShellScript(includeSource = false): string {
   return lines.join('\n')
 }
 
-// Adds a Run Script build phase that uploads dSYMs to PostHog. Idempotent: a
-// phase with the same name is only added once. Appended last so it runs after
-// the dSYM bundle is produced.
+// Appends a Run Script build phase that uploads dSYMs. Idempotent; appended last so it
+// runs after the dSYM bundle is produced.
 export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false): void {
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
@@ -197,14 +186,9 @@ export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false
 }
 
 export function disableUserScriptSandboxing(xcodeProject: any): void {
-  // posthog-cli needs to read .git/ for release auto-detection, which the
-  // Xcode 14+ user script sandbox blocks.
-  //
-  // Scope: withXcodeProject only exposes the main app's .xcodeproj (the Pods
-  // project is a separate .xcodeproj managed by CocoaPods — not touched here).
-  // Within the main .xcodeproj, this iterates ALL build configurations without
-  // filtering — that includes the app target, test targets, app extensions, and
-  // any other target defined in the project.
+  // posthog-cli reads .git/ for release auto-detection, which the Xcode 14+ user script
+  // sandbox blocks. Applies to all configs in the main app's .xcodeproj (Pods project is
+  // separate and untouched).
   const configurations = xcodeProject.pbxXCBuildConfigurationSection()
   for (const key in configurations) {
     const configuration = configurations[key]
