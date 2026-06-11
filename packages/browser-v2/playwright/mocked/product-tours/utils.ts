@@ -18,7 +18,7 @@ export const tourDismissedKey = (tourId: string) => `${TOUR_DISMISSED_KEY_PREFIX
 
 export const startOptionsWithProductTours: StartOptions = {
     options: {
-        disable_product_tours: false,
+        disableProductTours: false,
     },
     flagsResponseOverrides: {
         productTours: true,

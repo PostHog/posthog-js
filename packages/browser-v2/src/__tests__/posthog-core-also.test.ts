@@ -121,9 +121,9 @@ describe('posthog core', () => {
         it('calls updateCampaignParams and updateReferrerInfo on sessionPersistence', () => {
             const posthog = posthogWith(
                 {
-                    property_denylist: [],
-                    save_campaign_params: true,
-                    save_referrer: true,
+                    propertyDenylist: [],
+                    saveCampaignParams: true,
+                    saveReferrer: true,
                 },
                 {
                     ...defaultOverrides,
@@ -167,7 +167,7 @@ describe('posthog core', () => {
             expect(mockLogger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
         })
 
-        it('respects opt_out_useragent_filter (default: false)', () => {
+        it('respects optOutUseragentFilter (default: false)', () => {
             const originalNavigator = globals.navigator
             ;(globals as any).navigator = {
                 ...globals.navigator,
@@ -183,7 +183,7 @@ describe('posthog core', () => {
             ;(globals as any)['navigator'] = originalNavigator
         })
 
-        it('respects opt_out_useragent_filter', () => {
+        it('respects optOutUseragentFilter', () => {
             const originalNavigator = globals.navigator
             ;(globals as any).navigator = {
                 ...globals.navigator,
@@ -194,8 +194,8 @@ describe('posthog core', () => {
             const hook = jest.fn().mockImplementation((event) => event)
             const posthog = posthogWith(
                 {
-                    opt_out_useragent_filter: true,
-                    property_denylist: [],
+                    optOutUseragentFilter: true,
+                    propertyDenylist: [],
                 },
                 defaultOverrides
             )
@@ -216,8 +216,8 @@ describe('posthog core', () => {
         it('truncates long properties', () => {
             const posthog = posthogWith(
                 {
-                    properties_string_max_length: 1000,
-                    property_denylist: [],
+                    propertiesStringMaxLength: 1000,
+                    propertyDenylist: [],
                 },
                 defaultOverrides
             )
@@ -236,8 +236,8 @@ describe('posthog core', () => {
         it('keeps long properties if undefined', () => {
             const posthog = posthogWith(
                 {
-                    properties_string_max_length: undefined,
-                    property_denylist: [],
+                    propertiesStringMaxLength: undefined,
+                    propertyDenylist: [],
                 },
                 defaultOverrides
             )
@@ -284,7 +284,7 @@ describe('posthog core', () => {
         it('updates persisted person properties for feature flags if $set is present', () => {
             const posthog = posthogWith(
                 {
-                    property_denylist: [],
+                    propertyDenylist: [],
                 },
                 defaultOverrides
             )
@@ -302,7 +302,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to /e/ by default', () => {
-            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+            const posthog = posthogWith({ ...defaultConfig, requestBatching: false }, defaultOverrides)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
@@ -314,7 +314,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to alternative endpoint if given', () => {
-            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+            const posthog = posthogWith({ ...defaultConfig, requestBatching: false }, defaultOverrides)
             posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
@@ -327,7 +327,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to overriden endpoint if given', () => {
-            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+            const posthog = posthogWith({ ...defaultConfig, requestBatching: false }, defaultOverrides)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
@@ -339,7 +339,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
-            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+            const posthog = posthogWith({ ...defaultConfig, requestBatching: false }, defaultOverrides)
             posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
@@ -354,7 +354,7 @@ describe('posthog core', () => {
         it.each(['XHR', 'fetch', 'sendBeacon'] as const)(
             'passes the %s transport override to the request',
             (transport) => {
-                const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+                const posthog = posthogWith({ ...defaultConfig, requestBatching: false }, defaultOverrides)
 
                 posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
 
@@ -386,18 +386,18 @@ describe('posthog core', () => {
             const posthog = posthogWith({})
 
             posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
-            expect(posthog.config.person_profiles).toEqual('identified_only')
+            expect(posthog.config.personProfiles).toEqual('identified_only')
 
             posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
-            expect(posthog.config.person_profiles).toEqual('identified_only')
+            expect(posthog.config.personProfiles).toEqual('identified_only')
 
             posthog._onRemoteConfig({} as RemoteConfig)
-            expect(posthog.config.person_profiles).toEqual('identified_only')
+            expect(posthog.config.personProfiles).toEqual('identified_only')
         })
-        it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
-            const posthog = posthogWith({ person_profiles: 'always' })
+        it('defaultIdentifiedOnly does not override personProfiles if already set', () => {
+            const posthog = posthogWith({ personProfiles: 'always' })
             posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
-            expect(posthog.config.person_profiles).toEqual('always')
+            expect(posthog.config.personProfiles).toEqual('always')
         })
 
         it('enables compression from flags response when only one received', () => {
@@ -409,7 +409,7 @@ describe('posthog core', () => {
         })
 
         it('does not enable compression from flags response if compression is disabled', () => {
-            const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
+            const posthog = posthogWith({ disableCompression: true, persistence: 'memory' })
 
             posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
 
@@ -467,9 +467,9 @@ describe('posthog core', () => {
 
             posthog = posthogWith(
                 {
-                    api_host: 'https://app.posthog.com',
+                    apiHost: 'https://app.posthog.com',
                     token: 'testtoken',
-                    property_denylist: [],
+                    propertyDenylist: [],
                 },
                 overrides
             )
@@ -493,10 +493,10 @@ describe('posthog core', () => {
             })
         })
 
-        it('sets $lib_custom_api_host if api_host is not the default', () => {
+        it('sets $lib_custom_api_host if apiHost is not the default', () => {
             posthog = posthogWith(
                 {
-                    api_host: 'https://custom.posthog.com',
+                    apiHost: 'https://custom.posthog.com',
                 },
                 overrides
             )
@@ -522,8 +522,8 @@ describe('posthog core', () => {
         it("can't deny $process_person_profile", () => {
             posthog = posthogWith(
                 {
-                    api_host: 'https://custom.posthog.com',
-                    property_denylist: ['$process_person_profile'],
+                    apiHost: 'https://custom.posthog.com',
+                    propertyDenylist: ['$process_person_profile'],
                 },
                 overrides
             )
@@ -538,7 +538,7 @@ describe('posthog core', () => {
         it('only adds token and distinct_id if event_name is $snapshot', () => {
             posthog = posthogWith(
                 {
-                    api_host: 'https://custom.posthog.com',
+                    apiHost: 'https://custom.posthog.com',
                 },
                 overrides
             )
@@ -556,7 +556,7 @@ describe('posthog core', () => {
             const setupPosthogWithInitialProps = () => {
                 posthog = posthogWith(
                     {
-                        api_host: 'https://custom.posthog.com',
+                        apiHost: 'https://custom.posthog.com',
                     },
                     overrides
                 )
@@ -655,9 +655,9 @@ describe('posthog core', () => {
         it('captures $pageleave', () => {
             const posthog = posthogWith(
                 {
-                    capture_pageview: true,
-                    capture_pageleave: 'if_capture_pageview',
-                    request_batching: true,
+                    capturePageview: true,
+                    capturePageleave: 'if_capture_pageview',
+                    requestBatching: true,
                 },
                 { capture: jest.fn() }
             )
@@ -667,12 +667,12 @@ describe('posthog core', () => {
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
 
-        it('captures $pageleave when capture_pageview is set to history_change', () => {
+        it('captures $pageleave when capturePageview is set to history_change', () => {
             const posthog = posthogWith(
                 {
-                    capture_pageview: 'history_change',
-                    capture_pageleave: 'if_capture_pageview',
-                    request_batching: true,
+                    capturePageview: 'history_change',
+                    capturePageleave: 'if_capture_pageview',
+                    requestBatching: true,
                 },
                 { capture: jest.fn() }
             )
@@ -682,12 +682,12 @@ describe('posthog core', () => {
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
 
-        it('does not capture $pageleave when capture_pageview=false and capture_pageleave=if_capture_pageview', () => {
+        it('does not capture $pageleave when capturePageview=false and capturePageleave=if_capture_pageview', () => {
             const posthog = posthogWith(
                 {
-                    capture_pageview: false,
-                    capture_pageleave: 'if_capture_pageview',
-                    request_batching: true,
+                    capturePageview: false,
+                    capturePageleave: 'if_capture_pageview',
+                    requestBatching: true,
                 },
                 { capture: jest.fn() }
             )
@@ -697,12 +697,12 @@ describe('posthog core', () => {
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
-        it('does capture $pageleave when capture_pageview=false and capture_pageleave=true', () => {
+        it('does capture $pageleave when capturePageview=false and capturePageleave=true', () => {
             const posthog = posthogWith(
                 {
-                    capture_pageview: false,
-                    capture_pageleave: true,
-                    request_batching: true,
+                    capturePageview: false,
+                    capturePageleave: true,
+                    requestBatching: true,
                 },
                 { capture: jest.fn() }
             )
@@ -715,9 +715,9 @@ describe('posthog core', () => {
         it('calls requestQueue unload', () => {
             const posthog = posthogWith(
                 {
-                    capture_pageview: true,
-                    capture_pageleave: 'if_capture_pageview',
-                    request_batching: true,
+                    capturePageview: true,
+                    capturePageleave: 'if_capture_pageview',
+                    requestBatching: true,
                 },
                 { _requestQueue: { enqueue: jest.fn(), unload: jest.fn() } as unknown as RequestQueue }
             )
@@ -731,9 +731,9 @@ describe('posthog core', () => {
             it('captures $pageleave', () => {
                 const posthog = posthogWith(
                     {
-                        capture_pageview: true,
-                        capture_pageleave: 'if_capture_pageview',
-                        request_batching: false,
+                        capturePageview: true,
+                        capturePageleave: 'if_capture_pageview',
+                        requestBatching: false,
                     },
                     { capture: jest.fn() }
                 )
@@ -742,12 +742,12 @@ describe('posthog core', () => {
                 expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
             })
 
-            it('captures $pageleave when capture_pageview is set to history_change', () => {
+            it('captures $pageleave when capturePageview is set to history_change', () => {
                 const posthog = posthogWith(
                     {
-                        capture_pageview: 'history_change',
-                        capture_pageleave: 'if_capture_pageview',
-                        request_batching: false,
+                        capturePageview: 'history_change',
+                        capturePageleave: 'if_capture_pageview',
+                        requestBatching: false,
                     },
                     { capture: jest.fn() }
                 )
@@ -756,12 +756,12 @@ describe('posthog core', () => {
                 expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
             })
 
-            it('does not capture $pageleave when capture_pageview=false', () => {
+            it('does not capture $pageleave when capturePageview=false', () => {
                 const posthog = posthogWith(
                     {
-                        capture_pageview: false,
-                        capture_pageleave: 'if_capture_pageview',
-                        request_batching: false,
+                        capturePageview: false,
+                        capturePageleave: 'if_capture_pageview',
+                        requestBatching: false,
                     },
                     { capture: jest.fn() }
                 )
@@ -808,7 +808,7 @@ describe('posthog core', () => {
                         distinctID: 'abcd',
                         isIdentifiedID: true,
                     },
-                    get_device_id: () => 'og-device-id',
+                    getDeviceId: () => 'og-device-id',
                 },
                 { capture: jest.fn() }
             )
@@ -1123,7 +1123,7 @@ describe('posthog core', () => {
                 const posthog = uninitialisedPostHog.init(
                     uuidv7(),
                     {
-                        get_device_id: (uuid) => uuid,
+                        getDeviceId: (uuid) => uuid,
                     },
                     uuidv7()
                 )!
@@ -1143,7 +1143,7 @@ describe('posthog core', () => {
                 const posthog = uninitialisedPostHog.init(
                     uuidv7(),
                     {
-                        get_device_id: (uuid) => uuid,
+                        getDeviceId: (uuid) => uuid,
                     },
                     uuidv7()
                 )!
@@ -1151,11 +1151,11 @@ describe('posthog core', () => {
                 expect(posthog.persistence!.props.distinct_id).not.toEqual('existing-id')
             })
 
-            it('uses config.get_device_id for uuid generation if passed', () => {
+            it('uses config.getDeviceId for uuid generation if passed', () => {
                 const posthog = uninitialisedPostHog.init(
                     uuidv7(),
                     {
-                        get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
+                        getDeviceId: (uuid) => 'custom-' + uuid.slice(0, 8),
                         persistence: 'memory',
                     },
                     uuidv7()
@@ -1455,8 +1455,8 @@ describe('posthog core', () => {
     })
 
     describe('config migration', () => {
-        it('uses advanced_disable_flags when set', () => {
-            const posthog = posthogWith({ advanced_disable_flags: true })
+        it('uses advancedDisableFlags when set', () => {
+            const posthog = posthogWith({ advancedDisableFlags: true })
             expect(posthog._shouldDisableFlags()).toBe(true)
         })
 
@@ -1515,7 +1515,7 @@ describe('posthog core', () => {
             it('does not call flags if disabled', async () => {
                 const sendRequestMock = jest.fn()
                 await createPosthogInstance(uuidv7(), {
-                    advanced_disable_flags: true,
+                    advancedDisableFlags: true,
                     loaded: (ph) => {
                         ph._send_request = sendRequestMock
                     },
@@ -1532,7 +1532,7 @@ describe('posthog core', () => {
             jest.useFakeTimers()
 
             const instance = await createPosthogInstance(uuidv7(), {
-                capture_pageview: false,
+                capturePageview: false,
             })
             instance.capture = jest.fn()
 
@@ -1553,7 +1553,7 @@ describe('posthog core', () => {
             jest.useFakeTimers()
 
             const instance = await createPosthogInstance(uuidv7(), {
-                capture_pageview: true,
+                capturePageview: true,
             })
             instance.capture = jest.fn()
 
@@ -1574,7 +1574,7 @@ describe('posthog core', () => {
         beforeEach(async () => {
             token = uuidv7()
             instance = await createPosthogInstance(token, {
-                api_host: 'https://us.posthog.com',
+                apiHost: 'https://us.posthog.com',
             })
             instance.sessionManager!.checkAndGetSessionAndWindowId = jest.fn().mockReturnValue({
                 windowId: 'windowId',

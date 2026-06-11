@@ -12,8 +12,8 @@ describe('external-scripts-loader', () => {
     describe('loadScript', () => {
         const mockPostHog = {
             config: {
-                api_host: 'https://us.posthog.com',
-                external_scripts_inject_target: 'body',
+                apiHost: 'https://us.posthog.com',
+                externalScriptsInjectTarget: 'body',
             },
             version: '1.0.0',
         } as PostHog
@@ -22,8 +22,8 @@ describe('external-scripts-loader', () => {
         const callback = jest.fn()
         beforeEach(() => {
             callback.mockClear()
-            mockPostHog.config.strict_script_versioning = false
-            mockPostHog.config.asset_host = null
+            mockPostHog.config.strictScriptVersioning = false
+            mockPostHog.config.assetHost = null
         })
 
         it('appends scripts to body by default', () => {
@@ -42,7 +42,7 @@ describe('external-scripts-loader', () => {
         })
 
         it('appends scripts to head when configured', () => {
-            mockPostHog.config.external_scripts_inject_target = 'head'
+            mockPostHog.config.externalScriptsInjectTarget = 'head'
 
             const existingBodyScript = document!.createElement('script')
             existingBodyScript.id = 'framework-bundle'
@@ -58,7 +58,7 @@ describe('external-scripts-loader', () => {
             expect(headScripts.length).toBe(1)
             expect(headScripts[0].src).toContain('recorder.js')
 
-            mockPostHog.config.external_scripts_inject_target = 'body'
+            mockPostHog.config.externalScriptsInjectTarget = 'body'
         })
 
         it('does not add duplicate scripts', () => {
@@ -99,34 +99,34 @@ describe('external-scripts-loader', () => {
 
         it.each([
             [
-                'uses versioned asset paths on the normal asset host when strict_script_versioning is enabled',
+                'uses versioned asset paths on the normal asset host when strictScriptVersioning is enabled',
                 'https://us.posthog.com',
-                { strict_script_versioning: true },
+                { strictScriptVersioning: true },
                 'https://us-assets.i.posthog.com/static/1.0.0/recorder.js',
             ],
             [
-                'uses a configured asset_host override for versioned asset paths',
+                'uses a configured assetHost override for versioned asset paths',
                 'https://us.posthog.com',
-                { strict_script_versioning: true, asset_host: 'https://cdn-preview.example.com/' },
+                { strictScriptVersioning: true, assetHost: 'https://cdn-preview.example.com/' },
                 'https://cdn-preview.example.com/static/1.0.0/recorder.js',
             ],
             [
-                'uses a configured asset_host override for legacy asset paths',
+                'uses a configured assetHost override for legacy asset paths',
                 'https://us.posthog.com',
-                { asset_host: 'https://cdn-preview.example.com/' },
+                { assetHost: 'https://cdn-preview.example.com/' },
                 'https://cdn-preview.example.com/static/recorder.js?v=1.0.0',
             ],
             [
-                'uses the custom asset host from endpointFor when strict_script_versioning is enabled',
+                'uses the custom asset host from endpointFor when strictScriptVersioning is enabled',
                 'https://my-proxy.example.com',
-                { strict_script_versioning: true },
+                { strictScriptVersioning: true },
                 'https://my-proxy.example.com/static/1.0.0/recorder.js',
             ],
         ])('%s', (_, apiHost, configOverrides, expectedSrc) => {
             const posthog = {
                 config: {
-                    api_host: apiHost,
-                    external_scripts_inject_target: 'body',
+                    apiHost: apiHost,
+                    externalScriptsInjectTarget: 'body',
                     ...configOverrides,
                 },
                 version: '1.0.0',
@@ -141,8 +141,8 @@ describe('external-scripts-loader', () => {
         it('uses eu-assets on the EU region', () => {
             const euPostHog = {
                 config: {
-                    api_host: 'https://eu.i.posthog.com',
-                    external_scripts_inject_target: 'body',
+                    apiHost: 'https://eu.i.posthog.com',
+                    externalScriptsInjectTarget: 'body',
                 },
                 version: '1.0.0',
             } as PostHog
@@ -155,8 +155,8 @@ describe('external-scripts-loader', () => {
             )
         })
 
-        it('allows adding nonce via prepare_external_dependency_script', () => {
-            mockPostHog.config.prepare_external_dependency_script = (script) => {
+        it('allows adding nonce via prepareExternalDependencyScript', () => {
+            mockPostHog.config.prepareExternalDependencyScript = (script) => {
                 script.nonce = '123'
                 return script
             }
@@ -164,26 +164,26 @@ describe('external-scripts-loader', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             expect(document!.getElementsByTagName('script')[0].nonce).toBe('123')
 
-            delete mockPostHog.config.prepare_external_dependency_script
+            delete mockPostHog.config.prepareExternalDependencyScript
         })
 
-        it('does not load script if prepare_external_dependency_script returns null', () => {
-            mockPostHog.config.prepare_external_dependency_script = () => null
+        it('does not load script if prepareExternalDependencyScript returns null', () => {
+            mockPostHog.config.prepareExternalDependencyScript = () => null
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             expect(document!.getElementsByTagName('script').length).toBe(0)
-            expect(callback).toHaveBeenCalledWith('prepare_external_dependency_script returned null')
+            expect(callback).toHaveBeenCalledWith('prepareExternalDependencyScript returned null')
 
-            delete mockPostHog.config.prepare_external_dependency_script
+            delete mockPostHog.config.prepareExternalDependencyScript
         })
     })
 
     describe('remote-config loading', () => {
         const posthog = {
             config: {
-                api_host: 'https://us.posthog.com',
+                apiHost: 'https://us.posthog.com',
                 token: 'test-token',
-                external_scripts_inject_target: 'body',
+                externalScriptsInjectTarget: 'body',
             },
             version: '1.0.0',
         } as PostHog

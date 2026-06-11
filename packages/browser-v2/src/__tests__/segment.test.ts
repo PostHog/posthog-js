@@ -26,12 +26,12 @@ const initPostHogInAPromise = (
             {
                 debug: true,
                 persistence: `localStorage`,
-                api_host: `https://test.com`,
+                apiHost: `https://test.com`,
                 segment: segment,
                 loaded: resolve,
-                disable_surveys: true,
+                disableSurveys: true,
                 // want to avoid flags code logging during tests
-                advanced_disable_feature_flags: true,
+                advancedDisableFeatureFlags: true,
                 ...(config || {}),
             },
             posthogName

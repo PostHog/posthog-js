@@ -41,9 +41,9 @@ describe('Conversations Identity Verification', () => {
         } as unknown as ConversationsManager
 
         const config = createMockConfig({
-            api_host: 'https://test.posthog.com',
+            apiHost: 'https://test.posthog.com',
             token: 'test-token',
-            disable_conversations: false,
+            disableConversations: false,
         })
 
         mockPostHog = createMockPostHog({
@@ -60,13 +60,13 @@ describe('Conversations Identity Verification', () => {
             getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
             on: jest.fn().mockReturnValue(jest.fn()),
             setIdentity: jest.fn((distinctId: string, hash: string) => {
-                mockPostHog.config.identity_distinct_id = distinctId
-                mockPostHog.config.identity_hash = hash
+                mockPostHog.config.identityDistinctId = distinctId
+                mockPostHog.config.identityHash = hash
                 ;(mockPostHog as any).conversations?._onIdentityChanged()
             }),
             clearIdentity: jest.fn(() => {
-                delete mockPostHog.config.identity_distinct_id
-                delete mockPostHog.config.identity_hash
+                delete mockPostHog.config.identityDistinctId
+                delete mockPostHog.config.identityHash
                 ;(mockPostHog as any).conversations?._onIdentityCleared()
             }),
         })
@@ -91,8 +91,8 @@ describe('Conversations Identity Verification', () => {
         it('should store identity on top-level config', () => {
             mockPostHog.setIdentity('user_123', 'a1b2c3d4')
 
-            expect(mockPostHog.config.identity_distinct_id).toBe('user_123')
-            expect(mockPostHog.config.identity_hash).toBe('a1b2c3d4')
+            expect(mockPostHog.config.identityDistinctId).toBe('user_123')
+            expect(mockPostHog.config.identityHash).toBe('a1b2c3d4')
         })
 
         it('should forward to manager via _onIdentityChanged when manager is loaded', () => {
@@ -105,15 +105,15 @@ describe('Conversations Identity Verification', () => {
         it('should store on config even when manager is not loaded yet', () => {
             mockPostHog.setIdentity('user_123', 'a1b2c3d4')
 
-            expect(mockPostHog.config.identity_distinct_id).toBe('user_123')
-            expect(mockPostHog.config.identity_hash).toBe('a1b2c3d4')
+            expect(mockPostHog.config.identityDistinctId).toBe('user_123')
+            expect(mockPostHog.config.identityHash).toBe('a1b2c3d4')
             expect(mockManager.setIdentity).not.toHaveBeenCalled()
         })
 
         it('should be read by manager when it loads later', () => {
             mockPostHog.setIdentity('user_123', 'a1b2c3d4')
 
-            expect(mockPostHog.config.identity_distinct_id).toBe('user_123')
+            expect(mockPostHog.config.identityDistinctId).toBe('user_123')
 
             loadConversations()
 
@@ -123,12 +123,12 @@ describe('Conversations Identity Verification', () => {
 
     describe('posthog.clearIdentity', () => {
         it('should remove identity from posthog.config', () => {
-            mockPostHog.config.identity_distinct_id = 'user_123'
-            mockPostHog.config.identity_hash = 'a1b2c3d4'
+            mockPostHog.config.identityDistinctId = 'user_123'
+            mockPostHog.config.identityHash = 'a1b2c3d4'
             mockPostHog.clearIdentity()
 
-            expect(mockPostHog.config.identity_distinct_id).toBeUndefined()
-            expect(mockPostHog.config.identity_hash).toBeUndefined()
+            expect(mockPostHog.config.identityDistinctId).toBeUndefined()
+            expect(mockPostHog.config.identityHash).toBeUndefined()
         })
 
         it('should forward to manager via _onIdentityCleared when manager is loaded', () => {
@@ -154,22 +154,22 @@ describe('Conversations Identity Verification', () => {
 
     describe('init-time identity config', () => {
         it('should pass through init config to manager construction', () => {
-            mockPostHog.config.identity_distinct_id = 'user_123'
-            mockPostHog.config.identity_hash = 'a1b2c3d4'
+            mockPostHog.config.identityDistinctId = 'user_123'
+            mockPostHog.config.identityHash = 'a1b2c3d4'
 
             loadConversations()
 
             expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalled()
-            expect(mockPostHog.config.identity_distinct_id).toBe('user_123')
+            expect(mockPostHog.config.identityDistinctId).toBe('user_123')
         })
 
         it('should not interfere when no identity config is set', () => {
-            expect(mockPostHog.config.identity_distinct_id).toBeUndefined()
+            expect(mockPostHog.config.identityDistinctId).toBeUndefined()
 
             loadConversations()
 
             expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalled()
-            expect(mockPostHog.config.identity_distinct_id).toBeUndefined()
+            expect(mockPostHog.config.identityDistinctId).toBeUndefined()
         })
     })
 })

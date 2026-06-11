@@ -5,11 +5,11 @@ import { BrowserContext, Page } from '@playwright/test'
 
 const startOptions: StartOptions = {
     options: {
-        session_recording: {
+        sessionRecording: {
             // not the default but makes for easier test assertions
             compress_events: false,
         },
-        opt_out_capturing_by_default: true,
+        optOutCapturingByDefault: true,
     },
     flagsResponseOverrides: {
         sessionRecording: {
@@ -51,7 +51,7 @@ test.describe('Session recording - linked flags', () => {
         const recorderPromise = page.waitForResponse('**/*recorder.js*')
         await startWithFlags(page, context, {
             options: {
-                opt_out_capturing_by_default: false,
+                optOutCapturingByDefault: false,
             },
             flagsResponseOverrides: {
                 sessionRecording: { linkedFlag: 'my-linked-flag' },
@@ -81,7 +81,7 @@ test.describe('Session recording - linked flags', () => {
 
         await startWithFlags(page, context, {
             options: {
-                opt_out_capturing_by_default: false,
+                optOutCapturingByDefault: false,
             },
             flagsResponseOverrides: {
                 sessionRecording: { linkedFlag: 'my-linked-flag' },
@@ -109,7 +109,7 @@ test.describe('Session recording - linked flags', () => {
 
         await startWithFlags(page, context, {
             options: {
-                opt_out_capturing_by_default: false,
+                optOutCapturingByDefault: false,
             },
             flagsResponseOverrides: {
                 sessionRecording: { linkedFlag: 'replay-filtering-conversion' },
@@ -146,7 +146,7 @@ test.describe('Session recording - linked flags', () => {
 
         await startWithFlags(page, context, {
             options: {
-                opt_out_capturing_by_default: false,
+                optOutCapturingByDefault: false,
             },
             flagsResponseOverrides: {
                 sessionRecording: {
@@ -188,7 +188,7 @@ test.describe('Session recording - linked flags', () => {
 
         await startWithFlags(page, context, {
             options: {
-                opt_out_capturing_by_default: false,
+                optOutCapturingByDefault: false,
             },
             flagsResponseOverrides: {
                 sessionRecording: {
@@ -235,7 +235,7 @@ test.describe('Session recording - linked flags', () => {
             {
                 options: {
                     // we start opted out, so we can test the opt-in and override
-                    opt_out_capturing_by_default: true,
+                    optOutCapturingByDefault: true,
                 },
                 flagsResponseOverrides: {
                     sessionRecording: { linkedFlag: 'my-linked-flag' },

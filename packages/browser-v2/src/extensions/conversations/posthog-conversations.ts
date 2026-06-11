@@ -40,7 +40,7 @@ export class PostHogConversations implements Extension {
 
     onRemoteConfig(response: RemoteConfig) {
         // Don't load conversations if disabled via config
-        if (this._instance.config.disable_conversations) {
+        if (this._instance.config.disableConversations) {
             return
         }
 
@@ -79,7 +79,7 @@ export class PostHogConversations implements Extension {
         if (this._isInitializing) {
             return
         }
-        if (this._instance.config.disable_conversations) {
+        if (this._instance.config.disableConversations) {
             return
         }
         // The toolbar's internal PostHog instance must not own the conversations
@@ -88,7 +88,7 @@ export class PostHogConversations implements Extension {
         if (isToolbarInstance(this._instance.config)) {
             return
         }
-        if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
+        if (this._instance.config.cookielessMode && this._instance.consent.isOptedOut()) {
             return
         }
 

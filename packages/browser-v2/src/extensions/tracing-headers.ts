@@ -33,9 +33,9 @@ export class TracingHeaders implements Extension {
         })
     }
     private _getConfiguredHostnames(): string[] | boolean | undefined {
-        // Prefer the public `tracing_headers` option; fall back to deprecated aliases.
+        // Prefer the public `tracingHeaders` option; fall back to deprecated aliases.
         return (
-            this._instance.config.tracing_headers ??
+            this._instance.config.tracingHeaders ??
             this._instance.config.addTracingHeaders ??
             this._instance.config.__add_tracing_headers
         )

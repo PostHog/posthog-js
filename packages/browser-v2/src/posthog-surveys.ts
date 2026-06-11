@@ -58,7 +58,7 @@ export class PostHogSurveys implements Extension {
 
     onRemoteConfig(response: RemoteConfig) {
         // only load surveys if they are enabled and there are surveys to load
-        if (this._config.disable_surveys) {
+        if (this._config.disableSurveys) {
             return
         }
 
@@ -94,11 +94,11 @@ export class PostHogSurveys implements Extension {
             logger.info('Already initializing surveys, skipping...')
             return
         }
-        if (this._config.disable_surveys) {
+        if (this._config.disableSurveys) {
             logger.info(SURVEY_DISABLED)
             return
         }
-        if (this._config.cookieless_mode && this._instance.consent.isOptedOut()) {
+        if (this._config.cookielessMode && this._instance.consent.isOptedOut()) {
             logger.info('Not loading surveys in cookieless mode without consent.')
             return
         }
@@ -111,11 +111,11 @@ export class PostHogSurveys implements Extension {
 
         // waiting for remote config to load
         // if surveys is forced enable (like external surveys), ignore the remote config and load surveys
-        if (isUndefined(this._isSurveysEnabled) && !this._config.advanced_enable_surveys) {
+        if (isUndefined(this._isSurveysEnabled) && !this._config.advancedEnableSurveys) {
             return
         }
 
-        const isSurveysEnabled = this._isSurveysEnabled || this._config.advanced_enable_surveys
+        const isSurveysEnabled = this._isSurveysEnabled || this._config.advancedEnableSurveys
 
         this._isInitializingSurveys = true
 
@@ -207,7 +207,7 @@ export class PostHogSurveys implements Extension {
     getSurveys(callback: SurveyCallback, forceReload = false) {
         // In case we manage to load the surveys script, but config says not to load surveys
         // then we shouldn't return survey data
-        if (this._config.disable_surveys) {
+        if (this._config.disableSurveys) {
             logger.info(SURVEY_DISABLED)
             return callback([])
         }
@@ -239,7 +239,7 @@ export class PostHogSurveys implements Extension {
         this._instance._send_request({
             url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._config.token}`),
             method: 'GET',
-            timeout: this._config.surveys_request_timeout_ms,
+            timeout: this._config.surveysRequestTimeoutMs,
             callback: (response) => {
                 this._getSurveysInFlightPromise = null
 

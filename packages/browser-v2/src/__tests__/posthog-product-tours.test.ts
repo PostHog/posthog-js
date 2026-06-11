@@ -9,7 +9,7 @@ describe('PostHogProductTours', () => {
 
     beforeEach(async () => {
         instance = await createPosthogInstance(uuidv7(), {
-            api_host: 'https://test.com',
+            apiHost: 'https://test.com',
             token: 'testtoken',
         })
     })

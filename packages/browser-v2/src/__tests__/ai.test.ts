@@ -9,7 +9,7 @@ describe('ai', () => {
 
     const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
         const beforeSendMock = jest.fn().mockImplementation((e) => e)
-        const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
+        const posthog = defaultPostHog().init(token, { ...config, beforeSend: beforeSendMock }, token)!
         posthog.debug()
         return { posthog, beforeSendMock }
     }

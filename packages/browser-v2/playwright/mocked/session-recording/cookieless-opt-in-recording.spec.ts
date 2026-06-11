@@ -27,19 +27,19 @@ async function startWith(config: Partial<PostHogConfig>, page: Page, context: Br
 }
 
 test.describe('Session Recording - cookieless mode with opt-in', () => {
-    test('reproduces customer issue: cookieless_mode on_reject + opt_out_capturing_by_default', async ({
+    test('reproduces customer issue: cookielessMode on_reject + optOutCapturingByDefault', async ({
         page,
         context,
     }) => {
-        // NOTE: cookieless_mode: 'on_reject' already behaves like opt_out_capturing_by_default,
+        // NOTE: cookielessMode: 'on_reject' already behaves like optOutCapturingByDefault,
         // so using both is redundant, but we test with both to match the customer's exact setup
         const customerConfig: Partial<PostHogConfig> = {
-            cross_subdomain_cookie: false,
-            capture_pageview: true,
-            capture_pageleave: true,
-            cookieless_mode: 'on_reject',
-            opt_out_capturing_by_default: true,
-            opt_out_capturing_persistence_type: 'localStorage',
+            crossSubdomainCookie: false,
+            capturePageview: true,
+            capturePageleave: true,
+            cookielessMode: 'on_reject',
+            optOutCapturingByDefault: true,
+            optOutCapturingPersistenceType: 'localStorage',
         }
 
         // No recorder or snapshot call initially because we're opted out
@@ -84,12 +84,12 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await assertThatRecordingStarted(page)
     })
 
-    test('cookieless_mode on_reject acts like opt_out_capturing_by_default', async ({ page, context }) => {
-        // Test that cookieless_mode: 'on_reject' alone also prevents recording
+    test('cookielessMode on_reject acts like optOutCapturingByDefault', async ({ page, context }) => {
+        // Test that cookielessMode: 'on_reject' alone also prevents recording
         // until explicit consent is given (it treats pending consent as opted out)
         const config: Partial<PostHogConfig> = {
-            cookieless_mode: 'on_reject',
-            capture_pageview: true,
+            cookielessMode: 'on_reject',
+            capturePageview: true,
         }
 
         // No recorder should load initially because on_reject treats pending consent as opted out
@@ -127,9 +127,9 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         context,
     }) => {
         const customerConfig: Partial<PostHogConfig> = {
-            cookieless_mode: 'on_reject',
-            opt_out_capturing_by_default: true,
-            opt_out_capturing_persistence_type: 'localStorage',
+            cookielessMode: 'on_reject',
+            optOutCapturingByDefault: true,
+            optOutCapturingPersistenceType: 'localStorage',
         }
 
         await startWith(customerConfig, page, context)

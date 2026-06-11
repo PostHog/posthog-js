@@ -54,7 +54,7 @@ function getSnapshotTimestamp(snapshot: any, position: 'first' | 'last'): number
 
 const startOptions = {
     options: {
-        session_recording: {
+        sessionRecording: {
             // not the default but makes for easier test assertions
             compress_events: false,
         },

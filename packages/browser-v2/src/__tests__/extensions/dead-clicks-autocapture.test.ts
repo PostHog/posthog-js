@@ -25,10 +25,10 @@ describe('DeadClicksAutocapture', () => {
 
     it('should call initDeadClicksAutocapture if isEnabled is true', async () => {
         await createPosthogInstance(uuidv7(), {
-            api_host: 'https://test.com',
+            apiHost: 'https://test.com',
             token: 'testtoken',
             autocapture: true,
-            capture_dead_clicks: true,
+            captureDeadClicks: true,
         })
 
         expect(mockStart).toHaveBeenCalled()
@@ -36,10 +36,10 @@ describe('DeadClicksAutocapture', () => {
 
     it('should not call initDeadClicksAutocapture if isEnabled is false', async () => {
         await createPosthogInstance(uuidv7(), {
-            api_host: 'https://test.com',
+            apiHost: 'https://test.com',
             token: 'testtoken',
             autocapture: true,
-            capture_dead_clicks: false,
+            captureDeadClicks: false,
         })
 
         expect(mockStart).not.toHaveBeenCalled()
@@ -51,7 +51,7 @@ describe('DeadClicksAutocapture', () => {
         const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as jest.Mock
         mockLoader.mockClear()
 
-        const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
+        const instance = await createPosthogInstance(uuidv7(), { captureDeadClicks: true })
         new DeadClicksAutocapture(instance, () => true).startIfEnabledOrStop()
 
         expect(mockLoader).toHaveBeenCalledWith(instance, 'dead-clicks-autocapture', expect.any(Function))
@@ -59,10 +59,10 @@ describe('DeadClicksAutocapture', () => {
 
     it('should call lazy loaded stop when stopping', async () => {
         const instance = await createPosthogInstance(uuidv7(), {
-            api_host: 'https://test.com',
+            apiHost: 'https://test.com',
             token: 'testtoken',
             autocapture: true,
-            capture_dead_clicks: true,
+            captureDeadClicks: true,
         })
 
         const mockLazyStop = instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture?.stop
@@ -74,7 +74,7 @@ describe('DeadClicksAutocapture', () => {
 
     it('should stop dead clicks when remote config disables a previously enabled setting', async () => {
         const instance = await createPosthogInstance(uuidv7(), {
-            api_host: 'https://test.com',
+            apiHost: 'https://test.com',
             token: 'testtoken',
             autocapture: true,
         })
@@ -101,10 +101,10 @@ describe('DeadClicksAutocapture', () => {
 
         beforeEach(async () => {
             instance = await createPosthogInstance(uuidv7(), {
-                api_host: 'https://test.com',
+                apiHost: 'https://test.com',
                 token: 'testtoken',
                 autocapture: true,
-                capture_dead_clicks: true,
+                captureDeadClicks: true,
             })
         })
 
@@ -124,7 +124,7 @@ describe('DeadClicksAutocapture', () => {
                 instance.persistence?.register({
                     [DEAD_CLICKS_ENABLED_SERVER_SIDE]: serverSide,
                 })
-                instance.config.capture_dead_clicks = clientSide
+                instance.config.captureDeadClicks = clientSide
                 expect(instance.deadClicksAutocapture.isEnabled(instance.deadClicksAutocapture)).toBe(expected)
             }
         )
@@ -135,7 +135,7 @@ describe('DeadClicksAutocapture', () => {
 
         beforeEach(async () => {
             instance = await createPosthogInstance(uuidv7(), {
-                api_host: 'https://test.com',
+                apiHost: 'https://test.com',
                 token: 'testtoken',
                 autocapture: true,
             })

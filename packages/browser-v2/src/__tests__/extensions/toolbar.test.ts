@@ -20,7 +20,7 @@ describe('Toolbar', () => {
     beforeEach(() => {
         instance = createMockPostHog({
             config: createMockConfig({
-                api_host: 'http://api.example.com',
+                apiHost: 'http://api.example.com',
                 token: 'test_token',
             }),
             setConfig: jest.fn(),

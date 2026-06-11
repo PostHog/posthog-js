@@ -50,8 +50,8 @@ const parseName = (config: PostHogConfig): string => {
         token = config['token'].replace(/\+/g, 'PL').replace(/\//g, 'SL').replace(/=/g, 'EQ')
     }
 
-    if (config['persistence_name']) {
-        return 'ph_' + config['persistence_name']
+    if (config['persistenceName']) {
+        return 'ph_' + config['persistenceName']
     } else {
         return 'ph_' + token + '_posthog'
     }
@@ -114,7 +114,7 @@ export class PostHogPersistence {
     // localStorage+cookie). Set by `_buildStorage`.
     private _splitStorageEligible = false
     // Whether flag config is stored in their own entries this session:
-    // backend-eligible AND `split_storage` enabled.
+    // backend-eligible AND `splitStorage` enabled.
     // Re-resolved on every `updateConfig` (backend rebuild or a runtime flag flip).
     private _splitStorage = false
     // Whether this instance owns (and may clean up) the shared split group
@@ -123,7 +123,7 @@ export class PostHogPersistence {
     // remove them — otherwise its remove() (fired via setSecure on every
     // setConfig reconstruction) would wipe the primary's __flags entry.
     private readonly _ownsSplitStorage: boolean
-    // Optional debounce: when `persistence_save_debounce_ms` is > 0, rapid
+    // Optional debounce: when `persistenceSaveDebounceMs` is > 0, rapid
     // calls to `save()` are coalesced into one write at the end of the
     // window. The in-memory `props` is always updated synchronously, so
     // in-tab reads see the latest values regardless. Pending writes are
@@ -152,9 +152,9 @@ export class PostHogPersistence {
 
         // Install unload flush listeners unconditionally. They are a no-op
         // when no debounced write is pending (see `flush()`), so it is safe
-        // to install even when `persistence_save_debounce_ms` is 0 at
+        // to install even when `persistenceSaveDebounceMs` is 0 at
         // construction. Crucially this also handles `posthog.setConfig({
-        // persistence_save_debounce_ms: 250 })` enabling debounce later —
+        // persistenceSaveDebounceMs: 250 })` enabling debounce later —
         // we'd otherwise miss the listener install and lose pending writes
         // on close.
         if (window) {
@@ -165,7 +165,7 @@ export class PostHogPersistence {
     }
 
     private _saveDebounceMs(): number {
-        const value = this._config?.persistence_save_debounce_ms
+        const value = this._config?.persistenceSaveDebounceMs
         return isNumber(value) && value > 0 ? value : 0
     }
 
@@ -193,8 +193,8 @@ export class PostHogPersistence {
         // Creating it inside each individual condition below is too complicated and will break backwards compatibility
         // so create it once for this specific config and use it if necessary
         const localPlusCookieStore = createLocalPlusCookieStore(
-            config['cookie_persisted_properties'] || [],
-            config['__preview_cookie_wins_on_conflict'] || false
+            config['cookiePersistedProperties'] || [],
+            config['__previewCookieWinsOnConflict'] || false
         )
 
         let store: PersistentStore
@@ -239,7 +239,7 @@ export class PostHogPersistence {
     // AND the config opts in. Resolved here so the constructor and the runtime
     // `updateConfig` toggle can never disagree about whether the split is active.
     private _resolveSplitStorage(config: PostHogConfig): boolean {
-        return this._splitStorageEligible && !!config['split_storage']
+        return this._splitStorageEligible && !!config['splitStorage']
     }
 
     /**
@@ -248,7 +248,7 @@ export class PostHogPersistence {
      * @internal
      */
     _isFeatureFlagCacheStale(ttl?: number): boolean {
-        const effectiveTtl = ttl ?? this._config.feature_flag_cache_ttl_ms
+        const effectiveTtl = ttl ?? this._config.featureFlagCacheTtlMs
         if (!effectiveTtl || effectiveTtl <= 0) {
             return false
         }
@@ -506,7 +506,7 @@ export class PostHogPersistence {
 
     // The no-op-rejection snapshot for an entry. The main entry can live in a
     // cookie, so its fingerprint also covers the cookie options (expire_days,
-    // cross_subdomain, secure): a `setConfig({ cookie_expiration })` must force
+    // cross_subdomain, secure): a `setConfig({ cookieExpiration })` must force
     // a rewrite even when props are unchanged, otherwise the cookie keeps its old
     // `Expires` header until some other prop changes. Group entries are
     // localStorage-only — cookie options never reach them, so excluding those
@@ -703,9 +703,9 @@ export class PostHogPersistence {
     updateCampaignParams(): void {
         if (!this._campaign_params_saved) {
             const campaignParams = getCampaignParams(
-                this._config.custom_campaign_params,
-                this._config.mask_personal_data_properties,
-                this._config.custom_personal_data_properties
+                this._config.customCampaignParams,
+                this._config.maskPersonalDataProperties,
+                this._config.customPersonalDataProperties
             )
             // only save campaign params if there were any
             if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
@@ -731,8 +731,8 @@ export class PostHogPersistence {
         this.registerOnce(
             {
                 [INITIAL_PERSON_INFO]: getPersonInfo(
-                    this._config.mask_personal_data_properties,
-                    this._config.custom_personal_data_properties
+                    this._config.maskPersonalDataProperties,
+                    this._config.customPersonalDataProperties
                 ),
             },
             undefined
@@ -776,14 +776,14 @@ export class PostHogPersistence {
     }
 
     updateConfig(config: PostHogConfig, oldConfig: PostHogConfig, isDisabled?: boolean): void {
-        this._default_expiry = this._expire_days = config['cookie_expiration']
-        this.setDisabled(config['disable_persistence'] || !!isDisabled)
-        this.setCrossSubdomain(config['cross_subdomain_cookie'])
-        this.setSecure(config['secure_cookie'])
+        this._default_expiry = this._expire_days = config['cookieExpiration']
+        this.setDisabled(config['disablePersistence'] || !!isDisabled)
+        this.setCrossSubdomain(config['crossSubdomainCookie'])
+        this.setSecure(config['secureCookie'])
 
         const persistenceChanged =
             config.persistence !== oldConfig.persistence ||
-            !isArrayContentsEqual(config.cookie_persisted_properties || [], oldConfig.cookie_persisted_properties || [])
+            !isArrayContentsEqual(config.cookiePersistedProperties || [], oldConfig.cookiePersistedProperties || [])
 
         // `_buildStorage` re-resolves both the backend and `_splitStorageEligible`,
         // so on a persistence change build the new store first, then derive the
@@ -793,7 +793,7 @@ export class PostHogPersistence {
         const wantSplit = this._resolveSplitStorage(config)
 
         // Migrate when the backend changed or the split routing flipped at
-        // runtime, e.g. setConfig({ split_storage: true })
+        // runtime, e.g. setConfig({ splitStorage: true })
         // without touching persistence. Either way we clear the old layout and
         // re-save so subsequent reads/writes land in the right entries.
         if (persistenceChanged || wantSplit !== this._splitStorage) {

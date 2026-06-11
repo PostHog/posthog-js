@@ -34,7 +34,7 @@ test.describe('Session Recording - opting out', () => {
         // but no recorder or snapshot call, because we're opting out
         void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
         void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
-        await startWith({ opt_out_capturing_by_default: true }, page, context)
+        await startWith({ optOutCapturingByDefault: true }, page, context)
 
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
@@ -46,7 +46,7 @@ test.describe('Session Recording - opting out', () => {
         void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
         void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
 
-        await startWith({ disable_session_recording: true }, page, context)
+        await startWith({ disableSessionRecording: true }, page, context)
 
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
@@ -54,7 +54,7 @@ test.describe('Session Recording - opting out', () => {
     })
 
     test('can start recording after starting opted out', async ({ page, context }) => {
-        await startWith({ opt_out_capturing_by_default: true }, page, context)
+        await startWith({ optOutCapturingByDefault: true }, page, context)
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/*recorder.js*'],
@@ -77,7 +77,7 @@ test.describe('Session Recording - opting out', () => {
     })
 
     test('can start recording when starting disabled', async ({ page, context }) => {
-        await startWith({ disable_session_recording: true }, page, context)
+        await startWith({ disableSessionRecording: true }, page, context)
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/*recorder.js*'],
@@ -96,11 +96,7 @@ test.describe('Session Recording - opting out', () => {
     })
 
     test('does not capture session recordings when flags is disabled', async ({ page, context }) => {
-        await start(
-            { options: { advanced_disable_flags: true, autocapture: false }, waitForFlags: false },
-            page,
-            context
-        )
+        await start({ options: { advancedDisableFlags: true, autocapture: false }, waitForFlags: false }, page, context)
 
         await page.locator('[data-cy-custom-event-button]').click()
 

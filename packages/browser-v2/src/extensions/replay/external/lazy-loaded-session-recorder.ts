@@ -488,7 +488,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _sessionIdleThresholdMilliseconds(): number {
-        return this._instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
+        return this._instance.config.sessionRecording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
     }
 
     private get _isSampled(): boolean | null {
@@ -543,9 +543,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         | undefined {
         const masking_server_side = this._remoteConfig?.masking
         const masking_client_side = {
-            maskAllInputs: this._instance.config.session_recording?.maskAllInputs,
-            maskTextSelector: this._instance.config.session_recording?.maskTextSelector,
-            blockSelector: this._instance.config.session_recording?.blockSelector,
+            maskAllInputs: this._instance.config.sessionRecording?.maskAllInputs,
+            maskTextSelector: this._instance.config.sessionRecording?.maskTextSelector,
+            blockSelector: this._instance.config.sessionRecording?.blockSelector,
         }
 
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
@@ -562,7 +562,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {
-        const canvasRecording_client_side = this._instance.config.session_recording.captureCanvas
+        const canvasRecording_client_side = this._instance.config.sessionRecording.captureCanvas
         const canvasRecording_server_side = this._remoteConfig?.canvasRecording
 
         const enabled: boolean =
@@ -591,7 +591,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isConsoleLogCaptureEnabled() {
         const enabled_server_side = !!this._remoteConfig?.consoleLogRecordingEnabled
-        const enabled_client_side = this._instance.config.enable_recording_console_log
+        const enabled_client_side = this._instance.config.enableRecordingConsoleLog
         return enabled_client_side ?? enabled_server_side
     }
 
@@ -602,14 +602,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         | undefined {
         const networkPayloadCapture_server_side = this._remoteConfig?.networkPayloadCapture
         const networkPayloadCapture_client_side = {
-            recordHeaders: this._instance.config.session_recording?.recordHeaders,
-            recordBody: this._instance.config.session_recording?.recordBody,
+            recordHeaders: this._instance.config.sessionRecording?.recordHeaders,
+            recordBody: this._instance.config.sessionRecording?.recordBody,
         }
         const headersEnabled =
             networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
         const bodyEnabled =
             networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
-        const clientNetworkTiming = networkTimingFromConfig(this._instance.config.capture_performance)
+        const clientNetworkTiming = networkTimingFromConfig(this._instance.config.capturePerformance)
         const serverNetworkTiming = networkTimingFromConfig(networkPayloadCapture_server_side?.capturePerformance)
         const networkTimingEnabled = !!(isBoolean(clientNetworkTiming) ? clientNetworkTiming : serverNetworkTiming)
 
@@ -643,7 +643,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _maskUrl(url: string): string | undefined {
-        const userSessionRecordingOptions = this._instance.config.session_recording
+        const userSessionRecordingOptions = this._instance.config.sessionRecording
 
         // userSessionRecordingOptions.maskNetworkRequestFn is deprecated, fallback to it
         if (userSessionRecordingOptions.maskCapturedNetworkRequestFn) {
@@ -690,7 +690,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _pageViewFallBack() {
         try {
-            if (this._instance.config.capture_pageview || !window) {
+            if (this._instance.config.capturePageview || !window) {
                 return
             }
             // Strip hash parameters from URL since they often aren't helpful
@@ -740,7 +740,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return ONE_MINUTE
         }
 
-        return this._instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
+        return this._instance.config.sessionRecording?.full_snapshot_interval_millis ?? FIVE_MINUTES
     }
 
     private _scheduleFullSnapshot(): void {
@@ -1428,7 +1428,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
+        const compressionEnabled = this._instance.config.sessionRecording.compress_events ?? true
 
         if (
             this._queuedCompressionEvents > 0 ||
@@ -1578,7 +1578,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return false
         }
 
-        const strictMode = this._instance.config.session_recording?.strictMinimumDuration ?? false
+        const strictMode = this._instance.config.sessionRecording?.strictMinimumDuration ?? false
 
         if (!strictMode) {
             const sessionDuration = this._sessionDuration
@@ -1856,7 +1856,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // only allows user to set our allowlisted options
-        const userSessionRecordingOptions = this._instance.config.session_recording
+        const userSessionRecordingOptions = this._instance.config.sessionRecording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
                 if (key === 'maskInputOptions') {
@@ -1893,8 +1893,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._mutationThrottler =
             this._mutationThrottler ??
             new MutationThrottler(rrwebRecord, {
-                refillRate: this._instance.config.session_recording.__mutationThrottlerRefillRate,
-                bucketSize: this._instance.config.session_recording.__mutationThrottlerBucketSize,
+                refillRate: this._instance.config.sessionRecording.__mutationThrottlerRefillRate,
+                bucketSize: this._instance.config.sessionRecording.__mutationThrottlerBucketSize,
                 onBlockedNode: (id, node) => {
                     const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
                     logger.info(message, {

@@ -68,7 +68,7 @@ async function getSessionId(page: Page): Promise<string> {
 
 const startOptions = {
     options: {
-        session_recording: {
+        sessionRecording: {
             compress_events: false,
         },
     },

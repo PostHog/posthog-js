@@ -3,7 +3,7 @@ import { start, waitForSessionRecordingToStart } from '../utils/setup'
 
 const startOptions = {
     options: {
-        session_recording: {
+        sessionRecording: {
             compress_events: false,
             full_snapshot_interval_millis: 1500,
         },

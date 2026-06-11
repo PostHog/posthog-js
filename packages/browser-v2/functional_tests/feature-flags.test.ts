@@ -19,7 +19,7 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('person properties set in identify() with new distinct_id are sent to /flags', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
+        const posthog = await createPosthogInstance(token, { advancedDisableFlags: false, beforeSend: (cr) => cr })
 
         const anonymousId = posthog.getDistinctId()
 
@@ -98,7 +98,7 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('person properties set in identify() with the same distinct_id are sent to flags', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
+        const posthog = await createPosthogInstance(token, { advancedDisableFlags: false, beforeSend: (cr) => cr })
 
         const anonymousId = posthog.getDistinctId()
 
@@ -223,7 +223,7 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('identify() triggers new request in queue after first request', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
+        const posthog = await createPosthogInstance(token, { advancedDisableFlags: false, beforeSend: (cr) => cr })
 
         const anonymousId = posthog.getDistinctId()
 
@@ -304,9 +304,9 @@ describe('FunctionalTests / Feature Flags', () => {
 
     test('identify() does not trigger new request in queue after first request for loaded callback', async () => {
         await createPosthogInstance(token, {
-            advanced_disable_flags: false,
+            advancedDisableFlags: false,
             bootstrap: { distinctID: 'anon-id' },
-            before_send: (cr) => cr,
+            beforeSend: (cr) => cr,
             loaded: (ph) => {
                 ph.identify('test-id', { email: 'test3@email.com' })
                 ph.group('playlist', 'id:77', { length: 8 })

@@ -54,12 +54,12 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         const { SESSION_RECORDING_REMOTE_CONFIG, SESSION_RECORDING_IS_SAMPLED } = require('../../../constants')
 
         const config = createMockConfig({
-            api_host: 'https://test.com',
-            disable_session_recording: false,
-            enable_recording_console_log: false,
+            apiHost: 'https://test.com',
+            disableSessionRecording: false,
+            enableRecordingConsoleLog: false,
             autocapture: false,
-            capture_pageview: false,
-            session_recording: {
+            capturePageview: false,
+            sessionRecording: {
                 maskAllInputs: false,
                 compress_events: true,
             },

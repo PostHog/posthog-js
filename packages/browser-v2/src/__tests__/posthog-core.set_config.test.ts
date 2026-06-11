@@ -124,7 +124,7 @@ describe('posthog.setConfig', () => {
             const initialDebug = posthog.config.debug
             const initialConfigDebug = Config.DEBUG
 
-            posthog.setConfig({ api_host: 'https://new-host.com' })
+            posthog.setConfig({ apiHost: 'https://new-host.com' })
 
             expect(posthog.config.debug).toBe(initialDebug)
             expect(Config.DEBUG).toBe(initialConfigDebug)
@@ -136,9 +136,9 @@ describe('posthog.setConfig', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, {}, token)!
 
-            posthog.setConfig({ api_host: 'https://new-host.com' })
+            posthog.setConfig({ apiHost: 'https://new-host.com' })
 
-            expect(posthog.config.api_host).toBe('https://new-host.com')
+            expect(posthog.config.apiHost).toBe('https://new-host.com')
         })
 
         it('should update multiple config values at once', () => {
@@ -146,14 +146,14 @@ describe('posthog.setConfig', () => {
             const posthog = defaultPostHog().init(token, {}, token)!
 
             posthog.setConfig({
-                api_host: 'https://new-host.com',
-                capture_pageview: false,
-                capture_pageleave: false,
+                apiHost: 'https://new-host.com',
+                capturePageview: false,
+                capturePageleave: false,
             })
 
-            expect(posthog.config.api_host).toBe('https://new-host.com')
-            expect(posthog.config.capture_pageview).toBe(false)
-            expect(posthog.config.capture_pageleave).toBe(false)
+            expect(posthog.config.apiHost).toBe('https://new-host.com')
+            expect(posthog.config.capturePageview).toBe(false)
+            expect(posthog.config.capturePageleave).toBe(false)
         })
 
         it('should preserve existing config when updating subset of values', () => {
@@ -161,16 +161,16 @@ describe('posthog.setConfig', () => {
             const posthog = defaultPostHog().init(
                 token,
                 {
-                    api_host: 'https://original.com',
-                    capture_pageview: true,
+                    apiHost: 'https://original.com',
+                    capturePageview: true,
                 },
                 token
             )!
 
-            posthog.setConfig({ capture_pageview: false })
+            posthog.setConfig({ capturePageview: false })
 
-            expect(posthog.config.api_host).toBe('https://original.com')
-            expect(posthog.config.capture_pageview).toBe(false)
+            expect(posthog.config.apiHost).toBe('https://original.com')
+            expect(posthog.config.capturePageview).toBe(false)
         })
 
         it('should handle empty config object', () => {
@@ -181,7 +181,7 @@ describe('posthog.setConfig', () => {
             posthog.setConfig({})
 
             expect(posthog.config.debug).toBe(originalConfig.debug)
-            expect(posthog.config.api_host).toBe(originalConfig.api_host)
+            expect(posthog.config.apiHost).toBe(originalConfig.apiHost)
         })
     })
 
@@ -214,13 +214,13 @@ describe('posthog.setConfig', () => {
     })
 
     describe('session recording config', () => {
-        it('should update disable_session_recording config', () => {
+        it('should update disableSessionRecording config', () => {
             const token = uuidv7()
-            const posthog = defaultPostHog().init(token, { disable_session_recording: false }, token)!
+            const posthog = defaultPostHog().init(token, { disableSessionRecording: false }, token)!
 
-            posthog.setConfig({ disable_session_recording: true })
+            posthog.setConfig({ disableSessionRecording: true })
 
-            expect(posthog.config.disable_session_recording).toBe(true)
+            expect(posthog.config.disableSessionRecording).toBe(true)
         })
     })
 })

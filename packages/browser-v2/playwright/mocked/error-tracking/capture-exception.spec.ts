@@ -125,7 +125,7 @@ test.describe('ErrorTracking captureException', () => {
 
 async function bootstrap(posthog: PosthogPage, events: EventsPage, cb: (ph: PostHog) => void): Promise<CaptureResult> {
     await posthog.init({
-        request_batching: false,
+        requestBatching: false,
     })
     await posthog.evaluate(cb)
     const exception = await events.waitForEvent('$exception')

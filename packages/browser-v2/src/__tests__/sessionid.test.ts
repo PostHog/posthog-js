@@ -23,7 +23,7 @@ describe('Session ID manager', () => {
     let registerMock: jest.Mock
 
     const config: Partial<PostHogConfig> = {
-        persistence_name: 'persistance-name',
+        persistenceName: 'persistance-name',
     }
 
     let persistence: { props: Properties } & Partial<PostHogPersistence>
@@ -111,11 +111,11 @@ describe('Session ID manager', () => {
         })
 
         it('registers the session timeout as an event property', () => {
-            config.session_idle_timeout_seconds = 8 * 60 * 60
+            config.sessionIdleTimeoutSeconds = 8 * 60 * 60
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager.checkAndGetSessionAndWindowId(undefined, timestamp)
             expect(registerMock).toHaveBeenCalledWith({
-                $configured_session_timeout_ms: config.session_idle_timeout_seconds * 1000,
+                $configured_session_timeout_ms: config.sessionIdleTimeoutSeconds * 1000,
             })
         })
     })
@@ -547,7 +547,7 @@ describe('Session ID manager', () => {
             // write our stale SESSION_ID over the sibling's rotation before
             // we read it, defeating the mismatch guard. Per-key refresh reads
             // SESSION_ID without writing, so the sibling's rotation survives.
-            config.persistence_save_debounce_ms = 250
+            config.persistenceSaveDebounceMs = 250
             try {
                 const sessionIdManager = sessionIdMgr(persistence)
                 sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
@@ -568,7 +568,7 @@ describe('Session ID manager', () => {
                 expect(persistence.register).not.toHaveBeenCalled()
                 expect(persistence.props[SESSION_ID]).toEqual([2_000_000, 'sessionB', 2_000_000])
             } finally {
-                delete config.persistence_save_debounce_ms
+                delete config.persistenceSaveDebounceMs
             }
         })
 
@@ -585,12 +585,12 @@ describe('Session ID manager', () => {
         })
 
         it('flush refreshes SESSION_ID from storage, registers, then forces the debounced write (hardened path)', () => {
-            // With persistence_save_debounce_ms > 0, a whole-blob flush()
+            // With persistenceSaveDebounceMs > 0, a whole-blob flush()
             // would clobber a sibling SESSION_ID write before we read it.
             // Per-key refresh reads only SESSION_ID and writes nothing, so
             // neither side is clobbered. The trailing flush() forces the
             // SESSION_ID register past the debounce.
-            config.persistence_save_debounce_ms = 250
+            config.persistenceSaveDebounceMs = 250
             try {
                 const order: string[] = []
                 ;(persistence.flush as jest.Mock).mockImplementation(() => order.push('flush'))
@@ -608,7 +608,7 @@ describe('Session ID manager', () => {
                 sessionIdManager['_flushPendingActivityTimestamp']()
                 expect(order).toEqual(['refreshKey', 'register', 'flush'])
             } finally {
-                delete config.persistence_save_debounce_ms
+                delete config.persistenceSaveDebounceMs
             }
         })
 
@@ -717,12 +717,12 @@ describe('Session ID manager', () => {
         })
     })
 
-    describe('custom session_idle_timeout_seconds', () => {
+    describe('custom sessionIdleTimeoutSeconds', () => {
         const mockSessionManager = (timeout: number | undefined) =>
             new SessionIdManager(
                 createMockPostHog({
                     config: {
-                        session_idle_timeout_seconds: timeout,
+                        sessionIdleTimeoutSeconds: timeout,
                     },
                     persistence: persistence as PostHogPersistence,
                     register: jest.fn(),
@@ -733,7 +733,7 @@ describe('Session ID manager', () => {
             console.warn = jest.fn()
         })
 
-        it('uses the custom session_idle_timeout_seconds if within bounds', () => {
+        it('uses the custom sessionIdleTimeoutSeconds if within bounds', () => {
             assignableWindow.POSTHOG_DEBUG = true
             expect(mockSessionManager(61)['_sessionTimeoutMs']).toEqual(61 * 1000)
             expect(console.warn).toHaveBeenCalledTimes(0)
@@ -904,7 +904,7 @@ describe('Session ID manager', () => {
         // ahead of in-memory because a sibling tab kept the session alive).
 
         const memoryConfig = {
-            persistence_name: 'test-session-memory',
+            persistenceName: 'test-session-memory',
             persistence: 'memory',
             token: 'test-token',
         } as PostHogConfig

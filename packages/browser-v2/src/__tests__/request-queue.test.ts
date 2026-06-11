@@ -32,8 +32,8 @@ describe('RequestQueue', () => {
         })
 
         it('can be passed in from posthog config', async () => {
-            const posthog = await createPosthogInstance('token', { request_queue_config: { flush_interval_ms: 1000 } })
-            expect(posthog.config.request_queue_config.flush_interval_ms).toEqual(1000)
+            const posthog = await createPosthogInstance('token', { requestQueueConfig: { flush_interval_ms: 1000 } })
+            expect(posthog.config.requestQueueConfig.flush_interval_ms).toEqual(1000)
             expect(posthog['_requestQueue']['_flushTimeoutMs']).toEqual(1000)
         })
     })

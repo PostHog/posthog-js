@@ -68,7 +68,7 @@ test.beforeEach(async ({ context }) => {
                     await start(
                         {
                             options: {
-                                session_recording: {
+                                sessionRecording: {
                                     // not the default but makes for easier test assertions
                                     compress_events: false,
                                 },

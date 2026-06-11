@@ -80,7 +80,7 @@ describe('survey-event-receiver', () => {
             mockAddCaptureHook = jest.fn()
             config = createMockConfig({
                 token: 'testtoken',
-                api_host: 'https://app.posthog.com',
+                apiHost: 'https://app.posthog.com',
                 persistence: 'memory',
             })
 
@@ -213,7 +213,7 @@ describe('survey-event-receiver', () => {
             mockAddCaptureHook = jest.fn()
             config = createMockConfig({
                 token: 'testtoken',
-                api_host: 'https://app.posthog.com',
+                apiHost: 'https://app.posthog.com',
                 persistence: 'memory',
             })
 
@@ -402,7 +402,7 @@ describe('survey-event-receiver', () => {
         beforeEach(() => {
             config = createMockConfig({
                 token: 'testtoken',
-                api_host: 'https://app.posthog.com',
+                apiHost: 'https://app.posthog.com',
                 persistence: 'memory',
             })
 
@@ -570,7 +570,7 @@ describe('survey-event-receiver', () => {
             mockCancelPendingSurvey = jest.fn()
             config = createMockConfig({
                 token: 'testtoken',
-                api_host: 'https://app.posthog.com',
+                apiHost: 'https://app.posthog.com',
                 persistence: 'memory',
             })
 

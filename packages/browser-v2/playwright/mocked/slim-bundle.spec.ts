@@ -34,12 +34,12 @@ async function initPostHogWithExtensions(
                 const ph = (window as any).posthog as PostHog
                 const extensions = (window as any)[extName]
                 ph.init('test-token', {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                     ip: false,
-                    capture_pageview: false,
+                    capturePageview: false,
                     __extensionClasses: { ...extensions },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                     ...extra,
                 } as Partial<PostHogConfig>)
                 return null
@@ -133,12 +133,12 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
                 const ph = (window as any).posthog as PostHog
                 const extensions = (window as any).FeatureFlagsExtensions
                 ph.init('test-token', {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                     ip: false,
-                    capture_pageview: false,
+                    capturePageview: false,
                     __extensionClasses: { ...extensions },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                 } as Partial<PostHogConfig>)
                 ph.reloadFeatureFlags()
                 return null
@@ -164,12 +164,12 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
                 const ph = (window as any).posthog as PostHog
                 const extensions = (window as any).FeatureFlagsExtensions
                 ph.init('test-token', {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                     ip: false,
-                    capture_pageview: false,
+                    capturePageview: false,
                     __extensionClasses: { ...extensions },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                     bootstrap: { featureFlags: { 'test-flag': true } },
                 } as Partial<PostHogConfig>)
                 return { value: ph.getFeatureFlag('test-flag'), error: null }
@@ -197,12 +197,12 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
                 const ph = (window as any).posthog as PostHog
                 const extensions = (window as any).ErrorTrackingExtensions
                 ph.init('test-token', {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                     ip: false,
-                    capture_pageview: false,
+                    capturePageview: false,
                     __extensionClasses: { ...extensions },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                 } as Partial<PostHogConfig>)
                 ph.captureException(new Error('test error'), { extra: 'data' })
                 return null
@@ -230,12 +230,12 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
                 const ph = (window as any).posthog as PostHog
                 const extensions = (window as any).ToolbarExtensions
                 ph.init('test-token', {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                     ip: false,
-                    capture_pageview: false,
+                    capturePageview: false,
                     __extensionClasses: { ...extensions },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                 } as Partial<PostHogConfig>)
                 // loadToolbar returns false when there are no toolbar params — that's fine,
                 // we just want to make sure it doesn't throw.
@@ -266,12 +266,12 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
                     const ph = (window as any).posthog as PostHog
                     const extensions = (window as any).SurveysExtensions
                     ph.init('test-token', {
-                        api_host: 'https://localhost:1234',
+                        apiHost: 'https://localhost:1234',
                         debug: true,
                         ip: false,
-                        capture_pageview: false,
+                        capturePageview: false,
                         __extensionClasses: { ...extensions },
-                        opt_out_useragent_filter: true,
+                        optOutUseragentFilter: true,
                     } as Partial<PostHogConfig>)
                     ph.getSurveys(() => {
                         resolve(null)
@@ -302,13 +302,13 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
                 const ph = (window as any).posthog as PostHog
                 const extensions = (window as any).AnalyticsExtensions
                 ph.init('test-token', {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                     ip: false,
-                    capture_pageview: false,
+                    capturePageview: false,
                     autocapture: true,
                     __extensionClasses: { ...extensions },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                 } as Partial<PostHogConfig>)
                 return null
             } catch (e: any) {
@@ -361,12 +361,12 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
                 const ph = (window as any).posthog as PostHog
                 const extensions = (window as any).AllExtensions
                 ph.init('test-token', {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                     ip: false,
-                    capture_pageview: false,
+                    capturePageview: false,
                     __extensionClasses: { ...extensions },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                     bootstrap: { featureFlags: { 'test-flag': 'variant-a' } },
                 } as Partial<PostHogConfig>)
 

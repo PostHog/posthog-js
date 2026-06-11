@@ -10,7 +10,7 @@ import type { Extension } from './types'
  * This class is used to capture pageview events when the user navigates using the history API (pushState, replaceState)
  * and when the user navigates using the browser's back/forward buttons.
  *
- * The behavior is controlled by the `capture_pageview` configuration option:
+ * The behavior is controlled by the `capturePageview` configuration option:
  * - When set to `'history_change'`, this class will capture pageviews on history API changes
  */
 export class HistoryAutocapture implements Extension {
@@ -28,7 +28,7 @@ export class HistoryAutocapture implements Extension {
     }
 
     public get isEnabled(): boolean {
-        return this._instance.config.capture_pageview === 'history_change'
+        return this._instance.config.capturePageview === 'history_change'
     }
 
     public startIfEnabled(): void {

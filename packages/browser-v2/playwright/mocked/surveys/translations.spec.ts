@@ -5,7 +5,7 @@ import { start } from '../utils/setup'
 
 const startOptions = {
     options: {
-        override_display_language: 'es',
+        overrideDisplayLanguage: 'es',
     },
     flagsResponseOverrides: {
         surveys: true,

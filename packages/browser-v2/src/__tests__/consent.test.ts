@@ -62,7 +62,7 @@ describe('consentManager', () => {
     })
 
     it('should start default opted out if setting given', async () => {
-        posthog = await createPostHog({ opt_out_capturing_by_default: true })
+        posthog = await createPostHog({ optOutCapturingByDefault: true })
         expect(posthog.hasOptedInCapturing()).toBe(false)
         expect(posthog.hasOptedOutCapturing()).toBe(true)
         expect(posthog.getExplicitConsentStatus()).toBe('pending')
@@ -72,7 +72,7 @@ describe('consentManager', () => {
     })
 
     it('should start default opted out if setting given and disable storage', async () => {
-        posthog = await createPostHog({ opt_out_capturing_by_default: true, opt_out_persistence_by_default: true })
+        posthog = await createPostHog({ optOutCapturingByDefault: true, optOutPersistenceByDefault: true })
         expect(posthog.hasOptedInCapturing()).toBe(false)
         expect(posthog.hasOptedOutCapturing()).toBe(true)
         expect(posthog.getExplicitConsentStatus()).toBe('pending')
@@ -82,7 +82,7 @@ describe('consentManager', () => {
     })
 
     it('should enable or disable persistence when changing opt out status', async () => {
-        posthog = await createPostHog({ opt_out_capturing_by_default: true, opt_out_persistence_by_default: true })
+        posthog = await createPostHog({ optOutCapturingByDefault: true, optOutPersistenceByDefault: true })
         expect(posthog.hasOptedInCapturing()).toBe(false)
         expect(posthog.persistence?._disabled).toBe(true)
         expect(posthog.getExplicitConsentStatus()).toBe('pending')
@@ -102,7 +102,7 @@ describe('consentManager', () => {
         let beforeSendMock = jest.fn().mockImplementation((...args) => args)
         beforeEach(async () => {
             beforeSendMock = jest.fn().mockImplementation((e) => e)
-            posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
+            posthog = await createPostHog({ optOutCapturingByDefault: true, beforeSend: beforeSendMock })
         })
 
         it('should send opt in event if not disabled', () => {
@@ -143,9 +143,9 @@ describe('consentManager', () => {
 
         it('should not send $pageview on opt in if capturing is disabled', async () => {
             posthog = await createPostHog({
-                opt_out_capturing_by_default: true,
-                before_send: beforeSendMock,
-                capture_pageview: false,
+                optOutCapturingByDefault: true,
+                beforeSend: beforeSendMock,
+                capturePageview: false,
             })
             posthog.optInCapturing({ captureEventName: false })
             expect(beforeSendMock).toHaveBeenCalledTimes(0)
@@ -153,7 +153,7 @@ describe('consentManager', () => {
 
         it('should not send $pageview on opt in if is has already been captured', async () => {
             posthog = await createPostHog({
-                before_send: beforeSendMock,
+                beforeSend: beforeSendMock,
             })
             // Wait for the initial $pageview to be captured
             // eslint-disable-next-line compat/compat
@@ -168,7 +168,7 @@ describe('consentManager', () => {
         it('should send $pageview on opt in if is has not been captured', async () => {
             // Some other tests might call setTimeout after they've passed, so creating a new instance here.
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
-            const posthog = await createPostHog({ before_send: beforeSendMock })
+            const posthog = await createPostHog({ beforeSend: beforeSendMock })
 
             posthog.optInCapturing()
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
@@ -183,7 +183,7 @@ describe('consentManager', () => {
         it('should not send $pageview on subsequent opt in', async () => {
             // Some other tests might call setTimeout after they've passed, so creating a new instance here.
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
-            const posthog = await createPostHog({ before_send: beforeSendMock })
+            const posthog = await createPostHog({ beforeSend: beforeSendMock })
 
             posthog.optInCapturing()
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
@@ -204,7 +204,7 @@ describe('consentManager', () => {
         })
 
         it('should respect it if explicitly set', async () => {
-            posthog = await createPostHog({ respect_dnt: true })
+            posthog = await createPostHog({ respectDnt: true })
             expect(posthog.hasOptedInCapturing()).toBe(false)
         })
 
@@ -213,7 +213,7 @@ describe('consentManager', () => {
         })
     })
 
-    describe.each([`cookie`, `localStorage`] as PostHogConfig['opt_out_capturing_persistence_type'][])(
+    describe.each([`cookie`, `localStorage`] as PostHogConfig['optOutCapturingPersistenceType'][])(
         `%s`,
         (persistenceType) => {
             function assertPersistenceValue(
@@ -239,7 +239,7 @@ describe('consentManager', () => {
 
             beforeEach(async () => {
                 posthog = await createPostHog({
-                    opt_out_capturing_persistence_type: persistenceType,
+                    optOutCapturingPersistenceType: persistenceType,
                     persistence: persistenceType,
                 })
             })
@@ -277,7 +277,7 @@ describe('consentManager', () => {
 
                 it(`should allow use of a custom "persistence prefix" string (with correct default behavior)`, async () => {
                     posthog = await createPostHog({
-                        opt_out_capturing_persistence_type: persistenceType,
+                        optOutCapturingPersistenceType: persistenceType,
                         opt_out_capturing_cookie_prefix: CUSTOM_PERSISTENCE_PREFIX,
                     })
                     posthog.optOutCapturing()
@@ -303,14 +303,14 @@ describe('consentManager', () => {
     )
 
     describe('consent storage cache invalidation', () => {
-        it('should write consent to cookie when opt_out_capturing_persistence_type is cookie, even if consent was accessed before init', async () => {
+        it('should write consent to cookie when optOutCapturingPersistenceType is cookie, even if consent was accessed before init', async () => {
             // Simulate the bug: the primary instance's consent._storage is accessed
             // before init() is called (this happens in bundled apps where _dom_loaded()
             // fires during module load, before the user calls posthog.init()).
             const ph = new PostHog()
 
             // At this point, ph.config = defaultConfig() which has
-            // opt_out_capturing_persistence_type: 'localStorage'.
+            // optOutCapturingPersistenceType: 'localStorage'.
             // Trigger consent._storage initialization with the default config,
             // simulating what _dom_loaded() -> isCapturing() does.
             ph.consent.isOptedOut()
@@ -320,9 +320,9 @@ describe('consentManager', () => {
             const token = uuidv7()
             await new Promise<void>((resolve) =>
                 ph.init(token, {
-                    opt_out_capturing_persistence_type: 'cookie',
-                    request_batching: false,
-                    api_host: 'http://localhost',
+                    optOutCapturingPersistenceType: 'cookie',
+                    requestBatching: false,
+                    apiHost: 'http://localhost',
                     loaded: () => resolve(),
                 })
             )

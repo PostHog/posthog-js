@@ -95,11 +95,11 @@ describe('SessionRecording', () => {
         sessionId = 'sessionId' + uuidv7()
 
         config = createMockConfig({
-            api_host: 'https://test.com',
-            disable_session_recording: false,
-            enable_recording_console_log: false,
+            apiHost: 'https://test.com',
+            disableSessionRecording: false,
+            enableRecordingConsoleLog: false,
             autocapture: false, // Assert that session recording works even if `autocapture = false`
-            session_recording: {
+            sessionRecording: {
                 maskAllInputs: false,
                 compress_events: false,
             },
@@ -382,7 +382,7 @@ describe('SessionRecording', () => {
         })
 
         it('local sampleRate takes precedence over remote config', () => {
-            posthog.config.session_recording.sampleRate = 0.3
+            posthog.config.sessionRecording.sampleRate = 0.3
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -395,7 +395,7 @@ describe('SessionRecording', () => {
         })
 
         it('local sampleRate of 0 takes precedence over remote config', () => {
-            posthog.config.session_recording.sampleRate = 0
+            posthog.config.sessionRecording.sampleRate = 0
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -408,7 +408,7 @@ describe('SessionRecording', () => {
         })
 
         it('falls back to remote config when local sampleRate is undefined', () => {
-            posthog.config.session_recording.sampleRate = undefined
+            posthog.config.sessionRecording.sampleRate = undefined
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -421,7 +421,7 @@ describe('SessionRecording', () => {
         })
 
         it('ignores local sampleRate greater than 1 and falls back to remote config', () => {
-            posthog.config.session_recording.sampleRate = 1.5
+            posthog.config.sessionRecording.sampleRate = 1.5
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -434,7 +434,7 @@ describe('SessionRecording', () => {
         })
 
         it('ignores local sampleRate less than 0 and falls back to remote config', () => {
-            posthog.config.session_recording.sampleRate = -0.5
+            posthog.config.sessionRecording.sampleRate = -0.5
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

@@ -35,13 +35,13 @@ export class ConsentManager {
     }
 
     public isOptedOut() {
-        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
+        if (this._config.cookielessMode === COOKIELESS_ALWAYS) {
             return true
         }
         // we are opted out if we are rejected, or if consent is pending and we are in cookieless mode "on_reject"
         return (
             this.isRejected() ||
-            (this.consent === ConsentStatus.PENDING && this._config.cookieless_mode === COOKIELESS_ON_REJECT)
+            (this.consent === ConsentStatus.PENDING && this._config.cookielessMode === COOKIELESS_ON_REJECT)
         )
     }
 
@@ -56,7 +56,7 @@ export class ConsentManager {
     public isRejected() {
         return (
             this.consent === ConsentStatus.DENIED ||
-            (this.consent === ConsentStatus.PENDING && this._config.opt_out_capturing_by_default)
+            (this.consent === ConsentStatus.PENDING && this._config.optOutCapturingByDefault)
         )
     }
 
@@ -64,20 +64,20 @@ export class ConsentManager {
         this._storage._set(
             this._storageKey,
             isOptedIn ? 1 : 0,
-            this._config.cookie_expiration,
-            this._config.cross_subdomain_cookie,
-            this._config.secure_cookie
+            this._config.cookieExpiration,
+            this._config.crossSubdomainCookie,
+            this._config.secureCookie
         )
     }
 
     public reset() {
-        this._storage._remove(this._storageKey, this._config.cross_subdomain_cookie)
+        this._storage._remove(this._storageKey, this._config.crossSubdomainCookie)
     }
 
     private get _storageKey() {
-        const { token, opt_out_capturing_cookie_prefix, consent_persistence_name } = this._instance.config
-        if (consent_persistence_name) {
-            return consent_persistence_name
+        const { token, opt_out_capturing_cookie_prefix, consentPersistenceName } = this._instance.config
+        if (consentPersistenceName) {
+            return consentPersistenceName
         } else if (opt_out_capturing_cookie_prefix) {
             // Deprecated, but we still support it for backwards compatibility.
             // This was deprecated because it differed in behaviour from storage.ts, and appends the token.
@@ -99,7 +99,7 @@ export class ConsentManager {
         // Re-evaluate the store on every access so that a config change after the first
         // access (e.g. init() called after _dom_loaded() fires in bundled apps) is picked
         // up and any value already stored under the old backend is migrated across.
-        const persistenceType = this._config.opt_out_capturing_persistence_type
+        const persistenceType = this._config.optOutCapturingPersistenceType
         const expectedStore = persistenceType === 'localStorage' ? localStore : cookieStore
 
         if (!this._persistentStore || this._persistentStore !== expectedStore) {
@@ -112,7 +112,7 @@ export class ConsentManager {
                     this.optInOut(isYesLike(otherStorage._get(this._storageKey)))
                 }
 
-                otherStorage._remove(this._storageKey, this._config.cross_subdomain_cookie)
+                otherStorage._remove(this._storageKey, this._config.crossSubdomainCookie)
             }
         }
 
@@ -120,7 +120,7 @@ export class ConsentManager {
     }
 
     private _getDnt(): boolean {
-        if (!this._config.respect_dnt) {
+        if (!this._config.respectDnt) {
             return false
         }
         return [

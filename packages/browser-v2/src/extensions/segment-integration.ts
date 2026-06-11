@@ -9,7 +9,7 @@
  *
  *  analytics.ready(() => {
  *    posthog.init('<posthog-api-key>', {
- *      capture_pageview: false,
+ *      capturePageview: false,
  *      segment: window.analytics, // NOTE: Be sure to use window.analytics here!
  *    });
  *    window.analytics.page();
@@ -78,7 +78,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
     const bootstrapUser = (user: SegmentUser) => {
         // Use segments anonymousId instead
         const getSegmentAnonymousId = () => user.anonymousId() || uuidv7()
-        posthog.config.get_device_id = getSegmentAnonymousId
+        posthog.config.getDeviceId = getSegmentAnonymousId
 
         // If a segment user ID exists, set it as the distinct_id
         if (user.id()) {

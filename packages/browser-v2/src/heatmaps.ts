@@ -83,15 +83,15 @@ export class Heatmaps implements Extension {
 
     public get flushIntervalMilliseconds(): number {
         let flushInterval = DEFAULT_FLUSH_INTERVAL
-        if (isObject(this._config.capture_heatmaps) && this._config.capture_heatmaps.flush_interval_milliseconds) {
-            flushInterval = this._config.capture_heatmaps.flush_interval_milliseconds
+        if (isObject(this._config.captureHeatmaps) && this._config.captureHeatmaps.flush_interval_milliseconds) {
+            flushInterval = this._config.captureHeatmaps.flush_interval_milliseconds
         }
         return flushInterval
     }
 
     public get isEnabled(): boolean {
-        if (!isNullish(this._config.capture_heatmaps)) {
-            return this._config.capture_heatmaps !== false
+        if (!isNullish(this._config.captureHeatmaps)) {
+            return this._config.captureHeatmaps !== false
         }
         if (!isNullish(this._config.enable_heatmaps)) {
             return this._config.enable_heatmaps
@@ -269,8 +269,8 @@ export class Heatmaps implements Extension {
         const href = window.location.href
 
         // mask url query params
-        const maskPersonalDataProperties = this._config.mask_personal_data_properties
-        const customPersonalDataProperties = this._config.custom_personal_data_properties
+        const maskPersonalDataProperties = this._config.maskPersonalDataProperties
+        const customPersonalDataProperties = this._config.customPersonalDataProperties
 
         const paramsToMask = maskPersonalDataProperties
             ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]

@@ -53,9 +53,9 @@ describe('Conversations API Methods', () => {
         // Setup mock PostHog instance
         mockPostHog = createMockPostHog({
             config: createMockConfig({
-                api_host: 'https://test.posthog.com',
+                apiHost: 'https://test.posthog.com',
                 token: 'test-token',
-                disable_conversations: false,
+                disableConversations: false,
             }),
             persistence: createMockPersistence({
                 props: {

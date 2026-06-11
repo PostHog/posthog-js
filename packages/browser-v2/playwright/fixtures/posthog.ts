@@ -8,7 +8,7 @@ export const testPostHog = testEvents.extend<{
     posthog: PosthogPage
     posthogOptions: Partial<PostHogConfig>
 }>({
-    posthogOptions: [{ request_batching: false }, { option: true }],
+    posthogOptions: [{ requestBatching: false }, { option: true }],
     posthog: async ({ page, events, posthogOptions }, use, testInfo) => {
         const posthogPage = new PosthogPage(posthogOptions, page, events, testInfo)
         await use(posthogPage)
@@ -72,7 +72,7 @@ export class PosthogPage {
     }
 
     async init(
-        initOptions: Partial<Omit<PostHogConfig, 'before_send' | 'loaded'>> = {},
+        initOptions: Partial<Omit<PostHogConfig, 'beforeSend' | 'loaded'>> = {},
         beforeSendHandles: string[] = []
     ) {
         const additionalProperties = {
@@ -95,11 +95,11 @@ export class PosthogPage {
             // TS very unhappy with passing PostHogConfig here, so just pass an object
             (ph: PostHog, args: Record<string, any>) => {
                 const posthogConfig: Partial<PostHogConfig> = {
-                    api_host: args.apiHost,
+                    apiHost: args.apiHost,
                     debug: true,
                     ip: false, // Prevent IP deprecation warning in Playwright tests
                     ...args.options,
-                    before_send: args.beforeSendHandles.map((h: any) => window[h]),
+                    beforeSend: args.beforeSendHandles.map((h: any) => window[h]),
                     loaded: (ph) => {
                         if (ph.sessionRecording) {
                             ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
@@ -110,7 +110,7 @@ export class PosthogPage {
                         // but it's a new window so we have to create it in the `before_posthog_init` option
                         ;(window as any).__ph_loaded?.(ph)
                     },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                 }
                 ph.init(args.token, posthogConfig)
             },

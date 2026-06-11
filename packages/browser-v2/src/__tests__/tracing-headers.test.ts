@@ -87,8 +87,8 @@ describe('tracing headers', () => {
 
         it.each([
             {
-                name: 'uses the public tracing_headers option',
-                config: { tracing_headers: ['example.com'] },
+                name: 'uses the public tracingHeaders option',
+                config: { tracingHeaders: ['example.com'] },
                 expected: ['example.com'],
             },
             {
@@ -102,9 +102,9 @@ describe('tracing headers', () => {
                 expected: ['legacy.example'],
             },
             {
-                name: 'prefers tracing_headers over deprecated addTracingHeaders',
+                name: 'prefers tracingHeaders over deprecated addTracingHeaders',
                 config: {
-                    tracing_headers: ['public.example'],
+                    tracingHeaders: ['public.example'],
                     addTracingHeaders: ['camel.example'],
                 },
                 expected: ['public.example'],
@@ -118,17 +118,17 @@ describe('tracing headers', () => {
                 expected: ['camel.example'],
             },
             {
-                name: 'prefers tracing_headers over deprecated __add_tracing_headers',
+                name: 'prefers tracingHeaders over deprecated __add_tracing_headers',
                 config: {
-                    tracing_headers: ['public.example'],
+                    tracingHeaders: ['public.example'],
                     __add_tracing_headers: ['legacy.example'],
                 },
                 expected: ['public.example'],
             },
             {
-                name: 'allows an empty tracing_headers list to override deprecated aliases',
+                name: 'allows an empty tracingHeaders list to override deprecated aliases',
                 config: {
-                    tracing_headers: [],
+                    tracingHeaders: [],
                     addTracingHeaders: ['camel.example'],
                     __add_tracing_headers: ['legacy.example'],
                 },
@@ -138,14 +138,14 @@ describe('tracing headers', () => {
             expect(getConfiguredHostnames(config)).toEqual(expected)
         })
 
-        it('mutates the installed hostname list when tracing_headers changes', () => {
-            const config = { tracing_headers: ['example.com'] }
+        it('mutates the installed hostname list when tracingHeaders changes', () => {
+            const config = { tracingHeaders: ['example.com'] }
             const tracingHeaders = new TracingHeaders({ config } as any)
             const hostnames = (tracingHeaders as any)._syncHostnamesForPatch()
 
             expect(hostnames).toEqual(['example.com'])
 
-            config.tracing_headers = []
+            config.tracingHeaders = []
 
             expect((tracingHeaders as any)._syncHostnamesForPatch()).toBeUndefined()
             expect(hostnames).toEqual([])

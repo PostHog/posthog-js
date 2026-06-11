@@ -12,7 +12,7 @@
  * holds references to DOM elements that may be detached during navigation.
  * Only enable if you need the debugging data.
  *
- * Enable via: capture_performance: { web_vitals_attribution: true }
+ * Enable via: capturePerformance: { web_vitals_attribution: true }
  *
  * @see web-vitals.ts for the lighter, default bundle
  */

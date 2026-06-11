@@ -406,8 +406,8 @@ export class Autocapture implements Extension {
         ) {
             const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
                 e,
-                maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
-                maskAllText: this.instance.config.mask_all_text,
+                maskAllElementAttributes: this.instance.config.maskAllElementAttributes,
+                maskAllText: this.instance.config.maskAllText,
                 elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
             })

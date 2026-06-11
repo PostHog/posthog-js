@@ -19,7 +19,7 @@ describe('SessionIdManager property-based tests', () => {
     let persistence: { props: Properties } & Partial<PostHogPersistence>
 
     const config: Partial<PostHogConfig> = {
-        persistence_name: 'test-persistence',
+        persistenceName: 'test-persistence',
     }
 
     const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) =>

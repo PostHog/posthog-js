@@ -253,7 +253,7 @@ export class ProductTourManager {
         if (!rawStep) {
             return null
         }
-        const language = this._instance.config.override_display_language ?? getBrowserLanguage()
+        const language = this._instance.config.overrideDisplayLanguage ?? getBrowserLanguage()
         return resolveStepTranslation(rawStep, language ?? null)
     }
 

@@ -23,7 +23,7 @@ describe('featureflags', () => {
     const config = {
         token: 'random fake token',
         persistence: 'memory',
-        api_host: 'https://app.posthog.com',
+        apiHost: 'https://app.posthog.com',
     } as PostHogConfig
 
     let mockWarn
@@ -49,7 +49,7 @@ describe('featureflags', () => {
             ),
             _onRemoteConfig: jest.fn(),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
-            _shouldDisableFlags: () => instance.config.advanced_disable_flags || false,
+            _shouldDisableFlags: () => instance.config.advancedDisableFlags || false,
             _internalEventEmitter: internalEventEmitter,
             on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
@@ -291,12 +291,12 @@ describe('featureflags', () => {
         })
     })
 
-    describe('advanced_feature_flags_dedup_per_session', () => {
+    describe('advancedFeatureFlagsDedupPerSession', () => {
         let currentSessionId: string
 
         beforeEach(() => {
             currentSessionId = 'session-1'
-            instance.config.advanced_feature_flags_dedup_per_session = true
+            instance.config.advancedFeatureFlagsDedupPerSession = true
             instance.getSessionId = () => currentSessionId
         })
 
@@ -321,7 +321,7 @@ describe('featureflags', () => {
         })
 
         it('should not re-emit when option is off (default behavior)', () => {
-            instance.config.advanced_feature_flags_dedup_per_session = false
+            instance.config.advancedFeatureFlagsDedupPerSession = false
             featureFlags._hasLoadedFlags = true
 
             expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
@@ -981,8 +981,8 @@ describe('featureflags', () => {
     })
 
     describe('_callFlagsEndpoint via reloadFeatureFlags', () => {
-        it('should not call /flags if advanced_disable_flags is true', () => {
-            instance.config.advanced_disable_flags = true
+        it('should not call /flags if advancedDisableFlags is true', () => {
+            instance.config.advancedDisableFlags = true
             featureFlags.reloadFeatureFlags()
             jest.runOnlyPendingTimers()
 
@@ -997,10 +997,10 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
         })
 
-        it('should call /flags with flags disabled if advanced_disable_feature_flags is set', () => {
-            instance.config.advanced_disable_feature_flags = true
+        it('should call /flags with flags disabled if advancedDisableFeatureFlags is set', () => {
+            instance.config.advancedDisableFeatureFlags = true
             // Call _callFlagsEndpoint directly because reloadFeatureFlags() returns early
-            // when advanced_disable_feature_flags is true
+            // when advancedDisableFeatureFlags is true
             featureFlags._callFlagsEndpoint({ disableFlags: true })
             jest.runOnlyPendingTimers()
 
@@ -1017,7 +1017,7 @@ describe('featureflags', () => {
         })
 
         it('should call /flags with evaluation_contexts when configured', () => {
-            instance.config.evaluation_contexts = ['production', 'web']
+            instance.config.evaluationContexts = ['production', 'web']
             featureFlags.reloadFeatureFlags()
             jest.runOnlyPendingTimers()
 
@@ -1044,7 +1044,7 @@ describe('featureflags', () => {
         ])('should handle flag_keys when %s', (_description, configuredFlagKeys, expectedFlagKeys, expectedErrors) => {
             const errorSpy = jest.spyOn(window.console, 'error').mockImplementation()
             if (!isUndefined(configuredFlagKeys)) {
-                instance.config.flag_keys = configuredFlagKeys as any
+                instance.config.flagKeys = configuredFlagKeys as any
             }
 
             featureFlags.reloadFeatureFlags()
@@ -1086,7 +1086,7 @@ describe('featureflags', () => {
                 'other-flag': true,
             })
 
-            instance.config.flag_keys = ['checkout-redesign']
+            instance.config.flagKeys = ['checkout-redesign']
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
@@ -1115,7 +1115,7 @@ describe('featureflags', () => {
         })
 
         it('should not include evaluation_contexts when configured as empty array', () => {
-            instance.config.evaluation_contexts = []
+            instance.config.evaluationContexts = []
             featureFlags.reloadFeatureFlags()
             jest.runOnlyPendingTimers()
 
@@ -1295,7 +1295,7 @@ describe('featureflags', () => {
             const loadingCallback = jest.fn()
             instance.on('featureFlagsReloading', loadingCallback)
 
-            instance.config.advanced_disable_feature_flags = true
+            instance.config.advancedDisableFeatureFlags = true
             featureFlags.reloadFeatureFlags()
 
             expect(loadingCallback).not.toHaveBeenCalled()
@@ -1873,10 +1873,10 @@ describe('featureflags', () => {
             })
         })
 
-        it('on providing config advanced_disable_feature_flags', () => {
+        it('on providing config advancedDisableFeatureFlags', () => {
             instance.config = {
                 ...instance.config,
-                advanced_disable_feature_flags: true,
+                advancedDisableFeatureFlags: true,
             }
             instance.persistence.register({
                 $enabled_feature_flags: {
@@ -1911,10 +1911,10 @@ describe('featureflags', () => {
             expect(instance._send_request).not.toHaveBeenCalled()
         })
 
-        it('on providing config disable_compression', () => {
+        it('on providing config disableCompression', () => {
             instance.config = {
                 ...instance.config,
-                disable_compression: true,
+                disableCompression: true,
             }
 
             featureFlags.reloadFeatureFlags()
@@ -3131,7 +3131,7 @@ describe('getRemoteConfigPayload', () => {
         instance = createMockPostHog({
             config: {
                 token: 'test-token',
-                api_host: 'https://test.com',
+                apiHost: 'https://test.com',
             } as PostHogConfig,
             getDistinctId: () => 'test-distinct-id',
             _send_request: jest.fn(),
@@ -3144,7 +3144,7 @@ describe('getRemoteConfigPayload', () => {
     })
 
     it('should include evaluation_contexts when configured', () => {
-        instance.config.evaluation_contexts = ['staging', 'backend']
+        instance.config.evaluationContexts = ['staging', 'backend']
 
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
@@ -3168,7 +3168,7 @@ describe('getRemoteConfigPayload', () => {
         ['not configured', undefined, undefined],
     ])('should handle flag_keys when %s', (_description, configuredFlagKeys, expectedFlagKeys) => {
         if (!isUndefined(configuredFlagKeys)) {
-            instance.config.flag_keys = configuredFlagKeys as any
+            instance.config.flagKeys = configuredFlagKeys as any
         }
 
         const callback = jest.fn()
@@ -3212,7 +3212,7 @@ describe('getRemoteConfigPayload', () => {
     })
 
     it('should not include evaluation_contexts when configured as empty array', () => {
-        instance.config.evaluation_contexts = []
+        instance.config.evaluationContexts = []
 
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
@@ -3260,11 +3260,11 @@ describe('getRemoteConfigPayload', () => {
         warnSpy.mockRestore()
     })
 
-    describe('flags_api_host configuration', () => {
-        it('should use flags_api_host when configured', () => {
+    describe('flagsApiHost configuration', () => {
+        it('should use flagsApiHost when configured', () => {
             const apiConfig = {
-                api_host: 'https://app.posthog.com',
-                flags_api_host: 'https://example.com/feature-flags',
+                apiHost: 'https://app.posthog.com',
+                flagsApiHost: 'https://example.com/feature-flags',
             }
             const customInstance = createMockPostHog({
                 config: {
@@ -3288,17 +3288,17 @@ describe('getRemoteConfigPayload', () => {
             )
         })
 
-        it('should fall back to api_host when flags_api_host is not configured', () => {
+        it('should fall back to apiHost when flagsApiHost is not configured', () => {
             const customInstance = createMockPostHog({
                 config: {
                     token: 'test-token',
-                    api_host: 'https://app.posthog.com',
+                    apiHost: 'https://app.posthog.com',
                 } as PostHogConfig,
                 getDistinctId: () => 'test-distinct-id',
                 _send_request: jest.fn(),
                 requestRouter: new RequestRouter({
                     config: {
-                        api_host: 'https://app.posthog.com',
+                        apiHost: 'https://app.posthog.com',
                     },
                 } as any),
             })
@@ -3464,9 +3464,9 @@ describe('updateFlags', () => {
         expect(posthog.featureFlags._hasLoadedFlags).toBe(true)
     })
 
-    it('should work with advanced_disable_flags enabled', async () => {
+    it('should work with advancedDisableFlags enabled', async () => {
         const posthog = await createPosthogInstance(undefined, {
-            advanced_disable_flags: true,
+            advancedDisableFlags: true,
         })
 
         posthog.updateFlags({ 'test-flag': true })
@@ -3544,7 +3544,7 @@ describe('$feature_flag_error tracking', () => {
     const config = {
         token: 'random fake token',
         persistence: 'memory',
-        api_host: 'https://app.posthog.com',
+        apiHost: 'https://app.posthog.com',
     } as PostHogConfig
 
     beforeEach(() => {
@@ -3899,7 +3899,7 @@ describe('$feature_flag_error tracking', () => {
 
         it('should return undefined when cache is stale and TTL is configured', () => {
             // Set TTL to 1 hour
-            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+            instance.config.featureFlagCacheTtlMs = 60 * 60 * 1000
 
             // Set evaluated_at to 2 hours ago (stale)
             const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
@@ -3918,7 +3918,7 @@ describe('$feature_flag_error tracking', () => {
 
         it('should return flag value when cache is fresh', () => {
             // Set TTL to 1 hour
-            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+            instance.config.featureFlagCacheTtlMs = 60 * 60 * 1000
 
             // Set evaluated_at to 30 minutes ago (fresh)
             const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
@@ -3933,7 +3933,7 @@ describe('$feature_flag_error tracking', () => {
 
         it('should return flag value when TTL is not configured (default behavior)', () => {
             // No TTL configured (default)
-            instance.config.feature_flag_cache_ttl_ms = undefined
+            instance.config.featureFlagCacheTtlMs = undefined
 
             // Set evaluated_at to a long time ago
             const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
@@ -3949,7 +3949,7 @@ describe('$feature_flag_error tracking', () => {
 
         it('should return flag value when TTL is 0 (disabled)', () => {
             // TTL explicitly disabled
-            instance.config.feature_flag_cache_ttl_ms = 0
+            instance.config.featureFlagCacheTtlMs = 0
 
             // Set evaluated_at to a long time ago
             const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
@@ -3965,7 +3965,7 @@ describe('$feature_flag_error tracking', () => {
 
         it('should treat missing evaluated_at as stale when TTL is configured', () => {
             // Set TTL to 1 hour
-            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+            instance.config.featureFlagCacheTtlMs = 60 * 60 * 1000
 
             // No evaluated_at set
             instance.persistence.unregister('$feature_flag_evaluated_at')
@@ -3981,7 +3981,7 @@ describe('$feature_flag_error tracking', () => {
 
         it('should return undefined for getFeatureFlagResult when cache is stale', () => {
             // Set TTL to 1 hour
-            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+            instance.config.featureFlagCacheTtlMs = 60 * 60 * 1000
 
             // Set evaluated_at to 2 hours ago (stale)
             const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
@@ -3998,7 +3998,7 @@ describe('$feature_flag_error tracking', () => {
             const reloadSpy = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             // Set TTL to 1 hour
-            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+            instance.config.featureFlagCacheTtlMs = 60 * 60 * 1000
 
             // Set evaluated_at to 2 hours ago (stale)
             const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
@@ -4023,7 +4023,7 @@ describe('$feature_flag_error tracking', () => {
             const reloadSpy = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             // Set TTL to 1 hour
-            instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+            instance.config.featureFlagCacheTtlMs = 60 * 60 * 1000
 
             // Set evaluated_at to 2 hours ago (stale)
             const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000

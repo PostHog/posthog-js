@@ -208,7 +208,7 @@ describe('PostHogExceptions', () => {
             })
 
             it('captures exceptions thrown within the PostHog SDK when enabled', () => {
-                config.error_tracking.__capturePostHogExceptions = true
+                config.errorTracking.__capturePostHogExceptions = true
                 const exception = { stacktrace: { frames: [inAppFrame, posthogFrame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
@@ -305,7 +305,7 @@ describe('PostHogExceptions', () => {
         })
 
         it('respects max_bytes by evicting oldest steps on add', () => {
-            config.error_tracking = {
+            config.errorTracking = {
                 exception_steps: {
                     max_bytes: 80,
                 },
@@ -324,7 +324,7 @@ describe('PostHogExceptions', () => {
         })
 
         it('disables add and attach when exception_steps.enabled is false', () => {
-            config.error_tracking = {
+            config.errorTracking = {
                 exception_steps: {
                     enabled: false,
                 },

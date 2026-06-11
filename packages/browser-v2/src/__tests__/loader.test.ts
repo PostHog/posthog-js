@@ -35,11 +35,11 @@ describe(`Module-based loader in Node env`, () => {
         const _originalCapture = posthog.capture
         posthog.capture = sandbox.spy()
         posthog.init(`test-token`, {
-            disable_surveys: true,
-            disable_conversations: true,
+            disableSurveys: true,
+            disableConversations: true,
             debug: true,
             persistence: `localStorage`,
-            api_host: `https://test.com`,
+            apiHost: `https://test.com`,
             loaded: function () {
                 loaded = true
             },
@@ -68,15 +68,13 @@ describe(`Module-based loader in Node env`, () => {
         console.error = jest.fn()
         console.warn = jest.fn()
 
-        expect(posthog.init(`my-test`, { disable_surveys: true, disable_conversations: true }, 'sdk-1')).toBeInstanceOf(
+        expect(posthog.init(`my-test`, { disableSurveys: true, disableConversations: true }, 'sdk-1')).toBeInstanceOf(
             PostHog
         )
-        expect(posthog.init(``, { disable_surveys: true, disable_conversations: true }, 'sdk-2')).toBeInstanceOf(
-            PostHog
-        )
+        expect(posthog.init(``, { disableSurveys: true, disableConversations: true }, 'sdk-2')).toBeInstanceOf(PostHog)
         const nullTokenInstance = posthog.init(
             null as any,
-            { disable_surveys: true, disable_conversations: true },
+            { disableSurveys: true, disableConversations: true },
             'sdk-null'
         )
         expect(nullTokenInstance).toBeInstanceOf(PostHog)
@@ -88,11 +86,11 @@ describe(`Module-based loader in Node env`, () => {
         )
 
         expect(
-            posthog.init(`  trim-me\n`, { disable_surveys: true, disable_conversations: true }, 'sdk-trim').config.token
+            posthog.init(`  trim-me\n`, { disableSurveys: true, disableConversations: true }, 'sdk-trim').config.token
         ).toBe('trim-me')
 
         // Already loaded logged even when not debug
-        expect(posthog.init(`my-test`, { disable_surveys: true, disable_conversations: true }, 'sdk-1')).toBeInstanceOf(
+        expect(posthog.init(`my-test`, { disableSurveys: true, disableConversations: true }, 'sdk-1')).toBeInstanceOf(
             PostHog
         )
         expect(console.warn).toHaveBeenCalledWith(

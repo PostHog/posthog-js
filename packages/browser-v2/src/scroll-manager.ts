@@ -23,7 +23,7 @@ export class ScrollManager {
     constructor(private _instance: PostHog) {}
 
     private get _scrollRoot() {
-        return this._instance.config.scroll_root_selector
+        return this._instance.config.scrollRootSelector
     }
 
     getContext(): ScrollContext | undefined {

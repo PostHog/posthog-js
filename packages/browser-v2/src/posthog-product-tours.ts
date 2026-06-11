@@ -24,7 +24,7 @@ interface ProductTourManagerInterface {
 }
 
 const isProductToursEnabled = (instance: PostHog): boolean => {
-    if (instance.config.disable_product_tours) {
+    if (instance.config.disableProductTours) {
         return false
     }
     return !!instance.persistence?.getProperty(PRODUCT_TOURS_ENABLED_SERVER_SIDE)

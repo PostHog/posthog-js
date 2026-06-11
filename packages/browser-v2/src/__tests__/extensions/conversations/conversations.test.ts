@@ -30,9 +30,9 @@ describe('PostHogConversations', () => {
         // Setup mock PostHog instance
         mockPostHog = createMockPostHog({
             config: createMockConfig({
-                api_host: 'https://test.posthog.com',
+                apiHost: 'https://test.posthog.com',
                 token: 'test-token',
-                disable_conversations: false,
+                disableConversations: false,
             }),
             persistence: createMockPersistence({
                 props: {
@@ -67,7 +67,7 @@ describe('PostHogConversations', () => {
 
     describe('onRemoteConfig', () => {
         it('should not load conversations if disabled in config', () => {
-            mockPostHog.config.disable_conversations = true
+            mockPostHog.config.disableConversations = true
             const remoteConfig: Partial<RemoteConfig> = {
                 conversations: {
                     enabled: true,
@@ -168,14 +168,14 @@ describe('PostHogConversations', () => {
         })
 
         it('should not load if conversations are disabled', () => {
-            mockPostHog.config.disable_conversations = true
+            mockPostHog.config.disableConversations = true
             conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
 
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
         })
 
         it('should not load in cookieless mode without consent', () => {
-            mockPostHog.config.cookieless_mode = 'always'
+            mockPostHog.config.cookielessMode = 'always'
             ;(mockPostHog.consent.isOptedOut as jest.Mock).mockReturnValue(true)
 
             conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
@@ -464,9 +464,9 @@ describe('PostHogConversations', () => {
             // Create a PostHog instance where _isIdentified returns true
             const identifiedPostHog = createMockPostHog({
                 config: createMockConfig({
-                    api_host: 'https://test.posthog.com',
+                    apiHost: 'https://test.posthog.com',
                     token: 'test-token',
-                    disable_conversations: false,
+                    disableConversations: false,
                 }),
                 persistence: createMockPersistence({
                     props: {},

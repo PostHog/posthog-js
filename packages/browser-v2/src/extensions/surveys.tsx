@@ -846,7 +846,7 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
     }
 
     const surveyManager = new SurveyManager(posthog)
-    if (posthog.config.disable_surveys_automatic_display) {
+    if (posthog.config.disableSurveysAutomaticDisplay) {
         logger.info('Surveys automatic display is disabled. Skipping call surveys and evaluate display logic.')
         return surveyManager
     }

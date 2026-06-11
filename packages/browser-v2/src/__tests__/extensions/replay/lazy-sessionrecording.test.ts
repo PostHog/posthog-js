@@ -229,11 +229,11 @@ describe('Lazy SessionRecording', () => {
         sessionId = 'sessionId' + uuidv7()
 
         config = createMockConfig({
-            api_host: 'https://test.com',
-            disable_session_recording: false,
-            enable_recording_console_log: false,
+            apiHost: 'https://test.com',
+            disableSessionRecording: false,
+            enableRecordingConsoleLog: false,
             autocapture: false, // Assert that session recording works even if `autocapture = false`
-            session_recording: {
+            sessionRecording: {
                 maskAllInputs: false,
                 // not the default but makes for easier test assertions
                 compress_events: false,
@@ -317,8 +317,8 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording.status).toBe('disabled')
         })
 
-        it('does not load script if disable_session_recording passed', () => {
-            posthog.config.disable_session_recording = true
+        it('does not load script if disableSessionRecording passed', () => {
+            posthog.config.disableSessionRecording = true
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -358,7 +358,7 @@ describe('Lazy SessionRecording', () => {
             })
 
             it('is disabled if the client config is disabled', () => {
-                posthog.config.disable_session_recording = true
+                posthog.config.disableSessionRecording = true
                 expect(sessionRecording['_isRecordingEnabled']).toBe(false)
             })
         })
@@ -468,7 +468,7 @@ describe('Lazy SessionRecording', () => {
                     clientSide: boolean | undefined,
                     expected: boolean
                 ) => {
-                    posthog.config.enable_recording_console_log = clientSide
+                    posthog.config.enableRecordingConsoleLog = clientSide
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_isConsoleLogCaptureEnabled']).toBe(
                         expected
                     )
@@ -501,7 +501,7 @@ describe('Lazy SessionRecording', () => {
                             canvasRecording: { enabled: serverSide, fps: 4, quality: '0.1' },
                         },
                     })
-                    posthog.config.session_recording.captureCanvas = { recordCanvas: clientSide }
+                    posthog.config.sessionRecording.captureCanvas = { recordCanvas: clientSide }
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_canvasRecording']).toMatchObject({
                         enabled: expected,
                         fps: 4,
@@ -624,7 +624,7 @@ describe('Lazy SessionRecording', () => {
                             networkPayloadCapture: { capturePerformance: serverSide },
                         },
                     })
-                    posthog.config.capture_performance = clientSide
+                    posthog.config.capturePerformance = clientSide
                     expect(
                         sessionRecording['_lazyLoadedSessionRecording']['_networkPayloadCapture']?.recordPerformance
                     ).toBe(expected)
@@ -708,9 +708,9 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
 
-                    posthog.config.session_recording.maskAllInputs = clientConfig?.maskAllInputs
-                    posthog.config.session_recording.maskTextSelector = clientConfig?.maskTextSelector
-                    posthog.config.session_recording.blockSelector = clientConfig?.blockSelector
+                    posthog.config.sessionRecording.maskAllInputs = clientConfig?.maskAllInputs
+                    posthog.config.sessionRecording.maskTextSelector = clientConfig?.maskTextSelector
+                    posthog.config.sessionRecording.blockSelector = clientConfig?.blockSelector
 
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_masking']).toEqual(expected)
                 }
@@ -1431,7 +1431,7 @@ describe('Lazy SessionRecording', () => {
         describe('when pageview capture is disabled', () => {
             beforeEach(() => {
                 jest.spyOn(sessionRecording, 'tryAddCustomEvent')
-                posthog.config.capture_pageview = false
+                posthog.config.capturePageview = false
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -1480,7 +1480,7 @@ describe('Lazy SessionRecording', () => {
 
         describe('when pageview capture is enabled', () => {
             beforeEach(() => {
-                posthog.config.capture_pageview = true
+                posthog.config.capturePageview = true
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -1507,7 +1507,7 @@ describe('Lazy SessionRecording', () => {
             }
 
             beforeEach(() => {
-                posthog.config.session_recording.compress_events = true
+                posthog.config.sessionRecording.compress_events = true
                 sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
@@ -2771,7 +2771,7 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('call stopRecording if its not enabled', () => {
-            posthog.config.disable_session_recording = true
+            posthog.config.disableSessionRecording = true
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: {
@@ -3100,7 +3100,7 @@ describe('Lazy SessionRecording', () => {
 
     describe('masking', () => {
         it('passes remote masking options to rrweb', () => {
-            posthog.config.session_recording.maskAllInputs = undefined
+            posthog.config.sessionRecording.maskAllInputs = undefined
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -3128,8 +3128,8 @@ describe('Lazy SessionRecording', () => {
                 ['password not set', { maskInputOptions: { input: true } } as SessionRecordingOptions, true],
                 ['password set to true', { maskInputOptions: { password: true } } as SessionRecordingOptions, true],
                 ['password set to false', { maskInputOptions: { password: false } } as SessionRecordingOptions, false],
-            ])('%s', (_name: string, session_recording: SessionRecordingOptions, expected: boolean) => {
-                posthog.config.session_recording = session_recording
+            ])('%s', (_name: string, sessionRecordingOptions: SessionRecordingOptions, expected: boolean) => {
+                posthog.config.sessionRecording = sessionRecordingOptions
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -3148,7 +3148,7 @@ describe('Lazy SessionRecording', () => {
 
     describe('console logs', () => {
         it('if not enabled, plugin is not used', () => {
-            posthog.config.enable_recording_console_log = false
+            posthog.config.enableRecordingConsoleLog = false
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -3162,7 +3162,7 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('if enabled, plugin is used', () => {
-            posthog.config.enable_recording_console_log = true
+            posthog.config.enableRecordingConsoleLog = true
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -4085,7 +4085,7 @@ describe('Lazy SessionRecording', () => {
                 return data
             })
 
-            posthog.config.session_recording.maskCapturedNetworkRequestFn = maskFn
+            posthog.config.sessionRecording.maskCapturedNetworkRequestFn = maskFn
 
             addRRwebToWindow()
             sessionRecording.onRemoteConfig(
@@ -4134,7 +4134,7 @@ describe('Lazy SessionRecording', () => {
                 return data
             })
 
-            posthog.config.session_recording.maskNetworkRequestFn = deprecatedMaskFn
+            posthog.config.sessionRecording.maskNetworkRequestFn = deprecatedMaskFn
 
             addRRwebToWindow()
             sessionRecording.onRemoteConfig(
@@ -4179,8 +4179,8 @@ describe('Lazy SessionRecording', () => {
             const newMaskFn = jest.fn((data) => ({ ...data, name: 'masked-by-new' }))
             const deprecatedMaskFn = jest.fn((data) => ({ ...data, url: 'masked-by-deprecated' }))
 
-            posthog.config.session_recording.maskCapturedNetworkRequestFn = newMaskFn
-            posthog.config.session_recording.maskNetworkRequestFn = deprecatedMaskFn
+            posthog.config.sessionRecording.maskCapturedNetworkRequestFn = newMaskFn
+            posthog.config.sessionRecording.maskNetworkRequestFn = deprecatedMaskFn
 
             addRRwebToWindow()
             sessionRecording.onRemoteConfig(
@@ -4226,7 +4226,7 @@ describe('Lazy SessionRecording', () => {
                 return data
             })
 
-            posthog.config.session_recording.maskCapturedNetworkRequestFn = maskFn
+            posthog.config.sessionRecording.maskCapturedNetworkRequestFn = maskFn
 
             addRRwebToWindow()
             sessionRecording.onRemoteConfig(

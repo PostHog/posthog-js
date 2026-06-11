@@ -4,11 +4,11 @@ import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/eve
 
 const startOptions = {
     options: {
-        session_recording: {
+        sessionRecording: {
             // not the default but makes for easier test assertions
             compress_events: false,
         },
-        opt_out_capturing_by_default: true,
+        optOutCapturingByDefault: true,
     },
     flagsResponseOverrides: {
         sessionRecording: {

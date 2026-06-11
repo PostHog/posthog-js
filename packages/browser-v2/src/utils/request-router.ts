@@ -27,7 +27,7 @@ export class RequestRouter {
     }
 
     get apiHost(): string {
-        const host = this.instance.config.api_host.trim().replace(/\/$/, '')
+        const host = this.instance.config.apiHost.trim().replace(/\/$/, '')
         if (host === 'https://app.posthog.com') {
             return 'https://us.i.posthog.com'
         }
@@ -35,19 +35,19 @@ export class RequestRouter {
     }
 
     get flagsApiHost(): string {
-        const customHost = this.instance.config.flags_api_host
+        const customHost = this.instance.config.flagsApiHost
         if (customHost) {
             return customHost.trim().replace(/\/$/, '')
         }
-        // Backwards compatibility: if no custom flags_api_host is set, fall back to the regular apiHost
+        // Backwards compatibility: if no custom flagsApiHost is set, fall back to the regular apiHost
         return this.apiHost
     }
 
     get uiHost(): string | undefined {
-        let host = this.instance.config.ui_host?.replace(/\/$/, '')
+        let host = this.instance.config.uiHost?.replace(/\/$/, '')
 
         if (!host) {
-            // No ui_host set, get it from the api_host. But api_host differs
+            // No uiHost set, get it from the apiHost. But apiHost differs
             // from the actual UI host, so replace the ingestion subdomain with just posthog.com
             host = this.apiHost.replace(`.${ingestionDomain}`, '.posthog.com')
         }
@@ -78,7 +78,7 @@ export class RequestRouter {
             return undefined
         }
 
-        const override = this.instance.config.asset_host
+        const override = this.instance.config.assetHost
         if (typeof override !== 'string') {
             return undefined
         }

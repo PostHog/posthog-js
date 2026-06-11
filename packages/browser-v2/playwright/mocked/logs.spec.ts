@@ -8,7 +8,7 @@ test.describe('logs extension', () => {
         await start(
             {
                 options: {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                 },
             },
@@ -32,7 +32,7 @@ test.describe('logs extension', () => {
         await start(
             {
                 options: {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                 },
             },
@@ -80,7 +80,7 @@ test.describe('logs extension', () => {
         await start(
             {
                 options: {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                 },
             },
@@ -126,7 +126,7 @@ test.describe('logs extension', () => {
         await start(
             {
                 options: {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                 },
             },

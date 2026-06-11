@@ -38,7 +38,7 @@ test.describe('retry queue', () => {
         })
 
         // Initialize PostHog without pageview to avoid extra requests
-        await start({ ...startOptions, options: { capture_pageview: false } }, page, context)
+        await start({ ...startOptions, options: { capturePageview: false } }, page, context)
 
         // Capture a custom event which will initially fail
         await page.evaluate(() => {
@@ -95,7 +95,7 @@ test.describe('retry queue', () => {
         })
 
         // Initialize PostHog without pageview
-        await start({ ...startOptions, options: { capture_pageview: false } }, page, context)
+        await start({ ...startOptions, options: { capturePageview: false } }, page, context)
 
         // Capture a custom event which will fail
         await page.evaluate(() => {
@@ -149,7 +149,7 @@ test.describe('retry queue', () => {
         })
 
         // Initialize PostHog without pageview
-        await start({ ...startOptions, options: { capture_pageview: false } }, page, context)
+        await start({ ...startOptions, options: { capturePageview: false } }, page, context)
 
         // Capture an event that will fail
         await page.evaluate(() => {

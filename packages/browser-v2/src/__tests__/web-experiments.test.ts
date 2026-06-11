@@ -112,8 +112,8 @@ describe('Web Experimentation', () => {
         persistence = createMockPersistence({ props: {}, register: jest.fn() })
         posthog = makePostHog({
             config: createMockConfig({
-                disable_web_experiments: false,
-                api_host: 'https://test.com',
+                disableWebExperiments: false,
+                apiHost: 'https://test.com',
                 token: 'testtoken',
                 autocapture: true,
                 region: 'us-east-1',
@@ -248,11 +248,11 @@ describe('Web Experimentation', () => {
             }
             const disabledPostHog = makePostHog({
                 config: createMockConfig({
-                    api_host: 'https://test.com',
+                    apiHost: 'https://test.com',
                     token: 'testtoken',
                     autocapture: true,
                     region: 'us-east-1',
-                    // no disable_web_experiments set to false here, so it's implicitly enabled
+                    // no disableWebExperiments set to false here, so it's implicitly enabled
                 }),
                 persistence: persistence,
                 getProperty: jest.fn(),

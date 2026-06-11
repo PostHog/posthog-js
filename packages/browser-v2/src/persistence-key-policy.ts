@@ -85,7 +85,7 @@ export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
 /**
  * Keys sharing a `storageGroup` are persisted together in their own storage
  * entry (`<name>__<group>`) instead of the main persistence blob, when the
- * `split_storage` config is enabled. Keys without a group
+ * `splitStorage` config is enabled. Keys without a group
  * stay in the main blob. Members of one group are written in a single entry so
  * an atomic `register` of the whole group lands as one write (no torn state).
  */

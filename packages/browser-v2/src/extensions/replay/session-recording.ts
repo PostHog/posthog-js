@@ -68,8 +68,8 @@ export class SessionRecording implements Extension {
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
-        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
-            throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
+        if (this._config.cookielessMode === COOKIELESS_ALWAYS) {
+            throw new Error(LOGGER_PREFIX + ' cannot be used with cookielessMode="always"')
         }
     }
 
@@ -79,8 +79,8 @@ export class SessionRecording implements Extension {
 
     private get _isRecordingEnabled() {
         const enabled_server_side = !!this._instance.getProperty(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
-        const enabled_client_side = !this._config.disable_session_recording
-        const isDisabled = this._config.disable_session_recording || this._instance.consent.isOptedOut()
+        const enabled_client_side = !this._config.disableSessionRecording
+        const isDisabled = this._config.disableSessionRecording || this._instance.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
@@ -183,8 +183,8 @@ export class SessionRecording implements Extension {
                     response.sessionRecording === false ? undefined : response.sessionRecording
 
                 const localSampleRate = this._validateSampleRate(
-                    this._config.session_recording?.sampleRate,
-                    'session_recording.sampleRate'
+                    this._config.sessionRecording?.sampleRate,
+                    'sessionRecording.sampleRate'
                 )
                 const remoteSampleRate = this._validateSampleRate(
                     sessionRecordingConfigResponse?.sampleRate,

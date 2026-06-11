@@ -140,10 +140,10 @@ describe('web vitals', () => {
             beforeEach(async () => {
                 beforeSendMock.mockClear()
                 posthog = await createPosthogInstance(uuidv7(), {
-                    before_send: beforeSendMock,
-                    capture_performance: { web_vitals: true, web_vitals_allowed_metrics: clientConfig },
+                    beforeSend: beforeSendMock,
+                    capturePerformance: { web_vitals: true, web_vitals_allowed_metrics: clientConfig },
                     // sometimes pageviews sneak in and make asserting on mock capture tricky
-                    capture_pageview: false,
+                    capturePageview: false,
                 })
 
                 loadScriptMock.mockImplementation((_ph, _path, callback) => {
@@ -210,7 +210,7 @@ describe('web vitals', () => {
             })
 
             it('should emit after configured timeout even when only 1 to 3 metrics captured', async () => {
-                ;(posthog.config.capture_performance as PerformanceCaptureConfig).web_vitals_delayed_flush_ms = 1000
+                ;(posthog.config.capturePerformance as PerformanceCaptureConfig).web_vitals_delayed_flush_ms = 1000
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
                 expect(beforeSendMock).toBeCalledTimes(0)
@@ -239,7 +239,7 @@ describe('web vitals', () => {
             })
 
             it('can be configured not to ignore a ridiculous value', async () => {
-                posthog.config.capture_performance = { __web_vitals_max_value: 0 }
+                posthog.config.capturePerformance = { __web_vitals_max_value: 0 }
                 onCLSCallback?.({ name: 'CLS', value: FIFTEEN_MINUTES_IN_MILLIS, extra: 'property' })
 
                 expect(beforeSendMock).toBeCalledTimes(0)
@@ -251,7 +251,7 @@ describe('web vitals', () => {
         }
     )
 
-    describe('cookieless_mode (no SessionIdManager)', () => {
+    describe('cookielessMode (no SessionIdManager)', () => {
         const expectedEmittedWebVitalsCookieless = (name: string) => ({
             $current_url: 'http://localhost/',
             timestamp: expect.any(Number),
@@ -268,10 +268,10 @@ describe('web vitals', () => {
             onINPCallback = undefined
 
             posthog = await createPosthogInstance(uuidv7(), {
-                before_send: beforeSendMock,
-                cookieless_mode: 'always',
-                capture_performance: { web_vitals: true, web_vitals_allowed_metrics: ['CLS', 'FCP'] },
-                capture_pageview: false,
+                beforeSend: beforeSendMock,
+                cookielessMode: 'always',
+                capturePerformance: { web_vitals: true, web_vitals_allowed_metrics: ['CLS', 'FCP'] },
+                capturePageview: false,
             })
 
             expect(posthog.sessionManager).toBeUndefined()
@@ -305,7 +305,7 @@ describe('web vitals', () => {
             expect(posthog.webVitalsAutocapture!.allowedMetrics).toEqual(['CLS', 'FCP'])
         })
 
-        it('emits web vitals without nested $session_id or $window_id; sets $cookieless_mode on payload', async () => {
+        it('emits web vitals without nested $session_id or $window_id; sets $cookielessMode on payload', async () => {
             onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
             onFCPCallback?.({ name: 'FCP', value: 123.45, extra: 'property' })
 
@@ -336,7 +336,7 @@ describe('web vitals', () => {
         })
     })
 
-    describe('cookieless_mode on_reject after opt_out', () => {
+    describe('cookielessMode on_reject after opt_out', () => {
         const expectedEmittedWebVitalsCookieless = (name: string) => ({
             $current_url: 'http://localhost/',
             timestamp: expect.any(Number),
@@ -353,10 +353,10 @@ describe('web vitals', () => {
             onINPCallback = undefined
 
             posthog = await createPosthogInstance(uuidv7(), {
-                before_send: beforeSendMock,
-                cookieless_mode: 'on_reject',
-                capture_performance: { web_vitals: true, web_vitals_allowed_metrics: ['CLS', 'FCP'] },
-                capture_pageview: false,
+                beforeSend: beforeSendMock,
+                cookielessMode: 'on_reject',
+                capturePerformance: { web_vitals: true, web_vitals_allowed_metrics: ['CLS', 'FCP'] },
+                capturePageview: false,
             })
 
             posthog.optOutCapturing()
@@ -421,8 +421,8 @@ describe('web vitals', () => {
             'when web_vitals_attribution is %p, useAttribution should be %p',
             async (attributionConfig, expectedUseAttribution) => {
                 posthog = await createPosthogInstance(uuidv7(), {
-                    capture_performance: { web_vitals: true, web_vitals_attribution: attributionConfig },
-                    capture_pageview: false,
+                    capturePerformance: { web_vitals: true, web_vitals_attribution: attributionConfig },
+                    capturePageview: false,
                 })
 
                 expect(posthog.webVitalsAutocapture!.useAttribution).toBe(expectedUseAttribution)
@@ -449,8 +449,8 @@ describe('web vitals', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
             posthog = await createPosthogInstance(uuidv7(), {
-                capture_performance: { web_vitals: true, web_vitals_attribution: attributionConfig },
-                capture_pageview: false,
+                capturePerformance: { web_vitals: true, web_vitals_attribution: attributionConfig },
+                capturePageview: false,
             })
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
@@ -465,7 +465,7 @@ describe('web vitals', () => {
         beforeEach(async () => {
             beforeSendMock = jest.fn()
             posthog = await createPosthogInstance(uuidv7(), {
-                before_send: beforeSendMock,
+                beforeSend: beforeSendMock,
             })
         })
 
@@ -520,7 +520,7 @@ describe('web vitals', () => {
 
             beforeSendMock = jest.fn()
             posthog = await createPosthogInstance(uuidv7(), {
-                before_send: beforeSendMock,
+                beforeSend: beforeSendMock,
             })
         })
 
@@ -529,7 +529,7 @@ describe('web vitals', () => {
         })
 
         it('should be enabled if client config option is enabled', () => {
-            posthog.config.capture_performance = { web_vitals: true }
+            posthog.config.capturePerformance = { web_vitals: true }
             expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
         })
 
@@ -548,7 +548,7 @@ describe('web vitals', () => {
         ])(
             'when client side config is %p and remote opt in is %p - web vitals enabled should be %p',
             (clientSideOptIn, serverSideOptIn, expected) => {
-                posthog.config.capture_performance = { web_vitals: clientSideOptIn }
+                posthog.config.capturePerformance = { web_vitals: clientSideOptIn }
                 posthog.webVitalsAutocapture!.onRemoteConfig({
                     capturePerformance: { web_vitals: serverSideOptIn },
                 } as FlagsResponse)
@@ -557,19 +557,19 @@ describe('web vitals', () => {
         )
     })
 
-    it('should be disabled if capture_performance is set to false', async () => {
+    it('should be disabled if capturePerformance is set to false', async () => {
         posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            capture_performance: false,
+            beforeSend: beforeSendMock,
+            capturePerformance: false,
         })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
 
-    it('should be disabled if capture_performance is set to false even if enabled server-side', async () => {
+    it('should be disabled if capturePerformance is set to false even if enabled server-side', async () => {
         posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            capture_performance: false,
+            beforeSend: beforeSendMock,
+            capturePerformance: false,
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
@@ -592,8 +592,8 @@ describe('web vitals', () => {
         })
 
         posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            capture_performance: { web_vitals: true },
+            beforeSend: beforeSendMock,
+            capturePerformance: { web_vitals: true },
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
@@ -646,8 +646,8 @@ describe('web vitals', () => {
         })
 
         posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            capture_performance: { web_vitals: true },
+            beforeSend: beforeSendMock,
+            capturePerformance: { web_vitals: true },
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
@@ -668,8 +668,8 @@ describe('web vitals', () => {
         })
 
         posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            capture_performance: { web_vitals: true },
+            beforeSend: beforeSendMock,
+            capturePerformance: { web_vitals: true },
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
@@ -684,7 +684,7 @@ describe('web vitals', () => {
         [true, undefined, 'http://localhost/?gclid=<masked>&other=true'],
         [true, ['other'], 'http://localhost/?gclid=<masked>&other=<masked>'],
     ])(
-        'the behaviour when mask_personal_data_properties is %s and custom_personal_data_properties is %s',
+        'the behaviour when maskPersonalDataProperties is %s and customPersonalDataProperties is %s',
         (
             maskPersonalDataProperties: boolean,
             customPersonalDataProperties: undefined | string[],
@@ -702,12 +702,12 @@ describe('web vitals', () => {
 
                 beforeSendMock.mockClear()
                 posthog = await createPosthogInstance(uuidv7(), {
-                    before_send: beforeSendMock,
-                    capture_performance: { web_vitals: true },
+                    beforeSend: beforeSendMock,
+                    capturePerformance: { web_vitals: true },
                     // sometimes pageviews sneak in and make asserting on mock capture tricky
-                    capture_pageview: false,
-                    mask_personal_data_properties: maskPersonalDataProperties,
-                    custom_personal_data_properties: customPersonalDataProperties,
+                    capturePageview: false,
+                    maskPersonalDataProperties: maskPersonalDataProperties,
+                    customPersonalDataProperties: customPersonalDataProperties,
                 })
 
                 loadScriptMock.mockImplementation((_ph, _path, callback) => {

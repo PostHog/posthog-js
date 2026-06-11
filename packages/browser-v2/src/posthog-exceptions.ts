@@ -63,7 +63,7 @@ export class PostHogExceptions implements Extension {
 
     private get _captureExtensionExceptions() {
         const enabled_server_side = !!this._instance.getProperty(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
-        const enabled_client_side = this._instance.config.error_tracking.captureExtensionExceptions
+        const enabled_client_side = this._instance.config.errorTracking.captureExtensionExceptions
         return enabled_client_side ?? enabled_server_side ?? false
     }
 
@@ -126,7 +126,7 @@ export class PostHogExceptions implements Extension {
                 }
 
                 if (
-                    !this._instance.config.error_tracking.__capturePostHogExceptions &&
+                    !this._instance.config.errorTracking.__capturePostHogExceptions &&
                     this._isPostHogException(exceptionList)
                 ) {
                     this._addDroppedExceptionStep('Exception dropped: thrown by the PostHog SDK')
@@ -199,7 +199,7 @@ export class PostHogExceptions implements Extension {
     }
 
     private _getExceptionStepsConfig(): ErrorTracking.ExceptionStepsConfig {
-        return this._instance.config.error_tracking?.exception_steps ?? {}
+        return this._instance.config.errorTracking?.exception_steps ?? {}
     }
 
     private _matchesSuppressionRule(exceptionList: ErrorTracking.ExceptionList): boolean {

@@ -100,7 +100,7 @@ export class PageViewManager {
 
         const scrollContext = this._instance.scrollManager.getContext()
 
-        if (scrollContext && !this._instance.config.disable_scroll_properties) {
+        if (scrollContext && !this._instance.config.disableScrollProperties) {
             let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } =
                 scrollContext
 

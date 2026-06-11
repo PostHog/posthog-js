@@ -49,9 +49,9 @@ describe('deferred extension initialization', () => {
             } as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: true,
-                capture_pageview: false,
-                disable_session_recording: true,
+                __previewDeferredInitExtensions: true,
+                capturePageview: false,
+                disableSessionRecording: true,
             })
 
             // Simulate remote config arriving synchronously before extensions init
@@ -76,9 +76,9 @@ describe('deferred extension initialization', () => {
             } as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: true,
-                capture_pageview: false,
-                disable_session_recording: true,
+                __previewDeferredInitExtensions: true,
+                capturePageview: false,
+                disableSessionRecording: true,
             })
 
             // Wait for extensions to initialize first
@@ -98,9 +98,9 @@ describe('deferred extension initialization', () => {
             } as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: false, // sync init
-                capture_pageview: false,
-                disable_session_recording: true,
+                __previewDeferredInitExtensions: false, // sync init
+                capturePageview: false,
+                disableSessionRecording: true,
             })
 
             // With sync init, extensions are already ready, no need to store config
@@ -117,9 +117,9 @@ describe('deferred extension initialization', () => {
             } as RemoteConfig
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: true,
-                capture_pageview: false,
-                disable_session_recording: true,
+                __previewDeferredInitExtensions: true,
+                capturePageview: false,
+                disableSessionRecording: true,
             })
 
             // Call _onRemoteConfig before extensions are ready
@@ -145,8 +145,8 @@ describe('deferred extension initialization', () => {
             const token = uuidv7()
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             // Extensions should be initialized immediately (synchronously)
@@ -158,8 +158,8 @@ describe('deferred extension initialization', () => {
             const token = uuidv7()
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: true,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: true,
+                capturePageview: false,
             })
 
             // Extensions should not be initialized yet

@@ -60,7 +60,7 @@ describe('ConversationsManager Identity Verification', () => {
         mockPosthog = {
             config: {
                 token: 'test-token',
-                api_host: 'https://test.posthog.com',
+                apiHost: 'https://test.posthog.com',
             },
             _send_request: jest.fn((options) => {
                 const url = options.url as string
@@ -135,8 +135,8 @@ describe('ConversationsManager Identity Verification', () => {
 
     describe('init-time identity from config', () => {
         it('should use identity from top-level posthog.config during construction', async () => {
-            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
-            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
+            ;(mockPosthog as any).config.identityDistinctId = 'user_123'
+            ;(mockPosthog as any).config.identityHash = 'abc123hash'
 
             manager = new ConversationsManager(mockConfig, mockPosthog)
             jest.clearAllMocks()
@@ -157,8 +157,8 @@ describe('ConversationsManager Identity Verification', () => {
 
         it('should skip restore token when identity config is set', async () => {
             window.history.replaceState({}, '', '/?ph_conv_restore=restore-token-1')
-            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
-            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
+            ;(mockPosthog as any).config.identityDistinctId = 'user_123'
+            ;(mockPosthog as any).config.identityHash = 'abc123hash'
 
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
@@ -189,7 +189,7 @@ describe('ConversationsManager Identity Verification', () => {
         })
 
         it('should use widget_session_id when only one config field is set', async () => {
-            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
+            ;(mockPosthog as any).config.identityDistinctId = 'user_123'
 
             manager = new ConversationsManager(mockConfig, mockPosthog)
             jest.clearAllMocks()
@@ -214,8 +214,8 @@ describe('ConversationsManager Identity Verification', () => {
         })
 
         it('should trigger ticket reload on setIdentity', () => {
-            ;(mockPosthog as any).config.identity_distinct_id = 'user_456'
-            ;(mockPosthog as any).config.identity_hash = 'def456hash'
+            ;(mockPosthog as any).config.identityDistinctId = 'user_456'
+            ;(mockPosthog as any).config.identityHash = 'def456hash'
             jest.clearAllMocks()
 
             manager.setIdentity()
@@ -226,13 +226,13 @@ describe('ConversationsManager Identity Verification', () => {
         })
 
         it('should use widget_session_id after clearIdentity', async () => {
-            ;(mockPosthog as any).config.identity_distinct_id = 'user_456'
-            ;(mockPosthog as any).config.identity_hash = 'def456hash'
+            ;(mockPosthog as any).config.identityDistinctId = 'user_456'
+            ;(mockPosthog as any).config.identityHash = 'def456hash'
 
             manager.setIdentity()
 
-            delete (mockPosthog as any).config.identity_distinct_id
-            delete (mockPosthog as any).config.identity_hash
+            delete (mockPosthog as any).config.identityDistinctId
+            delete (mockPosthog as any).config.identityHash
             manager.clearIdentity()
             jest.clearAllMocks()
 
@@ -252,8 +252,8 @@ describe('ConversationsManager Identity Verification', () => {
 
     describe('API calls in identity mode', () => {
         beforeEach(() => {
-            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
-            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
+            ;(mockPosthog as any).config.identityDistinctId = 'user_123'
+            ;(mockPosthog as any).config.identityHash = 'abc123hash'
             manager = new ConversationsManager(mockConfig, mockPosthog)
             jest.clearAllMocks()
         })

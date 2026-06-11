@@ -69,7 +69,7 @@ describe('logs entrypoint', () => {
         // Mock PostHog instance
         mockPostHog = {
             config: {
-                api_host: 'https://app.posthog.com',
+                apiHost: 'https://app.posthog.com',
                 token: 'test-token',
             },
             sessionManager: {
@@ -682,7 +682,7 @@ describe('logs entrypoint', () => {
             const customPostHog = {
                 ...mockPostHog,
                 config: {
-                    api_host: 'https://custom.example.com',
+                    apiHost: 'https://custom.example.com',
                     token: 'custom-token-123',
                 },
             } as unknown as PostHog

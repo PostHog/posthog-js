@@ -5,7 +5,7 @@ import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 const startOptions = {
     options: {
-        session_recording: {
+        sessionRecording: {
             // not the default but makes for easier test assertions
             compress_events: false,
         },

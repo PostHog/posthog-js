@@ -27,7 +27,7 @@ describe('Rate Limiter', () => {
 
         mockPostHog = {
             config: {
-                rate_limiting: {
+                rateLimiting: {
                     events_per_second: 10,
                     events_burst_limit: 100,
                 },
@@ -154,7 +154,7 @@ describe('Rate Limiter', () => {
             expect(rateLimiter.captureEventsPerSecond).toBe(10)
             expect(rateLimiter.captureEventsBurstLimit).toBe(100)
 
-            mockPostHog.config.rate_limiting = {
+            mockPostHog.config.rateLimiting = {
                 events_per_second: 5,
                 events_burst_limit: 50,
             }
@@ -164,14 +164,14 @@ describe('Rate Limiter', () => {
         })
 
         it('uses defaults when config is not set', () => {
-            mockPostHog.config.rate_limiting = undefined
+            mockPostHog.config.rateLimiting = undefined
 
             expect(rateLimiter.captureEventsPerSecond).toBe(10)
             expect(rateLimiter.captureEventsBurstLimit).toBe(100)
         })
 
         it('computes burst limit from events_per_second when only events_per_second is configured', () => {
-            mockPostHog.config.rate_limiting = {
+            mockPostHog.config.rateLimiting = {
                 events_per_second: 20,
             }
 
@@ -180,7 +180,7 @@ describe('Rate Limiter', () => {
         })
 
         it('ensures burst limit is at least events_per_second', () => {
-            mockPostHog.config.rate_limiting = {
+            mockPostHog.config.rateLimiting = {
                 events_per_second: 50,
                 events_burst_limit: 10,
             }

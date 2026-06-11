@@ -160,9 +160,9 @@ const instances: Record<string, PostHog> = {}
 let _executeArrayDepth = 0
 
 const __NOOP = () => {}
-const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless_mode="always" and will be ignored'
+const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookielessMode="always" and will be ignored'
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
-const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
+const DENYLIST_INVALID = 'Invalid value for propertyDenylist config: '
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -182,13 +182,13 @@ const defaultsThatVaryByConfig = (
 ): Pick<
     PostHogConfig,
     | 'rageclick'
-    | 'capture_pageview'
-    | 'session_recording'
-    | 'external_scripts_inject_target'
-    | 'internal_or_test_user_hostname'
-    | 'persistence_save_debounce_ms'
-    | 'split_storage'
-    | 'detect_google_search_app'
+    | 'capturePageview'
+    | 'sessionRecording'
+    | 'externalScriptsInjectTarget'
+    | 'internalOrTestUserHostname'
+    | 'persistenceSaveDebounceMs'
+    | 'splitStorage'
+    | 'detectGoogleSearchApp'
 > => ({
     rageclick:
         defaults && defaults >= '2026-05-30'
@@ -196,91 +196,91 @@ const defaultsThatVaryByConfig = (
             : defaults && defaults >= '2025-11-30'
               ? { content_ignorelist: true }
               : true,
-    capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
-    external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
-    internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
-    persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
-    split_storage: !!(defaults && defaults >= '2026-05-30'),
-    detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
+    capturePageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
+    sessionRecording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+    externalScriptsInjectTarget: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
+    internalOrTestUserHostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
+    persistenceSaveDebounceMs: defaults && defaults >= '2026-05-30' ? 250 : 0,
+    splitStorage: !!(defaults && defaults >= '2026-05-30'),
+    detectGoogleSearchApp: !!(defaults && defaults >= '2026-05-30'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
 // to guarantee documentation is up to date, make sure to also update our website docs
 // NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
 export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
-    api_host: 'https://us.i.posthog.com',
-    flags_api_host: null,
-    ui_host: null,
-    asset_host: null,
+    apiHost: 'https://us.i.posthog.com',
+    flagsApiHost: null,
+    uiHost: null,
+    assetHost: null,
     token: '',
     autocapture: true,
-    cross_subdomain_cookie: isCrossDomainCookie(document?.location),
+    crossSubdomainCookie: isCrossDomainCookie(document?.location),
     persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
-    persistence_name: '',
-    cookie_persisted_properties: [],
+    persistenceName: '',
+    cookiePersistedProperties: [],
     loaded: __NOOP,
-    save_campaign_params: true,
-    custom_campaign_params: [],
-    custom_blocked_useragents: [],
-    save_referrer: true,
-    capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
+    saveCampaignParams: true,
+    customCampaignParams: [],
+    customBlockedUseragents: [],
+    saveReferrer: true,
+    capturePageleave: 'if_capture_pageview', // We'll only capture pageleave events if capturePageview is also true
     defaults: defaults ?? 'unset',
-    __preview_deferred_init_extensions: false, // Opt-in only for now
-    __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
+    __previewDeferredInitExtensions: false, // Opt-in only for now
+    __previewCookieWinsOnConflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
-    cookie_expiration: 365,
+    cookieExpiration: 365,
     upgrade: false,
-    disable_session_recording: false,
-    disable_persistence: false,
-    disable_web_experiments: true, // disabled in beta.
-    disable_surveys: false,
-    disable_surveys_automatic_display: false,
-    disable_conversations: false,
-    disable_product_tours: false,
-    disable_external_dependency_loading: false,
-    strict_script_versioning: false,
-    enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
-    secure_cookie: window?.location?.protocol === 'https:',
-    opt_out_capturing_by_default: false,
-    opt_out_persistence_by_default: false,
-    opt_out_useragent_filter: false,
-    opt_out_capturing_persistence_type: 'localStorage',
-    consent_persistence_name: null,
+    disableSessionRecording: false,
+    disablePersistence: false,
+    disableWebExperiments: true, // disabled in beta.
+    disableSurveys: false,
+    disableSurveysAutomaticDisplay: false,
+    disableConversations: false,
+    disableProductTours: false,
+    disableExternalDependencyLoading: false,
+    strictScriptVersioning: false,
+    enableRecordingConsoleLog: undefined, // When undefined, it falls back to the server-side setting
+    secureCookie: window?.location?.protocol === 'https:',
+    optOutCapturingByDefault: false,
+    optOutPersistenceByDefault: false,
+    optOutUseragentFilter: false,
+    optOutCapturingPersistenceType: 'localStorage',
+    consentPersistenceName: null,
     opt_out_capturing_cookie_prefix: null,
-    opt_in_site_apps: false,
-    property_denylist: [],
-    respect_dnt: false,
-    request_headers: {}, // { header: value, header2: value }
-    request_batching: true,
-    properties_string_max_length: 65535,
-    mask_all_element_attributes: false,
-    mask_all_text: false,
-    mask_personal_data_properties: false,
-    custom_personal_data_properties: [],
-    advanced_disable_flags: false,
-    advanced_disable_feature_flags: false,
-    advanced_disable_feature_flags_on_first_load: false,
-    advanced_only_evaluate_survey_feature_flags: false,
-    advanced_feature_flags_dedup_per_session: false,
-    advanced_enable_surveys: false,
-    advanced_disable_toolbar_metrics: false,
-    feature_flag_request_timeout_ms: 3000,
-    surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
-    on_request_error: (res) => {
+    optInSiteApps: false,
+    propertyDenylist: [],
+    respectDnt: false,
+    requestHeaders: {}, // { header: value, header2: value }
+    requestBatching: true,
+    propertiesStringMaxLength: 65535,
+    maskAllElementAttributes: false,
+    maskAllText: false,
+    maskPersonalDataProperties: false,
+    customPersonalDataProperties: [],
+    advancedDisableFlags: false,
+    advancedDisableFeatureFlags: false,
+    advancedDisableFeatureFlagsOnFirstLoad: false,
+    advancedOnlyEvaluateSurveyFeatureFlags: false,
+    advancedFeatureFlagsDedupPerSession: false,
+    advancedEnableSurveys: false,
+    advancedDisableToolbarMetrics: false,
+    featureFlagRequestTimeoutMs: 3000,
+    surveysRequestTimeoutMs: SURVEYS_REQUEST_TIMEOUT_MS,
+    onRequestError: (res) => {
         const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
         logger.error(error)
     },
-    get_device_id: (uuid) => uuid,
-    capture_performance: undefined,
+    getDeviceId: (uuid) => uuid,
+    capturePerformance: undefined,
     name: 'posthog',
     bootstrap: {},
-    disable_compression: false,
-    session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    person_profiles: PERSON_PROFILES_IDENTIFIED_ONLY,
-    before_send: undefined,
-    request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
-    error_tracking: {},
+    disableCompression: false,
+    sessionIdleTimeoutSeconds: 30 * 60, // 30 minutes
+    personProfiles: PERSON_PROFILES_IDENTIFIED_ONLY,
+    beforeSend: undefined,
+    requestQueueConfig: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
+    errorTracking: {},
 
     // Used for internal testing
     _onCapture: __NOOP,
@@ -375,8 +375,8 @@ export class PostHog implements PostHogInterface {
 
     private _inCookielessMode(): boolean {
         return (
-            this.config.cookieless_mode === COOKIELESS_ALWAYS ||
-            (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
+            this.config.cookielessMode === COOKIELESS_ALWAYS ||
+            (this.config.cookielessMode === COOKIELESS_ON_REJECT && this.consent.isRejected())
         )
     }
 
@@ -430,7 +430,7 @@ export class PostHog implements PostHogInterface {
      * ```js
      * // basic initialization
      * posthog.init('<ph_project_api_key>', {
-     *     api_host: '<ph_client_api_host>'
+     *     apiHost: '<ph_client_api_host>'
      * })
      * ```
      *
@@ -506,8 +506,8 @@ export class PostHog implements PostHogInterface {
 
         this._triggered_notifs = []
 
-        if (config.person_profiles) {
-            this._initialPersonProfilesConfig = config.person_profiles
+        if (config.personProfiles) {
+            this._initialPersonProfilesConfig = config.personProfiles
         }
 
         const baseConfig = defaultConfig(config.defaults)
@@ -522,7 +522,7 @@ export class PostHog implements PostHogInterface {
         }
         this.setConfig(mergedConfig)
 
-        this.compression = config.disable_compression ? undefined : Compression.GZipJS
+        this.compression = config.disableCompression ? undefined : Compression.GZipJS
 
         const persistenceDisabled = this._is_persistence_disabled()
 
@@ -541,7 +541,7 @@ export class PostHog implements PostHogInterface {
 
         this._requestQueue = new RequestQueue(
             (req) => this._send_retriable_request(req),
-            this.config.request_queue_config
+            this.config.requestQueueConfig
         )
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
@@ -554,7 +554,7 @@ export class PostHog implements PostHogInterface {
         }
 
         // Conditionally defer extension initialization based on config
-        if (this.config.__preview_deferred_init_extensions) {
+        if (this.config.__previewDeferredInitExtensions) {
             // EXPERIMENTAL: Defer non-critical extension initialization to next tick
             // This reduces main thread blocking during init
             // while keeping critical path (persistence, sessions, capture) synchronous
@@ -581,12 +581,12 @@ export class PostHog implements PostHogInterface {
             })
         }
 
-        // When identity_distinct_id is provided at init time, use it as the
+        // When identityDistinctId is provided at init time, use it as the
         // bootstrap distinct ID so the Person record is created from the first event.
-        if (this.config.identity_distinct_id && !config.bootstrap?.distinctID) {
+        if (this.config.identityDistinctId && !config.bootstrap?.distinctID) {
             config.bootstrap = {
                 ...config.bootstrap,
-                distinctID: this.config.identity_distinct_id,
+                distinctID: this.config.identityDistinctId,
                 isIdentifiedID: true,
             }
         }
@@ -629,7 +629,7 @@ export class PostHog implements PostHogInterface {
                         'if you intend to switch users.'
                 )
             } else {
-                const uuid = this.config.get_device_id(uuidv7())
+                const uuid = this.config.getDeviceId(uuidv7())
                 const deviceID = config.bootstrap.isIdentifiedID ? uuid : bootstrapDistinctId
                 this.persistence.setProperty(
                     USER_STATE,
@@ -654,7 +654,7 @@ export class PostHog implements PostHogInterface {
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persistence
-            const uuid = this.config.get_device_id(uuidv7())
+            const uuid = this.config.getDeviceId(uuidv7())
 
             this.registerOnce(
                 {
@@ -682,7 +682,7 @@ export class PostHog implements PostHogInterface {
         }
 
         if (isFunction(this.config._onCapture) && this.config._onCapture !== __NOOP) {
-            logger.warn('onCapture is deprecated. Please use `before_send` instead')
+            logger.warn('onCapture is deprecated. Please use `beforeSend` instead')
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
@@ -716,7 +716,7 @@ export class PostHog implements PostHogInterface {
         if (ext.sessionRecording && !startInCookielessMode) {
             this._extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
         }
-        if (!this.config.disable_scroll_properties) {
+        if (!this.config.disableScrollProperties) {
             initTasks.push(() => {
                 this.scrollManager.startMeasuringScrollPosition()
             })
@@ -782,7 +782,7 @@ export class PostHog implements PostHogInterface {
 
         while (queue.length > 0) {
             // Only time-slice if deferred init is enabled, otherwise run synchronously
-            if (this.config.__preview_deferred_init_extensions) {
+            if (this.config.__previewDeferredInitExtensions) {
                 // we don't support IE11 anymore, so performance.now is safe
                 // eslint-disable-next-line compat/compat
                 const elapsed = performance.now() - initStartTime
@@ -813,12 +813,12 @@ export class PostHog implements PostHogInterface {
         // eslint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.registerForSession({
-            [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
+            [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__previewDeferredInitExtensions
                 ? 'deferred'
                 : 'synchronous',
             [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: taskInitTiming,
         })
-        if (this.config.__preview_deferred_init_extensions) {
+        if (this.config.__previewDeferredInitExtensions) {
             logger.info(`PostHog extensions initialized (${taskInitTiming}ms)`)
         }
     }
@@ -833,7 +833,7 @@ export class PostHog implements PostHogInterface {
         }
 
         // Store config in case extensions aren't initialized yet (only needed for deferred init)
-        if (this.config.__preview_deferred_init_extensions) {
+        if (this.config.__previewDeferredInitExtensions) {
             this._pendingRemoteConfig = config
         }
 
@@ -843,7 +843,7 @@ export class PostHog implements PostHogInterface {
         this._lastRemoteConfig = config
 
         this.compression = undefined
-        if (config.supportedCompression && !this.config.disable_compression) {
+        if (config.supportedCompression && !this.config.disableCompression) {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
                 : includes(config['supportedCompression'], Compression.Base64)
@@ -856,7 +856,7 @@ export class PostHog implements PostHogInterface {
         }
 
         this.setConfig({
-            person_profiles: this._initialPersonProfilesConfig
+            personProfiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
                 : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
@@ -873,10 +873,10 @@ export class PostHog implements PostHogInterface {
 
         this._start_queue_if_opted_in()
 
-        // Check if current hostname matches internal_or_test_user_hostname pattern and mark as test user before any events
-        if (this.config.internal_or_test_user_hostname && location?.hostname) {
+        // Check if current hostname matches internalOrTestUserHostname pattern and mark as test user before any events
+        if (this.config.internalOrTestUserHostname && location?.hostname) {
             const hostname = location.hostname
-            const pattern = this.config.internal_or_test_user_hostname
+            const pattern = this.config.internalOrTestUserHostname
             const matches = typeof pattern === 'string' ? hostname === pattern : pattern.test(hostname)
             if (matches) {
                 this.setInternalOrTestUser()
@@ -884,7 +884,7 @@ export class PostHog implements PostHogInterface {
         }
 
         // this happens after "loaded" so a user can call identify or any other things before the pageview fires
-        if (this.config.capture_pageview) {
+        if (this.config.capturePageview) {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
@@ -900,7 +900,7 @@ export class PostHog implements PostHogInterface {
 
     _start_queue_if_opted_in(): void {
         if (this.isCapturing()) {
-            if (this.config.request_batching) {
+            if (this.config.requestBatching) {
                 this._requestQueue?.enable()
             }
         }
@@ -918,7 +918,7 @@ export class PostHog implements PostHogInterface {
     _handle_unload(): void {
         this.surveys?.handlePageUnload()
 
-        if (!this.config.request_batching) {
+        if (!this.config.requestBatching) {
             if (this._shouldCapturePageleave()) {
                 this.capture(EVENT_PAGELEAVE, null, { transport: 'sendBeacon' })
             }
@@ -948,24 +948,24 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        options.transport = options.transport || this.config.api_transport
+        options.transport = options.transport || this.config.apiTransport
         options.url = extendURLParams(options.url, {
             // The deprecated `ip` config option has been removed; it never had any effect, but the
             // query param is kept (always 0) to preserve the request shape.
             ip: 0,
         })
         options.headers = {
-            ...this.config.request_headers,
+            ...this.config.requestHeaders,
             ...options.headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
-        if (this.config.disable_beacon) {
+        if (this.config.disableBeacon) {
             options.disableTransport = ['sendBeacon']
         }
 
         // Specially useful if you're doing SSR with NextJS
         // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
-        options.fetchOptions = options.fetchOptions || this.config.fetch_options
+        options.fetchOptions = options.fetchOptions || this.config.fetchOptions
 
         request({
             ...options,
@@ -973,7 +973,7 @@ export class PostHog implements PostHogInterface {
                 this.rateLimiter.checkForLimiting(response)
 
                 if (response.statusCode >= 400) {
-                    this.config.on_request_error?.(response)
+                    this.config.onRequestError?.(response)
                 }
 
                 options.callback?.(response)
@@ -1137,8 +1137,8 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
-        const shouldDropBotEvent = isBot && !this.config.__preview_capture_bot_pageviews
+        const isBot = !this.config.optOutUseragentFilter && this._is_bot()
+        const shouldDropBotEvent = isBot && !this.config.__previewCaptureBotPageviews
 
         // We drop bot events unless the preview flag to send bot pageviews is enabled
         // or the user has explicitly opted out of useragent filtering
@@ -1174,14 +1174,14 @@ export class PostHog implements PostHogInterface {
         // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
         // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
         // with every event and used by the session table to create session-initial props.
-        if (this.config.save_campaign_params) {
+        if (this.config.saveCampaignParams) {
             this.sessionPersistence.updateCampaignParams()
         }
-        if (this.config.save_referrer) {
+        if (this.config.saveReferrer) {
             this.sessionPersistence.updateReferrerInfo()
         }
 
-        if (this.config.save_campaign_params || this.config.save_referrer) {
+        if (this.config.saveCampaignParams || this.config.saveReferrer) {
             this.persistence.setInitialPersonInfo()
         }
 
@@ -1196,7 +1196,7 @@ export class PostHog implements PostHogInterface {
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled
-        if (event_name === EVENT_PAGEVIEW && this.config.__preview_capture_bot_pageviews && isBot) {
+        if (event_name === EVENT_PAGEVIEW && this.config.__previewCaptureBotPageviews && isBot) {
             data.event = '$bot_pageview'
             // While it's obvious that a $bot_pageview is (likely) from a bot, we explicitly set $browser_type
             // to make it easy to filter and test bot pageviews in the product
@@ -1228,7 +1228,7 @@ export class PostHog implements PostHogInterface {
         }
 
         if (!options?._noTruncate) {
-            data = _copyAndTruncateStrings(data, this.config.properties_string_max_length)
+            data = _copyAndTruncateStrings(data, this.config.propertiesStringMaxLength)
         }
         data.timestamp = timestamp
         if (!isUndefined(options?.timestamp)) {
@@ -1271,7 +1271,7 @@ export class PostHog implements PostHogInterface {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        if (!isNullish(this.config.before_send)) {
+        if (!isNullish(this.config.beforeSend)) {
             const beforeSendResult = this._runBeforeSend(data)
             if (!beforeSendResult) {
                 return
@@ -1291,7 +1291,7 @@ export class PostHog implements PostHogInterface {
             transport: options?.transport,
         }
 
-        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
+        if (this.config.requestBatching && (!options || options?._batchKey) && !options?.send_instantly) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             this._send_retriable_request(requestOptions)
@@ -1354,9 +1354,9 @@ export class PostHog implements PostHogInterface {
         }
 
         const infoProperties = getEventProperties(
-            this.config.mask_personal_data_properties,
-            this.config.custom_personal_data_properties,
-            this.config.detect_google_search_app
+            this.config.maskPersonalDataProperties,
+            this.config.customPersonalDataProperties,
+            this.config.detectGoogleSearchApp
         )
 
         if (this.sessionManager) {
@@ -1381,7 +1381,7 @@ export class PostHog implements PostHogInterface {
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
-            properties['$lib_custom_api_host'] = this.config.api_host
+            properties['$lib_custom_api_host'] = this.config.apiHost
         }
 
         let pageviewProperties: Record<string, any>
@@ -1404,9 +1404,9 @@ export class PostHog implements PostHogInterface {
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
 
-        // this is only added when this.config.opt_out_useragent_filter is true,
+        // this is only added when this.config.optOutUseragentFilter is true,
         // or it would always add "browser"
-        if (userAgent && this.config.opt_out_useragent_filter) {
+        if (userAgent && this.config.optOutUseragentFilter) {
             properties['$browser_type'] = this._is_bot() ? 'bot' : 'browser'
         }
 
@@ -1425,12 +1425,12 @@ export class PostHog implements PostHogInterface {
 
         properties['$is_identified'] = this._isIdentified()
 
-        if (isArray(this.config.property_denylist)) {
-            each(this.config.property_denylist, function (denylisted_prop) {
+        if (isArray(this.config.propertyDenylist)) {
+            each(this.config.propertyDenylist, function (denylisted_prop) {
                 delete properties[denylisted_prop]
             })
         } else {
-            logger.error(DENYLIST_INVALID + this.config.property_denylist)
+            logger.error(DENYLIST_INVALID + this.config.propertyDenylist)
         }
 
         // add person processing flag as very last step, so it cannot be overridden
@@ -2317,7 +2317,7 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Updates user properties that are stored with the person profile in PostHog.
-     * If `person_profiles` is set to `identified_only` and no profile exists, this will create one.
+     * If `personProfiles` is set to `identified_only` and no profile exists, this will create one.
      *
      * @example
      * ```js
@@ -2622,7 +2622,7 @@ export class PostHog implements PostHogInterface {
         this.persistence?.setProperty(USER_STATE, USER_STATE_ANONYMOUS)
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
-        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+        if (this.config.cookielessMode === COOKIELESS_ALWAYS) {
             this.registerOnce(
                 {
                     distinct_id: COOKIELESS_SENTINEL_VALUE,
@@ -2631,7 +2631,7 @@ export class PostHog implements PostHogInterface {
                 ''
             )
         } else {
-            const uuid = this.config.get_device_id(uuidv7())
+            const uuid = this.config.getDeviceId(uuidv7())
             this.registerOnce(
                 {
                     distinct_id: uuid,
@@ -2649,8 +2649,8 @@ export class PostHog implements PostHogInterface {
         )
 
         // Clear HMAC identity verification fields
-        delete this.config.identity_distinct_id
-        delete this.config.identity_hash
+        delete this.config.identityDistinctId
+        delete this.config.identityHash
 
         // Reload feature flags for the new anonymous user, just like identify()
         // does when the distinct_id changes.
@@ -2677,8 +2677,8 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     setIdentity(distinctId: string, hash: string): void {
-        this.config.identity_distinct_id = distinctId
-        this.config.identity_hash = hash
+        this.config.identityDistinctId = distinctId
+        this.config.identityHash = hash
         this.alias(distinctId)
         this.conversations?._onIdentityChanged()
     }
@@ -2694,8 +2694,8 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     clearIdentity(): void {
-        delete this.config.identity_distinct_id
-        delete this.config.identity_hash
+        delete this.config.identityDistinctId
+        delete this.config.identityHash
         this.conversations?._onIdentityCleared()
     }
 
@@ -2940,7 +2940,7 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * turns session recording on, and updates the config option `disable_session_recording` to false
+     * turns session recording on, and updates the config option `disableSessionRecording` to false
      *
      * {@label Session replay}
      *
@@ -3002,12 +3002,12 @@ export class PostHog implements PostHogInterface {
             }
         }
 
-        this.setConfig({ disable_session_recording: false })
+        this.setConfig({ disableSessionRecording: false })
     }
 
     /**
      * turns session recording off, and updates the config option
-     * disable_session_recording to true
+     * disableSessionRecording to true
      *
      * {@label Session replay}
      *
@@ -3020,7 +3020,7 @@ export class PostHog implements PostHogInterface {
      * ```
      */
     stopSessionRecording(): void {
-        this.setConfig({ disable_session_recording: true })
+        this.setConfig({ disableSessionRecording: true })
     }
 
     /**
@@ -3147,7 +3147,7 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * turns exception autocapture on, and updates the config option `capture_exceptions` to the provided config (or `true`)
+     * turns exception autocapture on, and updates the config option `captureExceptions` to the provided config (or `true`)
      *
      * {@label Error tracking}
      *
@@ -3173,11 +3173,11 @@ export class PostHog implements PostHogInterface {
      * @param config - optional configuration option to control the exception autocapture behavior
      */
     startExceptionAutocapture(config?: ExceptionAutoCaptureConfig): void {
-        this.setConfig({ capture_exceptions: config ?? true })
+        this.setConfig({ captureExceptions: config ?? true })
     }
 
     /**
-     * turns exception autocapture off by updating the config option `capture_exceptions` to `false`
+     * turns exception autocapture off by updating the config option `captureExceptions` to `false`
      *
      * {@label Error tracking}
      *
@@ -3190,7 +3190,7 @@ export class PostHog implements PostHogInterface {
      * ```
      */
     stopExceptionAutocapture(): void {
-        this.setConfig({ capture_exceptions: false })
+        this.setConfig({ captureExceptions: false })
     }
 
     /**
@@ -3287,8 +3287,8 @@ export class PostHog implements PostHogInterface {
 
     _hasPersonProcessing(): boolean {
         return !(
-            this.config.person_profiles === 'never' ||
-            (this.config.person_profiles === PERSON_PROFILES_IDENTIFIED_ONLY &&
+            this.config.personProfiles === 'never' ||
+            (this.config.personProfiles === PERSON_PROFILES_IDENTIFIED_ONLY &&
                 !this._isIdentified() &&
                 isEmptyObject(this.getGroups()) &&
                 !this.persistence?.props?.[ALIAS_ID_KEY] &&
@@ -3298,15 +3298,15 @@ export class PostHog implements PostHogInterface {
 
     _shouldCapturePageleave(): boolean {
         return (
-            this.config.capture_pageleave === true ||
-            (this.config.capture_pageleave === 'if_capture_pageview' &&
-                (this.config.capture_pageview === true || this.config.capture_pageview === 'history_change'))
+            this.config.capturePageleave === true ||
+            (this.config.capturePageleave === 'if_capture_pageview' &&
+                (this.config.capturePageview === true || this.config.capturePageview === 'history_change'))
         )
     }
 
     /**
-     *  Creates a person profile for the current user, if they don't already have one and config.person_profiles is set
-     *  to 'identified_only'. Produces a warning and does not create a profile if config.person_profiles is set to
+     *  Creates a person profile for the current user, if they don't already have one and config.personProfiles is set
+     *  to 'identified_only'. Produces a warning and does not create a profile if config.personProfiles is set to
      *  'never'. Learn more about [person profiles](/docs/product-analytics/identify)
      *
      * {@label Identification}
@@ -3345,8 +3345,8 @@ export class PostHog implements PostHogInterface {
      * // Manually mark as test user
      * posthog.setInternalOrTestUser()
      *
-     * // Or use internal_or_test_user_hostname config for automatic detection
-     * posthog.init('token', { internal_or_test_user_hostname: 'localhost' })
+     * // Or use internalOrTestUserHostname config for automatic detection
+     * posthog.init('token', { internalOrTestUserHostname: 'localhost' })
      * ```
      *
      * @public
@@ -3364,9 +3364,9 @@ export class PostHog implements PostHogInterface {
      * @param function_name
      */
     _requirePersonProcessing(function_name: string): boolean {
-        if (this.config.person_profiles === 'never') {
+        if (this.config.personProfiles === 'never') {
             logger.error(
-                function_name + ' was called, but person_profiles is set to "never". This call will be ignored.'
+                function_name + ' was called, but personProfiles is set to "never". This call will be ignored.'
             )
             return false
         }
@@ -3375,15 +3375,15 @@ export class PostHog implements PostHogInterface {
     }
 
     private _is_persistence_disabled(): boolean {
-        if (this.config.cookieless_mode === 'always') {
+        if (this.config.cookielessMode === 'always') {
             return true
         }
         const isOptedOut = this.consent.isOptedOut()
         const defaultPersistenceDisabled =
-            this.config.opt_out_persistence_by_default || this.config.cookieless_mode === COOKIELESS_ON_REJECT
+            this.config.optOutPersistenceByDefault || this.config.cookielessMode === COOKIELESS_ON_REJECT
 
         // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
-        return this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
+        return this.config.disablePersistence || (isOptedOut && !!defaultPersistenceDisabled)
     }
 
     private _sync_opt_out_with_persistence(): boolean {
@@ -3440,12 +3440,12 @@ export class PostHog implements PostHogInterface {
         captureEventName?: EventName | null | false /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
-        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+        if (this.config.cookielessMode === COOKIELESS_ALWAYS) {
             logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
         if (this._inCookielessMode()) {
-            // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
+            // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via optOutCapturingByDefault), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
             this.sessionManager?.destroy()
@@ -3478,11 +3478,11 @@ export class PostHog implements PostHogInterface {
         this._start_queue_if_opted_in()
 
         // Restart session recording if it should now be enabled
-        // (this handles the case where opt_out_capturing_by_default or cookieless_mode prevented it from starting)
+        // (this handles the case where optOutCapturingByDefault or cookielessMode prevented it from starting)
         this.sessionRecording?.startIfEnabledOrStop()
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
-        if (this.config.cookieless_mode == COOKIELESS_ON_REJECT) {
+        if (this.config.cookielessMode == COOKIELESS_ON_REJECT) {
             this.surveys?.loadIfEnabled()
         }
 
@@ -3491,7 +3491,7 @@ export class PostHog implements PostHogInterface {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
 
-        if (this.config.capture_pageview) {
+        if (this.config.capturePageview) {
             this._captureInitialPageview()
         }
     }
@@ -3503,7 +3503,7 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Disables event tracking and data persistence (cookies/localStorage) for this PostHog instance.
-     * If `opt_out_persistence_by_default` is true, SDK persistence will also be disabled.
+     * If `optOutPersistenceByDefault` is true, SDK persistence will also be disabled.
      *
      * @example
      * ```js
@@ -3514,12 +3514,12 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     optOutCapturing(): void {
-        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+        if (this.config.cookielessMode === COOKIELESS_ALWAYS) {
             logger.warn(CONSENT_COOKIELESS_WARN)
             return
         }
 
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
+        if (this.config.cookielessMode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
             // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this.reset(true)
         }
@@ -3527,8 +3527,8 @@ export class PostHog implements PostHogInterface {
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
 
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
-            // If cookieless_mode is COOKIELESS_ON_REJECT, we start capturing events in cookieless mode
+        if (this.config.cookielessMode === COOKIELESS_ON_REJECT) {
+            // If cookielessMode is COOKIELESS_ON_REJECT, we start capturing events in cookieless mode
             this.register({
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
@@ -3540,7 +3540,7 @@ export class PostHog implements PostHogInterface {
             this.pageViewManager?.destroy()
             this.sessionManager = undefined
             this.sessionPropsManager = undefined
-            if (this.config.capture_pageview) {
+            if (this.config.capturePageview) {
                 this._captureInitialPageview()
             }
             // At init time, consent was PENDING so isCapturing() was false and _start_queue_if_opted_in() was a no-op.
@@ -3630,22 +3630,22 @@ export class PostHog implements PostHogInterface {
      * Usually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by
      * some config options.
      *
-     * Additionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the
+     * Additionally, if the cookielessMode is set to `'on_reject'`, we will capture events in cookieless mode if the
      * user has opted out or been defaulted to opt-out.
      *
      * {@label Privacy}
      *
-     * @see {PostHogConfig.cookieless_mode}
-     * @see {PostHogConfig.opt_out_persistence_by_default}
-     * @see {PostHogConfig.respect_dnt}
+     * @see {PostHogConfig.cookielessMode}
+     * @see {PostHogConfig.optOutPersistenceByDefault}
+     * @see {PostHogConfig.respectDnt}
      *
      * @returns {boolean} whether the posthog library is capturing events
      */
     isCapturing(): boolean {
-        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+        if (this.config.cookielessMode === COOKIELESS_ALWAYS) {
             return true
         }
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
+        if (this.config.cookielessMode === COOKIELESS_ON_REJECT) {
             return this.consent.isRejected() || this.consent.isOptedIn()
         } else {
             return !this.hasOptedOutCapturing()
@@ -3667,7 +3667,7 @@ export class PostHog implements PostHogInterface {
 
     _is_bot(): boolean | undefined {
         if (navigator) {
-            return isLikelyBot(navigator, this.config.custom_blocked_useragents)
+            return isLikelyBot(navigator, this.config.customBlockedUseragents)
         } else {
             return undefined
         }
@@ -3746,15 +3746,15 @@ export class PostHog implements PostHogInterface {
      * Helper method to check if external API calls (flags) should be disabled
      */
     _shouldDisableFlags(): boolean {
-        return !!this.config.advanced_disable_flags
+        return !!this.config.advancedDisableFlags
     }
 
     private _runBeforeSend(data: CaptureResult): CaptureResult | null {
-        if (isNullish(this.config.before_send)) {
+        if (isNullish(this.config.beforeSend)) {
             return data
         }
 
-        const fns = isArray(this.config.before_send) ? this.config.before_send : [this.config.before_send]
+        const fns = isArray(this.config.beforeSend) ? this.config.beforeSend : [this.config.beforeSend]
         let beforeSendResult: CaptureResult | null = data
         for (const fn of fns) {
             beforeSendResult = fn(beforeSendResult)
@@ -3885,7 +3885,7 @@ export function initFromSnippet(): void {
          * window.posthog is an array which the queue of calls made before the lib is loaded
          * It has methods attached to it to simulate the posthog object so for instance
          *
-         * window.posthog.init("TOKEN", {api_host: "foo" })
+         * window.posthog.init("TOKEN", {apiHost: "foo" })
          * window.posthog.capture("my-event", {foo: "bar" })
          *
          * ... will mean that window.posthog will look like this:
@@ -3894,7 +3894,7 @@ export function initFromSnippet(): void {
          * ]
          *
          * window.posthog[_i] == [
-         *   ["TOKEN", {api_host: "foo" }, "posthog"]
+         *   ["TOKEN", {apiHost: "foo" }, "posthog"]
          * ]
          *
          * If a name is given to the init function then the same as above is true but as a sub-property on the object:

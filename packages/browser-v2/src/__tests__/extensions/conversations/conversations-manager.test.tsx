@@ -124,7 +124,7 @@ describe('ConversationsManager', () => {
         mockPosthog = {
             config: {
                 token: 'test-token',
-                api_host: 'https://test.posthog.com',
+                apiHost: 'https://test.posthog.com',
             },
             _send_request: jest.fn((options) => {
                 // Call callback synchronously to avoid fake timer issues

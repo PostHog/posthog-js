@@ -4,7 +4,7 @@ import { start, waitForRemoteConfig } from '../utils/setup'
 
 const baseOptions = {
     options: {
-        session_recording: {
+        sessionRecording: {
             compress_events: false,
         },
     },

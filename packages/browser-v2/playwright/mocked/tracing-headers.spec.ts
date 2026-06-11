@@ -4,7 +4,7 @@ import { Page, BrowserContext, Request } from '@playwright/test'
 
 const baseOptions = {
     options: {
-        tracing_headers: ['example.com', 'no-session.com', 'xhr-test.com'],
+        tracingHeaders: ['example.com', 'no-session.com', 'xhr-test.com'],
     },
     url: '/playground/cypress/index.html',
 }
@@ -61,7 +61,7 @@ test.describe('tracing headers', () => {
     for (const { name, domain, disableSession } of casesWithHeaders) {
         test(`adds tracing headers: ${name}`, async ({ page, context }) => {
             const startOptions = disableSession
-                ? { ...baseOptions, options: { ...baseOptions.options, disable_session_recording: true } }
+                ? { ...baseOptions, options: { ...baseOptions.options, disableSessionRecording: true } }
                 : baseOptions
 
             const headers = await setupAndTriggerRequest(page, context, { domain, startOptions })

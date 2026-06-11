@@ -3,8 +3,8 @@ import { start, waitForSessionRecordingToStart } from '../utils/setup'
 
 const startOptions = {
     options: {
-        session_recording: {},
-        session_idle_timeout_seconds: 2,
+        sessionRecording: {},
+        sessionIdleTimeoutSeconds: 2,
     },
     flagsResponseOverrides: {
         sessionRecording: {

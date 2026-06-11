@@ -410,7 +410,7 @@ describe('fetch wrapper', () => {
     })
 
     // The real product applies BOTH the network-plugin wrapper and the
-    // tracing-headers wrapper to window.fetch (when tracing_headers is
+    // tracing-headers wrapper to window.fetch (when tracingHeaders is
     // configured). They wrap independently, so whichever loads second
     // ends up calling the other. This block reproduces both orders and
     // asserts that a user-supplied CSRF header still reaches the
@@ -422,7 +422,7 @@ describe('fetch wrapper', () => {
         // This is intentionally a partial mirror — the playwright spec
         // playwright/mocked/session-recording/csrf-headers-preserved.spec.ts
         // is authoritative for the REAL composed wrapper behaviour (it
-        // boots posthog-js end-to-end with tracing_headers and session
+        // boots posthog-js end-to-end with tracingHeaders and session
         // recording network capture both enabled). The jest test
         // here only proves the structural invariant that two `new
         // Request(url, init)`-style wrappers compose without dropping

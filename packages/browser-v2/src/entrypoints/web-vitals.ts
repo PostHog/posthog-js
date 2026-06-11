@@ -11,7 +11,7 @@
  * 3. Most users only need aggregate metrics, not debugging attribution data
  *
  * For attribution data, use web-vitals-with-attribution.ts instead by setting:
- *   capture_performance: { web_vitals_attribution: true }
+ *   capturePerformance: { web_vitals_attribution: true }
  *
  * @see web-vitals-with-attribution.ts
  */

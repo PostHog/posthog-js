@@ -91,7 +91,7 @@ test.describe('fetch wrappers preserve POST string bodies', () => {
 
         await start(
             {
-                options: { tracing_headers: ['localhost'] },
+                options: { tracingHeaders: ['localhost'] },
                 url: '/playground/cypress/index.html',
             },
             page,
@@ -130,7 +130,7 @@ test.describe('fetch wrappers preserve POST string bodies', () => {
                 await start(
                     {
                         options: {
-                            session_recording: {
+                            sessionRecording: {
                                 compress_events: true,
                                 recordBody: true,
                             },

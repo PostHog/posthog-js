@@ -346,12 +346,12 @@ test.describe('product tours - customization', () => {
             ]
         ) => createTour({ id, steps })
 
-        test('renders translated content when override_display_language is set', async ({ page, context }) => {
+        test('renders translated content when overrideDisplayLanguage is set', async ({ page, context }) => {
             const tour = translatedTour('i18n-content')
             await startWithTours(page, context, [tour], {
                 startOptions: {
                     ...startOptionsWithProductTours,
-                    options: { ...startOptionsWithProductTours.options, override_display_language: 'fr' },
+                    options: { ...startOptionsWithProductTours.options, overrideDisplayLanguage: 'fr' },
                 },
             })
 
@@ -367,7 +367,7 @@ test.describe('product tours - customization', () => {
             await startWithTours(page, context, [tour], {
                 startOptions: {
                     ...startOptionsWithProductTours,
-                    options: { ...startOptionsWithProductTours.options, override_display_language: 'de' },
+                    options: { ...startOptionsWithProductTours.options, overrideDisplayLanguage: 'de' },
                 },
             })
 
@@ -377,7 +377,7 @@ test.describe('product tours - customization', () => {
             await expect(container.locator('button:has-text("Next")')).toBeVisible()
         })
 
-        test('renders default content when no override_display_language is set', async ({ page, context }) => {
+        test('renders default content when no overrideDisplayLanguage is set', async ({ page, context }) => {
             const tour = translatedTour('i18n-none')
             await startWithTours(page, context, [tour])
 

@@ -9,12 +9,12 @@ test.describe('ingestion', () => {
     test.use({
         url: '/playground/cypress-full/index.html',
         posthogOptions: {
-            request_batching: false,
+            requestBatching: false,
             bootstrap: {
                 distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
                 isIdentifiedID: true,
             },
-            opt_out_useragent_filter: true,
+            optOutUseragentFilter: true,
         },
         mockIngestion: false,
     })
@@ -49,8 +49,8 @@ test.describe('ingestion', () => {
 
     test('Config options change autocapture behavior accordingly', async ({ page, posthog, events, ingestion }) => {
         await posthog.init({
-            mask_all_text: true,
-            mask_all_element_attributes: true,
+            maskAllText: true,
+            maskAllElementAttributes: true,
         })
         await page.delay(500)
         await page.click('[data-cy-link-mask-text]')

@@ -93,7 +93,7 @@ test.describe('event capture', () => {
                             'some-feature': 'some-payload',
                         },
                     },
-                    advanced_disable_feature_flags: true,
+                    advancedDisableFeatureFlags: true,
                 },
                 waitForFlags: false,
             },
@@ -181,7 +181,7 @@ test.describe('event capture', () => {
                 ...startOptions,
                 options: {
                     ...startOptions.options,
-                    capture_pageview: false,
+                    capturePageview: false,
                 },
             },
             page,
@@ -199,7 +199,7 @@ test.describe('event capture', () => {
                 ...startOptions,
                 options: {
                     ...startOptions.options,
-                    capture_pageview: false,
+                    capturePageview: false,
                     autocapture: false,
                 },
             },

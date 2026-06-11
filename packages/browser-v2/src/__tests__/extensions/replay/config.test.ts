@@ -19,8 +19,8 @@ describe('config', () => {
 
             it('client can force disable recording', () => {
                 const posthogConfig = defaultConfig()
-                posthogConfig.session_recording.recordHeaders = false
-                posthogConfig.session_recording.recordBody = false
+                posthogConfig.sessionRecording.recordHeaders = false
+                posthogConfig.sessionRecording.recordBody = false
                 const networkOptions = buildNetworkRequestOptions(posthogConfig, {
                     recordHeaders: true,
                     recordBody: true,
@@ -43,7 +43,7 @@ describe('config', () => {
 
             it('uses the deprecated mask fn when set', () => {
                 const posthogConfig = defaultConfig()
-                posthogConfig.session_recording.maskNetworkRequestFn = (data) => {
+                posthogConfig.sessionRecording.maskNetworkRequestFn = (data) => {
                     return {
                         ...data,
                         url: 'edited', // deprecated fn only edits the url
@@ -124,7 +124,7 @@ describe('config', () => {
                 ],
             ])('ignores ingestion paths', (capturedRequest, expected, apiHost?: string) => {
                 const networkOptions = buildNetworkRequestOptions(
-                    { ...defaultConfig(), api_host: apiHost || 'https://us.posthog.com' },
+                    { ...defaultConfig(), apiHost: apiHost || 'https://us.posthog.com' },
                     {}
                 )
                 const x = networkOptions.maskRequestFn!(capturedRequest as CapturedNetworkRequest)
@@ -257,7 +257,7 @@ describe('config', () => {
 
         it('can amend the provided object', () => {
             const posthogConfig = defaultConfig()
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
+            posthogConfig.sessionRecording.maskCapturedNetworkRequestFn = (data) => {
                 data.name = 'changed'
                 return data
             }
@@ -273,7 +273,7 @@ describe('config', () => {
 
         it('should remove the Authorization header from requests even when a mask request fn is set', () => {
             const posthogConfig = defaultConfig()
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
+            posthogConfig.sessionRecording.maskCapturedNetworkRequestFn = (data) => {
                 return {
                     ...data,
                     requestHeaders: {
@@ -324,7 +324,7 @@ describe('config', () => {
 
         it('mask request fn replaces scrubPayload functionality', () => {
             const posthogConfig = defaultConfig()
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
+            posthogConfig.sessionRecording.maskCapturedNetworkRequestFn = (data) => {
                 return {
                     ...data,
                     requestHeaders: {

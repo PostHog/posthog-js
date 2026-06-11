@@ -10,8 +10,8 @@ describe('loaded() with flags', () => {
 
     const createPosthog = async (config?: Partial<PostHogConfig>) => {
         const posthog = await createPosthogInstance(uuidv7(), {
-            api_host: 'https://app.posthog.com',
-            disable_compression: true,
+            apiHost: 'https://app.posthog.com',
+            disableCompression: true,
             ...config,
             loaded: (ph) => {
                 ph.capture = jest.fn()
@@ -110,7 +110,7 @@ describe('loaded() with flags', () => {
 
         it('adds only_evaluate_survey_feature_flags query param when configured', async () => {
             instance = await createPosthog({
-                advanced_only_evaluate_survey_feature_flags: true,
+                advancedOnlyEvaluateSurveyFeatureFlags: true,
                 loaded: (ph) => {
                     ph.group('org', 'bazinga', { name: 'Shelly' })
                 },
@@ -128,15 +128,15 @@ describe('loaded() with flags', () => {
             })
         })
 
-        it('does not load flags on init when advanced_disable_feature_flags_on_first_load is true, but group() still triggers reload', async () => {
+        it('does not load flags on init when advancedDisableFeatureFlagsOnFirstLoad is true, but group() still triggers reload', async () => {
             instance = await createPosthog({
-                advanced_disable_feature_flags_on_first_load: true,
+                advancedDisableFeatureFlagsOnFirstLoad: true,
                 loaded: (ph) => {
                     ph.group('org', 'bazinga', { name: 'Shelly' })
                 },
             })
 
-            expect(instance.config.advanced_disable_feature_flags_on_first_load).toBe(true)
+            expect(instance.config.advancedDisableFeatureFlagsOnFirstLoad).toBe(true)
 
             // Advance past the 5ms debounce timer — the group() call still triggers reloadFeatureFlags
             jest.advanceTimersByTime(10)

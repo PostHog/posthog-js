@@ -30,8 +30,8 @@ export class WebVitalsAutocapture {
         this.startIfEnabled()
     }
 
-    private get _perfConfig(): PostHogConfig['capture_performance'] {
-        return this._instance.config.capture_performance
+    private get _perfConfig(): PostHogConfig['capturePerformance'] {
+        return this._instance.config.capturePerformance
     }
 
     public get allowedMetrics(): SupportedWebVitalsMetrics[] {
@@ -144,8 +144,8 @@ export class WebVitalsAutocapture {
         }
 
         // mask url query params
-        const maskPersonalDataProperties = this._instance.config.mask_personal_data_properties
-        const customPersonalDataProperties = this._instance.config.custom_personal_data_properties
+        const maskPersonalDataProperties = this._instance.config.maskPersonalDataProperties
+        const customPersonalDataProperties = this._instance.config.customPersonalDataProperties
 
         const paramsToMask = maskPersonalDataProperties
             ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]

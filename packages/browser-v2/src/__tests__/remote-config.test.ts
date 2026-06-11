@@ -14,7 +14,7 @@ describe('RemoteConfigLoader', () => {
 
         const defaultConfig: Partial<PostHogConfig> = {
             token: 'testtoken',
-            api_host: 'https://test.com',
+            apiHost: 'https://test.com',
             persistence: 'memory',
         }
 
@@ -26,7 +26,7 @@ describe('RemoteConfigLoader', () => {
             config: { ...defaultConfig },
             _onRemoteConfig: jest.fn(),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            _shouldDisableFlags: () => posthog.config.advanced_disable_flags || false,
+            _shouldDisableFlags: () => posthog.config.advancedDisableFlags || false,
             featureFlags: {
                 ensureFlagsLoaded: jest.fn(),
             },
@@ -142,8 +142,8 @@ describe('RemoteConfigLoader', () => {
             expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
         })
 
-        it('does not call ensureFlagsLoaded when advanced_disable_feature_flags_on_first_load is true', () => {
-            posthog.config.advanced_disable_feature_flags_on_first_load = true
+        it('does not call ensureFlagsLoaded when advancedDisableFeatureFlagsOnFirstLoad is true', () => {
+            posthog.config.advancedDisableFeatureFlagsOnFirstLoad = true
 
             assignableWindow._POSTHOG_REMOTE_CONFIG = {
                 [posthog.config.token]: {
@@ -283,7 +283,7 @@ describe('RemoteConfigLoader', () => {
 
         it('uses custom refresh interval when configured', () => {
             const customInterval = 10 * 60 * 1000 // 10 minutes
-            posthog.config.remote_config_refresh_interval_ms = customInterval
+            posthog.config.remoteConfigRefreshIntervalMs = customInterval
 
             const loader = new RemoteConfigLoader(posthog)
             loader.load()
@@ -300,7 +300,7 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('disables periodic refresh when interval is 0', () => {
-            posthog.config.remote_config_refresh_interval_ms = 0
+            posthog.config.remoteConfigRefreshIntervalMs = 0
 
             const loader = new RemoteConfigLoader(posthog)
             loader.load()
@@ -313,7 +313,7 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('uses default interval when config is undefined', () => {
-            posthog.config.remote_config_refresh_interval_ms = undefined
+            posthog.config.remoteConfigRefreshIntervalMs = undefined
 
             const loader = new RemoteConfigLoader(posthog)
             loader.load()

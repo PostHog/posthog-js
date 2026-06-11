@@ -18,7 +18,7 @@ test.describe('opting out', () => {
                         autocapture_opt_out: true,
                     },
                     options: {
-                        opt_out_capturing_by_default: true,
+                        optOutCapturingByDefault: true,
                     },
                     url: '/playground/cypress/index.html',
                 },
@@ -40,7 +40,7 @@ test.describe('opting out', () => {
                         autocapture_opt_out: true,
                     },
                     options: {
-                        opt_out_capturing_by_default: true,
+                        optOutCapturingByDefault: true,
                     },
                     url: '/playground/cypress/index.html',
                 },
@@ -65,7 +65,7 @@ test.describe('opting out', () => {
                     },
                     options: {
                         // start opted in!
-                        opt_out_capturing_by_default: false,
+                        optOutCapturingByDefault: false,
                     },
                     url: '/playground/cypress/index.html',
                 },

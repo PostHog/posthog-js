@@ -4,7 +4,7 @@ import { pollUntilEventCaptured } from './utils/event-capture-utils'
 
 const startOptions = {
     options: {
-        capture_performance: {
+        capturePerformance: {
             web_vitals: true,
         },
     },
@@ -48,7 +48,7 @@ test.describe('Web Vitals', () => {
             {
                 ...startOptions,
                 options: {
-                    capture_performance: {
+                    capturePerformance: {
                         web_vitals: false,
                     },
                 },
@@ -76,7 +76,7 @@ test.describe('Web Vitals', () => {
                 {
                     ...startOptions,
                     options: {
-                        capture_performance: {
+                        capturePerformance: {
                             web_vitals: true,
                             web_vitals_attribution: attributionConfig,
                         },

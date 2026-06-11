@@ -150,7 +150,7 @@ export class Toolbar implements Extension {
         }
 
         const disableToolbarMetrics =
-            this.instance.requestRouter.region === 'custom' && this.instance.config.advanced_disable_toolbar_metrics
+            this.instance.requestRouter.region === 'custom' && this.instance.config.advancedDisableToolbarMetrics
 
         const toolbarParams = {
             token: this.instance.config.token,

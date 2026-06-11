@@ -13,7 +13,7 @@ export const isDeadClicksEnabledForHeatmaps = () => {
 }
 export const isDeadClicksEnabledForAutocapture = (instance: DeadClicksAutocapture) => {
     const isRemoteEnabled = !!instance.instance.persistence?.getProperty(DEAD_CLICKS_ENABLED_SERVER_SIDE)
-    const clientConfig = instance.instance.config.capture_dead_clicks
+    const clientConfig = instance.instance.config.captureDeadClicks
     if (isBoolean(clientConfig)) {
         return clientConfig
     }
@@ -89,8 +89,8 @@ export class DeadClicksAutocapture implements Extension {
             !this._lazyLoadedDeadClicksAutocapture &&
             assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
         ) {
-            const config = isObject(this.instance.config.capture_dead_clicks)
-                ? this.instance.config.capture_dead_clicks
+            const config = isObject(this.instance.config.captureDeadClicks)
+                ? this.instance.config.captureDeadClicks
                 : {}
             config.__onCapture = this.onCapture
 

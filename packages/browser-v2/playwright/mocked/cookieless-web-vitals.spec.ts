@@ -4,8 +4,8 @@ import { pollUntilEventCaptured } from './utils/event-capture-utils'
 
 const startOptions = {
     options: {
-        cookieless_mode: 'always' as const,
-        capture_performance: {
+        cookielessMode: 'always' as const,
+        capturePerformance: {
             web_vitals: true,
         },
     },
@@ -27,7 +27,7 @@ test.describe('Web Vitals in cookieless mode', () => {
         const webVitalsEvent = webVitalsEvents[0]
         expect(webVitalsEvent.properties).toMatchObject({
             $current_url: expect.any(String),
-            $cookieless_mode: true,
+            $cookielessMode: true,
             $web_vitals_FCP_value: expect.any(Number),
         })
 
@@ -51,8 +51,8 @@ test.describe('Web Vitals in cookieless mode', () => {
             {
                 ...startOptions,
                 options: {
-                    cookieless_mode: 'always' as const,
-                    capture_performance: {
+                    cookielessMode: 'always' as const,
+                    capturePerformance: {
                         web_vitals: false,
                     },
                 },

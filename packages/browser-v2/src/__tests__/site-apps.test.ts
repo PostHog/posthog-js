@@ -20,7 +20,7 @@ describe('SiteApps', () => {
 
     const defaultConfig: Partial<PostHogConfig> = {
         token: token,
-        api_host: 'https://test.com',
+        apiHost: 'https://test.com',
         persistence: 'memory',
     }
 
@@ -49,7 +49,7 @@ describe('SiteApps', () => {
         removeCaptureHook = jest.fn()
 
         posthog = createMockPostHog({
-            config: { ...defaultConfig, opt_in_site_apps: true },
+            config: { ...defaultConfig, optInSiteApps: true },
             persistence: new PostHogPersistence(defaultConfig as PostHogConfig),
             register: (props: Properties) => posthog.persistence!.register(props),
             unregister: (key: string) => posthog.persistence!.unregister(key),
@@ -81,19 +81,19 @@ describe('SiteApps', () => {
     })
 
     describe('constructor', () => {
-        it('sets enabled to true when opt_in_site_apps is true', () => {
+        it('sets enabled to true when optInSiteApps is true', () => {
             posthog.config = {
                 ...defaultConfig,
-                opt_in_site_apps: true,
+                optInSiteApps: true,
             } as PostHogConfig
 
             expect(siteAppsInstance.isEnabled).toBe(true)
         })
 
-        it('sets enabled to false when opt_in_site_apps is false', () => {
+        it('sets enabled to false when optInSiteApps is false', () => {
             posthog.config = {
                 ...defaultConfig,
-                opt_in_site_apps: false,
+                optInSiteApps: false,
             } as PostHogConfig
 
             siteAppsInstance = new SiteApps(posthog)
@@ -117,7 +117,7 @@ describe('SiteApps', () => {
         })
 
         it('does not add eventCollector as a capture hook if disabled', () => {
-            posthog.config.opt_in_site_apps = false
+            posthog.config.optInSiteApps = false
             siteAppsInstance.initialize()
 
             expect(posthog._addCaptureHook).not.toHaveBeenCalled()
@@ -224,12 +224,12 @@ describe('SiteApps', () => {
 
     describe('legacy site apps loading', () => {
         beforeEach(() => {
-            posthog.config.opt_in_site_apps = true
+            posthog.config.optInSiteApps = true
             siteAppsInstance.initialize()
         })
 
         it('loads stops buffering if no site apps', () => {
-            posthog.config.opt_in_site_apps = true
+            posthog.config.optInSiteApps = true
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
 
             expect(removeCaptureHook).toHaveBeenCalled()
@@ -238,7 +238,7 @@ describe('SiteApps', () => {
         })
 
         it('does not loads site apps if disabled', () => {
-            posthog.config.opt_in_site_apps = false
+            posthog.config.optInSiteApps = false
             siteAppsInstance.onRemoteConfig({
                 siteApps: [
                     { id: '1', url: '/site_app/1' },
@@ -452,13 +452,13 @@ describe('SiteApps', () => {
 
         it('logs error if site apps are disabled but response contains site apps', () => {
             init()
-            posthog.config.opt_in_site_apps = false
+            posthog.config.optInSiteApps = false
             assignableWindow.POSTHOG_DEBUG = true
 
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
 
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
+                'PostHog site apps are disabled. Enable the "optInSiteApps" config to proceed.'
             )
             expect(siteAppsInstance.apps).toEqual({})
         })

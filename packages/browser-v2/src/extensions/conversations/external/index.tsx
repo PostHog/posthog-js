@@ -680,15 +680,12 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         try {
-            const identityBefore = this._posthog.config.identity_distinct_id
+            const identityBefore = this._posthog.config.identityDistinctId
             const ticketBefore = this._currentTicketId
             const response = await this.getMessages(this._currentTicketId, this._lastMessageTimestamp || undefined)
 
             // Discard stale response if identity or ticket changed while in-flight
-            if (
-                this._posthog.config.identity_distinct_id !== identityBefore ||
-                this._currentTicketId !== ticketBefore
-            ) {
+            if (this._posthog.config.identityDistinctId !== identityBefore || this._currentTicketId !== ticketBefore) {
                 return
             }
 
@@ -918,13 +915,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private async _determineInitialView(): Promise<{ view: WidgetView; tickets: Ticket[] }> {
         try {
-            const identityBefore = this._posthog.config.identity_distinct_id
+            const identityBefore = this._posthog.config.identityDistinctId
             const response = await this.getTickets()
 
             // If identity changed while the request was in-flight, discard this
             // stale response -- setIdentity/clearIdentity already triggered a
             // fresh _loadTicketsAndReconcileView() with the correct credentials.
-            if (this._posthog.config.identity_distinct_id !== identityBefore) {
+            if (this._posthog.config.identityDistinctId !== identityBefore) {
                 return { view: 'messages', tickets: [] }
             }
 
@@ -1212,8 +1209,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     private _identityFields(): { identity_distinct_id: string; identity_hash: string } | null {
-        const id = this._posthog.config.identity_distinct_id
-        const hash = this._posthog.config.identity_hash
+        const id = this._posthog.config.identityDistinctId
+        const hash = this._posthog.config.identityHash
         if (!id || !hash) {
             return null
         }
@@ -1241,10 +1238,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     private async _loadTicketsAndReconcileView(): Promise<void> {
         try {
-            const identityBefore = this._posthog.config.identity_distinct_id
+            const identityBefore = this._posthog.config.identityDistinctId
             const response = await this.getTickets()
 
-            if (this._posthog.config.identity_distinct_id !== identityBefore) {
+            if (this._posthog.config.identityDistinctId !== identityBefore) {
                 return
             }
 

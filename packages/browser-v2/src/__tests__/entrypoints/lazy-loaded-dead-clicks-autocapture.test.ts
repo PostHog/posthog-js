@@ -39,7 +39,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         fakeInstance = {
             config: {
-                capture_dead_clicks: true,
+                captureDeadClicks: true,
             },
             persistence: {
                 props: {},

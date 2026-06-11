@@ -5,7 +5,7 @@ import { Z_INDEX_TOURS, Z_INDEX_SURVEYS, Z_INDEX_CONVERSATIONS } from '@/constan
 
 const startOptions = {
     options: {
-        disable_product_tours: false,
+        disableProductTours: false,
     },
     flagsResponseOverrides: {
         surveys: true,

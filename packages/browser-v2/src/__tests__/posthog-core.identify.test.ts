@@ -22,9 +22,9 @@ describe('identify()', () => {
         const posthog = defaultPostHog().init(
             token,
             {
-                api_host: 'https://test.com',
-                before_send: beforeSendMock,
-                disable_surveys: true,
+                apiHost: 'https://test.com',
+                beforeSend: beforeSendMock,
+                disableSurveys: true,
             },
             token
         )

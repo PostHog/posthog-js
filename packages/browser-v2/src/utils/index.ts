@@ -157,7 +157,7 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
 // NOTE: Update PostHogConfig docs if you change this list
 // We will not try to catch all bullets here, but we should make an effort to catch the most common ones
 // You should be highly against adding more to this list, because ultimately customers can configure
-// their `cross_subdomain_cookie` setting to anything they want.
+// their `crossSubdomainCookie` setting to anything they want.
 const EXCLUDED_FROM_CROSS_SUBDOMAIN_COOKIE = ['herokuapp.com', 'vercel.app', 'netlify.app']
 export function isCrossDomainCookie(documentLocation: Location | undefined) {
     const hostname = documentLocation?.hostname

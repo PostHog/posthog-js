@@ -5,7 +5,7 @@ import { createLogger } from '../utils/logger'
 const logger = createLogger('[ExternalScriptsLoader]')
 
 const loadScript = (posthog: PostHog, url: string, callback: (error?: string | Event, event?: Event) => void) => {
-    if (posthog.config.disable_external_dependency_loading) {
+    if (posthog.config.disableExternalDependencyLoading) {
         logger.warn(`${url} was requested but loading of external scripts is disabled.`)
         return callback('Loading of external scripts is disabled')
     }
@@ -54,15 +54,15 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         }
         scriptTag.onerror = (error) => callback(error)
 
-        if (posthog.config.prepare_external_dependency_script) {
-            scriptTag = posthog.config.prepare_external_dependency_script(scriptTag)
+        if (posthog.config.prepareExternalDependencyScript) {
+            scriptTag = posthog.config.prepareExternalDependencyScript(scriptTag)
         }
 
         if (!scriptTag) {
-            return callback('prepare_external_dependency_script returned null')
+            return callback('prepareExternalDependencyScript returned null')
         }
 
-        if (posthog.config.external_scripts_inject_target === 'head') {
+        if (posthog.config.externalScriptsInjectTarget === 'head') {
             document.head.appendChild(scriptTag)
         } else {
             const scripts = document.querySelectorAll('body > script')
@@ -99,7 +99,7 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
 
     let url: string
 
-    if (posthog.config.strict_script_versioning) {
+    if (posthog.config.strictScriptVersioning) {
         // posthog.version is baked into the executing array.js bundle, so this points at
         // the exact semver-qualified sibling asset without relying on alias redirects.
         url = posthog.requestRouter.endpointFor('assets', `/static/${posthog.version}/${kind}.js`)

@@ -13,14 +13,14 @@ export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog:
     const allProperties = extend(
         {},
         getEventProperties(
-            posthog.config.mask_personal_data_properties,
-            posthog.config.custom_personal_data_properties,
-            posthog.config.detect_google_search_app
+            posthog.config.maskPersonalDataProperties,
+            posthog.config.customPersonalDataProperties,
+            posthog.config.detectGoogleSearchApp
         ),
         getCampaignParams(
-            posthog.config.custom_campaign_params,
-            posthog.config.mask_personal_data_properties,
-            posthog.config.custom_personal_data_properties
+            posthog.config.customCampaignParams,
+            posthog.config.maskPersonalDataProperties,
+            posthog.config.customPersonalDataProperties
         ),
         getReferrerInfo()
     )

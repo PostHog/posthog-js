@@ -4,7 +4,7 @@ import { BeforeSendFn } from '@/types'
 
 const startOptions = {
     options: {
-        session_recording: {},
+        sessionRecording: {},
     },
     flagsResponseOverrides: {
         sessionRecording: {
@@ -15,8 +15,8 @@ const startOptions = {
     url: '/playground/cypress-full/index.html',
 }
 
-test.describe('before_send', () => {
-    test('can sample and edit with before_send', async ({ page, context }) => {
+test.describe('beforeSend', () => {
+    test('can sample and edit with beforeSend', async ({ page, context }) => {
         await start(startOptions, page, context)
 
         await page.evaluate(() => {
@@ -25,14 +25,14 @@ test.describe('before_send', () => {
                 throw new Error('PostHog is not initialized')
             }
             let counter = 0
-            // box the original before_send function
-            const og: BeforeSendFn[] = Array.isArray(posthog.config.before_send)
-                ? posthog.config.before_send
-                : posthog.config.before_send !== undefined
-                  ? [posthog.config.before_send]
+            // box the original beforeSend function
+            const og: BeforeSendFn[] = Array.isArray(posthog.config.beforeSend)
+                ? posthog.config.beforeSend
+                : posthog.config.beforeSend !== undefined
+                  ? [posthog.config.beforeSend]
                   : []
 
-            posthog.config.before_send = [
+            posthog.config.beforeSend = [
                 (cr) => {
                     if (!cr) {
                         return null
@@ -52,7 +52,7 @@ test.describe('before_send', () => {
                     }
                     return cr
                 },
-                // these tests rely on existing before_send function to capture events
+                // these tests rely on existing beforeSend function to capture events
                 // so we have to add it back in here
                 ...og,
             ]

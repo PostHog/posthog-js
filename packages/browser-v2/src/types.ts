@@ -286,8 +286,61 @@ type RemovedDeprecatedConfigKeys =
  * Specify that `loaded` should be using the PostHog instance type
  * as implemented by the browser/src/posthog-core.ts file rather than the @posthog/types type
  */
-export type PostHogConfig = Omit<BasePostHogConfig, 'loaded' | RemovedDeprecatedConfigKeys> & {
+type SnakeToCamelCase<S extends string> = S extends `${infer Head}_${infer Tail}`
+    ? `${Head}${Capitalize<SnakeToCamelCase<Tail>>}`
+    : S
+
+/**
+ * Config keys that are @deprecated in @posthog/types and slated for removal
+ * from v2 (not rename): they keep their snake_case names until they are dropped.
+ */
+type KeptSnakeCaseConfigKeys =
+    | 'evaluation_environments'
+    | 'opt_out_capturing_cookie_prefix'
+    | 'enable_heatmaps'
+    | 'api_method'
+    | 'inapp_protocol'
+    | 'inapp_link_new_window'
+
+/**
+ * Top-level config keys renamed to camelCase for v2. Keys with a leading
+ * underscore (internal/preview) are excluded from the generic mapping; the
+ * renamed `__preview_*` keys are redeclared explicitly below.
+ */
+type CamelizeConfigKey<K> = K extends KeptSnakeCaseConfigKeys
+    ? K
+    : K extends `_${string}`
+      ? K
+      : K extends string
+        ? SnakeToCamelCase<K>
+        : K
+
+type RenamedDunderConfigKeys =
+    | '__preview_deferred_init_extensions'
+    | '__preview_cookie_wins_on_conflict'
+    | '__preview_capture_bot_pageviews'
+
+type CamelizedBaseConfig = {
+    [K in keyof Omit<
+        BasePostHogConfig,
+        'loaded' | RemovedDeprecatedConfigKeys | RenamedDunderConfigKeys
+    > as CamelizeConfigKey<K>]: Omit<
+        BasePostHogConfig,
+        'loaded' | RemovedDeprecatedConfigKeys | RenamedDunderConfigKeys
+    >[K]
+}
+
+export type PostHogConfig = CamelizedBaseConfig & {
     loaded: (posthog: PostHogInterface) => void
+
+    /** Preview: defer loading of init extensions. Renamed from `__preview_deferred_init_extensions`. */
+    __previewDeferredInitExtensions: boolean
+
+    /** Preview: cookie wins on persistence conflict. Renamed from `__preview_cookie_wins_on_conflict`. */
+    __previewCookieWinsOnConflict: boolean
+
+    /** Preview: capture pageviews from bots. Renamed from `__preview_capture_bot_pageviews`. */
+    __previewCaptureBotPageviews?: boolean
 
     /**
      * Internal: Extension class overrides for tree-shaking support.

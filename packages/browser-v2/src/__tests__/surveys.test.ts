@@ -185,9 +185,9 @@ describe('surveys', () => {
 
         config = createMockConfig({
             token: 'testtoken',
-            api_host: 'https://app.posthog.com',
+            apiHost: 'https://app.posthog.com',
             persistence: 'memory',
-            surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
+            surveysRequestTimeoutMs: SURVEYS_REQUEST_TIMEOUT_MS,
         })
 
         instance = createMockPostHog({
@@ -327,7 +327,7 @@ describe('surveys', () => {
     })
 
     it('getSurveys returns empty array if surveys are disabled', () => {
-        instance.config.disable_surveys = true
+        instance.config.disableSurveys = true
         surveys.getSurveys((data) => {
             expect(data).toEqual([])
         })
@@ -1564,7 +1564,7 @@ describe('surveys', () => {
         })
 
         it('can be disabled by config despite results of onRemoteConfig', () => {
-            surveys['_instance'].config.disable_surveys = true
+            surveys['_instance'].config.disableSurveys = true
             surveys.onRemoteConfig({
                 surveys: ['example' as unknown as Survey],
             } as Partial<RemoteConfig> as RemoteConfig)

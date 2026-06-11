@@ -241,8 +241,8 @@ export class ConversationsPersistence {
             if (!token) {
                 return null
             }
-            const key = (this._posthog.config as any).persistence_name
-                ? 'ph_' + (this._posthog.config as any).persistence_name
+            const key = (this._posthog.config as any).persistenceName
+                ? 'ph_' + (this._posthog.config as any).persistenceName
                 : 'ph_' + token + '_posthog'
 
             const raw = window?.localStorage?.getItem(key)

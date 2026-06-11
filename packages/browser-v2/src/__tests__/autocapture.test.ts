@@ -78,10 +78,10 @@ describe('Autocapture system', () => {
         beforeSendMock = jest.fn().mockImplementation((...args) => args)
 
         posthog = await createPosthogInstance(uuidv7(), {
-            api_host: 'https://test.com',
+            apiHost: 'https://test.com',
             token: 'testtoken',
             autocapture: true,
-            before_send: beforeSendMock,
+            beforeSend: beforeSendMock,
         })
 
         if (isUndefined(posthog.autocapture)) {
@@ -524,10 +524,10 @@ describe('Autocapture system', () => {
                     // Create fresh instance with custom config, since
                     // rageclick behaviour is set on construction
                     const customPosthog = await createPosthogInstance(uuidv7(), {
-                        api_host: 'https://test.com',
+                        apiHost: 'https://test.com',
                         token: 'testtoken',
                         autocapture: true,
-                        before_send: beforeSendMock,
+                        beforeSend: beforeSendMock,
                         rageclick: rageclickConfig,
                     })
 
@@ -1239,14 +1239,14 @@ describe('Autocapture system', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(0)
         })
 
-        it('does not capture any element attributes if mask_all_element_attributes is set', () => {
+        it('does not capture any element attributes if maskAllElementAttributes is set', () => {
             const dom = `
       <button id='button1' formmethod='post'>
         Not sensitive
       </button>
       `
 
-            posthog.config.mask_all_element_attributes = true
+            posthog.config.maskAllElementAttributes = true
 
             document.body.innerHTML = dom
             const button1 = document.getElementById('button1')
@@ -1260,13 +1260,13 @@ describe('Autocapture system', () => {
             expect('attr__formmethod' in props1['$elements'][0]).toEqual(false)
         })
 
-        it('does not capture any textContent if mask_all_text is set', () => {
+        it('does not capture any textContent if maskAllText is set', () => {
             const dom = `
         <a id='a1'>
           Dont capture me!
         </a>
         `
-            posthog.config.mask_all_text = true
+            posthog.config.maskAllText = true
 
             document.body.innerHTML = dom
             const a = document.getElementById('a1')
@@ -1361,7 +1361,7 @@ describe('Autocapture system', () => {
     describe('_addDomEventHandlers', () => {
         beforeEach(() => {
             document.title = 'test page'
-            posthog.config.mask_all_element_attributes = false
+            posthog.config.maskAllElementAttributes = false
             autocapture.onRemoteConfig({} as FlagsResponse)
         })
 
@@ -1390,7 +1390,7 @@ describe('Autocapture system', () => {
         })
 
         it('should be enabled before the flags response if flags is disabled', () => {
-            posthog.config.advanced_disable_flags = true
+            posthog.config.advancedDisableFlags = true
             expect(autocapture.isEnabled).toBe(true)
         })
 

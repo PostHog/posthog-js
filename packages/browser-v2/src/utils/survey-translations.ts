@@ -10,7 +10,7 @@ const logger = createLogger('[SurveyTranslations]')
 
 /**
  * Detects the user's language using priority order:
- * 1. config.override_display_language (explicit override)
+ * 1. config.overrideDisplayLanguage (explicit override)
  * 2. person properties 'language' (allows programmatic control via posthog.identify())
  * 3. navigator.language (browser language)
  *
@@ -25,7 +25,7 @@ const logger = createLogger('[SurveyTranslations]')
 export function detectUserLanguage(instance: PostHog): string | null {
     return detectSurveyLanguage(
         {
-            overrideLanguage: instance.config.override_display_language,
+            overrideLanguage: instance.config.overrideDisplayLanguage,
             storedPersonProperties: isFunction(instance.getProperty)
                 ? instance.getProperty(STORED_PERSON_PROPERTIES_KEY)
                 : undefined,

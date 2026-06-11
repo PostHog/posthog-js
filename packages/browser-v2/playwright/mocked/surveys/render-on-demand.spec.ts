@@ -40,7 +40,7 @@ const testSurveyWithDelay = {
 
 const startOptions = {
     options: {
-        disable_surveys_automatic_display: true,
+        disableSurveysAutomaticDisplay: true,
     },
     flagsResponseOverrides: {
         surveys: true,

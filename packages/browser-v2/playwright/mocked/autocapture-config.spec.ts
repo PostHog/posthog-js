@@ -19,7 +19,7 @@ test.describe('autocapture config', () => {
                 ...startOptions,
                 options: {
                     ...startOptions.options,
-                    capture_pageview: false,
+                    capturePageview: false,
                     autocapture: {
                         dom_event_allowlist: ['change'],
                     },

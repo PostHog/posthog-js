@@ -55,8 +55,8 @@ export class SessionIdManager {
         if (!instance.persistence) {
             throw new Error('SessionIdManager requires a PostHogPersistence instance')
         }
-        if (instance.config.cookieless_mode === COOKIELESS_ALWAYS) {
-            throw new Error('SessionIdManager cannot be used with cookieless_mode="always"')
+        if (instance.config.cookielessMode === COOKIELESS_ALWAYS) {
+            throw new Error('SessionIdManager cannot be used with cookielessMode="always"')
         }
 
         this._config = instance.config
@@ -68,15 +68,15 @@ export class SessionIdManager {
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
 
-        const persistenceName = this._config['persistence_name'] || this._config['token']
+        const persistenceName = this._config['persistenceName'] || this._config['token']
 
-        const desiredTimeout = this._config['session_idle_timeout_seconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
+        const desiredTimeout = this._config['sessionIdleTimeoutSeconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
         this._sessionTimeoutMs =
             clampToRange(
                 desiredTimeout,
                 MIN_SESSION_IDLE_TIMEOUT_SECONDS,
                 MAX_SESSION_IDLE_TIMEOUT_SECONDS,
-                logger.createLogger('session_idle_timeout_seconds'),
+                logger.createLogger('sessionIdleTimeoutSeconds'),
                 DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
             ) * 1000
 
@@ -213,7 +213,7 @@ export class SessionIdManager {
     // dated default (>= 2026-05-30) enables debounce, so the new behaviour
     // and the bug surface roll out together.
     private _useCrossTabRefreshHardening(): boolean {
-        const debounce = this._config?.persistence_save_debounce_ms
+        const debounce = this._config?.persistenceSaveDebounceMs
         return isPositiveNumber(debounce) && debounce > 0
     }
 
@@ -349,8 +349,8 @@ export class SessionIdManager {
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
-        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
-            throw new Error('checkAndGetSessionAndWindowId should not be called with cookieless_mode="always"')
+        if (this._config.cookielessMode === COOKIELESS_ALWAYS) {
+            throw new Error('checkAndGetSessionAndWindowId should not be called with cookielessMode="always"')
         }
         const timestamp = _timestamp || new Date().getTime()
 

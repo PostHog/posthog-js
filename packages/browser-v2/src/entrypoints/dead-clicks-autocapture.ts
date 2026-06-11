@@ -299,8 +299,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 ...properties,
                 ...autocapturePropertiesForElement(click.node, {
                     e: click.originalEvent,
-                    maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
-                    maskAllText: this.instance.config.mask_all_text,
+                    maskAllElementAttributes: this.instance.config.maskAllElementAttributes,
+                    maskAllText: this.instance.config.maskAllText,
                     elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                     // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
                     elementsChainAsString: false,

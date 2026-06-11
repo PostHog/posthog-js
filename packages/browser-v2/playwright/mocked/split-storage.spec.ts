@@ -15,7 +15,7 @@ const flagOn = (key: string) => ({
 })
 
 // Reads the PostHog localStorage entries: the main blob plus the per-group
-// `__flags` / `__surveys` entries that `split_storage` partitions data into.
+// `__flags` / `__surveys` entries that `splitStorage` partitions data into.
 async function readPersistence(page: Page): Promise<{ main?: any; flags?: any; surveys?: any }> {
     return page.evaluate(() => {
         const snap: { main?: any; flags?: any; surveys?: any } = {}
@@ -45,7 +45,7 @@ async function readPersistence(page: Page): Promise<{ main?: any; flags?: any; s
 const getFlag = (page: Page, flag: string): Promise<any> =>
     page.evaluate((f) => (window as any).posthog?.getFeatureFlag(f), flag)
 
-test.describe('split storage (split_storage)', () => {
+test.describe('split storage (splitStorage)', () => {
     test('gate off (default): flags stay in the single blob, no group entries', async ({ page, context }) => {
         await start(
             {
@@ -72,7 +72,7 @@ test.describe('split storage (split_storage)', () => {
     }) => {
         await start(
             {
-                options: { split_storage: true },
+                options: { splitStorage: true },
                 flagsResponseOverrides: { featureFlags: { [MY_FLAG]: true }, flags: flagOn(MY_FLAG) },
                 url: PAGE,
             },
@@ -91,7 +91,7 @@ test.describe('split storage (split_storage)', () => {
     })
 
     test('gate on: flags survive a reload via the __flags entry', async ({ page, context }) => {
-        const options = { split_storage: true }
+        const options = { splitStorage: true }
         const flagsResponseOverrides = { featureFlags: { [MY_FLAG]: true }, flags: flagOn(MY_FLAG) }
 
         await start({ options, flagsResponseOverrides, url: PAGE }, page, context)
@@ -111,7 +111,7 @@ test.describe('split storage (split_storage)', () => {
     }) => {
         await start(
             {
-                options: { split_storage: true },
+                options: { splitStorage: true },
                 flagsResponseOverrides: { featureFlags: { [MY_FLAG]: true }, flags: flagOn(MY_FLAG) },
                 url: PAGE,
                 // seed an old-layout single blob (flags inline) before PostHog initialises
@@ -167,7 +167,7 @@ test.describe('split storage (split_storage)', () => {
             })
         )
 
-        const options = { split_storage: true }
+        const options = { splitStorage: true }
         const flagsResponseOverrides = { surveys: true }
 
         await start({ options, flagsResponseOverrides, url: PAGE }, page, context)
@@ -198,9 +198,9 @@ test.describe('split storage (split_storage)', () => {
         await start(
             {
                 options: {
-                    split_storage: true,
-                    opt_out_capturing_by_default: false,
-                    session_recording: { compress_events: false },
+                    splitStorage: true,
+                    optOutCapturingByDefault: false,
+                    sessionRecording: { compress_events: false },
                 },
                 flagsResponseOverrides: {
                     sessionRecording: { endpoint: '/ses/', linkedFlag },

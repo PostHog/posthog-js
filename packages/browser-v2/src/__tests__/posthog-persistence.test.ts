@@ -155,7 +155,7 @@ describe('persistence', () => {
             saveMock.mockClear()
         })
 
-        it('should rebuild storage when cookie_persisted_properties changes via updateConfig', () => {
+        it('should rebuild storage when cookiePersistedProperties changes via updateConfig', () => {
             const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
             const expectedProps = () => ({
                 distinct_id: 'test',
@@ -175,10 +175,10 @@ describe('persistence', () => {
             )
             expect(document.cookie).not.toContain('custom_prop')
 
-            // Now update config to include custom_prop in cookie_persisted_properties
+            // Now update config to include custom_prop in cookiePersistedProperties
             const newConfig = {
                 ...makePostHogConfig('test', 'localStorage+cookie'),
-                cookie_persisted_properties: ['custom_prop'],
+                cookiePersistedProperties: ['custom_prop'],
             }
             lib.updateConfig(newConfig, config)
             config = newConfig
@@ -232,7 +232,7 @@ describe('persistence', () => {
         it('skips $feature/ properties when cache is stale and TTL is configured', () => {
             const config = {
                 ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
+                featureFlagCacheTtlMs: 60 * 60 * 1000, // 1 hour TTL
             }
             const lib = new PostHogPersistence(config)
 
@@ -251,7 +251,7 @@ describe('persistence', () => {
         it('includes $feature/ properties when cache is fresh', () => {
             const config = {
                 ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
+                featureFlagCacheTtlMs: 60 * 60 * 1000, // 1 hour TTL
             }
             const lib = new PostHogPersistence(config)
 
@@ -273,7 +273,7 @@ describe('persistence', () => {
         it('includes $feature/ properties when TTL is not configured', () => {
             const config = {
                 ...makePostHogConfig('test', persistenceMode),
-                // No feature_flag_cache_ttl_ms set
+                // No featureFlagCacheTtlMs set
             }
             const lib = new PostHogPersistence(config)
 
@@ -295,7 +295,7 @@ describe('persistence', () => {
         it('treats non-numeric evaluatedAt as stale when TTL is configured', () => {
             const config = {
                 ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
+                featureFlagCacheTtlMs: 60 * 60 * 1000, // 1 hour TTL
             }
             const lib = new PostHogPersistence(config)
 
@@ -450,7 +450,7 @@ describe('persistence', () => {
                 // The no-op fingerprint must cover all four arguments to
                 // `_storage._set` — serialized props plus expire_days,
                 // cross_subdomain, secure. Otherwise a customer who calls
-                // `posthog.setConfig({ cookie_expiration: 90 })` would
+                // `posthog.setConfig({ cookieExpiration: 90 })` would
                 // mutate `_expire_days` but the no-op check (which only
                 // saw props) would short-circuit, and the cookie keeps
                 // its old `Expires` header until some other prop changes.
@@ -533,7 +533,7 @@ describe('persistence', () => {
         })
 
         describe('save debounce', () => {
-            // `persistence_save_debounce_ms` coalesces rapid save() calls
+            // `persistenceSaveDebounceMs` coalesces rapid save() calls
             // into a single write per window. The default is 0 (immediate).
             beforeEach(() => {
                 jest.useFakeTimers()
@@ -560,7 +560,7 @@ describe('persistence', () => {
             it('coalesces multiple saves within the debounce window into one write', () => {
                 const config = {
                     ...makePostHogConfig('test-debounce-on', persistenceMode),
-                    persistence_save_debounce_ms: 250,
+                    persistenceSaveDebounceMs: 250,
                 }
                 const debounced = new PostHogPersistence(config)
                 const spy = jest.spyOn(debounced['_storage'], '_set')
@@ -582,7 +582,7 @@ describe('persistence', () => {
             it('in-memory props update synchronously even before the debounced write lands', () => {
                 const config = {
                     ...makePostHogConfig('test-debounce-sync', persistenceMode),
-                    persistence_save_debounce_ms: 250,
+                    persistenceSaveDebounceMs: 250,
                 }
                 const debounced = new PostHogPersistence(config)
 
@@ -594,7 +594,7 @@ describe('persistence', () => {
             it('flush() writes pending state immediately', () => {
                 const config = {
                     ...makePostHogConfig('test-debounce-flush', persistenceMode),
-                    persistence_save_debounce_ms: 250,
+                    persistenceSaveDebounceMs: 250,
                 }
                 const debounced = new PostHogPersistence(config)
                 const spy = jest.spyOn(debounced['_storage'], '_set')
@@ -614,7 +614,7 @@ describe('persistence', () => {
             it('remove() cancels any pending debounced write', () => {
                 const config = {
                     ...makePostHogConfig('test-debounce-remove', persistenceMode),
-                    persistence_save_debounce_ms: 250,
+                    persistenceSaveDebounceMs: 250,
                 }
                 const debounced = new PostHogPersistence(config)
                 const setSpy = jest.spyOn(debounced['_storage'], '_set')
@@ -642,7 +642,7 @@ describe('persistence', () => {
                 // is no pending timer.
                 const config = {
                     ...makePostHogConfig('test-flush-after-remove', persistenceMode),
-                    persistence_save_debounce_ms: 250,
+                    persistenceSaveDebounceMs: 250,
                 }
                 const debounced = new PostHogPersistence(config)
                 debounced.register({ distinct_id: 'before-reset' })
@@ -662,7 +662,7 @@ describe('persistence', () => {
             it('writes through on flush() when debounce is enabled at runtime via setConfig (late-enable)', () => {
                 // Customer constructs PostHog with debounce=0 (no listener
                 // would be installed under the old logic), then later does
-                // `posthog.setConfig({ persistence_save_debounce_ms: 250 })`.
+                // `posthog.setConfig({ persistenceSaveDebounceMs: 250 })`.
                 // The mutable config is read every save() via _saveDebounceMs(),
                 // so save() correctly starts debouncing. But we must ALSO
                 // have installed unload listeners at construction so the
@@ -672,7 +672,7 @@ describe('persistence', () => {
                 const spy = jest.spyOn(debounced['_storage'], '_set')
 
                 // Enable debounce after construction.
-                config.persistence_save_debounce_ms = 250
+                config.persistenceSaveDebounceMs = 250
                 spy.mockClear()
 
                 debounced.register({ distinct_id: 'late' })
@@ -782,7 +782,7 @@ describe('persistence', () => {
                 token,
                 {
                     persistence: 'localStorage+cookie',
-                    cookie_persisted_properties: [customProp],
+                    cookiePersistedProperties: [customProp],
                 },
                 uuidv7()
             )
@@ -813,7 +813,7 @@ describe('persistence', () => {
         describe('merge precedence', () => {
             // The default merge in createLocalPlusCookieStore._parse is
             // extend(cookieProperties, localStorageData) — localStorage wins.
-            // With __preview_cookie_wins_on_conflict: true, that order flips so the
+            // With __previewCookieWinsOnConflict: true, that order flips so the
             // cross-subdomain cookie is authoritative for the keys it stores.
             const persistenceName = 'ph__posthog'
             const encodeCookie = (props: Record<string, any>) =>
@@ -828,7 +828,7 @@ describe('persistence', () => {
                         | 'localStorage+cookie'
                         | 'memory'
                         | 'sessionStorage',
-                    __preview_cookie_wins_on_conflict: cookieWins,
+                    __previewCookieWinsOnConflict: cookieWins,
                 }
             }
 
@@ -1074,7 +1074,7 @@ describe('flag and survey storage split', () => {
     const makeConfig = (overrides: Partial<PostHogConfig> = {}): PostHogConfig =>
         ({
             ...makePostHogConfig('test', 'localStorage'),
-            split_storage: true,
+            splitStorage: true,
             ...overrides,
         }) as PostHogConfig
 
@@ -1210,7 +1210,7 @@ describe('flag and survey storage split', () => {
             { label: 'cookie options unset', extra: {} },
             {
                 label: 'concrete cookie options (production)',
-                extra: { secure_cookie: true, cross_subdomain_cookie: false },
+                extra: { secureCookie: true, crossSubdomainCookie: false },
             },
         ])('a returning visitor does not rewrite the unchanged __flags it loaded ($label)', ({ extra }) => {
             localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
@@ -1449,7 +1449,7 @@ describe('flag and survey storage split', () => {
     })
 
     describe('runtime toggle of the gate via updateConfig', () => {
-        // The split routing must follow `split_storage`
+        // The split routing must follow `splitStorage`
         // even when it flips without a persistence change.
         it('turning the gate on migrates flag/survey keys out of the main blob', () => {
             const off = gateOffConfig()
@@ -1506,7 +1506,7 @@ describe('flag and survey storage split', () => {
             expect(parse(FLAGS)).not.toBeNull()
             expect(parse(SURVEYS_ENTRY)).not.toBeNull()
 
-            // still split_storage: true, but memory cannot host the split
+            // still splitStorage: true, but memory cannot host the split
             lib.updateConfig(makeConfig({ persistence: 'memory' }), on)
 
             expect((lib as any)._splitStorage).toBe(false)
@@ -1602,7 +1602,7 @@ describe('flag and survey storage split', () => {
             try {
                 localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
 
-                const lib = new PostHogPersistence(makeConfig({ persistence_save_debounce_ms: 250 }))
+                const lib = new PostHogPersistence(makeConfig({ persistenceSaveDebounceMs: 250 }))
                 Object.keys(FLAG_CLUSTER).forEach((k) => lib.unregister(k))
                 jest.advanceTimersByTime(250)
 
@@ -1625,8 +1625,8 @@ describe('flag and survey storage split', () => {
             const ownerSurveys = `ph_${token}_posthog__surveys`
             const posthog = new PostHog().init(token, {
                 persistence: 'localStorage+cookie',
-                split_storage: true,
-                secure_cookie: false,
+                splitStorage: true,
+                secureCookie: false,
             })
             posthog.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
             expect(parse(ownerFlags)).not.toBeNull()
@@ -1836,15 +1836,15 @@ describe('posthog instance persistence', () => {
         resetSessionStorageSupported()
         resetLocalStorageSupported()
     })
-    it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
+    it('should not write to storage if optOutPersistenceByDefault and optOutCapturingByDefault is true', () => {
         const sessionSpy = jest.spyOn(sessionStore, '_set')
 
         // init posthog while opting out
         const posthog = defaultPostHog().init(
             uuidv7(),
             {
-                opt_out_persistence_by_default: true,
-                opt_out_capturing_by_default: true,
+                optOutPersistenceByDefault: true,
+                optOutCapturingByDefault: true,
                 persistence: 'localStorage+cookie',
             },
             uuidv7()
@@ -1867,15 +1867,15 @@ describe('posthog instance persistence', () => {
         expect(localPlusCookieCalls).toEqual([])
     })
 
-    it('should write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is false', () => {
+    it('should write to storage if optOutPersistenceByDefault and optOutCapturingByDefault is false', () => {
         const sessionSpy = jest.spyOn(sessionStore, '_set')
 
         // init posthog while opting out
         const posthog = defaultPostHog().init(
             uuidv7(),
             {
-                opt_out_persistence_by_default: false,
-                opt_out_capturing_by_default: false,
+                optOutPersistenceByDefault: false,
+                optOutCapturingByDefault: false,
                 persistence: 'localStorage+cookie',
             },
             uuidv7()

@@ -25,12 +25,12 @@ export class RateLimiter {
     }
 
     get captureEventsPerSecond(): number {
-        return this.instance.config.rate_limiting?.events_per_second || DEFAULT_EVENTS_PER_SECOND
+        return this.instance.config.rateLimiting?.events_per_second || DEFAULT_EVENTS_PER_SECOND
     }
 
     get captureEventsBurstLimit(): number {
         return Math.max(
-            this.instance.config.rate_limiting?.events_burst_limit ||
+            this.instance.config.rateLimiting?.events_burst_limit ||
                 this.captureEventsPerSecond * BURST_LIMIT_MULTIPLIER,
             this.captureEventsPerSecond
         )

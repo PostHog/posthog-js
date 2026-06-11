@@ -27,8 +27,8 @@ export class ExceptionObserver {
         // refills at a rate of one token / 10 second period
         // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
         this._rateLimiter = new BucketedRateLimiter({
-            refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
-            bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
+            refillRate: this._instance.config.errorTracking.__exceptionRateLimiterRefillRate ?? 1,
+            bucketSize: this._instance.config.errorTracking.__exceptionRateLimiterBucketSize ?? 10,
             refillInterval: 10000, // ten seconds in milliseconds,
             _logger: logger,
         })
@@ -38,7 +38,7 @@ export class ExceptionObserver {
     }
 
     private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
-        const providedConfig = this._instance.config.capture_exceptions
+        const providedConfig = this._instance.config.captureExceptions
         let config: Required<ExceptionAutoCaptureConfig> = {
             capture_unhandled_errors: false,
             capture_unhandled_rejections: false,

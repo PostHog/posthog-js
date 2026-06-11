@@ -279,7 +279,7 @@ const COOKIE_PERSISTED_PROPERTIES = [
  * merge for any key both stores carry. Null/empty cookie values are filtered out
  * before the merge so a malformed legacy cookie cannot override valid localStorage
  * data. localStorage-only keys are unaffected. See the docs for
- * `__preview_cookie_wins_on_conflict` for context.
+ * `__previewCookieWinsOnConflict` for context.
  */
 export const createLocalPlusCookieStore = (
     customCookieProperties: readonly string[] = [],

@@ -89,9 +89,9 @@ describe('posthog-surveys', () => {
             // Mock PostHog instance
             mockPostHog = createMockPostHog({
                 config: {
-                    disable_surveys: false,
+                    disableSurveys: false,
                     token: 'test-token',
-                    surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
+                    surveysRequestTimeoutMs: SURVEYS_REQUEST_TIMEOUT_MS,
                 },
                 persistence: {
                     register: jest.fn(),
@@ -423,7 +423,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should not initialize if surveys are disabled', () => {
-                mockPostHog.config.disable_surveys = true
+                mockPostHog.config.disableSurveys = true
                 surveys.loadIfEnabled()
 
                 expect(mockGenerateSurveys).not.toHaveBeenCalled()
@@ -566,7 +566,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should not load surveys in cookieless mode without consent', () => {
-                mockPostHog.config.cookieless_mode = 'on_reject'
+                mockPostHog.config.cookielessMode = 'on_reject'
                 const mockIsOptedOut = mockPostHog.consent.isOptedOut as jest.Mock
                 mockIsOptedOut.mockReturnValue(true)
                 surveys['_isSurveysEnabled'] = true
@@ -578,7 +578,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should load surveys in cookieless mode after consent is given', () => {
-                mockPostHog.config.cookieless_mode = 'on_reject'
+                mockPostHog.config.cookielessMode = 'on_reject'
                 const mockIsOptedOut = mockPostHog.consent.isOptedOut as jest.Mock
                 mockIsOptedOut.mockReturnValue(false)
                 surveys['_isSurveysEnabled'] = true

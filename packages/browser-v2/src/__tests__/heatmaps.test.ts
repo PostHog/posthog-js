@@ -28,7 +28,7 @@ describe('heatmaps', () => {
         beforeSendMock = beforeSendMock.mockClear()
 
         posthog = await createPosthogInstance(uuidv7(), {
-            before_send: [
+            beforeSend: [
                 (cr) => {
                     if (!cr) {
                         return cr
@@ -52,10 +52,10 @@ describe('heatmaps', () => {
                 beforeSendMock,
             ],
             // simplifies assertions by not needing to ignore events
-            capture_pageview: false,
+            capturePageview: false,
         })
 
-        posthog.config.capture_heatmaps = true
+        posthog.config.captureHeatmaps = true
 
         // make sure we start fresh
         posthog.heatmaps!.startIfEnabled()
@@ -257,7 +257,7 @@ describe('heatmaps', () => {
         ])('when stored remote config is %p - heatmaps enabled should be %p', (stored, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: stored })
             posthog.config.enable_heatmaps = undefined
-            posthog.config.capture_heatmaps = undefined
+            posthog.config.captureHeatmaps = undefined
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
         })
@@ -270,7 +270,7 @@ describe('heatmaps', () => {
         ])('when local deprecated config is %p - heatmaps enabled should be %p', (deprecatedConfig, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
             posthog.config.enable_heatmaps = deprecatedConfig
-            posthog.config.capture_heatmaps = undefined
+            posthog.config.captureHeatmaps = undefined
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
         })
@@ -283,7 +283,7 @@ describe('heatmaps', () => {
         ])('when local current config is %p - heatmaps enabled should be %p', (localConfig, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
             posthog.config.enable_heatmaps = localConfig
-            posthog.config.capture_heatmaps = undefined
+            posthog.config.captureHeatmaps = undefined
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
         })
@@ -319,7 +319,7 @@ describe('heatmaps', () => {
             'when deprecated client side config is %p, current client side config is %p, and remote opt in is %p - heatmaps enabled should be %p',
             (deprecatedclientSideOptIn, clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.enable_heatmaps = deprecatedclientSideOptIn
-                posthog.config.capture_heatmaps = clientSideOptIn
+                posthog.config.captureHeatmaps = clientSideOptIn
                 posthog.heatmaps!.onRemoteConfig({
                     heatmaps: serverSideOptIn,
                 } as FlagsResponse)
@@ -342,7 +342,7 @@ describe('heatmaps', () => {
         [true, undefined, 'http://localhost/?gclid=<masked>&other=true'],
         [true, ['other'], 'http://localhost/?gclid=<masked>&other=<masked>'],
     ])(
-        'the behaviour when mask_personal_data_properties is %s and custom_personal_data_properties is %s',
+        'the behaviour when maskPersonalDataProperties is %s and customPersonalDataProperties is %s',
         (
             maskPersonalDataProperties: boolean,
             customPersonalDataProperties: undefined | string[],
@@ -352,9 +352,9 @@ describe('heatmaps', () => {
                 beforeSendMock = beforeSendMock.mockClear()
 
                 const posthogWithMasking = await createPosthogInstance(uuidv7(), {
-                    before_send: beforeSendMock,
-                    mask_personal_data_properties: maskPersonalDataProperties,
-                    custom_personal_data_properties: customPersonalDataProperties,
+                    beforeSend: beforeSendMock,
+                    maskPersonalDataProperties: maskPersonalDataProperties,
+                    customPersonalDataProperties: customPersonalDataProperties,
                 })
 
                 Object.defineProperty(window, 'location', {
@@ -364,7 +364,7 @@ describe('heatmaps', () => {
                     writable: true,
                 })
 
-                posthogWithMasking.config.capture_heatmaps = true
+                posthogWithMasking.config.captureHeatmaps = true
                 posthogWithMasking.heatmaps!.startIfEnabled()
                 posthogWithMasking.heatmaps?.['_onClick']?.(createMockMouseEvent())
 

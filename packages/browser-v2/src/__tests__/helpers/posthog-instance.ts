@@ -32,12 +32,12 @@ export const createPosthogInstance = async (
         posthog.init(
             token,
             {
-                request_batching: false,
-                api_host: 'http://localhost',
-                disable_surveys: true,
-                disable_surveys_automatic_display: false,
-                disable_conversations: true,
-                before_send: () => {
+                requestBatching: false,
+                apiHost: 'http://localhost',
+                disableSurveys: true,
+                disableSurveysAutomaticDisplay: false,
+                disableConversations: true,
+                beforeSend: () => {
                     // if we don't return null here, requests will be sent
                     // but can't go anywhere, and we get console output in tests,
                     // but it's just noise
@@ -62,7 +62,7 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
     ({
         config: {
             token: 'test-token',
-            api_host: 'https://test.com',
+            apiHost: 'https://test.com',
         } as PostHogConfig,
         getDistinctId: () => 'test-distinct-id',
         capture: jest.fn(),
@@ -73,7 +73,7 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
 export const createMockConfig = (overrides: Partial<PostHogConfig> = {}): PostHogConfig =>
     ({
         token: 'test-token',
-        api_host: 'https://test.com',
+        apiHost: 'https://test.com',
         ...overrides,
     }) as PostHogConfig
 

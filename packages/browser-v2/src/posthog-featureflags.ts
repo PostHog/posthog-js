@@ -124,7 +124,7 @@ export const parseFlagsResponse = (
     let newFeatureFlagDetails = flagDetails
     if (options?.partialResponse) {
         // The response is intentionally partial (e.g., only survey flags were requested via
-        // advanced_only_evaluate_survey_feature_flags). Merge with existing flags so that
+        // advancedOnlyEvaluateSurveyFeatureFlags). Merge with existing flags so that
         // bootstrapped or previously loaded non-survey flags are preserved.
         newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
         newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
@@ -235,7 +235,7 @@ export class PostHogFeatureFlags implements Extension {
      * Check if the feature flag cache is stale based on the configured TTL.
      */
     private _isCacheStale(): boolean {
-        return this._persistence?._isFeatureFlagCacheStale(this._config.feature_flag_cache_ttl_ms) ?? false
+        return this._persistence?._isFeatureFlagCacheStale(this._config.featureFlagCacheTtlMs) ?? false
     }
 
     /**
@@ -256,17 +256,17 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _getValidEvaluationEnvironments(): string[] {
-        // Support both evaluation_contexts (new) and evaluation_environments (deprecated)
-        const envs = this._config.evaluation_contexts ?? this._config.evaluation_environments
+        // Support both evaluationContexts (new) and evaluation_environments (deprecated)
+        const envs = this._config.evaluationContexts ?? this._config.evaluation_environments
 
         // Log deprecation warning if using old field (only once)
         if (
             this._config.evaluation_environments &&
-            !this._config.evaluation_contexts &&
+            !this._config.evaluationContexts &&
             !this._hasLoggedDeprecationWarning
         ) {
             logger.warn(
-                'evaluation_environments is deprecated. Use evaluation_contexts instead. evaluation_environments will be removed in a future version.'
+                'evaluation_environments is deprecated. Use evaluationContexts instead. evaluation_environments will be removed in a future version.'
             )
             this._hasLoggedDeprecationWarning = true
         }
@@ -289,14 +289,14 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _getValidFlagKeys(): string[] | undefined {
-        const flagKeys = this._config.flag_keys
+        const flagKeys = this._config.flagKeys
 
         if (isUndefined(flagKeys)) {
             return undefined
         }
 
         if (!isArray(flagKeys)) {
-            logger.error('Invalid flag_keys found:', flagKeys, 'Expected array of non-empty strings')
+            logger.error('Invalid flagKeys found:', flagKeys, 'Expected array of non-empty strings')
             return undefined
         }
 
@@ -500,7 +500,7 @@ export class PostHogFeatureFlags implements Extension {
      * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
      */
     reloadFeatureFlags(): void {
-        if (this._reloadingDisabled || this._config.advanced_disable_feature_flags) {
+        if (this._reloadingDisabled || this._config.advancedDisableFeatureFlags) {
             // If reloading has been explicitly disabled then we don't want to do anything
             // Or if feature flags are disabled
             return
@@ -574,7 +574,7 @@ export class PostHogFeatureFlags implements Extension {
             data.$device_id = deviceId
         }
 
-        if (options?.disableFlags || this._config.advanced_disable_feature_flags) {
+        if (options?.disableFlags || this._config.advancedDisableFeatureFlags) {
             data.disable_flags = true
         }
 
@@ -588,10 +588,10 @@ export class PostHogFeatureFlags implements Extension {
             data.flag_keys = flagKeys
         }
 
-        const queryParams = this._config.advanced_only_evaluate_survey_feature_flags
+        const queryParams = this._config.advancedOnlyEvaluateSurveyFeatureFlags
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
-        const isPartialFlagsResponse = !!this._config.advanced_only_evaluate_survey_feature_flags
+        const isPartialFlagsResponse = !!this._config.advancedOnlyEvaluateSurveyFeatureFlags
 
         const url = this._instance.requestRouter.endpointFor('flags', '/flags/?v=2' + queryParams)
 
@@ -600,8 +600,8 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url,
             data,
-            compression: this._config.disable_compression ? undefined : Compression.Base64,
-            timeout: this._config.feature_flag_request_timeout_ms,
+            compression: this._config.disableCompression ? undefined : Compression.Base64,
+            timeout: this._config.featureFlagRequestTimeoutMs,
             callback: (response) => {
                 let errorsLoading = true
 
@@ -777,7 +777,7 @@ export class PostHogFeatureFlags implements Extension {
         let flagCallReported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
 
         // When session-scoped dedup is enabled, reset the reported flags whenever the session changes.
-        if (this._config.advanced_feature_flags_dedup_per_session) {
+        if (this._config.advancedFeatureFlagsDedupPerSession) {
             const currentSessionId = this._instance.getSessionId()
             const storedSessionId = this._prop(FLAG_CALL_REPORTED_SESSION_ID)
             if (currentSessionId && currentSessionId !== storedSessionId) {
@@ -906,8 +906,8 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
-            compression: this._config.disable_compression ? undefined : Compression.Base64,
-            timeout: this._config.feature_flag_request_timeout_ms,
+            compression: this._config.disableCompression ? undefined : Compression.Base64,
+            timeout: this._config.featureFlagRequestTimeoutMs,
             callback: (response) => {
                 const flagPayloads = response.json?.['featureFlagPayloads']
                 callback(flagPayloads?.[key] || undefined)

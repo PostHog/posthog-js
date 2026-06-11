@@ -47,8 +47,8 @@ describe('group before identify bug', () => {
         const beforeSendMock = jest.fn().mockImplementation((e) => e)
 
         const posthog = await createPosthogInstance(token, {
-            before_send: beforeSendMock,
-            person_profiles: 'identified_only',
+            beforeSend: beforeSendMock,
+            personProfiles: 'identified_only',
         })
 
         // Simulate what Clerk does: call group() with properties before identify()
@@ -81,8 +81,8 @@ describe('group before identify bug', () => {
         const beforeSendMock = jest.fn().mockImplementation((e) => e)
 
         const posthog = await createPosthogInstance(token, {
-            before_send: beforeSendMock,
-            person_profiles: 'identified_only',
+            beforeSend: beforeSendMock,
+            personProfiles: 'identified_only',
         })
 
         // Just call identify without group first

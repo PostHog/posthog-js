@@ -24,9 +24,9 @@ describe('__extensionClasses enrollment', () => {
         PostHog.__defaultExtensionClasses = {}
 
         const posthog = await createPosthogInstance(undefined, {
-            __preview_deferred_init_extensions: false,
+            __previewDeferredInitExtensions: false,
             __extensionClasses: { autocapture: Autocapture, sessionRecording: SessionRecording },
-            capture_pageview: false,
+            capturePageview: false,
         })
 
         expect(posthog.autocapture).toBeDefined()
@@ -50,8 +50,8 @@ describe('__extensionClasses enrollment', () => {
         PostHog.__defaultExtensionClasses = {}
 
         const posthog = await createPosthogInstance(undefined, {
-            __preview_deferred_init_extensions: false,
-            capture_pageview: false,
+            __previewDeferredInitExtensions: false,
+            capturePageview: false,
         })
 
         expect(posthog.autocapture).toBeUndefined()
@@ -76,9 +76,9 @@ describe('__extensionClasses enrollment', () => {
         class MockAutocapture extends Autocapture {}
 
         const posthog = await createPosthogInstance(undefined, {
-            __preview_deferred_init_extensions: false,
+            __previewDeferredInitExtensions: false,
             __extensionClasses: { autocapture: MockAutocapture },
-            capture_pageview: false,
+            capturePageview: false,
         })
 
         expect(posthog.autocapture).toBeInstanceOf(MockAutocapture)
@@ -116,8 +116,8 @@ describe('__extensionClasses enrollment', () => {
         PostHog.__defaultExtensionClasses = AllExtensions
 
         const posthog = await createPosthogInstance(undefined, {
-            __preview_deferred_init_extensions: false,
-            capture_pageview: false,
+            __previewDeferredInitExtensions: false,
+            capturePageview: false,
         })
 
         expect(posthog.autocapture).toBeDefined()
@@ -190,9 +190,9 @@ describe('extension lifecycle', () => {
             }
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
+                __previewDeferredInitExtensions: false,
                 __extensionClasses: { autocapture: SpyExtension as any },
-                capture_pageview: false,
+                capturePageview: false,
             })
 
             expect(posthog.autocapture).toBeInstanceOf(SpyExtension)
@@ -207,9 +207,9 @@ describe('extension lifecycle', () => {
             }
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
+                __previewDeferredInitExtensions: false,
                 __extensionClasses: { autocapture: MinimalExtension as any },
-                capture_pageview: false,
+                capturePageview: false,
             })
 
             expect(posthog.autocapture).toBeInstanceOf(MinimalExtension)
@@ -230,12 +230,12 @@ describe('extension lifecycle', () => {
             }
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
+                __previewDeferredInitExtensions: false,
                 __extensionClasses: {
                     toolbar: SpyExtension as any,
                     conversations: SpyExtension as any,
                 },
-                capture_pageview: false,
+                capturePageview: false,
             })
 
             // Clear any calls from the init/loaded flow
@@ -255,8 +255,8 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = {}
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             const callback = jest.fn()
@@ -269,8 +269,8 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = {}
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             const callback = jest.fn()
@@ -283,8 +283,8 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = {}
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             const callback = jest.fn()
@@ -297,8 +297,8 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = {}
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             expect(posthog.featureFlags).toBeUndefined()
@@ -308,8 +308,8 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = {}
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             const callback = jest.fn()
@@ -323,8 +323,8 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = {}
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             expect(posthog.getFeatureFlag('test-flag')).toBeUndefined()
@@ -334,8 +334,8 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = {}
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             expect(() => posthog.reloadFeatureFlags()).not.toThrow()
@@ -347,8 +347,8 @@ describe('extension lifecycle', () => {
             PostHog.__defaultExtensionClasses = AllExtensions
 
             const posthog = await createPosthogInstance(undefined, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
             })
 
             expect(posthog.featureFlags).toBeDefined()
@@ -364,8 +364,8 @@ describe('extension lifecycle', () => {
             } as any
 
             const posthog = await createPosthogInstance(token, {
-                __preview_deferred_init_extensions: false,
-                capture_pageview: false,
+                __previewDeferredInitExtensions: false,
+                capturePageview: false,
                 bootstrap: {
                     featureFlags: {
                         'test-flag': true,

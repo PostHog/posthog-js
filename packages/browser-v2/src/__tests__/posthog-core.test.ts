@@ -91,15 +91,15 @@ describe('posthog core', () => {
         }
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
-            const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
+            const posthog = defaultPostHog().init(token, { ...config, beforeSend: beforeSendMock }, token)!
             posthog.debug()
             return { posthog, beforeSendMock }
         }
 
-        it('respects property_denylist', () => {
+        it('respects propertyDenylist', () => {
             // arrange
             const { posthog } = setup({
-                property_denylist: ['$lib', 'persistent', '$is_identified', 'token'],
+                propertyDenylist: ['$lib', 'persistent', '$is_identified', 'token'],
             })
 
             // act
@@ -158,8 +158,8 @@ describe('posthog core', () => {
                 mockReferrer.mockReturnValue('https://referrer.example.com/some/path')
                 const { posthog, beforeSendMock } = setup({
                     token,
-                    persistence_name: token,
-                    person_profiles: 'always',
+                    persistenceName: token,
+                    personProfiles: 'always',
                 })
 
                 // act
@@ -179,14 +179,14 @@ describe('posthog core', () => {
                 mockReferrer.mockReturnValue('https://referrer1.example.com/some/path')
                 const { posthog: posthog1 } = setup({
                     token,
-                    persistence_name: token,
-                    person_profiles: 'always',
+                    persistenceName: token,
+                    personProfiles: 'always',
                 })
                 posthog1.capture(eventName, eventProperties)
                 mockReferrer.mockReturnValue('https://referrer2.example.com/some/path')
                 const { posthog: posthog2, beforeSendMock } = setup({
                     token,
-                    persistence_name: token,
+                    persistenceName: token,
                 })
 
                 // act
@@ -210,14 +210,14 @@ describe('posthog core', () => {
                 mockReferrer.mockReturnValue('https://referrer1.example.com/some/path')
                 const { posthog: posthog1 } = setup({
                     token,
-                    persistence_name: token,
-                    person_profiles: 'always',
+                    persistenceName: token,
+                    personProfiles: 'always',
                 })
                 posthog1.capture(eventName, eventProperties)
                 mockReferrer.mockReturnValue('https://referrer2.example.com/some/path')
                 const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = setup({
                     token,
-                    persistence_name: token,
+                    persistenceName: token,
                 })
                 posthog2.sessionPersistence!.clear() // simulate a new session
 
@@ -241,8 +241,8 @@ describe('posthog core', () => {
                 mockReferrer.mockReturnValue('')
                 const { posthog, beforeSendMock } = setup({
                     token,
-                    persistence_name: token,
-                    person_profiles: 'always',
+                    persistenceName: token,
+                    personProfiles: 'always',
                 })
 
                 // act
@@ -264,7 +264,7 @@ describe('posthog core', () => {
                 mockURL.mockReturnValue('https://www.example.com/some/path')
                 const { posthog, beforeSendMock } = setup({
                     token,
-                    persistence_name: token,
+                    persistenceName: token,
                 })
 
                 // act
@@ -281,7 +281,7 @@ describe('posthog core', () => {
                 mockURL.mockReturnValue('https://www.example.com/some/path?utm_source=source')
                 const { posthog, beforeSendMock } = setup({
                     token,
-                    persistence_name: token,
+                    persistenceName: token,
                 })
 
                 // act
@@ -379,7 +379,7 @@ describe('posthog core', () => {
     describe('product tour capture()', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
-            const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
+            const posthog = defaultPostHog().init(token, { ...config, beforeSend: beforeSendMock }, token)!
             return { posthog, beforeSendMock }
         }
 
@@ -425,12 +425,12 @@ describe('posthog core', () => {
     describe('setInternalOrTestUser()', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
-            const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
+            const posthog = defaultPostHog().init(token, { ...config, beforeSend: beforeSendMock }, token)!
             return { posthog, beforeSendMock }
         }
 
         it('should set $internal_or_test_user person property to true', () => {
-            const { posthog, beforeSendMock } = setup({ person_profiles: 'always' })
+            const { posthog, beforeSendMock } = setup({ personProfiles: 'always' })
 
             posthog.setInternalOrTestUser()
 
@@ -441,7 +441,7 @@ describe('posthog core', () => {
         })
 
         it('should enable person processing when called in identified_only mode', () => {
-            const { posthog, beforeSendMock } = setup({ person_profiles: 'identified_only' })
+            const { posthog, beforeSendMock } = setup({ personProfiles: 'identified_only' })
 
             posthog.capture('event before setInternalOrTestUser')
             posthog.setInternalOrTestUser()
@@ -461,7 +461,7 @@ describe('posthog core', () => {
         })
 
         it('should not send duplicate events when called multiple times', () => {
-            const { posthog, beforeSendMock } = setup({ person_profiles: 'always' })
+            const { posthog, beforeSendMock } = setup({ personProfiles: 'always' })
 
             posthog.setInternalOrTestUser()
             posthog.setInternalOrTestUser()
@@ -469,12 +469,12 @@ describe('posthog core', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
         })
 
-        describe('internal_or_test_user_hostname config', () => {
+        describe('internalOrTestUserHostname config', () => {
             it('should call setInternalOrTestUser automatically when hostname matches regex', async () => {
                 mockHostName.mockReturnValue('localhost')
                 const { beforeSendMock } = setup({
-                    person_profiles: 'identified_only',
-                    internal_or_test_user_hostname: /^(localhost|127\.0\.0\.1)$/,
+                    personProfiles: 'identified_only',
+                    internalOrTestUserHostname: /^(localhost|127\.0\.0\.1)$/,
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -485,8 +485,8 @@ describe('posthog core', () => {
             it('should work with string exact match', () => {
                 mockHostName.mockReturnValue('localhost')
                 const { beforeSendMock } = setup({
-                    person_profiles: 'identified_only',
-                    internal_or_test_user_hostname: 'localhost',
+                    personProfiles: 'identified_only',
+                    internalOrTestUserHostname: 'localhost',
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -496,8 +496,8 @@ describe('posthog core', () => {
             it('should not match partial strings', () => {
                 mockHostName.mockReturnValue('localhost.example.com')
                 const { beforeSendMock } = setup({
-                    person_profiles: 'identified_only',
-                    internal_or_test_user_hostname: 'localhost',
+                    personProfiles: 'identified_only',
+                    internalOrTestUserHostname: 'localhost',
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -507,8 +507,8 @@ describe('posthog core', () => {
             it('should not call setInternalOrTestUser when hostname does not match', () => {
                 mockHostName.mockReturnValue('production.example.com')
                 const { beforeSendMock } = setup({
-                    person_profiles: 'identified_only',
-                    internal_or_test_user_hostname: /^localhost$/,
+                    personProfiles: 'identified_only',
+                    internalOrTestUserHostname: /^localhost$/,
                 })
 
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
@@ -518,12 +518,12 @@ describe('posthog core', () => {
             it('should allow disabling with null', () => {
                 mockHostName.mockReturnValue('localhost')
                 const { posthog, beforeSendMock } = setup({
-                    person_profiles: 'identified_only',
+                    personProfiles: 'identified_only',
                     defaults: '2026-01-30',
-                    internal_or_test_user_hostname: null,
+                    internalOrTestUserHostname: null,
                 })
 
-                expect(posthog.config.internal_or_test_user_hostname).toBeNull()
+                expect(posthog.config.internalOrTestUserHostname).toBeNull()
                 const setEvents = beforeSendMock.mock.calls.filter((call) => call[0].event === '$set')
                 expect(setEvents.length).toEqual(0)
             })

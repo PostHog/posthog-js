@@ -106,7 +106,7 @@ const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/']
 // because calls to PostHog would be reported using a call to PostHog which would be reported....
 const ignorePostHogPaths = (
     data: CapturedNetworkRequest,
-    apiHostConfig: PostHogConfig['api_host']
+    apiHostConfig: PostHogConfig['apiHost']
 ): CapturedNetworkRequest | undefined => {
     const url = convertToURL(data.name)
 
@@ -221,28 +221,27 @@ export const buildNetworkRequestOptions = (
     }
     // client can always disable despite remote options
     const canRecordHeaders =
-        instanceConfig.session_recording.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
-    const canRecordBody =
-        instanceConfig.session_recording.recordBody === false ? false : remoteNetworkOptions.recordBody
+        instanceConfig.sessionRecording.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
+    const canRecordBody = instanceConfig.sessionRecording.recordBody === false ? false : remoteNetworkOptions.recordBody
     const canRecordPerformance =
-        instanceConfig.capture_performance === false ? false : remoteNetworkOptions.recordPerformance
+        instanceConfig.capturePerformance === false ? false : remoteNetworkOptions.recordPerformance
 
     const payloadLimiter = limitPayloadSize(config)
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
-        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d), instanceConfig.api_host))
+        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d), instanceConfig.apiHost))
 
-    const hasDeprecatedMaskFunction = isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
+    const hasDeprecatedMaskFunction = isFunction(instanceConfig.sessionRecording.maskNetworkRequestFn)
 
-    if (hasDeprecatedMaskFunction && isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)) {
+    if (hasDeprecatedMaskFunction && isFunction(instanceConfig.sessionRecording.maskCapturedNetworkRequestFn)) {
         logger.warn(
             'Both `maskNetworkRequestFn` and `maskCapturedNetworkRequestFn` are defined. `maskNetworkRequestFn` will be ignored.'
         )
     }
 
     if (hasDeprecatedMaskFunction) {
-        instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
-            const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
+        instanceConfig.sessionRecording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
+            const cleanedURL = instanceConfig.sessionRecording.maskNetworkRequestFn!({ url: data.name })
             return {
                 ...data,
                 name: cleanedURL?.url,
@@ -250,11 +249,11 @@ export const buildNetworkRequestOptions = (
         }
     }
 
-    config.maskRequestFn = isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
+    config.maskRequestFn = isFunction(instanceConfig.sessionRecording.maskCapturedNetworkRequestFn)
         ? (data) => {
               const cleanedRequest = enforcedCleaningFn(data)
               return cleanedRequest
-                  ? (instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined)
+                  ? (instanceConfig.sessionRecording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined)
                   : undefined
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))

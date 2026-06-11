@@ -4,7 +4,7 @@ import { pollUntilEventCaptured } from './utils/event-capture-utils'
 
 const startOptions = {
     options: {
-        capture_dead_clicks: true,
+        captureDeadClicks: true,
     },
     url: '/playground/cypress/index.html',
 }
@@ -90,7 +90,7 @@ test.describe('Dead clicks', () => {
         await start(
             {
                 options: {
-                    capture_dead_clicks: {
+                    captureDeadClicks: {
                         capture_clicks_with_modifier_keys: true,
                     },
                 },

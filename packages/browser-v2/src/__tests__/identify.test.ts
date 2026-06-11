@@ -11,7 +11,7 @@ describe('identify', () => {
     it('should persist the distinct_id', async () => {
         // arrange
         const token = uuidv7()
-        const posthog = await createPosthogInstance(token, { before_send: (cr) => cr })
+        const posthog = await createPosthogInstance(token, { beforeSend: (cr) => cr })
         const distinctId = '123'
 
         // act
@@ -26,7 +26,7 @@ describe('identify', () => {
     it('should convert a numeric distinct_id to a string', async () => {
         // arrange
         const token = uuidv7()
-        const posthog = await createPosthogInstance(token, { before_send: (cr) => cr })
+        const posthog = await createPosthogInstance(token, { beforeSend: (cr) => cr })
         const distinctIdNum = 123
         const distinctIdString = '123'
 
@@ -61,7 +61,7 @@ describe('identify', () => {
         ])('should reject %s and log a critical error', async (_label, invalidId, expectedMessage) => {
             const token = uuidv7()
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
-            const posthog = await createPosthogInstance(token, { before_send: beforeSendMock })
+            const posthog = await createPosthogInstance(token, { beforeSend: beforeSendMock })
 
             posthog.identify(invalidId as any)
 
@@ -74,7 +74,7 @@ describe('identify', () => {
         // arrange
         const token = uuidv7()
         const beforeSendMock = jest.fn().mockImplementation((e) => e)
-        const posthog = await createPosthogInstance(token, { before_send: beforeSendMock })
+        const posthog = await createPosthogInstance(token, { beforeSend: beforeSendMock })
         const distinctId = '123'
 
         // act

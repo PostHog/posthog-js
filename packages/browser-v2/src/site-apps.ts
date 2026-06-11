@@ -20,7 +20,7 @@ export class SiteApps implements Extension {
     }
 
     public get isEnabled(): boolean {
-        return !!this._instance.config.opt_in_site_apps
+        return !!this._instance.config.optInSiteApps
     }
 
     private _eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
@@ -172,7 +172,7 @@ export class SiteApps implements Extension {
     onRemoteConfig(response: RemoteConfig): void {
         if (this.siteAppLoaders?.length) {
             if (!this.isEnabled) {
-                logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
+                logger.error(`PostHog site apps are disabled. Enable the "optInSiteApps" config to proceed.`)
                 return
             }
 
@@ -193,7 +193,7 @@ export class SiteApps implements Extension {
         }
 
         if (!this.isEnabled) {
-            logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
+            logger.error(`PostHog site apps are disabled. Enable the "optInSiteApps" config to proceed.`)
             return
         }
 

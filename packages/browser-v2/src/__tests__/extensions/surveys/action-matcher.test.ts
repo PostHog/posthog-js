@@ -14,7 +14,7 @@ describe('action-matcher', () => {
     beforeEach(() => {
         config = createMockConfig({
             token: 'testtoken',
-            api_host: 'https://app.posthog.com',
+            apiHost: 'https://app.posthog.com',
             persistence: 'memory',
         })
 

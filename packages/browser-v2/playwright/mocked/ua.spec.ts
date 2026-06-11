@@ -3,7 +3,7 @@ import { start } from './utils/setup'
 
 const startOptions = {
     options: {
-        session_recording: {},
+        sessionRecording: {},
     },
     flagsResponseOverrides: {
         sessionRecording: {

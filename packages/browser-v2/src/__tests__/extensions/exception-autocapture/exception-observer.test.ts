@@ -57,7 +57,7 @@ describe('Exception Observer', () => {
             callback()
         })
 
-        posthog = await createPosthogInstance(uuidv7(), { before_send: beforeSendMock })
+        posthog = await createPosthogInstance(uuidv7(), { beforeSend: beforeSendMock })
         assignableWindow.__PosthogExtensions__ = {
             loadExternalDependency: loadScriptMock,
         }
@@ -164,7 +164,7 @@ describe('Exception Observer', () => {
         })
 
         it('does not start if disabled locally', () => {
-            posthog.config.capture_exceptions = false
+            posthog.config.captureExceptions = false
             exceptionObserver = new ExceptionObserver(posthog)
             expect(exceptionObserver.isEnabled).toBe(false)
         })
@@ -176,7 +176,7 @@ describe('Exception Observer', () => {
             const originalConsoleError = window!.console.error
             window!.console.error = jest.fn()
 
-            posthog.config.capture_exceptions = {
+            posthog.config.captureExceptions = {
                 capture_console_errors: true,
                 capture_unhandled_errors: false,
                 capture_unhandled_rejections: false,

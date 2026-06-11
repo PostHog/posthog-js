@@ -83,7 +83,7 @@ describe('survey display logic', () => {
         getSessionReplayUrl: jest.fn(),
         capture: jest.fn().mockImplementation((eventName) => eventName),
         config: {
-            disable_surveys_automatic_display: false,
+            disableSurveysAutomaticDisplay: false,
         },
     })
 
@@ -676,7 +676,7 @@ describe('SurveyManager', () => {
             const mockPH = createMockPostHog({
                 config: {
                     token: 'test-token',
-                    api_host: 'https://test.com',
+                    apiHost: 'https://test.com',
                     surveys: { prefillFromUrl: true },
                 },
                 getActiveMatchingSurveys: jest.fn(),

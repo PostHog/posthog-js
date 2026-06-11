@@ -39,7 +39,7 @@ describe('Survey Translations', () => {
     describe('detectUserLanguage', () => {
         it.each([
             {
-                name: 'prioritizes config.override_display_language over all other sources',
+                name: 'prioritizes config.overrideDisplayLanguage over all other sources',
                 configLanguage: 'de',
                 browserLanguage: 'fr',
                 storedPersonProperties: { language: 'es' },
@@ -113,7 +113,7 @@ describe('Survey Translations', () => {
                 expectsStoredPropertiesLookup,
                 hasGetProperty = true,
             }) => {
-                mockPostHog.config.override_display_language = configLanguage
+                mockPostHog.config.overrideDisplayLanguage = configLanguage
                 ;(global.navigator as any).language = browserLanguage
 
                 if (hasGetProperty) {
@@ -281,7 +281,7 @@ describe('Survey Translations', () => {
         })
 
         it('should apply custom locale keys that are not in a product language list', () => {
-            mockPostHog.config.override_display_language = 'ro-RO'
+            mockPostHog.config.overrideDisplayLanguage = 'ro-RO'
             const survey = createBaseSurvey()
             survey.translations = {
                 'ro-RO': {

@@ -4,7 +4,7 @@ import { pollUntilEventCaptured } from './utils/event-capture-utils'
 
 const startOptions = {
     options: {
-        capture_heatmaps: {
+        captureHeatmaps: {
             flush_interval_milliseconds: 1000, // Short interval for testing
         },
     },
@@ -98,7 +98,7 @@ test.describe('Heatmaps', () => {
         await start(
             {
                 options: {
-                    capture_heatmaps: false,
+                    captureHeatmaps: false,
                 },
                 url: '/playground/cypress/index.html',
             },

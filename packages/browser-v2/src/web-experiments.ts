@@ -54,7 +54,7 @@ export class WebExperiments implements Extension {
             return
         }
 
-        if (this._config.disable_web_experiments) {
+        if (this._config.disableWebExperiments) {
             return
         }
 
@@ -101,7 +101,7 @@ export class WebExperiments implements Extension {
     }
 
     loadIfEnabled() {
-        if (this._config.disable_web_experiments) {
+        if (this._config.disableWebExperiments) {
             return
         }
 
@@ -147,7 +147,7 @@ export class WebExperiments implements Extension {
     }
 
     public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean, previewing?: boolean) {
-        if (this._config.disable_web_experiments && !previewing) {
+        if (this._config.disableWebExperiments && !previewing) {
             return callback([])
         }
 
@@ -281,7 +281,7 @@ export class WebExperiments implements Extension {
 
     _is_bot(): boolean | undefined {
         if (navigator && this._instance) {
-            return isLikelyBot(navigator, this._config.custom_blocked_useragents)
+            return isLikelyBot(navigator, this._config.customBlockedUseragents)
         } else {
             return undefined
         }

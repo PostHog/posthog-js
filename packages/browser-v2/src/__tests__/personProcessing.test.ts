@@ -117,49 +117,49 @@ describe('person processing', () => {
     })
 
     const setup = async (
-        person_profiles: 'always' | 'identified_only' | 'never' | undefined,
+        personProfiles: 'always' | 'identified_only' | 'never' | undefined,
         token?: string,
-        persistence_name?: string
+        persistenceName?: string
     ) => {
         token = token || uuidv7()
         const beforeSendMock = jest.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
-            before_send: beforeSendMock,
-            person_profiles,
-            persistence_name,
+            beforeSend: beforeSendMock,
+            personProfiles,
+            persistenceName,
         })
         return { token, beforeSendMock, posthog }
     }
 
     describe('init', () => {
-        it("should default to 'identified_only' person_profiles", async () => {
+        it("should default to 'identified_only' personProfiles", async () => {
             // arrange
             const token = uuidv7()
 
             // act
             const posthog = await createPosthogInstance(token, {
-                person_profiles: undefined,
+                personProfiles: undefined,
             })
 
             // assert
-            expect(posthog.config.person_profiles).toEqual('identified_only')
+            expect(posthog.config.personProfiles).toEqual('identified_only')
         })
-        it('should read person_profiles from init config', async () => {
+        it('should read personProfiles from init config', async () => {
             // arrange
             const token = uuidv7()
 
             // act
             const posthog = await createPosthogInstance(token, {
-                person_profiles: 'never',
+                personProfiles: 'never',
             })
 
             // assert
-            expect(posthog.config.person_profiles).toEqual('never')
+            expect(posthog.config.personProfiles).toEqual('never')
         })
     })
 
     describe('identify', () => {
-        it('should fail if person_profiles is set to never', async () => {
+        it('should fail if personProfiles is set to never', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('never')
 
@@ -169,12 +169,12 @@ describe('person processing', () => {
             // assert
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.identify was called, but person_profiles is set to "never". This call will be ignored.'
+                'posthog.identify was called, but personProfiles is set to "never". This call will be ignored.'
             )
             expect(beforeSendMock).toBeCalledTimes(0)
         })
 
-        it('should switch events to $person_process=true if person_profiles is identified_only', async () => {
+        it('should switch events to $person_process=true if personProfiles is identified_only', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('identified_only')
 
@@ -193,7 +193,7 @@ describe('person processing', () => {
             expect(eventAfterIdentify[0].properties.$process_person_profile).toEqual(true)
         })
 
-        it('should not change $person_process if person_profiles is always', async () => {
+        it('should not change $person_process if personProfiles is always', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('always')
 
@@ -555,7 +555,7 @@ describe('person processing', () => {
             // setGroupPropertiesForFlags still has a person processing check
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.setGroupPropertiesForFlags was called, but person_profiles is set to "never". This call will be ignored.'
+                'posthog.setGroupPropertiesForFlags was called, but personProfiles is set to "never". This call will be ignored.'
             )
 
             // $groupidentify is sent (groups are independent of person processing)
@@ -571,7 +571,7 @@ describe('person processing', () => {
     })
 
     describe('setPersonProperties', () => {
-        it("should not send a $set event if person_profiles is set to 'never'", async () => {
+        it("should not send a $set event if personProfiles is set to 'never'", async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('never')
 
@@ -582,11 +582,11 @@ describe('person processing', () => {
             expect(beforeSendMock).toBeCalledTimes(0)
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.setPersonProperties was called, but person_profiles is set to "never". This call will be ignored.'
+                'posthog.setPersonProperties was called, but personProfiles is set to "never". This call will be ignored.'
             )
         })
 
-        it("should send a $set event if person_profiles is set to 'always'", async () => {
+        it("should send a $set event if personProfiles is set to 'always'", async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('always')
 
@@ -649,7 +649,7 @@ describe('person processing', () => {
             expect(beforeSendMock).toBeCalledTimes(0)
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.alias was called, but person_profiles is set to "never". This call will be ignored.'
+                'posthog.alias was called, but personProfiles is set to "never". This call will be ignored.'
             )
         })
     })
@@ -689,7 +689,7 @@ describe('person processing', () => {
             expect(beforeSendMock.mock.calls.length).toEqual(3)
         })
 
-        it("should not send an event if person_profiles is to set to 'always'", async () => {
+        it("should not send an event if personProfiles is to set to 'always'", async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('always')
 

@@ -54,7 +54,7 @@ export async function start(
     page: Page,
     context: BrowserContext
 ) {
-    options.opt_out_useragent_filter = true
+    options.optOutUseragentFilter = true
 
     // Prepare the mocked Flags API response
     const flagsResponse: FlagsResponse = {
@@ -125,10 +125,10 @@ export async function start(
             // TS very unhappy with passing PostHogConfig here, so just pass an object
             (posthogOptions: Record<string, any>) => {
                 const opts: Partial<PostHogConfig> = {
-                    api_host: 'https://localhost:1234',
+                    apiHost: 'https://localhost:1234',
                     debug: true,
                     ip: false, // Prevent IP deprecation warning in Playwright tests
-                    before_send: (event) => {
+                    beforeSend: (event) => {
                         const win = window as WindowWithPostHog
                         win.capturedEvents = win.capturedEvents || []
 
@@ -147,7 +147,7 @@ export async function start(
                         // but it's a new window so we have to create it in the `before_posthog_init` option
                         ;(window as any).__ph_loaded?.(ph)
                     },
-                    opt_out_useragent_filter: true,
+                    optOutUseragentFilter: true,
                     ...posthogOptions,
                 }
 

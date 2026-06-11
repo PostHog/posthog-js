@@ -102,7 +102,7 @@ export class RemoteConfigLoader {
             return
         }
 
-        const intervalMs = this._instance.config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL
+        const intervalMs = this._instance.config.remoteConfigRefreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL
 
         // Allow users to disable periodic refresh by setting interval to 0
         if (intervalMs === 0) {
@@ -131,7 +131,7 @@ export class RemoteConfigLoader {
         this._instance._onRemoteConfig(config ?? ({} as RemoteConfig))
 
         if (config?.hasFeatureFlags !== false) {
-            if (!this._instance.config.advanced_disable_feature_flags_on_first_load) {
+            if (!this._instance.config.advancedDisableFeatureFlagsOnFirstLoad) {
                 this._instance.featureFlags?.ensureFlagsLoaded()
             }
         }
