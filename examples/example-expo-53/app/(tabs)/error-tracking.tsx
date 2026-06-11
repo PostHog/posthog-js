@@ -5,6 +5,7 @@ import ParallaxScrollView from '@/components/ParallaxScrollView'
 import { ThemedText } from '@/components/ThemedText'
 import { ThemedView } from '@/components/ThemedView'
 import { IconSymbol } from '@/components/ui/IconSymbol'
+import { crashNative } from '@/modules/native-crash'
 import { usePostHog, PostHogErrorBoundary } from 'posthog-react-native'
 
 function BuggyComponent({ shouldThrow }: { shouldThrow: boolean }) {
@@ -93,6 +94,17 @@ export default function ErrorTrackingScreen() {
                     }}
                     title="Capture console warn"
                 />
+            </ThemedView>
+
+            <ThemedView style={styles.sectionContainer}>
+                <ThemedText type="subtitle">Native Crash</ThemedText>
+                <ThemedText>
+                    Triggers a real native iOS/Android crash via a local Expo module. The app will terminate; PostHog
+                    reports the crash on the next launch. Requires `@posthog/react-native-plugin`,
+                    `errorTracking.autocapture.nativeCrashes`, and (for readable stack traces) a release build with
+                    uploaded symbols.
+                </ThemedText>
+                <Button color="#c62828" onPress={() => crashNative()} title="Trigger native crash (iOS/Android)" />
             </ThemedView>
         </ParallaxScrollView>
     )

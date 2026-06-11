@@ -31,6 +31,10 @@ export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_K
             uncaughtExceptions: true,
             unhandledRejections: true,
             console: ['error', 'warn'],
+            // Native iOS/Android crash capture via @posthog/react-native-plugin.
+            // Symbolication requires uploaded debug symbols (the Expo plugin's
+            // `uploadNativeSymbols` option in app.json).
+            nativeCrashes: true,
         },
     },
     // Inject X-POSTHOG-DISTINCT-ID and X-POSTHOG-SESSION-ID on outgoing fetch
