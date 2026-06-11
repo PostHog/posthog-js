@@ -1,0 +1,121 @@
+import { PostHog } from '../posthog-core'
+import { EVENT_PAGEVIEW } from '../constants'
+import { window } from '../utils/globals'
+import { addEventListener } from '../utils'
+import { logger } from '../utils/logger'
+import { patch } from './replay/rrweb-plugins/patch'
+import type { Extension } from './types'
+
+/**
+ * This class is used to capture pageview events when the user navigates using the history API (pushState, replaceState)
+ * and when the user navigates using the browser's back/forward buttons.
+ *
+ * The behavior is controlled by the `capture_pageview` configuration option:
+ * - When set to `'history_change'`, this class will capture pageviews on history API changes
+ */
+export class HistoryAutocapture implements Extension {
+    private _instance: PostHog
+    private _popstateListener: (() => void) | undefined
+    private _lastPathname: string
+
+    constructor(instance: PostHog) {
+        this._instance = instance
+        this._lastPathname = window?.location?.pathname || ''
+    }
+
+    initialize() {
+        this.startIfEnabled()
+    }
+
+    public get isEnabled(): boolean {
+        return this._instance.config.capture_pageview === 'history_change'
+    }
+
+    public startIfEnabled(): void {
+        if (this.isEnabled) {
+            logger.info('History API monitoring enabled, starting...')
+            this.monitorHistoryChanges()
+        }
+    }
+
+    public stop(): void {
+        if (this._popstateListener) {
+            this._popstateListener()
+        }
+        this._popstateListener = undefined
+        logger.info('History API monitoring stopped')
+    }
+
+    public monitorHistoryChanges(): void {
+        if (!window || !window.history) {
+            return
+        }
+
+        this._patchHistoryMethod('pushState')
+        this._patchHistoryMethod('replaceState')
+
+        this._setupPopstateListener()
+    }
+
+    private _patchHistoryMethod(method: 'pushState' | 'replaceState'): void {
+        if (!window || (window.history[method] as any)?.__posthog_wrapped__) {
+            return
+        }
+
+        // Old fashioned, we could also use arrow functions but I think the closure for a patch is more reliable
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const self = this
+        patch(window.history, method, (originalMethod) => {
+            return function patchedHistoryMethod(
+                this: History,
+                state: any,
+                title: string,
+                url?: string | URL | null
+            ): void {
+                ;(originalMethod as (state: any, title: string, url?: string | URL | null) => void).call(
+                    this,
+                    state,
+                    title,
+                    url
+                )
+                self._capturePageview(method)
+            }
+        })
+    }
+
+    private _capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate'): void {
+        try {
+            const currentPathname = window?.location?.pathname
+
+            if (!currentPathname) {
+                return
+            }
+
+            // Only capture pageview if the pathname has changed and the feature is enabled
+            if (currentPathname !== this._lastPathname && this.isEnabled) {
+                this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
+            }
+
+            this._lastPathname = currentPathname
+        } catch (error) {
+            logger.error(`Error capturing ${navigationType} pageview`, error)
+        }
+    }
+
+    private _setupPopstateListener(): void {
+        if (this._popstateListener) {
+            return
+        }
+
+        const handler = () => {
+            this._capturePageview('popstate')
+        }
+
+        addEventListener(window, 'popstate', handler)
+        this._popstateListener = () => {
+            if (window) {
+                window.removeEventListener('popstate', handler)
+            }
+        }
+    }
+}

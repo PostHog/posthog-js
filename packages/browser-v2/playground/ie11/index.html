@@ -1,0 +1,25 @@
+<html>
+
+<head>
+    <!-- COPY AND PASTE FROM `dist/array.full.e5.js` TO TEST THIS -->
+    <script>
+    </script>
+
+    <script>
+        posthog.init('BrpS4SctoaCCsyjlnlun3OzyNJAafdlv__jUWaaJWXg', { api_host: 'https://us.posthog.com', debug: true })
+        posthog.capture("e5 event")
+    </script>
+</head>
+
+<body>
+    <h1>This page triggers a simple event using E5 bundle</h1>
+    <div>
+        Did it work? Check console
+    </div>
+    <div>
+        You can also look at `posthog.something` to check if listeners were properly added to the window/document
+        object, such as `posthog.scrollManager.scrollX()`
+    </div>
+</body>
+
+</html>

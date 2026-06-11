@@ -1,0 +1,57 @@
+<html>
+<head>
+    <script src="../../dist/array.js"></script>
+    <script>
+        posthog.init('sTMFPsFhdP1Ssg', {
+            api_host: 'http://127.0.0.1:8000',
+            debug: true,
+            persistence: 'memory',
+            advanced_disable_feature_flags_on_first_load: true,
+            loaded: function(posthog) {
+                //posthog.identify('test')
+            }
+        })
+    </script>
+</head>
+<h2>Demo site</h2>
+<button>Here's a button you could click if you want to</button><br /><br />
+<body class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
+        <a href='https://posthog.com'>Here's a link to the outside world</a>
+    </div>
+    <div id="shadow" ></div>
+
+    <div style="padding: 2rem;background:green;display:none;color:white" id="feature"><h2>Look, a new beta feature</h2></div>
+    <script>
+        const header = document.createElement('header');
+        const shadowRoot = header.attachShadow({mode: 'open'});
+        shadowRoot.innerHTML = '<h2>shadowroot</h2><button>bla</button>'
+        document.body.appendChild(header)
+
+
+        console.log(posthog.isFeatureEnabled('beta-feature'))
+        posthog.onFeatureFlags(function(featureFlags) {
+            console.log(featureFlags)
+            if(posthog.isFeatureEnabled('beta-feature')) {
+                console.log('beta-feature enabled!')
+                document.getElementById('feature').style.display = 'block'
+            }
+        })
+    </script>
+</body>
+</html>

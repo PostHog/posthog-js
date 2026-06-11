@@ -1,0 +1,27 @@
+{
+    "name": "next-ts-app",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "preview": "next start",
+        "lint": "next lint",
+        "inject": "posthog-cli sourcemap inject --directory ./.next/static/chunks",
+        "upload": "posthog-cli sourcemap upload --directory ./.next/static/chunks",
+        "build-posthog": "cd ../../.. && NODE_ENV=dev pnpm i && pnpm run build",
+        "preinstall": "pnpm run build-posthog"
+    },
+    "dependencies": {
+        "next": "^15.5.7",
+        "posthog-js": "file:../../..",
+        "react": "^19.2.1",
+        "react-dom": "^19.2.1"
+    },
+    "devDependencies": {
+        "@types/node": "^20",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "typescript": "^5"
+    }
+}

@@ -1,0 +1,515 @@
+/**
+ * @jest-environment node
+ */
+
+import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
+import { NetworkRecordOptions } from '../../../../types'
+import { csrfHeaderCases, sensitiveHeaderCases, unaffectedHeaderCases } from './test_data/header-cases'
+
+function expectNotToThrow(promise: Promise<Response>) {
+    // We're testing that the wrapper doesn't cause body-consumption errors like:
+    // TypeError: body stream already read
+    // TypeError: Failed to execute 'clone' on 'Request': Request body is already used
+    return expect(promise).resolves.toBeInstanceOf(Response)
+}
+
+function setupWrappedFetch(downstreamFetch: typeof fetch): { wrappedFetch: typeof fetch; cleanup: () => void } {
+    class MockPerformanceObserver {
+        static supportedEntryTypes = ['resource']
+        observe() {}
+        disconnect() {}
+    }
+    ;(global as any).PerformanceObserver = MockPerformanceObserver
+
+    const mockWindow = {
+        fetch: downstreamFetch,
+        performance: { now: () => Date.now(), getEntriesByName: () => [] },
+        PerformanceObserver: MockPerformanceObserver,
+    } as any
+
+    const plugin = getRecordNetworkPlugin({
+        recordBody: true,
+        recordHeaders: true,
+    } as Partial<NetworkRecordOptions> as NetworkRecordOptions)
+    const cleanup = plugin.observer(() => {}, mockWindow, {
+        recordBody: true,
+        recordHeaders: true,
+        initiatorTypes: ['fetch'],
+    } as any)
+
+    return { wrappedFetch: mockWindow.fetch, cleanup }
+}
+
+describe('fetch wrapper', () => {
+    // Use fake timers to prevent getRequestPerformanceEntry retry timeouts
+    // from keeping the Jest worker alive after tests complete.
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    describe('does not throw for valid inputs', () => {
+        let wrappedFetch: typeof fetch
+        let cleanup: () => void
+
+        beforeEach(() => {
+            const result = setupWrappedFetch(async (input: RequestInfo | URL, init?: RequestInit) => {
+                new Request(input, init)
+                return new Response('ok')
+            })
+            wrappedFetch = result.wrappedFetch
+            cleanup = result.cleanup
+        })
+
+        afterEach(() => cleanup())
+
+        it.each(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const)(
+            'handles %s method',
+            async (method) => {
+                await expectNotToThrow(wrappedFetch('https://example.com/api', { method }))
+            }
+        )
+
+        it.each([
+            ['JSON string', JSON.stringify({ key: 'value' })],
+            ['plain text', 'plain text body'],
+            ['empty string', ''],
+            ['URL encoded', 'foo=bar&baz=qux'],
+        ])('handles %s body', async (_name, body) => {
+            await expectNotToThrow(wrappedFetch('https://example.com/api', { method: 'POST', body }))
+        })
+
+        it.each([
+            ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
+            ['ArrayBuffer', () => new TextEncoder().encode('buffer content').buffer],
+            ['URLSearchParams', () => new URLSearchParams({ foo: 'bar', baz: 'qux' })],
+            [
+                'FormData',
+                () => {
+                    const fd = new FormData()
+                    fd.append('key', 'value')
+                    return fd
+                },
+            ],
+            ['Uint8Array', () => new Uint8Array([1, 2, 3])],
+            ['File', () => new File(['content'], 'test.txt', { type: 'text/plain' })],
+            ['empty FormData', () => new FormData()],
+            [
+                'FormData with multiple files',
+                () => {
+                    const fd = new FormData()
+                    fd.append('file1', new Blob(['content1']), 'file1.txt')
+                    fd.append('file2', new Blob(['content2']), 'file2.txt')
+                    return fd
+                },
+            ],
+            ['null', () => null],
+            ['undefined', () => undefined],
+        ])('handles %s body', async (_name, createBody) => {
+            await expectNotToThrow(wrappedFetch('https://example.com/api', { method: 'POST', body: createBody() }))
+        })
+
+        it('handles custom headers', async () => {
+            await expectNotToThrow(
+                wrappedFetch('https://example.com/api', {
+                    method: 'POST',
+                    headers: { 'X-Custom-Header': 'custom-value', 'X-Another': 'another-value' },
+                    body: '{}',
+                })
+            )
+        })
+
+        it('handles URL object input', async () => {
+            await expectNotToThrow(
+                wrappedFetch(new URL('https://example.com/api/path'), { method: 'POST', body: 'test' })
+            )
+        })
+
+        it('handles Request object input', async () => {
+            const request = new Request('https://example.com/api', {
+                method: 'POST',
+                headers: { 'X-Custom': 'value' },
+                body: 'request body',
+            })
+            await expectNotToThrow(wrappedFetch(request))
+        })
+
+        it.each([
+            ['credentials', { credentials: 'include' as const }],
+            ['mode', { mode: 'cors' as const }],
+            ['cache', { cache: 'no-cache' as const }],
+            ['redirect', { redirect: 'manual' as const }],
+        ])('handles %s option', async (_name, options) => {
+            await expectNotToThrow(wrappedFetch('https://example.com/api', options))
+        })
+    })
+
+    describe('response availability', () => {
+        it('caller can read response body after wrapper processes it', async () => {
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async () => {
+                return new Response(JSON.stringify({ data: 'test' }), {
+                    headers: { 'Content-Type': 'application/json' },
+                })
+            })
+
+            const response = await wrappedFetch('https://example.com/api')
+            const body = await response.json()
+            cleanup()
+
+            expect(body).toEqual({ data: 'test' })
+        })
+
+        it('caller can clone response after wrapper processes it', async () => {
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async () => {
+                return new Response('test body')
+            })
+
+            const response = await wrappedFetch('https://example.com/api')
+            const clone = response.clone()
+            cleanup()
+
+            expect(await response.text()).toBe('test body')
+            expect(await clone.text()).toBe('test body')
+        })
+    })
+
+    describe('downstream wrapper compatibility', () => {
+        it('does not pass the internal Request downstream for URL string inputs', async () => {
+            let receivedInput: RequestInfo | URL | undefined
+            let receivedInit: RequestInit | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, init?: RequestInit) => {
+                    receivedInput = input
+                    receivedInit = init
+                    return new Response('ok')
+                }
+            )
+
+            await wrappedFetch('https://example.com/api', { method: 'POST', body: 'test' })
+            cleanup()
+
+            expect(receivedInput).toBe('https://example.com/api')
+            expect(receivedInit).toMatchObject({ method: 'POST', body: 'test' })
+        })
+
+        it('does not pass a locked caller-supplied ReadableStream body to downstream fetch', async () => {
+            const stream = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode('stream body'))
+                    controller.close()
+                },
+            })
+            const init = { method: 'POST', body: stream, duplex: 'half' } as RequestInit & { duplex: 'half' }
+            let downstreamBody: BodyInit | null | undefined
+            let downstreamText: string | undefined
+
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL, requestInit) => {
+                downstreamBody = requestInit?.body
+                // Mimics the browser/native fetch path (or a downstream wrapper) consuming the init body.
+                // This throws if PostHog's body recording has already locked/disturbed the stream.
+                const downstreamRequest = new Request(input, requestInit)
+                downstreamText = await downstreamRequest.text()
+                return new Response('ok')
+            })
+
+            try {
+                await expect(wrappedFetch('https://example.com/api', init)).resolves.toBeInstanceOf(Response)
+            } finally {
+                cleanup()
+            }
+
+            expect(downstreamBody).toBe(stream)
+            expect(downstreamText).toBe('stream body')
+        })
+
+        it('preserves Request input shape when caller supplied a Request', async () => {
+            let receivedInput: RequestInfo | URL | undefined
+            let receivedInit: RequestInit | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, init?: RequestInit) => {
+                    receivedInput = input
+                    receivedInit = init
+                    return new Response('ok')
+                }
+            )
+            const request = new Request('https://example.com/api', { method: 'POST', body: 'test' })
+
+            await wrappedFetch(request)
+            cleanup()
+
+            expect(receivedInput).toBeInstanceOf(Request)
+            expect(receivedInit).toBeUndefined()
+        })
+
+        it('preserves Request input shape for Request-branded inputs when instanceof fails', async () => {
+            let receivedInput: RequestInfo | URL | undefined
+            let receivedInit: RequestInit | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, init?: RequestInit) => {
+                    receivedInput = input
+                    receivedInit = init
+                    return new Response('ok')
+                }
+            )
+            const requestFromAnotherRealm = {
+                url: 'https://example.com/api',
+                toString() {
+                    return 'https://example.com/api'
+                },
+                get [Symbol.toStringTag]() {
+                    return 'Request'
+                },
+            } as unknown as Request
+
+            expect(requestFromAnotherRealm).not.toBeInstanceOf(Request)
+            expect(Object.prototype.toString.call(requestFromAnotherRealm)).toBe('[object Request]')
+
+            await wrappedFetch(requestFromAnotherRealm)
+            cleanup()
+
+            expect(receivedInput).toBeInstanceOf(Request)
+            expect(receivedInput).not.toBe(requestFromAnotherRealm)
+            expect(receivedInit).toBeUndefined()
+        })
+
+        it.each([
+            ['method', { method: 'PUT' } as RequestInit, (req: Request) => req.method, 'PUT'],
+            ['headers', { headers: { 'X-Custom': 'value' } }, (req: Request) => req.headers.get('X-Custom'), 'value'],
+            ['url', {}, (req: Request) => req.url, 'https://example.com/api'],
+        ])('downstream can reconstruct a Request and read %s', async (_name, init, getter, expected) => {
+            let captured: string | null | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL, requestInit) => {
+                captured = getter(new Request(input, requestInit))
+                return new Response('ok')
+            })
+
+            await wrappedFetch('https://example.com/api', init)
+            cleanup()
+
+            expect(captured).toBe(expected)
+        })
+    })
+
+    // Regression test for https://github.com/PostHog/posthog-js/issues/2922
+    it('preserves FormData boundary when downstream wrapper recreates Request', async () => {
+        let capturedRequest: Request | undefined
+        const { wrappedFetch, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL, init?: RequestInit) => {
+            capturedRequest = new Request(input, init)
+            return new Response('ok')
+        })
+
+        const formData = new FormData()
+        formData.append('key', 'value')
+        formData.append('file', new Blob(['test content']), 'test.txt')
+
+        await wrappedFetch('https://example.com/upload', { method: 'POST', body: formData })
+        cleanup()
+
+        const contentType = capturedRequest!.headers.get('content-type')!
+        const headerBoundary = contentType.match(/boundary=([^\s;]+)/)?.[1]
+        const body = await capturedRequest!.text()
+        const bodyBoundary = body.match(/^--+([^\r\n]+)/)?.[1]
+
+        expect(headerBoundary).toContain(bodyBoundary)
+    })
+
+    it('passes init to downstream wrappers', async () => {
+        let capturedInit: RequestInit | undefined
+        const { wrappedFetch, cleanup } = setupWrappedFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            capturedInit = init
+            return new Response('ok')
+        })
+
+        await wrappedFetch('https://example.com/api', { method: 'PUT', headers: { 'X-Custom': 'value' } })
+        cleanup()
+
+        expect(capturedInit).toBeDefined()
+        expect(capturedInit?.method).toBe('PUT')
+        expect(capturedInit?.headers).toEqual({ 'X-Custom': 'value' })
+    })
+
+    // Reproduces a user report that the wrapper strips deny-listed headers
+    // (CSRF tokens, authorization, api keys) from the actual outgoing
+    // request. The wrapper redacts them from the *recording* via
+    // HEADER_DENY_LIST, but that must never leak back into the live
+    // request the browser sends to the server.
+    describe('does not strip deny-listed headers from the actual outgoing request', () => {
+        const SURVEYS_URL = 'https://example.com/api/internal/surveys'
+        const supplyMechanisms = [
+            {
+                label: 'init.headers plain object',
+                invoke: (wrappedFetch: typeof fetch, name: string, value: string) =>
+                    wrappedFetch(SURVEYS_URL, {
+                        method: 'POST',
+                        headers: { [name]: value, 'content-type': 'application/json' },
+                        body: '{}',
+                    }),
+            },
+            {
+                label: 'Headers instance',
+                invoke: (wrappedFetch: typeof fetch, name: string, value: string) => {
+                    const headers = new Headers()
+                    headers.append(name, value)
+                    headers.append('content-type', 'application/json')
+                    return wrappedFetch(SURVEYS_URL, { method: 'POST', headers, body: '{}' })
+                },
+            },
+            {
+                label: 'Request input',
+                invoke: (wrappedFetch: typeof fetch, name: string, value: string) =>
+                    wrappedFetch(
+                        new Request(SURVEYS_URL, {
+                            method: 'POST',
+                            headers: { [name]: value, 'content-type': 'application/json' },
+                            body: '{}',
+                        })
+                    ),
+            },
+        ] as const
+
+        const cases = sensitiveHeaderCases.flatMap(([name, value]) =>
+            supplyMechanisms.map((m) => [m.label, name, value, m.invoke] as const)
+        )
+
+        it.each(cases)('via %s: preserves %s on downstream Request', async (_label, name, value, invoke) => {
+            let downstream: Request | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, init?: RequestInit) => {
+                    downstream = new Request(input, init)
+                    return new Response('ok')
+                }
+            )
+
+            await invoke(wrappedFetch, name, value)
+            cleanup()
+
+            expect(downstream!.headers.get(name)).toBe(value)
+        })
+    })
+
+    // Smoke check that the wrapper doesn't accidentally strip ordinary
+    // (non-deny-listed) headers either. NOT load-bearing for the
+    // deny-list bug — these are guaranteed to pass for trivial reasons.
+    describe('does not strip ordinary headers from the actual outgoing request', () => {
+        it.each(unaffectedHeaderCases)('preserves %s on downstream Request', async (name, value) => {
+            let downstream: Request | undefined
+            const { wrappedFetch, cleanup } = setupWrappedFetch(
+                async (input: RequestInfo | URL, init?: RequestInit) => {
+                    downstream = new Request(input, init)
+                    return new Response('ok')
+                }
+            )
+
+            await wrappedFetch('https://example.com/api/internal/surveys', {
+                method: 'POST',
+                headers: { [name]: value, 'content-type': 'application/json' },
+                body: '{}',
+            })
+            cleanup()
+
+            expect(downstream!.headers.get(name)).toBe(value)
+        })
+    })
+
+    // The real product applies BOTH the network-plugin wrapper and the
+    // tracing-headers wrapper to window.fetch (when tracing_headers is
+    // configured). They wrap independently, so whichever loads second
+    // ends up calling the other. This block reproduces both orders and
+    // asserts that a user-supplied CSRF header still reaches the
+    // underlying fetch — and that the tracing headers are also added.
+    describe('double wrap (network-plugin + tracing-headers)', () => {
+        // Mirrors packages/browser/src/entrypoints/tracing-headers.ts:patchFetch.
+        // Inlined because the real function patches the global window.fetch and
+        // we need an isolated wrapper around the downstream of our choice.
+        // This is intentionally a partial mirror — the playwright spec
+        // playwright/mocked/session-recording/csrf-headers-preserved.spec.ts
+        // is authoritative for the REAL composed wrapper behaviour (it
+        // boots posthog-js end-to-end with tracing_headers and session
+        // recording network capture both enabled). The jest test
+        // here only proves the structural invariant that two `new
+        // Request(url, init)`-style wrappers compose without dropping
+        // headers, irrespective of what each one adds.
+        function applyTracingHeadersWrapper(
+            originalFetch: typeof fetch,
+            hostnames: string[],
+            distinctId: string,
+            sessionId: string,
+            windowId: string
+        ): typeof fetch {
+            return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
+                const req = new Request(url, init)
+                let reqHostname: string
+                try {
+                    reqHostname = new URL(req.url).hostname
+                } catch {
+                    return originalFetch(req)
+                }
+                if (hostnames.includes(reqHostname)) {
+                    req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
+                    req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
+                    req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
+                }
+                return originalFetch(req)
+            }
+        }
+
+        describe('order: network-plugin wraps first, tracing-headers wraps second (outer)', () => {
+            it.each(csrfHeaderCases)('preserves %s and adds tracing headers', async (name, value) => {
+                let downstream: Request | undefined
+                const { wrappedFetch: innerWrapped, cleanup } = setupWrappedFetch(async (input: RequestInfo | URL) => {
+                    downstream = input as Request
+                    return new Response('ok')
+                })
+
+                const doublyWrapped = applyTracingHeadersWrapper(
+                    innerWrapped,
+                    ['example.com'],
+                    'distinct-abc',
+                    'session-abc',
+                    'window-abc'
+                )
+
+                await doublyWrapped('https://example.com/api/internal/surveys', {
+                    method: 'POST',
+                    headers: { [name]: value, 'content-type': 'application/json' },
+                    body: '{}',
+                })
+                cleanup()
+
+                expect(downstream!.headers.get(name)).toBe(value)
+                expect(downstream!.headers.get('x-posthog-distinct-id')).toBe('distinct-abc')
+                expect(downstream!.headers.get('x-posthog-session-id')).toBe('session-abc')
+                expect(downstream!.headers.get('x-posthog-window-id')).toBe('window-abc')
+            })
+        })
+
+        describe('order: tracing-headers wraps first (inner), network-plugin wraps second (outer)', () => {
+            it.each(csrfHeaderCases)('preserves %s and adds tracing headers', async (name, value) => {
+                let downstream: Request | undefined
+
+                const innerTraced = applyTracingHeadersWrapper(
+                    async (input: RequestInfo | URL) => {
+                        downstream = input as Request
+                        return new Response('ok')
+                    },
+                    ['example.com'],
+                    'distinct-xyz',
+                    'session-xyz',
+                    'window-xyz'
+                )
+
+                const { wrappedFetch: doublyWrapped, cleanup } = setupWrappedFetch(innerTraced)
+
+                await doublyWrapped('https://example.com/api/internal/surveys', {
+                    method: 'POST',
+                    headers: { [name]: value, 'content-type': 'application/json' },
+                    body: '{}',
+                })
+                cleanup()
+
+                expect(downstream!.headers.get(name)).toBe(value)
+                expect(downstream!.headers.get('x-posthog-distinct-id')).toBe('distinct-xyz')
+                expect(downstream!.headers.get('x-posthog-session-id')).toBe('session-xyz')
+                expect(downstream!.headers.get('x-posthog-window-id')).toBe('window-xyz')
+            })
+        })
+    })
+})

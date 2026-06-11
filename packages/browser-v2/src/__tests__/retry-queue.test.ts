@@ -1,0 +1,305 @@
+/* eslint-disable compat/compat */
+
+import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
+import { assignableWindow } from '../utils/globals'
+
+describe('RetryQueue', () => {
+    const mockPosthog = {
+        _send_request: jest.fn(),
+    }
+    let retryQueue: RetryQueue
+    let now = Date.now()
+
+    beforeEach(() => {
+        retryQueue = new RetryQueue(mockPosthog as any)
+
+        jest.useFakeTimers()
+        jest.setSystemTime(now)
+        jest.spyOn(assignableWindow.console, 'warn').mockImplementation()
+    })
+
+    const fastForwardTimeAndRunTimer = (time = 3500) => {
+        now += time
+        jest.setSystemTime(now)
+        jest.runOnlyPendingTimers()
+    }
+
+    const enqueueRequests = () => {
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            // Force a retry
+            callback?.({ statusCode: 502 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'foo', timestamp: now - 3000 },
+        })
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'bar', timestamp: now - 2000 },
+        })
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'baz', timestamp: now - 1000 },
+        })
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'fizz', timestamp: now },
+        })
+
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 200 })
+        })
+
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        mockPosthog._send_request.mockClear()
+    }
+
+    it('processes retry requests', () => {
+        enqueueRequests()
+
+        expect(retryQueue.length).toEqual(4)
+        expect(retryQueue['_queue']).toEqual([
+            {
+                requestOptions: {
+                    url: '/e',
+                    data: { event: 'foo', timestamp: now - 3000 },
+                    retriesPerformedSoFar: 1,
+                },
+                retryAt: expect.any(Number),
+            },
+            {
+                requestOptions: {
+                    url: '/e',
+                    data: { event: 'bar', timestamp: now - 2000 },
+                    retriesPerformedSoFar: 1,
+                },
+                retryAt: expect.any(Number),
+            },
+            {
+                requestOptions: {
+                    url: '/e',
+                    data: { event: 'baz', timestamp: now - 1000 },
+                    retriesPerformedSoFar: 1,
+                },
+                retryAt: expect.any(Number),
+            },
+            {
+                requestOptions: {
+                    url: '/e',
+                    data: { event: 'fizz', timestamp: now },
+                    retriesPerformedSoFar: 1,
+                },
+                retryAt: expect.any(Number),
+            },
+        ])
+
+        // Fast forward enough time to clear the jitter
+        fastForwardTimeAndRunTimer(3500)
+
+        // clears queue
+        expect(retryQueue.length).toEqual(0)
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        // Check the retry count is added
+        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+        ])
+    })
+
+    it('adds the retry_count to the url', () => {
+        enqueueRequests()
+        fastForwardTimeAndRunTimer(3500)
+
+        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+        ])
+    })
+
+    it('tries to send requests via beacon on unload', () => {
+        enqueueRequests()
+
+        retryQueue.unload()
+
+        expect(retryQueue.length).toEqual(0)
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.transport)).toEqual([
+            'sendBeacon',
+            'sendBeacon',
+            'sendBeacon',
+            'sendBeacon',
+        ])
+    })
+
+    it('enqueues requests when offline and flushes immediately when online again', () => {
+        retryQueue['_areWeOnline'] = false
+        expect(retryQueue['_areWeOnline']).toEqual(false)
+
+        enqueueRequests()
+        fastForwardTimeAndRunTimer()
+
+        // requests aren't attempted when we're offline
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(0)
+
+        // queue stays the same
+        expect(retryQueue.length).toEqual(4)
+
+        window.dispatchEvent(new Event('online'))
+
+        expect(retryQueue['_areWeOnline']).toEqual(true)
+        expect(retryQueue.length).toEqual(0)
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+    })
+
+    it('does not enqueue a request after 10 retries', () => {
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            retriesPerformedSoFar: 10,
+        })
+
+        expect(retryQueue.length).toEqual(0)
+    })
+
+    it('only calls the callback when successful', () => {
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 500 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+        })
+
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 200, text: 'it worked!' })
+        })
+
+        fastForwardTimeAndRunTimer()
+
+        expect(retryQueue.length).toEqual(0)
+        expect(cb).toHaveBeenCalledTimes(1)
+        expect(cb).toHaveBeenCalledWith({ statusCode: 200, text: 'it worked!' })
+    })
+
+    it('only calls the callback when retries are exhausted', () => {
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 500 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+            retriesPerformedSoFar: 10,
+        })
+
+        expect(retryQueue.length).toEqual(0)
+        expect(cb).toHaveBeenCalledTimes(1)
+        expect(cb).toHaveBeenCalledWith({ statusCode: 500 })
+    })
+
+    it('increments the retry count each attempt', () => {
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 500 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+            retriesPerformedSoFar: 1,
+        })
+
+        expect(retryQueue.length).toEqual(1)
+        expect(retryQueue['_queue'][0].requestOptions.retriesPerformedSoFar).toEqual(2)
+    })
+
+    describe('backoff calculation', () => {
+        const retryDelaysOne = Array.from({ length: 10 }, (_, i) => i).map((i) => {
+            return pickNextRetryDelay(i + 1)
+        })
+        const retryDelaysTwo = Array.from({ length: 10 }, (_, i) => i).map((i) => {
+            return pickNextRetryDelay(i + 1)
+        })
+        const retryDelaysThree = Array.from({ length: 10 }, (_, i) => i).map((i) => {
+            return pickNextRetryDelay(i + 1)
+        })
+
+        it('retry times are not identical each time they are generated', () => {
+            retryDelaysOne.forEach((delay, i) => {
+                expect(delay).not.toEqual(retryDelaysTwo[i])
+                expect(delay).not.toEqual(retryDelaysThree[i])
+            })
+        })
+
+        it('retry times are within bounds +/- jitter of 50%', () => {
+            retryDelaysOne
+                .concat(retryDelaysTwo)
+                .concat(retryDelaysThree)
+                .forEach((delay) => {
+                    expect(delay).toBeGreaterThanOrEqual(6000 * 0.5)
+                    expect(delay).toBeLessThanOrEqual(30 * 60 * 1000 * 1.5)
+                })
+        })
+    })
+
+    describe('memory management', () => {
+        it('stops polling when queue becomes empty', () => {
+            enqueueRequests()
+
+            expect(retryQueue['_isPolling']).toBe(true)
+            expect(retryQueue['_poller']).toBeDefined()
+            expect(retryQueue.length).toEqual(4)
+
+            fastForwardTimeAndRunTimer(3500)
+
+            expect(retryQueue.length).toEqual(0)
+            expect(retryQueue['_isPolling']).toBe(false)
+            expect(retryQueue['_poller']).toBeUndefined()
+        })
+
+        it('restarts polling when items are added after stopping', () => {
+            enqueueRequests()
+            fastForwardTimeAndRunTimer(3500)
+
+            expect(retryQueue['_isPolling']).toBe(false)
+            expect(retryQueue['_poller']).toBeUndefined()
+
+            mockPosthog._send_request.mockImplementation(({ callback }) => {
+                callback?.({ statusCode: 502 })
+            })
+
+            retryQueue.retriableRequest({
+                url: '/e',
+                data: { event: 'new-event', timestamp: now },
+            })
+
+            expect(retryQueue.length).toEqual(1)
+            expect(retryQueue['_isPolling']).toBe(true)
+            expect(retryQueue['_poller']).toBeDefined()
+        })
+
+        it('cleans up resources on unload', () => {
+            enqueueRequests()
+
+            expect(retryQueue['_isPolling']).toBe(true)
+            expect(retryQueue['_poller']).toBeDefined()
+
+            retryQueue.unload()
+
+            expect(retryQueue['_isPolling']).toBe(false)
+            expect(retryQueue['_poller']).toBeUndefined()
+            expect(retryQueue.length).toEqual(0)
+        })
+    })
+})

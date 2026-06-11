@@ -1,0 +1,307 @@
+import { expect, test } from '../utils/posthog-playwright-test-base'
+import { start } from '../utils/setup'
+
+const startOptions = {
+    options: {},
+    flagsResponseOverrides: {
+        surveys: true,
+    },
+    url: './playground/cypress/index.html',
+}
+
+const openTextQuestion = {
+    type: 'open',
+    question: 'What feedback do you have for us?',
+    description: 'plain text description',
+    id: 'open_text_1',
+}
+
+test.describe('surveys - core display logic', () => {
+    test('shows the same to user if they do not dismiss or respond to it', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+
+        await page.reload()
+
+        await start({ ...startOptions, type: 'reload' }, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+    })
+
+    test('does not show the same survey to user if they have dismissed it before', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+        await page.locator('.PostHogSurvey-123').locator('.form-cancel').click()
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
+
+        expect(
+            await page.evaluate(() => {
+                return window.localStorage.getItem('seenSurvey_123')
+            })
+        ).toBeTruthy()
+
+        await page.reload()
+
+        await start({ ...startOptions, type: 'reload' }, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
+    })
+
+    test('does not show the same survey to user if they responded to it before', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+        await page.locator('.PostHogSurvey-123').locator('textarea').type('some feedback')
+        await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
+
+        expect(
+            await page.evaluate(() => {
+                return window.localStorage.getItem('seenSurvey_123')
+            })
+        ).toBeTruthy()
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
+
+        await page.reload()
+
+        await start({ ...startOptions, type: 'reload' }, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
+
+        expect(
+            await page.evaluate(() => {
+                return window.localStorage.getItem('seenSurvey_123')
+            })
+        ).toBeTruthy()
+    })
+
+    test('does not show a survey to user if user has already seen any survey in the wait period', async ({
+        page,
+        context,
+    }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            conditions: { seenSurveyWaitPeriodInDays: 10 },
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+
+        // The SDK writes lastSeenSurveyDate synchronously after dispatching PHSurveyShown,
+        // but the survey render is async — wait for localStorage to be populated
+        await page.waitForFunction(() => window.localStorage.getItem('lastSeenSurveyDate') !== null)
+
+        const lastSeenDate = await page.evaluate(() => {
+            return window.localStorage.getItem('lastSeenSurveyDate')
+        })
+
+        expect(lastSeenDate!.split('T')[0]).toEqual(new Date().toISOString().split('T')[0])
+
+        await page.reload()
+
+        await start({ ...startOptions, type: 'reload' }, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
+    })
+
+    test('does not allow user to submit non optional survey questions if they have not responded to it', async ({
+        page,
+        context,
+    }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [{ ...openTextQuestion, optional: false }],
+                            appearance: { submitButtonColor: 'pink' },
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-123').locator('.form-submit')).toHaveAttribute('disabled')
+        await page.locator('.PostHogSurvey-123').locator('textarea').type('some feedback')
+        await expect(page.locator('.PostHogSurvey-123').locator('.form-submit')).not.toHaveAttribute('disabled')
+    })
+
+    test('survey popup delay is respected', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: 'delay-test-survey',
+                            name: 'Survey with cancel event',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: { surveyPopupDelaySeconds: 3 },
+                            conditions: {
+                                events: {
+                                    values: [{ name: 'trigger_event' }],
+                                },
+                            },
+                        },
+                    ],
+                },
+            })
+        })
+
+        // Wait for the surveys API response to ensure the event receiver is registered
+        const surveysResponse = page.waitForResponse('**/surveys/**')
+        await start(startOptions, page, context)
+        await surveysAPICall
+        await surveysResponse
+
+        const surveyLocator = page.locator('.PostHogSurvey-delay-test-survey').locator('.survey-form')
+
+        await expect(surveyLocator).not.toBeVisible()
+
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('trigger_event')
+        })
+
+        await page.waitForTimeout(2000)
+        await expect(surveyLocator).not.toBeVisible()
+
+        await expect(surveyLocator).toBeVisible({ timeout: 10000 })
+    })
+
+    test('cancels a pending survey when cancel event fires during delay', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: 'cancel-test-survey',
+                            name: 'Survey with cancel event',
+                            description: 'description',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: { surveyPopupDelaySeconds: 5 },
+                            conditions: {
+                                events: {
+                                    values: [{ name: 'trigger_event' }],
+                                },
+                                cancelEvents: {
+                                    values: [{ name: 'cancel_event' }],
+                                },
+                            },
+                        },
+                    ],
+                },
+            })
+        })
+
+        // Wait for the surveys API response to ensure the event receiver is registered
+        const surveysResponse = page.waitForResponse('**/surveys/**')
+        await start(startOptions, page, context)
+        await surveysAPICall
+        await surveysResponse
+
+        const surveyLocator = page.locator('.PostHogSurvey-cancel-test-survey').locator('.survey-form')
+
+        await expect(surveyLocator).not.toBeVisible()
+
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('trigger_event')
+        })
+
+        await page.waitForTimeout(2000)
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('cancel_event')
+        })
+
+        await page.waitForTimeout(5000)
+
+        await expect(surveyLocator).not.toBeVisible()
+    })
+})

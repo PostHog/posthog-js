@@ -1,0 +1,594 @@
+// Portions of this file are derived from getsentry/sentry-javascript
+// Copyright (c) 2012 Functional Software, Inc. dba Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
+
+import { PostHog } from './posthog-core'
+import { Survey } from './posthog-surveys-types'
+import { ConversationsRemoteConfig } from './posthog-conversations-types'
+
+// only importing types here, so won't affect the bundle
+// eslint-disable-next-line posthog-js/no-external-replay-imports
+import type { SAMPLED } from './extensions/replay/external/triggerMatching'
+
+// Extension class types for __extensionClasses (type-only, no bundle impact)
+import type { ExtensionConstructor } from './extensions/types'
+import type { Autocapture } from './autocapture'
+import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
+import type { ExceptionObserver } from './extensions/exception-autocapture'
+import type { HistoryAutocapture } from './extensions/history-autocapture'
+import type { TracingHeaders } from './extensions/tracing-headers'
+import type { WebVitalsAutocapture } from './extensions/web-vitals'
+import type { SessionRecording } from './extensions/replay/session-recording'
+import type { Heatmaps } from './heatmaps'
+import type { PostHogProductTours } from './posthog-product-tours'
+import type { SiteApps } from './site-apps'
+import type { PostHogSurveys } from './posthog-surveys'
+import type { Toolbar } from './extensions/toolbar'
+import type { PostHogExceptions } from './posthog-exceptions'
+import type { WebExperiments } from './web-experiments'
+import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
+import type { PostHogFeatureFlags } from './posthog-featureflags'
+import type { PostHogLogs } from './posthog-logs'
+
+// ============================================================================
+// Re-export public types from @posthog/types
+// ============================================================================
+
+// Common types
+export type { Property, Properties, JsonType, JsonRecord } from '@posthog/types'
+
+// Capture types
+export type { KnownEventName, EventName, CaptureResult, CaptureOptions, BeforeSendFn } from '@posthog/types'
+
+// Feature flag types
+export type {
+    FeatureFlagsCallback,
+    FeatureFlagDetail,
+    FeatureFlagMetadata,
+    EvaluationReason,
+    FeatureFlagResult,
+    FeatureFlagOptions,
+    RemoteConfigFeatureFlagCallback,
+    EarlyAccessFeature,
+    EarlyAccessFeatureStage,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureResponse,
+    FeatureFlagOverrides,
+    FeatureFlagPayloadOverrides,
+    FeatureFlagOverrideOptions,
+    OverrideFeatureFlagsOptions,
+} from '@posthog/types'
+
+// Request types
+export type { Headers, RequestResponse, RequestCallback } from '@posthog/types'
+
+// Session recording types
+export type {
+    SessionRecordingCanvasOptions,
+    InitiatorType,
+    NetworkRequest,
+    CapturedNetworkRequest,
+    SessionIdChangedCallback,
+    SeverityLevel,
+} from '@posthog/types'
+
+// Config types
+export type {
+    AutocaptureCompatibleElement,
+    DomAutocaptureEvents,
+    AutocaptureConfig,
+    RageclickConfig,
+    BootstrapConfig,
+    SupportedWebVitalsMetrics,
+    PerformanceCaptureConfig,
+    DeadClickCandidate,
+    ExceptionAutoCaptureConfig,
+    ExceptionStepsConfig,
+    DeadClicksAutoCaptureConfig,
+    HeatmapConfig,
+    ConfigDefaults,
+    ExternalIntegrationKind,
+    ErrorTrackingOptions,
+    MaskInputOptions,
+    SlimDOMOptions,
+    SessionRecordingOptions,
+    RequestQueueConfig,
+} from '@posthog/types'
+
+// Toolbar types
+export type { ToolbarUserIntent, ToolbarSource, ToolbarVersion, ToolbarParams } from '@posthog/types'
+
+// Log capture types
+export type {
+    LogSeverityLevel,
+    OtlpSeverityText,
+    OtlpSeverityEntry,
+    LogAttributeValue,
+    LogAttributes,
+    CaptureLogOptions,
+    Logger,
+    OtlpAnyValue,
+    OtlpKeyValue,
+    OtlpLogRecord,
+    OtlpLogsPayload,
+} from '@posthog/types'
+export type { LogSdkContext } from '@posthog/core'
+
+// Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
+export type { KnownUnsafeEditableEvent } from '@posthog/core'
+
+// ============================================================================
+// Browser-specific types that depend on local imports
+// These cannot be moved to @posthog/types as they reference browser-specific code
+// ============================================================================
+
+// Import types for internal use in this file
+import type {
+    SessionRecordingCanvasOptions,
+    PerformanceCaptureConfig,
+    InitiatorType,
+    JsonType,
+    Properties,
+    EventName,
+    CapturedNetworkRequest,
+    SessionRecordingOptions,
+    FeatureFlagDetail,
+    ToolbarParams,
+    PostHogConfig as BasePostHogConfig,
+    PostHog as BasePostHogInterface,
+    RequestResponse,
+} from '@posthog/types'
+
+/* Small override from the base class to make it more specific to the browser/src/posthog-core.ts file
+ * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
+ * using the proper `loaded` function signature.
+ */
+export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init'>
+
+/*
+ * Specify that `loaded` should be using the PostHog instance type
+ * as implemented by the browser/src/posthog-core.ts file rather than the @posthog/types type
+ */
+export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
+    loaded: (posthog: PostHogInterface) => void
+
+    /**
+     * Internal: Extension class overrides for tree-shaking support.
+     * When provided, these classes are used instead of the default imports.
+     * This enables entrypoints to control which extensions are bundled.
+     * @internal
+     */
+    __extensionClasses?: {
+        exceptions?: ExtensionConstructor<PostHogExceptions>
+        historyAutocapture?: ExtensionConstructor<HistoryAutocapture>
+        tracingHeaders?: ExtensionConstructor<TracingHeaders>
+        siteApps?: ExtensionConstructor<SiteApps>
+        sessionRecording?: ExtensionConstructor<SessionRecording>
+        autocapture?: ExtensionConstructor<Autocapture>
+        productTours?: ExtensionConstructor<PostHogProductTours>
+        heatmaps?: ExtensionConstructor<Heatmaps>
+        webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>
+        exceptionObserver?: ExtensionConstructor<ExceptionObserver>
+        deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>
+        surveys?: ExtensionConstructor<PostHogSurveys>
+        toolbar?: ExtensionConstructor<Toolbar>
+        experiments?: ExtensionConstructor<WebExperiments>
+        conversations?: ExtensionConstructor<PostHogConversations>
+        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>
+        logs?: ExtensionConstructor<PostHogLogs>
+    }
+}
+
+// See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
+type NextOptions = { revalidate: false | 0 | number; tags: string[] }
+
+export interface RequestWithOptions {
+    url: string
+    // Data can be a single object or an array of objects when batched
+    data?: Record<string, any> | Record<string, any>[]
+    headers?: Record<string, any>
+    transport?: 'XHR' | 'fetch' | 'sendBeacon'
+    method?: 'POST' | 'GET'
+    urlQueryArgs?: { compression: Compression }
+    callback?: (response: RequestResponse) => void
+    timeout?: number
+    noRetries?: boolean
+    disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
+    compression?: Compression | 'best-available'
+    fetchOptions?: {
+        cache?: RequestInit['cache']
+        next?: NextOptions
+    }
+}
+
+// Queued request types - the same as a request but with additional queueing information
+export interface QueuedRequestWithOptions extends RequestWithOptions {
+    /** key of queue, e.g. 'sessionRecording' vs 'event' */
+    batchKey?: string
+}
+
+// Used explicitly for retriable requests
+export interface RetriableRequestWithOptions extends QueuedRequestWithOptions {
+    retriesPerformedSoFar?: number
+}
+
+export type FlagVariant = { flag: string; variant: string }
+
+/** the config stored in persistence when session recording remote config is received */
+export type SessionRecordingPersistedConfig = Omit<
+    SessionRecordingRemoteConfig,
+    | 'recordCanvas'
+    | 'canvasFps'
+    | 'canvasQuality'
+    | 'networkPayloadCapture'
+    | 'sampleRate'
+    | 'minimumDurationMilliseconds'
+> & {
+    /**
+     * Used to determine if the persisted config is still valid or we need to wait for a new one
+     * only accepts undefined since older versions of the library didn't set this.
+     */
+    cache_timestamp?: number
+    enabled: boolean
+    networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {
+        capturePerformance: RemoteConfig['capturePerformance']
+    }
+    canvasRecording: {
+        enabled: SessionRecordingRemoteConfig['recordCanvas']
+        fps: SessionRecordingRemoteConfig['canvasFps']
+        quality: SessionRecordingRemoteConfig['canvasQuality']
+    }
+    // we don't allow string config here
+    sampleRate: number | null
+    minimumDurationMilliseconds: number | null | undefined
+}
+
+export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
+    endpoint?: string
+    consoleLogRecordingEnabled?: boolean
+    // the API returns a decimal between 0 and 1 as a string
+    sampleRate?: string | null
+    minimumDurationMilliseconds?: number
+    linkedFlag?: string | FlagVariant | null
+    networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+    masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+    urlTriggers?: SessionRecordingUrlTrigger[]
+    scriptConfig?: { script?: string | undefined }
+    urlBlocklist?: SessionRecordingUrlTrigger[]
+    eventTriggers?: string[]
+    /**
+     * Controls how event, url, sampling, and linked flag triggers are combined
+     *
+     * `any` means that if any of the triggers match, the session will be recorded
+     * `all` means that all the triggers must match for the session to be recorded
+     *
+     * originally it was (event || url) && (sampling || linked flag)
+     * which nobody wanted, now the default is all
+     */
+    triggerMatchType?: 'any' | 'all'
+    /**
+     * Config version - defaults to 1 (legacy)
+     * When version is 2, triggerGroups is used instead of individual trigger fields
+     */
+    version?: 1 | 2
+    /**
+     * V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates
+     * Only used when version === 2
+     */
+    triggerGroups?: SessionRecordingTriggerGroup[]
+}
+
+/**
+ * Remote configuration for the PostHog instance
+ *
+ * All of these settings can be configured directly in your PostHog instance
+ * Any configuration set in the client overrides the information from the server
+ */
+export interface RemoteConfig {
+    /**
+     * Supported compression algorithms
+     */
+    supportedCompression: Compression[]
+
+    /**
+     * If set, disables autocapture
+     */
+    autocapture_opt_out?: boolean
+
+    /**
+     *     originally capturePerformance was replay only and so boolean true
+     *     is equivalent to { network_timing: true }
+     *     now capture performance can be separately enabled within replay
+     *     and as a standalone web vitals tracker
+     *     people can have them enabled separately
+     *     they work standalone but enhance each other
+     *     TODO: deprecate this so we make a new config that doesn't need this explanation
+     */
+    capturePerformance?: boolean | PerformanceCaptureConfig
+
+    /**
+     * Whether we should use a custom endpoint for analytics
+     *
+     * @default { endpoint: "/e" }
+     */
+    analytics?: {
+        endpoint?: string
+    }
+
+    /**
+     * Whether the `$elements_chain` property should be sent as a string or as an array
+     *
+     * @default false
+     */
+    elementsChainAsString?: boolean
+
+    /**
+     * Error tracking configuration options
+     */
+    errorTracking?: {
+        autocaptureExceptions?: boolean
+        captureExtensionExceptions?: boolean
+        suppressionRules?: ErrorTrackingSuppressionRule[]
+    }
+
+    /**
+     * Whether capturing logs to the logs product is enabled
+     */
+    logs?: {
+        captureConsoleLogs?: boolean
+    }
+
+    /**
+     * This is currently in development and may have breaking changes without a major version bump
+     */
+    autocaptureExceptions?: boolean | { endpoint?: string }
+
+    /**
+     * Session recording configuration options
+     */
+    sessionRecording?: SessionRecordingRemoteConfig | false
+
+    /**
+     * Whether surveys are enabled
+     */
+    surveys?: boolean | Survey[]
+
+    /**
+     * Whether product tours are enabled
+     */
+    productTours?: boolean
+
+    /**
+     * Parameters for the toolbar
+     */
+    toolbarParams: ToolbarParams
+
+    /**
+     * @deprecated renamed to toolbarParams, still present on older API responses
+     */
+    editorParams?: ToolbarParams
+
+    /**
+     * @deprecated, moved to toolbarParams
+     */
+    toolbarVersion: 'toolbar'
+
+    /**
+     * Whether the user is authenticated
+     */
+    isAuthenticated: boolean
+
+    /**
+     * List of site apps with their IDs and URLs
+     */
+    siteApps: { id: string; url: string }[]
+
+    /**
+     * Whether heatmaps are enabled
+     */
+    heatmaps?: boolean
+
+    /**
+     * Whether to only capture identified users by default
+     */
+    defaultIdentifiedOnly?: boolean
+
+    /**
+     * Whether to capture dead clicks
+     */
+    captureDeadClicks?: boolean
+
+    /**
+     * Indicates if the team has any flags enabled (if not we don't need to load them)
+     */
+    hasFeatureFlags?: boolean
+
+    /**
+     * Conversations widget configuration
+     */
+    conversations?: boolean | ConversationsRemoteConfig
+}
+
+/**
+ * Flags returns feature flags and their payloads
+ */
+export interface FlagsResponse extends RemoteConfig {
+    featureFlags: Record<string, string | boolean>
+    featureFlagPayloads: Record<string, JsonType>
+    errorsWhileComputingFlags: boolean
+    requestId?: string
+    flags: Record<string, FeatureFlagDetail>
+    evaluatedAt?: number
+}
+
+export type SiteAppGlobals = {
+    event: {
+        uuid: string
+        event: EventName
+        properties: Properties
+        timestamp?: Date
+        elements_chain?: string
+        distinct_id?: string
+    }
+    person: {
+        properties: Properties
+    }
+    groups: Record<string, { id: string; type: string; properties: Properties }>
+}
+
+export type SiteAppLoader = {
+    id: string
+    init: (config: { posthog: PostHog; callback: (success: boolean) => void }) => {
+        processEvent?: (globals: SiteAppGlobals) => void
+    }
+}
+
+export type SiteApp = {
+    id: string
+    loaded: boolean
+    errored: boolean
+    processedBuffer: boolean
+    processEvent?: (globals: SiteAppGlobals) => void
+}
+
+export interface PersistentStore {
+    _is_supported: () => boolean
+    _error: (error: any) => void
+    _parse: (name: string) => any
+    _get: (name: string) => any
+    // Returns whether the write was accepted without throwing. Backends that
+    // swallow quota/serialization errors return false so callers can avoid
+    // caching a write that never landed. This is best-effort, not a durable
+    // -persistence guarantee — e.g. Safari private mode has historically
+    // reported success on a write that did not persist.
+    _set: (
+        name: string,
+        value: any,
+        expire_days?: number | null,
+        cross_subdomain?: boolean,
+        secure?: boolean,
+        debug?: boolean
+    ) => boolean
+    _remove: (name: string, cross_subdomain?: boolean) => void
+}
+
+export type EventHandler = (event: Event) => boolean | void
+
+export type SnippetArrayItem = [method: string, ...args: any[]]
+
+export type NetworkRecordOptions = {
+    initiatorTypes?: InitiatorType[]
+    maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined
+    recordHeaders?: boolean | { request: boolean; response: boolean }
+    recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
+    recordInitialRequests?: boolean
+    /**
+     * whether to record PerformanceEntry events for network requests
+     */
+    recordPerformance?: boolean
+    /**
+     * the PerformanceObserver will only observe these entry types
+     */
+    performanceEntryTypeToObserve: string[]
+    /**
+     * the maximum size of the request/response body to record
+     * NB this will be at most 1MB even if set larger
+     */
+    payloadSizeLimitBytes: number
+    /**
+     * some domains we should never record the payload
+     * for example other companies session replay ingestion payloads aren't super useful but are gigantic
+     * if this isn't provided we use a default list
+     * if this is provided - we add the provided list to the default list
+     * i.e. we never record the payloads on the default deny list
+     */
+    payloadHostDenyList?: string[]
+}
+
+export type ErrorEventArgs = [
+    event: string | Event,
+    source?: string | undefined,
+    lineno?: number | undefined,
+    colno?: number | undefined,
+    error?: Error | undefined,
+]
+
+// levels originally copied from Sentry to work with the sentry integration
+// and to avoid relying on a frequently changing @sentry/types dependency
+// but provided as an array of literal types, so we can constrain the level below
+export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
+
+export interface SessionRecordingUrlTrigger {
+    url: string
+    matching: 'regex'
+}
+
+/**
+ * V2 event trigger - always an object with name, optionally with property filters.
+ * The server normalizes bare event name strings to this shape before sending.
+ */
+export interface SessionRecordingEventTrigger {
+    name: string
+    properties?: SessionRecordingTriggerPropertyFilter[]
+}
+
+export interface SessionRecordingTriggerPropertyFilter {
+    key: string
+    type: 'event' | 'person'
+    operator?: 'exact' | 'is_not' | 'icontains' | 'not_icontains' | 'regex' | 'not_regex' | 'gt' | 'lt'
+    value?: string | number | boolean | string[]
+}
+
+/**
+ * V2 Trigger Group - represents a single trigger group with its own conditions and sample rate
+ */
+export interface SessionRecordingTriggerGroup {
+    id: string
+    name: string
+    sampleRate: number
+    minDurationMs?: number
+    conditions: {
+        matchType: 'any' | 'all'
+        events?: SessionRecordingEventTrigger[]
+        urls?: SessionRecordingUrlTrigger[]
+        flag?: string | FlagVariant
+        properties?: SessionRecordingTriggerPropertyFilter[]
+    }
+}
+
+export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
+
+export interface ErrorTrackingSuppressionRule {
+    type: 'AND' | 'OR'
+    values: ErrorTrackingSuppressionRuleValue[]
+}
+
+export interface ErrorTrackingSuppressionRuleValue {
+    key: '$exception_types' | '$exception_values'
+    operator: PropertyMatchType
+    value: string | string[]
+    type: string
+}
+
+export type SessionStartReason =
+    | 'sampling_overridden'
+    | 'recording_initialized'
+    | 'linked_flag_matched'
+    | 'linked_flag_overridden'
+    | typeof SAMPLED
+    | 'session_id_changed'
+    | 'url_trigger_matched'
+    | 'event_trigger_matched'
+
+export type OverrideConfig = {
+    sampling: boolean
+    linked_flag: boolean
+    url_trigger: boolean
+    event_trigger: boolean
+}
+
+export const Compression = {
+    GZipJS: 'gzip-js',
+    Base64: 'base64',
+} as const
+export type Compression = (typeof Compression)[keyof typeof Compression]

@@ -1,0 +1,24 @@
+{
+    "name": "nuxt-app",
+    "private": true,
+    "scripts": {
+        "build": "nuxt build",
+        "dev": "nuxt dev",
+        "generate": "nuxt generate",
+        "preview": "nuxt preview",
+        "postinstall": "nuxt prepare"
+    },
+    "devDependencies": {
+        "@types/node": "^20",
+        "nuxt": "^3.16.2"
+    },
+    "dependencies": {
+        "posthog-js": "file:../../dist/"
+    },
+    "packageManager": "pnpm@10.12.4",
+    "pnpm": {
+        "overrides": {
+            "node-forge": "1.3.2"
+        }
+    }
+}

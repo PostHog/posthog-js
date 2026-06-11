@@ -1,0 +1,68 @@
+<html>
+<head>
+    <title>CSS @layer repro for session replay</title>
+    <style id="panda-emulated"></style>
+    <!-- Mirrors emotion non-speedy / SSR-emitted shape: <style> with a single
+         text node containing the actual CSS. The Chakra-shaped rule is
+         shorthand-with-var()-plus-longhand-override which Chromium's
+         rule.cssText round-trip would corrupt. -->
+    <style id="chakra-emulated"></style>
+    <!-- A hybrid: real text content seeded at parse time, then sheet.insertRule()
+         used to append more rules at runtime. With clean (non-corrupting) CSS
+         on both sides, both the seeded text AND the late insertRule additions
+         should be captured. -->
+    <style id="hybrid-emulated">.hybrid-base { color: red; }</style>
+    <script>
+        (function () {
+            var sheet = document.getElementById('panda-emulated').sheet;
+            // Mirror Panda CSS shape: cascade-layer order then atomic utilities inside @layer utilities.
+            // Layout-affecting atomic classes go in the utilities layer.
+            sheet.insertRule('@layer reset, base, utilities;', 0);
+            sheet.insertRule(
+                '@layer base { .card { background: white; border-radius: 8px; color: #111; font-family: system-ui; } }',
+                1
+            );
+            // single @layer utilities block with many child rules — closer to what Panda CSS emits
+            sheet.insertRule(
+                '@layer utilities {' +
+                    '.p_8 { padding: 32px; }' +
+                    '.flex { display: flex; }' +
+                    '.items_center { align-items: center; }' +
+                    '.justify_center { justify-content: center; }' +
+                    '.grid_cols_2 { display: grid; grid-template-columns: 1fr 1fr; }' +
+                    '@media (min-width: 600px) { .md\\:p_16 { padding: 64px; } }' +
+                    '}',
+                2
+            );
+
+            // Chakra UI v3 + emotion writes a shorthand `padding: var(--x)` followed
+            // by a longhand override `padding-bottom: var(--y)`. Chromium's rule.cssText
+            // round-trip can't statically expand the shorthand var() into per-axis values,
+            // so it emits empty placeholder longhands (`padding-top: ;` etc.) for the
+            // three axes the shorthand "owns" and keeps the explicit override on the 4th.
+            // rrweb's serializeTextNode replaces <style> textContent with that broken
+            // round-trip output via stringifyStylesheet -> stringifyRule -> rule.cssText.
+            var chakra = document.getElementById('chakra-emulated');
+            chakra.textContent =
+                ':root { --chakra-spacing-12: 48px; --chakra-spacing-8: 32px; --chakra-sizes-full: 100%; }' +
+                '.chakra-card { padding: var(--chakra-spacing-8); padding-bottom: var(--chakra-spacing-12); width: var(--chakra-sizes-full); max-width: 420px; }';
+
+            // Hybrid: seeded text + runtime-inserted rule with non-corrupting CSS.
+            // serializeTextNode's stringifyStylesheet path runs cleanly here so
+            // both the seeded rule and the late addition end up captured.
+            var hybrid = document.getElementById('hybrid-emulated').sheet;
+            hybrid.insertRule('.hybrid-late { color: blue; }', hybrid.cssRules.length);
+        })();
+    </script>
+</head>
+<body>
+    <div class="card p_8 flex items_center justify_center">
+        <h1>Login</h1>
+        <input data-cy-input placeholder="Email" />
+    </div>
+
+    <script>
+        !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]), t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.crossOrigin = "anonymous", p.async = !0, p.src = s.api_host + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getSurveys getActiveMatchingSurveys captureException".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
+    </script>
+</body>
+</html>

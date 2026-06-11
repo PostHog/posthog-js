@@ -1,0 +1,30 @@
+<script
+  src="https://browser.sentry-cdn.com/5.25.0/bundle.min.js"
+  integrity="sha384-2p7fXoWSRPG49ZgmmJlTEI/01BY1LgxCNFQFiWpImAERmS/bROOQm+cJMdq/kmWS"
+  crossorigin="anonymous"
+></script>
+
+<h2>This page triggers a sentry error</h2>
+
+<script src="../dist/array.js"></script>
+<script>
+    posthog.init('TLA2XwOD2SB7lqXU1YeBAT2mQd2LQ4LidKHw6JRODi8', {api_host: 'http://127.0.0.1:8000', debug: true, loaded: function(posthog) { posthog.identify('test')}})
+
+    Sentry.init({
+        dsn: 'https://9946c76f89aa406da74bd05f66030c37@o344752.ingest.sentry.io/5455536',
+        integrations: [
+            new posthog.SentryIntegration(posthog, 'posthog', 5455536)
+        ]
+    });
+</script>
+
+<script>
+    window.addEventListener('load', function() {
+        setTimeout(function() {
+
+
+var coolNumber = 12123/0;
+alert(ddd)
+        }, 1000)
+})
+</script>

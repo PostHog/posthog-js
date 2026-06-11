@@ -1,0 +1,28 @@
+{
+    "compilerOptions": {
+        "outDir": "./lib",
+        "target": "ES5",
+        "lib": ["dom", "dom.iterable", "esnext"],
+        "allowJs": true,
+        "checkJs": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "strict": true,
+        "forceConsistentCasingInFileNames": true,
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "isolatedModules": true,
+        "noImplicitReturns": true,
+        "noUnusedParameters": true,
+        "sourceMap": true,
+        "inlineSources": true,
+        "resolveJsonModule": true,
+        "downlevelIteration": true,
+        "declaration": true,
+        "jsx": "react-jsx",
+        "jsxImportSource": "preact"
+    },
+    "include": ["./src/**/*.ts*"],
+    "exclude": ["./src/__tests__/**/*.ts*"]
+}
