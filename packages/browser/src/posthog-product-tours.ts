@@ -57,6 +57,12 @@ export class PostHogProductTours implements Extension {
                 [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: !!response.productTours,
             })
         }
+        if (!isProductToursEnabled(this._instance)) {
+            // tours cached while enabled would otherwise ride along in the main
+            // persistence blob (and every cross-tab storage broadcast) forever
+            this.clearCache()
+            return
+        }
         this.loadIfEnabled()
     }
 

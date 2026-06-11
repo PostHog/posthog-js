@@ -1,7 +1,7 @@
 import { PostHog } from '../posthog-core'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
-import { PRODUCT_TOURS_ENABLED_SERVER_SIDE } from '../constants'
+import { PRODUCT_TOURS, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from '../constants'
 import { RemoteConfig } from '../types'
 
 describe('PostHogProductTours', () => {
@@ -50,6 +50,57 @@ describe('PostHogProductTours', () => {
             } as RemoteConfig)
 
             expect(instance.persistence?.props[PRODUCT_TOURS_ENABLED_SERVER_SIDE]).toBe(true)
+        })
+
+        it.each([
+            {
+                label: 'remote config disables product tours',
+                config: {},
+                response: { productTours: false },
+            },
+            {
+                label: 'the disable_product_tours config opt-out is set',
+                config: { disable_product_tours: true },
+                response: { productTours: true },
+            },
+        ])('drops stored tours when $label', async ({ config, response }) => {
+            instance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                ...config,
+            })
+            instance.persistence?.register({
+                [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true,
+                [PRODUCT_TOURS]: [{ id: 'tour-1', name: 'stale cached tour' }],
+            })
+
+            instance.productTours.onRemoteConfig(response as RemoteConfig)
+
+            expect(instance.persistence?.props[PRODUCT_TOURS]).toBeUndefined()
+        })
+
+        it('keeps stored tours when product tours stays enabled', () => {
+            const tours = [{ id: 'tour-1', name: 'cached tour' }]
+            instance.persistence?.register({
+                [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true,
+                [PRODUCT_TOURS]: tours,
+            })
+
+            instance.productTours.onRemoteConfig({ productTours: true } as RemoteConfig)
+
+            expect(instance.persistence?.props[PRODUCT_TOURS]).toEqual(tours)
+        })
+
+        it('does not drop stored tours when the response carries no productTours key', () => {
+            const tours = [{ id: 'tour-1', name: 'cached tour' }]
+            instance.persistence?.register({
+                [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true,
+                [PRODUCT_TOURS]: tours,
+            })
+
+            instance.productTours.onRemoteConfig({} as RemoteConfig)
+
+            expect(instance.persistence?.props[PRODUCT_TOURS]).toEqual(tours)
         })
     })
 })
