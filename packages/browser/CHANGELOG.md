@@ -1,5 +1,13 @@
 # posthog-js
 
+## 1.386.6
+
+### Patch Changes
+
+- [#3804](https://github.com/PostHog/posthog-js/pull/3804) [`a27b163`](https://github.com/PostHog/posthog-js/commit/a27b16305eaef7fa8b4b36e6d2ffff1dbec7ba6b) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(product-tours): drop the cached tours blob when product tours is not enabled
+
+    Tours fetched while product tours was enabled are cached under `ph_product_tours` in the main persistence blob. Once product tours is disabled (remote config or the `disable_product_tours` option) that cache was never cleaned up, so a potentially large stale blob kept riding on every persistence write — and on every cross-tab `storage` event those writes broadcast. `onRemoteConfig` now clears the cached tours whenever product tours resolves to disabled; they are re-fetched if it is ever re-enabled. (2026-06-11)
+
 ## 1.386.5
 
 ### Patch Changes
