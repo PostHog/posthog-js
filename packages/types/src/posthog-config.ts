@@ -105,7 +105,8 @@ export interface RageclickConfig {
      * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
      * so they don't suppress text like "sign-up", "5 > 3", or "C++".
      *
-     * @default undefined (or `true` when `defaults` is `'2025-11-30'` or later;
+     * @default undefined
+     * (`true` when `defaults` is `'2025-11-30'` or later;
      * `['next', 'previous', 'prev', '>', '<', '+', '-', '−', '–']` when `defaults` is `'2026-05-30'` or later)
      */
     content_ignorelist?: boolean | string[]

@@ -1916,7 +1916,7 @@ export class PostHog implements PostHogInterface {
      * ```js
      * // disable event tracking
      * if (posthog.isFeatureEnabled('feature', { send_event: false })) {
-     *     // flag checked without sending $feature_flag_call event
+     *     // flag checked without sending $feature_flag_called event
      * }
      * ```
      *
