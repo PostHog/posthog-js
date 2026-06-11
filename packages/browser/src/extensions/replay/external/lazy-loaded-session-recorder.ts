@@ -885,8 +885,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // stop() took the _stopAfterCompressionQueueDrains path (non-empty compression queue),
         // its async cleanup would later call _teardown() and silently tear down THIS new
         // recorder once the drain promise resolves. Bumping the generation here causes that
-        // pending cleanup to bail at its generation check.
-        this._compressionQueueGeneration += 1
+        // pending cleanup to bail at its generation check, and resetting the rest of the
+        // compression-stop state means a future stop() of this new recorder is not mistaken
+        // for the still-in-progress old one (which would make it a silent no-op).
+        this._invalidateCompressionQueue()
 
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
@@ -1118,8 +1120,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._stopRecordingProducers()
 
-        // Invalidate any in-flight async compression work so it does not capture events
-        // after stop()/discard() has cleared the buffer or after a future restart.
+        this._invalidateCompressionQueue()
+    }
+
+    // Invalidate any in-flight async compression work so it does not capture events
+    // after stop()/discard() has cleared the buffer or after a future restart.
+    private _invalidateCompressionQueue() {
         this._compressionQueueGeneration += 1
         this._pendingCompressionEvents = []
         this._queuedCompressionEvents = 0

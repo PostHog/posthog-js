@@ -1407,6 +1407,40 @@ describe('Lazy SessionRecording', () => {
                 expect(lazyRecorder['isStarted']).toEqual(true)
                 expect(['active', 'sampled', 'buffering']).toContain(sessionRecording.status)
             })
+
+            // The rotation must not leave behind stale stop-in-progress state. If start()
+            // only invalidated the generation, _isStoppingAfterCompression would stay true
+            // (the bailed-out drain never resets it) and _queuedCompressionEvents would stay
+            // counted (stale-generation events never decrement it) — so every later stop()
+            // would hit the in-progress guard in _stopAfterCompressionQueueDrains and
+            // silently no-op, leaving rrweb running forever.
+            it('can still stop the new recorder after surviving an in-flight compression queue', async () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                let resolveDrain: () => void = () => {}
+                lazyRecorder['_compressionQueue'] = new Promise<void>((resolve) => {
+                    resolveDrain = resolve
+                })
+
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                const rotationTimestamp = startingTimestamp + 100 + sessionManager['_sessionTimeoutMs'] + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                emitActiveEvent(rotationTimestamp)
+
+                resolveDrain()
+                await Promise.resolve()
+                await Promise.resolve()
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder.stop()
+
+                expect(lazyRecorder['isStarted']).toEqual(false)
+            })
         })
 
         describe('scheduled full snapshots', () => {
