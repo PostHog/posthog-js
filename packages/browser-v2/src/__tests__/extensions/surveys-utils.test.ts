@@ -573,20 +573,11 @@ describe('addSurveyCSSVariablesToElement', () => {
     })
 
     describe('input background color', () => {
-        it('should use inputBackground, falling back to deprecated inputBackgroundColor', () => {
-            // inputBackground (core field) takes precedence
+        it('should use inputBackground', () => {
             addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
                 inputBackground: '#111111',
-                inputBackgroundColor: '#999999',
             })
             expect(element.style.getPropertyValue('--ph-survey-input-background')).toBe('#111111')
-
-            // Falls back to deprecated inputBackgroundColor for backwards compat
-            element = document.createElement('div')
-            addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
-                inputBackgroundColor: '#ff0000',
-            })
-            expect(element.style.getPropertyValue('--ph-survey-input-background')).toBe('#ff0000')
         })
 
         it('should auto-adjust to #f8f8f8 when main backgroundColor is white and no explicit input background', () => {

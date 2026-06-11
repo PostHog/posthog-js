@@ -12,7 +12,6 @@ import {
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigLoader } from '../../remote-config'
 import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
-import { type eventWithTime } from './types/rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '../../utils/logger'
@@ -321,15 +320,6 @@ export class SessionRecording implements Extension {
 
         this._recordingStatus = LAZY_LOADING
         this._lazyLoadedSessionRecording.start(startReason)
-    }
-
-    /**
-     * this is maintained on the public API only because it has always been on the public API
-     * if you are calling this directly you are certainly doing something wrong
-     * @deprecated
-     */
-    onRRwebEmit(rawEvent: eventWithTime) {
-        this._lazyLoadedSessionRecording?.onRRwebEmit?.(rawEvent)
     }
 
     /**

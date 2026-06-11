@@ -7,7 +7,7 @@ import { isUndefined } from '@posthog/core'
 import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
-import { configRenames, PostHog } from '../posthog-core'
+import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
@@ -59,23 +59,6 @@ describe('posthog core', () => {
 
     afterEach(() => {
         jest.useRealTimers()
-    })
-
-    describe('configRenames()', () => {
-        it.each([
-            [
-                'maps deprecated preview beacon option to the stable config name',
-                { __preview_disable_beacon: true },
-                { disable_beacon: true },
-            ],
-            [
-                'prioritizes stable beacon option name over deprecated preview name',
-                { disable_beacon: false, __preview_disable_beacon: true },
-                { disable_beacon: false },
-            ],
-        ] as [string, Partial<PostHogConfig>, Partial<PostHogConfig>][])('%s', (_description, input, expected) => {
-            expect(configRenames(input)).toMatchObject(expected)
-        })
     })
 
     describe('capture()', () => {
@@ -139,8 +122,7 @@ describe('posthog core', () => {
             const posthog = posthogWith(
                 {
                     property_denylist: [],
-                    property_blacklist: [],
-                    store_google: true,
+                    save_campaign_params: true,
                     save_referrer: true,
                 },
                 {
@@ -214,7 +196,6 @@ describe('posthog core', () => {
                 {
                     opt_out_useragent_filter: true,
                     property_denylist: [],
-                    property_blacklist: [],
                 },
                 defaultOverrides
             )
@@ -237,7 +218,6 @@ describe('posthog core', () => {
                 {
                     properties_string_max_length: 1000,
                     property_denylist: [],
-                    property_blacklist: [],
                 },
                 defaultOverrides
             )
@@ -258,7 +238,6 @@ describe('posthog core', () => {
                 {
                     properties_string_max_length: undefined,
                     property_denylist: [],
-                    property_blacklist: [],
                 },
                 defaultOverrides
             )
@@ -306,7 +285,6 @@ describe('posthog core', () => {
             const posthog = posthogWith(
                 {
                     property_denylist: [],
-                    property_blacklist: [],
                 },
                 defaultOverrides
             )
@@ -455,7 +433,7 @@ describe('posthog core', () => {
         })
     })
 
-    describe('_calculate_event_properties()', () => {
+    describe('calculateEventProperties()', () => {
         let posthog: PostHog
         const uuid = 'uuid'
 
@@ -492,8 +470,6 @@ describe('posthog core', () => {
                     api_host: 'https://app.posthog.com',
                     token: 'testtoken',
                     property_denylist: [],
-                    property_blacklist: [],
-                    sanitize_properties: undefined,
                 },
                 overrides
             )
@@ -543,12 +519,11 @@ describe('posthog core', () => {
             })
         })
 
-        it("can't deny or blacklist $process_person_profile", () => {
+        it("can't deny $process_person_profile", () => {
             posthog = posthogWith(
                 {
                     api_host: 'https://custom.posthog.com',
                     property_denylist: ['$process_person_profile'],
-                    property_blacklist: ['$process_person_profile'],
                 },
                 overrides
             )
@@ -575,43 +550,6 @@ describe('posthog core', () => {
                 $config_defaults: 'unset',
             })
             expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
-        })
-
-        it('calls sanitize_properties', () => {
-            posthog = posthogWith(
-                {
-                    api_host: 'https://custom.posthog.com',
-                    sanitize_properties: (props, event_name) => ({ token: props.token, event_name }),
-                },
-                overrides
-            )
-
-            expect(posthog.calculateEventProperties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
-                event_name: 'custom_event',
-                token: 'testtoken',
-                $process_person_profile: false,
-            })
-        })
-
-        it('calls sanitize_properties for $set_once', () => {
-            posthog = posthogWith(
-                {
-                    api_host: 'https://custom.posthog.com',
-                    sanitize_properties: (props, event_name) => ({ token: props.token, event_name, ...props }),
-                },
-                overrides
-            )
-
-            posthog.persistence.get_initial_props = () => ({ initial: 'prop' })
-            posthog.sessionPropsManager.getSetOnceProps = () => ({ session: 'prop' })
-            posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true // person processing is needed for $set_once
-            expect(posthog._calculate_set_once_properties({ key: 'prop' })).toEqual({
-                event_name: '$set_once',
-                token: undefined,
-                initial: 'prop',
-                session: 'prop',
-                key: 'prop',
-            })
         })
 
         describe('initial person props and $identify interaction', () => {
@@ -927,11 +865,11 @@ describe('posthog core', () => {
                 },
             })
 
-            expect(posthog.getFeatureFlagPayload('multivariant')).toBe('some-payload')
-            expect(posthog.getFeatureFlagPayload('enabled')).toEqual({ another: 'value' })
-            expect(posthog.getFeatureFlagPayload('jsonString')).toEqual({ a: 'payload' })
-            expect(posthog.getFeatureFlagPayload('disabled')).toBe(undefined)
-            expect(posthog.getFeatureFlagPayload('undef')).toBe(undefined)
+            expect(posthog.getFeatureFlagResult('multivariant')?.payload).toBe('some-payload')
+            expect(posthog.getFeatureFlagResult('enabled')?.payload).toEqual({ another: 'value' })
+            expect(posthog.getFeatureFlagResult('jsonString')?.payload).toEqual({ a: 'payload' })
+            expect(posthog.getFeatureFlagResult('disabled')?.payload).toBe(undefined)
+            expect(posthog.getFeatureFlagResult('undef')?.payload).toBe(undefined)
         })
 
         it('does nothing when empty', () => {
@@ -1522,28 +1460,7 @@ describe('posthog core', () => {
             expect(posthog._shouldDisableFlags()).toBe(true)
         })
 
-        it('falls back to advanced_disable_decide with deprecation warning', () => {
-            const warnSpy = jest.spyOn(mockLogger, 'warn')
-            const posthog = posthogWith({ advanced_disable_decide: true })
-            expect(posthog._shouldDisableFlags()).toBe(true)
-            expect(warnSpy).toHaveBeenCalledWith(
-                expect.stringContaining("Config field 'advanced_disable_decide' is deprecated")
-            )
-        })
-
-        it('prioritizes advanced_disable_flags over advanced_disable_decide', () => {
-            const warnSpy = jest.spyOn(mockLogger, 'warn')
-            const posthog = posthogWith({
-                advanced_disable_flags: false,
-                advanced_disable_decide: true,
-            })
-            expect(posthog._shouldDisableFlags()).toBe(false)
-            expect(warnSpy).not.toHaveBeenCalledWith(
-                expect.stringContaining("Config field 'advanced_disable_decide' is deprecated")
-            )
-        })
-
-        it('returns false when neither field is set', () => {
+        it('returns false when the field is not set', () => {
             const posthog = posthogWith({})
             expect(posthog._shouldDisableFlags()).toBe(false)
         })
@@ -1685,11 +1602,5 @@ describe('posthog core', () => {
                 `https://us.posthog.com/project/${token}/replay/sessionId?t=30`
             )
         })
-    })
-
-    it('deprecated web performance observer still exposes _forceAllowLocalhost', async () => {
-        const posthog = await createPosthogInstance(uuidv7())
-        expect(posthog.webPerformance._forceAllowLocalhost).toBe(false)
-        expect(() => posthog.webPerformance._forceAllowLocalhost).not.toThrow()
     })
 })

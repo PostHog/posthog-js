@@ -143,9 +143,9 @@ export const addSurveyCSSVariablesToElement = (
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
 
-    // Use user-provided inputBackground (or deprecated inputBackgroundColor for backwards compat)
+    // Use user-provided inputBackground
     // Fallback to internal default, with slight adjustment for white backgrounds
-    const userInputBg = appearance?.inputBackground || appearance?.inputBackgroundColor
+    const userInputBg = appearance?.inputBackground
     let inputBgColor = userInputBg || effectiveAppearance.inputBackground
     if (!userInputBg && effectiveAppearance.backgroundColor === 'white') {
         inputBgColor = '#f8f8f8'

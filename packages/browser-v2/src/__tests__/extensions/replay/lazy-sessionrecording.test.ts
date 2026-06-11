@@ -4,7 +4,6 @@ import '@testing-library/jest-dom'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
-    CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
@@ -302,7 +301,6 @@ describe('Lazy SessionRecording', () => {
         // defaults
         posthog.persistence?.register({
             [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
-            [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false,
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
 
@@ -470,7 +468,6 @@ describe('Lazy SessionRecording', () => {
                     clientSide: boolean | undefined,
                     expected: boolean
                 ) => {
-                    posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: serverSide })
                     posthog.config.enable_recording_console_log = clientSide
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_isConsoleLogCaptureEnabled']).toBe(
                         expected
@@ -831,7 +828,7 @@ describe('Lazy SessionRecording', () => {
                 // buffer is empty
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual(emptyBuffer)
 
-                sessionRecording.onRRwebEmit(createPluginSnapshot({}) as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(createPluginSnapshot({}) as eventWithTime)
 
                 // a plugin event doesn't count as returning from idle
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
@@ -854,7 +851,9 @@ describe('Lazy SessionRecording', () => {
                 // buffer is empty
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual(emptyBuffer)
 
-                sessionRecording.onRRwebEmit(createIncrementalSnapshot({}) as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(
+                    createIncrementalSnapshot({}) as eventWithTime
+                )
 
                 // an incremental event counts as returning from idle
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(false)
@@ -879,13 +878,13 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 // ensure buffer isn't empty
-                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
 
                 // fake having a large buffer
                 // in reality we would need a very long idle period emitting custom events to reach 1MB of buffer data
                 // particularly since we flush the buffer on entering idle
                 sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
-                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
 
                 // we're still idle
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toBe(true)
@@ -905,7 +904,7 @@ describe('Lazy SessionRecording', () => {
                     windowId: 'windowId',
                 })
 
-                sessionRecording.onRRwebEmit(createFullSnapshot({}) as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(createFullSnapshot({}) as eventWithTime)
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [],
@@ -926,7 +925,7 @@ describe('Lazy SessionRecording', () => {
                     windowId: 'windowId',
                 })
 
-                sessionRecording.onRRwebEmit(createMetaSnapshot({}) as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(createMetaSnapshot({}) as eventWithTime)
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [],
@@ -947,7 +946,7 @@ describe('Lazy SessionRecording', () => {
                     windowId: 'windowId',
                 })
 
-                sessionRecording.onRRwebEmit(createStyleSnapshot({}) as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(createStyleSnapshot({}) as eventWithTime)
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                     data: [],
@@ -974,7 +973,7 @@ describe('Lazy SessionRecording', () => {
                     { lastActivityTimestamp: startingTimestamp + 100 },
                     eventTag
                 )
-                sessionRecording.onRRwebEmit(event as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(event as eventWithTime)
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
                 const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
@@ -996,7 +995,7 @@ describe('Lazy SessionRecording', () => {
                         { lastActivityTimestamp: lastActivityTime },
                         eventTag
                     )
-                    sessionRecording.onRRwebEmit(event as eventWithTime)
+                    sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(event as eventWithTime)
 
                     const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
                     // timestamp should be corrected to lastActivityTimestamp, not the time rrweb recorded it
@@ -2797,7 +2796,9 @@ describe('Lazy SessionRecording', () => {
             ;(posthog.capture as jest.Mock).mockClear()
 
             expect(() =>
-                sessionRecording.onRRwebEmit(createIncrementalSnapshot({ data: { source: 1 } }) as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']!.onRRwebEmit(
+                    createIncrementalSnapshot({ data: { source: 1 } }) as eventWithTime
+                )
             ).not.toThrow()
             expect(posthog.capture).not.toHaveBeenCalled()
         })

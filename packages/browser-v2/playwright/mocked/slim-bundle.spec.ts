@@ -56,13 +56,11 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
         // Mock the remote config endpoint
         void context.route(/\/array\/[^/]+\/config(\?|$)/, (route) => {
             const flagsResponse: FlagsResponse = {
-                editorParams: {},
                 flags: {},
                 featureFlags: {},
                 featureFlagPayloads: {},
                 errorsWhileComputingFlags: false,
                 toolbarParams: {},
-                toolbarVersion: 'toolbar',
                 isAuthenticated: false,
                 siteApps: [],
                 supportedCompression: [Compression.GZipJS],

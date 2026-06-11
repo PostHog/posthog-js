@@ -28,23 +28,29 @@ describe('heatmaps', () => {
         beforeSendMock = beforeSendMock.mockClear()
 
         posthog = await createPosthogInstance(uuidv7(), {
-            before_send: beforeSendMock,
-            sanitize_properties: (props) => {
-                // what ever sanitization makes sense
-                const sanitizeUrl = (url: string) => url.replace(/https?:\/\/[^/]+/g, 'http://replaced')
-                if (props['$current_url']) {
-                    props['$current_url'] = sanitizeUrl(props['$current_url'])
-                }
-                if (isObject(props['$heatmap_data'])) {
-                    // the keys of the heatmap data are URLs, so we might need to sanitize them to
-                    // this sanitized URL would need to be entered in the toolbar for the heatmap display to work
-                    props['$heatmap_data'] = Object.entries(props['$heatmap_data']).reduce((acc, [url, data]) => {
-                        acc[sanitizeUrl(url)] = data
-                        return acc
-                    }, {})
-                }
-                return props
-            },
+            before_send: [
+                (cr) => {
+                    if (!cr) {
+                        return cr
+                    }
+                    // what ever sanitization makes sense
+                    const sanitizeUrl = (url: string) => url.replace(/https?:\/\/[^/]+/g, 'http://replaced')
+                    const props = cr.properties
+                    if (props['$current_url']) {
+                        props['$current_url'] = sanitizeUrl(props['$current_url'])
+                    }
+                    if (isObject(props['$heatmap_data'])) {
+                        // the keys of the heatmap data are URLs, so we might need to sanitize them to
+                        // this sanitized URL would need to be entered in the toolbar for the heatmap display to work
+                        props['$heatmap_data'] = Object.entries(props['$heatmap_data']).reduce((acc, [url, data]) => {
+                            acc[sanitizeUrl(url)] = data
+                            return acc
+                        }, {})
+                    }
+                    return cr
+                },
+                beforeSendMock,
+            ],
             // simplifies assertions by not needing to ignore events
             capture_pageview: false,
         })

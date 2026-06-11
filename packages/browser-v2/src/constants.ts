@@ -21,22 +21,10 @@ export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side
 export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'
 export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
-// @deprecated can be removed along with eager loaded replay
+// NOTE: still persisted/read by the replay extension and persistence key policy
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
-// @deprecated can be removed along with eager loaded replay
-export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
-// @deprecated can be removed along with eager loaded replay
-export const SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE = '$session_recording_network_payload_capture'
-// @deprecated can be removed along with eager loaded replay
-export const SESSION_RECORDING_MASKING = '$session_recording_masking'
-// @deprecated can be removed along with eager loaded replay
-export const SESSION_RECORDING_CANVAS_RECORDING = '$session_recording_canvas_recording'
-// @deprecated can be removed along with eager loaded replay
+// NOTE: still persisted/read by the replay extension and persistence key policy
 export const SESSION_RECORDING_SAMPLE_RATE = '$replay_sample_rate'
-// @deprecated can be removed along with eager loaded replay
-export const SESSION_RECORDING_MINIMUM_DURATION = '$replay_minimum_duration'
-// @deprecated can be removed along with eager loaded replay
-export const SESSION_RECORDING_SCRIPT_CONFIG = '$replay_script_config'
 export const SESSION_RECORDING_OVERRIDE_SAMPLING = '$replay_override_sampling'
 export const SESSION_RECORDING_OVERRIDE_LINKED_FLAG = '$replay_override_linked_flag'
 export const SESSION_RECORDING_OVERRIDE_URL_TRIGGER = '$replay_override_url_trigger'

@@ -133,7 +133,7 @@ export class Toolbar implements Extension {
     }
 
     private _callLoadToolbar(params: ToolbarParams) {
-        const loadFn = assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor']
+        const loadFn = assignableWindow['ph_load_toolbar']
         if (isNullish(loadFn) || !isFunction(loadFn)) {
             logger.warn('No toolbar load function found')
             return
@@ -191,19 +191,5 @@ export class Toolbar implements Extension {
         }
 
         return true
-    }
-
-    /** @deprecated Use "loadToolbar" instead. */
-    _loadEditor(params: ToolbarParams): boolean {
-        return this.loadToolbar(params)
-    }
-
-    /** @deprecated Use "maybeLoadToolbar" instead. */
-    maybeLoadEditor(
-        location: Location | undefined = undefined,
-        localStorage: Storage | undefined = undefined,
-        history: History | undefined = undefined
-    ): boolean {
-        return this.maybeLoadToolbar(location, localStorage, history)
     }
 }

@@ -137,19 +137,61 @@ import type {
     PostHogConfig as BasePostHogConfig,
     PostHog as BasePostHogInterface,
     RequestResponse,
+    TreeShakeable,
+    OverrideFeatureFlagsOptions,
 } from '@posthog/types'
+
+/**
+ * Members of the base interface from @posthog/types that have been removed from the v2 SDK.
+ * The deprecated members are kept in @posthog/types for the benefit of the v1 SDK.
+ */
+type RemovedDeprecatedPostHogMembers =
+    | 'people'
+    | 'decideEndpointWasHit'
+    | 'getFeatureFlagPayload'
+    | 'renderSurvey'
+    | 'canRenderSurvey'
 
 /* Small override from the base class to make it more specific to the browser/src/posthog-core.ts file
  * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
  * using the proper `loaded` function signature.
  */
-export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init'>
+export type PostHogInterface = Omit<
+    BasePostHogInterface,
+    'config' | 'init' | 'featureFlags' | RemovedDeprecatedPostHogMembers
+> & {
+    /**
+     * The feature flags instance. Provides access to feature flag override methods.
+     */
+    featureFlags: TreeShakeable<{
+        overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void
+    }>
+}
+
+/**
+ * Config keys from the base config in @posthog/types that have been removed from the v2 SDK.
+ * The deprecated keys are kept in @posthog/types for the benefit of the v1 SDK.
+ */
+type RemovedDeprecatedConfigKeys =
+    | 'sanitize_properties'
+    | 'ip'
+    | 'on_xhr_error'
+    | 'xhr_headers'
+    | 'process_person'
+    | 'advanced_disable_decide'
+    | 'cookie_name'
+    | 'disable_cookie'
+    | 'store_google'
+    | 'verbose'
+    | 'property_blacklist'
+    | '__preview_disable_beacon'
+    | '__preview_external_dependency_versioned_paths'
 
 /*
  * Specify that `loaded` should be using the PostHog instance type
  * as implemented by the browser/src/posthog-core.ts file rather than the @posthog/types type
  */
-export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
+export type PostHogConfig = Omit<BasePostHogConfig, 'loaded' | RemovedDeprecatedConfigKeys> & {
     loaded: (posthog: PostHogInterface) => void
 
     /**
@@ -362,16 +404,6 @@ export interface RemoteConfig {
      * Parameters for the toolbar
      */
     toolbarParams: ToolbarParams
-
-    /**
-     * @deprecated renamed to toolbarParams, still present on older API responses
-     */
-    editorParams?: ToolbarParams
-
-    /**
-     * @deprecated, moved to toolbarParams
-     */
-    toolbarVersion: 'toolbar'
 
     /**
      * Whether the user is authenticated

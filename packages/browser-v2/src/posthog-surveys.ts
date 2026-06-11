@@ -181,7 +181,7 @@ export class PostHogSurveys implements Extension {
      *         // Or get active matching surveys
      *         posthog.getActiveMatchingSurveys((activeMatchingSurveys) => {
      *             if (activeMatchingSurveys.length > 0) {
-     *                 posthog.renderSurvey(activeMatchingSurveys[0].id, '#survey-container')
+     *                 posthog.displaySurvey(activeMatchingSurveys[0].id)
      *             }
      *         })
      *     })

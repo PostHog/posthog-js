@@ -195,42 +195,6 @@ export function addEventListener(
     element?.addEventListener(event, callback, { capture, passive })
 }
 
-/**
- * Helper to migrate deprecated config fields to new field names with appropriate warnings
- * @param config - The config object to check
- * @param newField - The new field name to use
- * @param oldField - The deprecated field name to check for
- * @param defaultValue - The default value if neither field is set
- * @param loggerInstance - Optional logger instance for deprecation warnings
- * @returns The value to use (new field takes precedence over old field)
- */
-export function migrateConfigField<T>(
-    config: Record<string, any>,
-    newField: string,
-    oldField: string,
-    defaultValue: T,
-    loggerInstance?: { warn: (message: string) => void }
-): T {
-    const hasNewField = newField in config && !isNullish(config[newField])
-    const hasOldField = oldField in config && !isNullish(config[oldField])
-
-    if (hasNewField) {
-        return config[newField]
-    }
-
-    if (hasOldField) {
-        if (loggerInstance) {
-            loggerInstance.warn(
-                `Config field '${oldField}' is deprecated. Please use '${newField}' instead. ` +
-                    `The old field will be removed in a future major version.`
-            )
-        }
-        return config[oldField]
-    }
-
-    return defaultValue
-}
-
 const TOOLBAR_INTERNAL_INSTANCE_NAME = 'ph_toolbar_internal'
 
 export function isToolbarInstance(config: Pick<PostHogConfig, 'name'>): boolean {

@@ -26,8 +26,7 @@ describe('RemoteConfigLoader', () => {
             config: { ...defaultConfig },
             _onRemoteConfig: jest.fn(),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            _shouldDisableFlags: () =>
-                posthog.config.advanced_disable_flags || posthog.config.advanced_disable_decide || false,
+            _shouldDisableFlags: () => posthog.config.advanced_disable_flags || false,
             featureFlags: {
                 ensureFlagsLoaded: jest.fn(),
             },

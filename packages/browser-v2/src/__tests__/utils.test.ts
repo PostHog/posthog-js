@@ -7,7 +7,7 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, extend, isCrossDomainCookie, migrateConfigField } from '../utils'
+import { _copyAndTruncateStrings, extend, isCrossDomainCookie } from '../utils'
 import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
 import { expect } from '@jest/globals'
 
@@ -454,31 +454,6 @@ describe('utils', () => {
         })
         test.each(icontainsCases)('not_icontains', (targets, values, expected) => {
             expect(propertyComparisons['not_icontains'](targets, values)).toBe(!expected)
-        })
-    })
-
-    describe('migrateConfigField', () => {
-        it.each([
-            [{ newField: 'value' }, 'value'],
-            [{ oldField: 'oldValue' }, 'oldValue'],
-            [{ newField: 'value', oldField: 'oldValue' }, 'value'],
-            [{}, 'default'],
-            [{ newField: undefined }, 'default'],
-            [{ oldField: undefined }, 'default'],
-            [{ newField: null }, 'default'],
-            [{ oldField: null }, 'default'],
-            [{ newField: null, oldField: 'oldValue' }, 'oldValue'],
-            [{ newField: undefined, oldField: 'oldValue' }, 'oldValue'],
-        ])('when config is %p - should return %p', (config: Record<string, any>, expected: string) => {
-            expect(migrateConfigField(config, 'newField', 'oldField', 'default')).toBe(expected)
-        })
-
-        it('logs deprecation warning when using old field', () => {
-            const mockLogger = { warn: jest.fn() }
-            migrateConfigField({ oldField: 'oldValue' }, 'newField', 'oldField', 'default', mockLogger)
-            expect(mockLogger.warn).toHaveBeenCalledWith(
-                expect.stringContaining("Config field 'oldField' is deprecated")
-            )
         })
     })
 

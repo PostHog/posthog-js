@@ -50,7 +50,6 @@ describe('deferred extension initialization', () => {
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
-                advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
             })
@@ -78,7 +77,6 @@ describe('deferred extension initialization', () => {
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
-                advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
             })
@@ -101,7 +99,6 @@ describe('deferred extension initialization', () => {
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: false, // sync init
-                advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
             })
@@ -121,7 +118,6 @@ describe('deferred extension initialization', () => {
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
-                advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
             })

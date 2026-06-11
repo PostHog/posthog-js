@@ -49,8 +49,7 @@ describe('featureflags', () => {
             ),
             _onRemoteConfig: jest.fn(),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
-            _shouldDisableFlags: () =>
-                instance.config.advanced_disable_flags || instance.config.advanced_disable_decide || false,
+            _shouldDisableFlags: () => instance.config.advanced_disable_flags || false,
             _internalEventEmitter: internalEventEmitter,
             on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
@@ -398,11 +397,13 @@ describe('featureflags', () => {
     })
 
     it('should return the right payload', () => {
-        expect(featureFlags.getFeatureFlagPayload('beta-feature')).toEqual({
+        expect(featureFlags.getFeatureFlagResult('beta-feature', { send_event: false })?.payload).toEqual({
             some: 'payload',
         })
-        expect(featureFlags.getFeatureFlagPayload('alpha-feature-2')).toEqual(200)
-        expect(featureFlags.getFeatureFlagPayload('multivariate-flag')).toEqual(undefined)
+        expect(featureFlags.getFeatureFlagResult('alpha-feature-2', { send_event: false })?.payload).toEqual(200)
+        expect(featureFlags.getFeatureFlagResult('multivariate-flag', { send_event: false })?.payload).toEqual(
+            undefined
+        )
         expect(instance.capture).not.toHaveBeenCalled()
     })
 
@@ -590,51 +591,6 @@ describe('featureflags', () => {
                     'alpha-feature-2': 123,
                 },
             }
-        })
-
-        describe('deprecated override method', () => {
-            it('supports basic flag overrides with warning behavior', () => {
-                // Test default warning behavior
-                featureFlags.override({
-                    'beta-feature': false,
-                })
-
-                expect(featureFlags.getFlagVariants()).toEqual({
-                    'beta-feature': false,
-                    'alpha-feature-2': true,
-                })
-                expect(window.console.warn).toHaveBeenCalledWith(
-                    '[PostHog.js] [FeatureFlags]',
-                    ' Overriding feature flags!',
-                    expect.any(Object)
-                )
-
-                // Test suppressed warning behavior
-                mockWarn.mockClear()
-                featureFlags.override(
-                    {
-                        'alpha-feature-2': false,
-                    },
-                    { suppressWarning: true }
-                )
-
-                expect(window.console.warn).not.toHaveBeenCalledWith(
-                    '[PostHog.js] [FeatureFlags]',
-                    ' Overriding feature flags!'
-                )
-                expect(featureFlags.getFlagVariants()).toEqual({
-                    'beta-feature': true,
-                    'alpha-feature-2': false,
-                })
-            })
-
-            it('shows deprecation warning', () => {
-                featureFlags.override({ 'beta-feature': false })
-                expect(window.console.warn).toHaveBeenCalledWith(
-                    '[PostHog.js] [FeatureFlags]',
-                    'override is deprecated. Please use overrideFeatureFlags instead.'
-                )
-            })
         })
 
         describe('new overrideFeatureFlags method', () => {
@@ -1025,14 +981,6 @@ describe('featureflags', () => {
     })
 
     describe('_callFlagsEndpoint via reloadFeatureFlags', () => {
-        it('should not call /flags if advanced_disable_decide is true', () => {
-            instance.config.advanced_disable_decide = true
-            featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
-
-            expect(instance._send_request).toHaveBeenCalledTimes(0)
-        })
-
         it('should not call /flags if advanced_disable_flags is true', () => {
             instance.config.advanced_disable_flags = true
             featureFlags.reloadFeatureFlags()
@@ -3392,7 +3340,7 @@ describe('updateFlags', () => {
 
         posthog.updateFlags({ 'test-flag': true }, { 'test-flag': { some: 'payload' } })
 
-        expect(posthog.getFeatureFlagPayload('test-flag')).toEqual({ some: 'payload' })
+        expect(posthog.getFeatureFlagResult('test-flag')?.payload).toEqual({ some: 'payload' })
     })
 
     it('should return flag result with value and payload via getFeatureFlagResult', async () => {
@@ -3484,15 +3432,15 @@ describe('updateFlags', () => {
         // Set initial flags with payloads
         posthog.updateFlags({ 'flag-a': true, 'flag-b': true }, { 'flag-a': { data: 'a' }, 'flag-b': { data: 'b' } })
 
-        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
-        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
+        expect(posthog.getFeatureFlagResult('flag-a')?.payload).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagResult('flag-b')?.payload).toEqual({ data: 'b' })
 
         // Update with merge - should keep existing payloads
         posthog.updateFlags({ 'flag-c': true }, { 'flag-c': { data: 'c' } }, { merge: true })
 
-        expect(posthog.getFeatureFlagPayload('flag-a')).toEqual({ data: 'a' })
-        expect(posthog.getFeatureFlagPayload('flag-b')).toEqual({ data: 'b' })
-        expect(posthog.getFeatureFlagPayload('flag-c')).toEqual({ data: 'c' })
+        expect(posthog.getFeatureFlagResult('flag-a')?.payload).toEqual({ data: 'a' })
+        expect(posthog.getFeatureFlagResult('flag-b')?.payload).toEqual({ data: 'b' })
+        expect(posthog.getFeatureFlagResult('flag-c')?.payload).toEqual({ data: 'c' })
     })
 
     it('should override existing flag values when merging', async () => {

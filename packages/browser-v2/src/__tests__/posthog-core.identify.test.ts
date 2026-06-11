@@ -328,35 +328,5 @@ describe('identify()', () => {
                 })
             )
         })
-
-        it('calls proxies prople.set to setPersonProperties', () => {
-            instance.people.set({ email: 'john@example.com' })
-
-            expect(beforeSendMock).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    event: '$set',
-                    properties: expect.objectContaining({
-                        $set: { email: 'john@example.com' },
-                        $set_once: {},
-                    }),
-                })
-            )
-            expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
-        })
-
-        it('calls proxies prople.set_once to setPersonProperties', () => {
-            instance.people.set_once({ email: 'john@example.com' })
-
-            expect(beforeSendMock).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    event: '$set',
-                    properties: expect.objectContaining({
-                        $set: {},
-                        $set_once: { email: 'john@example.com' },
-                    }),
-                })
-            )
-            expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
-        })
     })
 })

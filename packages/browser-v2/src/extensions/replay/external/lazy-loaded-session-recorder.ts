@@ -1464,7 +1464,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
-        this._instance.sessionRecording?.onRRwebEmit({
+        this.onRRwebEmit({
             type: 6,
             data: {
                 plugin: 'rrweb/console@1',

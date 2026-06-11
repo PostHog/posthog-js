@@ -52,7 +52,6 @@ export class NetworkPage {
     async mockFlags(flagsOverrides: Partial<FlagsResponse>) {
         // Prepare the mocked Flags API response
         const flagsResponse: FlagsResponse = {
-            editorParams: {},
             flags: {
                 'session-recording-player': {
                     key: '7569-insight-cohorts',
@@ -75,7 +74,6 @@ export class NetworkPage {
             featureFlagPayloads: {},
             errorsWhileComputingFlags: false,
             toolbarParams: {},
-            toolbarVersion: 'toolbar',
             isAuthenticated: false,
             siteApps: [],
             supportedCompression: [Compression.GZipJS],

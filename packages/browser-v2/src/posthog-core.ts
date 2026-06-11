@@ -67,7 +67,6 @@ import {
     Property,
     QueuedRequestWithOptions,
     RemoteConfig,
-    RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
@@ -81,7 +80,6 @@ import {
     eachArray,
     extend,
     isCrossDomainCookie,
-    migrateConfigField,
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
@@ -164,7 +162,6 @@ let _executeArrayDepth = 0
 const __NOOP = () => {}
 const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless_mode="always" and will be ignored'
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
-const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
@@ -230,7 +227,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
-    __preview_external_dependency_versioned_paths: false,
     __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
@@ -246,7 +242,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     strict_script_versioning: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
-    ip: false,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
     opt_out_useragent_filter: false,
@@ -256,7 +251,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     opt_in_site_apps: false,
     property_denylist: [],
     respect_dnt: false,
-    sanitize_properties: null,
     request_headers: {}, // { header: value, header2: value }
     request_batching: true,
     properties_string_max_length: 65535,
@@ -265,7 +259,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     mask_personal_data_properties: false,
     custom_personal_data_properties: [],
     advanced_disable_flags: false,
-    advanced_disable_decide: false,
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
     advanced_only_evaluate_survey_feature_flags: false,
@@ -295,69 +288,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     ...defaultsThatVaryByConfig(defaults),
 })
 
-const CONFIG_RENAMES: [keyof PostHogConfig, keyof PostHogConfig][] = [
-    ['process_person', 'person_profiles'],
-    ['xhr_headers', 'request_headers'],
-    ['cookie_name', 'persistence_name'],
-    ['disable_cookie', 'disable_persistence'],
-    ['__preview_disable_beacon', 'disable_beacon'],
-    ['store_google', 'save_campaign_params'],
-    ['verbose', 'debug'],
-]
-
-export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
-    const renames: Partial<PostHogConfig> = {}
-    for (const [oldKey, newKey] of CONFIG_RENAMES) {
-        if (!isUndefined((origConfig as any)[oldKey])) {
-            ;(renames as any)[newKey] = (origConfig as any)[oldKey]
-        }
-    }
-    // on_xhr_error is not present, as the type is different to on_request_error
-
-    // the original config takes priority over the renames
-    const newConfig = extend({}, renames, origConfig)
-
-    // Maintain backwards compatibility for the deprecated preview option while
-    // letting the supported options take precedence when they are provided.
-    const previewExternalDependencyVersionedPaths = origConfig.__preview_external_dependency_versioned_paths
-    if (!isUndefined(previewExternalDependencyVersionedPaths)) {
-        if (isUndefined(origConfig.strict_script_versioning)) {
-            newConfig.strict_script_versioning = !!previewExternalDependencyVersionedPaths
-        }
-        if (isString(previewExternalDependencyVersionedPaths) && isUndefined(origConfig.asset_host)) {
-            newConfig.asset_host = previewExternalDependencyVersionedPaths
-        }
-    }
-
-    // merge property_blacklist into property_denylist
-    if (isArray(origConfig.property_blacklist)) {
-        if (isUndefined(origConfig.property_denylist)) {
-            newConfig.property_denylist = origConfig.property_blacklist
-        } else if (isArray(origConfig.property_denylist)) {
-            newConfig.property_denylist = [...origConfig.property_blacklist, ...origConfig.property_denylist]
-        } else {
-            logger.error(DENYLIST_INVALID + origConfig.property_denylist)
-        }
-    }
-
-    return newConfig
-}
-
-class DeprecatedWebPerformanceObserver {
-    get _forceAllowLocalhost(): boolean {
-        return this.__forceAllowLocalhost
-    }
-
-    set _forceAllowLocalhost(value: boolean) {
-        logger.error(
-            'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
-        )
-        this.__forceAllowLocalhost = value
-    }
-
-    private __forceAllowLocalhost: boolean = false
-}
-
 /**
  *
  * This is the SDK reference for the PostHog JavaScript Web SDK.
@@ -376,7 +306,6 @@ export class PostHog implements PostHogInterface {
 
     __loaded: boolean
     config: PostHogConfig
-    _originalUserConfig?: Partial<PostHogConfig>
 
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
@@ -410,7 +339,6 @@ export class PostHog implements PostHogInterface {
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
     externalIntegrations?: ExternalIntegrations
-    webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
     _visibilityStateListener: (() => void) | null
@@ -452,20 +380,8 @@ export class PostHog implements PostHogInterface {
         )
     }
 
-    // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
-    /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
-    public get decideEndpointWasHit(): boolean {
-        return this.featureFlags?.hasLoadedFlags ?? false
-    }
-
     public get flagsEndpointWasHit(): boolean {
         return this.featureFlags?.hasLoadedFlags ?? false
-    }
-
-    /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
-    people: {
-        set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
-        set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
     }
 
     constructor() {
@@ -497,20 +413,6 @@ export class PostHog implements PostHogInterface {
         this.logs = ext.logs && new ext.logs(this)
         this.experiments = ext.experiments && new ext.experiments(this)
         this.exceptions = ext.exceptions && new ext.exceptions(this)
-
-        // NOTE: See the property definition for deprecation notice
-        this.people = {
-            set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = isString(prop) ? { [prop]: to } : prop
-                this.setPersonProperties(setProps)
-                callback?.({} as any)
-            },
-            set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = isString(prop) ? { [prop]: to } : prop
-                this.setPersonProperties(undefined, setProps)
-                callback?.({} as any)
-            },
-        }
 
         this.on('eventCaptured', (data) => logger.info(`send "${data?.event}"`, data))
     }
@@ -601,32 +503,24 @@ export class PostHog implements PostHogInterface {
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         config.debug = this._checkLocalStorageForDebug(config.debug)
-        this._originalUserConfig = config // Store original user config for migration
 
         this._triggered_notifs = []
 
         if (config.person_profiles) {
             this._initialPersonProfilesConfig = config.person_profiles
-        } else if (config.process_person) {
-            this._initialPersonProfilesConfig = config.process_person
         }
 
         const baseConfig = defaultConfig(config.defaults)
-        const userConfig = configRenames(config)
-        const mergedConfig = extend({}, baseConfig, userConfig, {
+        const mergedConfig = extend({}, baseConfig, config, {
             name: name,
             token: normalizedToken,
         })
         // a partial user-supplied rageclick object should keep the date-gated defaults
         // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
-        if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
-            mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
+        if (isObject(baseConfig.rageclick) && isObject(config.rageclick)) {
+            mergedConfig.rageclick = extend({}, baseConfig.rageclick, config.rageclick)
         }
         this.set_config(mergedConfig)
-
-        if (this.config.on_xhr_error) {
-            logger.error('on_xhr_error is deprecated. Use on_request_error instead')
-        }
 
         this.compression = config.disable_compression ? undefined : Compression.GZipJS
 
@@ -790,12 +684,6 @@ export class PostHog implements PostHogInterface {
         if (isFunction(this.config._onCapture) && this.config._onCapture !== __NOOP) {
             logger.warn('onCapture is deprecated. Please use `before_send` instead')
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
-        }
-
-        if (this.config.ip) {
-            logger.warn(
-                'The `ip` config option has NO EFFECT AT ALL and has been deprecated. Use a custom transformation or "Discard IP data" project setting instead. See https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address for more information.'
-            )
         }
 
         return this
@@ -1062,18 +950,16 @@ export class PostHog implements PostHogInterface {
 
         options.transport = options.transport || this.config.api_transport
         options.url = extendURLParams(options.url, {
-            // Whether to detect ip info or not
-            ip: this.config.ip ? 1 : 0,
+            // The deprecated `ip` config option has been removed; it never had any effect, but the
+            // query param is kept (always 0) to preserve the request shape.
+            ip: 0,
         })
         options.headers = {
             ...this.config.request_headers,
             ...options.headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
-        const disableBeacon = isUndefined(this.config.disable_beacon)
-            ? this.config.__preview_disable_beacon
-            : this.config.disable_beacon
-        if (disableBeacon) {
+        if (this.config.disable_beacon) {
             options.disableTransport = ['sendBeacon']
         }
 
@@ -1544,18 +1430,7 @@ export class PostHog implements PostHogInterface {
                 delete properties[denylisted_prop]
             })
         } else {
-            logger.error(
-                DENYLIST_INVALID +
-                    this.config.property_denylist +
-                    ' or property_blacklist config: ' +
-                    this.config.property_blacklist
-            )
-        }
-
-        const sanitize_properties = this.config.sanitize_properties
-        if (sanitize_properties) {
-            logger.error(SANITIZE_DEPRECATED)
-            properties = sanitize_properties(properties, eventName)
+            logger.error(DENYLIST_INVALID + this.config.property_denylist)
         }
 
         // add person processing flag as very last step, so it cannot be overridden
@@ -1563,14 +1438,11 @@ export class PostHog implements PostHogInterface {
         properties['$process_person_profile'] = hasPersonProcessing
         // if the event has person processing, ensure that all future events will too, even if the setting changes
         if (hasPersonProcessing && !readOnly) {
-            this._requirePersonProcessing('_calculate_event_properties')
+            this._requirePersonProcessing('calculateEventProperties')
         }
 
         return properties
     }
-
-    /** @deprecated - deprecated in 1.241.0, use `calculateEventProperties` instead  */
-    _calculate_event_properties = this.calculateEventProperties.bind(this)
 
     /**
      * Add additional set_once properties to the event when creating a person profile. This allows us to create the
@@ -1599,12 +1471,7 @@ export class PostHog implements PostHogInterface {
         // if we're an identified person, send initial params with every event
         const initialProps = this.persistence.get_initial_props()
         const sessionProps = this.sessionPropsManager?.getSetOnceProps()
-        let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
-        const sanitize_properties = this.config.sanitize_properties
-        if (sanitize_properties) {
-            logger.error(SANITIZE_DEPRECATED)
-            setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
-        }
+        const setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
         if (markAsSent) {
             this._personProcessingSetOncePropertiesSent = true
         }
@@ -1811,29 +1678,6 @@ export class PostHog implements PostHogInterface {
      */
     getFeatureFlag(key: string, options?: FeatureFlagOptions): boolean | string | undefined {
         return this.featureFlags?.getFeatureFlag(key, options)
-    }
-
-    /**
-     * Get feature flag payload value matching key for user (supports multivariate flags).
-     *
-     * {@label Feature flags}
-     *
-     * @example
-     * ```js
-     * if(posthog.getFeatureFlag('beta-feature') === 'some-value') {
-     *      const someValue = posthog.getFeatureFlagPayload('beta-feature')
-     *      // do something
-     * }
-     * ```
-     *
-     * @public
-     *
-     * @deprecated Use `getFeatureFlagResult()` instead
-     *
-     * @param {Object|String} prop Key of the feature flag.
-     */
-    getFeatureFlagPayload(key: string): JsonType {
-        return this.featureFlags?.getFeatureFlagPayload(key)
     }
 
     /**
@@ -2238,32 +2082,6 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * Although we recommend using popover surveys and display conditions,
-     * if you want to show surveys programmatically without setting up all
-     * the extra logic needed for API surveys, you can render surveys
-     * programmatically with the renderSurvey method.
-     *
-     * This takes a survey ID and an HTML selector to render an unstyled survey.
-     *
-     * {@label Surveys}
-     *
-     * @example
-     * ```js
-     * posthog.renderSurvey(coolSurveyID, '#survey-container')
-     * ```
-     *
-     * @deprecated Use displaySurvey instead - it's more complete and also supports popover surveys.
-     *
-     * @public
-     *
-     * @param {String} surveyId The ID of the survey to render.
-     * @param {String} selector The selector of the HTML element to render the survey on.
-     */
-    renderSurvey(surveyId: string, selector: string): void {
-        this.surveys?.renderSurvey(surveyId, selector)
-    }
-
-    /**
      * Display a survey programmatically as either a popover or inline element.
      *
      * @param {string} surveyId - The survey ID to display
@@ -2307,28 +2125,6 @@ export class PostHog implements PostHogInterface {
      */
     cancelPendingSurvey(surveyId: string): void {
         this.surveys?.cancelPendingSurvey(surveyId)
-    }
-
-    /**
-     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
-     * This method is deprecated because it's synchronous and won't return the correct result if surveys are not loaded.
-     * Use `canRenderSurveyAsync` instead.
-     *
-     * {@label Surveys}
-     *
-     * @public
-     * @deprecated
-     *
-     * @param surveyId The ID of the survey to check.
-     * @returns A SurveyRenderReason object indicating if the survey can be rendered.
-     */
-    canRenderSurvey(surveyId: string): SurveyRenderReason | null {
-        return (
-            this.surveys?.canRenderSurvey(surveyId) ?? {
-                visible: false,
-                disabledReason: SURVEYS_NOT_AVAILABLE,
-            }
-        )
     }
 
     /**
@@ -3082,7 +2878,7 @@ export class PostHog implements PostHogInterface {
     set_config(config: Partial<PostHogConfig>): void {
         const oldConfig = { ...this.config }
         if (isObject(config)) {
-            extend(this.config, configRenames(config))
+            extend(this.config, config)
 
             const isPersistenceDisabled = this._is_persistence_disabled()
             this.persistence?.update_config(this.config, oldConfig, isPersistenceDisabled)
@@ -3570,7 +3366,7 @@ export class PostHog implements PostHogInterface {
     _requirePersonProcessing(function_name: string): boolean {
         if (this.config.person_profiles === 'never') {
             logger.error(
-                function_name + ' was called, but process_person is set to "never". This call will be ignored.'
+                function_name + ' was called, but person_profiles is set to "never". This call will be ignored.'
             )
             return false
         }
@@ -3947,32 +3743,10 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * Helper method to check if external API calls (flags/decide) should be disabled
-     * Handles migration from old `advanced_disable_decide` to new `advanced_disable_flags`
+     * Helper method to check if external API calls (flags) should be disabled
      */
     _shouldDisableFlags(): boolean {
-        // Check if advanced_disable_flags was explicitly set in original config
-        const originalConfig = this._originalUserConfig || {}
-        if ('advanced_disable_flags' in originalConfig) {
-            return !!originalConfig.advanced_disable_flags
-        }
-
-        // Check if advanced_disable_flags was set post-init (different from default false)
-        if (this.config.advanced_disable_flags !== false) {
-            return !!this.config.advanced_disable_flags
-        }
-
-        // Check for post-init changes to advanced_disable_decide
-        if (this.config.advanced_disable_decide === true) {
-            logger.warn(
-                "Config field 'advanced_disable_decide' is deprecated. Please use 'advanced_disable_flags' instead. " +
-                    'The old field will be removed in a future major version.'
-            )
-            return true
-        }
-
-        // Fall back to migration logic for original user config
-        return migrateConfigField(originalConfig, 'advanced_disable_flags', 'advanced_disable_decide', false, logger)
+        return !!this.config.advanced_disable_flags
     }
 
     private _runBeforeSend(data: CaptureResult): CaptureResult | null {
@@ -4126,11 +3900,10 @@ export function init_from_snippet(): void {
          * If a name is given to the init function then the same as above is true but as a sub-property on the object:
          *
          * window.posthog.init("TOKEN", {}, "ph2")
-         * window.posthog.ph2.people.set({foo: "bar"})
+         * window.posthog.ph2.capture("my-event", {foo: "bar"})
          *
-         * window.posthog.ph2 == []
-         * window.posthog.people == [
-         *  ["set", {foo: "bar"}]
+         * window.posthog.ph2 == [
+         *  ["my-event", {foo: "bar"}]
          * ]
          *
          */
@@ -4144,9 +3917,6 @@ export function init_from_snippet(): void {
                 const instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
 
                 if (instance) {
-                    // Crunch through the people queue first - we queue this data up &
-                    // flush on identify, so it's better to do all these operations first
-                    instance._execute_array.call(instance.people, instanceSnippet.people)
                     instance._execute_array(instanceSnippet)
                 }
             }

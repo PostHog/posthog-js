@@ -77,82 +77,11 @@ export type AssignableWindow = Window &
         // See entrypoints/customizations.full.ts
         posthogCustomizations: any
 
-        /**
-         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
-         * Can be removed once we drop support for 1.161.1
-         *
-         * See entrypoints/exception-autocapture.ts
-         *
-         * @deprecated use `__PosthogExtensions__.errorWrappingFunctions` instead
-         */
-        posthogErrorWrappingFunctions: any
-
-        /**
-         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
-         * Can be removed once we drop support for 1.161.1
-         *
-         * See entrypoints/posthog-recorder.ts
-         *
-         * @deprecated use `__PosthogExtensions__.rrweb` instead
-         */
-        rrweb: any
-
-        /**
-         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
-         * Can be removed once we drop support for 1.161.1
-         *
-         * See entrypoints/posthog-recorder.ts
-         *
-         * @deprecated use `__PosthogExtensions__.rrwebConsoleRecord` instead
-         */
-        rrwebConsoleRecord: any
-
-        /**
-         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
-         * Can be removed once we drop support for 1.161.1
-         *
-         * See entrypoints/posthog-recorder.ts
-         *
-         * @deprecated use `__PosthogExtensions__.getRecordNetworkPlugin` instead
-         */
-        getRecordNetworkPlugin: any
-
-        /**
-         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
-         * Can be removed once we drop support for 1.161.1
-         *
-         * See entrypoints/web-vitals.ts
-         *
-         * @deprecated use `__PosthogExtensions__.postHogWebVitalsCallbacks` instead
-         */
-        postHogWebVitalsCallbacks: any
-
-        /**
-         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
-         * Can be removed once we drop support for 1.161.1
-         *
-         * See entrypoints/tracing-headers.ts
-         *
-         * @deprecated use `__PosthogExtensions__.postHogTracingHeadersPatchFns` instead
-         */
-        postHogTracingHeadersPatchFns: any
-
-        /**
-         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
-         * Can be removed once we drop support for 1.161.1
-         *
-         * See entrypoints/surveys.ts
-         *
-         * @deprecated use `__PosthogExtensions__.generateSurveys` instead
-         */
-        extendPostHogWithSurveys: any
-
         /*
          * These are used to handle our toolbar state.
          * @see {Toolbar} from extensions/toolbar.ts
          */
         ph_load_toolbar: any
-        ph_load_editor: any
         ph_toolbar_state: any
     } & Record<`__$$ph_site_app_${string}`, any>
 
@@ -252,12 +181,6 @@ interface PostHogExtensions {
         onFCP: (metric: any) => void
         onINP: (metric: any) => void
     }
-    /**
-     * @deprecated
-     *
-     * this was introduced briefly, it is now always a no-op and only kept for backwards compatibility
-     */
-    loadWebVitalsCallbacks?: (useAttribution?: boolean) => PostHogExtensions['postHogWebVitalsCallbacks']
     tracingHeadersPatchFns?: {
         _patchFetch: (
             hostnames: TracingHeadersHostnames,

@@ -96,11 +96,10 @@ describe('posthog core', () => {
             return { posthog, beforeSendMock }
         }
 
-        it('respects property_denylist and property_blacklist', () => {
+        it('respects property_denylist', () => {
             // arrange
             const { posthog } = setup({
-                property_denylist: ['$lib', 'persistent', '$is_identified'],
-                property_blacklist: ['token'],
+                property_denylist: ['$lib', 'persistent', '$is_identified', 'token'],
             })
 
             // act

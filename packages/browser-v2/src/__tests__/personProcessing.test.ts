@@ -156,35 +156,10 @@ describe('person processing', () => {
             // assert
             expect(posthog.config.person_profiles).toEqual('never')
         })
-        it('should read person_profiles from init config as process_person', async () => {
-            // arrange
-            const token = uuidv7()
-
-            // act
-            const posthog = await createPosthogInstance(token, {
-                process_person: 'never',
-            })
-
-            // assert
-            expect(posthog.config.person_profiles).toEqual('never')
-        })
-        it('should prefer the correct name to the deprecated one', async () => {
-            // arrange
-            const token = uuidv7()
-
-            // act
-            const posthog = await createPosthogInstance(token, {
-                process_person: 'never',
-                person_profiles: 'identified_only',
-            })
-
-            // assert
-            expect(posthog.config.person_profiles).toEqual('identified_only')
-        })
     })
 
     describe('identify', () => {
-        it('should fail if process_person is set to never', async () => {
+        it('should fail if person_profiles is set to never', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('never')
 
@@ -194,12 +169,12 @@ describe('person processing', () => {
             // assert
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.identify was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.identify was called, but person_profiles is set to "never". This call will be ignored.'
             )
             expect(beforeSendMock).toBeCalledTimes(0)
         })
 
-        it('should switch events to $person_process=true if process_person is identified_only', async () => {
+        it('should switch events to $person_process=true if person_profiles is identified_only', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('identified_only')
 
@@ -218,7 +193,7 @@ describe('person processing', () => {
             expect(eventAfterIdentify[0].properties.$process_person_profile).toEqual(true)
         })
 
-        it('should not change $person_process if process_person is always', async () => {
+        it('should not change $person_process if person_profiles is always', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('always')
 
@@ -580,7 +555,7 @@ describe('person processing', () => {
             // setGroupPropertiesForFlags still has a person processing check
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.setGroupPropertiesForFlags was called, but person_profiles is set to "never". This call will be ignored.'
             )
 
             // $groupidentify is sent (groups are independent of person processing)
@@ -596,7 +571,7 @@ describe('person processing', () => {
     })
 
     describe('setPersonProperties', () => {
-        it("should not send a $set event if process_person is set to 'never'", async () => {
+        it("should not send a $set event if person_profiles is set to 'never'", async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('never')
 
@@ -607,11 +582,11 @@ describe('person processing', () => {
             expect(beforeSendMock).toBeCalledTimes(0)
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.setPersonProperties was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.setPersonProperties was called, but person_profiles is set to "never". This call will be ignored.'
             )
         })
 
-        it("should send a $set event if process_person is set to 'always'", async () => {
+        it("should send a $set event if person_profiles is set to 'always'", async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('always')
 
@@ -674,7 +649,7 @@ describe('person processing', () => {
             expect(beforeSendMock).toBeCalledTimes(0)
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.alias was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.alias was called, but person_profiles is set to "never". This call will be ignored.'
             )
         })
     })
@@ -714,7 +689,7 @@ describe('person processing', () => {
             expect(beforeSendMock.mock.calls.length).toEqual(3)
         })
 
-        it("should not send an event if process_person is to set to 'always'", async () => {
+        it("should not send an event if person_profiles is to set to 'always'", async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('always')
 
@@ -899,29 +874,11 @@ describe('person processing', () => {
             expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
         })
 
-        it('should deduplicate when using people.set with identical properties', async () => {
+        it('should deduplicate when using set_once with identical properties', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
-            posthog.people.set({ email: 'john@example.com' })
-            posthog.people.set({ email: 'john@example.com' })
-
-            expect(beforeSendMock).toHaveBeenCalledTimes(1)
-        })
-
-        it('should deduplicate when mixing people.set and setPersonProperties with identical properties', async () => {
-            const { posthog, beforeSendMock } = await setup('always')
-
-            posthog.people.set({ email: 'john@example.com' })
-            posthog.setPersonProperties({ email: 'john@example.com' })
-
-            expect(beforeSendMock).toHaveBeenCalledTimes(1)
-        })
-
-        it('should deduplicate when using people.set_once with identical properties', async () => {
-            const { posthog, beforeSendMock } = await setup('always')
-
-            posthog.people.set_once({ first_seen: 'today' })
-            posthog.people.set_once({ first_seen: 'today' })
+            posthog.setPersonProperties(undefined, { first_seen: 'today' })
+            posthog.setPersonProperties(undefined, { first_seen: 'today' })
 
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
         })
@@ -929,8 +886,8 @@ describe('person processing', () => {
         it('should not deduplicate when mixing set and set_once with same properties', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
-            posthog.people.set({ email: 'john@example.com' })
-            posthog.people.set_once({ email: 'john@example.com' })
+            posthog.setPersonProperties({ email: 'john@example.com' })
+            posthog.setPersonProperties(undefined, { email: 'john@example.com' })
 
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
         })

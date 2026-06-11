@@ -24,7 +24,6 @@ describe('external-scripts-loader', () => {
             callback.mockClear()
             mockPostHog.config.strict_script_versioning = false
             mockPostHog.config.asset_host = null
-            delete mockPostHog.config.__preview_external_dependency_versioned_paths
         })
 
         it('appends scripts to body by default', () => {

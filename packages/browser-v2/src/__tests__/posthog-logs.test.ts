@@ -28,7 +28,6 @@ describe('posthog-logs', () => {
             },
             supportedCompression: [],
             toolbarParams: {},
-            toolbarVersion: 'toolbar' as const,
             isAuthenticated: false,
             siteApps: [],
             logs: { captureConsoleLogs: true },
@@ -113,7 +112,6 @@ describe('posthog-logs', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: { captureConsoleLogs: false },
@@ -128,7 +126,6 @@ describe('posthog-logs', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: null,
@@ -143,7 +140,6 @@ describe('posthog-logs', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                 }
@@ -157,7 +153,6 @@ describe('posthog-logs', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: { captureConsoleLogs: true },
@@ -173,7 +168,6 @@ describe('posthog-logs', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: { captureConsoleLogs: true },
@@ -279,7 +273,6 @@ describe('posthog-logs', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: { captureConsoleLogs: true },
@@ -296,7 +289,6 @@ describe('posthog-logs', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: { captureConsoleLogs: false },
@@ -313,7 +305,6 @@ describe('posthog-logs', () => {
                 const enabledResponse = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: { captureConsoleLogs: true },
@@ -321,7 +312,6 @@ describe('posthog-logs', () => {
                 const disabledResponse = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: { captureConsoleLogs: false },
@@ -344,7 +334,6 @@ describe('posthog-logs', () => {
                 const baseConfig = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                 }
@@ -368,7 +357,6 @@ describe('posthog-logs', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                     logs: { captureConsoleLogs: true },
@@ -404,7 +392,6 @@ describe('posthog-logs', () => {
                 const baseConfig = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                 }
@@ -762,7 +749,6 @@ describe('posthog-logs', () => {
                 const baseConfig = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                 }
@@ -783,7 +769,6 @@ describe('posthog-logs', () => {
                 const baseConfig = {
                     supportedCompression: [],
                     toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
                 }

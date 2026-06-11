@@ -32,8 +32,6 @@ export interface SurveyEventWithFilters {
 // Omit 'position' from core because browser's SurveyPosition has additional values (e.g., NextToTrigger)
 export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position' | 'widgetType'> {
     // Browser-specific fields not in core
-    /** @deprecated - not currently used */
-    descriptionTextColor?: string
     ratingButtonHoverColor?: string
     whiteLabel?: boolean
     tabPosition?: SurveyTabPosition
@@ -42,8 +40,6 @@ export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position' 
     zIndex?: string
     disabledButtonOpacity?: string
     boxPadding?: string
-    /** @deprecated Use inputBackground instead (inherited from core) */
-    inputBackgroundColor?: string
     // Hide the X (cancel) button - defaults to false (show the button)
     hideCancelButton?: boolean
     // Browser's SurveyPosition has more options than core (e.g., NextToTrigger)
@@ -197,8 +193,6 @@ export interface ActionStepType {
     selector?: string | null
     /** pre-compiled regex pattern for matching selector against $elements_chain */
     selector_regex?: string | null
-    /** @deprecated Only `selector` should be used now. */
-    tag_name?: string
     text?: string | null
     /** @default StringMatching.Exact */
     text_matching?: ActionStepStringMatching | null
@@ -246,19 +240,6 @@ export type DisplaySurveyOptions = DisplaySurveyPopoverOptions | DisplaySurveyIn
 
 export interface SurveyConfig {
     prefillFromUrl?: boolean
-    /**
-     * @deprecated No longer used. Surveys will automatically advance past
-     * prefilled questions with skipSubmitButton enabled. If partial response
-     * collection is enabled, partial responses for pre-filled questions will
-     * be submitted automatically on page load.
-     */
-    autoSubmitIfComplete?: boolean
-    /**
-     * @deprecated No longer used. Pre-filled responses are now sent
-     * immediately when partial responses are enabled, or all required
-     * quesions have been pre-filled.
-     */
-    autoSubmitDelay?: number
 }
 
 export type SurveyResponseValue = CoreSurveyResponseValue

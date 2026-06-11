@@ -728,17 +728,6 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     /**
-     * @deprecated Use `getFeatureFlagResult()` instead which properly tracks the feature flag call.
-     * `getFeatureFlagPayload()` does not emit the `$feature_flag_called` event which may result in
-     * missing analytics. This method will be removed in a future version.
-     */
-    getFeatureFlagPayload(key: string): JsonType {
-        // Don't send event to maintain backwards compatibility - this method never tracked calls
-        const result = this.getFeatureFlagResult(key, { send_event: false })
-        return result?.payload
-    }
-
-    /**
      * Get a feature flag result including both the flag value and payload, while properly tracking the call.
      * This method emits the `$feature_flag_called` event by default.
      *
@@ -989,17 +978,6 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         this._fireFeatureFlagsCallbacks(errorsLoading)
-    }
-
-    /**
-     * @deprecated Use overrideFeatureFlags instead. This will be removed in a future version.
-     */
-    override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning: boolean = false): void {
-        logger.warn('override is deprecated. Please use overrideFeatureFlags instead.')
-        this.overrideFeatureFlags({
-            flags: flags,
-            suppressWarning: suppressWarning,
-        })
     }
 
     /**

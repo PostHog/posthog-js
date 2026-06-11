@@ -261,13 +261,6 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         }
     }
 
-    /**
-     * @deprecated Use onConfig instead
-     */
-    onRemoteConfig(response: RemoteConfig) {
-        this.onConfig(response)
-    }
-
     private _urlTriggerStatus(sessionId: string): TriggerStatus {
         return persistedTriggerStatus(
             this._instance,
@@ -426,13 +419,6 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         }
     }
 
-    /**
-     * @deprecated Use onConfig instead
-     */
-    onRemoteConfig(response: RemoteConfig, onStarted: (flag: string, variant: string | null) => void) {
-        this.onConfig(response, onStarted)
-    }
-
     stop(): void {
         this._flagListenerCleanup()
     }
@@ -457,13 +443,6 @@ export class EventTriggerMatching implements TriggerStatusMatching {
                     ? config.sessionRecording?.eventTriggers
                     : []
                 : config?.eventTriggers) || []
-    }
-
-    /**
-     * @deprecated Use onConfig instead
-     */
-    onRemoteConfig(response: RemoteConfig) {
-        this.onConfig(response)
     }
 
     private _eventTriggerStatus(sessionId: string): TriggerStatus {
