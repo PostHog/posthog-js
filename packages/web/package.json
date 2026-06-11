@@ -26,7 +26,7 @@
     "src"
   ],
   "dependencies": {
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:^"
   },
   "devDependencies": {
     "@babel/preset-env": "catalog:",

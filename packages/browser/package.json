@@ -58,8 +58,8 @@
         "rrweb-plugin-console-record/package.json"
     ],
     "dependencies": {
-        "@posthog/core": "workspace:*",
-        "@posthog/types": "workspace:*",
+        "@posthog/core": "workspace:^",
+        "@posthog/types": "workspace:^",
         "core-js": "^3.38.1",
         "dompurify": "^3.3.2",
         "fflate": "^0.4.8",
