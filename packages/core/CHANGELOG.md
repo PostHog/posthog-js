@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.32.2
+
+### Patch Changes
+
+- [#3799](https://github.com/PostHog/posthog-js/pull/3799) [`25822ac`](https://github.com/PostHog/posthog-js/commit/25822acc0d16f9f1d6fbbd65da57b3e060c6c558) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - fix(logs): when a logs `beforeSend` hook throws, log the error and drop the record (fail closed) instead of continuing the chain and enqueuing it — a buggy redaction hook must not leak an unredacted log record.
+  (2026-06-11)
+- Updated dependencies []:
+  - @posthog/types@1.386.2
+
 ## 1.32.1
 
 ### Patch Changes

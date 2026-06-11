@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "PostHog SDK for Model Context Protocol (MCP) servers — tracks tool usage, intent, and identity",
   "repository": {
     "type": "git",
