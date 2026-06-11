@@ -1441,6 +1441,29 @@ describe('Lazy SessionRecording', () => {
 
                 expect(lazyRecorder['isStarted']).toEqual(false)
             })
+
+            // start() is also called re-entrantly on a live recorder (e.g. opt-in calls
+            // _startCapturing twice) with no stop() in between. There is no stale cleanup
+            // to invalidate then — the compression queue holds the CURRENT session's events
+            // (rrweb's FullSnapshot among them) and resetting it would drop them, leaving
+            // a replay with a meta event but no full snapshot.
+            it('re-entrant start() preserves the live compression queue', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 2
+                const liveQueue = Promise.resolve()
+                lazyRecorder['_compressionQueue'] = liveQueue
+                const generationBefore = lazyRecorder['_compressionQueueGeneration']
+
+                lazyRecorder.start()
+
+                expect(lazyRecorder['_queuedCompressionEvents']).toEqual(2)
+                expect(lazyRecorder['_compressionQueue']).toBe(liveQueue)
+                expect(lazyRecorder['_compressionQueueGeneration']).toEqual(generationBefore)
+            })
         })
 
         describe('scheduled full snapshots', () => {

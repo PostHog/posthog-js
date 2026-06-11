@@ -888,7 +888,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // pending cleanup to bail at its generation check, and resetting the rest of the
         // compression-stop state means a future stop() of this new recorder is not mistaken
         // for the still-in-progress old one (which would make it a silent no-op).
-        this._invalidateCompressionQueue()
+        // Guarded on the stop-in-progress flag because start() is also called re-entrantly
+        // on a live recorder (e.g. opt-in flows) where the queue holds the current session's
+        // events and must survive.
+        if (this._isStoppingAfterCompression) {
+            this._invalidateCompressionQueue()
+        }
 
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
