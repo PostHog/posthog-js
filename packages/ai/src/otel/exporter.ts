@@ -4,6 +4,7 @@ import { ExportResultCode } from '@opentelemetry/core'
 
 import { redactSpan } from './redact'
 import { isAISpan } from './spans'
+import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
 
@@ -98,6 +99,9 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
     if (aiSpans.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS })
       return
+    }
+    for (const span of aiSpans) {
+      warnIfPostHogAiGatewayOtelAttributes(span.attributes)
     }
     super.export(aiSpans.map(redactSpan), resultCallback)
   }
