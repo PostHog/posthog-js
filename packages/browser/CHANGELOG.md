@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.386.5
+
+### Patch Changes
+
+- [#3801](https://github.com/PostHog/posthog-js/pull/3801) [`bd06ac7`](https://github.com/PostHog/posthog-js/commit/bd06ac7c09f48dc31b3019525561536452297b8d) Thanks [@ksvat](https://github.com/ksvat)! - fix(replay): prevent silent recorder teardown on session-id rotation. When the session id rotates during active rrweb capture, `_updateWindowAndSessionIds` calls `stop()` then synchronously `start('session_id_changed')`. If `stop()` took the `_stopAfterCompressionQueueDrains` path (which fires whenever the compression queue is non-empty — common during steady recording), its async cleanup would later resolve and call `_teardown()` against the freshly-started recorder, stopping rrweb, removing event listeners, and emptying the V2 trigger-group matchers. From that point on, the recorder's `status` getter kept reporting `active`/`sampled` (the `_strategy` reference was still set), but rrweb was no longer producing events, no listeners were registered, and no `$snapshot` data reached the server — the session looked recording-eligible from event metadata yet produced no replay. `start()` now invalidates the compression-queue state (generation bump plus reset of the stop-in-progress flag and queued-event count), so any pending cleanup from a prior `stop()` bails at its existing generation check and a later `stop()` of the new recorder is not mistaken for the old in-progress one. Affects long-running tabs that rotate session id mid-use (idle timeout, session-past-max-length, or `posthog.reset()`).
+  (2026-06-11)
+
 ## 1.386.4
 
 ### Patch Changes
