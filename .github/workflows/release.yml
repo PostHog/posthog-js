@@ -94,6 +94,9 @@ jobs:
                   fetch-depth: 0
                   token: ${{ steps.releaser.outputs.token }}
 
+            - name: Update to latest main before generating release artifacts
+              run: git pull --ff-only origin main
+
             - name: Setup environment
               uses: ./.github/actions/setup
               with:
@@ -122,8 +125,13 @@ jobs:
                   echo "version=$VERSION" >> "$GITHUB_OUTPUT"
                   echo "Resolved posthog-js version: $VERSION"
 
-            - name: Update to latest main before committing
-              run: git pull --ff-only --autostash origin main
+            - name: Ensure main did not advance during release artifact generation
+              run: |
+                  git fetch origin main
+                  if [ "$(git rev-parse HEAD)" != "$(git rev-parse FETCH_HEAD)" ]; then
+                    echo "::error::main advanced while generating release artifacts. Re-run the workflow so versions and changelogs include the latest changesets."
+                    exit 1
+                  fi
 
             - name: Commit version bump and lockfile
               id: commit-version-bump
