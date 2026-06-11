@@ -72,6 +72,32 @@ describe('native error tracking', () => {
     await posthog.shutdown()
   })
 
+  it('starts recording on the existing native instance instead of re-running setup when replay is enabled later', async () => {
+    const { PostHog } = await import('../src/posthog-rn')
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      errorTracking: { autocapture: { nativeCrashes: true } },
+    })
+
+    await posthog.ready()
+
+    await waitForExpect(100, () => {
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    })
+    // The native SDK was set up with replay disabled.
+    expect(mockPlugin.setup.mock.calls[0][2].sessionReplay.enabled).toBe(false)
+
+    // Enabling replay afterwards must not re-run setup() (which would reset the running
+    // native instance) — it should start recording on the existing instance.
+    await posthog.startSessionRecording()
+
+    expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    expect(mockPlugin.startRecording).toHaveBeenCalled()
+
+    await posthog.shutdown()
+  })
+
   it('passes both session replay and native error tracking config when both are enabled', async () => {
     const { PostHog } = await import('../src/posthog-rn')
     const posthog = new PostHog('test-token', {

@@ -1383,7 +1383,9 @@ export class PostHog extends PostHogCore {
     try {
       // Check if the plugin supports startRecording
       if (!OptionalReactNativePlugin.startRecording) {
-        this._logger.warn('startRecording is not available. Please update posthog-react-native-session-replay.')
+        this._logger.warn(
+          'startRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
+        )
         return
       }
 
@@ -1444,7 +1446,9 @@ export class PostHog extends PostHogCore {
     try {
       // Check if the plugin supports stopRecording
       if (!OptionalReactNativePlugin.stopRecording) {
-        this._logger.warn('stopRecording is not available. Please update posthog-react-native-session-replay.')
+        this._logger.warn(
+          'stopRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
+        )
         return
       }
 
@@ -1925,10 +1929,11 @@ export class PostHog extends PostHogCore {
     }
 
     // The native SDKs can't be re-initialized — a second setup() would reset the running
-    // instance. If error tracking is already running, skip setup() and let the caller
-    // (e.g. startSessionRecording) start replay on the existing native instance.
+    // instance. If error tracking is already running, skip setup() and start replay on the
+    // existing native instance instead (setup() is what would otherwise start it).
     if (this._isNativePluginInitialized() && enableSessionReplay && !this._sessionReplayNativeInitialized) {
       this._sessionReplayNativeInitialized = true
+      await OptionalReactNativePlugin.startRecording?.(true)
       return true
     }
 
@@ -2071,7 +2076,7 @@ export class PostHog extends PostHogCore {
       } else {
         if (enableNativeErrorTracking) {
           this._logger.warn(
-            'Native error tracking is not available. Please update posthog-react-native-session-replay.'
+            'Native error tracking is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
           )
         }
         if (!enableSessionReplay) {

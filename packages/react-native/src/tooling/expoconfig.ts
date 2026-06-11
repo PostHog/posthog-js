@@ -45,9 +45,14 @@ export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: strin
   }
 
   const classpathLine = `        classpath("com.posthog:posthog-android-gradle-plugin:${POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION}")`
-  const pattern = /(buildscript\s*\{[\s\S]*?dependencies\s*\{)/
 
-  if (!pattern.test(projectBuildGradle)) {
+  // Locate the first `dependencies {` inside the `buildscript {` block. Two simple
+  // anchored matches instead of a single combined regex to avoid backtracking (ReDoS).
+  const buildscriptIndex = projectBuildGradle.search(/buildscript\s*\{/)
+  const dependenciesMatch =
+    buildscriptIndex === -1 ? null : /dependencies\s*\{/.exec(projectBuildGradle.slice(buildscriptIndex))
+
+  if (!dependenciesMatch) {
     console.warn(
       'PostHog: Could not find a buildscript dependencies block in the project build.gradle; ' +
         'skipping the com.posthog.android classpath. Native symbols will not be uploaded.'
@@ -55,7 +60,8 @@ export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: strin
     return projectBuildGradle
   }
 
-  return projectBuildGradle.replace(pattern, `$1\n${classpathLine}`)
+  const insertAt = buildscriptIndex + dependenciesMatch.index + dependenciesMatch[0].length
+  return `${projectBuildGradle.slice(0, insertAt)}\n${classpathLine}${projectBuildGradle.slice(insertAt)}`
 }
 
 // Applies the com.posthog.android plugin in the app module. Idempotent.
