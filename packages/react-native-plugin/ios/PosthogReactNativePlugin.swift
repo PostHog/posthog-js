@@ -5,6 +5,36 @@ private func hedgeLog(_ message: String) {
     print("[PostHog] \(message)")
 }
 
+// Deduplication works on Android (both architectures) and iOS (old architecture only).
+// On the iOS new architecture, fatal JS exception events surface as a generic SIGABRT
+// crash event with no JS-error text in any field, so they currently cannot be filtered.
+private let fatalJsErrorMarkers = ["Unhandled JS Exception", "ExceptionsManager.reportException", "facebook::jsi::JSError"]
+
+private func containsFatalJsErrorMarker(_ text: String?) -> Bool {
+    guard let text else { return false }
+    return fatalJsErrorMarkers.contains { text.contains($0) }
+}
+
+private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
+    guard event.event == "$exception",
+          let exceptionList = event.properties["$exception_list"] as? [[String: Any]]
+    else { return false }
+    return exceptionList.contains { exception in
+        if containsFatalJsErrorMarker(exception["type"] as? String) {
+            return true
+        }
+        if containsFatalJsErrorMarker(exception["value"] as? String) {
+            return true
+        }
+        // New-architecture RN rethrows fatal JS errors as a C++ jsi::JSError (SIGABRT);
+        // the JS-error text only survives in the signal's crash-info message.
+        let mechanism = exception["mechanism"] as? [String: Any]
+        let meta = mechanism?["meta"] as? [String: Any]
+        let signal = meta?["signal"] as? [String: Any]
+        return containsFatalJsErrorMarker(signal?["crash_info_message"] as? String)
+    }
+}
+
 @objc(PosthogReactNativePlugin)
 class PosthogReactNativePlugin: NSObject {
     private var config: PostHogConfig?
@@ -77,6 +107,12 @@ class PosthogReactNativePlugin: NSObject {
         config.captureScreenViews = false
         config.debug = debug
         config.errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
+
+        // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
+        // The JS layer already captured them, so drop the native duplicate.
+        config.setBeforeSend { event in
+            isReactNativeFatalJsError(event) ? nil : event
+        }
 
         if #available(iOS 15.0, *) {
             config.surveys = false
