@@ -29,8 +29,6 @@ The CDN upload happens in `.github/workflows/release.yml` via the `upload-s3` jo
 
 Prerelease versions only get immutable versioned assets.
 
-The workflow still opens an automatic PR against the main `PostHog/posthog` repo to bump its `posthog-js` dependency, but that PR is no longer what uploads the browser SDK assets to the CDN. When that PR merges, the main app image is rebuilt with the new `posthog-js` dependency and app-bundled/disk-fallback static assets. If the PR fails or is delayed, the main app dependency update is blocked, but snippet/CDN users are not kept on the old version for that reason.
-
 A mismatch can still happen if npm publish succeeds but the S3/CDN upload fails: npm users may get version N+1 while CDN/snippet users remain on version N or see incomplete CDN assets until the failed upload is retried. The release workflow sends a partial-release Slack warning for this case.
 
 PostHoggers can join the [#alerts-posthog-js channel in Slack](https://posthog.slack.com/archives/C07HTMN9X47), which gets notified about release workflow failures.
