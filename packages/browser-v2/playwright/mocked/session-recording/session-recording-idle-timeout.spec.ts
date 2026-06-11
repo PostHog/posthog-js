@@ -34,7 +34,7 @@ async function triggerForcedIdleTimeout(page: Page) {
         }
 
         // Store the old session ID before we reset it
-        const oldSessionId = ph?.get_session_id()
+        const oldSessionId = ph?.getSessionId()
 
         // Directly reset the session to simulate an idle timeout
         sessionManager.resetSessionId()
@@ -98,7 +98,7 @@ test.describe('Session recording - idle timeout behavior', () => {
 
         const initialSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
         expect(initialSessionId).toBeDefined()
 
@@ -135,7 +135,7 @@ test.describe('Session recording - idle timeout behavior', () => {
         // Should have a new session ID
         const newSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
         expect(newSessionId).not.toEqual(initialSessionId)
 
@@ -181,7 +181,7 @@ test.describe('Session recording - idle timeout behavior', () => {
 
         const initialSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
         expect(initialSessionId).toBeDefined()
 
@@ -236,7 +236,7 @@ test.describe('Session recording - idle timeout behavior', () => {
 
         const newSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
 
         // The session should have rotated because we exceeded the idle timeout
@@ -321,7 +321,7 @@ test.describe('Session recording - idle timeout with sampling', () => {
         // Get current session ID
         const sessionIdBeforeIdle = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
 
         // Trigger forced idle timeout
@@ -339,7 +339,7 @@ test.describe('Session recording - idle timeout with sampling', () => {
         // Verify new session was created
         const sessionIdAfterIdle = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
         expect(sessionIdAfterIdle).not.toEqual(sessionIdBeforeIdle)
 

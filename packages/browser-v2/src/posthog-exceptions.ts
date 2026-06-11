@@ -32,7 +32,7 @@ export class PostHogExceptions implements Extension {
 
     constructor(instance: PostHog) {
         this._instance = instance
-        this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._suppressionRules = this._instance.persistence?.getProperty(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
         this._exceptionStepsConfig = ErrorTracking.resolveExceptionStepsConfig(this._getExceptionStepsConfig())
         this._exceptionStepsBuffer = new ErrorTracking.ExceptionStepsBuffer(this._exceptionStepsConfig)
     }
@@ -62,7 +62,7 @@ export class PostHogExceptions implements Extension {
     }
 
     private get _captureExtensionExceptions() {
-        const enabled_server_side = !!this._instance.get_property(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
+        const enabled_server_side = !!this._instance.getProperty(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
         const enabled_client_side = this._instance.config.error_tracking.captureExtensionExceptions
         return enabled_client_side ?? enabled_server_side ?? false
     }

@@ -102,13 +102,13 @@ describe('ConversationsManager Identity Verification', () => {
             requestRouter: {
                 endpointFor: jest.fn((_type: string, path: string) => `https://test.posthog.com${path}`),
             },
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            get_property: jest.fn().mockReturnValue(undefined),
-            get_session_id: jest.fn().mockReturnValue('test-session-id'),
-            get_session_replay_url: jest.fn().mockReturnValue(null),
+            getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
+            getProperty: jest.fn().mockReturnValue(undefined),
+            getSessionId: jest.fn().mockReturnValue('test-session-id'),
+            getSessionReplayUrl: jest.fn().mockReturnValue(null),
             persistence: {
                 props: {},
-                get_property: jest.fn(),
+                getProperty: jest.fn(),
                 register: jest.fn(),
                 unregister: jest.fn(),
                 isDisabled: jest.fn().mockReturnValue(false),

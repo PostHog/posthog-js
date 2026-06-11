@@ -44,7 +44,7 @@ describe('PostHogExceptions', () => {
 
         // TODO: we really need to make this a real posthog instance :cry:
         posthog = {
-            get_property: (property_key: string): Property | undefined => {
+            getProperty: (property_key: string): Property | undefined => {
                 return postHogPersistence?.props[property_key]
             },
             config: config,

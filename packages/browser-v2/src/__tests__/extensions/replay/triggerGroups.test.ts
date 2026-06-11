@@ -19,9 +19,9 @@ import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
 import { createMockPostHog } from '../../helpers/posthog-instance'
 
 const fakePostHog = createMockPostHog({
-    register_for_session: () => {},
+    registerForSession: () => {},
     onFeatureFlags: () => () => {}, // Returns cleanup function
-    get_property: () => undefined,
+    getProperty: () => undefined,
 })
 
 // Shared test helper: Creates a mock TriggerGroupMatching with optional overrides

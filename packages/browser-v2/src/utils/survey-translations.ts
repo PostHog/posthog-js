@@ -26,8 +26,8 @@ export function detectUserLanguage(instance: PostHog): string | null {
     return detectSurveyLanguage(
         {
             overrideLanguage: instance.config.override_display_language,
-            storedPersonProperties: isFunction(instance.get_property)
-                ? instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+            storedPersonProperties: isFunction(instance.getProperty)
+                ? instance.getProperty(STORED_PERSON_PROPERTIES_KEY)
                 : undefined,
             locale: getBrowserLanguage(),
         },

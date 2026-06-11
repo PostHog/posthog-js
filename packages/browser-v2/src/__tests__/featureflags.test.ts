@@ -32,13 +32,13 @@ describe('featureflags', () => {
         const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
-            get_distinct_id: () => 'blah id',
+            getDistinctId: () => 'blah id',
             getGroups: () => {},
             persistence: new PostHogPersistence(config),
             requestRouter: new RequestRouter({ config } as any),
             register: (props) => instance.persistence.register(props),
             unregister: (key) => instance.persistence.unregister(key),
-            get_property: (key) => instance.persistence.props[key],
+            getProperty: (key) => instance.persistence.props[key],
             capture: () => {},
             flagsEndpointWasHit: false,
             _send_request: jest.fn().mockImplementation(({ callback }) =>
@@ -231,7 +231,7 @@ describe('featureflags', () => {
         // It should not call `capture` on subsequent calls
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
         expect(instance.capture).toHaveBeenCalledTimes(3)
-        expect(instance.get_property('$flag_call_reported')).toEqual({
+        expect(instance.getProperty('$flag_call_reported')).toEqual({
             'beta-feature': ['true'],
             'multivariate-flag': ['variant-1'],
             random: ['undefined'],
@@ -252,7 +252,7 @@ describe('featureflags', () => {
         })
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
 
-        expect(instance.get_property('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
+        expect(instance.getProperty('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
 
         expect(instance.capture).toHaveBeenCalledTimes(1)
 
@@ -286,7 +286,7 @@ describe('featureflags', () => {
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
         expect(instance.capture).toHaveBeenCalledTimes(3)
 
-        expect(instance.get_property('$flag_call_reported')).toEqual({
+        expect(instance.getProperty('$flag_call_reported')).toEqual({
             'beta-feature': ['true', 'undefined', 'variant-1'],
         })
     })
@@ -297,7 +297,7 @@ describe('featureflags', () => {
         beforeEach(() => {
             currentSessionId = 'session-1'
             instance.config.advanced_feature_flags_dedup_per_session = true
-            instance.get_session_id = () => currentSessionId
+            instance.getSessionId = () => currentSessionId
         })
 
         it('should re-emit $feature_flag_called when session changes', () => {
@@ -305,8 +305,8 @@ describe('featureflags', () => {
 
             expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
             expect(instance.capture).toHaveBeenCalledTimes(1)
-            expect(instance.get_property('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
-            expect(instance.get_property('$flag_call_reported_session_id')).toEqual('session-1')
+            expect(instance.getProperty('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
+            expect(instance.getProperty('$flag_call_reported_session_id')).toEqual('session-1')
 
             // Same session: should NOT re-emit
             expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
@@ -316,8 +316,8 @@ describe('featureflags', () => {
             currentSessionId = 'session-2'
             expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
             expect(instance.capture).toHaveBeenCalledTimes(2)
-            expect(instance.get_property('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
-            expect(instance.get_property('$flag_call_reported_session_id')).toEqual('session-2')
+            expect(instance.getProperty('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
+            expect(instance.getProperty('$flag_call_reported_session_id')).toEqual('session-2')
         })
 
         it('should not re-emit when option is off (default behavior)', () => {
@@ -345,7 +345,7 @@ describe('featureflags', () => {
             })
             expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
             expect(instance.capture).toHaveBeenCalledTimes(2)
-            expect(instance.get_property('$flag_call_reported')).toEqual({
+            expect(instance.getProperty('$flag_call_reported')).toEqual({
                 'beta-feature': ['true', 'variant-1'],
             })
         })
@@ -356,7 +356,7 @@ describe('featureflags', () => {
             expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
             expect(featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
             expect(instance.capture).toHaveBeenCalledTimes(2)
-            expect(instance.get_property('$flag_call_reported')).toEqual({
+            expect(instance.getProperty('$flag_call_reported')).toEqual({
                 'beta-feature': ['true'],
                 'multivariate-flag': ['variant-1'],
             })
@@ -366,11 +366,11 @@ describe('featureflags', () => {
             expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
             expect(instance.capture).toHaveBeenCalledTimes(3)
             // Previous session's multivariate-flag entry is gone
-            expect(instance.get_property('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
+            expect(instance.getProperty('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
 
             expect(featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
             expect(instance.capture).toHaveBeenCalledTimes(4)
-            expect(instance.get_property('$flag_call_reported')).toEqual({
+            expect(instance.getProperty('$flag_call_reported')).toEqual({
                 'beta-feature': ['true'],
                 'multivariate-flag': ['variant-1'],
             })
@@ -1453,12 +1453,12 @@ describe('featureflags', () => {
         })
 
         it('getEarlyAccessFeatures handles persistence absence gracefully', () => {
-            // Save original get_property function
-            const originalGetProperty = instance.get_property
+            // Save original getProperty function
+            const originalGetProperty = instance.getProperty
 
-            // Remove persistence and update get_property to handle undefined persistence
+            // Remove persistence and update getProperty to handle undefined persistence
             instance.persistence = undefined
-            instance.get_property = (key) => {
+            instance.getProperty = (key) => {
                 if (!instance.persistence) {
                     return undefined
                 }
@@ -2520,7 +2520,7 @@ describe('featureflags', () => {
                 requestId: TEST_REQUEST_ID,
             })
 
-            expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
+            expect(instance.getProperty('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
         })
 
         it('saves evaluatedAt from /flags response', () => {
@@ -2530,7 +2530,7 @@ describe('featureflags', () => {
                 evaluatedAt: TEST_EVALUATED_AT,
             })
 
-            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
+            expect(instance.getProperty('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
         })
 
         it('includes requestId in feature flag called event', () => {
@@ -2632,7 +2632,7 @@ describe('featureflags', () => {
                 requestId: TEST_REQUEST_ID,
             })
 
-            expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
+            expect(instance.getProperty('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
 
             // Second /flags response with new ID
             const NEW_REQUEST_ID = 'new-request-id-456'
@@ -2642,7 +2642,7 @@ describe('featureflags', () => {
                 requestId: NEW_REQUEST_ID,
             })
 
-            expect(instance.get_property('$feature_flag_request_id')).toEqual(NEW_REQUEST_ID)
+            expect(instance.getProperty('$feature_flag_request_id')).toEqual(NEW_REQUEST_ID)
 
             // Verify new ID is used in events
             featureFlags._hasLoadedFlags = true
@@ -2664,7 +2664,7 @@ describe('featureflags', () => {
                 evaluatedAt: TEST_EVALUATED_AT,
             })
 
-            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
+            expect(instance.getProperty('$feature_flag_evaluated_at')).toEqual(TEST_EVALUATED_AT)
 
             // Second /flags response with new timestamp
             const NEW_EVALUATED_AT = 9876543210
@@ -2674,7 +2674,7 @@ describe('featureflags', () => {
                 evaluatedAt: NEW_EVALUATED_AT,
             })
 
-            expect(instance.get_property('$feature_flag_evaluated_at')).toEqual(NEW_EVALUATED_AT)
+            expect(instance.getProperty('$feature_flag_evaluated_at')).toEqual(NEW_EVALUATED_AT)
 
             // Verify new timestamp is used in events
             featureFlags._hasLoadedFlags = true
@@ -3133,7 +3133,7 @@ describe('getRemoteConfigPayload', () => {
                 token: 'test-token',
                 api_host: 'https://test.com',
             } as PostHogConfig,
-            get_distinct_id: () => 'test-distinct-id',
+            getDistinctId: () => 'test-distinct-id',
             _send_request: jest.fn(),
             requestRouter: {
                 endpointFor: jest.fn().mockImplementation((endpoint, path) => `${endpoint}${path}`),
@@ -3271,7 +3271,7 @@ describe('getRemoteConfigPayload', () => {
                     token: 'test-token',
                     ...apiConfig,
                 } as PostHogConfig,
-                get_distinct_id: () => 'test-distinct-id',
+                getDistinctId: () => 'test-distinct-id',
                 _send_request: jest.fn(),
                 requestRouter: new RequestRouter({ config: apiConfig } as any),
             })
@@ -3294,7 +3294,7 @@ describe('getRemoteConfigPayload', () => {
                     token: 'test-token',
                     api_host: 'https://app.posthog.com',
                 } as PostHogConfig,
-                get_distinct_id: () => 'test-distinct-id',
+                getDistinctId: () => 'test-distinct-id',
                 _send_request: jest.fn(),
                 requestRouter: new RequestRouter({
                     config: {
@@ -3551,13 +3551,13 @@ describe('$feature_flag_error tracking', () => {
         const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
-            get_distinct_id: () => 'blah id',
+            getDistinctId: () => 'blah id',
             getGroups: () => {},
             persistence: new PostHogPersistence(config),
             requestRouter: new RequestRouter({ config } as any),
             register: (props: any) => instance.persistence.register(props),
             unregister: (key: string) => instance.persistence.unregister(key),
-            get_property: (key: string) => instance.persistence.props[key],
+            getProperty: (key: string) => instance.persistence.props[key],
             capture: jest.fn(),
             _send_request: jest.fn(),
             _onRemoteConfig: jest.fn(),

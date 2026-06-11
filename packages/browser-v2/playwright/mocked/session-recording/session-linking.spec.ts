@@ -32,7 +32,7 @@ test.describe('Session Recording - Session Linking', () => {
     test('emits session linking events when session times out', async ({ page }) => {
         const firstSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
 
         await page.waitingForNetworkCausedBy({
@@ -64,7 +64,7 @@ test.describe('Session Recording - Session Linking', () => {
 
         const newSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
 
         expect(firstSessionId).not.toEqual(newSessionId)
@@ -85,7 +85,7 @@ test.describe('Session Recording - Session Linking', () => {
     test('does NOT emit linking events when session changes after reset()', async ({ page }) => {
         const firstSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
 
         await page.waitingForNetworkCausedBy({
@@ -112,7 +112,7 @@ test.describe('Session Recording - Session Linking', () => {
 
         const newSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
 
         expect(firstSessionId).not.toEqual(newSessionId)

@@ -59,7 +59,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as WindowWithPostHog).posthog
-                    ph?.opt_in_capturing()
+                    ph?.optInCapturing()
                 })
             },
         })
@@ -109,7 +109,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as WindowWithPostHog).posthog
-                    ph?.opt_in_capturing()
+                    ph?.optInCapturing()
                 })
             },
         })
@@ -122,7 +122,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await assertThatRecordingStarted(page)
     })
 
-    test('session recording auto-starts after opt_in_capturing without explicit startSessionRecording call', async ({
+    test('session recording auto-starts after optInCapturing without explicit startSessionRecording call', async ({
         page,
         context,
     }) => {
@@ -135,13 +135,13 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await startWith(customerConfig, page, context)
 
         // User opts in but does NOT call startSessionRecording()
-        // Recording should auto-start because opt_in_capturing() now calls startIfEnabledOrStop()
+        // Recording should auto-start because optInCapturing() now calls startIfEnabledOrStop()
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as WindowWithPostHog).posthog
-                    ph?.opt_in_capturing()
+                    ph?.optInCapturing()
                 })
             },
         })

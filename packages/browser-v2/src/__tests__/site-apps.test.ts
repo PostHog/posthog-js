@@ -53,14 +53,14 @@ describe('SiteApps', () => {
             persistence: new PostHogPersistence(defaultConfig as PostHogConfig),
             register: (props: Properties) => posthog.persistence!.register(props),
             unregister: (key: string) => posthog.persistence!.unregister(key),
-            get_property: (key: string) => posthog.persistence!.props[key],
+            getProperty: (key: string) => posthog.persistence!.props[key],
             capture: jest.fn(),
             _addCaptureHook: jest.fn((cb) => {
                 emitCaptureEvent = cb
                 return removeCaptureHook
             }),
             _afterFlagsResponse: jest.fn(),
-            get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
+            getDistinctId: jest.fn().mockImplementation(() => 'distinctid'),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {
                 receivedFeatureFlags: jest.fn(),
@@ -170,7 +170,7 @@ describe('SiteApps', () => {
         })
 
         it('constructs globals object correctly', () => {
-            jest.spyOn(posthog, 'get_property').mockImplementation((key) => {
+            jest.spyOn(posthog, 'getProperty').mockImplementation((key) => {
                 if (key === '$groups') {
                     return { groupType: 'groupId' }
                 } else if (key === '$stored_group_properties') {

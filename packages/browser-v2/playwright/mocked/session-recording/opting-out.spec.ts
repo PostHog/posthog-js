@@ -61,7 +61,7 @@ test.describe('Session Recording - opting out', () => {
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as WindowWithPostHog).posthog
-                    ph?.opt_in_capturing()
+                    ph?.optInCapturing()
                     ph?.startSessionRecording()
                 })
             },

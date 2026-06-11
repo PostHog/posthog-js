@@ -12,7 +12,7 @@ export const isDeadClicksEnabledForHeatmaps = () => {
     return true
 }
 export const isDeadClicksEnabledForAutocapture = (instance: DeadClicksAutocapture) => {
-    const isRemoteEnabled = !!instance.instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
+    const isRemoteEnabled = !!instance.instance.persistence?.getProperty(DEAD_CLICKS_ENABLED_SERVER_SIDE)
     const clientConfig = instance.instance.config.capture_dead_clicks
     if (isBoolean(clientConfig)) {
         return clientConfig

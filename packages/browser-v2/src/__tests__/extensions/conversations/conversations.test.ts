@@ -46,7 +46,7 @@ describe('PostHogConversations', () => {
             consent: {
                 isOptedOut: jest.fn().mockReturnValue(false),
             } as any,
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
             on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
         })
 
@@ -477,7 +477,7 @@ describe('PostHogConversations', () => {
                 consent: {
                     isOptedOut: jest.fn().mockReturnValue(false),
                 } as any,
-                get_distinct_id: jest.fn().mockReturnValue('identified-user-123'),
+                getDistinctId: jest.fn().mockReturnValue('identified-user-123'),
                 on: jest.fn().mockReturnValue(jest.fn()),
                 capture: jest.fn(),
                 _isIdentified: jest.fn().mockReturnValue(true),

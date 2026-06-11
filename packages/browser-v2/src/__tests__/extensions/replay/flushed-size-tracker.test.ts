@@ -18,11 +18,11 @@ describe('FlushedSizeTracker', () => {
         )
 
         // Bind methods to preserve this context
-        persistence.get_property = persistence.get_property.bind(persistence)
-        persistence.set_property = persistence.set_property.bind(persistence)
+        persistence.getProperty = persistence.getProperty.bind(persistence)
+        persistence.setProperty = persistence.setProperty.bind(persistence)
 
         mockPostHog = createMockPostHog({
-            get_property: persistence.get_property,
+            getProperty: persistence.getProperty,
             persistence,
         })
 
@@ -41,7 +41,7 @@ describe('FlushedSizeTracker', () => {
 
         it('throws error when persistence is missing', () => {
             const invalidPostHog = createMockPostHog({
-                get_property: () => {},
+                getProperty: () => {},
                 persistence: undefined,
             })
 
@@ -52,7 +52,7 @@ describe('FlushedSizeTracker', () => {
 
         it('throws error when persistence is null', () => {
             const invalidPostHog = createMockPostHog({
-                get_property: () => {},
+                getProperty: () => {},
                 persistence: null,
             })
 

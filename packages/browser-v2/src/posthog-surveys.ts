@@ -212,7 +212,7 @@ export class PostHogSurveys implements Extension {
             return callback([])
         }
 
-        const existingSurveys = this._instance.get_property(SURVEYS)
+        const existingSurveys = this._instance.getProperty(SURVEYS)
         if (existingSurveys && !forceReload) {
             return callback(existingSurveys, {
                 isLoaded: true,

@@ -37,19 +37,19 @@ describe('reset()', () => {
     })
 
     it('sets the user as anonymous', () => {
-        instance.persistence!.set_property(USER_STATE, 'identified')
+        instance.persistence!.setProperty(USER_STATE, 'identified')
 
         instance.reset()
 
-        expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
+        expect(instance.persistence!.getProperty(USER_STATE)).toEqual('anonymous')
     })
 
     it('does not reset the device id', () => {
-        const initialDeviceId = instance.get_property('$device_id')
+        const initialDeviceId = instance.getProperty('$device_id')
 
         instance.reset()
 
-        const nextDeviceId = instance.get_property('$device_id')
+        const nextDeviceId = instance.getProperty('$device_id')
         expect(initialDeviceId).toEqual(nextDeviceId)
     })
 
@@ -118,11 +118,11 @@ describe('reset()', () => {
 
     describe('when calling reset(true)', () => {
         it('does reset the device id', () => {
-            const initialDeviceId = instance.get_property('$device_id')
+            const initialDeviceId = instance.getProperty('$device_id')
 
             instance.reset(true)
 
-            const nextDeviceId = instance.get_property('$device_id')
+            const nextDeviceId = instance.getProperty('$device_id')
             expect(initialDeviceId).not.toEqual(nextDeviceId)
         })
     })

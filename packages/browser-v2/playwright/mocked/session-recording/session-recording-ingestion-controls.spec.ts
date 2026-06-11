@@ -37,7 +37,7 @@ test.describe('Session recording - multiple ingestion controls', () => {
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as WindowWithPostHog).posthog
-                    ph?.opt_in_capturing()
+                    ph?.optInCapturing()
                     // this won't start recording because of the linked flag and sample rate
                     ph?.startSessionRecording()
                 })

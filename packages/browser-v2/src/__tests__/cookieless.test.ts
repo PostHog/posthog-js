@@ -86,7 +86,7 @@ describe('cookieless', () => {
             const { posthog, beforeSendMock } = await setup({
                 cookieless_mode: 'always',
             })
-            expect(posthog.has_opted_in_capturing()).toBe(false)
+            expect(posthog.hasOptedInCapturing()).toBe(false)
             posthog.capture(eventName, eventProperties)
 
             expect(beforeSendMock).toBeCalledTimes(1)
@@ -102,7 +102,7 @@ describe('cookieless', () => {
             expect(posthog.sessionRecording).toBeFalsy()
 
             // should ignore cookie consent, and throw in test code due to logging an error
-            expect(() => posthog.opt_in_capturing()).toThrow()
+            expect(() => posthog.optInCapturing()).toThrow()
         })
 
         it.each([[true], ['history_change']])(
@@ -112,7 +112,7 @@ describe('cookieless', () => {
                     cookieless_mode: 'always',
                     capture_pageview: capturePageview,
                 })
-                expect(posthog.has_opted_in_capturing()).toBe(false)
+                expect(posthog.hasOptedInCapturing()).toBe(false)
                 await delay(1) // wait for async pageview capture
 
                 expect(beforeSendMock).toBeCalledTimes(1)
@@ -128,7 +128,7 @@ describe('cookieless', () => {
                 expect(posthog.sessionRecording).toBeFalsy()
 
                 // should ignore cookie consent, and throw in test code due to logging an error
-                expect(() => posthog.opt_in_capturing()).toThrow()
+                expect(() => posthog.optInCapturing()).toThrow()
             }
         )
     })
@@ -140,13 +140,13 @@ describe('cookieless', () => {
             })
             posthog.capture('eventBeforeOptIn') // will be dropped
             expect(beforeSendMock).toBeCalledTimes(0)
-            expect(posthog.has_opted_out_capturing()).toEqual(true)
+            expect(posthog.hasOptedOutCapturing()).toEqual(true)
 
             // Mock surveys to verify they get loaded
             const mockSurveysLoadIfEnabled = jest.spyOn(posthog.surveys, 'loadIfEnabled')
 
             // opt in
-            posthog.opt_in_capturing()
+            posthog.optInCapturing()
 
             expect(beforeSendMock).toBeCalledTimes(2)
             const optInEvent = beforeSendMock.mock.calls[0][0]
@@ -175,10 +175,10 @@ describe('cookieless', () => {
             })
             posthog.capture('eventBeforeOptOut') // will be dropped
             expect(beforeSendMock).toBeCalledTimes(0)
-            expect(posthog.has_opted_out_capturing()).toEqual(true)
+            expect(posthog.hasOptedOutCapturing()).toEqual(true)
 
             // opt out
-            posthog.opt_out_capturing()
+            posthog.optOutCapturing()
 
             posthog.capture('eventAfterOptOut')
 
@@ -206,7 +206,7 @@ describe('cookieless', () => {
             posthog.capture('eventBeforeOptOut') // will be dropped
             expect(beforeSendMock).toBeCalledTimes(0)
 
-            posthog.opt_out_capturing()
+            posthog.optOutCapturing()
 
             expect(beforeSendMock).toBeCalledTimes(0)
 
@@ -230,7 +230,7 @@ describe('cookieless', () => {
                 },
                 undefined
             )
-            previousPosthog.opt_in_capturing()
+            previousPosthog.optInCapturing()
             const { beforeSendMock, posthog } = await setup(
                 {
                     cookieless_mode: 'on_reject',
@@ -262,7 +262,7 @@ describe('cookieless', () => {
                 },
                 undefined
             )
-            previousPosthog.opt_out_capturing()
+            previousPosthog.optOutCapturing()
             const { beforeSendMock, posthog } = await setup(
                 {
                     cookieless_mode: 'on_reject',
@@ -288,13 +288,13 @@ describe('cookieless', () => {
             const { posthog, beforeSendMock } = await setup({
                 cookieless_mode: 'on_reject',
             })
-            posthog.opt_out_capturing()
+            posthog.optOutCapturing()
             posthog.register({ test: 'test' })
             posthog.capture(eventName, eventProperties)
             expect(beforeSendMock).toBeCalledTimes(2)
             expect(beforeSendMock.mock.calls[1][0].properties.test).toBe('test')
 
-            posthog.opt_in_capturing()
+            posthog.optInCapturing()
             posthog.capture(eventName, eventProperties)
 
             expect(beforeSendMock).toBeCalledTimes(4)
@@ -315,14 +315,14 @@ describe('cookieless', () => {
             const { posthog, beforeSendMock } = await setup({
                 cookieless_mode: 'on_reject',
             })
-            posthog.opt_in_capturing()
+            posthog.optInCapturing()
             posthog.register({ test: 'test' })
             posthog.capture(eventName, eventProperties)
 
             expect(beforeSendMock).toBeCalledTimes(3)
             expect(beforeSendMock.mock.calls[2][0].properties.test).toBe('test')
 
-            posthog.opt_out_capturing()
+            posthog.optOutCapturing()
             posthog.capture(eventName, eventProperties)
 
             expect(beforeSendMock).toBeCalledTimes(4)
@@ -344,8 +344,8 @@ describe('cookieless', () => {
             })
             await delay(1) // wait for async initial pageview capture
 
-            expect(posthog.has_opted_out_capturing()).toEqual(true)
-            expect(posthog.get_explicit_consent_status()).toBe('pending')
+            expect(posthog.hasOptedOutCapturing()).toEqual(true)
+            expect(posthog.getExplicitConsentStatus()).toBe('pending')
 
             expect(beforeSendMock).toBeCalledTimes(1)
             const pageview = beforeSendMock.mock.calls[0][0]
@@ -371,7 +371,7 @@ describe('cookieless', () => {
             expect(beforeSendMock).toBeCalledTimes(1)
             expect(beforeSendMock.mock.calls[0][0].properties.$cookieless_mode).toEqual(true)
 
-            posthog.opt_in_capturing()
+            posthog.optInCapturing()
             posthog.capture(eventName, eventProperties)
 
             expect(beforeSendMock.mock.calls[1][0].event).toBe('$opt_in')
@@ -394,7 +394,7 @@ describe('cookieless', () => {
             expect(mockedFetch).toBeCalledTimes(1) // flags
             expect(mockedFetch.mock.calls[0][0]).toContain('/flags/')
 
-            posthog.opt_in_capturing()
+            posthog.optInCapturing()
             expect(mockedFetch).toBeCalledTimes(3) // flags + opt in + pageview
             expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$opt_in')
             expect(JSON.parse(mockedFetch.mock.calls[2][1].body).event).toEqual('$pageview')
@@ -406,7 +406,7 @@ describe('cookieless', () => {
         })
 
         it('should start the request queue when opting out (cookieless transport regression #3680)', async () => {
-            // Regression: after opt_out_capturing() in on_reject mode the SDK switches to cookieless
+            // Regression: after optOutCapturing() in on_reject mode the SDK switches to cookieless
             // capturing, but the RequestQueue was never enabled — so batched events were enqueued
             // but never flushed over the network.
             jest.useFakeTimers()
@@ -417,7 +417,7 @@ describe('cookieless', () => {
             jest.advanceTimersByTime(10)
             expect(mockedFetch).toBeCalledTimes(1) // flags only — queue is paused, no events yet
 
-            posthog.opt_out_capturing()
+            posthog.optOutCapturing()
             // opt_out triggers an initial $pageview in cookieless mode — it should be sent immediately (non-batched)
             expect(mockedFetch).toBeCalledTimes(2) // flags + pageview
             expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$pageview')

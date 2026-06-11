@@ -228,7 +228,7 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _prop(key: string): any {
-        return this._instance.get_property(key)
+        return this._instance.getProperty(key)
     }
 
     /**
@@ -558,11 +558,11 @@ export class PostHogFeatureFlags implements Extension {
 
         const data: Record<string, any> = {
             token: token,
-            distinct_id: this._instance.get_distinct_id(),
+            distinct_id: this._instance.getDistinctId(),
             groups: this._instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: {
-                ...(this._persistence?.get_initial_props() || {}),
+                ...(this._persistence?.getInitialProps() || {}),
                 ...(this._prop(STORED_PERSON_PROPERTIES_KEY) || {}),
             },
             group_properties: this._prop(STORED_GROUP_PROPERTIES_KEY),
@@ -778,7 +778,7 @@ export class PostHogFeatureFlags implements Extension {
 
         // When session-scoped dedup is enabled, reset the reported flags whenever the session changes.
         if (this._config.advanced_feature_flags_dedup_per_session) {
-            const currentSessionId = this._instance.get_session_id()
+            const currentSessionId = this._instance.getSessionId()
             const storedSessionId = this._prop(FLAG_CALL_REPORTED_SESSION_ID)
             if (currentSessionId && currentSessionId !== storedSessionId) {
                 flagCallReported = {}
@@ -888,7 +888,7 @@ export class PostHogFeatureFlags implements Extension {
     getRemoteConfigPayload(key: string, callback: RemoteConfigFeatureFlagCallback): void {
         const token = this._config.token
         const data: Record<string, any> = {
-            distinct_id: this._instance.get_distinct_id(),
+            distinct_id: this._instance.getDistinctId(),
             token,
         }
 

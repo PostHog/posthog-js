@@ -21,7 +21,7 @@ import { createMockPostHog } from './helpers/posthog-instance'
 describe('posthog-surveys', () => {
     describe('PostHogSurveys Class', () => {
         let mockPostHog: PostHog & {
-            get_property: jest.Mock
+            getProperty: jest.Mock
             _send_request: jest.Mock
         }
         let surveys: PostHogSurveys
@@ -101,7 +101,7 @@ describe('posthog-surveys', () => {
                     endpointFor: jest.fn().mockReturnValue('https://test.com/api/surveys'),
                 },
                 _send_request: jest.fn(),
-                get_property: jest.fn(),
+                getProperty: jest.fn(),
                 consent: {
                     _instance: {} as any,
                     _config: {} as any,
@@ -127,7 +127,7 @@ describe('posthog-surveys', () => {
                         .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
                 },
             }) as PostHog & {
-                get_property: jest.Mock
+                getProperty: jest.Mock
                 _send_request: jest.Mock
             }
 
@@ -159,7 +159,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should return visible: true if surveys are loaded and the survey is eligible', () => {
-                mockPostHog.get_property.mockReturnValue([survey])
+                mockPostHog.getProperty.mockReturnValue([survey])
                 surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
                 flagsResponse.featureFlags[survey.targeting_flag_key] = true
                 flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
@@ -173,7 +173,7 @@ describe('posthog-surveys', () => {
         describe('checkSurveyEligibility', () => {
             beforeEach(() => {
                 // mock getSurveys response
-                mockPostHog.get_property.mockReturnValue([
+                mockPostHog.getProperty.mockReturnValue([
                     survey,
                     repeatableSurvey,
                     surveyWithWaitPeriod,
@@ -187,7 +187,7 @@ describe('posthog-surveys', () => {
                     ...survey,
                     end_date: new Date('11/10/2022').toISOString(),
                 }
-                mockPostHog.get_property.mockReturnValue([completedSurvey])
+                mockPostHog.getProperty.mockReturnValue([completedSurvey])
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual(`Survey is not running. It was completed on ${completedSurvey.end_date}`)
@@ -340,7 +340,7 @@ describe('posthog-surveys', () => {
                 }
 
                 beforeEach(() => {
-                    mockPostHog.get_property.mockReturnValue([surveyWithBothConditions])
+                    mockPostHog.getProperty.mockReturnValue([surveyWithBothConditions])
                     // Set all flags to true
                     flagsResponse.featureFlags[surveyWithBothConditions.targeting_flag_key] = true
                     flagsResponse.featureFlags[surveyWithBothConditions.linked_flag_key] = true
@@ -387,7 +387,7 @@ describe('posthog-surveys', () => {
                             actions: null,
                         },
                     }
-                    mockPostHog.get_property.mockReturnValue([repeatableSurveyWithWaitPeriod])
+                    mockPostHog.getProperty.mockReturnValue([repeatableSurveyWithWaitPeriod])
 
                     // Set last seen survey date to 10 days ago (more than 5 day wait period)
                     const tenDaysAgo = new Date()
@@ -486,7 +486,7 @@ describe('posthog-surveys', () => {
                 mockGenerateSurveys.mockReturnValue({})
                 const callback = jest.fn()
                 const mockSurveys = [{ id: 'test-survey' }]
-                mockPostHog.get_property.mockReturnValue(mockSurveys)
+                mockPostHog.getProperty.mockReturnValue(mockSurveys)
 
                 surveys.onSurveysLoaded(callback)
                 surveys.loadIfEnabled()
@@ -534,7 +534,7 @@ describe('posthog-surveys', () => {
                 const callback = jest.fn()
 
                 // No cached surveys (simulating first page load)
-                mockPostHog.get_property.mockReturnValue(undefined)
+                mockPostHog.getProperty.mockReturnValue(undefined)
 
                 // Mock _send_request to simulate async API call
                 mockPostHog._send_request.mockImplementation(({ callback: reqCallback }) => {
@@ -600,7 +600,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should return cached surveys and not fetch if they exist', () => {
-                mockPostHog.get_property.mockReturnValue(mockSurveys)
+                mockPostHog.getProperty.mockReturnValue(mockSurveys)
 
                 surveys.getSurveys(mockCallback)
 
@@ -755,7 +755,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should force reload surveys when forceReload is true', () => {
-                mockPostHog.get_property.mockReturnValue(mockSurveys)
+                mockPostHog.getProperty.mockReturnValue(mockSurveys)
 
                 surveys.getSurveys(mockCallback, true)
 

@@ -86,11 +86,11 @@ export function createEventProcessor(
 
         const personUrl = _posthog.requestRouter.endpointFor(
             'ui',
-            `/project/${_posthog.config.token}/person/${_posthog.get_distinct_id()}`
+            `/project/${_posthog.config.token}/person/${_posthog.getDistinctId()}`
         )
         event.tags['PostHog Person URL'] = personUrl
         if (_posthog.sessionRecordingStarted()) {
-            event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
+            event.tags['PostHog Recording URL'] = _posthog.getSessionReplayUrl({ withTimestamp: true })
         }
 
         const exceptions: _SentryException[] = event.exception?.values || []

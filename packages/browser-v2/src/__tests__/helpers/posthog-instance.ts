@@ -1,7 +1,7 @@
 // The library depends on having the module initialized before it can be used.
 import '../../entrypoints/default-extensions'
 
-import { PostHog, init_as_module } from '../../posthog-core'
+import { PostHog, initAsModule } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { assignableWindow } from '../../utils/globals'
@@ -55,7 +55,7 @@ export const createPosthogInstance = async (
     )
 }
 
-const posthog = init_as_module()
+const posthog = initAsModule()
 export const defaultPostHog = (): PostHog => posthog
 
 export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
@@ -64,7 +64,7 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
             token: 'test-token',
             api_host: 'https://test.com',
         } as PostHogConfig,
-        get_distinct_id: () => 'test-distinct-id',
+        getDistinctId: () => 'test-distinct-id',
         capture: jest.fn(),
         _send_request: jest.fn(),
         ...overrides,

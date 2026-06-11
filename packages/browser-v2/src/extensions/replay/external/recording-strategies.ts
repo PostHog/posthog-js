@@ -157,7 +157,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
             this._recordingStatusFunction = allMatchSessionRecordingStatus
         }
 
-        this._instance.register_for_session({
+        this._instance.registerForSession({
             [SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG]: config.triggerMatchType,
         })
 
@@ -185,7 +185,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
     getMinimumDuration(sessionId: string): number | null {
         // V1: Minimum duration is global from config, doesn't need sessionId
         void sessionId
-        const config = this._instance.get_property('$session_recording_remote_config') as
+        const config = this._instance.getProperty('$session_recording_remote_config') as
             | SessionRecordingPersistedConfig
             | undefined
         const duration = config?.minimumDurationMilliseconds
@@ -230,8 +230,8 @@ export class V1RecordingStrategy implements RecordingStrategy {
             return
         }
 
-        const storedValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        const storedSampleRate = this._instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
+        const storedValue = this._instance.getProperty(SESSION_RECORDING_IS_SAMPLED)
+        const storedSampleRate = this._instance.getProperty(SESSION_RECORDING_SAMPLE_RATE)
 
         // Parse stored decision:
         // - sessionId string = sampled in for that session
@@ -328,7 +328,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         // Setup trigger group matchers
         this._setupTriggerGroups(config.triggerGroups)
 
-        this._instance.register_for_session({
+        this._instance.registerForSession({
             [SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG]: 'v2_trigger_groups',
             [SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT]: config.triggerGroups.length,
         })
@@ -441,7 +441,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                             const matchedTriggers = (matcher.group.conditions.events || []).filter(
                                 (t) => t.name === event.event
                             )
-                            const personProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+                            const personProperties = this._instance.getProperty(STORED_PERSON_PROPERTIES_KEY)
                             const anyMatched = matchedTriggers.some(
                                 (t) =>
                                     !t.properties ||
@@ -474,7 +474,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
             // Check if we have a stored decision for this group
             const storageKey = SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + groupId
-            const storedValue = this._instance.get_property(storageKey)
+            const storedValue = this._instance.getProperty(storageKey)
 
             // Parse stored decision:
             // - object = current format with session ID, sample rate, and decision
@@ -575,7 +575,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
             }
         }
 
-        this._instance.register_for_session({
+        this._instance.registerForSession({
             [SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS]: recordingGroups,
         })
     }
@@ -607,7 +607,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         if (!groupProperties || groupProperties.length === 0) {
             return true
         }
-        const personProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+        const personProperties = this._instance.getProperty(STORED_PERSON_PROPERTIES_KEY)
         return matchTriggerPropertyFilters(groupProperties, eventProperties, personProperties)
     }
 

@@ -13,7 +13,7 @@ const mockPosthog = createMockPostHog({
     featureFlags: {
         isFeatureEnabled: jest.fn().mockReturnValue(true),
     } as Partial<PostHogFeatureFlags> as unknown as PostHogFeatureFlags,
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    getSessionReplayUrl: jest.fn().mockReturnValue('http://example.com/replay'),
 })
 
 // Base mock survey for widget type

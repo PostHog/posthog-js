@@ -5,10 +5,10 @@ import * as ts from 'typescript'
 import * as constants from '../constants'
 import { getPersistenceKeyPolicy, PERSISTENCE_KEY_POLICY, PERSISTENCE_STORAGE_GROUPS } from '../persistence-key-policy'
 
-const PERSISTENCE_OBJECT_METHODS = new Set(['register', 'register_once'])
-const PERSISTENCE_SINGLE_KEY_METHODS = new Set(['set_property', 'unregister'])
-const SESSION_OBJECT_METHODS = new Set(['register_for_session'])
-const SESSION_SINGLE_KEY_METHODS = new Set(['unregister_for_session'])
+const PERSISTENCE_OBJECT_METHODS = new Set(['register', 'registerOnce'])
+const PERSISTENCE_SINGLE_KEY_METHODS = new Set(['setProperty', 'unregister'])
+const SESSION_OBJECT_METHODS = new Set(['registerForSession'])
+const SESSION_SINGLE_KEY_METHODS = new Set(['unregisterForSession'])
 const INTERNAL_SINGLE_KEY_METHODS = new Set(['_register_single', '_setProp', '_deleteProp'])
 
 const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set<string>([
@@ -374,11 +374,11 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
         '_setProp',
         '_deleteProp',
         'register',
-        'register_once',
+        'registerOnce',
         'unregister',
-        'set_event_timer',
-        'remove_event_timer',
-        'set_property',
+        'setEventTimer',
+        'removeEventTimer',
+        'setProperty',
         'refreshKey',
     ])
 

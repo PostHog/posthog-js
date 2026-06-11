@@ -118,7 +118,7 @@ describe('posthog core', () => {
             )
         })
 
-        it('calls update_campaign_params and update_referrer_info on sessionPersistence', () => {
+        it('calls updateCampaignParams and updateReferrerInfo on sessionPersistence', () => {
             const posthog = posthogWith(
                 {
                     property_denylist: [],
@@ -128,20 +128,20 @@ describe('posthog core', () => {
                 {
                     ...defaultOverrides,
                     sessionPersistence: {
-                        update_search_keyword: jest.fn(),
-                        update_campaign_params: jest.fn(),
-                        update_referrer_info: jest.fn(),
-                        update_config: jest.fn(),
+                        updateSearchKeyword: jest.fn(),
+                        updateCampaignParams: jest.fn(),
+                        updateReferrerInfo: jest.fn(),
+                        updateConfig: jest.fn(),
                         properties: jest.fn(),
-                        get_property: () => 'anonymous',
+                        getProperty: () => 'anonymous',
                     } as unknown as PostHogPersistence,
                 }
             )
 
             posthog.capture(eventName, {}, {})
 
-            expect(posthog.sessionPersistence.update_campaign_params).toHaveBeenCalled()
-            expect(posthog.sessionPersistence.update_referrer_info).toHaveBeenCalled()
+            expect(posthog.sessionPersistence.updateCampaignParams).toHaveBeenCalled()
+            expect(posthog.sessionPersistence.updateReferrerInfo).toHaveBeenCalled()
         })
 
         it('errors with undefined event name', () => {
@@ -440,14 +440,14 @@ describe('posthog core', () => {
         const overrides: Partial<PostHog> = {
             persistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
-                remove_event_timer: jest.fn(),
-                get_property: () => 'anonymous',
+                removeEventTimer: jest.fn(),
+                getProperty: () => 'anonymous',
                 props: {},
                 register: jest.fn(),
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
-                get_property: () => 'anonymous',
+                getProperty: () => 'anonymous',
             } as unknown as PostHogPersistence,
             sessionManager: {
                 checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
@@ -561,7 +561,7 @@ describe('posthog core', () => {
                     overrides
                 )
 
-                posthog.persistence.get_initial_props = () => ({
+                posthog.persistence.getInitialProps = () => ({
                     $initial_current_url: 'https://posthog.com',
                 })
                 posthog.sessionPropsManager.getSetOnceProps = () => ({})
@@ -784,9 +784,9 @@ describe('posthog core', () => {
                 { capture: jest.fn() }
             )
 
-            expect(posthog.get_distinct_id()).toBe('abcd')
-            expect(posthog.get_property('$device_id')).toBe('abcd')
-            expect(posthog.persistence.get_property(USER_STATE)).toBe('anonymous')
+            expect(posthog.getDistinctId()).toBe('abcd')
+            expect(posthog.getProperty('$device_id')).toBe('abcd')
+            expect(posthog.persistence.getProperty(USER_STATE)).toBe('anonymous')
 
             posthog.identify('efgh')
 
@@ -813,9 +813,9 @@ describe('posthog core', () => {
                 { capture: jest.fn() }
             )
 
-            expect(posthog.get_distinct_id()).toBe('abcd')
-            expect(posthog.get_property('$device_id')).toBe('og-device-id')
-            expect(posthog.persistence.get_property(USER_STATE)).toBe('identified')
+            expect(posthog.getDistinctId()).toBe('abcd')
+            expect(posthog.getProperty('$device_id')).toBe('og-device-id')
+            expect(posthog.persistence.getProperty(USER_STATE)).toBe('identified')
 
             posthog.identify('efgh')
             expect(posthog.capture).not.toHaveBeenCalled()
@@ -834,8 +834,8 @@ describe('posthog core', () => {
                 },
             })
 
-            expect(posthog.get_distinct_id()).not.toBe('abcd')
-            expect(posthog.get_distinct_id()).not.toEqual(undefined)
+            expect(posthog.getDistinctId()).not.toBe('abcd')
+            expect(posthog.getDistinctId()).not.toEqual(undefined)
             expect(posthog.getFeatureFlag('multivariant')).toBe('variant-1')
             expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
             expect(posthog.getFeatureFlag('undef')).toBe(undefined)
@@ -878,8 +878,8 @@ describe('posthog core', () => {
                 persistence: 'memory',
             })
 
-            expect(posthog.get_distinct_id()).not.toBe('abcd')
-            expect(posthog.get_distinct_id()).not.toEqual(undefined)
+            expect(posthog.getDistinctId()).not.toBe('abcd')
+            expect(posthog.getDistinctId()).not.toEqual(undefined)
             expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')
@@ -937,8 +937,8 @@ describe('posthog core', () => {
 
                 // First instance creates an anonymous user in persistence
                 const first = posthogWith({ token })
-                expect(first.get_distinct_id()).toBeTruthy()
-                expect(first.persistence.get_property(USER_STATE)).toBe('anonymous')
+                expect(first.getDistinctId()).toBeTruthy()
+                expect(first.persistence.getProperty(USER_STATE)).toBe('anonymous')
 
                 const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
                 const captureSpy = jest.spyOn(PostHog.prototype, 'capture')
@@ -953,8 +953,8 @@ describe('posthog core', () => {
                 })
 
                 expect(identifySpy).toHaveBeenCalledWith('user-123')
-                expect(second.get_distinct_id()).toBe('user-123')
-                expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+                expect(second.getDistinctId()).toBe('user-123')
+                expect(second.persistence.getProperty(USER_STATE)).toBe('identified')
 
                 // Verify the $identify event includes the anonymous-to-identified mapping
                 const captureCall = captureSpy.mock.calls.find((call) => call[0] === '$identify')
@@ -968,7 +968,7 @@ describe('posthog core', () => {
                 identifySpy.mockClear()
                 second.identify('user-123')
                 // identify is called but since distinct_id matches, no $identify event fires
-                expect(second.get_distinct_id()).toBe('user-123')
+                expect(second.getDistinctId()).toBe('user-123')
             })
 
             it('does not call identify when bootstrap distinctID matches persisted ID', () => {
@@ -976,7 +976,7 @@ describe('posthog core', () => {
 
                 // First instance creates an anonymous user
                 const first = posthogWith({ token })
-                const anonId = first.get_distinct_id()
+                const anonId = first.getDistinctId()
 
                 const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
 
@@ -1030,8 +1030,8 @@ describe('posthog core', () => {
                 })
 
                 expect(identifySpy).not.toHaveBeenCalled()
-                expect(posthog.get_distinct_id()).toBe('user-789')
-                expect(posthog.persistence.get_property(USER_STATE)).toBe('identified')
+                expect(posthog.getDistinctId()).toBe('user-789')
+                expect(posthog.persistence.getProperty(USER_STATE)).toBe('identified')
             })
 
             it('does not call identify when existing user is already identified', () => {
@@ -1040,7 +1040,7 @@ describe('posthog core', () => {
                 // First instance: create and identify a user
                 const first = posthogWith({ token }, { capture: jest.fn() })
                 first.identify('existing-user')
-                expect(first.persistence.get_property(USER_STATE)).toBe('identified')
+                expect(first.persistence.getProperty(USER_STATE)).toBe('identified')
 
                 const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
 
@@ -1057,8 +1057,8 @@ describe('posthog core', () => {
                 expect(identifySpy).not.toHaveBeenCalled()
 
                 // Existing identity should be preserved (bootstrap should NOT silently switch identities)
-                expect(second.get_distinct_id()).toBe('existing-user')
-                expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+                expect(second.getDistinctId()).toBe('existing-user')
+                expect(second.persistence.getProperty(USER_STATE)).toBe('identified')
             })
         })
     })
@@ -1100,7 +1100,7 @@ describe('posthog core', () => {
             } as unknown as SessionRecording
             posthog.persistence = {
                 register: jest.fn(),
-                update_config: jest.fn(),
+                updateConfig: jest.fn(),
             } as unknown as PostHogPersistence
 
             // Feature flags
@@ -1584,21 +1584,19 @@ describe('posthog core', () => {
         })
 
         it('returns the session_id', () => {
-            expect(instance.get_session_id()).toEqual('sessionId')
+            expect(instance.getSessionId()).toEqual('sessionId')
         })
 
         it('returns the replay URL', () => {
-            expect(instance.get_session_replay_url()).toEqual(
-                `https://us.posthog.com/project/${token}/replay/sessionId`
-            )
+            expect(instance.getSessionReplayUrl()).toEqual(`https://us.posthog.com/project/${token}/replay/sessionId`)
         })
 
         it('returns the replay URL including timestamp', () => {
-            expect(instance.get_session_replay_url({ withTimestamp: true })).toEqual(
+            expect(instance.getSessionReplayUrl({ withTimestamp: true })).toEqual(
                 `https://us.posthog.com/project/${token}/replay/sessionId?t=20` // default lookback is 10 seconds
             )
 
-            expect(instance.get_session_replay_url({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
+            expect(instance.getSessionReplayUrl({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
                 `https://us.posthog.com/project/${token}/replay/sessionId?t=30`
             )
         })

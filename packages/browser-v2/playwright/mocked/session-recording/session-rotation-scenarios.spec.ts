@@ -54,14 +54,14 @@ async function triggerForcedIdleTimeout(page: Page): Promise<void> {
     await page.evaluate(() => {
         const ph = (window as WindowWithPostHog).posthog
         const sessionManager = ph?.sessionManager as any
-        const oldSessionId = ph?.get_session_id()
+        const oldSessionId = ph?.getSessionId()
         sessionManager.resetSessionId()
         sessionManager._eventEmitter?.emit?.('forcedIdleReset', { idleSessionId: oldSessionId })
     })
 }
 
 async function getSessionId(page: Page): Promise<string> {
-    const id = await page.evaluate(() => (window as WindowWithPostHog).posthog?.get_session_id())
+    const id = await page.evaluate(() => (window as WindowWithPostHog).posthog?.getSessionId())
     expect(id).toBeDefined()
     return id!
 }

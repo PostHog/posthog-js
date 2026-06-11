@@ -119,7 +119,7 @@ describe('Web Experimentation', () => {
                 region: 'us-east-1',
             }),
             persistence: persistence,
-            get_property: jest.fn(),
+            getProperty: jest.fn(),
             capture: jest.fn(),
             _send_request: jest
                 .fn()
@@ -255,7 +255,7 @@ describe('Web Experimentation', () => {
                     // no disable_web_experiments set to false here, so it's implicitly enabled
                 }),
                 persistence: persistence,
-                get_property: jest.fn(),
+                getProperty: jest.fn(),
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: expResponse })),
@@ -329,7 +329,7 @@ describe('Web Experimentation', () => {
 
     function makePostHog(ph: Partial<PostHog>): PostHog {
         return createMockPostHog({
-            get_distinct_id() {
+            getDistinctId() {
                 return 'distinctid'
             },
             ...ph,

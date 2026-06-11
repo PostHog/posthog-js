@@ -91,14 +91,14 @@ export class TracingHeaders implements Extension {
         if (isUndefined(this._restoreXHRPatch)) {
             this._restoreXHRPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
                 hostnames,
-                () => this._instance.get_distinct_id(),
+                () => this._instance.getDistinctId(),
                 this._instance.sessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
             this._restoreFetchPatch = assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
                 hostnames,
-                () => this._instance.get_distinct_id(),
+                () => this._instance.getDistinctId(),
                 this._instance.sessionManager
             )
         }

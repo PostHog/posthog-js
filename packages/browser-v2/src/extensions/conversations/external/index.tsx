@@ -129,18 +129,18 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 payload.distinct_id = identity.identity_distinct_id
             } else {
                 payload.widget_session_id = this._widgetSessionId
-                payload.distinct_id = this._posthog.get_distinct_id()
+                payload.distinct_id = this._posthog.getDistinctId()
             }
 
             try {
                 // Capture session ID - sent with every message
-                const capturedSessionId = this._posthog.get_session_id()
+                const capturedSessionId = this._posthog.getSessionId()
                 if (capturedSessionId) {
                     payload.session_id = capturedSessionId
                 }
 
                 // Capture session replay URL with timestamp - sent with every message
-                const replayUrl = this._posthog.get_session_replay_url({
+                const replayUrl = this._posthog.getSessionReplayUrl({
                     withTimestamp: true,
                     timestampLookBack: 30,
                 })
@@ -437,7 +437,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         const payload: RestoreFromTokenPayload = {
             restore_token: restoreToken,
             widget_session_id: this._widgetSessionId,
-            distinct_id: this._posthog.get_distinct_id(),
+            distinct_id: this._posthog.getDistinctId(),
             current_url: window?.location?.href,
         }
 
@@ -556,8 +556,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     private _getPersonTraits(): { name: string | undefined; email: string | undefined } {
         const superProps = this._posthog.persistence?.props || {}
-        const storedPersonProps =
-            (this._posthog.get_property(STORED_PERSON_PROPERTIES_KEY) as Record<string, any>) || {}
+        const storedPersonProps = (this._posthog.getProperty(STORED_PERSON_PROPERTIES_KEY) as Record<string, any>) || {}
 
         const name =
             storedPersonProps.$name || storedPersonProps.name || superProps.$name || superProps.name || undefined

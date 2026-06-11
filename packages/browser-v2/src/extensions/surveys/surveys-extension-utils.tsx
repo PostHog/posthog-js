@@ -434,7 +434,7 @@ export const sendSurveyEvent = ({
         [SurveyEventProperties.SURVEY_SUBMISSION_ID]: surveySubmissionId,
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
         ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        sessionRecordingUrl: posthog.getSessionReplayUrl?.(),
         ...buildSurveyResponseProperties(responses, survey),
         ...properties,
         $set: {
@@ -461,7 +461,7 @@ const _buildSurveyEventProperties = (
     ...(inProgressSurvey?.surveyLanguage && {
         [SurveyEventProperties.SURVEY_LANGUAGE]: inProgressSurvey.surveyLanguage,
     }),
-    sessionRecordingUrl: posthog.get_session_replay_url?.(),
+    sessionRecordingUrl: posthog.getSessionReplayUrl?.(),
     [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
     ...buildSurveyResponseProperties(inProgressSurvey?.responses, survey),
 })

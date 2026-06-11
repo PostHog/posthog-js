@@ -152,13 +152,34 @@ type RemovedDeprecatedPostHogMembers =
     | 'renderSurvey'
     | 'canRenderSurvey'
 
+/**
+ * Members declared in snake_case on the base interface from @posthog/types.
+ * v2 standardizes on camelCase; the base declarations are kept in
+ * @posthog/types for the benefit of the v1 SDK and redeclared in camelCase below.
+ */
+type RenamedSnakeCasePostHogMembers =
+    | 'get_distinct_id'
+    | 'register_once'
+    | 'register_for_session'
+    | 'unregister_for_session'
+    | 'get_property'
+    | 'get_session_id'
+    | 'get_session_replay_url'
+    | 'opt_in_capturing'
+    | 'opt_out_capturing'
+    | 'has_opted_in_capturing'
+    | 'has_opted_out_capturing'
+    | 'get_explicit_consent_status'
+    | 'clear_opt_in_out_capturing'
+    | 'set_config'
+
 /* Small override from the base class to make it more specific to the browser/src/posthog-core.ts file
  * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
  * using the proper `loaded` function signature.
  */
 export type PostHogInterface = Omit<
     BasePostHogInterface,
-    'config' | 'init' | 'featureFlags' | RemovedDeprecatedPostHogMembers
+    'config' | 'init' | 'featureFlags' | RemovedDeprecatedPostHogMembers | RenamedSnakeCasePostHogMembers
 > & {
     /**
      * The feature flags instance. Provides access to feature flag override methods.
@@ -166,6 +187,80 @@ export type PostHogInterface = Omit<
     featureFlags: TreeShakeable<{
         overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void
     }>
+
+    /**
+     * Get the current distinct ID.
+     */
+    getDistinctId(): string
+
+    /**
+     * Register properties to send with every event, only if they are not already set.
+     *
+     * @param properties - The properties to register
+     * @param default_value - Default value for the property
+     * @param days - Number of days to persist the properties
+     */
+    registerOnce(properties: Properties, default_value?: any, days?: number): void
+
+    /**
+     * Register properties for the current session only.
+     */
+    registerForSession(properties: Properties): void
+
+    /**
+     * Unregister a session property.
+     */
+    unregisterForSession(property: string): void
+
+    /**
+     * Get a property value from persistence.
+     */
+    getProperty(property_name: string): any | undefined
+
+    /**
+     * Get the current session ID.
+     */
+    getSessionId(): string
+
+    /**
+     * Get the URL to view the current session recording.
+     */
+    getSessionReplayUrl(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string
+
+    /**
+     * Opt the user into capturing.
+     */
+    optInCapturing(): void
+
+    /**
+     * Opt the user out of capturing.
+     */
+    optOutCapturing(): void
+
+    /**
+     * Check if the user has opted in to capturing.
+     */
+    hasOptedInCapturing(): boolean
+
+    /**
+     * Check if the user has opted out of capturing.
+     */
+    hasOptedOutCapturing(): boolean
+
+    /**
+     * Get the explicit consent status.
+     */
+    getExplicitConsentStatus(): 'granted' | 'denied' | 'pending'
+
+    /**
+     * Clear the opt-in/out status.
+     */
+    clearOptInOutCapturing(): void
+
+    /**
+     * Update the configuration.
+     */
+    setConfig(config: Partial<PostHogConfig>): void
 }
 
 /**

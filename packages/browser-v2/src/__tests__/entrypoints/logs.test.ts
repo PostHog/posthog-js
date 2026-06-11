@@ -72,8 +72,8 @@ describe('logs entrypoint', () => {
                     lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
                 })),
             },
-            get_distinct_id: jest.fn(() => 'user-123'),
-            is_capturing: jest.fn(() => true),
+            getDistinctId: jest.fn(() => 'user-123'),
+            isCapturing: jest.fn(() => true),
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -589,7 +589,7 @@ describe('logs entrypoint', () => {
 
         it('should not emit logs when capturing is opted out', () => {
             const originalConsoleLog = assignableWindow.console.log as jest.Mock
-            ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+            ;(mockPostHog.isCapturing as jest.Mock).mockReturnValue(false)
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -602,7 +602,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should resume emitting once capturing is opted back in', () => {
-            const isCapturing = mockPostHog.is_capturing as jest.Mock
+            const isCapturing = mockPostHog.isCapturing as jest.Mock
             isCapturing.mockReturnValue(false)
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -623,7 +623,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should check capturing status on every log, not just at init', () => {
-            const isCapturing = mockPostHog.is_capturing as jest.Mock
+            const isCapturing = mockPostHog.isCapturing as jest.Mock
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)

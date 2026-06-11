@@ -1,4 +1,4 @@
-import { init_as_module } from '../posthog-core'
+import { initAsModule } from '../posthog-core'
 
 declare module '@posthog/types' {
     interface TreeShakeableConfig {
@@ -12,5 +12,5 @@ export * from '../posthog-surveys-types'
 export * from '../posthog-product-tours-types'
 export * from '../posthog-conversations-types'
 export type * as BundleTypes from '../extensions/extension-bundles'
-export const posthog = init_as_module()
+export const posthog = initAsModule()
 export default posthog

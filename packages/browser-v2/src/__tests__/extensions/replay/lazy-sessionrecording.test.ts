@@ -264,7 +264,7 @@ describe('Lazy SessionRecording', () => {
         simpleEventEmitter = new SimpleEventEmitter()
         // TODO we really need to make this a real posthog instance :cry:
         posthog = {
-            get_property: (property_key: string): Property | undefined => {
+            getProperty: (property_key: string): Property | undefined => {
                 return postHogPersistence?.props[property_key]
             },
             config: config,
@@ -283,7 +283,7 @@ describe('Lazy SessionRecording', () => {
                     return false
                 },
             } as unknown as ConsentManager,
-            register_for_session() {},
+            registerForSession() {},
             _internalEventEmitter: simpleEventEmitter,
             on: jest.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
@@ -396,7 +396,7 @@ describe('Lazy SessionRecording', () => {
                     expect(result?.enabled).toBe(true)
                 } else {
                     expect(result).toBeUndefined()
-                    expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
+                    expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
                 }
             })
 
@@ -417,7 +417,7 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 expect(sessionRecording['_isRemoteConfigFresh']()).toBe(false)
-                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe('{not json')
+                expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG)).toBe('{not json')
             })
 
             it('ignores invalid persisted JSON config when reading remote config', () => {
@@ -428,7 +428,7 @@ describe('Lazy SessionRecording', () => {
                 const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
 
                 expect(result).toBeUndefined()
-                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe('{not json')
+                expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG)).toBe('{not json')
             })
 
             it('trusts stale config once recording has started (long-lived SPA)', () => {
@@ -1408,7 +1408,7 @@ describe('Lazy SessionRecording', () => {
                 // Simulate posthog.reset() with the fix in place: snapshot the
                 // recording remote config, clear all persistence, then re-register
                 // the snapshotted config. This is exactly what posthog-core.ts does.
-                const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+                const preservedConfig = posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG)
                 expect(preservedConfig).toBeDefined()
                 posthog.persistence?.clear()
                 posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: preservedConfig })
@@ -2912,8 +2912,8 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording.status).toBe(expectedStatus)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled())
-            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(expectedSampleRate)
+            expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled())
+            expect(posthog.getProperty(SESSION_RECORDING_SAMPLE_RATE)).toBe(expectedSampleRate)
         })
 
         it('does not expose the sampling override null sentinel on event properties', () => {
@@ -2927,7 +2927,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBeNull()
+            expect(posthog.getProperty(SESSION_RECORDING_SAMPLE_RATE)).toBeNull()
             expect(posthog.persistence?.properties()).not.toHaveProperty(SESSION_RECORDING_SAMPLE_RATE)
 
             posthog.persistence?.register({
@@ -2955,7 +2955,7 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
 
             expect(sessionRecording.status).toBe('sampled')
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+            expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
 
             sessionRecording.stopRecording()
             ;(posthog.capture as jest.Mock).mockClear()
@@ -2971,7 +2971,7 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
 
             expect(sessionRecording.status).toBe('disabled')
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
@@ -3028,7 +3028,7 @@ describe('Lazy SessionRecording', () => {
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
             )
             // then check that a session is sampled (i.e. storage is false not true or null)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
             expect(sessionRecording.status).toBe('disabled')
 
             // then turn sample rate to null
@@ -3037,7 +3037,7 @@ describe('Lazy SessionRecording', () => {
             )
 
             // then check that a session is no longer sampled out (i.e. storage is cleared not false)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
+            expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
             expect(sessionRecording.status).toBe('active')
         })
 
@@ -3052,14 +3052,14 @@ describe('Lazy SessionRecording', () => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_IS_SAMPLED]: true,
                     })
-                    expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(true)
+                    expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).toBe(true)
 
                     sessionRecording.onRemoteConfig(
                         makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate } })
                     )
 
                     // legacy true should be treated as unknown and a fresh decision made
-                    expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).not.toBe(true)
+                    expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).not.toBe(true)
                     expect(sessionRecording.status).toBe(expectedStatus)
                 }
             )
@@ -3076,7 +3076,7 @@ describe('Lazy SessionRecording', () => {
 
                 // should be disabled despite legacy true, because 0% sample rate
                 expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+                expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
@@ -3092,8 +3092,8 @@ describe('Lazy SessionRecording', () => {
                 )
 
                 expect(sessionRecording.status).toBe('sampled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
-                expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(1)
+                expect(posthog.getProperty(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+                expect(posthog.getProperty(SESSION_RECORDING_SAMPLE_RATE)).toBe(1)
             })
         })
     })
@@ -4458,7 +4458,7 @@ describe('Lazy SessionRecording', () => {
 
     describe('V2 Trigger Groups Integration', () => {
         it('registers session properties when trigger group matches and is sampled', () => {
-            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+            const registerSpy = jest.spyOn(posthog, 'registerForSession')
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -4544,7 +4544,7 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('tracks multiple trigger groups with union behavior', () => {
-            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+            const registerSpy = jest.spyOn(posthog, 'registerForSession')
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -4602,7 +4602,7 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('triggers immediately when trigger group has empty conditions', () => {
-            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+            const registerSpy = jest.spyOn(posthog, 'registerForSession')
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -4664,7 +4664,7 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording.status).toBe('sampled')
-            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+            expect(posthog.getProperty(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
                 sessionId,
                 sampleRate: 1,
                 sampled: true,
@@ -4685,7 +4685,7 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording.status).toBe('disabled')
-            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+            expect(posthog.getProperty(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
                 sessionId,
                 sampleRate: 0,
                 sampled: false,
@@ -4726,7 +4726,7 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording.status).toBe('disabled')
-            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+            expect(posthog.getProperty(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
                 sessionId,
                 sampleRate: 0,
                 sampled: false,
@@ -4757,7 +4757,7 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording.status).toBe('sampled')
-            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+            expect(posthog.getProperty(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
                 sessionId,
                 sampleRate: 1,
                 sampled: true,
@@ -4765,7 +4765,7 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('respects sampleRate < 1.0 and samples out when triggered', () => {
-            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+            const registerSpy = jest.spyOn(posthog, 'registerForSession')
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -4811,7 +4811,7 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('matchType all requires ALL conditions to match before triggering', () => {
-            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+            const registerSpy = jest.spyOn(posthog, 'registerForSession')
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -4865,7 +4865,7 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('respects minDurationMs and delays full recording until duration passes', () => {
-            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+            const registerSpy = jest.spyOn(posthog, 'registerForSession')
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

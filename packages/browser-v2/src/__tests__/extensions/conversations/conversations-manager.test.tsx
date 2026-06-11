@@ -162,16 +162,16 @@ describe('ConversationsManager', () => {
             requestRouter: {
                 endpointFor: jest.fn((type: string, path: string) => `https://test.posthog.com${path}`),
             },
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            get_property: jest.fn().mockReturnValue(undefined),
-            get_session_id: jest.fn().mockReturnValue('test-session-id-123'),
-            get_session_replay_url: jest.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
+            getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
+            getProperty: jest.fn().mockReturnValue(undefined),
+            getSessionId: jest.fn().mockReturnValue('test-session-id-123'),
+            getSessionReplayUrl: jest.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
             persistence: {
                 props: {
                     $name: 'Test User',
                     $email: 'test@example.com',
                 },
-                get_property: jest.fn(),
+                getProperty: jest.fn(),
                 register: jest.fn(),
                 unregister: jest.fn(),
                 isDisabled: jest.fn().mockReturnValue(false),
@@ -615,8 +615,8 @@ describe('ConversationsManager', () => {
         })
 
         it('should handle missing session ID gracefully', async () => {
-            // Mock get_session_id to return empty string
-            ;(mockPosthog.get_session_id as jest.Mock).mockReturnValue('')
+            // Mock getSessionId to return empty string
+            ;(mockPosthog.getSessionId as jest.Mock).mockReturnValue('')
 
             await act(async () => {
                 await manager.sendMessage('First message')
@@ -629,8 +629,8 @@ describe('ConversationsManager', () => {
         })
 
         it('should handle missing session replay URL gracefully', async () => {
-            // Mock get_session_replay_url to return empty string
-            ;(mockPosthog.get_session_replay_url as jest.Mock).mockReturnValue('')
+            // Mock getSessionReplayUrl to return empty string
+            ;(mockPosthog.getSessionReplayUrl as jest.Mock).mockReturnValue('')
 
             await act(async () => {
                 await manager.sendMessage('First message')
@@ -646,20 +646,20 @@ describe('ConversationsManager', () => {
             })
         })
 
-        it('should call get_session_replay_url with correct parameters', async () => {
+        it('should call getSessionReplayUrl with correct parameters', async () => {
             await act(async () => {
                 await manager.sendMessage('First message')
             })
 
-            expect(mockPosthog.get_session_replay_url).toHaveBeenCalledWith({
+            expect(mockPosthog.getSessionReplayUrl).toHaveBeenCalledWith({
                 withTimestamp: true,
                 timestampLookBack: 30,
             })
         })
 
         it('should handle error during session context capture without failing message send', async () => {
-            // Mock get_session_id to throw an error
-            ;(mockPosthog.get_session_id as jest.Mock).mockImplementation(() => {
+            // Mock getSessionId to throw an error
+            ;(mockPosthog.getSessionId as jest.Mock).mockImplementation(() => {
                 throw new Error('Session ID error')
             })
 

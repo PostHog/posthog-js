@@ -81,14 +81,14 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
 
         const simpleEventEmitter = new SimpleEventEmitter()
         const posthog = {
-            get_property: (propertyKey: string) => persistence.props[propertyKey],
+            getProperty: (propertyKey: string) => persistence.props[propertyKey],
             config,
             capture: jest.fn(),
             persistence,
             sessionManager,
             requestRouter: new RequestRouter({ config } as any),
             consent: { isOptedOut: () => false },
-            register_for_session: jest.fn(),
+            registerForSession: jest.fn(),
             _internalEventEmitter: simpleEventEmitter,
             on: jest.fn((event, cb) => simpleEventEmitter.on(event, cb)),
         }

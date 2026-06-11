@@ -2,7 +2,7 @@ import { defaultPostHog } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import Config from '../config'
 
-describe('posthog.set_config', () => {
+describe('posthog.setConfig', () => {
     const mockURL = jest.fn()
     const mockReferrer = jest.fn()
     const originalWindowLocation = window.location
@@ -58,7 +58,7 @@ describe('posthog.set_config', () => {
                 const token = uuidv7()
                 const posthog = defaultPostHog().init(token, { debug: initial }, token)!
 
-                posthog.set_config({ debug: setValue })
+                posthog.setConfig({ debug: setValue })
 
                 expect(posthog.config.debug).toBe(expectedDebug)
                 expect(Config.DEBUG).toBe(expectedDebug)
@@ -82,7 +82,7 @@ describe('posthog.set_config', () => {
             const posthog = defaultPostHog().init(token, {}, token)!
             expect(localStorage.getItem('ph_debug')).toBeNull()
 
-            posthog.set_config({ debug: true })
+            posthog.setConfig({ debug: true })
 
             expect(localStorage.getItem('ph_debug')).toBe('true')
         })
@@ -93,7 +93,7 @@ describe('posthog.set_config', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, {}, token)!
 
-            posthog.set_config({ debug: false })
+            posthog.setConfig({ debug: false })
 
             expect(localStorage.getItem('ph_debug')).toBeNull()
         })
@@ -102,17 +102,17 @@ describe('posthog.set_config', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, { debug: false }, token)!
 
-            posthog.set_config({ debug: true })
+            posthog.setConfig({ debug: true })
             expect(posthog.config.debug).toBe(true)
             expect(Config.DEBUG).toBe(true)
             expect(localStorage.getItem('ph_debug')).toBe('true')
 
-            posthog.set_config({ debug: false })
+            posthog.setConfig({ debug: false })
             expect(posthog.config.debug).toBe(false)
             expect(Config.DEBUG).toBe(false)
             expect(localStorage.getItem('ph_debug')).toBeNull()
 
-            posthog.set_config({ debug: true })
+            posthog.setConfig({ debug: true })
             expect(posthog.config.debug).toBe(true)
             expect(Config.DEBUG).toBe(true)
             expect(localStorage.getItem('ph_debug')).toBe('true')
@@ -124,7 +124,7 @@ describe('posthog.set_config', () => {
             const initialDebug = posthog.config.debug
             const initialConfigDebug = Config.DEBUG
 
-            posthog.set_config({ api_host: 'https://new-host.com' })
+            posthog.setConfig({ api_host: 'https://new-host.com' })
 
             expect(posthog.config.debug).toBe(initialDebug)
             expect(Config.DEBUG).toBe(initialConfigDebug)
@@ -136,7 +136,7 @@ describe('posthog.set_config', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, {}, token)!
 
-            posthog.set_config({ api_host: 'https://new-host.com' })
+            posthog.setConfig({ api_host: 'https://new-host.com' })
 
             expect(posthog.config.api_host).toBe('https://new-host.com')
         })
@@ -145,7 +145,7 @@ describe('posthog.set_config', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, {}, token)!
 
-            posthog.set_config({
+            posthog.setConfig({
                 api_host: 'https://new-host.com',
                 capture_pageview: false,
                 capture_pageleave: false,
@@ -167,7 +167,7 @@ describe('posthog.set_config', () => {
                 token
             )!
 
-            posthog.set_config({ capture_pageview: false })
+            posthog.setConfig({ capture_pageview: false })
 
             expect(posthog.config.api_host).toBe('https://original.com')
             expect(posthog.config.capture_pageview).toBe(false)
@@ -178,7 +178,7 @@ describe('posthog.set_config', () => {
             const posthog = defaultPostHog().init(token, { debug: false }, token)!
             const originalConfig = { ...posthog.config }
 
-            posthog.set_config({})
+            posthog.setConfig({})
 
             expect(posthog.config.debug).toBe(originalConfig.debug)
             expect(posthog.config.api_host).toBe(originalConfig.api_host)
@@ -194,7 +194,7 @@ describe('posthog.set_config', () => {
             const originalSessionPersistence = posthog.sessionPersistence
             expect(originalSessionPersistence).not.toBe(posthog.persistence)
 
-            posthog.set_config({ persistence: 'cookie' })
+            posthog.setConfig({ persistence: 'cookie' })
 
             // After changing to cookie, sessionPersistence should be recreated
             expect(posthog.sessionPersistence).not.toBe(originalSessionPersistence)
@@ -206,7 +206,7 @@ describe('posthog.set_config', () => {
                 const token = uuidv7()
                 const posthog = defaultPostHog().init(token, { persistence: 'cookie' }, token)!
 
-                posthog.set_config({ persistence: persistenceType })
+                posthog.setConfig({ persistence: persistenceType })
 
                 expect(posthog.sessionPersistence).toBe(posthog.persistence)
             }
@@ -218,7 +218,7 @@ describe('posthog.set_config', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, { disable_session_recording: false }, token)!
 
-            posthog.set_config({ disable_session_recording: true })
+            posthog.setConfig({ disable_session_recording: true })
 
             expect(posthog.config.disable_session_recording).toBe(true)
         })

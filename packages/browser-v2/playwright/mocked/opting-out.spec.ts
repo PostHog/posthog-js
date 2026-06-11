@@ -51,7 +51,7 @@ test.describe('opting out', () => {
             await page.expectCapturedEventsToBe([])
 
             await page.evaluate(() => {
-                ;(window as WindowWithPostHog).posthog?.opt_in_capturing()
+                ;(window as WindowWithPostHog).posthog?.optInCapturing()
             })
 
             await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
@@ -76,7 +76,7 @@ test.describe('opting out', () => {
             await page.expectCapturedEventsToBe(['$pageview'])
 
             await page.evaluate(() => {
-                ;(window as WindowWithPostHog).posthog?.opt_in_capturing()
+                ;(window as WindowWithPostHog).posthog?.optInCapturing()
             })
 
             await page.expectCapturedEventsToBe(['$pageview', '$opt_in'])
@@ -103,7 +103,7 @@ test.describe('opting out', () => {
             await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event'])
 
             await page.evaluate(() => {
-                ;(window as WindowWithPostHog).posthog?.opt_out_capturing()
+                ;(window as WindowWithPostHog).posthog?.optOutCapturing()
             })
 
             await page.click('[data-cy-custom-event-button]')

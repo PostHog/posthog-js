@@ -129,7 +129,7 @@ describe('SessionRecording', () => {
         simpleEventEmitter = new SimpleEventEmitter()
         // TODO we really need to make this a real posthog instance :cry:
         posthog = {
-            get_property: (property_key: string): Property | undefined => {
+            getProperty: (property_key: string): Property | undefined => {
                 return postHogPersistence?.['props'][property_key]
             },
             config: config,
@@ -145,7 +145,7 @@ describe('SessionRecording', () => {
                     return false
                 },
             } as unknown as ConsentManager,
-            register_for_session() {},
+            registerForSession() {},
             _internalEventEmitter: simpleEventEmitter,
             on: jest.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
@@ -291,7 +291,7 @@ describe('SessionRecording', () => {
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).enabled).toBe(true)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).enabled).toBe(true)
         })
 
         it('stores true in persistence if canvas is enabled from the server', () => {
@@ -303,9 +303,9 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).recordCanvas).toBe(true)
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).canvasFps).toBe(6)
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).canvasQuality).toBe('0.2')
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).recordCanvas).toBe(true)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).canvasFps).toBe(6)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).canvasQuality).toBe('0.2')
         })
 
         it('stores masking config in persistence if set on the server', () => {
@@ -317,7 +317,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).masking).toEqual({
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).masking).toEqual({
                 maskAllInputs: true,
                 maskTextSelector: '*',
             })
@@ -328,7 +328,7 @@ describe('SessionRecording', () => {
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBe(undefined)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG)).toBe(undefined)
             expect(sessionRecording.status).toBe('disabled')
         })
 
@@ -365,7 +365,7 @@ describe('SessionRecording', () => {
             expect(discardSpy).toHaveBeenCalled()
             expect(flushSpy).not.toHaveBeenCalled()
             expect(sessionRecording['_persistFlagsOnSessionListener']).toBeUndefined()
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).enabled).toBe(false)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).enabled).toBe(false)
         })
 
         it('stores sample rate', () => {
@@ -377,7 +377,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.7)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.7)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.7)
         })
 
@@ -390,7 +390,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.3)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.3)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.3)
         })
 
@@ -403,7 +403,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0)
         })
 
@@ -416,7 +416,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.5)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.5)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.5)
         })
 
@@ -429,7 +429,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.7)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.7)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.7)
         })
 
@@ -442,7 +442,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.7)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).sampleRate).toBe(0.7)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sampleRate']).toBe(0.7)
         })
 
@@ -456,7 +456,7 @@ describe('SessionRecording', () => {
 
             expect(sessionRecording.startIfEnabledOrStop).toHaveBeenCalled()
             expect(loadScriptMock).toHaveBeenCalled()
-            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG).enabled).toBe(true)
+            expect(posthog.getProperty(SESSION_RECORDING_REMOTE_CONFIG).enabled).toBe(true)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_endpoint']).toEqual('/ses/')
         })
 

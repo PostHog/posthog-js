@@ -22,10 +22,10 @@ assignableWindow.__PosthogExtensions__.integrations.crispChat = {
         }
 
         const updateCrispChat = () => {
-            const replayUrl = posthog.get_session_replay_url()
+            const replayUrl = posthog.getSessionReplayUrl()
             const personUrl = posthog.requestRouter.endpointFor(
                 'ui',
-                `/project/${posthog.config.token}/person/${posthog.get_distinct_id()}`
+                `/project/${posthog.config.token}/person/${posthog.getDistinctId()}`
             )
 
             crispChat.push([

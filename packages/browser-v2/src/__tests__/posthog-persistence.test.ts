@@ -109,8 +109,8 @@ describe('persistence', () => {
             library.clear()
         })
 
-        it('should register_once', () => {
-            library.register_once({ distinct_id: 'hi', test_prop: 'test_val' }, undefined, undefined)
+        it('should registerOnce', () => {
+            library.registerOnce({ distinct_id: 'hi', test_prop: 'test_val' }, undefined, undefined)
 
             const lib2 = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
             expect(lib2.props).toEqual({ distinct_id: 'hi', test_prop: 'test_val' })
@@ -118,20 +118,20 @@ describe('persistence', () => {
 
         it('should save user state', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
-            lib.set_property(USER_STATE, 'identified')
+            lib.setProperty(USER_STATE, 'identified')
             expect(lib.props[USER_STATE]).toEqual('identified')
         })
 
         it('can load user state', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
-            lib.set_property(USER_STATE, 'identified')
-            expect(lib.get_property(USER_STATE)).toEqual('identified')
+            lib.setProperty(USER_STATE, 'identified')
+            expect(lib.getProperty(USER_STATE)).toEqual('identified')
         })
 
         it('has user state as a reserved property key', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
             lib.register({ distinct_id: 'testy', test_prop: 'test_value' })
-            lib.set_property(USER_STATE, 'identified')
+            lib.setProperty(USER_STATE, 'identified')
             expect(lib.properties()).toEqual({ distinct_id: 'testy', test_prop: 'test_value' })
         })
 
@@ -155,7 +155,7 @@ describe('persistence', () => {
             saveMock.mockClear()
         })
 
-        it('should rebuild storage when cookie_persisted_properties changes via update_config', () => {
+        it('should rebuild storage when cookie_persisted_properties changes via updateConfig', () => {
             const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
             const expectedProps = () => ({
                 distinct_id: 'test',
@@ -180,7 +180,7 @@ describe('persistence', () => {
                 ...makePostHogConfig('test', 'localStorage+cookie'),
                 cookie_persisted_properties: ['custom_prop'],
             }
-            lib.update_config(newConfig, config)
+            lib.updateConfig(newConfig, config)
             config = newConfig
 
             // After update, custom_prop should now be in cookies
@@ -198,7 +198,7 @@ describe('persistence', () => {
 
         it('should set direct referrer', () => {
             referrer = ''
-            library.update_referrer_info()
+            library.updateReferrerInfo()
 
             expect(library.props['$referring_domain']).toBe('$direct')
             expect(library.props['$referrer']).toBe('$direct')
@@ -206,7 +206,7 @@ describe('persistence', () => {
 
         it('should set external referrer', () => {
             referrer = 'https://www.google.com'
-            library.update_referrer_info()
+            library.updateReferrerInfo()
 
             expect(library.props['$referring_domain']).toBe('www.google.com')
             expect(library.props['$referrer']).toBe('https://www.google.com')
@@ -214,7 +214,7 @@ describe('persistence', () => {
 
         it('should set internal referrer', () => {
             referrer = 'https://hedgebox.net/files/abc.png'
-            library.update_referrer_info()
+            library.updateReferrerInfo()
 
             expect(library.props['$referring_domain']).toBe('hedgebox.net')
             expect(library.props['$referrer']).toBe('https://hedgebox.net/files/abc.png')
@@ -450,7 +450,7 @@ describe('persistence', () => {
                 // The no-op fingerprint must cover all four arguments to
                 // `_storage._set` — serialized props plus expire_days,
                 // cross_subdomain, secure. Otherwise a customer who calls
-                // `posthog.set_config({ cookie_expiration: 90 })` would
+                // `posthog.setConfig({ cookie_expiration: 90 })` would
                 // mutate `_expire_days` but the no-op check (which only
                 // saw props) would short-circuit, and the cookie keeps
                 // its old `Expires` header until some other prop changes.
@@ -659,10 +659,10 @@ describe('persistence', () => {
                 expect(setSpy).not.toHaveBeenCalled()
             })
 
-            it('writes through on flush() when debounce is enabled at runtime via set_config (late-enable)', () => {
+            it('writes through on flush() when debounce is enabled at runtime via setConfig (late-enable)', () => {
                 // Customer constructs PostHog with debounce=0 (no listener
                 // would be installed under the old logic), then later does
-                // `posthog.set_config({ persistence_save_debounce_ms: 250 })`.
+                // `posthog.setConfig({ persistence_save_debounce_ms: 250 })`.
                 // The mutable config is read every save() via _saveDebounceMs(),
                 // so save() correctly starts debouncing. But we must ALSO
                 // have installed unload listeners at construction so the
@@ -694,7 +694,7 @@ describe('persistence', () => {
 
         it('should migrate data from cookies to localStorage', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', 'cookie'))
-            lib.register_once({ distinct_id: 'testy', test_prop: 'test_value' }, undefined, undefined)
+            lib.registerOnce({ distinct_id: 'testy', test_prop: 'test_value' }, undefined, undefined)
             expect(document.cookie).toContain(
                 'ph__posthog=%7B%22distinct_id%22%3A%22testy%22%2C%22test_prop%22%3A%22test_value%22%7D'
             )
@@ -748,7 +748,7 @@ describe('persistence', () => {
                 })}`
             )
 
-            lib.set_property(USER_STATE, 'identified')
+            lib.setProperty(USER_STATE, 'identified')
             expect(document.cookie).toContain(
                 `ph__posthog=${encode({
                     $device_id: 'device-123',
@@ -992,7 +992,7 @@ describe('persistence', () => {
 
             // Swap to memory
             let newConfig = makePostHogConfig('test', 'memory')
-            lib.update_config(newConfig, config)
+            lib.updateConfig(newConfig, config)
             config = newConfig
 
             // Check stores were cleared but properties are the same
@@ -1002,7 +1002,7 @@ describe('persistence', () => {
 
             // Swap to localStorage
             newConfig = makePostHogConfig('test', 'localStorage')
-            lib.update_config(newConfig, config)
+            lib.updateConfig(newConfig, config)
             config = newConfig
 
             // Check store contains data and props are the same
@@ -1201,7 +1201,7 @@ describe('flag and survey storage split', () => {
         // the unchanged flag blob. Loading must seed the same fingerprint a
         // write produces, so the very first save recognises it as unchanged.
         //
-        // The cookie-option setters (set_cross_subdomain / set_secure) fire once
+        // The cookie-option setters (setCrossSubdomain / setSecure) fire once
         // each on construction as their in-memory option transitions from
         // undefined to its configured value. They must not churn the
         // localStorage-only group entries either, so the concrete-cookie-options
@@ -1448,7 +1448,7 @@ describe('flag and survey storage split', () => {
         })
     })
 
-    describe('runtime toggle of the gate via update_config', () => {
+    describe('runtime toggle of the gate via updateConfig', () => {
         // The split routing must follow `split_storage`
         // even when it flips without a persistence change.
         it('turning the gate on migrates flag/survey keys out of the main blob', () => {
@@ -1458,7 +1458,7 @@ describe('flag and survey storage split', () => {
             expect(parse(FLAGS)).toBeNull()
             expect(parse(MAIN)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
 
-            lib.update_config(makeConfig(), off)
+            lib.updateConfig(makeConfig(), off)
 
             expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
             expect(parse(SURVEYS_ENTRY)[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
@@ -1474,7 +1474,7 @@ describe('flag and survey storage split', () => {
             lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
             expect(parse(FLAGS)).not.toBeNull()
 
-            lib.update_config(gateOffConfig(), on)
+            lib.updateConfig(gateOffConfig(), on)
 
             expect(parse(FLAGS)).toBeNull()
             expect(parse(SURVEYS_ENTRY)).toBeNull()
@@ -1488,14 +1488,14 @@ describe('flag and survey storage split', () => {
             const lib = new PostHogPersistence(off)
             lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
 
-            lib.update_config(makeConfig(), off)
+            lib.updateConfig(makeConfig(), off)
 
             Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
             expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
             expect(lib.props['distinct_id']).toBe('d')
         })
 
-        // update_config can move to a backend that can't host the split
+        // updateConfig can move to a backend that can't host the split
         // (localStorage -> memory) while the gate stays on. Eligibility must
         // re-resolve to "off" so the grouped keys fold back into the single blob
         // instead of being stranded in orphaned __flags / __surveys entries.
@@ -1507,7 +1507,7 @@ describe('flag and survey storage split', () => {
             expect(parse(SURVEYS_ENTRY)).not.toBeNull()
 
             // still split_storage: true, but memory cannot host the split
-            lib.update_config(makeConfig({ persistence: 'memory' }), on)
+            lib.updateConfig(makeConfig({ persistence: 'memory' }), on)
 
             expect((lib as any)._splitStorage).toBe(false)
             expect(parse(FLAGS)).toBeNull()
@@ -1529,7 +1529,7 @@ describe('flag and survey storage split', () => {
             expect(parse(FLAGS)).toBeNull()
             expect(parse(SURVEYS_ENTRY)).toBeNull()
 
-            lib.update_config(makeConfig(), onMemory)
+            lib.updateConfig(makeConfig(), onMemory)
 
             expect((lib as any)._splitStorage).toBe(true)
             expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
@@ -1555,7 +1555,7 @@ describe('flag and survey storage split', () => {
 
             // -> memory: split drops, grouped keys fold into the single blob
             const onMemory = makeConfig({ persistence: 'memory' })
-            lib.update_config(onMemory, onLocal)
+            lib.updateConfig(onMemory, onLocal)
             expect((lib as any)._splitStorage).toBe(false)
             expect(parse(FLAGS)).toBeNull()
             expect(parse(SURVEYS_ENTRY)).toBeNull()
@@ -1563,7 +1563,7 @@ describe('flag and survey storage split', () => {
             expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
 
             // -> localStorage: split re-adopts, grouped keys migrate back out
-            lib.update_config(onLocal, onMemory)
+            lib.updateConfig(onLocal, onMemory)
             expect((lib as any)._splitStorage).toBe(true)
             expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
             expect(parse(SURVEYS_ENTRY)[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
@@ -1616,10 +1616,10 @@ describe('flag and survey storage split', () => {
 
     describe('the session-scoped sibling must not wipe the localStorage owner', () => {
         // posthog-core runs a second, sessionStorage-backed PostHogPersistence that
-        // shares the main instance's storage name. set_config reconstructs it, and a
-        // fresh instance's update_config -> set_secure calls remove() — which must not
+        // shares the main instance's storage name. setConfig reconstructs it, and a
+        // fresh instance's updateConfig -> setSecure calls remove() — which must not
         // delete the localStorage owner's __flags / __surveys entries.
-        it('set_config leaves the owner __flags and __surveys entries intact', () => {
+        it('setConfig leaves the owner __flags and __surveys entries intact', () => {
             const token = uuidv7()
             const ownerFlags = `ph_${token}_posthog__flags`
             const ownerSurveys = `ph_${token}_posthog__surveys`
@@ -1632,13 +1632,13 @@ describe('flag and survey storage split', () => {
             expect(parse(ownerFlags)).not.toBeNull()
             expect(parse(ownerSurveys)).not.toBeNull()
 
-            posthog.set_config({})
+            posthog.setConfig({})
 
             expect(parse(ownerFlags)).not.toBeNull()
             expect(parse(ownerSurveys)).not.toBeNull()
         })
 
-        // The set_config path above is saved by `keepGroupEntries` on the cookie
+        // The setConfig path above is saved by `keepGroupEntries` on the cookie
         // setters, so it would still pass if the `_ownsSplitStorage` guard were
         // deleted. This case makes that guard load-bearing: a non-owning sibling
         // that gets disabled fires a *bare* remove() (no keepGroupEntries), and
@@ -1651,7 +1651,7 @@ describe('flag and survey storage split', () => {
             // mirrors the sessionStorage instance posthog-core spins up: shares the
             // storage name, but ownsSplitStorage=false (third constructor arg)
             const sibling = new PostHogPersistence({ ...makeConfig(), persistence: 'sessionStorage' }, false, false)
-            sibling.set_disabled(true)
+            sibling.setDisabled(true)
 
             expect(parse(FLAGS)).not.toBeNull()
         })

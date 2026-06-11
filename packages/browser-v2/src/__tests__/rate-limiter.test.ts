@@ -33,8 +33,8 @@ describe('Rate Limiter', () => {
                 },
             },
             persistence: {
-                get_property: jest.fn((key) => persistedBucket[key]),
-                set_property: jest.fn((key, value) => {
+                getProperty: jest.fn((key) => persistedBucket[key]),
+                setProperty: jest.fn((key, value) => {
                     persistedBucket[key] = value
                 }),
             },

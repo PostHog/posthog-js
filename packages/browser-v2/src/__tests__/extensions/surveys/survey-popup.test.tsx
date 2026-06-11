@@ -19,7 +19,7 @@ jest.mock('../../../uuidv7')
 // Mock PostHog instance needed by event handlers
 const mockPosthog = {
     capture: jest.fn(),
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    getSessionReplayUrl: jest.fn().mockReturnValue('http://example.com/replay'),
 }
 
 describe('SurveyPopup', () => {

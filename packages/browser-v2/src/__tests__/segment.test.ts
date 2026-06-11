@@ -100,8 +100,8 @@ describe(`Segment integration`, () => {
     it('should set properties from the segment user', async () => {
         const posthog = await initPostHogInAPromise(segment, posthogName)
 
-        expect(posthog.get_distinct_id()).toBe('test-id')
-        expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
+        expect(posthog.getDistinctId()).toBe('test-id')
+        expect(posthog.getProperty('$device_id')).toBe('test-anonymous-id')
     })
 
     // FIXME: Flaky test - fails on main branch, see issue tracking test isolation
@@ -114,8 +114,8 @@ describe(`Segment integration`, () => {
 
         const posthog = await initPostHogInAPromise(segment, posthogName)
 
-        expect(posthog.get_distinct_id()).toBe('test-id')
-        expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
+        expect(posthog.getDistinctId()).toBe('test-id')
+        expect(posthog.getProperty('$device_id')).toBe('test-anonymous-id')
     })
 
     // FIXME: Flaky test - fails on main branch, see issue tracking test isolation
@@ -127,8 +127,8 @@ describe(`Segment integration`, () => {
 
         const posthog = await initPostHogInAPromise(segment, posthogName, { persistence: 'memory' })
 
-        expect(posthog.get_distinct_id()).not.toEqual('test-id')
-        expect(posthog.persistence?.get_property(USER_STATE)).toEqual('anonymous')
+        expect(posthog.getDistinctId()).not.toEqual('test-id')
+        expect(posthog.persistence?.getProperty(USER_STATE)).toEqual('anonymous')
 
         if (segmentIntegration && segmentIntegration.identify) {
             segmentIntegration.identify({
@@ -139,8 +139,8 @@ describe(`Segment integration`, () => {
                 },
             } as unknown as SegmentContext)
 
-            expect(posthog.get_distinct_id()).toEqual('distinguished user')
-            expect(posthog.persistence?.get_property(USER_STATE)).toEqual('identified')
+            expect(posthog.getDistinctId()).toEqual('distinguished user')
+            expect(posthog.persistence?.getProperty(USER_STATE)).toEqual('identified')
         }
     })
 })

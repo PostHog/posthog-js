@@ -78,7 +78,7 @@ export class SessionRecording implements Extension {
     }
 
     private get _isRecordingEnabled() {
-        const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
+        const enabled_server_side = !!this._instance.getProperty(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
         const enabled_client_side = !this._config.disable_session_recording
         const isDisabled = this._config.disable_session_recording || this._instance.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
@@ -263,14 +263,14 @@ export class SessionRecording implements Extension {
     }
 
     private get _scriptName(): PostHogExtensionKind {
-        const remoteConfig: SessionRecordingPersistedConfig | undefined = this._instance?.persistence?.get_property(
+        const remoteConfig: SessionRecordingPersistedConfig | undefined = this._instance?.persistence?.getProperty(
             SESSION_RECORDING_REMOTE_CONFIG
         )
         return (remoteConfig?.scriptConfig?.script as PostHogExtensionKind) || 'lazy-recorder'
     }
 
     private _isRemoteConfigFresh(): boolean {
-        const persistedConfig = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        const persistedConfig = this._instance.getProperty(SESSION_RECORDING_REMOTE_CONFIG)
         if (!persistedConfig) {
             return false
         }
@@ -294,7 +294,7 @@ export class SessionRecording implements Extension {
             logger.warn(
                 'Called on script loaded before session recording is available. This can be caused by adblockers.'
             )
-            this._instance.register_for_session({
+            this._instance.registerForSession({
                 [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
             })
             return

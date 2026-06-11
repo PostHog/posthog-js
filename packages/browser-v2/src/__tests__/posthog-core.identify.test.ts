@@ -39,7 +39,7 @@ describe('identify()', () => {
             unregister: jest.fn(),
         })
 
-        instance.persistence!.set_property(USER_STATE, 'anonymous')
+        instance.persistence!.setProperty(USER_STATE, 'anonymous')
         instance.persistence!.props['distinct_id'] = 'oldIdentity'
         instance.persistence!.props['$device_id'] = 'oldIdentity'
     })
@@ -73,12 +73,12 @@ describe('identify()', () => {
 
         instance.identify('calls capture when identity changes')
 
-        expect(instance.persistence!.get_property(USER_STATE)).toEqual('identified')
+        expect(instance.persistence!.getProperty(USER_STATE)).toEqual('identified')
     })
 
     it('adds props to next capture when there is no device id', () => {
-        instance.persistence!.set_property('$device_id', null)
-        instance.persistence!.set_property('distinct_id', 'oldIdentity')
+        instance.persistence!.setProperty('$device_id', null)
+        instance.persistence!.setProperty('distinct_id', 'oldIdentity')
 
         instance.identify('a-new-id')
 
@@ -95,7 +95,7 @@ describe('identify()', () => {
     })
 
     it('calls capture when there is no device id (on first check) even if user is not set to anonymous', () => {
-        instance.persistence!.set_property(USER_STATE, undefined)
+        instance.persistence!.setProperty(USER_STATE, undefined)
         instance.persistence!.props['distinct_id'] = 'oldIdentity'
         instance.persistence!.props['$device_id'] = null
 
@@ -119,7 +119,7 @@ describe('identify()', () => {
          */
         instance.persistence!.props['$device_id'] = 'not the oldIdentity'
         // now this is set explicitly by identify
-        instance.persistence!.set_property(USER_STATE, 'identified')
+        instance.persistence!.setProperty(USER_STATE, 'identified')
 
         instance.persistence!.props['distinct_id'] = 'oldIdentity'
 
@@ -136,7 +136,7 @@ describe('identify()', () => {
         instance.persistence!.props['distinct_id'] = 'oldIdentity'
         instance.persistence!.props['$device_id'] = 'not the oldIdentity'
 
-        instance.persistence!.set_property(USER_STATE, 'identified')
+        instance.persistence!.setProperty(USER_STATE, 'identified')
 
         instance.identify('a-new-id')
 
@@ -147,7 +147,7 @@ describe('identify()', () => {
     it('does call capture when distinct_id changes and device id does not match the previous_id but user is marked as anonymous', () => {
         instance.persistence!.props['distinct_id'] = 'oldIdentity'
         instance.persistence!.props['$device_id'] = 'not the oldIdentity'
-        instance.persistence!.set_property(USER_STATE, 'anonymous')
+        instance.persistence!.setProperty(USER_STATE, 'anonymous')
 
         instance.identify('a-new-id')
 

@@ -68,9 +68,9 @@ describe('posthog-logs', () => {
                     endpointFor: jest.fn(() => 'https://us.i.posthog.com'),
                 },
                 _send_retriable_request: jest.fn(),
-                get_property: jest.fn(),
-                is_capturing: jest.fn(() => true),
-                get_distinct_id: jest.fn(() => 'distinct-id-123'),
+                getProperty: jest.fn(),
+                isCapturing: jest.fn(() => true),
+                getDistinctId: jest.fn(() => 'distinct-id-123'),
                 sessionManager: {
                     checkAndGetSessionAndWindowId: jest.fn(() => ({
                         sessionId: 'session-abc',
@@ -448,7 +448,7 @@ describe('posthog-logs', () => {
             })
 
             it('should silently skip when user has opted out of capturing', () => {
-                ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+                ;(mockPostHog.isCapturing as jest.Mock).mockReturnValue(false)
 
                 logs.captureLog({ body: 'should not be captured' })
 

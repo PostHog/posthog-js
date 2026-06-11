@@ -916,7 +916,7 @@ export class ProductTourManager {
         this._captureEvent(SurveyEventName.SHOWN, {
             [SurveyEventProperties.SURVEY_ID]: surveyId,
             [SurveyEventProperties.PRODUCT_TOUR_ID]: tourId,
-            sessionRecordingUrl: this._instance.get_session_replay_url?.(),
+            sessionRecordingUrl: this._instance.getSessionReplayUrl?.(),
         })
 
         const handleSubmit = (response: string | number | null) => {
@@ -932,7 +932,7 @@ export class ProductTourManager {
                     },
                 ],
                 [SurveyEventProperties.SURVEY_COMPLETED]: true,
-                sessionRecordingUrl: this._instance.get_session_replay_url?.(),
+                sessionRecordingUrl: this._instance.getSessionReplayUrl?.(),
                 ...(!isNull(response) && { [responseKey]: response }),
             })
 
@@ -952,7 +952,7 @@ export class ProductTourManager {
                     },
                 ],
                 [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: false,
-                sessionRecordingUrl: this._instance.get_session_replay_url?.(),
+                sessionRecordingUrl: this._instance.getSessionReplayUrl?.(),
             })
 
             logger.info(`Survey ${surveyId} dismissed`)

@@ -69,7 +69,7 @@ describe('Conversations API Methods', () => {
             consent: {
                 isOptedOut: jest.fn().mockReturnValue(false),
             } as any,
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
             on: jest.fn().mockReturnValue(jest.fn()),
         })
 

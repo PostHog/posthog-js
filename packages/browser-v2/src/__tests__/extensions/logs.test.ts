@@ -80,8 +80,8 @@ describe('logs entrypoint', () => {
                     lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
                 })),
             },
-            get_distinct_id: jest.fn(() => 'user-123'),
-            is_capturing: jest.fn(() => true),
+            getDistinctId: jest.fn(() => 'user-123'),
+            isCapturing: jest.fn(() => true),
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -639,7 +639,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should use PostHog distinct_id in log attributes', () => {
-            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('custom-distinct-id')
+            ;(mockPostHog.getDistinctId as jest.Mock).mockReturnValue('custom-distinct-id')
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)

@@ -80,7 +80,7 @@ describe('survey display logic', () => {
         surveys: {
             getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
         },
-        get_session_replay_url: jest.fn(),
+        getSessionReplayUrl: jest.fn(),
         capture: jest.fn().mockImplementation((eventName) => eventName),
         config: {
             disable_surveys_automatic_display: false,
@@ -132,7 +132,7 @@ describe('usePopupVisibility', () => {
     }
     const mockPostHog = createMockPostHog({
         getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
-        get_session_replay_url: jest.fn(),
+        getSessionReplayUrl: jest.fn(),
         capture: jest.fn().mockImplementation((eventName) => eventName),
     })
 
@@ -310,7 +310,7 @@ describe('SurveyManager', () => {
 
         mockPostHog = createMockPostHog({
             getActiveMatchingSurveys: jest.fn(),
-            get_session_replay_url: jest.fn(),
+            getSessionReplayUrl: jest.fn(),
             capture: jest.fn(),
             featureFlags: {
                 _send_request: jest
@@ -680,7 +680,7 @@ describe('SurveyManager', () => {
                     surveys: { prefillFromUrl: true },
                 },
                 getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
+                getSessionReplayUrl: jest.fn(),
                 capture: jest.fn(),
                 featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
             })
@@ -747,7 +747,7 @@ describe('SurveyManager', () => {
             // Set up mocks
             mockPostHog = createMockPostHog({
                 getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
+                getSessionReplayUrl: jest.fn(),
                 capture: jest.fn(),
                 featureFlags: {
                     isFeatureEnabled: jest.fn().mockReturnValue(true),
@@ -949,7 +949,7 @@ describe('SurveyManager', () => {
 
             mockPostHog = createMockPostHog({
                 getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
+                getSessionReplayUrl: jest.fn(),
                 capture: jest.fn(),
                 featureFlags: {
                     isFeatureEnabled: jest.fn().mockReturnValue(true),
@@ -1226,7 +1226,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         // Mock PostHog instance
         posthog = createMockPostHog({
             capture: jest.fn(),
-            get_session_replay_url: jest.fn(),
+            getSessionReplayUrl: jest.fn(),
         })
 
         mockRemoveSurveyFromFocus = jest.fn()

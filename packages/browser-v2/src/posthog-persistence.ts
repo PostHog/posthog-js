@@ -115,13 +115,13 @@ export class PostHogPersistence {
     private _splitStorageEligible = false
     // Whether flag config is stored in their own entries this session:
     // backend-eligible AND `split_storage` enabled.
-    // Re-resolved on every `update_config` (backend rebuild or a runtime flag flip).
+    // Re-resolved on every `updateConfig` (backend rebuild or a runtime flag flip).
     private _splitStorage = false
     // Whether this instance owns (and may clean up) the shared split group
     // entries. The localStorage primary owns them; the sessionStorage sibling
     // posthog-core spins up shares the primary's storage name, so it must not
-    // remove them — otherwise its remove() (fired via set_secure on every
-    // set_config reconstruction) would wipe the primary's __flags entry.
+    // remove them — otherwise its remove() (fired via setSecure on every
+    // setConfig reconstruction) would wipe the primary's __flags entry.
     private readonly _ownsSplitStorage: boolean
     // Optional debounce: when `persistence_save_debounce_ms` is > 0, rapid
     // calls to `save()` are coalesced into one write at the end of the
@@ -147,13 +147,13 @@ export class PostHogPersistence {
         if (config.debug) {
             logger.info('Persistence loaded', config['persistence'], { ...this.props })
         }
-        this.update_config(config, config, isDisabled)
+        this.updateConfig(config, config, isDisabled)
         this.save()
 
         // Install unload flush listeners unconditionally. They are a no-op
         // when no debounced write is pending (see `flush()`), so it is safe
         // to install even when `persistence_save_debounce_ms` is 0 at
-        // construction. Crucially this also handles `posthog.set_config({
+        // construction. Crucially this also handles `posthog.setConfig({
         // persistence_save_debounce_ms: 250 })` enabling debounce later —
         // we'd otherwise miss the listener install and lose pending writes
         // on close.
@@ -237,7 +237,7 @@ export class PostHogPersistence {
     // The split is on only when the resolved backend can host it (localStorage /
     // localStorage+cookie, set by `_buildStorage` into `_splitStorageEligible`)
     // AND the config opts in. Resolved here so the constructor and the runtime
-    // `update_config` toggle can never disagree about whether the split is active.
+    // `updateConfig` toggle can never disagree about whether the split is active.
     private _resolveSplitStorage(config: PostHogConfig): boolean {
         return this._splitStorageEligible && !!config['split_storage']
     }
@@ -506,7 +506,7 @@ export class PostHogPersistence {
 
     // The no-op-rejection snapshot for an entry. The main entry can live in a
     // cookie, so its fingerprint also covers the cookie options (expire_days,
-    // cross_subdomain, secure): a `set_config({ cookie_expiration })` must force
+    // cross_subdomain, secure): a `setConfig({ cookie_expiration })` must force
     // a rewrite even when props are unchanged, otherwise the cookie keeps its old
     // `Expires` header until some other prop changes. Group entries are
     // localStorage-only — cookie options never reach them, so excluding those
@@ -581,13 +581,13 @@ export class PostHogPersistence {
         }
     }
 
-    // `keepGroupEntries` is set by the cookie-option setters (set_secure /
-    // set_cross_subdomain). A cookie-scope change has to clear the cookie-backed
+    // `keepGroupEntries` is set by the cookie-option setters (setSecure /
+    // setCrossSubdomain). A cookie-scope change has to clear the cookie-backed
     // main entry, but the group entries are localStorage-only and entirely
     // scope-independent, so deleting and rewriting them would be the exact
     // per-page-load flag-blob churn the split exists to remove (these setters fire
     // once each on every construction, transitioning the in-memory option from
-    // undefined to its configured value). Opt-out / reset (set_disabled / clear)
+    // undefined to its configured value). Opt-out / reset (setDisabled / clear)
     // pass nothing and wipe everything.
     //
     // INVARIANT for `keepGroupEntries: true`: the caller must not also mutate
@@ -643,7 +643,7 @@ export class PostHogPersistence {
      * @param {number=} days
      */
 
-    register_once(props: Properties, default_value: any, days?: number): boolean {
+    registerOnce(props: Properties, default_value: any, days?: number): boolean {
         if (isObject(props)) {
             if (isUndefined(default_value)) {
                 default_value = 'None'
@@ -700,7 +700,7 @@ export class PostHogPersistence {
         }
     }
 
-    update_campaign_params(): void {
+    updateCampaignParams(): void {
         if (!this._campaign_params_saved) {
             const campaignParams = getCampaignParams(
                 this._config.custom_campaign_params,
@@ -714,21 +714,21 @@ export class PostHogPersistence {
             this._campaign_params_saved = true
         }
     }
-    update_search_keyword(): void {
+    updateSearchKeyword(): void {
         this.register(getSearchInfo())
     }
 
-    update_referrer_info(): void {
-        this.register_once(getReferrerInfo(), undefined)
+    updateReferrerInfo(): void {
+        this.registerOnce(getReferrerInfo(), undefined)
     }
 
-    set_initial_person_info(): void {
+    setInitialPersonInfo(): void {
         if (this.props[INITIAL_CAMPAIGN_PARAMS] || this.props[INITIAL_REFERRER_INFO]) {
             // the user has initial properties stored the previous way, don't save them again
             return
         }
 
-        this.register_once(
+        this.registerOnce(
             {
                 [INITIAL_PERSON_INFO]: getPersonInfo(
                     this._config.mask_personal_data_properties,
@@ -739,7 +739,7 @@ export class PostHogPersistence {
         )
     }
 
-    get_initial_props(): Properties {
+    getInitialProps(): Properties {
         const p: Properties = {}
 
         // this section isn't written to anymore, but we should keep reading from it for backwards compatibility
@@ -775,11 +775,11 @@ export class PostHogPersistence {
         return props
     }
 
-    update_config(config: PostHogConfig, oldConfig: PostHogConfig, isDisabled?: boolean): void {
+    updateConfig(config: PostHogConfig, oldConfig: PostHogConfig, isDisabled?: boolean): void {
         this._default_expiry = this._expire_days = config['cookie_expiration']
-        this.set_disabled(config['disable_persistence'] || !!isDisabled)
-        this.set_cross_subdomain(config['cross_subdomain_cookie'])
-        this.set_secure(config['secure_cookie'])
+        this.setDisabled(config['disable_persistence'] || !!isDisabled)
+        this.setCrossSubdomain(config['cross_subdomain_cookie'])
+        this.setSecure(config['secure_cookie'])
 
         const persistenceChanged =
             config.persistence !== oldConfig.persistence ||
@@ -793,7 +793,7 @@ export class PostHogPersistence {
         const wantSplit = this._resolveSplitStorage(config)
 
         // Migrate when the backend changed or the split routing flipped at
-        // runtime, e.g. set_config({ split_storage: true })
+        // runtime, e.g. setConfig({ split_storage: true })
         // without touching persistence. Either way we clear the old layout and
         // re-save so subsequent reads/writes land in the right entries.
         if (persistenceChanged || wantSplit !== this._splitStorage) {
@@ -806,7 +806,7 @@ export class PostHogPersistence {
         }
     }
 
-    set_disabled(disabled: boolean): void {
+    setDisabled(disabled: boolean): void {
         this._disabled = disabled
         if (this._disabled) {
             this.remove()
@@ -815,7 +815,7 @@ export class PostHogPersistence {
         }
     }
 
-    set_cross_subdomain(cross_subdomain: boolean): void {
+    setCrossSubdomain(cross_subdomain: boolean): void {
         if (cross_subdomain !== this._cross_subdomain) {
             this._cross_subdomain = cross_subdomain
             this.remove({ keepGroupEntries: true })
@@ -823,7 +823,7 @@ export class PostHogPersistence {
         }
     }
 
-    set_secure(secure: boolean): void {
+    setSecure(secure: boolean): void {
         if (secure !== this._secure) {
             this._secure = secure
             this.remove({ keepGroupEntries: true })
@@ -831,14 +831,14 @@ export class PostHogPersistence {
         }
     }
 
-    set_event_timer(event_name: string, timestamp: number): void {
+    setEventTimer(event_name: string, timestamp: number): void {
         const timers = this.props[EVENT_TIMERS_KEY] || {}
         timers[event_name] = timestamp
         this._setProp(EVENT_TIMERS_KEY, timers)
         this.save()
     }
 
-    remove_event_timer(event_name: string): number {
+    removeEventTimer(event_name: string): number {
         const timers = this.props[EVENT_TIMERS_KEY] || {}
         const timestamp = timers[event_name]
         if (!isUndefined(timestamp)) {
@@ -849,11 +849,11 @@ export class PostHogPersistence {
         return timestamp
     }
 
-    get_property(prop: string): any {
+    getProperty(prop: string): any {
         return this.props[prop]
     }
 
-    set_property(prop: string, to: any): void {
+    setProperty(prop: string, to: any): void {
         this._setProp(prop, to)
         this.save()
     }

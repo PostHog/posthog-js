@@ -54,9 +54,8 @@ export class SiteApps implements Extension {
             throw new Error('Event payload is required')
         }
         const groups: SiteAppGlobals['groups'] = {}
-        const groupIds = this._instance.get_property('$groups') || []
-        const groupProperties: Record<string, Properties> =
-            this._instance.get_property('$stored_group_properties') || {}
+        const groupIds = this._instance.getProperty('$groups') || []
+        const groupProperties: Record<string, Properties> = this._instance.getProperty('$stored_group_properties') || {}
         for (const [type, properties] of Object.entries(groupProperties)) {
             groups[type] = { id: groupIds[type], type, properties }
         }
@@ -78,7 +77,7 @@ export class SiteApps implements Extension {
                 distinct_id: event.properties?.['distinct_id'],
             },
             person: {
-                properties: this._instance.get_property('$stored_person_properties'),
+                properties: this._instance.getProperty('$stored_person_properties'),
             },
             groups,
         }

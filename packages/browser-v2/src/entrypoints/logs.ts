@@ -357,7 +357,7 @@ const initializeLogs = (posthog: PostHog) => {
                     return
                 }
 
-                if (!posthog.is_capturing()) {
+                if (!posthog.isCapturing()) {
                     originalConsoleLog.apply(assignableWindow.console, args)
                     return
                 }
@@ -372,7 +372,7 @@ const initializeLogs = (posthog: PostHog) => {
                     body: body,
                     attributes: {
                         'log.source': `console.${level}`,
-                        distinct_id: posthog.get_distinct_id(),
+                        distinct_id: posthog.getDistinctId(),
                         'location.href': assignableWindow.location.href,
                         ...logAttributes,
                         ...(isObject(args[0]) ? flattenObject(args[0]) : {}),

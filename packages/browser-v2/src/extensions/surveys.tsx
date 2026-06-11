@@ -141,7 +141,7 @@ export class SurveyManager {
     public handlePageUnload = (): void => {
         // we don't use getSurveys to avoid adding extra API calls here.
         // if no surveys are cached, there's nothing to do anyways
-        const surveys = this._posthog.get_property(SURVEYS) as Survey[] | undefined
+        const surveys = this._posthog.getProperty(SURVEYS) as Survey[] | undefined
         if (!surveys) {
             return
         }
@@ -1052,7 +1052,7 @@ export function usePopupVisibility(
                     [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
                     [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
                     ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
-                    sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                    sessionRecordingUrl: posthog.getSessionReplayUrl?.(),
                 })
             }
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())

@@ -492,7 +492,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _isSampled(): boolean | null {
-        const currentValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        const currentValue = this._instance.getProperty(SESSION_RECORDING_IS_SAMPLED)
         // we store the session id when sampled so that we can detect session id changes
         // and `false` when not sampled
         // legacy SDKs stored `true` when sampled, but that is not tied to a session id
@@ -837,7 +837,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get _remoteConfig(): SessionRecordingPersistedConfig | undefined {
-        const persistedConfig: any = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        const persistedConfig: any = this._instance.getProperty(SESSION_RECORDING_REMOTE_CONFIG)
         if (!persistedConfig) {
             return undefined
         }
@@ -871,7 +871,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _checkOverride(key: string, overrideFunction: () => void, clearOverride: () => void): void {
-        const overrideFlag: boolean = this._instance.get_property(key) as boolean
+        const overrideFlag: boolean = this._instance.getProperty(key) as boolean
         if (overrideFlag) {
             overrideFunction()
 
@@ -1352,7 +1352,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // Track the timestamp of the first full snapshot for this session
             // This helps us detect session rotation issues where incremental snapshots
             // are sent before the full snapshot
-            this._instance.persistence?.register_once(
+            this._instance.persistence?.registerOnce(
                 {
                     [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: rawEvent.timestamp,
                 },
@@ -1714,7 +1714,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _reportStarted(startReason: SessionStartReason, tagPayload?: Record<string, any>) {
-        this._instance.register_for_session({
+        this._instance.registerForSession({
             [SESSION_RECORDING_START_REASON]: startReason,
         })
         logger.info(startReason.replace('_', ' '), tagPayload)

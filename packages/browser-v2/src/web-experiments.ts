@@ -151,7 +151,7 @@ export class WebExperiments implements Extension {
             return callback([])
         }
 
-        const existingWebExperiments = this._instance.get_property(WEB_EXPERIMENTS)
+        const existingWebExperiments = this._instance.getProperty(WEB_EXPERIMENTS)
         if (existingWebExperiments && !forceReload) {
             return callback(existingWebExperiments)
         }

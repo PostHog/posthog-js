@@ -23,7 +23,7 @@ describe('Toolbar', () => {
                 api_host: 'http://api.example.com',
                 token: 'test_token',
             }),
-            set_config: jest.fn(),
+            setConfig: jest.fn(),
         })
         instance.requestRouter = new RequestRouter(instance)
 

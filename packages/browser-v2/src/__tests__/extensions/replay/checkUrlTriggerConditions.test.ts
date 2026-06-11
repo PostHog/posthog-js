@@ -71,8 +71,8 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         persistedSession = null
 
         mockPostHog = createMockPostHog({
-            register_for_session: jest.fn(),
-            get_property: jest.fn((key: string) => {
+            registerForSession: jest.fn(),
+            getProperty: jest.fn((key: string) => {
                 if (key === SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION) {
                     return persistedSession
                 }

@@ -188,7 +188,7 @@ export class ConversationsPersistence {
                 return
             }
 
-            const widgetSessionId = persistence.get_property(CONVERSATIONS_LEGACY_WIDGET_SESSION_ID)
+            const widgetSessionId = persistence.getProperty(CONVERSATIONS_LEGACY_WIDGET_SESSION_ID)
             if (!widgetSessionId) {
                 // persistence.props may be empty (the bug) — try raw localStorage
                 const legacyFromRaw = this._readLegacyFromRawStorage()
@@ -201,17 +201,17 @@ export class ConversationsPersistence {
 
             const data: ConversationsStorageData = { widgetSessionId }
 
-            const ticketId = persistence.get_property(CONVERSATIONS_LEGACY_TICKET_ID)
+            const ticketId = persistence.getProperty(CONVERSATIONS_LEGACY_TICKET_ID)
             if (ticketId) {
                 data.ticketId = ticketId
             }
 
-            const widgetState = persistence.get_property(CONVERSATIONS_LEGACY_WIDGET_STATE)
+            const widgetState = persistence.getProperty(CONVERSATIONS_LEGACY_WIDGET_STATE)
             if (widgetState === 'open' || widgetState === 'closed') {
                 data.widgetState = widgetState
             }
 
-            const userTraits = persistence.get_property(CONVERSATIONS_LEGACY_USER_TRAITS) as
+            const userTraits = persistence.getProperty(CONVERSATIONS_LEGACY_USER_TRAITS) as
                 | UserProvidedTraits
                 | undefined
             if (userTraits) {

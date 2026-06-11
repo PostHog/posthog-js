@@ -106,7 +106,7 @@ test.describe('Session recording - array.js', () => {
     test('captures session events', async ({ page }) => {
         const startingSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
         await ensureActivitySendsSnapshots(page, [
             '$remote_config_received',
@@ -137,7 +137,7 @@ test.describe('Session recording - array.js', () => {
         // the session id is not rotated by stopping and starting the recording
         const finishingSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
         expect(startingSessionId).toEqual(finishingSessionId)
     })
@@ -200,7 +200,7 @@ test.describe('Session recording - array.js', () => {
 
         const firstSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
         const capturedEvents = await page.capturedEvents()
         expect(new Set(capturedEvents.map((c) => c['properties']['$session_id']))).toEqual(new Set([firstSessionId]))
@@ -247,7 +247,7 @@ test.describe('Session recording - array.js', () => {
         await page.resetCapturedEvents()
         const startingSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.get_session_id()
+            return ph?.getSessionId()
         })
         expect(startingSessionId).not.toBeNull()
 

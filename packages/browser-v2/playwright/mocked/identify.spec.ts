@@ -25,11 +25,11 @@ test.describe('Identify', () => {
         })
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            ph?.opt_out_capturing()
+            ph?.optOutCapturing()
         })
         const isOptedOut = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
-            return ph?.has_opted_out_capturing()
+            return ph?.hasOptedOutCapturing()
         })
         expect(isOptedOut).toEqual(true)
     })

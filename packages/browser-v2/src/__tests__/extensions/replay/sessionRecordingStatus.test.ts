@@ -25,7 +25,7 @@ type TestConfig = {
     allMatchExpected: SessionRecordingStatus
 }
 
-const fakePostHog = createMockPostHog({ register_for_session: () => {} })
+const fakePostHog = createMockPostHog({ registerForSession: () => {} })
 
 const defaultTriggersStatus: RecordingTriggersStatus = {
     receivedFlags: true,

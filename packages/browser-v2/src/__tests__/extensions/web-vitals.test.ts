@@ -359,7 +359,7 @@ describe('web vitals', () => {
                 capture_pageview: false,
             })
 
-            posthog.opt_out_capturing()
+            posthog.optOutCapturing()
             beforeSendMock.mockClear()
 
             expect(posthog.sessionManager).toBeUndefined()

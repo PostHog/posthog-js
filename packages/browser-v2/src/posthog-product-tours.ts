@@ -27,7 +27,7 @@ const isProductToursEnabled = (instance: PostHog): boolean => {
     if (instance.config.disable_product_tours) {
         return false
     }
-    return !!instance.persistence?.get_property(PRODUCT_TOURS_ENABLED_SERVER_SIDE)
+    return !!instance.persistence?.getProperty(PRODUCT_TOURS_ENABLED_SERVER_SIDE)
 }
 
 export class PostHogProductTours implements Extension {

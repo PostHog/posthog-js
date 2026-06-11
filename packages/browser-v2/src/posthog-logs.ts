@@ -91,7 +91,7 @@ export class PostHogLogs implements Extension {
     // ========================================================================
 
     captureLog(options: CaptureLogOptions): void {
-        if (!this._instance.is_capturing()) {
+        if (!this._instance.isCapturing()) {
             return
         }
 
@@ -202,7 +202,7 @@ export class PostHogLogs implements Extension {
     private _getSdkContext(): LogSdkContext {
         const context: LogSdkContext = {}
 
-        context.distinctId = this._instance.get_distinct_id()
+        context.distinctId = this._instance.getDistinctId()
 
         if (this._instance.sessionManager) {
             const { sessionId } = this._instance.sessionManager.checkAndGetSessionAndWindowId(true)

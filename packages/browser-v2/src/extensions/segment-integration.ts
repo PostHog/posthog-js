@@ -39,12 +39,12 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         if (!eventName) {
             return ctx
         }
-        if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
+        if (!ctx.event.userId && ctx.event.anonymousId !== posthog.getDistinctId()) {
             // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
             logger.info('No userId set, resetting PostHog')
             posthog.reset()
         }
-        if (ctx.event.userId && ctx.event.userId !== posthog.get_distinct_id()) {
+        if (ctx.event.userId && ctx.event.userId !== posthog.getDistinctId()) {
             logger.info('UserId set, identifying with PostHog')
             posthog.identify(ctx.event.userId)
         }
@@ -86,7 +86,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
                 distinct_id: user.id(),
                 $device_id: getSegmentAnonymousId(),
             })
-            posthog.persistence!.set_property(USER_STATE, USER_STATE_IDENTIFIED)
+            posthog.persistence!.setProperty(USER_STATE, USER_STATE_IDENTIFIED)
         }
 
         done()

@@ -44,7 +44,7 @@ export class RateLimiter {
         // It's as much for our protection as theirs.
         const { captureEventsBurstLimit, captureEventsPerSecond } = this
         const now = new Date().getTime()
-        const bucket = this.instance.persistence?.get_property(CAPTURE_RATE_LIMIT) ?? {
+        const bucket = this.instance.persistence?.getProperty(CAPTURE_RATE_LIMIT) ?? {
             tokens: captureEventsBurstLimit,
             last: now,
         }
@@ -75,7 +75,7 @@ export class RateLimiter {
         }
 
         this.lastEventRateLimited = isRateLimited
-        this.instance.persistence?.set_property(CAPTURE_RATE_LIMIT, bucket)
+        this.instance.persistence?.setProperty(CAPTURE_RATE_LIMIT, bucket)
 
         return {
             isRateLimited,

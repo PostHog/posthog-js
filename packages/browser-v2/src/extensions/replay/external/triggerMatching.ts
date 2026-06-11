@@ -73,7 +73,7 @@ function persistedTriggerStatus(
 
     // V2: Use per-group persistence key if groupId is provided
     const persistenceKey = groupId ? groupPrefix + groupId : fallbackPersistenceKey
-    const currentTriggerSession = instance?.get_property(persistenceKey)
+    const currentTriggerSession = instance?.getProperty(persistenceKey)
     return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
 }
 
@@ -278,7 +278,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         const eitherIsPending = urlTriggerStatus === TRIGGER_PENDING
 
         const result = eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
-        this._instance.register_for_session({
+        this._instance.registerForSession({
             [SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS]: result,
         })
         return result
@@ -377,7 +377,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         if (this.linkedFlagSeen) {
             result = TRIGGER_ACTIVATED
         }
-        this._instance.register_for_session({
+        this._instance.registerForSession({
             [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: result,
         })
         return result
@@ -465,7 +465,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
                 : eventTriggerStatus === TRIGGER_PENDING
                   ? TRIGGER_PENDING
                   : TRIGGER_DISABLED
-        this._instance.register_for_session({
+        this._instance.registerForSession({
             [SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS]: result,
         })
         return result

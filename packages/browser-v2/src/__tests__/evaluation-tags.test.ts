@@ -13,11 +13,11 @@ describe('Evaluation Tags/Contexts', () => {
         posthog = {
             config: {} as PostHogConfig,
             persistence: {
-                get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-                get_initial_props: jest.fn().mockReturnValue({}),
+                getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
+                getInitialProps: jest.fn().mockReturnValue({}),
             },
-            get_property: jest.fn().mockReturnValue({}),
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            getProperty: jest.fn().mockReturnValue({}),
+            getDistinctId: jest.fn().mockReturnValue('test-distinct-id'),
             getGroups: jest.fn().mockReturnValue({}),
             requestRouter: {
                 endpointFor: jest.fn().mockReturnValue('/flags/?v=2'),

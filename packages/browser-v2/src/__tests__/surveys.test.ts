@@ -197,7 +197,7 @@ describe('surveys', () => {
             _addCaptureHook: jest.fn(),
             register: (props: Properties) => instance.persistence?.register(props),
             unregister: (key: string) => instance.persistence?.unregister(key),
-            get_property: (key: string) => instance.persistence?.props[key],
+            getProperty: (key: string) => instance.persistence?.props[key],
             _send_request: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),

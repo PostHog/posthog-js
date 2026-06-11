@@ -21,7 +21,7 @@ describe('FunctionalTests / Feature Flags', () => {
     test('person properties set in identify() with new distinct_id are sent to /flags', async () => {
         const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
 
-        const anonymousId = posthog.get_distinct_id()
+        const anonymousId = posthog.getDistinctId()
 
         await waitFor(() => {
             expect(getRequests(token)['/flags/']).toEqual([
@@ -100,7 +100,7 @@ describe('FunctionalTests / Feature Flags', () => {
     test('person properties set in identify() with the same distinct_id are sent to flags', async () => {
         const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
 
-        const anonymousId = posthog.get_distinct_id()
+        const anonymousId = posthog.getDistinctId()
 
         await waitFor(() => {
             expect(getRequests(token)['/flags/']).toEqual([
@@ -225,7 +225,7 @@ describe('FunctionalTests / Feature Flags', () => {
     test('identify() triggers new request in queue after first request', async () => {
         const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
 
-        const anonymousId = posthog.get_distinct_id()
+        const anonymousId = posthog.getDistinctId()
 
         await waitFor(() => {
             expect(getRequests(token)['/flags/']).toEqual([

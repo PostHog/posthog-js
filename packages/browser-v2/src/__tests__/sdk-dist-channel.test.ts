@@ -1,6 +1,6 @@
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
-import { init_as_module, init_from_snippet } from '../posthog-core'
+import { initAsModule, initFromSnippet } from '../posthog-core'
 import { getEventProperties } from '../utils/event-utils'
 import { assignableWindow } from '../utils/globals'
 
@@ -22,7 +22,7 @@ describe('sdk dist channel', () => {
     it('overrides a prior dist channel and reports npm for module usage', () => {
         Config.SDK_DIST_CHANNEL = 'cdn'
 
-        init_as_module()
+        initAsModule()
 
         expect(getEventProperties()[SDK_DIST_CHANNEL]).toBe('npm')
     })
@@ -30,7 +30,7 @@ describe('sdk dist channel', () => {
     it('reports cdn for snippet usage', () => {
         assignableWindow.posthog = { _i: [] } as any
 
-        init_from_snippet()
+        initFromSnippet()
 
         expect(getEventProperties()[SDK_DIST_CHANNEL]).toBe('cdn')
     })
