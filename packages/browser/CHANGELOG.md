@@ -1,5 +1,26 @@
 # posthog-js
 
+## 1.386.3
+
+### Patch Changes
+
+- [#3760](https://github.com/PostHog/posthog-js/pull/3760) [`5ddfd44`](https://github.com/PostHog/posthog-js/commit/5ddfd44d21ebcc17df65466dd03226e278e4a89d) Thanks [@benben](https://github.com/benben)! - fix(conversations): re-attach the support widget after SPA navigations that replace `document.body` (e.g. Turbo Drive), so the widget no longer disappears until a full page reload
+  (2026-06-11)
+
+- [#3690](https://github.com/PostHog/posthog-js/pull/3690) [`dbf2377`](https://github.com/PostHog/posthog-js/commit/dbf23777e1c14a811c67697684d56145518ebe16) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(sessionid): keep the session id stable across tabs
+
+    A session now rotates only when every tab has been idle past the timeout, rather than whenever a single background tab decides it is idle. On the active event path an idle tab re-reads the session id from storage before rotating: if a sibling tab kept the session alive it does not rotate, and if a sibling already rotated it adopts that id instead of minting a new one. This removes spurious cross-tab session fragmentation (inflated session counts, truncated session durations, split replays). When a sibling session is adopted, `onSessionId` handlers fire with `changeReason.crossTabAdoption: true` so session recording, pageview state, and session-scoped properties follow the new session. When `persistence_save_debounce_ms > 0` (the `2026-05-30` default) the refresh reads only the session-id key so it cannot clobber a sibling's write.
+
+    Note: projects with significant multi-tab usage will see fewer but longer sessions after upgrading — this is a correction of previously over-counted sessions, not a traffic change. (2026-06-11)
+
+- [#3795](https://github.com/PostHog/posthog-js/pull/3795) [`21441a8`](https://github.com/PostHog/posthog-js/commit/21441a8203006ca878d89cdd60cd21beec1bb537) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(persistence): stop per-request metadata rewriting the split-storage entries on every load
+
+    `$feature_flag_evaluated_at`, `$feature_flag_request_id`, and `$surveys_loaded_at` change on every `/flags` (or `/surveys`) load even when the flag and survey content is unchanged. With `split_storage` enabled that made the multi-hundred-KB `__flags` / `__surveys` localStorage entries dirty on every SPA navigation, re-broadcasting the full payload to every open same-origin tab via cross-tab `storage` events — the exact pressure the split exists to remove. These keys are now marked volatile: a value-only change neither dirties the group nor alters its fingerprint, so the write is skipped and the freshest value rides along on the next real content write. Adding or deleting a volatile key still writes through (presence is fingerprinted, the moving value is not), and the in-memory value is always current — only the on-disk copy may lag until the next content change. (2026-06-11)
+
+- Updated dependencies [[`dbf2377`](https://github.com/PostHog/posthog-js/commit/dbf23777e1c14a811c67697684d56145518ebe16)]:
+    - @posthog/types@1.386.3
+    - @posthog/core@1.32.3
+
 ## 1.386.2
 
 ### Patch Changes
