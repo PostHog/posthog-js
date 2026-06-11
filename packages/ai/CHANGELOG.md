@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.2.0
+
+### Minor Changes
+
+- [#3793](https://github.com/PostHog/posthog-js/pull/3793) [`b477c02`](https://github.com/PostHog/posthog-js/commit/b477c0281f3a7e1ad507ae44645914dac73967ea) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat: warn when a `base_url` points at the PostHog AI Gateway. The gateway emits its own `$ai_generation`, so routing through it double-captures (and, for billable products, double-bills) every call. Detection covers the provider wrappers (OpenAI, Azure, Anthropic, Gemini, Vercel), LangChain, OpenAI Agents, direct `captureAiGeneration` callers, and the OTel exporter/processor (via the span's `server.address` / `url.full`). The warning logs on every routed call; the event is left untouched, since it carries data the gateway never sees (groups, custom properties, trace hierarchy).
+  (2026-06-11)
+
 ## 8.1.11
 
 ### Patch Changes
