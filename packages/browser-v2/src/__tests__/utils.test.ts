@@ -461,7 +461,7 @@ describe('utils', () => {
         // Pins the merge semantics that the localStorage+cookie persistence merge depends on.
         // Later args override earlier args for any defined value (undefined is skipped, but
         // null, '', 0, false ARE applied). Code paths that need stricter behaviour (e.g.
-        // createLocalPlusCookieStore with __previewCookieWinsOnConflict) must filter
+        // createLocalPlusCookieStore) must filter
         // before calling extend rather than relying on it to skip falsy values.
 
         it('later args override earlier args for defined values', () => {

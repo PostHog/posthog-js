@@ -192,10 +192,7 @@ export class PostHogPersistence {
         // Create this before hand to avoid creating it multiple times
         // Creating it inside each individual condition below is too complicated and will break backwards compatibility
         // so create it once for this specific config and use it if necessary
-        const localPlusCookieStore = createLocalPlusCookieStore(
-            config['cookiePersistedProperties'] || [],
-            config['__previewCookieWinsOnConflict'] || false
-        )
+        const localPlusCookieStore = createLocalPlusCookieStore(config['cookiePersistedProperties'] || [])
 
         let store: PersistentStore
 

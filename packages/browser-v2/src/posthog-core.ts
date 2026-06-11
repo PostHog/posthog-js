@@ -227,7 +227,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     capturePageleave: 'if_capture_pageview', // We'll only capture pageleave events if capturePageview is also true
     defaults: defaults ?? 'unset',
     __previewDeferredInitExtensions: false, // Opt-in only for now
-    __previewCookieWinsOnConflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookieExpiration: 365,
     upgrade: false,
@@ -1130,12 +1129,8 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        const isBot = !this.config.optOutUseragentFilter && this._is_bot()
-        const shouldDropBotEvent = isBot && !this.config.__previewCaptureBotPageviews
-
-        // We drop bot events unless the preview flag to send bot pageviews is enabled
-        // or the user has explicitly opted out of useragent filtering
-        if (shouldDropBotEvent) {
+        // We drop bot events unless the user has explicitly opted out of useragent filtering
+        if (!this.config.optOutUseragentFilter && this._is_bot()) {
             return
         }
 
@@ -1186,14 +1181,6 @@ export class PostHog implements PostHogInterface {
             uuid,
             event: event_name,
             properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
-        }
-
-        // Route pageviews to $bot_pageview when bot detected and preview flag enabled
-        if (event_name === EVENT_PAGEVIEW && this.config.__previewCaptureBotPageviews && isBot) {
-            data.event = '$bot_pageview'
-            // While it's obvious that a $bot_pageview is (likely) from a bot, we explicitly set $browser_type
-            // to make it easy to filter and test bot pageviews in the product
-            data.properties.$browser_type = 'bot'
         }
 
         if (clientRateLimitContext) {

@@ -294,6 +294,8 @@ type RemovedDeprecatedConfigKeys =
     | 'evaluation_environments'
     | 'enable_heatmaps'
     | 'opt_out_capturing_cookie_prefix'
+    | '__preview_cookie_wins_on_conflict'
+    | '__preview_capture_bot_pageviews'
 
 /*
  * Specify that `loaded` should be using the PostHog instance type
@@ -310,10 +312,7 @@ type SnakeToCamelCase<S extends string> = S extends `${infer Head}_${infer Tail}
  */
 type CamelizeConfigKey<K> = K extends `_${string}` ? K : K extends string ? SnakeToCamelCase<K> : K
 
-type RenamedDunderConfigKeys =
-    | '__preview_deferred_init_extensions'
-    | '__preview_cookie_wins_on_conflict'
-    | '__preview_capture_bot_pageviews'
+type RenamedDunderConfigKeys = '__preview_deferred_init_extensions'
 
 type CamelizedBaseConfig = {
     [K in keyof Omit<
@@ -330,12 +329,6 @@ export type PostHogConfig = CamelizedBaseConfig & {
 
     /** Preview: defer loading of init extensions. Renamed from `__preview_deferred_init_extensions`. */
     __previewDeferredInitExtensions: boolean
-
-    /** Preview: cookie wins on persistence conflict. Renamed from `__preview_cookie_wins_on_conflict`. */
-    __previewCookieWinsOnConflict: boolean
-
-    /** Preview: capture pageviews from bots. Renamed from `__preview_capture_bot_pageviews`. */
-    __previewCaptureBotPageviews?: boolean
 
     /**
      * Internal: Extension class overrides for tree-shaking support.

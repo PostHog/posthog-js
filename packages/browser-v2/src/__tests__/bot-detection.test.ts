@@ -61,7 +61,7 @@ describe('bot detection and pageview collection', () => {
         })
     }
 
-    describe('default behavior (without preview flag)', () => {
+    describe('default behavior', () => {
         it('should drop pageview events from bots', async () => {
             setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
             posthog = await createPostHog()
@@ -136,140 +136,12 @@ describe('bot detection and pageview collection', () => {
         })
     })
 
-    describe('with __previewCaptureBotPageviews enabled', () => {
-        it('should send bot pageviews as $bot_pageview events', async () => {
-            setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({ __previewCaptureBotPageviews: true })
-
-            posthog.capture('$pageview')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
-            const properties = beforeSendMock.mock.calls[0][0].properties
-            // While it's obvious that a $bot_pageview is from a bot, we explicitly set $browser_type
-            // to make it easy to filter and test bot pageviews in the product
-            expect(properties.$browser_type).toBe('bot')
-        })
-
-        it('should send non-pageview events from bots with original event name', async () => {
-            setBotUserAgent('Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)')
-            posthog = await createPostHog({ __previewCaptureBotPageviews: true })
-
-            posthog.capture('custom_event')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('custom_event')
-        })
-
-        it('should send webdriver-detected bot pageviews as $bot_pageview', async () => {
-            setWebdriver(true)
-            posthog = await createPostHog({ __previewCaptureBotPageviews: true })
-
-            posthog.capture('$pageview')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
-        })
-
-        it('should send normal browser pageviews as $pageview', async () => {
-            setBotUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
-            posthog = await createPostHog({ __previewCaptureBotPageviews: true })
-
-            posthog.capture('$pageview')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$pageview')
-        })
-
-        it('should work with various bot user agents', async () => {
-            const botUserAgents = [
-                'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-                'facebookexternalagent',
-                'Twitterbot/1.0',
-                'LinkedInBot/1.0',
-                'Chrome-Lighthouse',
-                'HeadlessChrome/91.0.4472.124',
-            ]
-
-            for (const ua of botUserAgents) {
-                setBotUserAgent(ua)
-                posthog = await createPostHog({ __previewCaptureBotPageviews: true })
-                beforeSendMock.mockClear()
-
-                posthog.capture('$pageview')
-
-                expect(beforeSendMock).toHaveBeenCalled()
-                expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
-            }
-        })
-    })
-
-    describe('interaction between optOutUseragentFilter and __previewCaptureBotPageviews', () => {
-        it('should not rename events when optOutUseragentFilter is true (bot filtering disabled)', async () => {
-            setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({
-                optOutUseragentFilter: true,
-                __previewCaptureBotPageviews: true,
-            })
-
-            posthog.capture('$pageview')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            // Should be $pageview, not $bot_pageview, because optOutUseragentFilter disables bot detection
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$pageview')
-        })
-
-        it('should still set $browser_type when optOutUseragentFilter is true', async () => {
-            setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({
-                optOutUseragentFilter: true,
-                __previewCaptureBotPageviews: true,
-            })
-
-            posthog.capture('$pageview')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            const properties = beforeSendMock.mock.calls[0][0].properties
-            expect(properties.$browser_type).toBe('bot')
-        })
-
-        it('should allow bot events when optOutUseragentFilter is true even without preview flag', async () => {
-            setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({
-                optOutUseragentFilter: true,
-                __previewCaptureBotPageviews: false,
-            })
-
-            posthog.capture('$pageview')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$pageview')
-            const properties = beforeSendMock.mock.calls[0][0].properties
-            expect(properties.$browser_type).toBe('bot')
-        })
-
-        it('should keep original event names for non-pageview bot events when both flags are true', async () => {
-            setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({
-                optOutUseragentFilter: true,
-                __previewCaptureBotPageviews: true,
-            })
-
-            posthog.capture('custom_event')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('custom_event')
-            const properties = beforeSendMock.mock.calls[0][0].properties
-            expect(properties.$browser_type).toBe('bot')
-        })
-    })
-
     describe('edge cases', () => {
         it('should handle missing navigator gracefully', async () => {
             const originalNav = (global as any).navigator
             ;(global as any).navigator = undefined
 
-            posthog = await createPostHog({ __previewCaptureBotPageviews: true })
+            posthog = await createPostHog()
 
             posthog.capture('$pageview')
 
@@ -278,29 +150,15 @@ describe('bot detection and pageview collection', () => {
             ;(global as any).navigator = originalNav
         })
 
-        it('should handle custom blocked user agents', async () => {
+        it('should drop events from custom blocked user agents', async () => {
             setBotUserAgent('MyCustomBot/1.0')
             posthog = await createPostHog({
                 customBlockedUseragents: ['MyCustomBot'],
-                __previewCaptureBotPageviews: true,
             })
 
             posthog.capture('$pageview')
 
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
-        })
-
-        it('should preserve event properties when renaming to $bot_pageview', async () => {
-            setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
-            posthog = await createPostHog({ __previewCaptureBotPageviews: true })
-
-            posthog.capture('$pageview', { custom_prop: 'test_value' })
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
-            const properties = beforeSendMock.mock.calls[0][0].properties
-            expect(properties.custom_prop).toBe('test_value')
+            expect(beforeSendMock).not.toHaveBeenCalled()
         })
     })
 })

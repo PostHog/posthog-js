@@ -811,15 +811,13 @@ describe('persistence', () => {
         })
 
         describe('merge precedence', () => {
-            // The default merge in createLocalPlusCookieStore._parse is
-            // extend(cookieProperties, localStorageData) — localStorage wins.
-            // With __previewCookieWinsOnConflict: true, that order flips so the
-            // cross-subdomain cookie is authoritative for the keys it stores.
+            // createLocalPlusCookieStore._parse merges with the cookie winning:
+            // the cross-subdomain cookie is authoritative for the keys it stores.
             const persistenceName = 'ph__posthog'
             const encodeCookie = (props: Record<string, any>) =>
                 `${persistenceName}=${encodeURIComponent(JSON.stringify(props))}`
 
-            function makeConfig(persistenceMode: string, cookieWins: boolean): PostHogConfig {
+            function makeConfig(persistenceMode: string): PostHogConfig {
                 return <PostHogConfig>{
                     name: '',
                     persistence: persistenceMode as
@@ -828,7 +826,6 @@ describe('persistence', () => {
                         | 'localStorage+cookie'
                         | 'memory'
                         | 'sessionStorage',
-                    __previewCookieWinsOnConflict: cookieWins,
                 }
             }
 
@@ -837,29 +834,17 @@ describe('persistence', () => {
                 localStorage.clear()
             })
 
-            it('default (flag off): localStorage wins for keys present in both stores', () => {
-                // Seed both stores with conflicting distinct_id
+            it('cookie wins for keys present in both stores', () => {
                 document.cookie = encodeCookie({ distinct_id: 'from_cookie', $device_id: 'd1' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'from_localstorage' }))
 
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', false))
-
-                expect(lib.props.distinct_id).toBe('from_localstorage')
-                // Keys only in cookie still flow through (no localStorage value to override)
-                expect(lib.props.$device_id).toBe('d1')
-            })
-
-            it('flag on: cookie wins for keys present in both stores', () => {
-                document.cookie = encodeCookie({ distinct_id: 'from_cookie', $device_id: 'd1' })
-                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'from_localstorage' }))
-
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 expect(lib.props.distinct_id).toBe('from_cookie')
                 expect(lib.props.$device_id).toBe('d1')
             })
 
-            it('flag on: cross-subdomain identify scenario - fresh cookie state wins over stale localStorage', () => {
+            it('cross-subdomain identify scenario - fresh cookie state wins over stale localStorage', () => {
                 // Models the bug this flag exists to fix: localStorage on a subdomain carries
                 // stale anonymous state from a prior visit, while the shared cookie carries
                 // fresh identified state written by an identify() on another subdomain.
@@ -880,7 +865,7 @@ describe('persistence', () => {
                 document.cookie = encodeCookie(freshCookie)
                 localStorage.setItem(persistenceName, JSON.stringify(staleLocalStorage))
 
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 expect(lib.props.distinct_id).toBe('user@x.com')
                 expect(lib.props.$device_id).toBe('anon-uuid')
@@ -892,18 +877,18 @@ describe('persistence', () => {
                 })
             })
 
-            it('flag on: self-heals stale localStorage by writing the merged value back', () => {
+            it('self-heals stale localStorage by writing the merged value back', () => {
                 document.cookie = encodeCookie({ distinct_id: 'from_cookie' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'from_localstorage' }))
 
-                new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 // The _parse self-heal writes the merged value back to localStorage
                 const localStorageAfter = JSON.parse(localStorage.getItem(persistenceName) || '{}')
                 expect(localStorageAfter.distinct_id).toBe('from_cookie')
             })
 
-            it('flag on: localStorage-only keys are preserved (cookie does not carry them)', () => {
+            it('localStorage-only keys are preserved (cookie does not carry them)', () => {
                 document.cookie = encodeCookie({ distinct_id: 'from_cookie' })
                 localStorage.setItem(
                     persistenceName,
@@ -915,47 +900,47 @@ describe('persistence', () => {
                     })
                 )
 
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 expect(lib.props.distinct_id).toBe('from_cookie')
                 expect(lib.props.$surveys).toEqual(['s1', 's2'])
                 expect(lib.props.super_prop).toBe('value')
             })
 
-            it('flag on: empty cookie is a no-op, localStorage round-trips intact', () => {
+            it('empty cookie is a no-op, localStorage round-trips intact', () => {
                 expect(document.cookie).toEqual('')
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'ls_only', super_prop: 'value' }))
 
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 expect(lib.props.distinct_id).toBe('ls_only')
                 expect(lib.props.super_prop).toBe('value')
             })
 
-            it('flag on: empty localStorage, cookie-only data populates props', () => {
+            it('empty localStorage, cookie-only data populates props', () => {
                 document.cookie = encodeCookie({ distinct_id: 'cookie_only', $device_id: 'd1' })
                 expect(localStorage.getItem(persistenceName)).toBe(null)
 
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 expect(lib.props.distinct_id).toBe('cookie_only')
                 expect(lib.props.$device_id).toBe('d1')
             })
 
-            it('flag on: defensive filter - null cookie value does NOT clobber valid localStorage value', () => {
+            it('defensive filter - null cookie value does NOT clobber valid localStorage value', () => {
                 document.cookie = encodeCookie({ distinct_id: null })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'valid' }))
 
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 expect(lib.props.distinct_id).toBe('valid')
             })
 
-            it('flag on: defensive filter - empty-string cookie value does NOT clobber valid localStorage value', () => {
+            it('defensive filter - empty-string cookie value does NOT clobber valid localStorage value', () => {
                 document.cookie = encodeCookie({ distinct_id: '' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'valid' }))
 
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 expect(lib.props.distinct_id).toBe('valid')
             })
@@ -964,7 +949,7 @@ describe('persistence', () => {
                 document.cookie = encodeCookie({ distinct_id: 'from_cookie', cookie_only_key: 'c' })
                 localStorage.setItem(persistenceName, JSON.stringify({ super_prop: 'ls', ls_only_key: 'l' }))
 
-                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie'))
 
                 // All non-conflicting keys merge into props from their respective stores
                 expect(lib.props.distinct_id).toBe('from_cookie')
