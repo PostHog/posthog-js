@@ -2,6 +2,7 @@
     "name": "@posthog/webpack-plugin",
     "version": "1.5.22",
     "description": "Webpack plugin for Posthog 🦔",
+    "license": "MIT",
     "repository": {
         "type": "git",
         "url": "https://github.com/PostHog/posthog-js.git",
