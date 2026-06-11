@@ -41,7 +41,7 @@
     "@types/jest": "catalog:",
     "jest": "catalog:",
     "node-fetch": "^3.3.2",
-    "posthog-node": "workspace:*"
+    "posthog-node": "workspace:^"
   },
   "keywords": [
     "posthog",
@@ -57,7 +57,7 @@
     "node": "^20.20.0 || >=22.22.0"
   },
   "dependencies": {
-    "@posthog/core": "workspace:*",
+    "@posthog/core": "workspace:^",
     "uuid": "^11.1.0",
     "zod": "^4.1.13"
   },

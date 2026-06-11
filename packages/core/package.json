@@ -76,7 +76,7 @@
     }
   },
   "dependencies": {
-    "@posthog/types": "workspace:*"
+    "@posthog/types": "workspace:^"
   },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
