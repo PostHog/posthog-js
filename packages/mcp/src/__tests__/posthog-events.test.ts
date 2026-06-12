@@ -280,9 +280,19 @@ describe('buildPostHogCaptureEvents', () => {
     expect(exceptionEvent?.properties[PostHogMCPAnalyticsProperty.ToolDescription]).toBe(description)
   })
 
-  it('sets $mcp_tool_category on tool-call events and omits it elsewhere', () => {
-    const [toolCallEvent] = buildPostHogCaptureEvents(makeEvent({ toolCategory: 'Logs' }))
-    expect(toolCallEvent.properties[PostHogMCPAnalyticsProperty.ToolCategory]).toBe('Logs')
+  it('sets $mcp_tool_category on tool-call and exception events, and omits it elsewhere', () => {
+    const events = buildPostHogCaptureEvents(
+      makeEvent({
+        toolCategory: 'Logs',
+        isError: true,
+        error: makeError('boom'),
+      })
+    )
+
+    const toolCallEvent = findEvent(events, PostHogMCPAnalyticsEvent.ToolCall)
+    const exceptionEvent = findEvent(events, PostHogMCPAnalyticsEvent.Exception)
+    expect(toolCallEvent?.properties[PostHogMCPAnalyticsProperty.ToolCategory]).toBe('Logs')
+    expect(exceptionEvent?.properties[PostHogMCPAnalyticsProperty.ToolCategory]).toBe('Logs')
 
     const [resourceEvent] = buildPostHogCaptureEvents(
       makeEvent({
