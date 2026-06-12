@@ -870,19 +870,19 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-H15tf7U6QvOCJelWw0i2JXMIDm2IliFJXu2QB0YaPqfzwnM6sI23Q7xQZVvwDvzP9nyhVktXAcGKyTj2pRA3HQ==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.31.1
+    resolution: {integrity: sha512-QuMH4qY0atWpo5Xvc5LFIQSg1mEz/DspIGqlwPaGX9jOY2CQvK0EOs8yGaiHvWk9VaIRPS8bfQ7Ornjv1YDwow==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.32.3
 
   '@posthog/react-native-plugin@file:../../target/posthog-react-native-plugin.tgz':
-    resolution: {integrity: sha512-q2kcYMzKxj8tMsrSFKl55xYrBmVXyjCxdUXJ/1QhsWT4tCG30WEfJnZywkEr8/3AElXP+s3KI/cTqPuGK0OkaQ==, tarball: file:../../target/posthog-react-native-plugin.tgz}
-    version: 2.0.0
+    resolution: {integrity: sha512-kZ4/gsUEKiRfDq1RZZ4sEwJBYIsmRP715XFgpKE8J4wa3k3lLlJGKDtEeyLg/5U+3xgKySApjAaGxFb8eAkgnQ==, tarball: file:../../target/posthog-react-native-plugin.tgz}
+    version: 2.0.1
     peerDependencies:
       react: '*'
       react-native: '*'
 
   '@posthog/types@file:../../target/posthog-types.tgz':
-    resolution: {integrity: sha512-efkjhVCIfui3kbaB9w4EYqct18d1xlEoCQVAuXNeV8kNTmLv3NRstGhxlm8r260iwOAYtkK5Sqk7PG0s1Ee2BQ==, tarball: file:../../target/posthog-types.tgz}
-    version: 1.384.1
+    resolution: {integrity: sha512-CHBzPdbQcpGaQpdVCZNgsqEQScMzbsCAJTCYrs0v/cvNNzHU4IdLomzI6YUoO5cJ5le3ow7B0efvtfpFqHmPqw==, tarball: file:../../target/posthog-types.tgz}
+    version: 1.386.3
 
   '@radix-ui/react-compose-refs@1.1.2':
     resolution: {integrity: sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==}
@@ -3150,10 +3150,10 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-sQv03Zr03IonWfMEC7l6N6FgJZUQvf1KGsCgRLVlZNSoDgFu9WzG06Jxtw6wGbhcjxtetghHRibXLLhoVksz1g==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.46.25
+    resolution: {integrity: sha512-DYOWrGoEivHL/UbgmroKR6B+cEUiKjLjTtua1Pu0tBWmGU3FM+98cXYQTLwcgMP4Z5P3mX/eObpQqZQJIj6dTw==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.46.32
     peerDependencies:
-      '@posthog/react-native-plugin': '>= 2.0.0'
+      '@posthog/react-native-plugin': '>= 2.0.1'
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
       expo-application: '>= 4.0.0'
