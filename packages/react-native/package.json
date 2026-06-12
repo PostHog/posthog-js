@@ -71,6 +71,7 @@
     "jest-expo": "catalog:",
     "metro": "0.83.1",
     "@expo/metro-config": "~0.20.0",
+    "@posthog/react-native-plugin": "workspace:*",
     "posthog-react-native-session-replay": "^1.6.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
@@ -90,6 +91,7 @@
     "expo-device": ">= 4.0.0",
     "expo-file-system": ">= 13.0.0",
     "expo-localization": ">= 11.0.0",
+    "@posthog/react-native-plugin": ">= 2.0.1",
     "posthog-react-native-session-replay": ">= 1.6.0",
     "react-native-device-info": ">= 10.0.0",
     "react-native-localize": ">= 3.0.0",
@@ -123,6 +125,9 @@
       "optional": true
     },
     "react-native-localize": {
+      "optional": true
+    },
+    "@posthog/react-native-plugin": {
       "optional": true
     },
     "posthog-react-native-session-replay": {
