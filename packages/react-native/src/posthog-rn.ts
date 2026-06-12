@@ -1906,7 +1906,7 @@ export class PostHog extends PostHogCore {
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
     enableSessionReplay: boolean = this._isEnableSessionReplay()
   ): Promise<boolean> {
-    const enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+    let enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
 
     if (!enableSessionReplay && !enableNativeErrorTracking) {
       return true
@@ -2078,6 +2078,8 @@ export class PostHog extends PostHogCore {
           this._logger.warn(
             'Native error tracking is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
           )
+          // The legacy plugin can't do native crash capture, so don't mark it initialized below.
+          enableNativeErrorTracking = false
         }
         if (!enableSessionReplay) {
           return false

@@ -37,31 +37,57 @@ const withAndroidPlugin = (config: any) => {
   })
 }
 
-// The plugin is published to Maven Central, not the Gradle Plugin Portal, so we use the
-// legacy buildscript classpath + apply route for broad RN/Expo compatibility. Idempotent.
-export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: string): string {
+// Index of the `}` matching the `{` at openBraceIndex, or -1 if unbalanced. Manual scan
+// (not regex) to avoid ReDoS; counts all braces, fine for the generated gradle we target.
+function matchingBraceIndex(s: string, openBraceIndex: number): number {
+  let depth = 0
+  for (let i = openBraceIndex; i < s.length; i++) {
+    if (s[i] === '{') {
+      depth++
+    } else if (s[i] === '}') {
+      depth--
+      if (depth === 0) {
+        return i
+      }
+    }
+  }
+  return -1
+}
+
+// Published to Maven Central (not the Gradle Plugin Portal), so we use the legacy buildscript
+// classpath + apply route. Idempotent. `classpathPresent` tells the caller to only `apply
+// plugin` when the classpath is in the file, else the build can't resolve it.
+export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: string): {
+  contents: string
+  classpathPresent: boolean
+} {
   if (projectBuildGradle.includes('posthog-android-gradle-plugin')) {
-    return projectBuildGradle
+    return { contents: projectBuildGradle, classpathPresent: true }
   }
 
   const classpathLine = `        classpath("com.posthog:posthog-android-gradle-plugin:${POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION}")`
 
-  // Locate the first `dependencies {` inside the `buildscript {` block. Two simple
-  // anchored matches instead of a single combined regex to avoid backtracking (ReDoS).
-  const buildscriptIndex = projectBuildGradle.search(/buildscript\s*\{/)
-  const dependenciesMatch =
-    buildscriptIndex === -1 ? null : /dependencies\s*\{/.exec(projectBuildGradle.slice(buildscriptIndex))
+  // First `dependencies {` inside the `buildscript {}` block. Bounding to the buildscript body
+  // avoids a backtracking regex (ReDoS) and mis-placing into a later block (e.g. allprojects).
+  const buildscriptMatch = /buildscript\s*\{/.exec(projectBuildGradle)
+  const buildscriptOpenBrace = buildscriptMatch ? buildscriptMatch.index + buildscriptMatch[0].length - 1 : -1
+  const buildscriptEnd = buildscriptOpenBrace === -1 ? -1 : matchingBraceIndex(projectBuildGradle, buildscriptOpenBrace)
+  const buildscriptBody = buildscriptEnd === -1 ? '' : projectBuildGradle.slice(buildscriptOpenBrace, buildscriptEnd)
+  const dependenciesMatch = buildscriptBody ? /dependencies\s*\{/.exec(buildscriptBody) : null
 
   if (!dependenciesMatch) {
     console.warn(
       'PostHog: Could not find a buildscript dependencies block in the project build.gradle; ' +
         'skipping the com.posthog.android classpath. Native symbols will not be uploaded.'
     )
-    return projectBuildGradle
+    return { contents: projectBuildGradle, classpathPresent: false }
   }
 
-  const insertAt = buildscriptIndex + dependenciesMatch.index + dependenciesMatch[0].length
-  return `${projectBuildGradle.slice(0, insertAt)}\n${classpathLine}${projectBuildGradle.slice(insertAt)}`
+  const insertAt = buildscriptOpenBrace + dependenciesMatch.index + dependenciesMatch[0].length
+  return {
+    contents: `${projectBuildGradle.slice(0, insertAt)}\n${classpathLine}${projectBuildGradle.slice(insertAt)}`,
+    classpathPresent: true,
+  }
 }
 
 // Applies the com.posthog.android plugin in the app module. Idempotent.
@@ -89,18 +115,28 @@ export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string 
 }
 
 const withAndroidNativeSymbolsPlugin = (config: any) => {
+  // Couple the classpath and `apply plugin`: applying without the classpath breaks the build.
+  // Expo compiles projectBuildGradle before appBuildGradle, so this flag is set before it's read.
+  let classpathPresent = false
+
   config = withProjectBuildGradle(config, (config: any) => {
     if (config.modResults.language !== 'groovy') {
       console.warn('Cannot configure the PostHog Android Gradle plugin because the project build.gradle is not groovy')
       return config
     }
-    config.modResults.contents = addPostHogAndroidGradlePluginClasspath(config.modResults.contents)
+    const result = addPostHogAndroidGradlePluginClasspath(config.modResults.contents)
+    config.modResults.contents = result.contents
+    classpathPresent = result.classpathPresent
     return config
   })
 
   return withAppBuildGradle(config, (config: any) => {
     if (config.modResults.language !== 'groovy') {
       console.warn('Cannot configure the PostHog Android Gradle plugin because the app build.gradle is not groovy')
+      return config
+    }
+    if (!classpathPresent) {
+      // No classpath (kts, or no buildscript dependencies block) → applying would break the build.
       return config
     }
     config.modResults.contents = applyPostHogAndroidGradlePlugin(config.modResults.contents)

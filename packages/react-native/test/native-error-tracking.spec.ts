@@ -98,6 +98,89 @@ describe('native error tracking', () => {
     await posthog.shutdown()
   })
 
+  it('with the legacy plugin (no setup), starts replay via start() and does not report native crash capture as started', async () => {
+    jest.resetModules()
+    const legacyPlugin = {
+      start: jest.fn(() => Promise.resolve()),
+      isEnabled: jest.fn(() => Promise.resolve(false)),
+      identify: jest.fn(() => Promise.resolve()),
+      startSession: jest.fn(() => Promise.resolve()),
+      endSession: jest.fn(() => Promise.resolve()),
+      startRecording: jest.fn(() => Promise.resolve()),
+      stopRecording: jest.fn(() => Promise.resolve()),
+      // intentionally no setup() — emulates posthog-react-native-session-replay
+    }
+    jest.doMock('../src/optional/OptionalPlugin', () => ({ OptionalReactNativePlugin: legacyPlugin }))
+    // Logger only emits under debug; spy so we can assert what was/wasn't logged.
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { PostHog } = await import('../src/posthog-rn')
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      debug: true,
+      enableSessionReplay: true,
+      errorTracking: { autocapture: { nativeCrashes: true } },
+    })
+
+    await posthog.ready()
+
+    await waitForExpect(100, () => {
+      expect(legacyPlugin.start).toHaveBeenCalledTimes(1)
+    })
+
+    // nativeCrashes was requested but the legacy plugin can't do it: we must warn AND must
+    // not claim it started.
+    expect(warnSpy.mock.calls.flat().join(' ')).toContain('Native error tracking is not available')
+    expect(logSpy.mock.calls.flat().join(' ')).not.toContain('Native error tracking started')
+
+    warnSpy.mockRestore()
+    logSpy.mockRestore()
+    await posthog.shutdown()
+  })
+
+  it('routes to error-tracking-only setup() when session replay is gated off by a linked flag', async () => {
+    jest.resetModules()
+    jest.doMock('../src/optional/OptionalPlugin', () => ({ OptionalReactNativePlugin: mockPlugin }))
+
+    // Seed the cached session-replay config with a linkedFlag that resolves off, so
+    // recordingActive becomes false while native error tracking stays enabled.
+    const seeded = JSON.stringify({
+      content: {
+        session_replay: { linkedFlag: 'rec-flag' },
+        feature_flags: { 'rec-flag': false },
+      },
+    })
+    const customStorage = {
+      getItem: (_key: string) => seeded,
+      setItem: (_key: string, _value: string) => {},
+    }
+
+    const { PostHog } = await import('../src/posthog-rn')
+    const posthog = new PostHog('test-token', {
+      persistence: 'file',
+      customStorage: customStorage as any,
+      flushInterval: 0,
+      enableSessionReplay: true,
+      errorTracking: { autocapture: { nativeCrashes: true } },
+    })
+
+    await posthog.ready()
+
+    await waitForExpect(100, () => {
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    })
+
+    // Replay is gated off, but native crash capture still initializes — without recording.
+    const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
+    expect(pluginConfig.sessionReplay.enabled).toBe(false)
+    expect(pluginConfig.errorTracking.nativeAutocapture).toBe(true)
+    expect(mockPlugin.startRecording).not.toHaveBeenCalled()
+
+    await posthog.shutdown()
+  })
+
   it('passes both session replay and native error tracking config when both are enabled', async () => {
     const { PostHog } = await import('../src/posthog-rn')
     const posthog = new PostHog('test-token', {

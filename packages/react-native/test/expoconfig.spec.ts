@@ -262,21 +262,41 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
   ].join('\n')
 
   it('adds the plugin classpath inside the buildscript dependencies block', () => {
-    const result = addPostHogAndroidGradlePluginClasspath(projectBuildGradle)
-    expect(result).toContain('classpath("com.posthog:posthog-android-gradle-plugin:')
+    const { contents, classpathPresent } = addPostHogAndroidGradlePluginClasspath(projectBuildGradle)
+    expect(classpathPresent).toBe(true)
+    expect(contents).toContain('classpath("com.posthog:posthog-android-gradle-plugin:')
     // inserted before the buildscript closing brace
-    expect(result.indexOf('posthog-android-gradle-plugin')).toBeLessThan(result.lastIndexOf('\n}'))
+    expect(contents.indexOf('posthog-android-gradle-plugin')).toBeLessThan(contents.lastIndexOf('\n}'))
   })
 
-  it('is idempotent', () => {
+  it('is idempotent and reports the classpath as present', () => {
     const once = addPostHogAndroidGradlePluginClasspath(projectBuildGradle)
-    const twice = addPostHogAndroidGradlePluginClasspath(once)
-    expect(twice).toBe(once)
+    const twice = addPostHogAndroidGradlePluginClasspath(once.contents)
+    expect(twice.contents).toBe(once.contents)
+    expect(twice.classpathPresent).toBe(true)
   })
 
-  it('leaves contents unchanged when there is no buildscript dependencies block', () => {
+  it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
     const contents = 'plugins {\n  id "com.android.application"\n}'
-    expect(addPostHogAndroidGradlePluginClasspath(contents)).toBe(contents)
+    const result = addPostHogAndroidGradlePluginClasspath(contents)
+    expect(result.contents).toBe(contents)
+    expect(result.classpathPresent).toBe(false)
+  })
+
+  it('does not place the classpath in a later block when buildscript has no dependencies block', () => {
+    const contents = [
+      'buildscript {',
+      '    repositories { google() }',
+      '}',
+      'allprojects {',
+      '    dependencies {',
+      '    }',
+      '}',
+    ].join('\n')
+    const result = addPostHogAndroidGradlePluginClasspath(contents)
+    // The only dependencies block is in allprojects, outside buildscript — must not be used.
+    expect(result.classpathPresent).toBe(false)
+    expect(result.contents).toBe(contents)
   })
 })
 
