@@ -76,6 +76,7 @@ export class ExceptionObserver {
         if (assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
             // already loaded
             cb()
+            return
         }
 
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
