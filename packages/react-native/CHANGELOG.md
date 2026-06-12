@@ -1,5 +1,13 @@
 # posthog-react-native
 
+## 4.47.0
+
+### Minor Changes
+
+- [#3677](https://github.com/PostHog/posthog-js/pull/3677) [`b061628`](https://github.com/PostHog/posthog-js/commit/b06162885401658a8d5a56f1b91497d0d57c5864) Thanks [@ioannisj](https://github.com/ioannisj)! - Add opt-in native iOS and Android crash capture through the optional native plugin:
+  - Runtime: `errorTracking.autocapture.nativeCrashes` enables native crash autocapture.
+  - Build tooling: the Expo config plugin option `uploadNativeSymbols` wires native debug-symbol upload so crashes are symbolicated — iOS dSYMs via posthog-ios's `upload-symbols.sh`, and Android ProGuard/R8 mappings via the `com.posthog.android` Gradle plugin. Pass `uploadNativeSymbols: { includeSource: true }` to also upload native source for crash context (iOS only). (2026-06-12)
+
 ## 4.46.32
 
 ### Patch Changes
