@@ -1016,6 +1016,29 @@ describe('PostHog React Native', () => {
         expect(cachedProps === undefined || Object.keys(cachedProps).length === 0).toBe(true)
       })
 
+      it('keeps project-level remote config across reset() but clears user-specific survey state', () => {
+        // Project-level config (not user data) — should survive an identity change so session replay
+        // re-arms and surveys stay available without an app restart.
+        posthog.setPersistedProperty(PostHogPersistedProperty.RemoteConfig, { capturePerformance: true } as any)
+        posthog.setPersistedProperty(PostHogPersistedProperty.SessionReplay, { linkedFlag: 'replay-flag' } as any)
+        posthog.setPersistedProperty(PostHogPersistedProperty.Surveys, [{ id: 'survey-1' }] as any)
+        // User-specific survey state — should be cleared so the new user starts fresh.
+        posthog.setPersistedProperty(PostHogPersistedProperty.SurveysSeen, { 'survey-1': true } as any)
+        posthog.setPersistedProperty(PostHogPersistedProperty.SurveyLastSeenDate, '2026-01-01' as any)
+
+        posthog.reset()
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)).toEqual({
+          capturePerformance: true,
+        })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplay)).toEqual({
+          linkedFlag: 'replay-flag',
+        })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Surveys)).toEqual([{ id: 'survey-1' }])
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveysSeen)).toBeFalsy()
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveyLastSeenDate)).toBeFalsy()
+      })
+
       it('should cache properties from $set when provided', async () => {
         posthog.identify('user-123', {
           $set: { email: 'test@example.com', plan: 'premium' },

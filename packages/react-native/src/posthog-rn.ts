@@ -189,6 +189,8 @@ export class PostHog extends PostHogCore {
   private _enableSessionReplay?: boolean
   private _sessionReplayNativeInitialized: boolean = false
   private _nativeErrorTrackingInitialized: boolean = false
+  // Last applied recording state; the native bridge is only crossed on a change.
+  private _sessionReplayRecordingActive?: boolean
   private _sessionReplayOptions?: PostHogOptions
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
@@ -472,6 +474,14 @@ export class PostHog extends PostHogCore {
 
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
 
+      // Re-evaluate session replay on every flags load/reload so the linked flag
+      // gates recording without an app restart.
+      if (options?.enableSessionReplay) {
+        this.onFeatureFlags(() => {
+          void this._evaluateAndStartSessionReplay()
+        })
+      }
+
       if (options?.addTracingHeaders && options.addTracingHeaders.length > 0) {
         patchFetchForTracingHeaders(this, options.addTracingHeaders)
       }
@@ -666,6 +676,12 @@ export class PostHog extends PostHogCore {
    * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of
    * what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.
    *
+   * The project-level remote config (`PostHogPersistedProperty.RemoteConfig`,
+   * `PostHogPersistedProperty.SessionReplay`, `PostHogPersistedProperty.Surveys`) is also
+   * always preserved — it is not user data — so session replay and surveys keep working
+   * after an identity change. The user-specific survey state (`SurveysSeen`,
+   * `SurveyLastSeenDate`) is still cleared.
+   *
    * {@label Identification}
    *
    * @example
@@ -701,7 +717,15 @@ export class PostHog extends PostHogCore {
       PostHogPersistedProperty.DeviceId,
     ]
 
-    super.reset(effectivePropertiesToKeep)
+    // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
+    // always preserve them so replay can re-arm against the new user's flags. The
+    // user-specific survey state (SurveysSeen, SurveyLastSeenDate) is still cleared.
+    super.reset([
+      PostHogPersistedProperty.RemoteConfig,
+      PostHogPersistedProperty.SessionReplay,
+      PostHogPersistedProperty.Surveys,
+      ...effectivePropertiesToKeep,
+    ])
 
     if (this._setDefaultPersonProperties) {
       // Reset reloads flags asyncrhonously, but doesn't wait for it.
@@ -2119,12 +2143,38 @@ export class PostHog extends PostHogCore {
     this._enableSessionReplay = options?.enableSessionReplay
     this._sessionReplayOptions = options
 
+    await this._evaluateAndStartSessionReplay(cachedRemoteConfig)
+  }
+
+  /**
+   * Decides whether session replay should be recording (replay enabled AND the linked
+   * flag, if any, on for the current user) and arms or pauses the native recorder to match.
+   *
+   * Runs at startup and on every feature flags load/reload (identify(), reset(),
+   * reloadFeatureFlags()), so recording starts, resumes, or pauses on identity changes
+   * without an app restart. `_sessionReplayRecordingActive` dedups repeated answers, and
+   * the init guards prevent double-starts. When replay is off, the native plugin is still
+   * initialized for native error tracking (both share one native instance).
+   *
+   * Pausing requires a real "flag off": core keeps the previous flag values across
+   * quota-limited/failed reloads, so a transient error never pauses a recording. Right
+   * after reset() the flags are genuinely unknown and pausing is the intended outcome.
+   */
+  private async _evaluateAndStartSessionReplay(
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
+  ): Promise<void> {
+    const options = this._sessionReplayOptions
     const enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+    // On the re-arm path (flags reloaded after identify/reset) cachedRemoteConfig
+    // isn't passed in, so fall back to the persisted remote config for capture gating.
+    const remoteConfig =
+      cachedRemoteConfig ??
+      this.getPersistedProperty<Omit<PostHogRemoteConfig, 'surveys'>>(PostHogPersistedProperty.RemoteConfig)
 
     if (!this._isEnableSessionReplay()) {
       this._logger.info('Session replay is not enabled.')
       if (enableNativeErrorTracking) {
-        await this.initializeNativePlugin(options, cachedRemoteConfig, false)
+        await this.initializeNativePlugin(options, remoteConfig, false)
       }
       return
     }
@@ -2174,11 +2224,31 @@ export class PostHog extends PostHogCore {
     }
 
     if (recordingActive) {
-      await this.initializeNativePlugin(options, cachedRemoteConfig, true)
+      if (this._sessionReplayRecordingActive === true) {
+        // Already recording — nothing to do.
+        return
+      }
+      this._sessionReplayRecordingActive = true
+
+      if (!this._sessionReplayNativeInitialized) {
+        await this.initializeNativePlugin(options, remoteConfig, true)
+      } else {
+        // Native recorder is initialized but was paused when the linked flag turned off; resume it.
+        await this.startSessionRecording(true)
+      }
     } else {
       this._logger.info('Session replay disabled.')
+
+      const wasRecording = this._sessionReplayRecordingActive === true
+      this._sessionReplayRecordingActive = false
+
+      if (wasRecording) {
+        // Linked flag turned off — pause the native recorder so a gated-off user isn't recorded.
+        await this.stopSessionRecording()
+      }
+
       if (enableNativeErrorTracking) {
-        await this.initializeNativePlugin(options, cachedRemoteConfig, false)
+        await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
   }
