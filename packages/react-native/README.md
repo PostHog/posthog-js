@@ -1,4 +1,4 @@
-# PostHog React Native example
+# PostHog React Native package
 
 Please see the main [PostHog docs](https://posthog.com/docs).
 

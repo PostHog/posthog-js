@@ -1,4 +1,4 @@
-# PostHog Node.js example
+# PostHog Node.js package
 
 Please see the main [PostHog docs](https://posthog.com/docs).
 

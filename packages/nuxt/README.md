@@ -1,4 +1,4 @@
-# PostHog Nuxt example
+# PostHog Nuxt package
 
 Please see the main [PostHog docs](https://posthog.com/docs).
 

@@ -8,21 +8,26 @@
   <img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/posthog/posthog-js"/>
 </p>
 
-# PostHog JavaScript SDKs# PostHog JavaScript SDKs
+# PostHog JS
 
-Please see the main [PostHog docs](https://posthog.com/docs).
+This is a monorepo containing multiple packages to integrate with PostHog using JavaScript!
 
-SDK usage examples and code snippets live in the official documentation so they stay up to date.
+## Packages
 
-## Documentation
-
-- [JavaScript library docs](https://posthog.com/docs/libraries/js)
-- [Node.js library docs](https://posthog.com/docs/libraries/node)
-- [React library docs](https://posthog.com/docs/libraries/react)
-- [Next.js library docs](https://posthog.com/docs/libraries/next-js)
-- [React Native library docs](https://posthog.com/docs/libraries/react-native)
-- [AI observability docs](https://posthog.com/docs/ai-observability)
+- [posthog-js](./packages/browser/README.md)
+- [posthog-js-lite](./packages/web/README.md)
+- [posthog-node](./packages/node/README.md)
+- [posthog-react-native](./packages/react-native/README.md)
+- [@posthog/react](./packages/react/README.md)
+- [@posthog/ai](./packages/ai/README.md)
+- [@posthog/convex](./packages/convex/README.md)
+- [@posthog/nextjs-config](./packages/nextjs-config/README.md)
+- [@posthog/nuxt](./packages/nuxt/README.md)
+- [@posthog/plugin-utils](./packages/plugin-utils/README.md)
+- [@posthog/rollup-plugin](./packages/rollup-plugin/README.md)
+- [@posthog/types](./packages/types/README.md)
+- [@posthog/webpack-plugin](./packages/webpack-plugin/README.md)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup and test instructions.
+See [CONTRIBUTING.md](./CONTRIBUTING.md)

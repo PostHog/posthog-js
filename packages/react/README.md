@@ -1,4 +1,4 @@
-# PostHog React example
+# PostHog React package
 
 Please see the main [PostHog docs](https://posthog.com/docs).
 
