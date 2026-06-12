@@ -303,6 +303,20 @@ jobs:
       - name: Lint playground files
         run: pnpm lint:playground
 
+  package:
+    name: Package tarballs
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Build package tarballs
+        run: pnpm package
+
   write-mangled-property-names:
     name: Write mangled property names
     runs-on: ubuntu-22.04
