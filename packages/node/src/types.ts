@@ -297,6 +297,10 @@ export type PostHogFeatureFlag = {
       }[]
     }
     payloads?: Record<string, string>
+    // Flag-level toggle: when true, condition evaluation stops and returns false as soon as a
+    // group's property filters match but the rollout percentage excludes the user, rather than
+    // continuing to evaluate later groups.
+    early_exit?: boolean
   }
   deleted: boolean
   active: boolean
