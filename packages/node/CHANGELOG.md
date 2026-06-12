@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.37.0
+
+### Minor Changes
+
+- [#3705](https://github.com/PostHog/posthog-js/pull/3705) [`d6fc0a5`](https://github.com/PostHog/posthog-js/commit/d6fc0a50fa2c2650869e3444a030533753ff0b4f) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - feat(feature-flags): support the `early_exit` condition option in local evaluation. When a flag enables early exit, evaluation now stops and returns `false` as soon as a condition group's property filters match but the rollout percentage excludes the user, instead of falling through to later groups — matching the server-side evaluation behavior.
+  (2026-06-12)
+
 ## 5.36.17
 
 ### Patch Changes
