@@ -55,7 +55,7 @@
         "cross-env": "^7.0.3",
         "jest": "catalog:",
         "jest-environment-jsdom": "catalog:",
-        "posthog-js": "workspace:*",
+        "posthog-js": "workspace:^",
         "react": "catalog:",
         "react-dom": "catalog:",
         "react-test-renderer": "catalog:",

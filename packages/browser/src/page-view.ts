@@ -53,7 +53,13 @@ export class PageViewManager {
         // - noSessionId: after posthog.reset() or forced idle reset
         // - activityTimeout: 30 min idle (default, configurable up to 10 hours)
         // - sessionPastMaximumLength: 24 hour max session
-        if (changeReason.noSessionId || changeReason.activityTimeout || changeReason.sessionPastMaximumLength) {
+        // - crossTabAdoption: this tab adopted a rotation another tab already wrote
+        if (
+            changeReason.noSessionId ||
+            changeReason.activityTimeout ||
+            changeReason.sessionPastMaximumLength ||
+            changeReason.crossTabAdoption
+        ) {
             logger.info('[PageViewManager] Session rotated, clearing pageview state', {
                 sessionId,
                 changeReason,

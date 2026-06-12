@@ -53,6 +53,7 @@ import {
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
+    SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
@@ -70,6 +71,7 @@ import {
 } from './constants'
 import { transformEnabledFeatureFlagsToEventProperties } from './persistence-key-transforms'
 import type { Properties, Property } from './types'
+import { isNull } from '@posthog/core'
 
 /**
  * - `event`: include the stored key/value on captured events as-is.
@@ -94,6 +96,15 @@ export const PERSISTENCE_STORAGE_GROUPS: readonly PersistenceStorageGroup[] = ['
 interface PersistenceKeyPolicyEntry {
     exposure: PersistenceKeyExposure
     storageGroup?: PersistenceStorageGroup
+    /**
+     * Per-request metadata that changes on every remote load even when the
+     * meaningful content is unchanged. A volatile key never marks its storage
+     * group dirty and is excluded from the group fingerprint, so a
+     * volatile-only change does not rewrite — and cross-tab re-broadcast — a
+     * large group entry. The freshest value rides along on the next content
+     * write; the on-disk copy may lag in-memory until then.
+     */
+    volatile?: boolean
     shouldSkipFromEventProperties?: (value: Property, shouldSkip: () => boolean) => boolean
     transformToEventProperties?: (value: Property) => Properties
 }
@@ -116,6 +127,10 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
     [SESSION_ID]: { exposure: 'hidden' },
     [SESSION_RECORDING_IS_SAMPLED]: { exposure: 'event' },
+    [SESSION_RECORDING_SAMPLE_RATE]: {
+        exposure: 'event',
+        shouldSkipFromEventProperties: (value) => isNull(value),
+    },
     [SESSION_RECORDING_PAST_MINIMUM_DURATION]: { exposure: 'event' },
     [SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
     [SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
@@ -130,13 +145,13 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [PERSISTENCE_EARLY_ACCESS_FEATURES]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_DETAILS]: { exposure: 'hidden', storageGroup: 'flags' },
     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { exposure: 'event', storageGroup: 'flags' },
-    [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'event', storageGroup: 'flags' },
+    [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'event', storageGroup: 'flags', volatile: true },
     [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { exposure: 'event' },
     [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden' },
     [STORED_PERSON_PROPERTIES_KEY]: { exposure: 'hidden' },
     [STORED_GROUP_PROPERTIES_KEY]: { exposure: 'hidden' },
     [SURVEYS]: { exposure: 'hidden', storageGroup: 'surveys' },
-    [SURVEYS_LOADED_AT]: { exposure: 'hidden', storageGroup: 'surveys' },
+    [SURVEYS_LOADED_AT]: { exposure: 'hidden', storageGroup: 'surveys', volatile: true },
     [SURVEYS_ACTIVATED]: { exposure: 'event' },
     [PRODUCT_TOURS]: { exposure: 'hidden' },
     [PRODUCT_TOURS_ACTIVATED]: { exposure: 'hidden' },
@@ -147,7 +162,7 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [FLAG_CALL_REPORTED]: { exposure: 'hidden' },
     [FLAG_CALL_REPORTED_SESSION_ID]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_ERRORS]: { exposure: 'hidden' },
-    [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: { exposure: 'hidden', storageGroup: 'flags' },
+    [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: { exposure: 'hidden', storageGroup: 'flags', volatile: true },
     [USER_STATE]: { exposure: 'hidden' },
     [CLIENT_SESSION_PROPS]: { exposure: 'hidden' },
     [CAPTURE_RATE_LIMIT]: { exposure: 'hidden' },

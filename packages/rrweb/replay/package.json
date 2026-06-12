@@ -1,6 +1,6 @@
 {
   "name": "@posthog/rrweb-replay",
-  "version": "0.0.28",
+  "version": "0.0.30",
   "scripts": {
     "dev": "vite build --watch",
     "build": "pnpm turbo run prepublish",

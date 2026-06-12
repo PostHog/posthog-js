@@ -961,9 +961,8 @@ describe('PostHogLogs', () => {
       )
 
     // Cases that share a "captureLog → assert queue body" shape. Bespoke
-    // assertions (logger expectations, throw-doesn't-crash, post-chain
-    // continuation after throw) live in their own `it` blocks below — those
-    // were warping the table when forced into it.
+    // assertions (logger expectations, throw-drops-the-record) live in their
+    // own `it` blocks below — those were warping the table when forced into it.
     type Case = {
       name: string
       beforeSend: PostHogLogsConfig['beforeSend']
@@ -1030,10 +1029,7 @@ describe('PostHogLogs', () => {
       expect(logger.info).toHaveBeenCalledWith('Log was rejected in beforeSend function')
     })
 
-    it('never crashes the caller when a fn throws — the chain continues with the prior result', () => {
-      // Bespoke: needs to verify (a) no throw escapes captureLog, (b) the
-      // chain continues with the previous result so a buggy filter degrades
-      // to a no-op, and (c) the failure is logged. Doesn't fit the table.
+    it('never crashes the caller when a fn throws — drops the record (fail closed) and logs', () => {
       const thrower = jest.fn(() => {
         throw new Error('bad filter')
       })
@@ -1047,7 +1043,8 @@ describe('PostHogLogs', () => {
       )
 
       expect(() => logs.captureLog({ body: 'hi' })).not.toThrow()
-      expect(readQueue(mockInstance)[0].record.body.stringValue).toBe('hi!')
+      expect(readQueue(mockInstance)).toHaveLength(0)
+      expect(after).not.toHaveBeenCalled()
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error in beforeSend function for log:'),
         expect.any(Error)

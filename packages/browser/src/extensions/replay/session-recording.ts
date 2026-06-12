@@ -2,6 +2,7 @@ import {
     COOKIELESS_ALWAYS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
@@ -159,6 +160,7 @@ export class SessionRecording implements Extension {
 
     private _resetSampling() {
         this._persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
     }
 
     private _validateSampleRate(rate: unknown, source: string): number | null {
