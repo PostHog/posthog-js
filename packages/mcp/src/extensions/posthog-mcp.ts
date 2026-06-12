@@ -51,6 +51,7 @@ export class PostHogMCP extends PostHog {
     const event = baseEvent(MCPAnalyticsEventType.mcpToolsCall, data)
     event.resourceName = data.toolName
     event.toolDescription = data.toolDescription
+    event.toolCategory = data.category
     event.parameters = data.parameters
     event.response = data.response
     event.duration = data.durationMs
