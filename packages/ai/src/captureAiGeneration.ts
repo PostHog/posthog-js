@@ -5,6 +5,7 @@ import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { stringifyError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, sanitizeValues, withPrivacyMode } from './utils'
+import { warnIfPostHogAiGateway } from './gatewayWarning'
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -95,6 +96,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
   if (!client.capture) {
     return
   }
+
+  warnIfPostHogAiGateway(options.baseURL)
 
   const traceId = options.traceId ?? uuidv4()
   const eventType = options.eventType ?? AIEvent.Generation

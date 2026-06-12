@@ -7,7 +7,7 @@ import { isUndefined } from '@posthog/core'
 import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
-import { PostHog } from '../posthog-core'
+import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
@@ -59,6 +59,23 @@ describe('posthog core', () => {
 
     afterEach(() => {
         jest.useRealTimers()
+    })
+
+    describe('configRenames()', () => {
+        it.each([
+            [
+                'maps deprecated preview beacon option to the stable config name',
+                { __preview_disable_beacon: true },
+                { disable_beacon: true },
+            ],
+            [
+                'prioritizes stable beacon option name over deprecated preview name',
+                { disable_beacon: false, __preview_disable_beacon: true },
+                { disable_beacon: false },
+            ],
+        ] as [string, Partial<PostHogConfig>, Partial<PostHogConfig>][])('%s', (_description, input, expected) => {
+            expect(configRenames(input)).toMatchObject(expected)
+        })
     })
 
     describe('capture()', () => {
@@ -1220,6 +1237,39 @@ describe('posthog core', () => {
 
             expect(mockLogger.uninitializedWarning).toHaveBeenCalledWith('posthog.capture')
         })
+    })
+
+    describe('person properties for flags', () => {
+        let posthog: PostHog
+
+        beforeEach(() => {
+            posthog = defaultPostHog().init(
+                'testtoken',
+                {
+                    persistence: 'memory',
+                },
+                uuidv7()
+            )!
+            posthog.persistence!.clear()
+            posthog.reloadFeatureFlags = jest.fn()
+        })
+
+        it.each([
+            [undefined, 1],
+            [false, 0],
+        ] as const)(
+            'resets person properties for flags (reloadFeatureFlags=%s)',
+            (reloadFeatureFlags, expectedCalls) => {
+                posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
+
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual({ plan: 'pro' })
+
+                posthog.resetPersonPropertiesForFlags(reloadFeatureFlags)
+
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
+                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
+            }
+        )
     })
 
     describe('group()', () => {

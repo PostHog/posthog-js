@@ -437,9 +437,11 @@ export class Replayer {
         this.rebuildFullSnapshot(
           firstFullsnapshot as fullSnapshotEvent & { timestamp: number },
         );
-        this.iframe.contentWindow?.scrollTo(
-          (firstFullsnapshot as fullSnapshotEvent).data.initialOffset,
-        );
+        // 'instant' so the offset is not animated when the page sets scroll-behavior: smooth
+        this.iframe.contentWindow?.scrollTo({
+          ...(firstFullsnapshot as fullSnapshotEvent).data.initialOffset,
+          behavior: 'instant',
+        });
       }, 1);
     }
     if (this.service.state.context.events.find(indicatesTouchDevice)) {
@@ -792,7 +794,11 @@ export class Replayer {
           this.mediaManager.reset();
           this.styleMirror.reset();
           this.rebuildFullSnapshot(event, isSync);
-          this.iframe.contentWindow?.scrollTo(event.data.initialOffset);
+          // 'instant' so the offset is not animated when the page sets scroll-behavior: smooth
+          this.iframe.contentWindow?.scrollTo({
+            ...event.data.initialOffset,
+            behavior: 'instant',
+          });
         };
         break;
       case EventType.IncrementalSnapshot:
@@ -1972,21 +1978,21 @@ export class Replayer {
       this.iframe.contentWindow?.scrollTo({
         top: d.y,
         left: d.x,
-        behavior: isSync ? 'auto' : 'smooth',
+        behavior: isSync ? 'instant' : 'smooth',
       });
     } else if (sn?.type === NodeType.Document) {
       // nest iframe content document
       (target as Document).defaultView?.scrollTo({
         top: d.y,
         left: d.x,
-        behavior: isSync ? 'auto' : 'smooth',
+        behavior: isSync ? 'instant' : 'smooth',
       });
     } else {
       try {
         (target as Element).scrollTo({
           top: d.y,
           left: d.x,
-          behavior: isSync ? 'auto' : 'smooth',
+          behavior: isSync ? 'instant' : 'smooth',
         });
       } catch (error) {
         /**

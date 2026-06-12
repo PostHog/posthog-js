@@ -1,5 +1,68 @@
 # @posthog/mcp
 
+## 0.2.0
+
+### Minor Changes
+
+- [#3781](https://github.com/PostHog/posthog-js/pull/3781) [`b732ecb`](https://github.com/PostHog/posthog-js/commit/b732ecb0ce83b656782b525eefbdfde42555d9c9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add `PostHogMCP`, a `posthog-node` client subclass with first-class MCP analytics for servers that have no `Server`/`McpServer` to wrap (e.g. custom hono/HTTP dispatchers). It extends `PostHog` — so `capture`, `identify`, `flush`, `shutdown`, and feature flags all work unchanged — and adds `captureToolCall` / `captureInitialize`, which build the canonical `$mcp_*` events and run them through the same sanitize → truncate → `$exception` fan-out pipeline as `instrument()` before handing them to the inherited `capture()` (so the client's own `beforeSend` applies). The caller passes `distinctId`/`sessionId`/`groups`/`properties` per call. `$session_id` is now omitted from events when no session is supplied (previously always set), so stateless captures don't bucket into a non-existent Session Replay session.
+  (2026-06-11)
+
+## 0.1.28
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.32.3
+  - posthog-node@5.36.17
+
+## 0.1.27
+
+### Patch Changes
+
+- Updated dependencies [[`25822ac`](https://github.com/PostHog/posthog-js/commit/25822acc0d16f9f1d6fbbd65da57b3e060c6c558)]:
+  - @posthog/core@1.32.2
+  - posthog-node@5.36.16
+
+## 0.1.26
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.32.1
+  - posthog-node@5.36.15
+
+## 0.1.25
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+  - @posthog/core@1.32.0
+  - posthog-node@5.36.14
+
+## 0.1.24
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.4
+  - posthog-node@5.36.13
+
+## 0.1.23
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.3
+  - posthog-node@5.36.12
+
+## 0.1.22
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.2
+  - posthog-node@5.36.11
+
 ## 0.1.21
 
 ### Patch Changes

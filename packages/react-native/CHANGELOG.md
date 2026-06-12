@@ -1,5 +1,61 @@
 # posthog-react-native
 
+## 4.46.32
+
+### Patch Changes
+
+- Updated dependencies [[`dbf2377`](https://github.com/PostHog/posthog-js/commit/dbf23777e1c14a811c67697684d56145518ebe16)]:
+  - @posthog/types@1.386.3
+  - @posthog/core@1.32.3
+
+## 4.46.31
+
+### Patch Changes
+
+- Updated dependencies [[`25822ac`](https://github.com/PostHog/posthog-js/commit/25822acc0d16f9f1d6fbbd65da57b3e060c6c558)]:
+  - @posthog/core@1.32.2
+  - @posthog/types@1.386.2
+
+## 4.46.30
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.386.1
+  - @posthog/core@1.32.1
+
+## 4.46.29
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+  - @posthog/core@1.32.0
+  - @posthog/types@1.386.0
+
+## 4.46.28
+
+### Patch Changes
+
+- Updated dependencies [[`c11794d`](https://github.com/PostHog/posthog-js/commit/c11794dd5fbb73d99bb88600ae487f8f08f625be), [`f601c49`](https://github.com/PostHog/posthog-js/commit/f601c496338ed0be8853f94160ee3edca542ac7d)]:
+  - @posthog/types@1.385.0
+  - @posthog/core@1.31.4
+
+## 4.46.27
+
+### Patch Changes
+
+- Updated dependencies [[`2d21ada`](https://github.com/PostHog/posthog-js/commit/2d21ada24479c0d4f561dd3b6f5922ce3f8e4afd)]:
+  - @posthog/types@1.384.3
+  - @posthog/core@1.31.3
+
+## 4.46.26
+
+### Patch Changes
+
+- Updated dependencies [[`d9462b3`](https://github.com/PostHog/posthog-js/commit/d9462b3567a0b7c9b755552c303814b6fcbe3a97)]:
+  - @posthog/types@1.384.2
+  - @posthog/core@1.31.2
+
 ## 4.46.25
 
 ### Patch Changes

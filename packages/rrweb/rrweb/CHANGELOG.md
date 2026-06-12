@@ -1,5 +1,19 @@
 # rrweb
 
+## 0.0.72
+
+### Patch Changes
+
+- [#3767](https://github.com/PostHog/posthog-js/pull/3767) [`fdc07f3`](https://github.com/PostHog/posthog-js/commit/fdc07f32f886602504d7c1132adfbcccdb4112ec) Thanks [@arnohillen](https://github.com/arnohillen)! - replay: jump scrolls instantly when seeking past pages that use `scroll-behavior: smooth`. During fast-forward the replayer applied scrolls with `behavior: 'auto'`, which inherits the page's CSS `scroll-behavior` — so on sites that set `scroll-behavior: smooth` (e.g. Silk bottom sheets/modals) a seeked scroll animated from 0 instead of jumping, leaving scroll-revealed content (the open sheet) out of view and showing only the backdrop until the animation caught up. Sync scrolls now use `behavior: 'instant'`, matching the method's stated intent that smooth scrolling be disabled while fast-forwarding. Full snapshot rebuilds apply their initial offset with `behavior: 'instant'` too, so the document-level scroll doesn't animate either.
+  (2026-06-11)
+
+## 0.0.71
+
+### Patch Changes
+
+- [#3742](https://github.com/PostHog/posthog-js/pull/3742) [`23b2af1`](https://github.com/PostHog/posthog-js/commit/23b2af19031527c8a9934535915db5d15b6abd94) Thanks [@arnohillen](https://github.com/arnohillen)! - record: capture resting scroll offset on `scrollend` when a reveal scroll clamps to 0 before its target is scrollable (e.g. Silk sheets). Deduped against `scroll` so normal gestures don't double event volume.
+  (2026-06-10)
+
 ## 0.0.70
 
 ### Patch Changes

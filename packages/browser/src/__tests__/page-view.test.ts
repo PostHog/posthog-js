@@ -245,6 +245,20 @@ describe('PageView ID manager', () => {
             expect(properties.$pageview_id).toBe('pv-2')
         })
 
+        it('should clear state when this tab adopts a sibling tab session rotation', () => {
+            pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
+
+            sessionIdCallback('adopted-session-id', 'window-id', {
+                noSessionId: false,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: true,
+            })
+
+            expect(pageViewManager._currentPageview).toBeUndefined()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+        })
+
         it('should cleanup subscription on destroy', () => {
             const unsubscribe = jest.fn()
             const mockOnSessionId = jest.fn(() => unsubscribe)

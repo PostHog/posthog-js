@@ -4,6 +4,7 @@ import { BatchSpanProcessor, type SpanProcessor, type ReadableSpan, type Span } 
 
 import { redactSpan } from './redact'
 import { isAISpan } from './spans'
+import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
 
@@ -108,6 +109,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
 
   onEnd(span: ReadableSpan): void {
     if (isAISpan(span)) {
+      warnIfPostHogAiGatewayOtelAttributes(span.attributes)
       this.inner.onEnd(redactSpan(span))
     }
   }

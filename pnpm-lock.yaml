@@ -195,7 +195,7 @@ importers:
   packages/ai:
     dependencies:
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       uuid:
         specifier: ^11.1.0
@@ -262,16 +262,16 @@ importers:
         specifier: ^6.25.0
         version: 6.25.0(ws@8.19.0)(zod@4.1.13)
       posthog-node:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../node
 
   packages/browser:
     dependencies:
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@posthog/types':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../types
       core-js:
         specifier: ^3.38.1
@@ -509,10 +509,10 @@ importers:
   packages/convex:
     dependencies:
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       posthog-node:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../node
     devDependencies:
       '@edge-runtime/vm':
@@ -549,7 +549,7 @@ importers:
   packages/core:
     dependencies:
       '@posthog/types':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../types
     devDependencies:
       '@posthog-tooling/tsconfig-base':
@@ -568,7 +568,7 @@ importers:
   packages/mcp:
     dependencies:
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@babel/preset-env':
@@ -596,7 +596,7 @@ importers:
         specifier: 'catalog:'
         version: 29.7.0(@types/node@20.19.9)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.9.3))
       posthog-node:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../node
       zod:
         specifier: ^3.25.0
@@ -605,16 +605,16 @@ importers:
   packages/next:
     dependencies:
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@posthog/react':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../react
       posthog-js:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../browser
       posthog-node:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../node
       server-only:
         specifier: ^0.0.1
@@ -669,10 +669,10 @@ importers:
         specifier: 'catalog:'
         version: 0.7.21
       '@posthog/plugin-utils':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-utils
       '@posthog/webpack-plugin':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../webpack-plugin
       semver:
         specifier: ^7.7.2
@@ -709,7 +709,7 @@ importers:
   packages/node:
     dependencies:
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@edge-runtime/jest-environment':
@@ -746,16 +746,16 @@ importers:
         specifier: 'catalog:'
         version: 0.7.21
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@posthog/plugin-utils':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-utils
       posthog-js:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../browser
       posthog-node:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../node
     devDependencies:
       '@nuxt/devtools':
@@ -847,7 +847,7 @@ importers:
         specifier: 'catalog:'
         version: 29.7.0
       posthog-js:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../browser
       react:
         specifier: 'catalog:'
@@ -874,10 +874,10 @@ importers:
   packages/react-native:
     dependencies:
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@posthog/types':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../types
     devDependencies:
       '@babel/cli':
@@ -1034,7 +1034,7 @@ importers:
         specifier: 'catalog:'
         version: 0.7.21
       '@posthog/plugin-utils':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-utils
     devDependencies:
       '@posthog-tooling/tsconfig-base':
@@ -1549,7 +1549,7 @@ importers:
   packages/web:
     dependencies:
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@babel/preset-env':
@@ -1580,10 +1580,10 @@ importers:
         specifier: 'catalog:'
         version: 0.7.21
       '@posthog/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@posthog/plugin-utils':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-utils
     devDependencies:
       '@posthog-tooling/tsconfig-base':

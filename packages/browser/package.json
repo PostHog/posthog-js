@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.384.1",
+    "version": "1.386.6",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "engineering@posthog.com",
@@ -58,8 +58,8 @@
         "rrweb-plugin-console-record/package.json"
     ],
     "dependencies": {
-        "@posthog/core": "workspace:*",
-        "@posthog/types": "workspace:*",
+        "@posthog/core": "workspace:^",
+        "@posthog/types": "workspace:^",
         "core-js": "^3.38.1",
         "dompurify": "^3.3.2",
         "fflate": "^0.4.8",

@@ -44,12 +44,12 @@ import {
     isNativeAsyncGzipError,
     isNumber,
     isObject,
-    isString,
     isUndefined,
 } from '@posthog/core'
 import {
     SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
@@ -80,6 +80,7 @@ import {
     V1RecordingStrategy,
     V2TriggerGroupStrategy,
     RecordingStrategyContext,
+    decodeSamplingDecision,
 } from './recording-strategies'
 
 const BASE_ENDPOINT = '/s/'
@@ -492,14 +493,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isSampled(): boolean | null {
         const currentValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        // we store the session id when sampled so that we can detect session id changes
-        // and `false` when not sampled
-        // legacy SDKs stored `true` when sampled, but that is not tied to a session id
-        // so we treat it as null (unknown) and will make a fresh decision
-        if (currentValue === true) {
-            return null
-        }
-        return currentValue === false ? false : isString(currentValue) ? currentValue === this.sessionId : null
+        // anything but this session's own tagged decision decodes to null, forcing a fresh decision
+        return decodeSamplingDecision(currentValue, this.sessionId)
     }
 
     private get _sampleRate(): number | null {
@@ -513,7 +508,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
-    private _samplingSessionListener: (() => void) | undefined = undefined
     private _forceIdleSessionIdListener: (() => void) | undefined = undefined
 
     constructor(private readonly _instance: PostHog) {
@@ -886,6 +880,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // Invalidate any in-flight async cleanup queued by a prior stop(). On a session-id
+        // rotation, _updateWindowAndSessionIds calls stop() then start() synchronously; if
+        // stop() took the _stopAfterCompressionQueueDrains path (non-empty compression queue),
+        // its async cleanup would later call _teardown() and silently tear down THIS new
+        // recorder once the drain promise resolves. Bumping the generation here causes that
+        // pending cleanup to bail at its generation check, and resetting the rest of the
+        // compression-stop state means a future stop() of this new recorder is not mistaken
+        // for the still-in-progress old one (which would make it a silent no-op).
+        // Guarded on the stop-in-progress flag because start() is also called re-entrantly
+        // on a live recorder (e.g. opt-in flows) where the queue holds the current session's
+        // events and must survive.
+        if (this._isStoppingAfterCompression) {
+            this._invalidateCompressionQueue()
+        }
+
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
@@ -1087,9 +1096,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         }
 
-        if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
-            this._strategy?.makeSamplingDecisions(sessionId)
-        }
+        // always re-decide for the new session — guarding on the persisted config here would skip
+        // V2 trigger groups and post-reset() sessions, leaving them undecided (= ACTIVE, unsampled)
+        this._strategy?.makeSamplingDecisions(sessionId)
     }
 
     private _teardown() {
@@ -1109,8 +1118,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._onSessionIdListener = undefined
         this._onSessionIdleResetForcedListener?.()
         this._onSessionIdleResetForcedListener = undefined
-        this._samplingSessionListener?.()
-        this._samplingSessionListener = undefined
         this._forceIdleSessionIdListener?.()
         this._forceIdleSessionIdListener = undefined
 
@@ -1118,8 +1125,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._stopRecordingProducers()
 
-        // Invalidate any in-flight async compression work so it does not capture events
-        // after stop()/discard() has cleared the buffer or after a future restart.
+        this._invalidateCompressionQueue()
+    }
+
+    // Invalidate any in-flight async compression work so it does not capture events
+    // after stop()/discard() has cleared the buffer or after a future restart.
+    private _invalidateCompressionQueue() {
         this._compressionQueueGeneration += 1
         this._pendingCompressionEvents = []
         this._queuedCompressionEvents = 0
@@ -1494,6 +1505,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._instance.persistence?.register({
             // short-circuits the `makeSamplingDecision` function in the session recording module
             [SESSION_RECORDING_IS_SAMPLED]: this.sessionId,
+            [SESSION_RECORDING_SAMPLE_RATE]: null,
         })
         this._tryTakeFullSnapshot()
         this._reportStarted('sampling_overridden')
@@ -1518,6 +1530,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
+
+        // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
+        // undecided session reads as ACTIVE and would leak a batch it then decides not to record
+        this._strategy?.ensureSamplingDecision(this.sessionId)
 
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
 

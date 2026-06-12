@@ -11,6 +11,7 @@ import { ToolCall } from '@langchain/core/messages/tool'
 import { BaseMessage } from '@langchain/core/messages'
 import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
+import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -460,6 +461,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     parentRunId?: string
   ): void {
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
+    warnIfPostHogAiGateway(run.baseUrl)
     const eventProperties: Record<string, any> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
