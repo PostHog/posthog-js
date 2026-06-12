@@ -1,16 +1,9 @@
-# PostHog Browser SDK (posthog-js) Compliance Adapter
+# PostHog JavaScript package
 
-Compliance adapter for the posthog-js browser SDK with the [PostHog SDK Test Harness](https://github.com/PostHog/posthog-sdk-test-harness).
+Please see the main [PostHog docs](https://posthog.com/docs).
 
-Uses jsdom to run the browser SDK in Node.js for testing.
-
-## Running Tests
-
-```bash
-# From compliance/browser
-docker-compose up --build --abort-on-container-exit
-```
+SDK usage examples and code snippets live in the official documentation so they stay up to date.
 
 ## Documentation
 
-See the [test harness documentation](https://github.com/PostHog/posthog-sdk-test-harness) for details.
+- [JavaScript library docs](https://posthog.com/docs/libraries/js)

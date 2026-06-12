@@ -1,14 +1,9 @@
-# PostHog Node SDK Compliance Adapter
+# PostHog Node.js example
 
-Compliance adapter for the posthog-node SDK with the [PostHog SDK Test Harness](https://github.com/PostHog/posthog-sdk-test-harness).
+Please see the main [PostHog docs](https://posthog.com/docs).
 
-## Running Tests
-
-```bash
-# From compliance/node
-docker-compose up --build --abort-on-container-exit
-```
+SDK usage examples and code snippets live in the official documentation so they stay up to date.
 
 ## Documentation
 
-See the [test harness documentation](https://github.com/PostHog/posthog-sdk-test-harness) for details.
+- [Node.js library docs](https://posthog.com/docs/libraries/node)

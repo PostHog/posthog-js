@@ -1,5 +1,9 @@
-files in here are intended for the lazy loaded portion of replay
+# PostHog JavaScript package
 
-you aren't supposed to import them from outside the entrypoint file
+Please see the main [PostHog docs](https://posthog.com/docs).
 
-they could cause an increase in bundle size
+SDK usage examples and code snippets live in the official documentation so they stay up to date.
+
+## Documentation
+
+- [JavaScript library docs](https://posthog.com/docs/libraries/js)
