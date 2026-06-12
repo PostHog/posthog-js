@@ -111,7 +111,8 @@ describe('native error tracking', () => {
       // intentionally no setup() — emulates posthog-react-native-session-replay
     }
     jest.doMock('../src/optional/OptionalPlugin', () => ({ OptionalReactNativePlugin: legacyPlugin }))
-    // Logger only emits under debug; spy so we can assert what was/wasn't logged.
+    // _logger only emits when debug is on (isDebug = whether debug() was called), so spy on the
+    // console and enable debug before init runs.
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
 
@@ -119,10 +120,10 @@ describe('native error tracking', () => {
     const posthog = new PostHog('test-token', {
       persistence: 'memory',
       flushInterval: 0,
-      debug: true,
       enableSessionReplay: true,
       errorTracking: { autocapture: { nativeCrashes: true } },
     })
+    posthog.debug(true)
 
     await posthog.ready()
 
