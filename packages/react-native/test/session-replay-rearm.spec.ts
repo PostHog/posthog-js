@@ -49,8 +49,11 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     replay.startSession.mockClear()
     replay.endSession.mockClear()
     replay.startRecording.mockClear()
+    replay.stopRecording.mockClear()
+    replay.identify.mockClear()
     replay.isEnabled.mockClear()
     replay.isEnabled.mockImplementation(async () => false)
+    replay.start.mockImplementation(async () => {})
 
     currentFlags = {}
     currentSessionRecording = {}
@@ -179,5 +182,19 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await posthog.reloadFeatureFlagsAsync()
     await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
     expect(replay.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries native init on the next flags reload when the first attempt fails', async () => {
+    currentSessionRecording = { endpoint: '/s/' } // no linkedFlag => recording active
+
+    // First native start throws -> init fails and the armed state must roll back.
+    replay.start.mockRejectedValueOnce(new Error('native start failed'))
+
+    posthog = newPostHog()
+    await posthog.ready()
+
+    // The bootstrap arm fails and rolls back; the flags load re-arms and retries.
+    // Without the rollback the failed attempt would suppress every later attempt.
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(2))
   })
 })

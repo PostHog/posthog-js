@@ -2228,10 +2228,15 @@ export class PostHog extends PostHogCore {
         // Already recording — nothing to do.
         return
       }
+      // Set before the await as a re-entry guard for concurrent flags emits.
       this._sessionReplayRecordingActive = true
 
       if (!this._sessionReplayNativeInitialized) {
-        await this.initializeNativePlugin(options, remoteConfig, true)
+        const initialized = await this.initializeNativePlugin(options, remoteConfig, true)
+        if (!initialized) {
+          // Roll back so the next flags reload retries instead of early-returning forever.
+          this._sessionReplayRecordingActive = false
+        }
       } else {
         // Native recorder is initialized but was paused when the linked flag turned off; resume it.
         await this.startSessionRecording(true)
