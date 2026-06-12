@@ -6,8 +6,8 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 ## Documentation
 
-- [JavaScript library docs](https://posthog.com/docs/libraries/js)
+- [Webpack source map upload docs](https://posthog.com/docs/error-tracking/upload-source-maps/webpack)
 
 ## Questions?
 
-### [Check out our community page.](https://posthog.com/docs/error-tracking/upload-source-maps/webpack)
+### [Check out our community page.](https://posthog.com/posts)

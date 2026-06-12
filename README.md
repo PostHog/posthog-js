@@ -12,6 +12,8 @@
 
 This is a monorepo containing multiple packages to integrate with PostHog using JavaScript!
 
+Please see the main [PostHog docs](https://posthog.com/docs).
+
 ## Packages
 
 - [posthog-js](./packages/browser/README.md)

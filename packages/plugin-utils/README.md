@@ -1,9 +1,5 @@
-# PostHog JavaScript example
+# @posthog/plugin-utils
 
-Please see the main [PostHog docs](https://posthog.com/docs).
+Shared CLI and sourcemap utilities used by PostHog build plugins (`@posthog/webpack-plugin`, `@posthog/rollup-plugin`, `@posthog/nextjs-config`, `@posthog/nuxt`).
 
-SDK usage examples and code snippets live in the official documentation so they stay up to date.
-
-## Documentation
-
-- [JavaScript library docs](https://posthog.com/docs/libraries/js)
+This package is an internal dependency and not intended for direct use.
