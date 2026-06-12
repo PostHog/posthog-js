@@ -103,31 +103,32 @@ class PosthogReactNativePluginModule(
               // The JS layer already captured them, so drop the native duplicate.
               addBeforeSend { event -> if (isReactNativeFatalJsError(event)) null else event }
 
-              if (sessionReplayEnabled) {
-                val maskAllTextInputs = getBoolean(sdkReplayConfig, "maskAllTextInputs", DEFAULT_MASK_ALL_TEXT_INPUTS)
-                val maskAllImages = getBoolean(sdkReplayConfig, "maskAllImages", DEFAULT_MASK_ALL_IMAGES)
-                val captureLog = getBoolean(sdkReplayConfig, "captureLog", DEFAULT_CAPTURE_LOG)
+              // Always apply the session replay configuration so that recording started later
+              // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+              // sessionReplayEnabled only controls whether recording starts at setup.
+              val maskAllTextInputs = getBoolean(sdkReplayConfig, "maskAllTextInputs", DEFAULT_MASK_ALL_TEXT_INPUTS)
+              val maskAllImages = getBoolean(sdkReplayConfig, "maskAllImages", DEFAULT_MASK_ALL_IMAGES)
+              val captureLog = getBoolean(sdkReplayConfig, "captureLog", DEFAULT_CAPTURE_LOG)
 
-                // read throttleDelayMs and use androidDebouncerDelayMs as a fallback for back compatibility
-                val throttleDelayMs =
-                  when {
-                    hasKey(sdkReplayConfig, "throttleDelayMs") -> getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                    hasKey(sdkReplayConfig, "androidDebouncerDelayMs") -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                    else -> DEFAULT_THROTTLE_DELAY_MS
-                  }
-
-                sessionReplay = true
-                sessionReplayConfig.screenshot = true
-                sessionReplayConfig.captureLogcat = captureLog
-                sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
-                sessionReplayConfig.maskAllImages = maskAllImages
-                sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
-                sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
-
-                val endpoint = getString(decideReplayConfig, "endpoint", "")
-                if (endpoint.isNotEmpty()) {
-                  snapshotEndpoint = endpoint
+              // read throttleDelayMs and use androidDebouncerDelayMs as a fallback for back compatibility
+              val throttleDelayMs =
+                when {
+                  hasKey(sdkReplayConfig, "throttleDelayMs") -> getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
+                  hasKey(sdkReplayConfig, "androidDebouncerDelayMs") -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
+                  else -> DEFAULT_THROTTLE_DELAY_MS
                 }
+
+              sessionReplay = sessionReplayEnabled
+              sessionReplayConfig.screenshot = true
+              sessionReplayConfig.captureLogcat = captureLog
+              sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
+              sessionReplayConfig.maskAllImages = maskAllImages
+              sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
+              sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
+
+              val endpoint = getString(decideReplayConfig, "endpoint", "")
+              if (endpoint.isNotEmpty()) {
+                snapshotEndpoint = endpoint
               }
 
               if (theSdkVersion.isNotEmpty()) {

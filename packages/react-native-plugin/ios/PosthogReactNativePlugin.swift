@@ -118,43 +118,44 @@ class PosthogReactNativePlugin: NSObject {
             config.surveys = false
         }
 
-        if sessionReplayEnabled {
-            config.sessionReplay = true
-            config.sessionReplayConfig.screenshotMode = true
+        // Always apply the session replay configuration so that recording started later
+        // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+        // sessionReplayEnabled only controls whether recording starts at setup.
+        config.sessionReplay = sessionReplayEnabled
+        config.sessionReplayConfig.screenshotMode = true
 
-            let maskAllTextInputs = sdkReplayConfig["maskAllTextInputs"] as? Bool ?? true
-            config.sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
+        let maskAllTextInputs = sdkReplayConfig["maskAllTextInputs"] as? Bool ?? true
+        config.sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
 
-            let maskAllImages = sdkReplayConfig["maskAllImages"] as? Bool ?? true
-            config.sessionReplayConfig.maskAllImages = maskAllImages
+        let maskAllImages = sdkReplayConfig["maskAllImages"] as? Bool ?? true
+        config.sessionReplayConfig.maskAllImages = maskAllImages
 
-            let maskAllSandboxedViews = sdkReplayConfig["maskAllSandboxedViews"] as? Bool ?? true
-            config.sessionReplayConfig.maskAllSandboxedViews = maskAllSandboxedViews
+        let maskAllSandboxedViews = sdkReplayConfig["maskAllSandboxedViews"] as? Bool ?? true
+        config.sessionReplayConfig.maskAllSandboxedViews = maskAllSandboxedViews
 
-            // read throttleDelayMs and use iOSdebouncerDelayMs as a fallback for back compatibility
-            let throttleDelayMs =
-                (sdkReplayConfig["throttleDelayMs"] as? Int)
-                    ?? (sdkReplayConfig["iOSdebouncerDelayMs"] as? Int)
-                    ?? 1000
+        // read throttleDelayMs and use iOSdebouncerDelayMs as a fallback for back compatibility
+        let throttleDelayMs =
+            (sdkReplayConfig["throttleDelayMs"] as? Int)
+                ?? (sdkReplayConfig["iOSdebouncerDelayMs"] as? Int)
+                ?? 1000
 
-            let timeInterval: TimeInterval = Double(throttleDelayMs) / 1000.0
-            config.sessionReplayConfig.throttleDelay = timeInterval
+        let timeInterval: TimeInterval = Double(throttleDelayMs) / 1000.0
+        config.sessionReplayConfig.throttleDelay = timeInterval
 
-            let captureNetworkTelemetry = sdkReplayConfig["captureNetworkTelemetry"] as? Bool ?? true
-            config.sessionReplayConfig.captureNetworkTelemetry = captureNetworkTelemetry
+        let captureNetworkTelemetry = sdkReplayConfig["captureNetworkTelemetry"] as? Bool ?? true
+        config.sessionReplayConfig.captureNetworkTelemetry = captureNetworkTelemetry
 
-            let captureLog = sdkReplayConfig["captureLog"] as? Bool ?? true
-            config.sessionReplayConfig.captureLogs = captureLog
+        let captureLog = sdkReplayConfig["captureLog"] as? Bool ?? true
+        config.sessionReplayConfig.captureLogs = captureLog
 
-            config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
+        config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
 
-            let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
-            config.sessionReplayConfig.screenshotModeBackgroundCapture = screenshotModeBackgroundCapture
+        let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
+        config.sessionReplayConfig.screenshotModeBackgroundCapture = screenshotModeBackgroundCapture
 
-            let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
-            if !endpoint.isEmpty {
-                config.snapshotEndpoint = endpoint
-            }
+        let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
+        if !endpoint.isEmpty {
+            config.snapshotEndpoint = endpoint
         }
 
         let distinctId = sdkOptions["distinctId"] as? String ?? ""
