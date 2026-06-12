@@ -1,8 +1,6 @@
 # @posthog/react-native-plugin
 
-## 2.0.0 (deprecated)
-
-> **Deprecated:** when native crash autocapture is enabled, this version can report a fatal React Native JS error twice — once from the JS layer and once as a rethrown native crash. Use 2.0.1 or later, which drops the duplicate native capture.
+## 2.0.0
 
 ### Major Changes
 
