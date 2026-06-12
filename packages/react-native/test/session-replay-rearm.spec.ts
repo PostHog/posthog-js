@@ -184,6 +184,32 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     expect(replay.start).toHaveBeenCalledTimes(1)
   })
 
+  it('retries resume on the next flags reload when startRecording fails', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    replay.isEnabled.mockImplementation(async () => true)
+
+    // Pause via flag off.
+    currentFlags = { 'replay-flag': false }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+
+    // Flag back on, but the native resume call fails once -> must roll back.
+    replay.startRecording.mockRejectedValueOnce(new Error('native resume failed'))
+    currentFlags = { 'replay-flag': true }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+
+    // Next reload retries the resume instead of early-returning.
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(2))
+  })
+
   it('retries native init on the next flags reload when the first attempt fails', async () => {
     currentSessionRecording = { endpoint: '/s/' } // no linkedFlag => recording active
 

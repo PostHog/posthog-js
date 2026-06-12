@@ -1393,15 +1393,20 @@ export class PostHog extends PostHogCore {
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
+    await this._startSessionRecording(resumeCurrent)
+  }
+
+  // Same as startSessionRecording, but reports success so callers can react to failures.
+  private async _startSessionRecording(resumeCurrent: boolean): Promise<boolean> {
     await this._initPromise
 
     if (this.isDisabled) {
-      return
+      return false
     }
 
     if (!OptionalReactNativePlugin) {
       // Web/macOS - silently return
-      return
+      return false
     }
 
     try {
@@ -1410,7 +1415,7 @@ export class PostHog extends PostHogCore {
         this._logger.warn(
           'startRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
         )
-        return
+        return false
       }
 
       // If only error tracking is active, add replay to the existing native instance
@@ -1420,7 +1425,7 @@ export class PostHog extends PostHogCore {
         const initialized = await this.initializeNativePlugin(this._sessionReplayOptions, undefined, true)
         if (!initialized) {
           this._logger.error('Failed to initialize native session replay SDK.')
-          return
+          return false
         }
       }
 
@@ -1435,8 +1440,10 @@ export class PostHog extends PostHogCore {
 
       await OptionalReactNativePlugin.startRecording(resumeCurrent)
       this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
+      return true
     } catch (e) {
       this._logger.error(`Failed to start session recording: ${e}`)
+      return false
     }
   }
 
@@ -2239,7 +2246,11 @@ export class PostHog extends PostHogCore {
         }
       } else {
         // Native recorder is initialized but was paused when the linked flag turned off; resume it.
-        await this.startSessionRecording(true)
+        const resumed = await this._startSessionRecording(true)
+        if (!resumed) {
+          // Roll back so the next flags reload retries instead of early-returning forever.
+          this._sessionReplayRecordingActive = false
+        }
       }
     } else {
       this._logger.info('Session replay disabled.')
