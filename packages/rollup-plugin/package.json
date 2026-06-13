@@ -1,41 +1,44 @@
 {
-    "name": "@posthog/rollup-plugin",
-    "version": "1.4.5",
-    "description": "PostHog Rollup plugin",
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/PostHog/posthog-js.git",
-        "directory": "packages/rollup-plugin"
-    },
-    "type": "module",
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "scripts": {
-        "build": "rslib build",
-        "clean": "rimraf dist",
-        "lint": "eslint src",
-        "lint:fix": "eslint src --fix",
-        "test:unit": "jest --passWithNoTests",
-        "dev": "rslib build --watch",
-        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
-    },
-    "files": [
-        "src",
-        "dist",
-        "!src/**/*.spec.ts"
-    ],
-    "dependencies": {
-        "@posthog/cli": "catalog:",
-        "@posthog/plugin-utils": "workspace:^"
-    },
-    "peerDependencies": {
-        "rollup": ">= 4.0.0"
-    },
-    "devDependencies": {
-        "@posthog-tooling/tsconfig-base": "workspace:*",
-        "@rslib/core": "catalog:",
-        "@types/jest": "catalog:",
-        "jest": "catalog:",
-        "rollup": "~4.53.2"
-    }
+  "name": "@posthog/rollup-plugin",
+  "version": "1.4.5",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
+  "description": "PostHog Rollup plugin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/rollup-plugin"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "rslib build",
+    "clean": "rimraf dist",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "test:unit": "jest --passWithNoTests",
+    "dev": "rslib build --watch",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/**/*.spec.ts"
+  ],
+  "dependencies": {
+    "@posthog/cli": "catalog:",
+    "@posthog/plugin-utils": "workspace:^"
+  },
+  "peerDependencies": {
+    "rollup": ">= 4.0.0"
+  },
+  "devDependencies": {
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@rslib/core": "catalog:",
+    "@types/jest": "catalog:",
+    "jest": "catalog:",
+    "rollup": "~4.53.2"
+  }
 }
