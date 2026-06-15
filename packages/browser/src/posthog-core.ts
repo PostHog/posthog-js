@@ -4056,6 +4056,19 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Temporary public API used to validate public API baseline checks.
+     *
+     * {@label Initialization}
+     *
+     * @public
+     *
+     * @returns True when the SDK is loaded.
+     */
+    public getPublicApiBaselineCheckProbe(): boolean {
+        return this.__loaded
+    }
+
+    /**
      * Capture written user feedback for a LLM trace. Numeric values are converted to strings.
      *
      * {@label LLM analytics}
