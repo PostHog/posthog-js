@@ -19,7 +19,6 @@ concurrency:
 jobs:
   browsers:
     name: Test on ${{ matrix.name }}
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-22.04
 
     strategy:
@@ -31,29 +30,36 @@ jobs:
             name: IE11
 
     steps:
+      - name: Skip fork PR
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: echo "Skipping ${{ matrix.name }} TestCafe tests for fork PRs because required BrowserStack/PostHog secrets are unavailable."
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         with:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         with:
           build: false
 
       - uses: ./.github/actions/is-affected
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         id: is-affected
         with:
           package-name: posthog-js
 
       - name: Build packages
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm build
 
       - name: Serve static files
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
         run: python -m http.server 8080 &
 
       - name: Run ${{ matrix.name }} test
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 10
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -64,7 +70,7 @@ jobs:
         working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 30
         run: pnpm check-testcafe-results
         working-directory: packages/browser
