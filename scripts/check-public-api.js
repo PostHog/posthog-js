@@ -1,6 +1,10 @@
 const { execFileSync } = require('child_process')
 
-const referencePaths = ['packages/browser/references', 'packages/node/references', 'packages/react-native/references']
+const referencePaths = [
+    'packages/browser/references/posthog-js-references-latest.json',
+    'packages/node/references/posthog-node-references-latest.json',
+    'packages/react-native/references/posthog-react-native-references-latest.json',
+]
 
 let status
 try {
