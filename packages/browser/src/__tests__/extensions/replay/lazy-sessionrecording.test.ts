@@ -1464,6 +1464,50 @@ describe('Lazy SessionRecording', () => {
                 expect(lazyRecorder['_compressionQueue']).toBe(liveQueue)
                 expect(lazyRecorder['_compressionQueueGeneration']).toEqual(generationBefore)
             })
+
+            // Reproduces the wrong-person attribution from a stopSessionRecording() → reset() →
+            // identify(newUser) → startSessionRecording() sequence. stopSessionRecording() takes
+            // the async compression-drain path: rrweb stops but the buffer/teardown are deferred.
+            // start() bails that pending cleanup out (so the new recorder survives) — but if it
+            // leaves the stopped session's buffer in place, the re-entrant onSessionId restart it
+            // triggers flushes those prior-user snapshots under the OLD session id. Server-side
+            // any(distinct_id) attribution then resolves that mixed session to the wrong person.
+            it('discards the prior session buffer when start() bails out a pending stop()', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                // Establish a recording session with the prior user's data sitting in the buffer.
+                emitActiveEvent(startingTimestamp + 100)
+                const priorSessionId = lazyRecorder['_sessionId']
+                expect(lazyRecorder['_buffer'].data.length).toBeGreaterThan(0)
+                expect(lazyRecorder['_buffer'].sessionId).toEqual(priorSessionId)
+
+                // Mirror stopSessionRecording() taking the async compression-drain path: rrweb is
+                // stopped synchronously, but the buffer flush and teardown are deferred until the
+                // queue drains.
+                lazyRecorder['_isStoppingAfterCompression'] = true
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                lazyRecorder['_compressionQueue'] = new Promise<void>(() => {})
+                lazyRecorder['_stopRecordingProducers']()
+                expect(lazyRecorder['isStarted']).toEqual(false)
+
+                // reset() clears the session id and a new user identifies before
+                // startSessionRecording() restarts the recorder. The fresh id makes start()'s
+                // checkAndGetSessionAndWindowId() fire the onSessionId restart synchronously,
+                // which (without the buffer discard) flushes the prior session's snapshots.
+                sessionManager.resetSessionId()
+                ;(posthog.capture as Mock).mockClear()
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'post-reset-session-id')
+
+                lazyRecorder.start()
+
+                // No snapshot from the prior session may be flushed during the restart.
+                const leakedPriorSessionSnapshot = (posthog.capture as Mock).mock.calls.find(
+                    (call) => call[0] === '$snapshot' && call[1]?.$session_id === priorSessionId
+                )
+                expect(leakedPriorSessionSnapshot).toBeUndefined()
+                expect(lazyRecorder['isStarted']).toEqual(true)
+            })
         })
 
         describe('scheduled full snapshots', () => {
