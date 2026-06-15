@@ -226,40 +226,29 @@ describe('PostHog Core', () => {
   })
 
   describe('unsetPersonProperties', () => {
-    it('should send a $set event with a $unset array for a single property', async () => {
-      posthog.unsetPersonProperties('plan')
-      await waitForPromises()
+    it.each([
+      ['single property', 'plan', ['plan']],
+      ['multiple properties', ['plan', 'email'], ['plan', 'email']],
+    ] as Array<[string, string | string[], string[]]>)(
+      'should send a $set event with a $unset array for %s',
+      async (_, propertyNames, expectedUnset) => {
+        posthog.unsetPersonProperties(propertyNames)
+        await waitForPromises()
 
-      const batchCall = mocks.fetch.mock.calls.find((call) => call[0].includes('/batch/'))
-      expect(batchCall).toBeDefined()
-      expect(parseBody(batchCall)).toMatchObject({
-        batch: [
-          {
-            event: '$set',
-            properties: {
-              $unset: ['plan'],
+        const batchCall = mocks.fetch.mock.calls.find((call) => call[0].includes('/batch/'))
+        expect(batchCall).toBeDefined()
+        expect(parseBody(batchCall)).toMatchObject({
+          batch: [
+            {
+              event: '$set',
+              properties: {
+                $unset: expectedUnset,
+              },
             },
-          },
-        ],
-      })
-    })
-
-    it('should send a $set event with a $unset array for multiple properties', async () => {
-      posthog.unsetPersonProperties(['plan', 'email'])
-      await waitForPromises()
-
-      const batchCall = mocks.fetch.mock.calls.find((call) => call[0].includes('/batch/'))
-      expect(parseBody(batchCall)).toMatchObject({
-        batch: [
-          {
-            event: '$set',
-            properties: {
-              $unset: ['plan', 'email'],
-            },
-          },
-        ],
-      })
-    })
+          ],
+        })
+      }
+    )
 
     it('should remove the properties from the persisted flag person properties', () => {
       posthog.setPersonPropertiesForFlags({ plan: 'free', email: 'test@example.com' }, false)
