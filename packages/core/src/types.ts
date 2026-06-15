@@ -865,6 +865,17 @@ export const knownUnsafeEditableEvent = [
  */
 export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
+export const knownUnsafeEditableEventProperty = ['token'] as const
+
+/**
+ * These event properties can be edited by the `before_send` function
+ * but are required for the event to be ingested. For example `token` carries
+ * the project api_key, and ingest rejects any event that arrives without it.
+ *
+ * If a `before_send` function removes one of these, the event is dropped.
+ */
+export type KnownUnsafeEditableEventProperty = (typeof knownUnsafeEditableEventProperty)[number]
+
 /**
  * Represents an event before it's sent to PostHog.
  * This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.

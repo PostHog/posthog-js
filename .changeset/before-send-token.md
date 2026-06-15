@@ -1,5 +1,6 @@
 ---
-"posthog-js": patch
+'@posthog/core': patch
+'posthog-js': patch
 ---
 
-Re-assert the `token` property if a `before_send` hook removes it, so events are no longer silently rejected by ingest with a 401.
+Drop the event and log a warning when a `before_send` hook removes the `token` property, instead of silently sending an event that ingest rejects with a 401.

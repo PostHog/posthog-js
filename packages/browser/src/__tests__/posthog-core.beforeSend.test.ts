@@ -175,10 +175,11 @@ describe('posthog core - before send', () => {
         )
     })
 
-    it('re-asserts the token property if a beforeSend function strips it', () => {
+    it('drops the event if a beforeSend function strips a required property like token', () => {
         // Regression test for #3438: the project api_key is sent on
         // properties.token, so a generic token/PII scrubber that drops it would
         // otherwise make every event 401 with "submitted without an api_key".
+        // We drop the event and warn rather than send something ingest will reject.
         const posthog = posthogWith({
             before_send: (cr) => {
                 if (cr.properties) {
@@ -195,10 +196,10 @@ describe('posthog core - before send', () => {
 
         const capturedData = posthog.capture(eventName, {}, {})
 
-        expect(capturedData).toHaveProperty(['properties', 'token'], 'testtoken')
-        expect(posthog._send_request).toHaveBeenCalled()
+        expect(capturedData).toBeUndefined()
+        expect(posthog._send_request).not.toHaveBeenCalled()
         expect(mockLogger.warn).toHaveBeenCalledWith(
-            `Event '${eventName}' is missing its 'token' property after beforeSend (it may have been removed by a token or PII scrubber); re-adding it so the event can be ingested.`
+            `Event '${eventName}' had its 'token' property removed in a beforeSend function. This property is required for ingestion, so the event will be dropped.`
         )
     })
 })

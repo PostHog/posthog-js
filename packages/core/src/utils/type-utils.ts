@@ -1,4 +1,9 @@
-import { knownUnsafeEditableEvent, KnownUnsafeEditableEvent } from '../types'
+import {
+  knownUnsafeEditableEvent,
+  KnownUnsafeEditableEvent,
+  knownUnsafeEditableEventProperty,
+  KnownUnsafeEditableEventProperty,
+} from '../types'
 import { includes } from './string-utils'
 
 // eslint-disable-next-line posthog-js/no-direct-array-check
@@ -91,6 +96,10 @@ export const isPlainError = (x: unknown): x is Error => {
 
 export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
   return includes(knownUnsafeEditableEvent as unknown as string[], x)
+}
+
+export const isKnownUnsafeEditableEventProperty = (x: unknown): x is KnownUnsafeEditableEventProperty => {
+  return includes(knownUnsafeEditableEventProperty as unknown as string[], x)
 }
 
 export function isPrimitive(value: unknown): boolean {
