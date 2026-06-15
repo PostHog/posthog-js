@@ -27,7 +27,12 @@ jobs:
           name: bundle-stats-array.html
           path: packages/browser/bundle-stats-array.html
 
+      - name: Skip PR comments for fork PR
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: echo "Skipping bundled-size PR comments for fork PRs because GitHub tokens are read-only."
+
       - name: Find artifact link comment if it exists
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # pin v4.0.0
         id: fc
         with:
@@ -36,6 +41,7 @@ jobs:
           body-includes: Download bundle size visualization
 
       - name: Create or update artifact link comment
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # pin v5.0.0
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
@@ -45,6 +51,7 @@ jobs:
           edit-mode: replace
 
       - uses: preactjs/compressed-size-action@946a292cd35bd1088e0d7eb92b69d1a8d5b5d76a # pin v2.8.0
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         with:
           compression: "none"
           strip-hash: '-(\w{8})\.'

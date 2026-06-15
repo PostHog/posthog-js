@@ -1464,6 +1464,43 @@ describe('Lazy SessionRecording', () => {
                 expect(lazyRecorder['_compressionQueue']).toBe(liveQueue)
                 expect(lazyRecorder['_compressionQueueGeneration']).toEqual(generationBefore)
             })
+
+            // #3822: stopSessionRecording() → reset() → identify() → startSessionRecording()
+            // leaked the prior session's buffer (flushed under the old session id), mis-attributing
+            // the recording. start() must discard it when bailing out the pending stop.
+            it('discards the prior session buffer when start() bails out a pending stop()', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                // Establish a recording session with the prior user's data sitting in the buffer.
+                emitActiveEvent(startingTimestamp + 100)
+                const priorSessionId = lazyRecorder['_sessionId']
+                expect(lazyRecorder['_buffer'].data.length).toBeGreaterThan(0)
+                expect(lazyRecorder['_buffer'].sessionId).toEqual(priorSessionId)
+
+                // stopSessionRecording() via the async compression-drain path: rrweb stops, but the
+                // buffer flush and teardown are deferred until the queue drains.
+                lazyRecorder['_isStoppingAfterCompression'] = true
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                lazyRecorder['_compressionQueue'] = new Promise<void>(() => {})
+                lazyRecorder['_stopRecordingProducers']()
+                expect(lazyRecorder['isStarted']).toEqual(false)
+
+                // reset() clears the session id; the fresh id then makes start()'s
+                // checkAndGetSessionAndWindowId() fire the onSessionId restart synchronously.
+                sessionManager.resetSessionId()
+                ;(posthog.capture as Mock).mockClear()
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'post-reset-session-id')
+
+                lazyRecorder.start()
+
+                // No snapshot from the prior session may be flushed during the restart.
+                const leakedPriorSessionSnapshot = (posthog.capture as Mock).mock.calls.find(
+                    (call) => call[0] === '$snapshot' && call[1]?.$session_id === priorSessionId
+                )
+                expect(leakedPriorSessionSnapshot).toBeUndefined()
+                expect(lazyRecorder['isStarted']).toEqual(true)
+            })
         })
 
         describe('scheduled full snapshots', () => {
