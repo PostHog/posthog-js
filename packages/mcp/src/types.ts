@@ -111,6 +111,8 @@ export type ToolCallback =
 // RegisteredTool type that supports both MCP SDK 1.23- (callback) and 1.24+ (handler)
 export type RegisteredTool = {
   description?: string
+  /** MCP tool `_meta` block (spec-allowed arbitrary metadata, e.g. `category`). */
+  _meta?: Record<string, unknown>
   inputSchema?: unknown
   update?: (...args: unknown[]) => unknown
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
@@ -155,6 +157,7 @@ export interface Event {
   serverVersion?: string
   sessionId: string
   timestamp: Date
+  toolCategory?: string
   toolDescription?: string
   userIntent?: string
   userIntentSource?: MCPAnalyticsIntentSource
@@ -234,6 +237,7 @@ export interface MCPAnalyticsData {
   sessionId: string
   sessionInfo: SessionInfo
   sessionSource: 'generated' | 'mcp'
+  toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
 }
 
@@ -277,6 +281,8 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
   toolName: string
   /** Tool description → `$mcp_tool_description`. */
   toolDescription?: string
+  /** Product category the tool belongs to (e.g. "Logs") → `$mcp_tool_category`. */
+  category?: string
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
   /** Captured tool result → `$mcp_response` (sanitized + truncated). */
