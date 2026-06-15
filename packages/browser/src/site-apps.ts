@@ -1,7 +1,7 @@
 import type { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
-import { assignableWindow } from './utils/globals'
+import { assignableWindow, document } from './utils/globals'
 import { createLogger } from './utils/logger'
 
 const logger = createLogger('[SiteApps]')
@@ -85,12 +85,73 @@ export class SiteApps implements Extension {
         return globals
     }
 
+    private _prepareElementForSiteApp<T extends Node>(element: T): T | null {
+        const tagName = (element as unknown as Element).tagName?.toLowerCase()
+        if (tagName === 'style' && this._instance.config.prepare_external_dependency_stylesheet) {
+            const prepared = this._instance.config.prepare_external_dependency_stylesheet(
+                element as Node as HTMLStyleElement
+            )
+            if (!prepared) {
+                logger.error('prepare_external_dependency_stylesheet returned null')
+                return null
+            }
+            return prepared as Node as T
+        }
+        if (tagName === 'script' && this._instance.config.prepare_external_dependency_script) {
+            const prepared = this._instance.config.prepare_external_dependency_script(
+                element as Node as HTMLScriptElement
+            )
+            if (!prepared) {
+                logger.error('prepare_external_dependency_script returned null')
+                return null
+            }
+            return prepared as Node as T
+        }
+        return element
+    }
+
+    private _runWithPreparedSiteAppElements<T>(callback: () => T): T {
+        const nodePrototype = document?.defaultView?.Node?.prototype
+        if (!nodePrototype) {
+            return callback()
+        }
+
+        const originalAppendChild = nodePrototype.appendChild
+        const originalInsertBefore = nodePrototype.insertBefore
+        const siteApps = this
+
+        nodePrototype.appendChild = function (this: Node, child: Node) {
+            const prepared = siteApps._prepareElementForSiteApp(child)
+            if (!prepared) {
+                return child
+            }
+            return originalAppendChild.call(this, prepared)
+        } as typeof nodePrototype.appendChild
+
+        nodePrototype.insertBefore = function (this: Node, newChild: Node, refChild: Node | null) {
+            const prepared = siteApps._prepareElementForSiteApp(newChild)
+            if (!prepared) {
+                return newChild
+            }
+            return originalInsertBefore.call(this, prepared, refChild)
+        } as typeof nodePrototype.insertBefore
+
+        try {
+            return callback()
+        } finally {
+            nodePrototype.appendChild = originalAppendChild
+            nodePrototype.insertBefore = originalInsertBefore
+        }
+    }
+
     setupSiteApp(loader: SiteAppLoader) {
         const app = this.apps[loader.id]
         const processBufferedEvents = () => {
             if (!app.errored && this._bufferedInvocations.length) {
                 logger.info(`Processing ${this._bufferedInvocations.length} events for site app with id ${loader.id}`)
-                this._bufferedInvocations.forEach((globals) => app.processEvent?.(globals))
+                this._bufferedInvocations.forEach((globals) =>
+                    this._runWithPreparedSiteAppElements(() => app.processEvent?.(globals))
+                )
                 app.processedBuffer = true
             }
 
@@ -111,12 +172,14 @@ export class SiteApps implements Extension {
         }
 
         try {
-            const { processEvent } = loader.init({
-                posthog: this._instance,
-                callback: (success) => {
-                    onLoaded(success)
-                },
-            })
+            const { processEvent } = this._runWithPreparedSiteAppElements(() =>
+                loader.init({
+                    posthog: this._instance,
+                    callback: (success) => {
+                        onLoaded(success)
+                    },
+                })
+            )
             if (processEvent) {
                 app.processEvent = processEvent
             }
@@ -163,7 +226,7 @@ export class SiteApps implements Extension {
 
         for (const app of Object.values(this.apps)) {
             try {
-                app.processEvent?.(globals)
+                this._runWithPreparedSiteAppElements(() => app.processEvent?.(globals))
             } catch (e) {
                 logger.error(`Error while processing event ${event.event} for site app ${app.id}`, e)
             }

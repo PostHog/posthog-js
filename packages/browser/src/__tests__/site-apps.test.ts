@@ -383,6 +383,49 @@ describe('SiteApps', () => {
             })
         })
 
+        it('prepares style elements appended during site app init', () => {
+            posthog.config.prepare_external_dependency_stylesheet = jest.fn((stylesheet) => {
+                stylesheet.nonce = 'style-nonce'
+                return stylesheet
+            })
+            init(({ callback }) => {
+                const host = document.createElement('div')
+                const shadow = host.attachShadow({ mode: 'open' })
+                const styleElement = Object.assign(document.createElement('style'), {
+                    innerText: '.foo { color: red; }',
+                })
+                shadow.appendChild(styleElement)
+                document.body.appendChild(host)
+                callback(true)
+            })
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+
+            const styleElement = document.body.querySelector('div')?.shadowRoot?.querySelector('style')
+            expect(posthog.config.prepare_external_dependency_stylesheet).toHaveBeenCalledWith(styleElement)
+            expect(styleElement?.nonce).toBe('style-nonce')
+        })
+
+        it('prepares script elements appended while processing site app events', () => {
+            posthog.config.prepare_external_dependency_script = jest.fn((script) => {
+                script.nonce = 'script-nonce'
+                return script
+            })
+            init()
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            appConfigs[0].processEvent.mockImplementation(() => {
+                const script = document.createElement('script')
+                document.head.appendChild(script)
+            })
+
+            const eventCaptured = (posthog.on as jest.Mock).mock.calls[0][1]
+            eventCaptured({ event: 'test_event', properties: {} } as CaptureResult)
+
+            const scriptElement = document.head.querySelector('script')
+            expect(posthog.config.prepare_external_dependency_script).toHaveBeenCalledWith(scriptElement)
+            expect(scriptElement?.nonce).toBe('script-nonce')
+        })
+
         it('marks site app as errored if callback fails', () => {
             init()
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
