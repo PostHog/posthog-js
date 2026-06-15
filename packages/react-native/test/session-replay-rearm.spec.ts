@@ -245,4 +245,63 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     // Without the rollback the failed attempt would suppress every later attempt.
     await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(2))
   })
+
+  it('does not stop again on a later reload once the flag is already off', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    replay.isEnabled.mockImplementation(async () => true)
+
+    // Flag off -> one pause.
+    currentFlags = { 'replay-flag': false }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+
+    // Still off on subsequent reloads -> already paused, must not stop again.
+    await posthog.reloadFeatureFlagsAsync()
+    await posthog.reloadFeatureFlagsAsync()
+    await wait(50)
+    expect(replay.stopRecording).toHaveBeenCalledTimes(1)
+  })
+
+  it('serializes overlapping reloads so an off->on pair ends recording, not stuck off', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    replay.isEnabled.mockImplementation(async () => true)
+
+    // Hold the native stop open so the next evaluation runs while the pause is in flight.
+    let releaseStop: () => void = () => {}
+    replay.stopRecording.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseStop = resolve
+        })
+    )
+
+    // Flag off: the pause evaluation reaches the (held) native stop.
+    currentFlags = { 'replay-flag': false }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+
+    // Flag back on while the stop is still blocked. The resume evaluation is queued behind
+    // the in-flight pause (serialized), so it has not resumed yet.
+    currentFlags = { 'replay-flag': true }
+    await posthog.reloadFeatureFlagsAsync()
+    await wait(20)
+    expect(replay.startRecording).not.toHaveBeenCalled()
+
+    // Once the stop completes, the queued resume runs and recording ends on (not stuck off).
+    releaseStop()
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+    expect(replay.start).toHaveBeenCalledTimes(1)
+  })
 })

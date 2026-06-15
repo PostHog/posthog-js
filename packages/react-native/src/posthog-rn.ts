@@ -191,6 +191,8 @@ export class PostHog extends PostHogCore {
   private _nativeErrorTrackingInitialized: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
+  // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
+  private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
   private _sessionReplayOptions?: PostHogOptions
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
@@ -2172,8 +2174,17 @@ export class PostHog extends PostHogCore {
    * Pausing requires a real "flag off": core keeps the previous flag values across
    * quota-limited/failed reloads, so a transient error never pauses a recording. Right
    * after reset() the flags are genuinely unknown and pausing is the intended outcome.
+   *
+   * Evaluations are serialized so concurrent flags reloads run one at a time.
    */
-  private async _evaluateAndStartSessionReplay(
+  private _evaluateAndStartSessionReplay(cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>): Promise<void> {
+    this._sessionReplayEvalChain = this._sessionReplayEvalChain
+      .catch(() => {})
+      .then(() => this._evaluateAndStartSessionReplayInternal(cachedRemoteConfig))
+    return this._sessionReplayEvalChain
+  }
+
+  private async _evaluateAndStartSessionReplayInternal(
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
   ): Promise<void> {
     const options = this._sessionReplayOptions
@@ -2241,33 +2252,18 @@ export class PostHog extends PostHogCore {
         // Already recording — nothing to do.
         return
       }
-      // Set before the await as a re-entry guard for concurrent flags emits.
-      this._sessionReplayRecordingActive = true
-
-      if (!this._sessionReplayNativeInitialized) {
-        const initialized = await this.initializeNativePlugin(options, remoteConfig, true)
-        if (!initialized) {
-          // Roll back so the next flags reload retries instead of early-returning forever.
-          this._sessionReplayRecordingActive = false
-        }
-      } else {
-        // Native recorder is initialized but was paused when the linked flag turned off; resume it.
-        const resumed = await this._startSessionRecording(true)
-        if (!resumed) {
-          // Roll back so the next flags reload retries instead of early-returning forever.
-          this._sessionReplayRecordingActive = false
-        }
-      }
+      // Record the actual outcome; on failure it stays false so the next reload retries.
+      // (Already initialized means replay was paused by an earlier flag-off, so resume it.)
+      this._sessionReplayRecordingActive = this._sessionReplayNativeInitialized
+        ? await this._startSessionRecording(true)
+        : await this.initializeNativePlugin(options, remoteConfig, true)
     } else {
       this._logger.info('Session replay disabled.')
 
       if (this._sessionReplayRecordingActive === true) {
-        // Linked flag turned off — pause the native recorder so a gated-off user isn't recorded.
-        // Only clear the flag on success; a failed stop stays "recording" so the next reload retries.
-        const stopped = await this._stopSessionRecording()
-        if (stopped) {
-          this._sessionReplayRecordingActive = false
-        }
+        // Linked flag turned off — pause so a gated-off user isn't recorded. Keep the flag
+        // set if the native stop fails, so the next reload retries instead of giving up.
+        this._sessionReplayRecordingActive = !(await this._stopSessionRecording())
       } else {
         this._sessionReplayRecordingActive = false
       }
