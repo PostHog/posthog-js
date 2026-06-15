@@ -1055,7 +1055,11 @@ export function usePopupVisibility(
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
             }
-            localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            try {
+                localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            } catch {
+                // localStorage is not always available (e.g. in cross-origin iframes).
+            }
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
