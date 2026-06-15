@@ -1463,15 +1463,20 @@ export class PostHog extends PostHogCore {
    * @public
    */
   async stopSessionRecording(): Promise<void> {
+    await this._stopSessionRecording()
+  }
+
+  // Same as stopSessionRecording, but reports success so callers can react to failures.
+  private async _stopSessionRecording(): Promise<boolean> {
     await this._initPromise
 
     if (this.isDisabled) {
-      return
+      return false
     }
 
     if (!OptionalReactNativePlugin) {
       // Web/macOS - silently return
-      return
+      return false
     }
 
     try {
@@ -1480,14 +1485,15 @@ export class PostHog extends PostHogCore {
         this._logger.warn(
           'stopRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
         )
-        return
+        return false
       }
 
       await OptionalReactNativePlugin.stopRecording()
-      // this._enableSessionReplay = false
       this._logger.info('Session recording stopped.')
+      return true
     } catch (e) {
       this._logger.error(`Failed to stop session recording: ${e}`)
+      return false
     }
   }
 
@@ -2255,12 +2261,15 @@ export class PostHog extends PostHogCore {
     } else {
       this._logger.info('Session replay disabled.')
 
-      const wasRecording = this._sessionReplayRecordingActive === true
-      this._sessionReplayRecordingActive = false
-
-      if (wasRecording) {
+      if (this._sessionReplayRecordingActive === true) {
         // Linked flag turned off — pause the native recorder so a gated-off user isn't recorded.
-        await this.stopSessionRecording()
+        // Only clear the flag on success; a failed stop stays "recording" so the next reload retries.
+        const stopped = await this._stopSessionRecording()
+        if (stopped) {
+          this._sessionReplayRecordingActive = false
+        }
+      } else {
+        this._sessionReplayRecordingActive = false
       }
 
       if (enableNativeErrorTracking) {

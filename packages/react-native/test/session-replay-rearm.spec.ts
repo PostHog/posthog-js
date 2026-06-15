@@ -210,6 +210,28 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(2))
   })
 
+  it('retries pause on the next flags reload when stopRecording fails', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    replay.isEnabled.mockImplementation(async () => true)
+
+    // Flag turns off, but the native stop call fails once -> recording state must NOT clear.
+    replay.stopRecording.mockRejectedValueOnce(new Error('native stop failed'))
+    currentFlags = { 'replay-flag': false }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+
+    // Flag still off on the next reload: since the stop failed, the pause is retried
+    // instead of being treated as already-paused.
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(2))
+  })
+
   it('retries native init on the next flags reload when the first attempt fails', async () => {
     currentSessionRecording = { endpoint: '/s/' } // no linkedFlag => recording active
 
