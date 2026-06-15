@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.32.5
+
+### Patch Changes
+
+- [#3828](https://github.com/PostHog/posthog-js/pull/3828) [`8464c92`](https://github.com/PostHog/posthog-js/commit/8464c9296d73376701b72075b48ea69e09bc1d9a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - fix: persist the session replay config from a `/flags` response before emitting the `featureflags` event, so listeners (e.g. React Native session replay linked-flag re-evaluation) read a recording config consistent with the new flag values. This only reorders two adjacent synchronous writes in the stateful core client (used by `posthog-react-native` and `@posthog/web`); the event payload is unchanged, and `posthog-node` and the browser `posthog-js` package do not use this code path.
+  (2026-06-15)
+
 ## 1.32.4
 
 ### Patch Changes
