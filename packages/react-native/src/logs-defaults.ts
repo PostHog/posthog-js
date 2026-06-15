@@ -1,5 +1,6 @@
 import { Platform } from 'react-native'
 import type { PostHogLogsConfig, ResolvedPostHogLogsConfig } from '@posthog/core'
+import { getPlatformOS } from './utils'
 
 // Mobile defaults. Tuned for cellular radio tail (longer flush interval keeps
 // the radio asleep) and cellular data cost (tighter per-interval rate cap).
@@ -21,10 +22,20 @@ export const DEFAULT_TERMINATION_FLUSH_BUDGET_MS = 2000
  * `Platform.Version` is `string` on iOS and `number` on Android — coerce
  * to string so the OTLP `os.version` attribute has a stable type.
  */
+function getPlatformVersion(): string | undefined {
+  try {
+    return Platform?.Version !== undefined ? String(Platform.Version) : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function defaultResourceAttributes(): Record<string, string> {
+  const osName = getPlatformOS()
+  const osVersion = getPlatformVersion()
   return {
-    'os.name': Platform.OS,
-    'os.version': String(Platform.Version),
+    ...(osName ? { 'os.name': osName } : {}),
+    ...(osVersion ? { 'os.version': osVersion } : {}),
   }
 }
 

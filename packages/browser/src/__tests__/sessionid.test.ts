@@ -169,6 +169,7 @@ describe('Session ID manager', () => {
                     activityTimeout: false,
                     noSessionId: false,
                     sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
                 },
             })
             expect(persistence.register).toHaveBeenCalledWith({
@@ -190,6 +191,7 @@ describe('Session ID manager', () => {
                     activityTimeout: true,
                     noSessionId: false,
                     sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
                 },
             })
             expect(persistence.register).toHaveBeenCalledWith({
@@ -213,6 +215,7 @@ describe('Session ID manager', () => {
                     activityTimeout: true,
                     noSessionId: false,
                     sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
                 },
             })
 
@@ -238,6 +241,7 @@ describe('Session ID manager', () => {
                     activityTimeout: false,
                     noSessionId: false,
                     sessionPastMaximumLength: true,
+                    crossTabAdoption: false,
                 },
             })
 
@@ -261,6 +265,7 @@ describe('Session ID manager', () => {
                     activityTimeout: true,
                     noSessionId: false,
                     sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
                 },
             })
             expect(persistence.register).toHaveBeenCalledWith({
@@ -632,6 +637,38 @@ describe('Session ID manager', () => {
             sessionIdManager['_flushPendingActivityTimestamp']()
             expect(order).toEqual(['flush', 'load', 'register', 'flush'])
         })
+
+        it('checkAndGetSessionAndWindowId does not rotate when a sibling tab has been active', () => {
+            // This tab last persisted at t=1_000_000; it has been idle since.
+            // A sibling tab has since written a recent activity timestamp
+            // (simulated by mutating persistence.props directly — `load()`
+            // is a no-op in the mock, so this stands in for "storage was
+            // updated by another tab and we re-read it").
+            ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+
+            // Use the actual configured timeout so the test is robust to
+            // shared-config mutations by other tests in this file.
+            const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+            // Sibling tab wrote 1 second ago, so the session is alive.
+            persistence.props[SESSION_ID] = [queryTime - 1_000, 'sessionA', 1_000_000]
+
+            const result = sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+            expect(result.sessionId).toBe('sessionA')
+            expect(result.changeReason?.activityTimeout).toBeFalsy()
+        })
+
+        it('checkAndGetSessionAndWindowId rotates when cross-tab refresh confirms idle', () => {
+            ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+
+            const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+            const result = sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+            expect(result.sessionId).not.toBe('sessionA')
+            expect(result.changeReason?.activityTimeout).toBe(true)
+        })
     })
 
     describe('reset session id', () => {
@@ -965,6 +1002,131 @@ describe('Session ID manager', () => {
 
             const secondResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
             expect(secondResult.changeReason?.activityTimeout).toBeUndefined()
+        })
+    })
+
+    describe('cross-tab refresh hardening', () => {
+        // Each test pins an exact failure mode the cross-tab refresh prevents.
+        // The hardening is gated on persistence_save_debounce_ms > 0.
+
+        beforeEach(() => {
+            config.persistence_save_debounce_ms = 250
+        })
+
+        afterEach(() => {
+            delete config.persistence_save_debounce_ms
+        })
+
+        it('cross-tab refresh pulls only the SESSION_ID slot from storage', () => {
+            // The cross-tab refresh path must NOT do a whole-blob
+            // flush+load — that would write tab B's stale props to storage
+            // (clobbering sibling writes) before reading them back.
+            ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+
+            const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+            sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+
+            expect(persistence.refreshKey).toHaveBeenCalledWith(SESSION_ID)
+            expect(persistence.load).not.toHaveBeenCalled()
+        })
+
+        it('does not clobber a sibling tab session id when cross-tab refresh keeps the session alive', () => {
+            // Tab A has stale view (sessionA). Tab B rotated to sessionB
+            // in storage and wrote a recent activity timestamp. Tab A's
+            // next event capture triggers cross-tab refresh; activityTimeout
+            // becomes false (sibling kept it alive) so we don't rotate.
+            // BUT we must not write Tab A's stale sessionA back via
+            // _setSessionId — we'd clobber Tab B's rotation. The fix is to
+            // re-sample _getSessionId() after the refresh.
+            ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+
+            const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+
+            // Simulate the cross-tab refresh seeing the sibling's rotation:
+            // refreshKey mutates props[SESSION_ID] to reflect the sibling.
+            ;(persistence.refreshKey as jest.Mock).mockImplementation(() => {
+                persistence.props[SESSION_ID] = [queryTime - 1_000, 'sessionB', queryTime - 1_000]
+            })
+
+            const result = sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+
+            // No rotation should have happened (sibling kept it alive).
+            expect(result.changeReason?.activityTimeout).toBeFalsy()
+            // And we must have written sessionB back, not sessionA.
+            expect(persistence.register).toHaveBeenLastCalledWith({
+                [SESSION_ID]: [expect.any(Number), 'sessionB', queryTime - 1_000],
+            })
+        })
+
+        it('idle timer does not re-arm after destroy()', async () => {
+            jest.useFakeTimers()
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+
+            // Simulate a sibling tab keeping the session alive so the timer
+            // would normally re-arm.
+            ;(persistence.refreshKey as jest.Mock).mockImplementation(() => {
+                persistence.props[SESSION_ID] = [Date.now() - 100, 'sessionA', 1_000_000]
+            })
+
+            // Destroy while a timer is pending.
+            sessionIdManager.destroy()
+
+            // Advance well past any timer that might still be queued.
+            jest.advanceTimersByTime(sessionIdManager.sessionTimeoutMs * 5)
+
+            // The destroyed instance must not have re-armed.
+            expect(sessionIdManager['_enforceIdleTimeout']).toBeUndefined()
+            jest.useRealTimers()
+        })
+    })
+
+    describe('cross-tab refresh legacy path (debounce disabled)', () => {
+        // Without `persistence_save_debounce_ms`, the cross-tab refresh
+        // path falls back to the prior `flush() + load()` cycle. Handler
+        // emission is NOT gated: an adopted session id that handlers don't
+        // hear about leaves consumers on the old session.
+
+        it('falls back to flush + load when debounce is disabled', () => {
+            ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+
+            const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+            sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+
+            expect(persistence.flush).toHaveBeenCalled()
+            expect(persistence.load).toHaveBeenCalled()
+            expect(persistence.refreshKey).not.toHaveBeenCalled()
+        })
+
+        it('emits onSessionId handlers with crossTabAdoption when observing a sibling rotation (debounce disabled)', () => {
+            ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+
+            const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+
+            ;(persistence.load as jest.Mock).mockImplementation(() => {
+                persistence.props[SESSION_ID] = [queryTime - 1_000, 'sessionB', queryTime - 1_000]
+            })
+
+            const handler = jest.fn()
+            sessionIdManager.onSessionId(handler)
+            handler.mockClear()
+
+            sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+
+            expect(handler).toHaveBeenCalledWith('sessionB', 'stable-window-id', {
+                noSessionId: false,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: true,
+            })
         })
     })
 

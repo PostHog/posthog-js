@@ -42,7 +42,7 @@ import {
 } from './types'
 import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isValidSampleRate } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
-import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
+import { OptionalReactNativePlugin } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 
 export { PostHogPersistedProperty }
@@ -188,6 +188,7 @@ export class PostHog extends PostHogCore {
   private _currentSessionId?: string | undefined
   private _enableSessionReplay?: boolean
   private _sessionReplayNativeInitialized: boolean = false
+  private _nativeErrorTrackingInitialized: boolean = false
   private _sessionReplayOptions?: PostHogOptions
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
@@ -1296,10 +1297,7 @@ export class PostHog extends PostHogCore {
     return !this.isDisabled && (this._enableSessionReplay ?? false)
   }
 
-  _resetSessionId(
-    reactNativeSessionReplay: typeof OptionalReactNativeSessionReplay | undefined,
-    sessionId: string
-  ): void {
+  _resetSessionId(reactNativeSessionReplay: typeof OptionalReactNativePlugin | undefined, sessionId: string): void {
     // _resetSessionId is only called if reactNativeSessionReplay not undefined, but the linter wasn't happy
     if (reactNativeSessionReplay) {
       reactNativeSessionReplay.endSession()
@@ -1310,15 +1308,15 @@ export class PostHog extends PostHogCore {
   getSessionId(): string {
     const sessionId = super.getSessionId()
 
-    if (!this._isEnableSessionReplay()) {
+    if (!this._isEnableSessionReplay() && !this._isNativePluginInitialized()) {
       return sessionId
     }
 
     // only rotate if there is a new sessionId and it is different from the current one
     if (sessionId.length > 0 && this._currentSessionId && sessionId !== this._currentSessionId) {
-      if (OptionalReactNativeSessionReplay) {
+      if (OptionalReactNativePlugin) {
         try {
-          this._resetSessionId(OptionalReactNativeSessionReplay, String(sessionId))
+          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
           this._logger.info(`sessionId rotated from ${this._currentSessionId} to ${sessionId}.`)
         } catch (e) {
           this._logger.error(`Failed to rotate sessionId: ${e}.`)
@@ -1334,12 +1332,12 @@ export class PostHog extends PostHogCore {
 
   resetSessionId(): void {
     super.resetSessionId()
-    if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {
+    if ((this._isEnableSessionReplay() || this._isNativePluginInitialized()) && OptionalReactNativePlugin) {
       try {
-        OptionalReactNativeSessionReplay.endSession()
-        this._logger.info(`Session replay ended.`)
+        OptionalReactNativePlugin.endSession()
+        this._logger.info(`Native PostHog session ended.`)
       } catch (e) {
-        this._logger.error(`Session replay failed to end: ${e}.`)
+        this._logger.error(`Native PostHog session failed to end: ${e}.`)
       }
     }
   }
@@ -1377,23 +1375,25 @@ export class PostHog extends PostHogCore {
       return
     }
 
-    if (!OptionalReactNativeSessionReplay) {
+    if (!OptionalReactNativePlugin) {
       // Web/macOS - silently return
       return
     }
 
     try {
       // Check if the plugin supports startRecording
-      if (!OptionalReactNativeSessionReplay.startRecording) {
-        this._logger.warn('startRecording is not available. Please update posthog-react-native-session-replay.')
+      if (!OptionalReactNativePlugin.startRecording) {
+        this._logger.warn(
+          'startRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
+        )
         return
       }
 
-      // Lazily initialize native SDK if not already initialized
-      // This handles the case where enableSessionReplay = false in config but user wants to start manually
+      // If only error tracking is active, add replay to the existing native instance
+      // rather than re-initializing.
       if (!this._sessionReplayNativeInitialized) {
         this._logger.info('Native session replay SDK not initialized, initializing now...')
-        const initialized = await this.initializeSessionReplayNative(this._sessionReplayOptions)
+        const initialized = await this.initializeNativePlugin(this._sessionReplayOptions, undefined, true)
         if (!initialized) {
           this._logger.error('Failed to initialize native session replay SDK.')
           return
@@ -1405,11 +1405,11 @@ export class PostHog extends PostHogCore {
         super.resetSessionId()
         const newSessionId = super.getSessionId()
         // sync native + rn sessionId
-        this._resetSessionId(OptionalReactNativeSessionReplay, String(newSessionId))
+        this._resetSessionId(OptionalReactNativePlugin, String(newSessionId))
         this._currentSessionId = newSessionId
       }
 
-      await OptionalReactNativeSessionReplay.startRecording(resumeCurrent)
+      await OptionalReactNativePlugin.startRecording(resumeCurrent)
       this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
     } catch (e) {
       this._logger.error(`Failed to start session recording: ${e}`)
@@ -1438,19 +1438,21 @@ export class PostHog extends PostHogCore {
       return
     }
 
-    if (!OptionalReactNativeSessionReplay) {
+    if (!OptionalReactNativePlugin) {
       // Web/macOS - silently return
       return
     }
 
     try {
       // Check if the plugin supports stopRecording
-      if (!OptionalReactNativeSessionReplay.stopRecording) {
-        this._logger.warn('stopRecording is not available. Please update posthog-react-native-session-replay.')
+      if (!OptionalReactNativePlugin.stopRecording) {
+        this._logger.warn(
+          'stopRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
+        )
         return
       }
 
-      await OptionalReactNativeSessionReplay.stopRecording()
+      await OptionalReactNativePlugin.stopRecording()
       // this._enableSessionReplay = false
       this._logger.info('Session recording stopped.')
     } catch (e) {
@@ -1481,13 +1483,13 @@ export class PostHog extends PostHogCore {
       return false
     }
 
-    if (!OptionalReactNativeSessionReplay) {
+    if (!OptionalReactNativePlugin) {
       // Web/macOS - always return false
       return false
     }
 
     try {
-      return await OptionalReactNativeSessionReplay.isEnabled()
+      return await OptionalReactNativePlugin.isEnabled()
     } catch (e) {
       this._logger.error(`Failed to check session replay status: ${e}`)
       return false
@@ -1571,14 +1573,14 @@ export class PostHog extends PostHogCore {
       )
     }
 
-    if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {
+    if ((this._isEnableSessionReplay() || this._isNativePluginInitialized()) && OptionalReactNativePlugin) {
       try {
         distinctId = distinctId || previousDistinctId
         const anonymousId = this.getAnonymousId()
-        OptionalReactNativeSessionReplay.identify(String(distinctId), String(anonymousId))
-        this._logger.info(`Session replay identified with distinctId ${distinctId} and anonymousId ${anonymousId}.`)
+        OptionalReactNativePlugin.identify(String(distinctId), String(anonymousId))
+        this._logger.info(`Native PostHog identified with distinctId ${distinctId} and anonymousId ${anonymousId}.`)
       } catch (e) {
-        this._logger.error(`Session replay failed to identify: ${e}.`)
+        this._logger.error(`Native PostHog failed to identify: ${e}.`)
       }
     }
 
@@ -1876,6 +1878,16 @@ export class PostHog extends PostHogCore {
     }
   }
 
+  private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {
+    const autocapture = options?.errorTracking?.autocapture
+    const nativeCrashes = typeof autocapture === 'object' && autocapture.nativeCrashes === true
+    return !this.isDisabled && nativeCrashes
+  }
+
+  private _isNativePluginInitialized(): boolean {
+    return this._sessionReplayNativeInitialized || this._nativeErrorTrackingInitialized
+  }
+
   /**
    * Initializes the native session replay SDK if not already initialized.
    * This is called automatically by startSessionReplay() or lazily by startSessionRecording().
@@ -1886,18 +1898,48 @@ export class PostHog extends PostHogCore {
     options?: PostHogOptions,
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
   ): Promise<boolean> {
-    if (!OptionalReactNativeSessionReplay) {
-      this._logger.warn('Session replay enabled but not installed.')
+    return this.initializeNativePlugin(options, cachedRemoteConfig, true)
+  }
+
+  private async initializeNativePlugin(
+    options?: PostHogOptions,
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
+    enableSessionReplay: boolean = this._isEnableSessionReplay()
+  ): Promise<boolean> {
+    let enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+
+    if (!enableSessionReplay && !enableNativeErrorTracking) {
+      return true
+    }
+
+    if (!OptionalReactNativePlugin) {
+      this._logger.warn(
+        enableSessionReplay
+          ? 'Session replay enabled but not installed.'
+          : 'Native error tracking enabled but not installed.'
+      )
       return false
     }
 
-    if (this._sessionReplayNativeInitialized) {
+    if (
+      (!enableSessionReplay || this._sessionReplayNativeInitialized) &&
+      (!enableNativeErrorTracking || this._nativeErrorTrackingInitialized)
+    ) {
+      return true
+    }
+
+    // The native SDKs can't be re-initialized — a second setup() would reset the running
+    // instance. If error tracking is already running, skip setup() and start replay on the
+    // existing native instance instead (setup() is what would otherwise start it).
+    if (this._isNativePluginInitialized() && enableSessionReplay && !this._sessionReplayNativeInitialized) {
+      this._sessionReplayNativeInitialized = true
+      await OptionalReactNativePlugin.startRecording?.(true)
       return true
     }
 
     const sessionId = this.getSessionId()
     if (sessionId.length === 0) {
-      this._logger.warn(`Session replay enabled but no sessionId found.`)
+      this._logger.warn(`Native PostHog plugin enabled but no sessionId found.`)
       return false
     }
 
@@ -1988,7 +2030,7 @@ export class PostHog extends PostHogCore {
       throttleDelayMs,
     }
 
-    this._logger.info(`Session replay SDK config: ${JSON.stringify(sdkReplayConfig)}`)
+    this._logger.info(`Native PostHog plugin replay config: ${JSON.stringify(sdkReplayConfig)}`)
 
     // if Flags API has not returned yet, we will start session replay with default config.
     const sessionReplay = this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}
@@ -2008,27 +2050,64 @@ export class PostHog extends PostHogCore {
       flushAt: this.flushAt,
     }
 
-    this._logger.info(`Session replay sdk options: ${JSON.stringify(sdkOptions)}`)
+    this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(sdkOptions)}`)
 
     try {
-      if (!(await OptionalReactNativeSessionReplay.isEnabled())) {
-        await OptionalReactNativeSessionReplay.start(
-          String(sessionId),
-          sdkOptions,
-          sdkReplayConfig,
-          cachedSessionReplayConfig
-        )
-        this._logger.info(`Session replay started with sessionId ${sessionId}.`)
+      const wasSessionReplayEnabled = enableSessionReplay
+        ? await OptionalReactNativePlugin.isEnabled().catch(() => false)
+        : false
+
+      if (OptionalReactNativePlugin.setup) {
+        const pluginConfig = {
+          sessionReplay: {
+            enabled: enableSessionReplay,
+            sdkReplayConfig,
+            decideReplayConfig: cachedSessionReplayConfig,
+          },
+          errorTracking: {
+            nativeAutocapture: enableNativeErrorTracking,
+          },
+        }
+        await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
+        if (wasSessionReplayEnabled) {
+          // if somehow the SDK is already enabled with a different sessionId, we reset it
+          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
+        }
       } else {
-        // if somehow the SDK is already enabled with a different sessionId, we reset it
-        this._resetSessionId(OptionalReactNativeSessionReplay, String(sessionId))
-        this._logger.info(`Session replay already started with sessionId ${sessionId}.`)
+        if (enableNativeErrorTracking) {
+          this._logger.warn(
+            'Native error tracking is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
+          )
+          // The legacy plugin can't do native crash capture, so don't mark it initialized below.
+          enableNativeErrorTracking = false
+        }
+        if (!enableSessionReplay) {
+          return false
+        }
+        if (!(await OptionalReactNativePlugin.isEnabled())) {
+          await OptionalReactNativePlugin.start(
+            String(sessionId),
+            sdkOptions,
+            sdkReplayConfig,
+            cachedSessionReplayConfig
+          )
+        } else {
+          // if somehow the SDK is already enabled with a different sessionId, we reset it
+          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
+        }
       }
       this._currentSessionId = sessionId
-      this._sessionReplayNativeInitialized = true
+      if (enableSessionReplay) {
+        this._sessionReplayNativeInitialized = true
+        this._logger.info(`Session replay started with sessionId ${sessionId}.`)
+      }
+      if (enableNativeErrorTracking) {
+        this._nativeErrorTrackingInitialized = true
+        this._logger.info('Native error tracking started.')
+      }
       return true
     } catch (e) {
-      this._logger.error(`Session replay failed to start: ${e}.`)
+      this._logger.error(`Native PostHog plugin failed to start: ${e}.`)
       return false
     }
   }
@@ -2040,8 +2119,13 @@ export class PostHog extends PostHogCore {
     this._enableSessionReplay = options?.enableSessionReplay
     this._sessionReplayOptions = options
 
+    const enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+
     if (!this._isEnableSessionReplay()) {
       this._logger.info('Session replay is not enabled.')
+      if (enableNativeErrorTracking) {
+        await this.initializeNativePlugin(options, cachedRemoteConfig, false)
+      }
       return
     }
 
@@ -2090,9 +2174,12 @@ export class PostHog extends PostHogCore {
     }
 
     if (recordingActive) {
-      await this.initializeSessionReplayNative(options, cachedRemoteConfig)
+      await this.initializeNativePlugin(options, cachedRemoteConfig, true)
     } else {
       this._logger.info('Session replay disabled.')
+      if (enableNativeErrorTracking) {
+        await this.initializeNativePlugin(options, cachedRemoteConfig, false)
+      }
     }
   }
 

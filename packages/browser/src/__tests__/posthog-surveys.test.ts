@@ -151,6 +151,18 @@ describe('posthog-surveys', () => {
             localStorage.clear()
         })
 
+        describe('reset', () => {
+            it('does not throw when localStorage access throws (e.g. cross-origin iframe)', () => {
+                const removeItemSpy = jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+                    throw new Error('storage unavailable')
+                })
+
+                expect(() => surveys.reset()).not.toThrow()
+
+                removeItemSpy.mockRestore()
+            })
+        })
+
         describe('canRenderSurvey', () => {
             it('should return false if surveys are not loaded', () => {
                 const result = surveys.canRenderSurvey(survey.id)

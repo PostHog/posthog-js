@@ -98,6 +98,90 @@ describe('record', function (this: ISuite) {
     `,
   );
 
+  // Resting offset from a real silk-sheet recording where the reveal scroll clamped to 0.
+  const SILK_SHEET_RESTING_Y = 787;
+
+  const scrollData = () =>
+    ctx.events
+      .filter(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          e.data.source === IncrementalSource.Scroll,
+      )
+      .map((e) => {
+        const d = e.data as { id: number; x: number; y: number };
+        return { id: d.id, x: d.x, y: d.y };
+      });
+
+  const setupScrolledContainerBeforeRecord = async (
+    initialScrollTop: number,
+  ): Promise<void> => {
+    await ctx.page.evaluate((top: number) => {
+      const container = document.createElement('div');
+      container.setAttribute(
+        'style',
+        'overflow: auto; height: 100px; width: 100px;',
+      );
+      const tall = document.createElement('div');
+      tall.setAttribute('style', 'height: 3000px; width: 50px;');
+      container.appendChild(tall);
+      document.body.appendChild(container);
+      container.scrollTop = top;
+      (window as unknown as { __container: HTMLElement }).__container =
+        container;
+    }, initialScrollTop);
+    await waitForRAF(ctx.page);
+  };
+
+  const recordSilkSheetClampToZero = async (
+    restingY: number,
+  ): Promise<number> => {
+    await ctx.page.evaluate(() => {
+      const container = document.createElement('div');
+      container.id = 'reveal-container';
+      container.setAttribute(
+        'style',
+        'overflow: auto; height: 100px; width: 100%;',
+      );
+      const child = document.createElement('div');
+      child.setAttribute('style', 'height: 10px;');
+      container.appendChild(child);
+      document.body.appendChild(container);
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__container = container;
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__child = child;
+    });
+    await waitForRAF(ctx.page);
+
+    const expectedId = await ctx.page.evaluate((top: number) => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const { __container } = window as unknown as { __container: HTMLElement };
+      __container.scrollTop = top;
+      __container.dispatchEvent(new Event('scroll'));
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(__container);
+    }, restingY);
+    await waitForRAF(ctx.page);
+
+    await ctx.page.evaluate((top: number) => {
+      const { __container, __child } = window as unknown as {
+        __container: HTMLElement;
+        __child: HTMLElement;
+      };
+      __child.style.height = '3000px';
+      __container.scrollTop = top;
+      __container.dispatchEvent(new Event('scrollend'));
+    }, restingY);
+    await waitForRAF(ctx.page);
+
+    return expectedId;
+  };
+
   it('will only have one full snapshot without checkout config', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
@@ -248,6 +332,182 @@ describe('record', function (this: ISuite) {
     });
     await waitForRAF(ctx.page);
     await assertSnapshot(ctx.events);
+  });
+
+  it('should record the resting scroll offset on scrollend', async () => {
+    await setupScrolledContainerBeforeRecord(745);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const c = (window as unknown as { __container: HTMLElement }).__container;
+      c.dispatchEvent(new Event('scrollend'));
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(c);
+    });
+    await waitForRAF(ctx.page);
+
+    expect(expectedId).toBeGreaterThan(0);
+    expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 745 }]);
+  });
+
+  it.each([
+    ['scroll then scrollend', ['scroll', 'scrollend']],
+    ['scrollend then scroll', ['scrollend', 'scroll']],
+  ] as const)(
+    'should not emit a duplicate when %s fires at the same offset',
+    async (_label, eventOrder) => {
+      await setupScrolledContainerBeforeRecord(300);
+
+      const expectedId = await ctx.page.evaluate((order: string[]) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+        const c = (window as unknown as { __container: HTMLElement }).__container;
+        order.forEach((type) => c.dispatchEvent(new Event(type)));
+        return (
+          record as unknown as { mirror: { getId(n: Node): number } }
+        ).mirror.getId(c);
+      }, [...eventOrder]);
+      await waitForRAF(ctx.page);
+
+      expect(expectedId).toBeGreaterThan(0);
+      expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 300 }]);
+    },
+  );
+
+  it('should recover the resting offset via scrollend after a scroll clamped to 0', async () => {
+    await ctx.page.evaluate(() => {
+      const container = document.createElement('div');
+      container.setAttribute(
+        'style',
+        'overflow: auto; height: 100px; width: 100px;',
+      );
+      const child = document.createElement('div');
+      child.setAttribute('style', 'height: 10px; width: 50px;'); // not scrollable yet
+      container.appendChild(child);
+      document.body.appendChild(container);
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__container = container;
+      (
+        window as unknown as { __container: HTMLElement; __child: HTMLElement }
+      ).__child = child;
+    });
+    await waitForRAF(ctx.page);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      const { __container } = window as unknown as { __container: HTMLElement };
+      __container.scrollTop = 745;
+      __container.dispatchEvent(new Event('scroll'));
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(__container);
+    });
+    await waitForRAF(ctx.page);
+
+    await ctx.page.evaluate(() => {
+      const { __container, __child } = window as unknown as {
+        __container: HTMLElement;
+        __child: HTMLElement;
+      };
+      __child.style.height = '3000px';
+      __container.scrollTop = 745;
+      __container.dispatchEvent(new Event('scrollend'));
+    });
+    await waitForRAF(ctx.page);
+
+    const data = scrollData().filter((d) => d.id === expectedId);
+    expect(expectedId).toBeGreaterThan(0);
+    expect(data[0].y).toBe(0);
+    expect(data[data.length - 1].y).toBe(745);
+  });
+
+  it('should record the resting window scroll offset on scrollend', async () => {
+    await ctx.page.evaluate(() => {
+      document.body.style.height = '5000px';
+      window.scrollTo(0, 500);
+    });
+    await waitForRAF(ctx.page);
+
+    const expectedId = await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+      document.dispatchEvent(new Event('scrollend'));
+      return (
+        record as unknown as { mirror: { getId(n: Node): number } }
+      ).mirror.getId(document);
+    });
+    await waitForRAF(ctx.page);
+
+    expect(expectedId).toBeGreaterThan(0);
+    expect(scrollData()).toEqual([{ id: expectedId, x: 0, y: 500 }]);
+  });
+
+  it('should record silk sheet resting offset after clamp-to-0', async () => {
+    const restingY = SILK_SHEET_RESTING_Y;
+    const expectedId = await recordSilkSheetClampToZero(restingY);
+
+    const data = scrollData().filter((d) => d.id === expectedId);
+    expect(expectedId).toBeGreaterThan(0);
+    expect(data).toEqual([
+      { id: expectedId, x: 0, y: 0 },
+      { id: expectedId, x: 0, y: restingY },
+    ]);
+  });
+
+  it('should record a later scroll offset after scrollend recovery', async () => {
+    const restingY = SILK_SHEET_RESTING_Y;
+    const expectedId = await recordSilkSheetClampToZero(restingY);
+
+    await ctx.page.evaluate(() => {
+      const c = (window as unknown as { __container: HTMLElement }).__container;
+      c.scrollTop = 900;
+      c.dispatchEvent(new Event('scroll'));
+    });
+    await waitForRAF(ctx.page);
+
+    const data = scrollData().filter((d) => d.id === expectedId);
+    expect(data).toEqual([
+      { id: expectedId, x: 0, y: 0 },
+      { id: expectedId, x: 0, y: restingY },
+      { id: expectedId, x: 0, y: 900 },
+    ]);
+  });
+
+  it('should replay recorded silk sheet reveal offset end-to-end', async () => {
+    const restingY = SILK_SHEET_RESTING_Y;
+    await recordSilkSheetClampToZero(restingY);
+
+    const recordedEvents = [...ctx.events];
+    const firstTimestamp =
+      recordedEvents.find((e) => e.type === EventType.FullSnapshot)?.timestamp ??
+      recordedEvents[0].timestamp;
+    const lastTimestamp = recordedEvents[recordedEvents.length - 1].timestamp;
+
+    await ctx.page.evaluate(
+      ({ events, pauseAt }) => {
+        const { Replayer } = (
+          window as unknown as {
+            rrweb: { Replayer: new (e: eventWithTime[]) => { pause: (t: number) => void } };
+          }
+        ).rrweb;
+        const replayer = new Replayer(events);
+        replayer.pause(pauseAt);
+      },
+      { events: recordedEvents, pauseAt: lastTimestamp - firstTimestamp + 200 },
+    );
+
+    const iframe = await ctx.page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval(
+        '#reveal-container',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(restingY);
   });
 
   it('should record selection event', async () => {

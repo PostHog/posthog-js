@@ -15,6 +15,10 @@ import orderingEvents from './events/ordering';
 import scrollEvents from './events/scroll';
 import scrollWithParentStylesEvents from './events/scroll-with-parent-styles';
 import scrollRevealedByLateStyleEvents from './events/scroll-revealed-by-late-style';
+import scrollModalRevealedOnSeekEvents from './events/scroll-modal-revealed-on-seek';
+import scrollDocumentInitialOffsetEvents from './events/scroll-document-initial-offset';
+import silkSheetRevealBrokenEvents from './events/silk-sheet-reveal-broken';
+import silkSheetRevealFixedEvents from './events/silk-sheet-reveal-fixed';
 import inputEvents from './events/input';
 import iframeEvents from './events/iframe';
 import selectionEvents from './events/selection';
@@ -477,6 +481,80 @@ describe('replayer', function () {
         (element: Element) => element.scrollTop,
       ),
     ).toEqual(800);
+  });
+
+  it('lands a scroll instantly on seek even when the target uses scroll-behavior: smooth', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(scrollModalRevealedOnSeekEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(1500);
+    `);
+    // With 'instant' the seek lands at 1320 immediately; with 'auto' the inherited
+    // smooth animation has barely left 0 after two frames.
+    await waitForRAF(page);
+    await waitForRAF(page);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval(
+        '#sheet',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(1320);
+  });
+
+  it('applies the full snapshot initial offset instantly despite scroll-behavior: smooth', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(scrollDocumentInitialOffsetEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(200);
+    `);
+    await waitForRAF(page);
+    await waitForRAF(page);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval(
+        'html',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(800);
+  });
+
+  it('silk sheet reveal without scrollend leaves container scrolled to 0', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(silkSheetRevealBrokenEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(750);
+    `);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval(
+        '#reveal-container',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(0);
+  });
+
+  it('silk sheet reveal with scrollend offset replays revealed content', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(silkSheetRevealFixedEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(800);
+    `);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval(
+        '#reveal-container',
+        (element: Element) => element.scrollTop,
+      ),
+    ).toEqual(787);
   });
 
   it('can fast forward input events', async () => {

@@ -8,11 +8,29 @@ import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 // primitives here, all rendering as plain divs so children appear in the DOM.
 jest.mock('react-native', () => {
   const RealReact = jest.requireActual('react')
+  const withoutNativeOnlyProps = (props: any) => {
+    const domProps = { ...props }
+    delete domProps.visible
+    delete domProps.animationType
+    delete domProps.transparent
+    delete domProps.onRequestClose
+    delete domProps.onDismiss
+    delete domProps.statusBarTranslucent
+    return domProps
+  }
   const Box = RealReact.forwardRef(({ children, testID, onTouchStart, ...rest }: any, ref: any) =>
-    RealReact.createElement('div', { ref, 'data-testid': testID, onMouseDown: onTouchStart, ...rest }, children)
+    RealReact.createElement(
+      'div',
+      { ref, 'data-testid': testID, onMouseDown: onTouchStart, ...withoutNativeOnlyProps(rest) },
+      children
+    )
   )
   const Pressable = RealReact.forwardRef(({ children, testID, onPress, ...rest }: any, ref: any) =>
-    RealReact.createElement('div', { ref, 'data-testid': testID, onClick: onPress, ...rest }, children)
+    RealReact.createElement(
+      'div',
+      { ref, 'data-testid': testID, onClick: onPress, ...withoutNativeOnlyProps(rest) },
+      children
+    )
   )
   return {
     View: Box,

@@ -9,6 +9,7 @@ import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.UiThreadUtil
 import com.posthog.PostHog
 import com.posthog.PostHogConfig
+import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
 import com.posthog.internal.PostHogPreferences
@@ -98,31 +99,36 @@ class PosthogReactNativePluginModule(
               flushAt = theFlushAt
               errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
 
-              if (sessionReplayEnabled) {
-                val maskAllTextInputs = getBoolean(sdkReplayConfig, "maskAllTextInputs", DEFAULT_MASK_ALL_TEXT_INPUTS)
-                val maskAllImages = getBoolean(sdkReplayConfig, "maskAllImages", DEFAULT_MASK_ALL_IMAGES)
-                val captureLog = getBoolean(sdkReplayConfig, "captureLog", DEFAULT_CAPTURE_LOG)
+              // React Native rethrows fatal JS errors natively as JavascriptException.
+              // The JS layer already captured them, so drop the native duplicate.
+              addBeforeSend { event -> if (isReactNativeFatalJsError(event)) null else event }
 
-                // read throttleDelayMs and use androidDebouncerDelayMs as a fallback for back compatibility
-                val throttleDelayMs =
-                  when {
-                    hasKey(sdkReplayConfig, "throttleDelayMs") -> getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                    hasKey(sdkReplayConfig, "androidDebouncerDelayMs") -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                    else -> DEFAULT_THROTTLE_DELAY_MS
-                  }
+              // Always apply the session replay configuration so that recording started later
+              // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+              // sessionReplayEnabled only controls whether recording starts at setup.
+              val maskAllTextInputs = getBoolean(sdkReplayConfig, "maskAllTextInputs", DEFAULT_MASK_ALL_TEXT_INPUTS)
+              val maskAllImages = getBoolean(sdkReplayConfig, "maskAllImages", DEFAULT_MASK_ALL_IMAGES)
+              val captureLog = getBoolean(sdkReplayConfig, "captureLog", DEFAULT_CAPTURE_LOG)
 
-                sessionReplay = true
-                sessionReplayConfig.screenshot = true
-                sessionReplayConfig.captureLogcat = captureLog
-                sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
-                sessionReplayConfig.maskAllImages = maskAllImages
-                sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
-                sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
-
-                val endpoint = getString(decideReplayConfig, "endpoint", "")
-                if (endpoint.isNotEmpty()) {
-                  snapshotEndpoint = endpoint
+              // read throttleDelayMs and use androidDebouncerDelayMs as a fallback for back compatibility
+              val throttleDelayMs =
+                when {
+                  hasKey(sdkReplayConfig, "throttleDelayMs") -> getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
+                  hasKey(sdkReplayConfig, "androidDebouncerDelayMs") -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
+                  else -> DEFAULT_THROTTLE_DELAY_MS
                 }
+
+              sessionReplay = sessionReplayEnabled
+              sessionReplayConfig.screenshot = true
+              sessionReplayConfig.captureLogcat = captureLog
+              sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
+              sessionReplayConfig.maskAllImages = maskAllImages
+              sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
+              sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
+
+              val endpoint = getString(decideReplayConfig, "endpoint", "")
+              if (endpoint.isNotEmpty()) {
+                snapshotEndpoint = endpoint
               }
 
               if (theSdkVersion.isNotEmpty()) {
@@ -279,6 +285,16 @@ class PosthogReactNativePluginModule(
     map: ReadableMap?,
     key: String,
   ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+  private fun isReactNativeFatalJsError(event: PostHogEvent): Boolean {
+    if (event.event != "\$exception") return false
+    val exceptionList = event.properties?.get("\$exception_list") as? List<*> ?: return false
+    return exceptionList.any { item ->
+      val exception = item as? Map<*, *> ?: return@any false
+      exception["type"] == "JavascriptException" &&
+        (exception["module"] as? String)?.startsWith("com.facebook.react") == true
+    }
+  }
 
   private fun logError(
     method: String,

@@ -194,7 +194,6 @@ export interface RequestWithOptions {
     timeout?: number
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
-    disableXHRCredentials?: boolean
     compression?: Compression | 'best-available'
     fetchOptions?: {
         cache?: RequestInit['cache']

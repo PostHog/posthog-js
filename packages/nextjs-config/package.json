@@ -1,6 +1,9 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.9.57",
+  "version": "1.9.66",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
   "description": "NextJS configuration helper for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -44,8 +47,8 @@
   "dependencies": {
     "@posthog/cli": "catalog:",
     "semver": "^7.7.2",
-    "@posthog/plugin-utils": "workspace:*",
-    "@posthog/webpack-plugin": "workspace:*"
+    "@posthog/plugin-utils": "workspace:^",
+    "@posthog/webpack-plugin": "workspace:^"
   },
   "keywords": [
     "posthog",

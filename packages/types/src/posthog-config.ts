@@ -97,14 +97,17 @@ export interface RageclickConfig {
     /**
      * Controls automatic exclusion of elements by text content from rageclick detection.
      * Useful for pagination buttons, loading spinners, and other repeatedly-clicked UI elements.
-     * - `true` (default): Use default keywords ['next', 'previous', 'prev', '>', '<']
+     * - `true`: Use default keywords ['next', 'previous', 'prev', '>', '<']
      * - `false`: Disable content-based exclusion
      * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
      *
      * Checks if element text content or aria-label matches any of the keywords (case-insensitive).
      * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
      * so they don't suppress text like "sign-up", "5 > 3", or "C++".
-     * @default true
+     *
+     * @default undefined
+     * (`true` when `defaults` is `'2025-11-30'` or later;
+     * `['next', 'previous', 'prev', '>', '<', '+', '-', '−', '–']` when `defaults` is `'2026-05-30'` or later)
      */
     content_ignorelist?: boolean | string[]
 
@@ -137,9 +140,24 @@ export interface RageclickConfig {
 }
 
 export interface BootstrapConfig {
+    /**
+     * Distinct ID to use before the SDK has loaded persisted identity.
+     */
     distinctID?: string
+
+    /**
+     * Whether `distinctID` already identifies a known person profile.
+     */
     isIdentifiedID?: boolean
+
+    /**
+     * Feature flag values to use immediately until the SDK fetches fresh values.
+     */
     featureFlags?: Record<string, boolean | string>
+
+    /**
+     * Feature flag payloads to use together with bootstrapped `featureFlags`.
+     */
     featureFlagPayloads?: Record<string, JsonType>
 
     /**
@@ -338,6 +356,10 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
+/**
+ * Configuration defaults snapshot used by `PostHogConfig.defaults`.
+ * Later dates include all earlier default changes.
+ */
 export type ConfigDefaults = '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
@@ -684,6 +706,13 @@ export interface LogCaptureOptions {
  * Logs configuration options
  */
 export interface LogsConfig extends LogCaptureOptions {
+    /**
+     * Automatically capture `console.*` calls as structured log records.
+     * Review console output before enabling, as messages can include sensitive values
+     * written by your code or by third-party libraries.
+     *
+     * @default undefined
+     */
     captureConsoleLogs?: boolean
 }
 
@@ -752,7 +781,10 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture rage clicks.
      *
-     * by default rageclicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` css class on the element or a parent
+     * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.
+     * When `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`.
+     * When `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.
+     *
      * @default true
      */
     rageclick: boolean | RageclickConfig
@@ -857,9 +889,9 @@ export interface PostHogConfig {
      * Can be:
      * - `true`: Capture regular pageviews (default)
      * - `false`: Don't capture any pageviews
-     * - `'history_change'`: Only capture pageviews on history API changes (pushState, replaceState, popstate)
+     * - `'history_change'`: Capture pageviews on the initial page load and on history API changes (pushState, replaceState, popstate)
      *
-     * @default true
+     * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
     capture_pageview: boolean | 'history_change'
 
@@ -974,7 +1006,7 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should disable all product tours functionality.
      *
-     * @default true (disabled until feature is ready for GA)
+     * @default false
      */
     disable_product_tours: boolean
 
@@ -1039,6 +1071,25 @@ export interface PostHogConfig {
      * @default false
      */
     disable_external_dependency_loading: boolean
+
+    /**
+     * Determines whether PostHog should load external dependency scripts from
+     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead
+     * of the legacy /static/recorder.js?v=1.370.0 form.
+     *
+     * @default false
+     */
+    strict_script_versioning: boolean
+
+    /**
+     * Optional host override for static assets loaded by PostHog, such as
+     * recorder.js, surveys.js, or toolbar.js. Only applies to /static/* asset
+     * paths; dynamic assets like remote config continue to use the regular
+     * asset host derived from api_host.
+     *
+     * @default null
+     */
+    asset_host: string | null
 
     /**
      * A function to be called when a script is being loaded.
@@ -1201,6 +1252,7 @@ export interface PostHogConfig {
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
+     * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      *
      * @default 'unset'
      */
@@ -1236,6 +1288,7 @@ export interface PostHogConfig {
      * Determines the session recording options.
      *
      * For more session recording settings, see the `enable_recording_console_log` and `capture_performance` configuration option.
+     * When `defaults` is `'2025-11-30'` or later, `strictMinimumDuration` defaults to `true`.
      *
      * @see `SessionRecordingOptions`
      * @default {}
@@ -1432,6 +1485,8 @@ export interface PostHogConfig {
      * fails (e.g., due to ad blockers or network issues).
      *
      * When not set or set to `0`, cache expiration is disabled (cached values never expire).
+     *
+     * @default 0
      */
     feature_flag_cache_ttl_ms?: number
 
@@ -1458,7 +1513,7 @@ export interface PostHogConfig {
     surveys_request_timeout_ms: number
 
     /**
-     * Controls how often feature flags are automatically refreshed in long-running sessions.
+     * Controls how often feature flags are automatically refreshed in long-running sessions after remote configuration has loaded.
      *
      * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
      * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
@@ -1557,7 +1612,7 @@ export interface PostHogConfig {
      */
     capture_heatmaps?: boolean | HeatmapConfig
 
-    /* @deprecated - use `capture_heatmaps` instead */
+    /** @deprecated Use `capture_heatmaps` instead. */
     enable_heatmaps?: boolean
 
     /**
@@ -1722,32 +1777,31 @@ export interface PostHogConfig {
     __preview_flags_v2?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - ONLY USE WHEN TALKING TO POSTHOG SUPPORT
-     * Enables deprecated eager loading of session recording code, not just rrweb and network plugin
-     * we are switching the default to lazy loading because the bundle will ultimately be 18% smaller then
-     * keeping this around for a few days in case there are unexpected consequences that testing did not uncover
+     * @deprecated This option is a no-op. Session replay is lazy-loaded by default.
      * */
     __preview_eager_load_replay?: boolean
 
     /**
      * Prevents posthog-js from using the `navigator.sendBeacon` API to send events.
-     * Enabling this option may hurt the reliability of sending $pageleave events
+     * Enabling this option may hurt the reliability of sending $pageleave events.
+     */
+    disable_beacon?: boolean
+
+    /**
+     * @deprecated Use `disable_beacon` instead.
      */
     __preview_disable_beacon?: boolean
 
     /**
-     * Disables sending credentials when using XHR requests.
+     * @deprecated This option is a no-op. The browser SDK no longer sets `XMLHttpRequest.withCredentials`.
      */
     __preview_disable_xhr_credentials?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Loads external dependency bundles (for example recorder.js and toolbar.js) from
-     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead of the
-     * legacy /static/recorder.js?v=1.370.0 form.
-     *
-     * When set to a string, that string is treated as an asset host override for any
-     * /static/* asset path while leaving non-static asset paths unchanged.
+     * @deprecated Use {@link strict_script_versioning} and {@link asset_host} instead.
+     * When set to true, this is equivalent to strict_script_versioning: true.
+     * When set to a string, this is equivalent to strict_script_versioning: true
+     * and asset_host set to that string.
      */
     __preview_external_dependency_versioned_paths?: boolean | string
 

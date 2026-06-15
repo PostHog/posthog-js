@@ -1,5 +1,26 @@
 # @rrweb/replay
 
+## 0.0.30
+
+### Patch Changes
+
+- Updated dependencies [[`fdc07f3`](https://github.com/PostHog/posthog-js/commit/fdc07f32f886602504d7c1132adfbcccdb4112ec)]:
+    - @posthog/rrweb@0.0.72
+
+## 0.0.29
+
+### Patch Changes
+
+- Updated dependencies [[`23b2af1`](https://github.com/PostHog/posthog-js/commit/23b2af19031527c8a9934535915db5d15b6abd94)]:
+    - @posthog/rrweb@0.0.71
+
+## 0.0.28
+
+### Patch Changes
+
+- Updated dependencies [[`0e22d77`](https://github.com/PostHog/posthog-js/commit/0e22d778a439188f32294b5932194efe86ad1e6a)]:
+    - @posthog/rrweb@0.0.70
+
 ## 0.0.27
 
 ### Patch Changes

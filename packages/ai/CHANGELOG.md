@@ -1,5 +1,84 @@
 # posthog-ai
 
+## 8.2.0
+
+### Minor Changes
+
+- [#3793](https://github.com/PostHog/posthog-js/pull/3793) [`b477c02`](https://github.com/PostHog/posthog-js/commit/b477c0281f3a7e1ad507ae44645914dac73967ea) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat: warn when a `base_url` points at the PostHog AI Gateway. The gateway emits its own `$ai_generation`, so routing through it double-captures (and, for billable products, double-bills) every call. Detection covers the provider wrappers (OpenAI, Azure, Anthropic, Gemini, Vercel), LangChain, OpenAI Agents, direct `captureAiGeneration` callers, and the OTel exporter/processor (via the span's `server.address` / `url.full`). The warning logs on every routed call; the event is left untouched, since it carries data the gateway never sees (groups, custom properties, trace hierarchy).
+  (2026-06-11)
+
+## 8.1.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.32.3
+  - posthog-node@5.36.17
+
+## 8.1.10
+
+### Patch Changes
+
+- Updated dependencies [[`25822ac`](https://github.com/PostHog/posthog-js/commit/25822acc0d16f9f1d6fbbd65da57b3e060c6c558)]:
+  - @posthog/core@1.32.2
+  - posthog-node@5.36.16
+
+## 8.1.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.32.1
+  - posthog-node@5.36.15
+
+## 8.1.8
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+  - @posthog/core@1.32.0
+  - posthog-node@5.36.14
+
+## 8.1.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.4
+  - posthog-node@5.36.13
+
+## 8.1.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.3
+  - posthog-node@5.36.12
+
+## 8.1.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.2
+  - posthog-node@5.36.11
+
+## 8.1.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.1
+  - posthog-node@5.36.10
+
+## 8.1.3
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/core@1.31.0
+  - posthog-node@5.36.9
+
 ## 8.1.2
 
 ### Patch Changes

@@ -32,6 +32,10 @@ const logger = createLogger('[ConversationsManager]')
 
 const WIDGET_CONTAINER_ID = 'ph-conversations-widget-container'
 const POLL_INTERVAL_MS = 5000 // 5 seconds
+// How often to check that the widget container is still attached to the DOM.
+// SPA frameworks that replace document.body on navigation (e.g. Turbo Drive)
+// detach our container; this watcher re-attaches it so the widget survives.
+const REATTACH_CHECK_INTERVAL_MS = 1000 // 1 second
 const RESTORE_EXCHANGE_ENDPOINT = '/api/conversations/v1/widget/restore'
 const RESTORE_REQUEST_ENDPOINT = '/api/conversations/v1/widget/restore/request'
 
@@ -47,6 +51,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _containerElement: HTMLDivElement | null = null
     private _currentTicketId: string | null = null
     private _pollIntervalId: number | null = null
+    private _reattachIntervalId: number | null = null
     private _lastMessageTimestamp: string | null = null
     private _isPollingMessages: boolean = false
     private _isPollingTickets: boolean = false
@@ -545,6 +550,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Start polling — the first poll fires immediately and loads messages or tickets
         this._startPolling()
+
+        // Keep the widget attached across SPA navigations that replace document.body
+        this._startReattachWatcher()
     }
 
     /**
@@ -1000,6 +1008,55 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
+     * Re-attach the widget container if it has been detached from the DOM.
+     *
+     * SPA frameworks such as Turbo Drive (Hotwire) and Rails Turbo replace the
+     * entire document.body on navigation. That removes our container — which was
+     * appended to body in _renderWidget — without any teardown call, so the
+     * widget silently disappears until a full page reload. Re-attaching the same
+     * element (rather than re-rendering) preserves widget state and avoids
+     * refetching messages.
+     */
+    private _reattachWidgetIfDetached(): void {
+        // hide()/destroy() clear the container intentionally — don't fight them
+        if (!this._isWidgetRendered || !this._containerElement) {
+            return
+        }
+        // Still in the DOM — nothing to do
+        if (this._containerElement.isConnected) {
+            return
+        }
+        if (!document?.body) {
+            return
+        }
+        document.body.appendChild(this._containerElement)
+        logger.info('Re-attached widget after it was detached from the DOM')
+    }
+
+    /**
+     * Start watching for the widget being detached from the DOM (e.g. by an SPA
+     * navigation that replaces document.body) and re-attach it when it happens.
+     */
+    private _startReattachWatcher(): void {
+        if (this._reattachIntervalId) {
+            return // Already watching
+        }
+        this._reattachIntervalId = window?.setInterval(() => {
+            this._reattachWidgetIfDetached()
+        }, REATTACH_CHECK_INTERVAL_MS) as unknown as number
+    }
+
+    /**
+     * Stop the DOM re-attach watcher.
+     */
+    private _stopReattachWatcher(): void {
+        if (this._reattachIntervalId) {
+            window?.clearInterval(this._reattachIntervalId)
+            this._reattachIntervalId = null
+        }
+    }
+
+    /**
      * Setup listener for identify events.
      * When user calls posthog.identify(), hide the identification form
      * since we now know who they are.
@@ -1038,6 +1095,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
     hide(): void {
         // Stop polling when widget is hidden (save resources)
         this._stopPolling()
+        // Stop re-attaching — the widget is being removed intentionally
+        this._stopReattachWatcher()
 
         if (this._containerElement) {
             render(null, this._containerElement)
@@ -1269,6 +1328,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      */
     destroy(): void {
         this._stopPolling()
+        this._stopReattachWatcher()
 
         // Unsubscribe from identify events
         if (this._unsubscribeIdentifyListener) {

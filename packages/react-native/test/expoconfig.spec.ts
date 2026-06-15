@@ -1,9 +1,14 @@
 import { spawnSync } from 'child_process'
 
 import {
+  addDsymUploadBuildPhase,
+  addPostHogAndroidGradlePluginClasspath,
   addPostHogWithBundledScriptsToBundleShellScript,
+  applyPostHogAndroidGradlePlugin,
+  buildDsymUploadShellScript,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
+  resolveNativeSymbolUpload,
 } from '../src/tooling/expoconfig'
 
 type MockBuildConfig = { buildSettings: Record<string, string> }
@@ -164,5 +169,165 @@ describe('modifyExistingXcodeBuildScript', () => {
     const original = script.shellScript
     modifyExistingXcodeBuildScript(script)
     expect(script.shellScript).toBe(original)
+  })
+})
+
+const mockXcodeProjectForBuildPhase = (
+  existingPhase: any = undefined
+): { pbxItemByComment: jest.Mock; addBuildPhase: jest.Mock } => ({
+  pbxItemByComment: jest.fn(() => existingPhase),
+  addBuildPhase: jest.fn(),
+})
+
+describe('buildDsymUploadShellScript', () => {
+  it('produces valid shell syntax with and without source', () => {
+    expectValidShellSyntax(buildDsymUploadShellScript())
+    expectValidShellSyntax(buildDsymUploadShellScript(true))
+  })
+
+  it('reuses posthog-ios upload-symbols.sh and probes both Pods and SwiftPM paths', () => {
+    const script = buildDsymUploadShellScript()
+    expect(script).toContain('upload-symbols.sh')
+    expect(script).toContain('${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh')
+    expect(script).toContain('SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh')
+  })
+
+  it('does not set POSTHOG_INCLUDE_SOURCE by default', () => {
+    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_INCLUDE_SOURCE')
+    expect(buildDsymUploadShellScript(false)).not.toContain('POSTHOG_INCLUDE_SOURCE')
+  })
+
+  it('exports POSTHOG_INCLUDE_SOURCE=1 when includeSource is requested', () => {
+    expect(buildDsymUploadShellScript(true)).toContain('export POSTHOG_INCLUDE_SOURCE=1')
+  })
+})
+
+describe('addDsymUploadBuildPhase', () => {
+  it('adds a shell-script build phase when none exists', () => {
+    const xp = mockXcodeProjectForBuildPhase(undefined)
+    addDsymUploadBuildPhase(xp)
+
+    expect(xp.addBuildPhase).toHaveBeenCalledTimes(1)
+    const [files, isa, comment, , opts] = xp.addBuildPhase.mock.calls[0]
+    expect(files).toEqual([])
+    expect(isa).toBe('PBXShellScriptBuildPhase')
+    expect(comment).toBe('Upload PostHog Debug Symbols')
+    expect(opts.shellPath).toBe('/bin/sh')
+    expect(opts.shellScript).toContain('upload-symbols.sh')
+    expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
+  })
+
+  it('forwards includeSource into the phase script', () => {
+    const xp = mockXcodeProjectForBuildPhase(undefined)
+    addDsymUploadBuildPhase(xp, true)
+    const [, , , , opts] = xp.addBuildPhase.mock.calls[0]
+    expect(opts.shellScript).toContain('export POSTHOG_INCLUDE_SOURCE=1')
+  })
+
+  it('is idempotent — does not add a second phase when one already exists', () => {
+    const xp = mockXcodeProjectForBuildPhase({ isa: 'PBXShellScriptBuildPhase' })
+    addDsymUploadBuildPhase(xp)
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolveNativeSymbolUpload', () => {
+  it('treats undefined and false as disabled', () => {
+    expect(resolveNativeSymbolUpload(undefined)).toEqual({ enabled: false, includeSource: false })
+    expect(resolveNativeSymbolUpload(false)).toEqual({ enabled: false, includeSource: false })
+  })
+
+  it('treats true as enabled without source', () => {
+    expect(resolveNativeSymbolUpload(true)).toEqual({ enabled: true, includeSource: false })
+  })
+
+  it('reads includeSource from the options object', () => {
+    expect(resolveNativeSymbolUpload({ includeSource: true })).toEqual({ enabled: true, includeSource: true })
+    expect(resolveNativeSymbolUpload({ includeSource: false })).toEqual({ enabled: true, includeSource: false })
+    expect(resolveNativeSymbolUpload({})).toEqual({ enabled: true, includeSource: false })
+  })
+})
+
+describe('addPostHogAndroidGradlePluginClasspath', () => {
+  const projectBuildGradle = [
+    'buildscript {',
+    '    repositories {',
+    '        google()',
+    '        mavenCentral()',
+    '    }',
+    '    dependencies {',
+    '        classpath("com.android.tools.build:gradle")',
+    '    }',
+    '}',
+  ].join('\n')
+
+  it('adds the plugin classpath inside the buildscript dependencies block', () => {
+    const { contents, classpathPresent } = addPostHogAndroidGradlePluginClasspath(projectBuildGradle)
+    expect(classpathPresent).toBe(true)
+    expect(contents).toContain('classpath("com.posthog:posthog-android-gradle-plugin:')
+    // inserted before the buildscript closing brace
+    expect(contents.indexOf('posthog-android-gradle-plugin')).toBeLessThan(contents.lastIndexOf('\n}'))
+  })
+
+  it('is idempotent and reports the classpath as present', () => {
+    const once = addPostHogAndroidGradlePluginClasspath(projectBuildGradle)
+    const twice = addPostHogAndroidGradlePluginClasspath(once.contents)
+    expect(twice.contents).toBe(once.contents)
+    expect(twice.classpathPresent).toBe(true)
+  })
+
+  it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
+    const contents = 'plugins {\n  id "com.android.application"\n}'
+    const result = addPostHogAndroidGradlePluginClasspath(contents)
+    expect(result.contents).toBe(contents)
+    expect(result.classpathPresent).toBe(false)
+  })
+
+  it('does not place the classpath in a later block when buildscript has no dependencies block', () => {
+    const contents = [
+      'buildscript {',
+      '    repositories { google() }',
+      '}',
+      'allprojects {',
+      '    dependencies {',
+      '    }',
+      '}',
+    ].join('\n')
+    const result = addPostHogAndroidGradlePluginClasspath(contents)
+    // The only dependencies block is in allprojects, outside buildscript — must not be used.
+    expect(result.classpathPresent).toBe(false)
+    expect(result.contents).toBe(contents)
+  })
+})
+
+describe('applyPostHogAndroidGradlePlugin', () => {
+  const appBuildGradle = [
+    'apply plugin: "com.android.application"',
+    'apply plugin: "com.facebook.react"',
+    '',
+    'android {',
+    '    namespace "com.example"',
+    '}',
+  ].join('\n')
+
+  it('applies the plugin right after com.android.application', () => {
+    const result = applyPostHogAndroidGradlePlugin(appBuildGradle)
+    expect(result).toContain('apply plugin: "com.posthog.android"')
+    const lines = result.split('\n')
+    const appIdx = lines.findIndex((l) => l.includes('com.android.application'))
+    expect(lines[appIdx + 1]).toContain('com.posthog.android')
+  })
+
+  it('is idempotent', () => {
+    const once = applyPostHogAndroidGradlePlugin(appBuildGradle)
+    const twice = applyPostHogAndroidGradlePlugin(once)
+    expect(twice).toBe(once)
+  })
+
+  it('falls back to inserting above the android block when com.android.application is absent', () => {
+    const contents = 'android {\n    namespace "com.example"\n}'
+    const result = applyPostHogAndroidGradlePlugin(contents)
+    expect(result).toContain('apply plugin: "com.posthog.android"')
+    expect(result.indexOf('com.posthog.android')).toBeLessThan(result.indexOf('android {'))
   })
 })

@@ -1162,6 +1162,83 @@ describe('flag and survey storage split', () => {
         })
     })
 
+    describe('volatile metadata does not dirty the group entries', () => {
+        // $feature_flag_evaluated_at, $feature_flag_request_id, and
+        // $surveys_loaded_at change on every /flags (or /surveys) load even when
+        // the meaningful content is unchanged. Rewriting a multi-hundred-KB group
+        // entry just to refresh them re-broadcasts the payload to every open tab
+        // on each SPA navigation — exactly the cross-tab storage-event pressure
+        // the split exists to remove. A volatile-only change skips the write; the
+        // freshest value rides along on the next content write.
+        it.each([
+            {
+                label: '$feature_flag_evaluated_at',
+                entry: FLAGS,
+                register: { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 1717200099999 },
+            },
+            {
+                label: '$feature_flag_request_id',
+                entry: FLAGS,
+                register: { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-789' },
+            },
+            {
+                label: '$surveys_loaded_at',
+                entry: SURVEYS_ENTRY,
+                register: { [SURVEYS_LOADED_AT]: 1717200099999 },
+            },
+        ])('registering only a fresh $label does not rewrite the group entry', ({ entry, register }) => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, [SURVEYS_LOADED_AT]: 1717200000000, distinct_id: 'd' })
+
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+            lib.register(register)
+
+            expect(setSpy.mock.calls.map(([name]) => name)).not.toContain(entry)
+            setSpy.mockRestore()
+        })
+
+        it('a content change writes the group entry with the freshest volatile values riding along', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+
+            lib.register({ [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 1717200099999 })
+            expect(parse(FLAGS)[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]).toEqual(1717200000000)
+
+            lib.register({ [ENABLED_FEATURE_FLAGS]: { beta: false } })
+            const flagsEntry = parse(FLAGS)
+            expect(flagsEntry[ENABLED_FEATURE_FLAGS]).toEqual({ beta: false })
+            expect(flagsEntry[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]).toEqual(1717200099999)
+        })
+
+        it('the in-memory value is always the freshest even while disk lags', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+
+            lib.register({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-789' })
+
+            expect(lib.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toEqual('req-789')
+            expect(parse(FLAGS)[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toEqual('req-123')
+        })
+
+        it('a returning visitor whose loads only refresh volatile values never rewrites the entry', () => {
+            localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
+            localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
+
+            const lib = new PostHogPersistence(makeConfig())
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+
+            lib.register({
+                [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 1717200099999,
+                [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-789',
+            })
+
+            expect(setSpy.mock.calls.map(([name]) => name)).not.toContain(FLAGS)
+            setSpy.mockRestore()
+        })
+    })
+
     describe('per-entry fingerprints decouple the writes', () => {
         it('a main-blob change does not rewrite __flags or __surveys', () => {
             const lib = new PostHogPersistence(makeConfig())
@@ -1186,7 +1263,7 @@ describe('flag and survey storage split', () => {
             const setSpy = jest.spyOn(localStore, '_set')
             setSpy.mockClear()
 
-            lib.register({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-456' })
+            lib.register({ [ENABLED_FEATURE_FLAGS]: { beta: false, exp: 'test' } })
 
             const names = setSpy.mock.calls.map(([name]) => name)
             expect(names).toContain(FLAGS)
@@ -1264,10 +1341,10 @@ describe('flag and survey storage split', () => {
             const setSpy = jest.spyOn(localStore, '_set')
             setSpy.mockClear()
 
-            lib.register({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-new' })
+            lib.register({ [ENABLED_FEATURE_FLAGS]: { beta: false, exp: 'control' } })
 
             expect(setSpy.mock.calls.map(([name]) => name)).toContain(FLAGS)
-            expect(parse(FLAGS)[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('req-new')
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual({ beta: false, exp: 'control' })
             setSpy.mockRestore()
         })
     })

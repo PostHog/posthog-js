@@ -73,16 +73,20 @@ export class PostHogSurveys implements Extension {
     }
 
     reset(): void {
-        localStorage.removeItem('lastSeenSurveyDate')
-        const surveyKeys = []
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
-                surveyKeys.push(key)
+        try {
+            localStorage.removeItem('lastSeenSurveyDate')
+            const surveyKeys = []
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i)
+                if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
+                    surveyKeys.push(key)
+                }
             }
-        }
 
-        surveyKeys.forEach((key) => localStorage.removeItem(key))
+            surveyKeys.forEach((key) => localStorage.removeItem(key))
+        } catch {
+            // localStorage is not always available (e.g. in cross-origin iframes); resetting survey state is best-effort.
+        }
     }
 
     loadIfEnabled() {

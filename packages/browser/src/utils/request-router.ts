@@ -74,8 +74,12 @@ export class RequestRouter {
     }
 
     private _staticAssetHostOverride(path: string): string | undefined {
-        const override = this.instance.config.__preview_external_dependency_versioned_paths
-        if (typeof override !== 'string' || !staticAssetPath.test(path)) {
+        if (!staticAssetPath.test(path)) {
+            return undefined
+        }
+
+        const override = this.instance.config.asset_host
+        if (typeof override !== 'string') {
             return undefined
         }
 

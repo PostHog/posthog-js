@@ -1,6 +1,9 @@
 {
     "name": "@posthog/next",
-    "version": "0.4.86",
+    "version": "0.4.95",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
     "description": "PostHog integration for Next.js",
     "repository": {
         "type": "git",
@@ -61,10 +64,10 @@
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {
-        "@posthog/core": "workspace:*",
-        "@posthog/react": "workspace:*",
-        "posthog-js": "workspace:*",
-        "posthog-node": "workspace:*",
+        "@posthog/core": "workspace:^",
+        "@posthog/react": "workspace:^",
+        "posthog-js": "workspace:^",
+        "posthog-node": "workspace:^",
         "server-only": "^0.0.1"
     },
     "devDependencies": {

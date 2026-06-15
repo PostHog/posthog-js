@@ -8,13 +8,11 @@
   <img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/posthog/posthog-js"/>
 </p>
 
-# Posthog JS
+# PostHog JS
 
-This is a monorepo containing multiple packages to integrate with Posthog using JavaScript!
+This is a monorepo containing multiple packages to integrate with PostHog using JavaScript!
 
-## Documentation
-
-- [Posthog JS Documentation](https://posthog.com/docs/libraries/js)
+Please see the main [PostHog docs](https://posthog.com/docs).
 
 ## Packages
 

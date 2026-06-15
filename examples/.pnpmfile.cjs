@@ -6,7 +6,11 @@ module.exports = {
             function rewriteLocalDeps(deps) {
                 if (deps) {
                     for (const dep in deps) {
-                        if (['@posthog/cli', 'posthog-react-native-session-replay'].includes(dep)) {
+                        if (
+                            ['@posthog/cli', 'posthog-react-native-plugin', 'posthog-react-native-session-replay'].includes(
+                                dep
+                            )
+                        ) {
                             continue
                         }
                         if (dep.startsWith('posthog') || dep.startsWith('@posthog')) {
