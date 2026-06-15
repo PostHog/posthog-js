@@ -1,5 +1,14 @@
 # @posthog/react
 
+## 1.10.2
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad), [`d3a9462`](https://github.com/PostHog/posthog-js/commit/d3a9462b8b21994764bdd2802973d82ffe472294)]:
+    - posthog-js@1.386.7
+
 ## 1.10.1
 
 ### Patch Changes

@@ -891,8 +891,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Guarded on the stop-in-progress flag because start() is also called re-entrantly
         // on a live recorder (e.g. opt-in flows) where the queue holds the current session's
         // events and must survive.
+        // Discard the buffer too — the bailed-out cleanup would have cleared it. Otherwise the
+        // prior session's snapshots flush under the old session id with the new distinct_id,
+        // mis-attributing the recording (#3822).
         if (this._isStoppingAfterCompression) {
             this._invalidateCompressionQueue()
+            this._clearBuffer()
         }
 
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
