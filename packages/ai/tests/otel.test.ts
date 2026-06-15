@@ -80,19 +80,34 @@ describe('PostHogTraceExporter', () => {
     })
   })
 
-  it('accepts deprecated apiKey', () => {
-    new PostHogTraceExporter({ apiKey: DEFAULT_TOKEN })
-    expect(OTLPTraceExporter).toHaveBeenCalledWith({
-      url: 'https://us.i.posthog.com/i/v0/ai/otel',
-      headers: { Authorization: `Bearer ${DEFAULT_TOKEN}` },
-    })
+  it.each([
+    ['missing', {}],
+    ['empty', { projectToken: '' }],
+    ['blank', { projectToken: '  \n\t ' }],
+  ])('disables and no-ops when projectToken is %s', (_case, options) => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const exporter = new PostHogTraceExporter(options as any)
+    const callback = jest.fn()
+
+    exporter.export([makeSpan('gen_ai.chat')], callback)
+
+    expect(getSuperExport()).not.toHaveBeenCalled()
+    expect(callback).toHaveBeenCalledWith({ code: 0 })
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[PostHogTraceExporter] projectToken is missing or blank; the exporter will be disabled.'
+    )
+    warnSpy.mockRestore()
   })
 
-  it('throws when projectToken is missing', () => {
-    expect(() => new PostHogTraceExporter({ projectToken: '' })).toThrow('PostHogTraceExporter requires a projectToken')
-    expect(() => new PostHogTraceExporter({ projectToken: '  \n\t ' })).toThrow(
-      'PostHogTraceExporter requires a projectToken'
+  it('does not validate host when disabled by missing projectToken', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+    expect(() => new PostHogTraceExporter({ projectToken: '', host: 'not a url' })).not.toThrow()
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[PostHogTraceExporter] projectToken is missing or blank; the exporter will be disabled.'
     )
+    warnSpy.mockRestore()
   })
 
   it('inherits shutdown from OTLPTraceExporter', async () => {
@@ -142,5 +157,15 @@ describe('PostHogTraceExporter AI span filtering', () => {
     exporter.export([makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }), makeSpan('other.operation')], callback)
 
     expect(getSuperExport()).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
+  })
+
+  it('redacts multimodal content before exporting', () => {
+    const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
+    const callback = jest.fn()
+
+    exporter.export([makeSpan('gen_ai.chat', { 'gen_ai.prompt': 'data:image/png;base64,iVBORw0KGgo' })], callback)
+
+    const exported = getSuperExport().mock.calls[0][0] as ReadableSpan[]
+    expect(exported[0].attributes['gen_ai.prompt']).toBe('[base64 image/png redacted]')
   })
 })

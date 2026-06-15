@@ -353,25 +353,32 @@ const initializeLogs = (posthog: PostHog) => {
         const logWrapper =
             (originalConsoleLog: any) =>
             (...args: any[]) => {
-                if (args.length > 0) {
-                    const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
-                    const logAttributes = {
-                        ...attributes,
-                        ...(truncated ? { body_truncated: 'true' } : {}),
-                    }
-                    logger.emit({
-                        severityText: SEVERITY_MAP[level],
-                        body: body,
-                        attributes: {
-                            'log.source': `console.${level}`,
-                            distinct_id: posthog.get_distinct_id(),
-                            'location.href': assignableWindow.location.href,
-                            ...logAttributes,
-                            ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
-                        },
-                    })
-                    originalConsoleLog.apply(assignableWindow.console, args)
+                if (args.length === 0) {
+                    return
                 }
+
+                if (!posthog.is_capturing()) {
+                    originalConsoleLog.apply(assignableWindow.console, args)
+                    return
+                }
+
+                const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
+                const logAttributes = {
+                    ...attributes,
+                    ...(truncated ? { body_truncated: 'true' } : {}),
+                }
+                logger.emit({
+                    severityText: SEVERITY_MAP[level],
+                    body: body,
+                    attributes: {
+                        'log.source': `console.${level}`,
+                        distinct_id: posthog.get_distinct_id(),
+                        'location.href': assignableWindow.location.href,
+                        ...logAttributes,
+                        ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
+                    },
+                })
+                originalConsoleLog.apply(assignableWindow.console, args)
             }
 
         const originalConsoleLog = assignableWindow.console[level]

@@ -198,6 +198,28 @@ describe('cookieless', () => {
             expect(posthog.sessionRecording).toBeFalsy()
         })
 
+        it('should not send an initial pageview on opt out when capture_pageview is false', async () => {
+            const { posthog, beforeSendMock } = await setup({
+                cookieless_mode: 'on_reject',
+                capture_pageview: false,
+            })
+            posthog.capture('eventBeforeOptOut') // will be dropped
+            expect(beforeSendMock).toBeCalledTimes(0)
+
+            posthog.opt_out_capturing()
+
+            expect(beforeSendMock).toBeCalledTimes(0)
+
+            posthog.capture('eventAfterOptOut')
+
+            expect(beforeSendMock).toBeCalledTimes(1)
+            const event = beforeSendMock.mock.calls[0][0]
+            expect(event.event).toBe('eventAfterOptOut')
+            expect(event.properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(event.properties.$device_id).toBe(null)
+            expect(event.properties.$cookieless_mode).toEqual(true)
+        })
+
         it('should pick up positive cookie consent on startup and start sending non-cookieless events', async () => {
             const persistenceName = uuidv7()
             const { posthog: previousPosthog } = await setup(

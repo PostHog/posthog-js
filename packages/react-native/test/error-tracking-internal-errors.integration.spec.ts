@@ -22,25 +22,36 @@ describe('isPostHogFetchNetworkError recognizes real core errors', () => {
       throw new Error('offline')
     })
 
-    const posthog = new PostHog('test-token', {
-      persistence: 'memory',
-      flushInterval: 0,
-      fetchRetryCount: 0,
-    })
-    await posthog.ready()
-    posthog.capture('event')
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
-    let caught: unknown
     try {
-      await posthog.flush()
-    } catch (err) {
-      caught = err
-    }
-    await posthog.shutdown()
+      const posthog = new PostHog('test-token', {
+        persistence: 'memory',
+        flushInterval: 0,
+        fetchRetryCount: 0,
+      })
+      await posthog.ready()
+      posthog.capture('event')
 
-    expect(caught).toBeDefined()
-    expect(isPostHogFetchNetworkError(caught)).toBe(true)
-    // ordinary errors must not be mistaken for network errors
-    expect(isPostHogFetchNetworkError(new Error('boom'))).toBe(false)
+      let caught: unknown
+      try {
+        await posthog.flush()
+      } catch (err) {
+        caught = err
+      }
+      await posthog.shutdown()
+
+      expect(caught).toBeDefined()
+      expect(isPostHogFetchNetworkError(caught)).toBe(true)
+      // ordinary errors must not be mistaken for network errors
+      expect(isPostHogFetchNetworkError(new Error('boom'))).toBe(false)
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error while flushing PostHog',
+        expect.objectContaining({ name: 'PostHogFetchNetworkError' })
+      )
+    } finally {
+      consoleErrorSpy.mockRestore()
+    }
   }, 15000)
 })

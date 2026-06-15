@@ -193,6 +193,7 @@ export default class MutationBuffer {
   private canvasManager: observerParam['canvasManager'];
   private processedNodeManager: observerParam['processedNodeManager'];
   private unattachedDoc: HTMLDocument;
+  private canvasManagerReleased = false;
 
   public init(options: MutationBufferParam) {
     (
@@ -223,6 +224,8 @@ export default class MutationBuffer {
       // just a type trick, the runtime result is correct
       this[key] = options[key] as never;
     });
+    // Balanced by releaseCanvasManager() in reset().
+    this.canvasManager.acquire();
   }
 
   public freeze() {
@@ -253,7 +256,26 @@ export default class MutationBuffer {
 
   public reset() {
     this.shadowDomManager.reset();
+    this.releaseCanvasManager();
+  }
+
+  // Releases at most once even if reset() runs twice (iframe pagehide + stop). Separate from
+  // reset() so shadow-root teardown can release without re-entering shadowDomManager.reset().
+  public releaseCanvasManager() {
+    if (this.canvasManagerReleased) {
+      return;
+    }
+    this.canvasManagerReleased = true;
     this.canvasManager.reset();
+    // Don't null `this.doc` here — a MutationObserver callback queued before
+    // the observer was disconnected can still drain through `emit`, which
+    // passes `this.doc` to `serializeNodeWithId`. Splicing the buffer out of
+    // `mutationBuffers[]` + removing the cleanup closure from `handlers[]`
+    // releases the only strong refs to the buffer; GC handles the rest.
+  }
+
+  public bufferDoc(): Document {
+    return this.doc;
   }
 
   public destroy() {
@@ -339,6 +361,12 @@ export default class MutationBuffer {
           this.iframeManager.attachIframe(iframe, childSn);
           this.shadowDomManager.observeAttachShadow(iframe);
         },
+        onIframeListenerRegistered: (
+          iframe: HTMLIFrameElement,
+          disposer: () => void,
+        ) => {
+          this.iframeManager.registerLoadListenerDisposer(iframe, disposer);
+        },
         onStylesheetLoad: (link, childSn) => {
           this.stylesheetManager.attachLinkElement(link, childSn);
         },
@@ -353,6 +381,12 @@ export default class MutationBuffer {
       }
     };
 
+    // Drain mapRemoves before pushAdd so the mirror only holds nodes that
+    // are still live. Reparent detection in record/index.ts depends on this
+    // order — it resolves an `add`'s fresh id back to an element via
+    // `mirror.getNode` and matches it against the iframe behind the removed
+    // id. Reorder this and iframe moves will look like remove+add to that
+    // path, tearing down observers on a still-live iframe.
     while (this.mapRemoves.length) {
       this.mirror.removeNodeFromMap(this.mapRemoves.shift()!);
     }

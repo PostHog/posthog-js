@@ -2,11 +2,13 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { Context } from '@opentelemetry/api'
 import { BatchSpanProcessor, type SpanProcessor, type ReadableSpan, type Span } from '@opentelemetry/sdk-trace-base'
 
+import { redactSpan } from './redact'
 import { isAISpan } from './spans'
+import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
 
-function normalizeApiKey(value?: unknown): string {
+function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -17,9 +19,10 @@ function normalizeHost(value?: unknown): string {
 
 export interface PostHogSpanProcessorOptions {
   /**
-   * Your PostHog project API key.
+   * Your PostHog project token (the `phc_...` key). Required; a blank token disables the
+   * processor as a defensive no-op.
    */
-  apiKey: string
+  projectToken: string
 
   /**
    * PostHog host URL. Defaults to `https://us.i.posthog.com`.
@@ -32,8 +35,25 @@ export interface PostHogSpanProcessorOptions {
   _spanProcessor?: SpanProcessor
 }
 
+class NoopSpanProcessor implements SpanProcessor {
+  onStart(_span: Span, _parentContext: Context): void {
+    return
+  }
+  onEnd(_span: ReadableSpan): void {
+    return
+  }
+  shutdown(): Promise<void> {
+    return Promise.resolve()
+  }
+  forceFlush(): Promise<void> {
+    return Promise.resolve()
+  }
+}
+
 /**
  * An OpenTelemetry `SpanProcessor` that sends AI traces to PostHog.
+ *
+ * `projectToken` is required; a blank token disables the processor as a defensive no-op.
  *
  * Internally batches spans and exports them to PostHog's OTLP ingestion
  * endpoint. Only AI-related spans (those whose name or attribute keys
@@ -50,7 +70,7 @@ export interface PostHogSpanProcessorOptions {
  * import { NodeSDK } from '@opentelemetry/sdk-node'
  *
  * const sdk = new NodeSDK({
- *   spanProcessors: [new PostHogSpanProcessor({ apiKey: 'phc_...' })],
+ *   spanProcessors: [new PostHogSpanProcessor({ projectToken: 'phc_...' })],
  * })
  * sdk.start()
  * ```
@@ -59,9 +79,11 @@ export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
 
   constructor(options: PostHogSpanProcessorOptions) {
-    const apiKey = normalizeApiKey(options.apiKey)
-    if (!apiKey) {
-      throw new Error('PostHogSpanProcessor requires an apiKey')
+    const token = normalizeToken(options.projectToken)
+    if (!token) {
+      console.warn('[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.')
+      this.inner = new NoopSpanProcessor()
+      return
     }
 
     if (options._spanProcessor) {
@@ -71,7 +93,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
       const exporter = new OTLPTraceExporter({
         url: `${host}/i/v0/ai/otel`,
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${token}`,
         },
       })
       this.inner = new BatchSpanProcessor(exporter)
@@ -87,7 +109,8 @@ export class PostHogSpanProcessor implements SpanProcessor {
 
   onEnd(span: ReadableSpan): void {
     if (isAISpan(span)) {
-      this.inner.onEnd(span)
+      warnIfPostHogAiGatewayOtelAttributes(span.attributes)
+      this.inner.onEnd(redactSpan(span))
     }
   }
 

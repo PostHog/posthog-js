@@ -67,6 +67,8 @@ export class ShadowDomManager {
     this.restoreHandlers.push(() => {
       observer.disconnect();
       buffer.destroy();
+      // Release the canvas ref directly; buffer.reset() would re-enter shadowDomManager.reset().
+      buffer.releaseCanvasManager();
       const index = mutationBuffers.indexOf(buffer);
       if (index !== -1) {
         mutationBuffers.splice(index, 1);

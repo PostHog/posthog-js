@@ -13,6 +13,12 @@ const LONG_SCALE = 0xfffffffffffffff
 // `is_not` may legitimately compare against null; `is_set` only cares about key presence and
 // must not be short-circuited by the null guard in `matchProperty`.
 const NULL_VALUES_ALLOWED_OPERATORS = ['is_not', 'is_set']
+
+// Outcome of evaluating a single condition group. `out_of_rollout_bound` means the group's property
+// filters matched (or there were none) but the rollout percentage excluded the user — the only case
+// that triggers a flag's `early_exit` short-circuit.
+type ConditionMatchResult = 'match' | 'no_match' | 'out_of_rollout_bound'
+
 class ClientError extends Error {
   constructor(message: string) {
     super()
@@ -23,27 +29,26 @@ class ClientError extends Error {
   }
 }
 
+function setCustomErrorPrototype(error: Error, constructor: new (message: string) => Error): void {
+  error.name = constructor.name
+  Error.captureStackTrace(error, constructor)
+  // instanceof doesn't work in ES3 or ES5
+  // https://www.dannyguo.com/blog/how-to-fix-instanceof-not-working-for-custom-errors-in-typescript/
+  // this is the workaround
+  Object.setPrototypeOf(error, constructor.prototype)
+}
+
 class InconclusiveMatchError extends Error {
   constructor(message: string) {
     super(message)
-    this.name = this.constructor.name
-    Error.captureStackTrace(this, this.constructor)
-    // instanceof doesn't work in ES3 or ES5
-    // https://www.dannyguo.com/blog/how-to-fix-instanceof-not-working-for-custom-errors-in-typescript/
-    // this is the workaround
-    Object.setPrototypeOf(this, InconclusiveMatchError.prototype)
+    setCustomErrorPrototype(this, InconclusiveMatchError)
   }
 }
 
 class RequiresServerEvaluation extends Error {
   constructor(message: string) {
     super(message)
-    this.name = this.constructor.name
-    Error.captureStackTrace(this, this.constructor)
-    // instanceof doesn't work in ES3 or ES5
-    // https://www.dannyguo.com/blog/how-to-fix-instanceof-not-working-for-custom-errors-in-typescript/
-    // this is the workaround
-    Object.setPrototypeOf(this, RequiresServerEvaluation.prototype)
+    setCustomErrorPrototype(this, RequiresServerEvaluation)
   }
 }
 
@@ -492,6 +497,7 @@ class FeatureFlagsPoller {
     const flagFilters = flag.filters || {}
     const flagConditions = flagFilters.groups || []
     const flagAggregation = flagFilters.aggregation_group_type_index
+    const earlyExitEnabled = flagFilters.early_exit ?? false
     const { groups, groupProperties } = evaluationContext
     let isInconclusive = false
     let result = undefined
@@ -531,9 +537,14 @@ class FeatureFlagsPoller {
           }
         }
 
-        if (
-          await this.isConditionMatch(flag, effectiveBucketingValue, condition, effectiveProperties, evaluationContext)
-        ) {
+        const matchResult = await this.isConditionMatch(
+          flag,
+          effectiveBucketingValue,
+          condition,
+          effectiveProperties,
+          evaluationContext
+        )
+        if (matchResult === 'match') {
           const variantOverride = condition.variant
           const flagVariants = flagFilters.multivariate?.variants || []
           if (variantOverride && flagVariants.some((variant) => variant.key === variantOverride)) {
@@ -542,6 +553,14 @@ class FeatureFlagsPoller {
             result = (await this.getMatchingVariant(flag, effectiveBucketingValue)) || true
           }
           break
+        } else if (earlyExitEnabled && matchResult === 'out_of_rollout_bound') {
+          // The condition's property filters (if any) matched and only the rollout check failed,
+          // so re-evaluating later groups can't change the outcome. Return a deterministic false,
+          // mirroring the server-side engine. `isInconclusive` could theoretically be true here
+          // (an earlier group threw InconclusiveMatchError while this group evaluated cleanly), but
+          // in practice early_exit is only set on flags whose groups are all locally evaluable, so
+          // this combination does not arise.
+          return false
         }
       } catch (e) {
         if (e instanceof RequiresServerEvaluation) {
@@ -574,7 +593,7 @@ class FeatureFlagsPoller {
     condition: FeatureFlagCondition,
     properties: Record<string, any>,
     evaluationContext: FeatureFlagEvaluationContext
-  ): Promise<boolean> {
+  ): Promise<ConditionMatchResult> {
     const rolloutPercentage = condition.rollout_percentage
     const warnFunction = (msg: string): void => {
       this.logMsgIfDebug(() => console.warn(msg))
@@ -595,20 +614,22 @@ class FeatureFlagsPoller {
         }
 
         if (!matches) {
-          return false
+          return 'no_match'
         }
       }
 
       if (rolloutPercentage == undefined) {
-        return true
+        return 'match'
       }
     }
 
+    // Property filters (if any) matched; only the rollout check remains. A failure here means the
+    // user was targeted but excluded by rollout — the server-side engine's `OutOfRolloutBound`.
     if (rolloutPercentage != undefined && (await _hash(flag.key, bucketingValue)) > rolloutPercentage / 100.0) {
-      return false
+      return 'out_of_rollout_bound'
     }
 
-    return true
+    return 'match'
   }
 
   async getMatchingVariant(flag: PostHogFeatureFlag, bucketingValue: string): Promise<FeatureFlagValue | undefined> {

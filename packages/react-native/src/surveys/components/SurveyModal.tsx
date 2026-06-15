@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, View, useWindowDimensions } from 'react-native'
 
 import { Cancel } from './Cancel'
 import { ConfirmationMessage } from './ConfirmationMessage'
+import { createSafeStyleSheet } from '../safeStyleSheet'
 import { SurveyAppearanceTheme, resolveSurveyAlignment } from '../surveys-utils'
 import { Survey, type SurveyResponses } from '@posthog/core'
 import { useOptionalSafeAreaInsets } from '../../optional/OptionalReactNativeSafeArea'
@@ -146,7 +147,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   )
 }
 
-const styles = StyleSheet.create({
+const styles = createSafeStyleSheet({
   fill: {
     flex: 1,
   },

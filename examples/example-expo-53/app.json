@@ -37,7 +37,14 @@
                 }
             ],
             "expo-localization",
-            "posthog-react-native/expo"
+            [
+                "posthog-react-native/expo",
+                {
+                    "uploadNativeSymbols": {
+                        "includeSource": true
+                    }
+                }
+            ]
         ],
         "experiments": {
             "typedRoutes": true

@@ -24,7 +24,7 @@ import {
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl } from '../sanitization'
-import { isString } from '../typeGuards'
+import { isObject, isString } from '../typeGuards'
 
 // Union types for dual version support
 type LanguageModel = LanguageModelV2 | LanguageModelV3
@@ -283,6 +283,33 @@ const extractProvider = (model: LanguageModel): string => {
   return providerName
 }
 
+/**
+ * Recover the base URL so gateway calls self-identify via `$ai_base_url` (dedup
+ * keys on it). The spec exposes none, so we read the off-spec provider `config`:
+ * `@ai-sdk/anthropic` keeps a `config.baseURL` string; `@ai-sdk/openai`/
+ * `openai-compatible` bury it in a `config.url({ path })` closure. Unknown shapes
+ * degrade to `''` — those providers (or a custom `fetch`) stay invisible to dedup.
+ */
+const extractBaseURL = (model: LanguageModel): string => {
+  try {
+    const config = (model as { config?: unknown }).config
+    if (!isObject(config)) {
+      return ''
+    }
+    if (isString(config.baseURL)) {
+      return config.baseURL
+    }
+    const urlFn = config.url
+    if (typeof urlFn === 'function') {
+      const url = urlFn({ path: '', modelId: model.modelId })
+      return isString(url) ? url : ''
+    }
+  } catch {
+    // Unknown config shape or url() threw.
+  }
+  return ''
+}
+
 // Extract web search count from provider metadata (works for both V2 and V3)
 const extractWebSearchCount = (providerMetadata: unknown, usage: any): number => {
   // Try Anthropic-specific extraction
@@ -328,41 +355,29 @@ const extractTokenCount = (value: unknown): number | undefined => {
   return undefined
 }
 
-// Helper to extract reasoning tokens from V2 (usage.reasoningTokens) or V3 (usage.outputTokens.reasoning)
-const extractReasoningTokens = (usage: Record<string, unknown>): unknown => {
-  // V2 style: top-level reasoningTokens
-  if ('reasoningTokens' in usage) {
-    return usage.reasoningTokens
+const extractUsageToken = (
+  usage: Record<string, unknown>,
+  topLevelKey: string,
+  nestedObjectKey: string,
+  nestedValueKey: string
+): unknown => {
+  if (topLevelKey in usage) {
+    return usage[topLevelKey]
   }
-  // V3 style: nested in outputTokens.reasoning
-  if (
-    'outputTokens' in usage &&
-    usage.outputTokens &&
-    typeof usage.outputTokens === 'object' &&
-    'reasoning' in usage.outputTokens
-  ) {
-    return (usage.outputTokens as { reasoning: unknown }).reasoning
+  const nestedTokens = usage[nestedObjectKey]
+  if (nestedTokens && typeof nestedTokens === 'object' && nestedValueKey in nestedTokens) {
+    return (nestedTokens as Record<string, unknown>)[nestedValueKey]
   }
   return undefined
 }
 
+// Helper to extract reasoning tokens from V2 (usage.reasoningTokens) or V3 (usage.outputTokens.reasoning)
+const extractReasoningTokens = (usage: Record<string, unknown>): unknown =>
+  extractUsageToken(usage, 'reasoningTokens', 'outputTokens', 'reasoning')
+
 // Helper to extract cached input tokens from V2 (usage.cachedInputTokens) or V3 (usage.inputTokens.cacheRead)
-const extractCacheReadTokens = (usage: Record<string, unknown>): unknown => {
-  // V2 style: top-level cachedInputTokens
-  if ('cachedInputTokens' in usage) {
-    return usage.cachedInputTokens
-  }
-  // V3 style: nested in inputTokens.cacheRead
-  if (
-    'inputTokens' in usage &&
-    usage.inputTokens &&
-    typeof usage.inputTokens === 'object' &&
-    'cacheRead' in usage.inputTokens
-  ) {
-    return (usage.inputTokens as { cacheRead: unknown }).cacheRead
-  }
-  return undefined
-}
+const extractCacheReadTokens = (usage: Record<string, unknown>): unknown =>
+  extractUsageToken(usage, 'cachedInputTokens', 'inputTokens', 'cacheRead')
 
 // Helper to extract cache write tokens from V3 (usage.inputTokens.cacheWrite). Providers like
 // Amazon Bedrock populate this standardized field instead of providerMetadata.anthropic.
@@ -481,13 +496,13 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           ...mapVercelParams(params),
         }
         const availableTools = extractAvailableToolCalls('vercel', params)
+        const baseURL = extractBaseURL(model)
 
         try {
           const result = await model.doGenerate(params as any)
           const modelId =
             mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
           const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
-          const baseURL = '' // cannot currently get baseURL from vercel
           // result.content is undefined when the model returns only tool calls with no text output
           const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[])
           const latency = (Date.now() - startTime) / 1000
@@ -562,7 +577,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
             output: [],
             latency: 0,
-            baseURL: '',
+            baseURL,
             modelParameters: getModelParams(mergedParams as any),
             usage: {
               inputTokens: 0,
@@ -601,7 +616,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         const modelId = mergedOptions.posthogModelOverride ?? model.modelId
         const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
         const availableTools = extractAvailableToolCalls('vercel', params)
-        const baseURL = '' // cannot currently get baseURL from vercel
+        const baseURL = extractBaseURL(model)
 
         // Map to track in-progress tool calls
         const toolCallsInProgress = new Map<
@@ -766,7 +781,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
             output: [],
             latency: 0,
-            baseURL: '',
+            baseURL,
             modelParameters: getModelParams(mergedParams as any),
             usage: {
               inputTokens: 0,

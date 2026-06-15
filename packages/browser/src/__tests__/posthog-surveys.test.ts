@@ -8,7 +8,7 @@ jest.mock('../utils/logger', () => ({
 }))
 jest.useFakeTimers()
 
-import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
+import { SURVEYS, SURVEYS_LOADED_AT, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
 import { PostHog } from '../posthog-core'
 import { PostHogSurveys } from '../posthog-surveys'
@@ -149,6 +149,18 @@ describe('posthog-surveys', () => {
             // Clean up
             delete assignableWindow.__PosthogExtensions__
             localStorage.clear()
+        })
+
+        describe('reset', () => {
+            it('does not throw when localStorage access throws (e.g. cross-origin iframe)', () => {
+                const removeItemSpy = jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+                    throw new Error('storage unavailable')
+                })
+
+                expect(() => surveys.reset()).not.toThrow()
+
+                removeItemSpy.mockRestore()
+            })
         })
 
         describe('canRenderSurvey', () => {
@@ -677,7 +689,10 @@ describe('posthog-surveys', () => {
                 expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
                     isLoaded: true,
                 })
-                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: mockSurveys })
+                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({
+                    [SURVEYS]: mockSurveys,
+                    [SURVEYS_LOADED_AT]: expect.any(Number),
+                })
             })
 
             it('should clear promise after failed API call (non-200 status)', () => {
@@ -735,7 +750,10 @@ describe('posthog-surveys', () => {
                 expect(mockCallback).toHaveBeenCalledWith(delayedSurveys, {
                     isLoaded: true,
                 })
-                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: delayedSurveys })
+                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({
+                    [SURVEYS]: delayedSurveys,
+                    [SURVEYS_LOADED_AT]: expect.any(Number),
+                })
             })
 
             it('should set correct timeout value in request', () => {

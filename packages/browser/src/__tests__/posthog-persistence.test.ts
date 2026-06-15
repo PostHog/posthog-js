@@ -4,14 +4,21 @@ import {
     DEVICE_ID,
     ENABLED_FEATURE_FLAGS,
     INITIAL_PERSON_INFO,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
     PRODUCT_TOURS,
     PRODUCT_TOURS_ACTIVATED,
     SESSION_ID,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+    SURVEYS,
     SURVEYS_ACTIVATED,
+    SURVEYS_LOADED_AT,
     USER_STATE,
 } from '../constants'
 import { PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
@@ -19,7 +26,13 @@ import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
-import { cookieStore, resetLocalStorageSupported, resetSessionStorageSupported, sessionStore } from '../storage'
+import {
+    cookieStore,
+    localStore,
+    resetLocalStorageSupported,
+    resetSessionStorageSupported,
+    sessionStore,
+} from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
 import Mock = jest.Mock
 
@@ -46,6 +59,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$stored_group_properties',
     '$stored_person_properties',
     '$surveys',
+    '$surveys_loaded_at',
     '$flag_call_reported',
     '$flag_call_reported_session_id',
     '$feature_flag_errors',
@@ -471,6 +485,208 @@ describe('persistence', () => {
                 expect(() => library.save()).not.toThrow()
             })
         })
+
+        describe('refreshKey', () => {
+            // Pulls a single key from on-disk storage into in-memory props
+            // without a whole-blob flush() (which would clobber a sibling's
+            // write) or load() (which would discard pending in-memory writes).
+            let parseSpy: jest.SpyInstance
+
+            afterEach(() => {
+                parseSpy?.mockRestore()
+            })
+
+            it('pulls a single key from storage and leaves other in-memory props untouched', () => {
+                library.register({ distinct_id: 'mine', other: 'in-memory-only' })
+
+                // Simulate a sibling having written a different value for one key.
+                const onDisk = { ...library.props, distinct_id: 'from-sibling' }
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue(onDisk)
+
+                library.refreshKey('distinct_id')
+
+                expect(library.props.distinct_id).toBe('from-sibling')
+                expect(library.props.other).toBe('in-memory-only')
+            })
+
+            it('does not write to storage', () => {
+                library.register({ distinct_id: 'mine' })
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue({ distinct_id: 'from-sibling' })
+                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                storageSetSpy.mockClear()
+
+                library.refreshKey('distinct_id')
+
+                expect(storageSetSpy).not.toHaveBeenCalled()
+                storageSetSpy.mockRestore()
+            })
+
+            it('deletes the in-memory key when storage no longer has it', () => {
+                library.register({ distinct_id: 'mine', keep: 'me' })
+                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue({ keep: 'me' })
+
+                library.refreshKey('distinct_id')
+
+                expect(library.props.distinct_id).toBeUndefined()
+                expect(library.props.keep).toBe('me')
+            })
+        })
+
+        describe('save debounce', () => {
+            // `persistence_save_debounce_ms` coalesces rapid save() calls
+            // into a single write per window. The default is 0 (immediate).
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            afterEach(() => {
+                jest.runOnlyPendingTimers()
+                jest.useRealTimers()
+            })
+
+            it('writes immediately when debounce is 0 (default)', () => {
+                const config = makePostHogConfig('test-debounce-off', persistenceMode)
+                const debounced = new PostHogPersistence(config)
+                const spy = jest.spyOn(debounced['_storage'], '_set')
+                spy.mockClear()
+
+                debounced.register({ distinct_id: 'a' })
+                debounced.register({ distinct_id: 'b' })
+
+                expect(spy).toHaveBeenCalledTimes(2)
+                debounced.clear()
+            })
+
+            it('coalesces multiple saves within the debounce window into one write', () => {
+                const config = {
+                    ...makePostHogConfig('test-debounce-on', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+                const spy = jest.spyOn(debounced['_storage'], '_set')
+                spy.mockClear()
+
+                debounced.register({ a: '1' })
+                debounced.register({ b: '2' })
+                debounced.register({ c: '3' })
+
+                expect(spy).not.toHaveBeenCalled()
+
+                jest.advanceTimersByTime(250)
+
+                expect(spy).toHaveBeenCalledTimes(1)
+                expect(debounced.props).toMatchObject({ a: '1', b: '2', c: '3' })
+                debounced.clear()
+            })
+
+            it('in-memory props update synchronously even before the debounced write lands', () => {
+                const config = {
+                    ...makePostHogConfig('test-debounce-sync', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+
+                debounced.register({ distinct_id: 'live' })
+                expect(debounced.props.distinct_id).toBe('live')
+                debounced.clear()
+            })
+
+            it('flush() writes pending state immediately', () => {
+                const config = {
+                    ...makePostHogConfig('test-debounce-flush', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+                const spy = jest.spyOn(debounced['_storage'], '_set')
+                spy.mockClear()
+
+                debounced.register({ distinct_id: 'before-flush' })
+                expect(spy).not.toHaveBeenCalled()
+
+                debounced.flush()
+                expect(spy).toHaveBeenCalledTimes(1)
+
+                jest.advanceTimersByTime(1000)
+                expect(spy).toHaveBeenCalledTimes(1)
+                debounced.clear()
+            })
+
+            it('remove() cancels any pending debounced write', () => {
+                const config = {
+                    ...makePostHogConfig('test-debounce-remove', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+                const setSpy = jest.spyOn(debounced['_storage'], '_set')
+                const removeSpy = jest.spyOn(debounced['_storage'], '_remove')
+
+                debounced.register({ distinct_id: 'doomed' })
+                setSpy.mockClear()
+                removeSpy.mockClear()
+
+                debounced.remove()
+                jest.advanceTimersByTime(1000)
+
+                expect(setSpy).not.toHaveBeenCalled()
+                expect(removeSpy).toHaveBeenCalled()
+            })
+
+            it('flush() does NOT resurrect storage after remove() (the reset bug)', () => {
+                // Sequence: posthog.reset() → clear() → remove() cancels
+                // the timer, resets _slotState, deletes storage.
+                // Then the unload listener fires flush(). Without the
+                // pending-timer guard, flush() would call _writeNow() with
+                // props={}, mismatch against the now-empty _slotState,
+                // and resurrect the storage entry that remove() just
+                // deleted. The guard means flush() is a no-op once there
+                // is no pending timer.
+                const config = {
+                    ...makePostHogConfig('test-flush-after-remove', persistenceMode),
+                    persistence_save_debounce_ms: 250,
+                }
+                const debounced = new PostHogPersistence(config)
+                debounced.register({ distinct_id: 'before-reset' })
+
+                // Simulate reset
+                debounced.clear()
+
+                const setSpy = jest.spyOn(debounced['_storage'], '_set')
+                setSpy.mockClear()
+
+                // Simulate the unload listener firing after reset
+                debounced.flush()
+
+                expect(setSpy).not.toHaveBeenCalled()
+            })
+
+            it('writes through on flush() when debounce is enabled at runtime via set_config (late-enable)', () => {
+                // Customer constructs PostHog with debounce=0 (no listener
+                // would be installed under the old logic), then later does
+                // `posthog.set_config({ persistence_save_debounce_ms: 250 })`.
+                // The mutable config is read every save() via _saveDebounceMs(),
+                // so save() correctly starts debouncing. But we must ALSO
+                // have installed unload listeners at construction so the
+                // pending write isn't lost on page close.
+                const config: any = makePostHogConfig('test-late-debounce', persistenceMode)
+                const debounced = new PostHogPersistence(config)
+                const spy = jest.spyOn(debounced['_storage'], '_set')
+
+                // Enable debounce after construction.
+                config.persistence_save_debounce_ms = 250
+                spy.mockClear()
+
+                debounced.register({ distinct_id: 'late' })
+
+                // The debounced write is pending — not in storage yet.
+                expect(spy).not.toHaveBeenCalled()
+
+                // Simulate the unload listener firing.
+                debounced.flush()
+
+                expect(spy).toHaveBeenCalledTimes(1)
+                debounced.clear()
+            })
+        })
     })
 
     describe('localStorage+cookie', () => {
@@ -594,6 +810,170 @@ describe('persistence', () => {
             persistence.clear()
         })
 
+        describe('merge precedence', () => {
+            // The default merge in createLocalPlusCookieStore._parse is
+            // extend(cookieProperties, localStorageData) — localStorage wins.
+            // With __preview_cookie_wins_on_conflict: true, that order flips so the
+            // cross-subdomain cookie is authoritative for the keys it stores.
+            const persistenceName = 'ph__posthog'
+            const encodeCookie = (props: Record<string, any>) =>
+                `${persistenceName}=${encodeURIComponent(JSON.stringify(props))}`
+
+            function makeConfig(persistenceMode: string, cookieWins: boolean): PostHogConfig {
+                return <PostHogConfig>{
+                    name: '',
+                    persistence: persistenceMode as
+                        | 'cookie'
+                        | 'localStorage'
+                        | 'localStorage+cookie'
+                        | 'memory'
+                        | 'sessionStorage',
+                    __preview_cookie_wins_on_conflict: cookieWins,
+                }
+            }
+
+            beforeEach(() => {
+                document.cookie = `${persistenceName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
+                localStorage.clear()
+            })
+
+            it('default (flag off): localStorage wins for keys present in both stores', () => {
+                // Seed both stores with conflicting distinct_id
+                document.cookie = encodeCookie({ distinct_id: 'from_cookie', $device_id: 'd1' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'from_localstorage' }))
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', false))
+
+                expect(lib.props.distinct_id).toBe('from_localstorage')
+                // Keys only in cookie still flow through (no localStorage value to override)
+                expect(lib.props.$device_id).toBe('d1')
+            })
+
+            it('flag on: cookie wins for keys present in both stores', () => {
+                document.cookie = encodeCookie({ distinct_id: 'from_cookie', $device_id: 'd1' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'from_localstorage' }))
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('from_cookie')
+                expect(lib.props.$device_id).toBe('d1')
+            })
+
+            it('flag on: cross-subdomain identify scenario - fresh cookie state wins over stale localStorage', () => {
+                // Models the bug this flag exists to fix: localStorage on a subdomain carries
+                // stale anonymous state from a prior visit, while the shared cookie carries
+                // fresh identified state written by an identify() on another subdomain.
+                const staleLocalStorage = {
+                    distinct_id: 'anon-uuid',
+                    $device_id: 'anon-uuid',
+                    $sesid: [1000, 'old-sid', 1000],
+                    $user_state: 'anonymous',
+                    $initial_person_info: { u: 'https://www.example.com/old', r: 'https://www.bing.com/' },
+                }
+                const freshCookie = {
+                    distinct_id: 'user@x.com',
+                    $device_id: 'anon-uuid',
+                    $sesid: [9999, 'new-sid', 9999],
+                    $user_state: 'identified',
+                    $initial_person_info: { u: 'https://app.example.com/dash', r: 'https://www.example.com/' },
+                }
+                document.cookie = encodeCookie(freshCookie)
+                localStorage.setItem(persistenceName, JSON.stringify(staleLocalStorage))
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('user@x.com')
+                expect(lib.props.$device_id).toBe('anon-uuid')
+                expect(lib.props.$sesid).toEqual([9999, 'new-sid', 9999])
+                expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.$initial_person_info).toEqual({
+                    u: 'https://app.example.com/dash',
+                    r: 'https://www.example.com/',
+                })
+            })
+
+            it('flag on: self-heals stale localStorage by writing the merged value back', () => {
+                document.cookie = encodeCookie({ distinct_id: 'from_cookie' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'from_localstorage' }))
+
+                new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                // The _parse self-heal writes the merged value back to localStorage
+                const localStorageAfter = JSON.parse(localStorage.getItem(persistenceName) || '{}')
+                expect(localStorageAfter.distinct_id).toBe('from_cookie')
+            })
+
+            it('flag on: localStorage-only keys are preserved (cookie does not carry them)', () => {
+                document.cookie = encodeCookie({ distinct_id: 'from_cookie' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'from_localstorage',
+                        // keys NOT in COOKIE_PERSISTED_PROPERTIES — they live only in localStorage
+                        $surveys: ['s1', 's2'],
+                        super_prop: 'value',
+                    })
+                )
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('from_cookie')
+                expect(lib.props.$surveys).toEqual(['s1', 's2'])
+                expect(lib.props.super_prop).toBe('value')
+            })
+
+            it('flag on: empty cookie is a no-op, localStorage round-trips intact', () => {
+                expect(document.cookie).toEqual('')
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'ls_only', super_prop: 'value' }))
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('ls_only')
+                expect(lib.props.super_prop).toBe('value')
+            })
+
+            it('flag on: empty localStorage, cookie-only data populates props', () => {
+                document.cookie = encodeCookie({ distinct_id: 'cookie_only', $device_id: 'd1' })
+                expect(localStorage.getItem(persistenceName)).toBe(null)
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('cookie_only')
+                expect(lib.props.$device_id).toBe('d1')
+            })
+
+            it('flag on: defensive filter - null cookie value does NOT clobber valid localStorage value', () => {
+                document.cookie = encodeCookie({ distinct_id: null })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'valid' }))
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('valid')
+            })
+
+            it('flag on: defensive filter - empty-string cookie value does NOT clobber valid localStorage value', () => {
+                document.cookie = encodeCookie({ distinct_id: '' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'valid' }))
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('valid')
+            })
+
+            it('flag on: has no effect for non-conflicting keys regardless of source', () => {
+                document.cookie = encodeCookie({ distinct_id: 'from_cookie', cookie_only_key: 'c' })
+                localStorage.setItem(persistenceName, JSON.stringify({ super_prop: 'ls', ls_only_key: 'l' }))
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                // All non-conflicting keys merge into props from their respective stores
+                expect(lib.props.distinct_id).toBe('from_cookie')
+                expect(lib.props.cookie_only_key).toBe('c')
+                expect(lib.props.super_prop).toBe('ls')
+                expect(lib.props.ls_only_key).toBe('l')
+            })
+        })
+
         it('should allow swapping between storage methods', () => {
             const expectedProps = () => ({ distinct_id: 'test', test_prop: 'test_val', $is_identified: false })
 
@@ -670,6 +1050,860 @@ describe('persistence', () => {
             expect(window.localStorage.getItem(persistenceKey)).toBeTruthy()
             expect(window.sessionStorage.getItem(persistenceKey)).toBeTruthy()
             expect(document.cookie).toEqual('')
+        })
+    })
+})
+
+describe('flag and survey storage split', () => {
+    const MAIN = 'ph__posthog'
+    const FLAGS = 'ph__posthog__flags'
+    const SURVEYS_ENTRY = 'ph__posthog__surveys'
+
+    const FLAG_CLUSTER: Record<string, any> = {
+        [ENABLED_FEATURE_FLAGS]: { beta: true, exp: 'control' },
+        [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['beta', 'exp'],
+        [PERSISTENCE_FEATURE_FLAG_DETAILS]: { flags: { beta: { enabled: true } } },
+        [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { beta: { k: 'v' } },
+        [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-123',
+        [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 1717200000000,
+    }
+    const SURVEY_DATA: Record<string, any> = { [SURVEYS]: [{ id: 's1', name: 'NPS' }] }
+
+    const parse = (key: string): any => JSON.parse(localStorage.getItem(key) || 'null')
+
+    const makeConfig = (overrides: Partial<PostHogConfig> = {}): PostHogConfig =>
+        ({
+            ...makePostHogConfig('test', 'localStorage'),
+            split_storage: true,
+            ...overrides,
+        }) as PostHogConfig
+
+    const gateOffConfig = (): PostHogConfig => makePostHogConfig('test', 'localStorage')
+
+    beforeEach(() => {
+        resetLocalStorageSupported()
+        resetSessionStorageSupported()
+        localStorage.clear()
+        document.cookie = ''
+    })
+
+    afterEach(() => {
+        localStorage.clear()
+        document.cookie = ''
+    })
+
+    describe('gate off (default) keeps current single-blob behaviour', () => {
+        it('writes flag and survey keys into the single main blob, no group entries', () => {
+            const lib = new PostHogPersistence(gateOffConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(SURVEYS_ENTRY)).toBeNull()
+            const main = parse(MAIN)
+            expect(main[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            expect(main[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            expect(main['distinct_id']).toBe('d')
+        })
+
+        it('never writes to the group entries', () => {
+            const setSpy = jest.spyOn(localStore, '_set')
+            const lib = new PostHogPersistence(gateOffConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            const groupWrites = setSpy.mock.calls.filter(([name]) => name === FLAGS || name === SURVEYS_ENTRY)
+            expect(groupWrites).toEqual([])
+            setSpy.mockRestore()
+        })
+    })
+
+    describe('gate on partitions into group entries', () => {
+        it('writes the cluster to __flags, surveys to __surveys, strips both from main', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            const flags = parse(FLAGS)
+            const surveys = parse(SURVEYS_ENTRY)
+            const main = parse(MAIN)
+
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(flags[k]).toEqual(v))
+            expect(surveys[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            expect(main['distinct_id']).toBe('d')
+            Object.keys(FLAG_CLUSTER).forEach((k) => expect(main[k]).toBeUndefined())
+            expect(main[SURVEYS]).toBeUndefined()
+            // flags and surveys live in different entries
+            expect(flags[SURVEYS]).toBeUndefined()
+            expect(surveys[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+        })
+
+        it('round-trips all grouped values back into props on reload', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            const reloaded = new PostHogPersistence(makeConfig())
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(reloaded.props[k]).toEqual(v))
+            expect(reloaded.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            expect(reloaded.props['distinct_id']).toBe('d')
+        })
+
+        it('the whole flag cluster lands in __flags in a single write (atomic)', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ distinct_id: 'd' })
+
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+
+            lib.register(FLAG_CLUSTER)
+
+            const flagWrites = setSpy.mock.calls.filter(([name]) => name === FLAGS)
+            expect(flagWrites).toHaveLength(1)
+            const [, written] = flagWrites[0]
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect((written as any)[k]).toEqual(v))
+            setSpy.mockRestore()
+        })
+    })
+
+    describe('volatile metadata does not dirty the group entries', () => {
+        // $feature_flag_evaluated_at, $feature_flag_request_id, and
+        // $surveys_loaded_at change on every /flags (or /surveys) load even when
+        // the meaningful content is unchanged. Rewriting a multi-hundred-KB group
+        // entry just to refresh them re-broadcasts the payload to every open tab
+        // on each SPA navigation — exactly the cross-tab storage-event pressure
+        // the split exists to remove. A volatile-only change skips the write; the
+        // freshest value rides along on the next content write.
+        it.each([
+            {
+                label: '$feature_flag_evaluated_at',
+                entry: FLAGS,
+                register: { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 1717200099999 },
+            },
+            {
+                label: '$feature_flag_request_id',
+                entry: FLAGS,
+                register: { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-789' },
+            },
+            {
+                label: '$surveys_loaded_at',
+                entry: SURVEYS_ENTRY,
+                register: { [SURVEYS_LOADED_AT]: 1717200099999 },
+            },
+        ])('registering only a fresh $label does not rewrite the group entry', ({ entry, register }) => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, [SURVEYS_LOADED_AT]: 1717200000000, distinct_id: 'd' })
+
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+            lib.register(register)
+
+            expect(setSpy.mock.calls.map(([name]) => name)).not.toContain(entry)
+            setSpy.mockRestore()
+        })
+
+        it('a content change writes the group entry with the freshest volatile values riding along', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+
+            lib.register({ [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 1717200099999 })
+            expect(parse(FLAGS)[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]).toEqual(1717200000000)
+
+            lib.register({ [ENABLED_FEATURE_FLAGS]: { beta: false } })
+            const flagsEntry = parse(FLAGS)
+            expect(flagsEntry[ENABLED_FEATURE_FLAGS]).toEqual({ beta: false })
+            expect(flagsEntry[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]).toEqual(1717200099999)
+        })
+
+        it('the in-memory value is always the freshest even while disk lags', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+
+            lib.register({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-789' })
+
+            expect(lib.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toEqual('req-789')
+            expect(parse(FLAGS)[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toEqual('req-123')
+        })
+
+        it('a returning visitor whose loads only refresh volatile values never rewrites the entry', () => {
+            localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
+            localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
+
+            const lib = new PostHogPersistence(makeConfig())
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+
+            lib.register({
+                [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 1717200099999,
+                [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-789',
+            })
+
+            expect(setSpy.mock.calls.map(([name]) => name)).not.toContain(FLAGS)
+            setSpy.mockRestore()
+        })
+    })
+
+    describe('per-entry fingerprints decouple the writes', () => {
+        it('a main-blob change does not rewrite __flags or __surveys', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+
+            lib.register({ distinct_id: 'd2' })
+
+            const names = setSpy.mock.calls.map(([name]) => name)
+            expect(names).toContain(MAIN)
+            expect(names).not.toContain(FLAGS)
+            expect(names).not.toContain(SURVEYS_ENTRY)
+            setSpy.mockRestore()
+        })
+
+        it('a flag change rewrites only __flags', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+
+            lib.register({ [ENABLED_FEATURE_FLAGS]: { beta: false, exp: 'test' } })
+
+            const names = setSpy.mock.calls.map(([name]) => name)
+            expect(names).toContain(FLAGS)
+            expect(names).not.toContain(MAIN)
+            expect(names).not.toContain(SURVEYS_ENTRY)
+            setSpy.mockRestore()
+        })
+
+        // A returning visitor loads __flags from disk. The frequent main-blob
+        // saves posthog fires at startup (before fresh flags return from the
+        // network) must not rewrite — and so re-broadcast to every open tab —
+        // the unchanged flag blob. Loading must seed the same fingerprint a
+        // write produces, so the very first save recognises it as unchanged.
+        //
+        // The cookie-option setters (set_cross_subdomain / set_secure) fire once
+        // each on construction as their in-memory option transitions from
+        // undefined to its configured value. They must not churn the
+        // localStorage-only group entries either, so the concrete-cookie-options
+        // case (what posthog-core actually constructs with) is covered too.
+        it.each([
+            { label: 'cookie options unset', extra: {} },
+            {
+                label: 'concrete cookie options (production)',
+                extra: { secure_cookie: true, cross_subdomain_cookie: false },
+            },
+        ])('a returning visitor does not rewrite the unchanged __flags it loaded ($label)', ({ extra }) => {
+            localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
+            localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
+
+            const setSpy = jest.spyOn(localStore, '_set')
+            const lib = new PostHogPersistence(makeConfig(extra))
+
+            // construction must not have rewritten the entry it just loaded
+            expect(setSpy.mock.calls.filter(([name]) => name === FLAGS)).toEqual([])
+
+            setSpy.mockClear()
+            lib.register({ distinct_id: 'd2' })
+
+            const names = setSpy.mock.calls.map(([name]) => name)
+            expect(names).toContain(MAIN)
+            expect(names).not.toContain(FLAGS)
+            setSpy.mockRestore()
+        })
+
+        // Same returning-visitor guarantee for the survey payload: an unchanged
+        // __surveys loaded from disk must not be rewritten/re-broadcast by the
+        // startup main-blob saves.
+        it('a returning visitor does not rewrite the unchanged __surveys it loaded', () => {
+            localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
+            localStorage.setItem(SURVEYS_ENTRY, JSON.stringify(SURVEY_DATA))
+
+            const setSpy = jest.spyOn(localStore, '_set')
+            const lib = new PostHogPersistence(makeConfig())
+
+            expect(setSpy.mock.calls.filter(([name]) => name === SURVEYS_ENTRY)).toEqual([])
+
+            setSpy.mockClear()
+            lib.register({ distinct_id: 'd2' })
+
+            const names = setSpy.mock.calls.map(([name]) => name)
+            expect(names).toContain(MAIN)
+            expect(names).not.toContain(SURVEYS_ENTRY)
+            setSpy.mockRestore()
+        })
+
+        // The flip side of seeding: the seed must suppress only the redundant
+        // first write, never a real subsequent flag change. A genuine mutation
+        // goes through _setProp -> _markGroupDirty, which clears the fast-path, so
+        // the changed cluster must still land in __flags after a seeded load.
+        it('still rewrites __flags when a flag changes after a seeded load', () => {
+            localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
+            localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
+
+            const lib = new PostHogPersistence(makeConfig())
+            const setSpy = jest.spyOn(localStore, '_set')
+            setSpy.mockClear()
+
+            lib.register({ [ENABLED_FEATURE_FLAGS]: { beta: false, exp: 'control' } })
+
+            expect(setSpy.mock.calls.map(([name]) => name)).toContain(FLAGS)
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual({ beta: false, exp: 'control' })
+            setSpy.mockRestore()
+        })
+    })
+
+    describe('one-shot migration from the old main-blob location', () => {
+        it('reads the old location once, then moves grouped keys out of main', () => {
+            localStorage.setItem(MAIN, JSON.stringify({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' }))
+
+            const lib = new PostHogPersistence(makeConfig())
+
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+            expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+
+            const main = parse(MAIN)
+            Object.keys(FLAG_CLUSTER).forEach((k) => expect(main[k]).toBeUndefined())
+            expect(main[SURVEYS]).toBeUndefined()
+            expect(main['distinct_id']).toBe('d')
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            expect(parse(SURVEYS_ENTRY)[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+        })
+
+        // Partial migration: __flags already exists on disk, but the main blob
+        // still carries a flag-group key that __flags does not (an older SDK that
+        // grouped fewer keys, or a gate-off / mixed-fleet tab that wrote a flag key
+        // back to main). The leftover must end up in __flags, not be stripped from
+        // main and lost — seeding the load fingerprint must not let the first save
+        // skip this migration write.
+        it('folds a main-blob leftover into __flags even when __flags already exists', () => {
+            localStorage.setItem(FLAGS, JSON.stringify({ [ENABLED_FEATURE_FLAGS]: { beta: true } }))
+            localStorage.setItem(
+                MAIN,
+                JSON.stringify({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'req-leftover', distinct_id: 'd' })
+            )
+
+            new PostHogPersistence(makeConfig())
+
+            // the leftover is migrated into __flags and stripped from main
+            expect(parse(FLAGS)[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('req-leftover')
+            expect(parse(MAIN)[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBeUndefined()
+
+            // a fresh reload still resolves it (proves it landed on disk, not just memory)
+            const reloaded = new PostHogPersistence(makeConfig())
+            expect(reloaded.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('req-leftover')
+            expect(reloaded.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: true })
+        })
+
+        it('prefers the group entry over a stale value in the old main blob', () => {
+            localStorage.setItem(MAIN, JSON.stringify({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'stale-main' }))
+            localStorage.setItem(FLAGS, JSON.stringify({ [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'fresh-group' }))
+
+            const lib = new PostHogPersistence(makeConfig())
+            expect(lib.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('fresh-group')
+        })
+    })
+
+    describe('downgrade / mixed fleet (transient miss, never wrong)', () => {
+        it('a gate-off instance does not see grouped keys a gate-on instance split out', () => {
+            const split = new PostHogPersistence(makeConfig())
+            split.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            const old = new PostHogPersistence(gateOffConfig())
+            Object.keys(FLAG_CLUSTER).forEach((k) => expect(old.props[k]).toBeUndefined())
+            expect(old.props[SURVEYS]).toBeUndefined()
+            expect(old.props['distinct_id']).toBe('d')
+        })
+
+        it('a live gate-off instance keeps its in-memory flags after a gate-on sibling strips main', () => {
+            localStorage.setItem(MAIN, JSON.stringify({ ...FLAG_CLUSTER, distinct_id: 'd' }))
+
+            const oldTab = new PostHogPersistence(gateOffConfig())
+            expect(oldTab.props[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+
+            // a newly-loaded gate-on tab migrates and strips flags from main
+            new PostHogPersistence(makeConfig())
+            expect(parse(MAIN)[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+
+            // the live old tab still has its in-memory copy (no storage listener re-reads)
+            expect(oldTab.props[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+        })
+    })
+
+    describe('reset / opt-out wipe every entry', () => {
+        it('clear() removes the main blob and both group entries', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+            expect(parse(FLAGS)).not.toBeNull()
+            expect(parse(SURVEYS_ENTRY)).not.toBeNull()
+
+            lib.clear()
+
+            expect(parse(MAIN)).toBeNull()
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(SURVEYS_ENTRY)).toBeNull()
+        })
+
+        it('clear() removes orphaned group entries even when the gate is off', () => {
+            localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
+            localStorage.setItem(SURVEYS_ENTRY, JSON.stringify(SURVEY_DATA))
+
+            const lib = new PostHogPersistence(gateOffConfig())
+            lib.clear()
+
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(SURVEYS_ENTRY)).toBeNull()
+        })
+    })
+
+    describe('storage backends', () => {
+        it('localStorage+cookie writes group entries to localStorage only, never the cookie', () => {
+            const lib = new PostHogPersistence(makeConfig({ persistence: 'localStorage+cookie' }))
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            expect(parse(SURVEYS_ENTRY)[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            expect(document.cookie).not.toContain('__flags')
+            expect(document.cookie).not.toContain('__surveys')
+            expect(document.cookie).not.toContain('feature_flag')
+        })
+
+        it.each(['memory', 'sessionStorage', 'cookie'])(
+            '%s backend keeps the single blob even with the gate on',
+            (mode) => {
+                const lib = new PostHogPersistence(makeConfig({ persistence: mode as PostHogConfig['persistence'] }))
+                lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+                expect(parse(FLAGS)).toBeNull()
+                expect(parse(SURVEYS_ENTRY)).toBeNull()
+                expect(lib.props[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+                expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            }
+        )
+    })
+
+    describe('overrides stay in the main blob', () => {
+        it('feature flag overrides are not split out', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { beta: false }, ...FLAG_CLUSTER })
+
+            expect(parse(MAIN)[PERSISTENCE_OVERRIDE_FEATURE_FLAGS]).toEqual({ beta: false })
+            expect(parse(FLAGS)[PERSISTENCE_OVERRIDE_FEATURE_FLAGS]).toBeUndefined()
+        })
+    })
+
+    describe('refreshKey is group-aware', () => {
+        it('pulls a grouped key from the __flags entry', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+
+            const flags = parse(FLAGS)
+            flags[PERSISTENCE_FEATURE_FLAG_REQUEST_ID] = 'req-from-sibling'
+            localStorage.setItem(FLAGS, JSON.stringify(flags))
+
+            lib.refreshKey(PERSISTENCE_FEATURE_FLAG_REQUEST_ID)
+            expect(lib.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('req-from-sibling')
+        })
+
+        it('falls back to the un-migrated main blob for a grouped key absent from __flags', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            localStorage.setItem(FLAGS, JSON.stringify({}))
+            const main = parse(MAIN) || {}
+            main[PERSISTENCE_FEATURE_FLAG_REQUEST_ID] = 'from-old-main'
+            localStorage.setItem(MAIN, JSON.stringify(main))
+
+            lib.refreshKey(PERSISTENCE_FEATURE_FLAG_REQUEST_ID)
+            expect(lib.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('from-old-main')
+        })
+
+        it('deletes a grouped key absent from both __flags and main', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID] = 'stale'
+            localStorage.setItem(FLAGS, JSON.stringify({}))
+            const main = parse(MAIN) || {}
+            delete main[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]
+            localStorage.setItem(MAIN, JSON.stringify(main))
+
+            lib.refreshKey(PERSISTENCE_FEATURE_FLAG_REQUEST_ID)
+            expect(lib.props[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBeUndefined()
+        })
+    })
+
+    describe('runtime toggle of the gate via update_config', () => {
+        // The split routing must follow `split_storage`
+        // even when it flips without a persistence change.
+        it('turning the gate on migrates flag/survey keys out of the main blob', () => {
+            const off = gateOffConfig()
+            const lib = new PostHogPersistence(off)
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(MAIN)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+
+            lib.update_config(makeConfig(), off)
+
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            expect(parse(SURVEYS_ENTRY)[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            const main = parse(MAIN)
+            Object.keys(FLAG_CLUSTER).forEach((k) => expect(main[k]).toBeUndefined())
+            expect(main[SURVEYS]).toBeUndefined()
+            expect(main['distinct_id']).toBe('d')
+        })
+
+        it('turning the gate off folds grouped keys back into main and drops the group entries', () => {
+            const on = makeConfig()
+            const lib = new PostHogPersistence(on)
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+            expect(parse(FLAGS)).not.toBeNull()
+
+            lib.update_config(gateOffConfig(), on)
+
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(SURVEYS_ENTRY)).toBeNull()
+            const main = parse(MAIN)
+            expect(main[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            expect(main[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+        })
+
+        it('keeps in-memory props intact across the toggle', () => {
+            const off = gateOffConfig()
+            const lib = new PostHogPersistence(off)
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            lib.update_config(makeConfig(), off)
+
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+            expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            expect(lib.props['distinct_id']).toBe('d')
+        })
+
+        // update_config can move to a backend that can't host the split
+        // (localStorage -> memory) while the gate stays on. Eligibility must
+        // re-resolve to "off" so the grouped keys fold back into the single blob
+        // instead of being stranded in orphaned __flags / __surveys entries.
+        it('drops the split when the backend becomes ineligible while the gate stays on', () => {
+            const on = makeConfig()
+            const lib = new PostHogPersistence(on)
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+            expect(parse(FLAGS)).not.toBeNull()
+            expect(parse(SURVEYS_ENTRY)).not.toBeNull()
+
+            // still split_storage: true, but memory cannot host the split
+            lib.update_config(makeConfig({ persistence: 'memory' }), on)
+
+            expect((lib as any)._splitStorage).toBe(false)
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(SURVEYS_ENTRY)).toBeNull()
+            // the grouped keys fold back into the (single) blob in memory, not stranded
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+            expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            expect(lib.props['distinct_id']).toBe('d')
+        })
+
+        // The reverse: starting on a backend that can't host the split (memory),
+        // moving to localStorage with the gate on must adopt the split and migrate
+        // the grouped keys out of the single blob into __flags / __surveys.
+        it('adopts the split when the backend becomes eligible while the gate stays on', () => {
+            const onMemory = makeConfig({ persistence: 'memory' })
+            const lib = new PostHogPersistence(onMemory)
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+            expect((lib as any)._splitStorage).toBe(false)
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(SURVEYS_ENTRY)).toBeNull()
+
+            lib.update_config(makeConfig(), onMemory)
+
+            expect((lib as any)._splitStorage).toBe(true)
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            expect(parse(SURVEYS_ENTRY)[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            const main = parse(MAIN)
+            Object.keys(FLAG_CLUSTER).forEach((k) => expect(main[k]).toBeUndefined())
+            expect(main[SURVEYS]).toBeUndefined()
+            expect(main['distinct_id']).toBe('d')
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+            expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+        })
+
+        // A full round-trip across the eligibility boundary in both directions
+        // must never strand the grouped keys: they follow the in-memory props the
+        // whole way and land back in __flags / __surveys once the backend can host
+        // the split again.
+        it('round-trips grouped keys across localStorage -> memory -> localStorage without stranding them', () => {
+            const onLocal = makeConfig()
+            const lib = new PostHogPersistence(onLocal)
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+            expect(parse(FLAGS)).not.toBeNull()
+            expect(parse(SURVEYS_ENTRY)).not.toBeNull()
+
+            // -> memory: split drops, grouped keys fold into the single blob
+            const onMemory = makeConfig({ persistence: 'memory' })
+            lib.update_config(onMemory, onLocal)
+            expect((lib as any)._splitStorage).toBe(false)
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(SURVEYS_ENTRY)).toBeNull()
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+            expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+
+            // -> localStorage: split re-adopts, grouped keys migrate back out
+            lib.update_config(onLocal, onMemory)
+            expect((lib as any)._splitStorage).toBe(true)
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            expect(parse(SURVEYS_ENTRY)[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            Object.entries(FLAG_CLUSTER).forEach(([k, v]) => expect(lib.props[k]).toEqual(v))
+            expect(lib.props[SURVEYS]).toEqual(SURVEY_DATA[SURVEYS])
+            expect(lib.props['distinct_id']).toBe('d')
+        })
+    })
+
+    describe('empty group entries are not eagerly created', () => {
+        it('a gate-on instance with no flag/survey data writes only the main blob', () => {
+            const setSpy = jest.spyOn(localStore, '_set')
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ distinct_id: 'd' })
+
+            expect(parse(MAIN)['distinct_id']).toBe('d')
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(SURVEYS_ENTRY)).toBeNull()
+            const groupWrites = setSpy.mock.calls.filter(([name]) => name === FLAGS || name === SURVEYS_ENTRY)
+            expect(groupWrites).toEqual([])
+            setSpy.mockRestore()
+        })
+
+        it('writes a group entry through to empty once it has held data', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+
+            Object.keys(FLAG_CLUSTER).forEach((k) => lib.unregister(k))
+
+            expect(parse(FLAGS)).toEqual({})
+        })
+
+        it('clears a pre-existing group entry emptied within the debounce window', () => {
+            jest.useFakeTimers()
+            try {
+                localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
+
+                const lib = new PostHogPersistence(makeConfig({ persistence_save_debounce_ms: 250 }))
+                Object.keys(FLAG_CLUSTER).forEach((k) => lib.unregister(k))
+                jest.advanceTimersByTime(250)
+
+                expect(parse(FLAGS)).toEqual({})
+            } finally {
+                jest.runOnlyPendingTimers()
+                jest.useRealTimers()
+            }
+        })
+    })
+
+    describe('the session-scoped sibling must not wipe the localStorage owner', () => {
+        // posthog-core runs a second, sessionStorage-backed PostHogPersistence that
+        // shares the main instance's storage name. set_config reconstructs it, and a
+        // fresh instance's update_config -> set_secure calls remove() — which must not
+        // delete the localStorage owner's __flags / __surveys entries.
+        it('set_config leaves the owner __flags and __surveys entries intact', () => {
+            const token = uuidv7()
+            const ownerFlags = `ph_${token}_posthog__flags`
+            const ownerSurveys = `ph_${token}_posthog__surveys`
+            const posthog = new PostHog().init(token, {
+                persistence: 'localStorage+cookie',
+                split_storage: true,
+                secure_cookie: false,
+            })
+            posthog.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+            expect(parse(ownerFlags)).not.toBeNull()
+            expect(parse(ownerSurveys)).not.toBeNull()
+
+            posthog.set_config({})
+
+            expect(parse(ownerFlags)).not.toBeNull()
+            expect(parse(ownerSurveys)).not.toBeNull()
+        })
+
+        // The set_config path above is saved by `keepGroupEntries` on the cookie
+        // setters, so it would still pass if the `_ownsSplitStorage` guard were
+        // deleted. This case makes that guard load-bearing: a non-owning sibling
+        // that gets disabled fires a *bare* remove() (no keepGroupEntries), and
+        // only `_ownsSplitStorage` stops it wiping the owner's localStorage entry.
+        it('a disabled non-owning sibling does not wipe the owner __flags entry', () => {
+            const owner = new PostHogPersistence(makeConfig())
+            owner.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+            expect(parse(FLAGS)).not.toBeNull()
+
+            // mirrors the sessionStorage instance posthog-core spins up: shares the
+            // storage name, but ownsSplitStorage=false (third constructor arg)
+            const sibling = new PostHogPersistence({ ...makeConfig(), persistence: 'sessionStorage' }, false, false)
+            sibling.set_disabled(true)
+
+            expect(parse(FLAGS)).not.toBeNull()
+        })
+    })
+
+    describe('a swallowed group write is retried, not cached as saved', () => {
+        it('retries the __flags write on the next save after a failed (swallowed) write', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            const realSet = localStore._set.bind(localStore)
+            let failFlags = true
+            jest.spyOn(localStore, '_set').mockImplementation((name, value, expire, cross, secure, debug) => {
+                if (name === FLAGS && failFlags) {
+                    return false // simulate a swallowed quota failure scoped to the flags entry
+                }
+                return realSet(name, value, expire, cross, secure, debug)
+            })
+
+            lib.register({ ...FLAG_CLUSTER, distinct_id: 'd' })
+            // the failed write did not land, and the main blob is unaffected
+            expect(parse(FLAGS)).toBeNull()
+            expect(parse(MAIN)['distinct_id']).toBe('d')
+            // a failed write must not mark the group as materialized on disk
+            expect(!!(lib as any)._slotState['flags']?.persisted).toBe(false)
+
+            // the entry is still dirty / un-fingerprinted, so the next save retries it
+            failFlags = false
+            lib.save()
+
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
+            // only after the confirmed write is it recorded as persisted
+            expect(!!(lib as any)._slotState['flags']?.persisted).toBe(true)
+            jest.restoreAllMocks()
+        })
+    })
+
+    describe('a main-blob change does not re-serialize the unchanged group payloads', () => {
+        it('skips JSON.stringify of __flags / __surveys when only a main key changed', () => {
+            const lib = new PostHogPersistence(makeConfig())
+            lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
+
+            const stringifySpy = jest.spyOn(JSON, 'stringify')
+            lib.register({ distinct_id: 'd2' })
+
+            const serializedAGroupPayload = stringifySpy.mock.calls.some(
+                ([arg]) => arg && typeof arg === 'object' && (ENABLED_FEATURE_FLAGS in arg || SURVEYS in arg)
+            )
+            expect(serializedAGroupPayload).toBe(false)
+            jest.restoreAllMocks()
+        })
+    })
+
+    describe('a stale group entry does not overwrite a fresher main blob', () => {
+        const olderTs = 1000
+        const newerTs = 2000
+
+        // flags carry $feature_flag_evaluated_at, so freshness is compared by
+        // timestamp; an equal timestamp keeps the group entry (the canonical
+        // migrated-forward home).
+        it.each([
+            { name: 'group older than main -> main wins', mainTs: newerTs, groupTs: olderTs, expectedBeta: 'main' },
+            { name: 'group newer than main -> group wins', mainTs: olderTs, groupTs: newerTs, expectedBeta: 'group' },
+            { name: 'equal timestamps -> group wins', mainTs: newerTs, groupTs: newerTs, expectedBeta: 'group' },
+        ])('flags: $name', ({ mainTs, groupTs, expectedBeta }) => {
+            localStorage.setItem(
+                MAIN,
+                JSON.stringify({
+                    [ENABLED_FEATURE_FLAGS]: { beta: 'main' },
+                    [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: mainTs,
+                    distinct_id: 'd',
+                })
+            )
+            localStorage.setItem(
+                FLAGS,
+                JSON.stringify({
+                    [ENABLED_FEATURE_FLAGS]: { beta: 'group' },
+                    [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: groupTs,
+                })
+            )
+
+            const lib = new PostHogPersistence(makeConfig())
+            expect(lib.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: expectedBeta })
+        })
+
+        // The freshness comparison only flips to the main blob when BOTH sides
+        // carry a numeric stamp and main's is strictly newer (the `isNumber`
+        // guards in `_groupEntryIsStale`). A missing stamp — an older SDK, or a
+        // write from before the timestamp existed — must keep the group entry as
+        // the canonical migrated-forward home, never silently lose to an
+        // undefined. Without this the cached flags would quietly change.
+        const flagsBeta = (beta: string): Record<string, any> => ({ [ENABLED_FEATURE_FLAGS]: { beta } })
+        const flagStamp = { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: newerTs }
+        it.each([
+            { name: 'main omits the stamp', main: flagsBeta('main'), group: { ...flagsBeta('group'), ...flagStamp } },
+            { name: 'group omits the stamp', main: { ...flagsBeta('main'), ...flagStamp }, group: flagsBeta('group') },
+            { name: 'neither side carries a stamp', main: flagsBeta('main'), group: flagsBeta('group') },
+        ])('flags: the group entry wins when $name', ({ main, group }) => {
+            localStorage.setItem(MAIN, JSON.stringify({ ...main, distinct_id: 'd' }))
+            localStorage.setItem(FLAGS, JSON.stringify(group))
+
+            const lib = new PostHogPersistence(makeConfig())
+            expect(lib.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: 'group' })
+        })
+
+        // Surveys stamp $surveys_loaded_at on every /surveys fetch, so the same
+        // freshness comparison applies: a stale __surveys entry no longer wins
+        // over a fresher write-back left in the main blob.
+        it.each([
+            { name: 'group older than main -> main wins', mainTs: newerTs, groupTs: olderTs, expectedId: 'main' },
+            { name: 'group newer than main -> group wins', mainTs: olderTs, groupTs: newerTs, expectedId: 'group' },
+            { name: 'equal timestamps -> group wins', mainTs: newerTs, groupTs: newerTs, expectedId: 'group' },
+        ])('surveys: $name', ({ mainTs, groupTs, expectedId }) => {
+            localStorage.setItem(
+                MAIN,
+                JSON.stringify({ [SURVEYS]: [{ id: 'main' }], [SURVEYS_LOADED_AT]: mainTs, distinct_id: 'd' })
+            )
+            localStorage.setItem(
+                SURVEYS_ENTRY,
+                JSON.stringify({ [SURVEYS]: [{ id: 'group' }], [SURVEYS_LOADED_AT]: groupTs })
+            )
+
+            const lib = new PostHogPersistence(makeConfig())
+            expect(lib.props[SURVEYS]).toEqual([{ id: expectedId }])
+        })
+
+        // Same isNumber-guard coverage as flags, for the surveys freshness key: a
+        // missing $surveys_loaded_at on either side (a pre-freshness-stamp SDK, or
+        // a write from before the stamp existed) must keep the group entry as the
+        // canonical migrated-forward home, never silently lose to an undefined.
+        const surveyRows = (id: string): Record<string, any> => ({ [SURVEYS]: [{ id }] })
+        const surveyStamp = { [SURVEYS_LOADED_AT]: newerTs }
+        it.each([
+            {
+                name: 'main omits the stamp',
+                main: surveyRows('main'),
+                group: { ...surveyRows('group'), ...surveyStamp },
+            },
+            {
+                name: 'group omits the stamp',
+                main: { ...surveyRows('main'), ...surveyStamp },
+                group: surveyRows('group'),
+            },
+            { name: 'neither side carries a stamp', main: surveyRows('main'), group: surveyRows('group') },
+        ])('surveys: the group entry wins when $name', ({ main, group }) => {
+            localStorage.setItem(MAIN, JSON.stringify({ ...main, distinct_id: 'd' }))
+            localStorage.setItem(SURVEYS_ENTRY, JSON.stringify(group))
+
+            const lib = new PostHogPersistence(makeConfig())
+            expect(lib.props[SURVEYS]).toEqual([{ id: 'group' }])
+        })
+
+        // The stale orphan must not just lose in memory — the first save has to
+        // heal the on-disk __flags with the fresher main payload. Seeding the load
+        // fingerprint must not let the group fast-path skip that heal write.
+        it('heals a stale __flags entry on disk from the fresher main blob', () => {
+            localStorage.setItem(
+                MAIN,
+                JSON.stringify({
+                    [ENABLED_FEATURE_FLAGS]: { beta: 'fresh-main' },
+                    [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: newerTs,
+                    distinct_id: 'd',
+                })
+            )
+            localStorage.setItem(
+                FLAGS,
+                JSON.stringify({
+                    [ENABLED_FEATURE_FLAGS]: { beta: 'stale-group' },
+                    [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: olderTs,
+                })
+            )
+
+            new PostHogPersistence(makeConfig())
+
+            expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual({ beta: 'fresh-main' })
+            const reloaded = new PostHogPersistence(makeConfig())
+            expect(reloaded.props[ENABLED_FEATURE_FLAGS]).toEqual({ beta: 'fresh-main' })
         })
     })
 })

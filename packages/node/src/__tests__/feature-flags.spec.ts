@@ -93,6 +93,122 @@ describe('local evaluation', () => {
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
   })
 
+  describe('early exit', () => {
+    // First group's properties match but its rollout (0%) excludes everyone; the second group
+    // would otherwise match. Mirrors the server-side `OutOfRolloutBound` short-circuit.
+    const earlyExitFlag = (earlyExit?: boolean): any => ({
+      flags: [
+        {
+          id: 1,
+          name: 'Early Exit Feature',
+          key: 'early-exit-flag',
+          active: true,
+          filters: {
+            early_exit: earlyExit,
+            groups: [
+              {
+                properties: [{ key: 'region', operator: 'exact', value: ['USA'], type: 'person' }],
+                rollout_percentage: 0,
+              },
+              {
+                properties: [{ key: 'region', operator: 'exact', value: ['USA'], type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    })
+
+    const newPosthog = (): PostHog =>
+      new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+    it.each([
+      ['enabled', true, false],
+      ['not set', undefined, true],
+      ['explicitly disabled', false, true],
+    ])('returns correct result when early_exit is %s', async (_, earlyExit, expected) => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: earlyExitFlag(earlyExit as boolean | undefined) }))
+      posthog = newPosthog()
+
+      expect(
+        await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
+          personProperties: { region: 'USA' },
+        })
+      ).toEqual(expected)
+
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    })
+
+    it('early exits on a rollout-only group with no property filters', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                name: 'Early Exit Feature',
+                key: 'early-exit-flag',
+                active: true,
+                filters: {
+                  early_exit: true,
+                  groups: [{ rollout_percentage: 0 }, { rollout_percentage: 100 }],
+                },
+              },
+            ],
+          },
+        })
+      )
+      posthog = newPosthog()
+
+      expect(await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {})).toEqual(false)
+
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    })
+
+    it('does not early exit when a group fails on a property filter rather than rollout', async () => {
+      // First group fails on its property (region mismatch), not rollout — so even with early_exit
+      // enabled, evaluation must continue to the second group, which matches.
+      const flags: any = {
+        flags: [
+          {
+            id: 1,
+            name: 'Early Exit Feature',
+            key: 'early-exit-flag',
+            active: true,
+            filters: {
+              early_exit: true,
+              groups: [
+                {
+                  properties: [{ key: 'region', operator: 'exact', value: ['Canada'], type: 'person' }],
+                  rollout_percentage: 0,
+                },
+                {
+                  properties: [{ key: 'region', operator: 'exact', value: ['USA'], type: 'person' }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
+          },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+      posthog = newPosthog()
+
+      expect(
+        await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
+          personProperties: { region: 'USA' },
+        })
+      ).toEqual(true)
+
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    })
+  })
+
   it('evaluates person properties', async () => {
     const flags = {
       flags: [

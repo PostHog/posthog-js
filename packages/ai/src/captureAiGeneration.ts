@@ -1,15 +1,11 @@
 import { EventMessage, PostHog } from 'posthog-node'
-import type { ChatCompletionTool } from 'openai/resources/chat/completions'
-import type { Tool as GeminiTool } from '@google/genai'
-import AnthropicOriginal from '@anthropic-ai/sdk'
 import { v4 as uuidv4 } from 'uuid'
 import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { stringifyError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, sanitizeValues, withPrivacyMode } from './utils'
-
-type AnthropicTool = AnthropicOriginal.Tool
+import { warnIfPostHogAiGateway } from './gatewayWarning'
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -59,7 +55,7 @@ export interface CaptureAiGenerationOptions {
   providerOverride?: string
   costOverride?: CostOverride
 
-  tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
+  tools?: unknown[] | null
   stopReason?: string
 
   /**
@@ -100,6 +96,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
   if (!client.capture) {
     return
   }
+
+  warnIfPostHogAiGateway(options.baseURL)
 
   const traceId = options.traceId ?? uuidv4()
   const eventType = options.eventType ?? AIEvent.Generation

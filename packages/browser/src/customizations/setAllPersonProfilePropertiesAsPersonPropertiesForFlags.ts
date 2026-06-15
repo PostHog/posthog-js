@@ -14,7 +14,8 @@ export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog:
         {},
         getEventProperties(
             posthog.config.mask_personal_data_properties,
-            posthog.config.custom_personal_data_properties
+            posthog.config.custom_personal_data_properties,
+            posthog.config.detect_google_search_app
         ),
         getCampaignParams(
             posthog.config.custom_campaign_params,

@@ -59,6 +59,24 @@ triggers can have one of three statuses:
 const triggerStatuses = [TRIGGER_ACTIVATED, TRIGGER_PENDING, TRIGGER_DISABLED] as const
 export type TriggerStatus = (typeof triggerStatuses)[number]
 
+function persistedTriggerStatus(
+    instance: PostHog | undefined,
+    triggerCount: number,
+    groupId: string | undefined,
+    groupPrefix: string,
+    fallbackPersistenceKey: string,
+    sessionId: string
+): TriggerStatus {
+    if (triggerCount === 0) {
+        return TRIGGER_DISABLED
+    }
+
+    // V2: Use per-group persistence key if groupId is provided
+    const persistenceKey = groupId ? groupPrefix + groupId : fallbackPersistenceKey
+    const currentTriggerSession = instance?.get_property(persistenceKey)
+    return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
+}
+
 /**
  * Session recording starts in buffering mode while waiting for "flags response".
  * Once the response is received, it might be disabled, active or sampled.
@@ -251,17 +269,14 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     }
 
     private _urlTriggerStatus(sessionId: string): TriggerStatus {
-        if (this._urlTriggers.length === 0) {
-            return TRIGGER_DISABLED
-        }
-
-        // V2: Use per-group persistence key if groupId is provided
-        const persistenceKey = this._groupId
-            ? SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX + this._groupId
-            : SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
-
-        const currentTriggerSession = this._instance?.get_property(persistenceKey)
-        return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
+        return persistedTriggerStatus(
+            this._instance,
+            this._urlTriggers.length,
+            this._groupId,
+            SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
+            SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
+            sessionId
+        )
     }
 
     triggerStatus(sessionId: string): TriggerStatus {
@@ -452,17 +467,15 @@ export class EventTriggerMatching implements TriggerStatusMatching {
     }
 
     private _eventTriggerStatus(sessionId: string): TriggerStatus {
-        if (this._eventTriggers.length === 0) {
-            return TRIGGER_DISABLED
-        }
-
-        // V2: Use per-group persistence key if groupId is provided
-        const persistenceKey = this._groupId
-            ? SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX + this._groupId
-            : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION
-
-        const currentTriggerSession = this._instance?.get_property(persistenceKey)
-        return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
+        const triggerCount = this._eventTriggers.length
+        return persistedTriggerStatus(
+            this._instance,
+            triggerCount,
+            this._groupId,
+            SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+            SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
+            sessionId
+        )
     }
 
     triggerStatus(sessionId: string): TriggerStatus {

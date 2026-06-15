@@ -246,15 +246,14 @@ describe('memory leak prevention', () => {
       // Stop recording - this should call destroy() which creates new WeakMaps
       stopRecording?.();
 
-      // Verify that WeakMaps were created during cleanup
-      // The IframeManager destroy() creates:
-      // - 3 WeakMaps for IframeManager (crossOriginIframeMap, iframes, crossOriginIframeRootIdMap)
-      // - 4 WeakMaps from CrossOriginIframeMirror.reset() calls (2 mirrors × 2 WeakMaps each)
-      // - 1 WeakMap from other cleanup
-      // Total: 8 new WeakMaps
+      // 7 WeakMaps from IframeManager (crossOriginIframeMap, iframes,
+      //   crossOriginIframeRootIdMap, loadListenerDisposers, pageHideHandlers,
+      //   attachedDocuments, attachedWindows)
+      // + 4 from CrossOriginIframeMirror.reset() (2 mirrors × 2 WeakMaps each)
+      // + 1 from other cleanup
       const newWeakMapsCreated =
         weakMapConstructorCalls - weakMapCallsAfterRecord;
-      expect(newWeakMapsCreated).toBe(8);
+      expect(newWeakMapsCreated).toBe(12);
 
       // Restore original WeakMap
       global.WeakMap = originalWeakMap;
@@ -841,6 +840,439 @@ describe('memory leak prevention', () => {
       expect(buffersAfterRemoval).toBeLessThan(buffersBeforeRemoval);
 
       stopRecording?.();
+    });
+
+    // Regression test for the same-origin iframe leak: previously the
+    // wrappedMutationEmit cleanup was gated on `recordCrossOriginIframes`,
+    // which left observers and iframe-manager state retained for every
+    // mounted/unmounted same-origin iframe.
+    it('should disconnect iframe observers even when recordCrossOriginIframes is false', async () => {
+      const emit = (event: eventWithTime) => {
+        events.push(event);
+      };
+
+      const stopRecording = record({
+        emit,
+        // explicitly default — this is the case that used to leak
+        recordCrossOriginIframes: false,
+      });
+
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const buffersBeforeRemoval = mutationBuffers.length;
+      expect(buffersBeforeRemoval).toBeGreaterThan(1); // main doc + iframe
+
+      document.body.removeChild(iframe);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mutationBuffers.length).toBe(buffersBeforeRemoval - 1);
+
+      stopRecording?.();
+    });
+
+    it('should clean up nested iframes that are removed via parent removal', async () => {
+      const emit = (event: eventWithTime) => {
+        events.push(event);
+      };
+
+      const stopRecording = record({
+        emit,
+        recordCrossOriginIframes: false,
+      });
+
+      const container = document.createElement('div');
+      const iframe = document.createElement('iframe');
+      container.appendChild(iframe);
+      document.body.appendChild(container);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const buffersBeforeRemoval = mutationBuffers.length;
+      expect(buffersBeforeRemoval).toBeGreaterThan(1);
+
+      // Remove the parent — the mutation buffer only reports the parent in
+      // m.removes, so cleanup must walk the subtree (or fall back via the
+      // mirror) to find the nested iframe.
+      document.body.removeChild(container);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mutationBuffers.length).toBe(buffersBeforeRemoval - 1);
+
+      stopRecording?.();
+    });
+  });
+
+  // Regression for the "src swap before removal" leak: React-style cleanup
+  // sets iframe.src = 'about:blank' immediately before unmounting the iframe.
+  // By the time rrweb sees the removal, iframe.contentDocument is the new
+  // about:blank doc, so the recursive mirror cleanup walks an empty document
+  // and the original document's nodes stay pinned in mirror.idNodeMap.
+  // IframeManager must capture the original contentDocument at attach time
+  // and release it explicitly on detach.
+  describe('IframeManager.attachedDocuments', () => {
+    function makeIframeManager() {
+      const mirror = createMirror();
+      const iframeManager = new IframeManager({
+        mirror,
+        mutationCb: vi.fn(),
+        stylesheetManager: {
+          styleMirror: { generateId: vi.fn(() => 1) },
+          adoptStyleSheets: vi.fn(),
+        } as any,
+        recordCrossOriginIframes: false,
+        wrappedEmit: vi.fn(),
+      });
+      return { iframeManager, mirror };
+    }
+
+    it('walks the original contentDocument on detach, not the current one', () => {
+      const { iframeManager, mirror } = makeIframeManager();
+
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+
+      const iframeId = 700;
+      mirror.add(iframe, {
+        type: 2,
+        tagName: 'iframe',
+        attributes: {},
+        childNodes: [],
+        id: iframeId,
+      });
+
+      // Simulate the original (pre-swap) contentDocument with serialized nodes
+      // tracked in the mirror.
+      const originalDoc = iframe.contentDocument!;
+      const trackedChild = originalDoc.createElement('div');
+      originalDoc.body.appendChild(trackedChild);
+      mirror.add(trackedChild, {
+        type: 2,
+        tagName: 'div',
+        attributes: {},
+        childNodes: [],
+        id: 701,
+      });
+
+      iframeManager.addIframe(iframe);
+      iframeManager.attachIframe(iframe, {
+        type: 0,
+        childNodes: [],
+        id: 702,
+      } as any);
+
+      expect(mirror.has(701)).toBe(true);
+
+      // Swap contentDocument to a fresh document — this is what the host does
+      // when it sets iframe.src = 'about:blank' before unmounting.
+      const swappedDoc = document.implementation.createHTMLDocument();
+      Object.defineProperty(iframe, 'contentDocument', {
+        configurable: true,
+        get: () => swappedDoc,
+      });
+
+      iframeManager.removeIframeById(iframeId);
+
+      // The captured original-doc walk must release the tracked child node
+      // even though iframe.contentDocument no longer points at the original.
+      expect(mirror.has(701)).toBe(false);
+
+      document.body.removeChild(iframe);
+      iframeManager.destroy();
+    });
+
+    // Regression for v3 — a single iframe element lives through multiple
+    // documents (initial about:blank → loaded src → cleanup about:blank).
+    // attachIframe runs once per load event, so we must accumulate every
+    // doc; tracking only the most recent leaks every prior doc.
+    it('walks every contentDocument that has been attached, not just the last one', () => {
+      const { iframeManager, mirror } = makeIframeManager();
+
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+
+      const iframeId = 800;
+      mirror.add(iframe, {
+        type: 2,
+        tagName: 'iframe',
+        attributes: {},
+        childNodes: [],
+        id: iframeId,
+      });
+
+      // Doc #1 — initial about:blank with a tracked node.
+      const doc1 = iframe.contentDocument!;
+      const child1 = doc1.createElement('div');
+      doc1.body.appendChild(child1);
+      mirror.add(child1, {
+        type: 2,
+        tagName: 'div',
+        attributes: {},
+        childNodes: [],
+        id: 801,
+      });
+      iframeManager.addIframe(iframe);
+      iframeManager.attachIframe(iframe, {
+        type: 0,
+        childNodes: [],
+        id: 802,
+      } as any);
+
+      // Doc #2 — host swaps contentDocument (e.g. after iframe.src loads).
+      const doc2 = document.implementation.createHTMLDocument();
+      const child2 = doc2.createElement('span');
+      doc2.body.appendChild(child2);
+      mirror.add(child2, {
+        type: 2,
+        tagName: 'span',
+        attributes: {},
+        childNodes: [],
+        id: 803,
+      });
+      Object.defineProperty(iframe, 'contentDocument', {
+        configurable: true,
+        get: () => doc2,
+      });
+      iframeManager.attachIframe(iframe, {
+        type: 0,
+        childNodes: [],
+        id: 804,
+      } as any);
+
+      // Doc #3 — host swaps to about:blank just before unmount. No tracked
+      // nodes, but it shouldn't make us forget docs 1 and 2.
+      const doc3 = document.implementation.createHTMLDocument();
+      Object.defineProperty(iframe, 'contentDocument', {
+        configurable: true,
+        get: () => doc3,
+      });
+      iframeManager.attachIframe(iframe, {
+        type: 0,
+        childNodes: [],
+        id: 805,
+      } as any);
+
+      expect(mirror.has(801)).toBe(true);
+      expect(mirror.has(803)).toBe(true);
+
+      iframeManager.removeIframeById(iframeId);
+
+      // Both prior docs' tracked nodes must be released — not just the last.
+      expect(mirror.has(801)).toBe(false);
+      expect(mirror.has(803)).toBe(false);
+
+      document.body.removeChild(iframe);
+      iframeManager.destroy();
+    });
+
+    // Regression: an iframe can be removed before its first load fires —
+    // attachIframe never runs, so attachedIframes has no entry, and by the
+    // time wrappedMutationEmit calls removeIframeById the mirror entry has
+    // typically been cleared by MutationBuffer.emit. We must still find the
+    // iframe element by id (via `iframeElementsById`, populated when the
+    // load-listener disposer was registered) so the disposer fires and the
+    // listener closure does not pin the iframe.
+    it('disposes the load listener for an iframe removed before first load', () => {
+      const mirror = createMirror();
+      const mutationCb = vi.fn();
+      const wrappedEmit = vi.fn();
+
+      const iframeManager = new IframeManager({
+        mirror,
+        mutationCb,
+        stylesheetManager: {
+          styleMirror: { generateId: vi.fn(() => 1) },
+          adoptStyleSheets: vi.fn(),
+        } as any,
+        recordCrossOriginIframes: false,
+        wrappedEmit,
+      });
+
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+
+      const iframeId = 900;
+      mirror.add(iframe, {
+        type: 2,
+        tagName: 'iframe',
+        attributes: {},
+        childNodes: [],
+        id: iframeId,
+      });
+
+      const disposer = vi.fn();
+      iframeManager.registerLoadListenerDisposer(iframe, disposer);
+
+      // Simulate the host removing the iframe before any load event fires —
+      // by mutation emit time the mirror entry is typically gone too.
+      mirror.removeNodeFromMap(iframe);
+      iframeManager.removeIframeById(iframeId);
+
+      // The fallback id→element map must have let removeIframeById find the
+      // iframe and run the disposer; without that the load listener would
+      // stay registered and pin the iframe via its closure.
+      expect(disposer).toHaveBeenCalledTimes(1);
+
+      document.body.removeChild(iframe);
+      iframeManager.destroy();
+    });
+
+    // Regression: a moved (reparented) iframe shows up in MutationBuffer
+    // as remove(oldId) + add(newId) because mirror entries are cleared
+    // before adds re-serialize. The cleanup path must NOT dispose the
+    // (still-active) load listener / observers — only drop the stale id
+    // bookkeeping. forgetIframeId is the API the record-loop uses for
+    // that, and disposeLoadListeners must NOT be called on the element.
+    it('forgetIframeId drops id bookkeeping but preserves listener disposers', () => {
+      const mirror = createMirror();
+      const mutationCb = vi.fn();
+      const wrappedEmit = vi.fn();
+
+      const iframeManager = new IframeManager({
+        mirror,
+        mutationCb,
+        stylesheetManager: {
+          styleMirror: { generateId: vi.fn(() => 1) },
+          adoptStyleSheets: vi.fn(),
+        } as any,
+        recordCrossOriginIframes: false,
+        wrappedEmit,
+      });
+
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+
+      const oldId = 1100;
+      mirror.add(iframe, {
+        type: 2,
+        tagName: 'iframe',
+        attributes: {},
+        childNodes: [],
+        id: oldId,
+      });
+
+      const disposer = vi.fn();
+      iframeManager.registerLoadListenerDisposer(iframe, disposer);
+      iframeManager.attachIframe(iframe, {
+        type: 0,
+        childNodes: [],
+        id: 1101,
+      } as any);
+
+      // Sanity: the manager knows about this iframe under oldId.
+      expect(iframeManager.getIframeElementById(oldId)).toBe(iframe);
+
+      // Simulate the move: forget the old id but keep all element-keyed
+      // bookkeeping for the same iframe. Disposer must not fire.
+      iframeManager.forgetIframeId(oldId);
+
+      expect(disposer).not.toHaveBeenCalled();
+      expect(iframeManager.getIframeElementById(oldId)).toBeNull();
+
+      // Re-registering under a new id (as the move's add path would) and
+      // then a real removal must still dispose the listener exactly once.
+      const newId = 1102;
+      mirror.removeNodeFromMap(iframe);
+      mirror.add(iframe, {
+        type: 2,
+        tagName: 'iframe',
+        attributes: {},
+        childNodes: [],
+        id: newId,
+      });
+      iframeManager.registerLoadListenerDisposer(iframe, disposer);
+      iframeManager.removeIframeById(newId);
+      // disposer is in the Set once, and callSafely calls it once.
+      expect(disposer).toHaveBeenCalledTimes(1);
+
+      document.body.removeChild(iframe);
+      iframeManager.destroy();
+    });
+
+    // Same move scenario, exercised through the real record() pipeline:
+    // an iframe reparented from one container to another should not lose
+    // its mutation observer (i.e. the per-iframe MutationBuffer count
+    // must not decrease as a side effect of the move).
+    it('moving an iframe to a new parent does not tear down its observers', async () => {
+      const events: eventWithTime[] = [];
+      const stopRecording = record({
+        emit: (e) => events.push(e),
+      });
+
+      const c1 = document.createElement('div');
+      const c2 = document.createElement('div');
+      document.body.appendChild(c1);
+      document.body.appendChild(c2);
+
+      const iframe = document.createElement('iframe');
+      c1.appendChild(iframe);
+
+      // Let the load listener register and any synchronous mutation
+      // observer setup complete.
+      await new Promise((r) => setTimeout(r, 50));
+      const buffersBeforeMove = mutationBuffers.length;
+
+      // Move (remove + add in one atomic mutation).
+      c2.appendChild(iframe);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Reparent must not splice any per-iframe MutationBuffer entries.
+      // (The count can grow because the add side re-serializes the iframe
+      // and `attachIframe` registers a fresh observer alongside the kept
+      // old one; that's a known limitation, separate from this leak.)
+      expect(mutationBuffers.length).toBeGreaterThanOrEqual(buffersBeforeMove);
+
+      stopRecording?.();
+      document.body.removeChild(c1);
+      document.body.removeChild(c2);
+    });
+
+    // destroy() must run pending iframe load-listener disposers and
+    // pagehide-handler removers; reassigning the WeakMaps without
+    // iterating leaves the DOM listeners alive and the
+    // onceIframeLoaded timer scheduled.
+    it('destroy() disposes pending iframe load listeners', () => {
+      const mirror = createMirror();
+      const mutationCb = vi.fn();
+      const wrappedEmit = vi.fn();
+
+      const iframeManager = new IframeManager({
+        mirror,
+        mutationCb,
+        stylesheetManager: {
+          styleMirror: { generateId: vi.fn(() => 1) },
+          adoptStyleSheets: vi.fn(),
+        } as any,
+        recordCrossOriginIframes: false,
+        wrappedEmit,
+      });
+
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      const iframeId = 1300;
+      mirror.add(iframe, {
+        type: 2,
+        tagName: 'iframe',
+        attributes: {},
+        childNodes: [],
+        id: iframeId,
+      });
+
+      const disposer = vi.fn();
+      iframeManager.registerLoadListenerDisposer(iframe, disposer);
+
+      iframeManager.destroy();
+
+      // Without the iterate-and-dispose step in destroy(), the disposer
+      // would be silently dropped and the DOM listener / timeout would
+      // outlive recording.
+      expect(disposer).toHaveBeenCalledTimes(1);
+
+      document.body.removeChild(iframe);
     });
   });
 });

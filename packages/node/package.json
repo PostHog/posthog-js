@@ -1,6 +1,9 @@
 {
   "name": "posthog-node",
-  "version": "5.35.8",
+  "version": "5.37.1",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -38,7 +41,7 @@
   "module": "dist/entrypoints/index.node.mjs",
   "types": "dist/entrypoints/index.node.d.ts",
   "dependencies": {
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:^"
   },
   "devDependencies": {
     "@edge-runtime/jest-environment": "^4.0.0",

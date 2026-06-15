@@ -17,6 +17,7 @@
 - [ ] posthog-js-lite (web lite)
 - [ ] posthog-node
 - [ ] posthog-react-native
+- [ ] @posthog/react-native-plugin
 - [ ] @posthog/react
 - [ ] @posthog/ai
 - [ ] @posthog/convex

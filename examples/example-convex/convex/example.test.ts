@@ -3,7 +3,7 @@ import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globa
 import { initConvexTest } from './setup.test.js'
 import { api, components } from './_generated/api.js'
 
-// CI can be slow with ESM + convex-test startup; default 5s is occasionally too tight.
+// Keep a guard above Jest's 5s default; scheduled functions are driven deterministically below.
 jest.setTimeout(15000)
 
 // Collect all fetch calls for assertion
@@ -69,6 +69,14 @@ function firstBatchEvent(): Record<string, unknown> {
     return batch?.batch?.[0] ?? {}
 }
 
+async function finishScheduledFunctions(t: ReturnType<typeof initConvexTest>) {
+    // Run only the Convex scheduler timer that was pending before this call. `runAllTimers()` also
+    // executes timers created by the scheduled action itself, such as PostHog request timeout/retry
+    // timers, which can make these tests race or hang under fake timers.
+    await jest.runOnlyPendingTimersAsync()
+    await t.finishInProgressScheduledFunctions()
+}
+
 describe('capture', () => {
     beforeEach(() => {
         process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
@@ -91,8 +99,7 @@ describe('capture', () => {
             event: 'button_clicked',
         })
         expect(result).toEqual({ success: true })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         expect(batchCalls().length).toBeGreaterThanOrEqual(1)
         const batch = batchCalls()[0].body as { api_key: string }
@@ -113,8 +120,7 @@ describe('capture', () => {
             properties: { plan: 'pro', amount: 99 },
             groups: { company: 'acme' },
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const event = firstBatchEvent()
         const props = event.properties as Record<string, unknown>
@@ -132,8 +138,7 @@ describe('capture', () => {
             event: 'test',
             properties: { foo: 'bar' },
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const props = firstBatchEvent().properties as Record<string, unknown>
         expect(props.environment).toBe('example-app')
@@ -149,8 +154,7 @@ describe('capture', () => {
             event: 'test',
             disableGeoip: true,
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const props = firstBatchEvent().properties as Record<string, unknown>
         expect(props.$geoip_disable).toBe(true)
@@ -165,8 +169,7 @@ describe('capture', () => {
             event: 'test',
             uuid: 'custom-uuid-abc',
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const event = firstBatchEvent()
         expect(event.uuid).toBe('custom-uuid-abc')
@@ -181,8 +184,7 @@ describe('capture', () => {
             event: 'test',
             timestamp: '2024-06-15T12:00:00Z',
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const event = firstBatchEvent()
         expect(event.timestamp).toContain('2024-06-15')
@@ -210,8 +212,7 @@ describe('identify', () => {
             distinctId: 'user-123',
         })
         expect(result).toEqual({ success: true })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         expect(batchCalls().length).toBeGreaterThanOrEqual(1)
         const event = firstBatchEvent()
@@ -230,8 +231,7 @@ describe('identify', () => {
                 email: 'test@example.com',
             },
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const event = firstBatchEvent()
         // posthog-node puts properties into $set inside event.properties
@@ -249,8 +249,7 @@ describe('identify', () => {
             distinctId: 'user-123',
             disableGeoip: true,
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const props = firstBatchEvent().properties as Record<string, unknown>
         expect(props.$geoip_disable).toBe(true)
@@ -279,8 +278,7 @@ describe('captureException', () => {
             errorType: 'error',
         })
         expect(result).toEqual({ success: true })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         expect(batchCalls().length).toBeGreaterThanOrEqual(1)
         const event = firstBatchEvent()
@@ -302,8 +300,7 @@ describe('captureException', () => {
             errorMessage: 'string error',
             errorType: 'string',
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const props = firstBatchEvent().properties as Record<string, unknown>
         const exceptionList = props.$exception_list as Array<{
@@ -320,8 +317,7 @@ describe('captureException', () => {
             errorMessage: 'obj error',
             errorType: 'object',
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const props = firstBatchEvent().properties as Record<string, unknown>
         const exceptionList = props.$exception_list as Array<{
@@ -338,8 +334,7 @@ describe('captureException', () => {
             errorMessage: 'test',
             additionalProperties: { page: '/checkout', step: 3 },
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         const props = firstBatchEvent().properties as Record<string, unknown>
         expect(props.page).toBe('/checkout')
@@ -354,8 +349,7 @@ describe('captureException', () => {
             errorMessage: 'test',
             distinctId: 'specific-user',
         })
-        jest.runAllTimers()
-        await t.finishInProgressScheduledFunctions()
+        await finishScheduledFunctions(t)
 
         expect(firstBatchEvent().distinct_id).toBe('specific-user')
     })

@@ -1,6 +1,7 @@
 import React, { ReactNode, useMemo, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
+import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
   CheckSVG,
   DissatisfiedEmoji,
@@ -54,7 +55,7 @@ function QuestionLayout({ children, footer }: { children: ReactNode; footer: Rea
   )
 }
 
-const questionLayoutStyles = StyleSheet.create({
+const questionLayoutStyles = createSafeStyleSheet({
   container: {
     flexShrink: 1,
   },
@@ -427,7 +428,7 @@ function getScaleNumbers(scale: number): number[] {
   }
 }
 
-const styles = StyleSheet.create({
+const styles = createSafeStyleSheet({
   textInputContainer: {
     padding: 10,
   },

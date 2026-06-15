@@ -1,5 +1,7 @@
 #!/bin/bash
-# adapted from https://github.com/getsentry/sentry-react-native/blob/e76d0d388228437e82f235546de00f4e748fcbda/packages/core/scripts/sentry-xcode.sh
+# Portions of this file are derived from getsentry/sentry-react-native
+# Copyright (c) 2017 Sentry
+# Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 # Bundle React Native code and images
 # PWD=ios
 
@@ -9,6 +11,24 @@ set -x -e
 # Ensure common tool paths are available so posthog-cli can auto-detect git
 # (Xcode runs build phases with a minimal PATH)
 export PATH="/usr/bin:/usr/local/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.posthog:$PATH"
+
+print_prefixed_output() {
+  local prefix="$1"
+  local output="$2"
+
+  if [ -n "$output" ]; then
+    echo "$output" | awk -v prefix="$prefix" '{print prefix $0}'
+  fi
+}
+
+print_command_error() {
+  local command_name="$1"
+  local exit_code="$2"
+  local output="$3"
+
+  echo "error: ${command_name} failed with exit code ${exit_code}"
+  print_prefixed_output "error: ${command_name} - " "$output"
+}
 
 # WITH_ENVIRONMENT is executed by React Native
 
@@ -172,7 +192,7 @@ CLONE_EXIT_CODE=$?
 if [ $CLONE_EXIT_CODE -eq 0 ]; then
   echo "$CLI_CLONE_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
 else
-  echo "error: posthog-cli - $CLI_CLONE_OUTPUT"
+  print_command_error "posthog-cli hermes clone" "$CLONE_EXIT_CODE" "$CLI_CLONE_OUTPUT"
   exit $CLONE_EXIT_CODE
 fi
 set -x -e
@@ -184,7 +204,7 @@ UPLOAD_EXIT_CODE=$?
 if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
   echo "$CLI_UPLOAD_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
 else
-  echo "error: posthog-cli - $CLI_UPLOAD_OUTPUT"
+  print_command_error "posthog-cli hermes upload" "$UPLOAD_EXIT_CODE" "$CLI_UPLOAD_OUTPUT"
   exit $UPLOAD_EXIT_CODE
 fi
 set -x -e

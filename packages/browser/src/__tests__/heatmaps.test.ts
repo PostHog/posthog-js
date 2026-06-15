@@ -8,6 +8,7 @@ import { isObject } from '@posthog/core'
 import { beforeEach, expect } from '@jest/globals'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { Heatmaps } from '../heatmaps'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '../autocapture-utils'
 
 jest.useFakeTimers()
 
@@ -133,6 +134,29 @@ describe('heatmaps', () => {
         expect(heatmapData).toBeDefined()
         expect(heatmapData['http://replaced/']).toHaveLength(4)
         expect(heatmapData['http://replaced/'].map((x) => x.type)).toEqual(['click', 'click', 'rageclick', 'click'])
+    })
+
+    it('should downgrade rageclick to click for suppressed targets', async () => {
+        posthog.config.rageclick = { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS }
+
+        const stepperButton = document.createElement('button')
+        stepperButton.textContent = '+'
+
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: stepperButton }))
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: stepperButton }))
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: stepperButton }))
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        const heatmapData = beforeSendMock.mock.lastCall[0].properties.$heatmap_data
+        expect(heatmapData).toBeDefined()
+        expect(heatmapData['http://replaced/']).toHaveLength(3)
+        expect(heatmapData['http://replaced/'].map((x: { type: string }) => x.type)).toEqual([
+            'click',
+            'click',
+            'click',
+        ])
     })
 
     it('should clear the buffer after each call', async () => {

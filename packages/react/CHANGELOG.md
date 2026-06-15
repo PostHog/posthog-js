@@ -1,5 +1,30 @@
 # @posthog/react
 
+## 1.10.2
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad), [`d3a9462`](https://github.com/PostHog/posthog-js/commit/d3a9462b8b21994764bdd2802973d82ffe472294)]:
+    - posthog-js@1.386.7
+
+## 1.10.1
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies [[`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6)]:
+    - posthog-js@1.383.2
+
+## 1.10.0
+
+### Minor Changes
+
+- [#3718](https://github.com/PostHog/posthog-js/pull/3718) [`3aff16e`](https://github.com/PostHog/posthog-js/commit/3aff16e98540e659be4158a784fe38ef755f878e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add an optional `defaultValue` argument to `useFeatureFlagEnabled`. When supplied, the hook returns that value instead of `undefined` while flags are loading or when the flag is absent, and the return type narrows to `boolean`. Omitting the argument keeps the existing `boolean | undefined` behavior.
+  (2026-06-02)
+
 ## 1.9.1
 
 ### Patch Changes

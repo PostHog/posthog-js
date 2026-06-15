@@ -17,8 +17,8 @@ const axiosBundleSrc = readFileSync(resolvePath(__dirname, 'test_fixtures/axios-
 // wrap fetch/XHR) must NEVER cause user-supplied request headers to go
 // missing from what the browser actually sends to the server.
 
-// __add_tracing_headers matches by exact hostname (entrypoints/tracing-headers.ts
-// addTracingHeaders). The URL path is irrelevant for that match — a flake here
+// tracing_headers matches by exact hostname (entrypoints/tracing-headers.ts).
+// The URL path is irrelevant for that match — a flake here
 // almost certainly means the wrapper readiness wait fired too early, not the URL.
 const DOMAIN = 'example.com'
 
@@ -51,7 +51,7 @@ const scenarios: Scenario[] = [
             autocapture_opt_out: true,
         },
         options: {
-            __add_tracing_headers: [DOMAIN],
+            tracing_headers: [DOMAIN],
         },
     },
     {
@@ -65,7 +65,7 @@ const scenarios: Scenario[] = [
             autocapture_opt_out: true,
         },
         options: {
-            __add_tracing_headers: [DOMAIN],
+            tracing_headers: [DOMAIN],
             session_recording: { compress_events: false },
         },
     },
@@ -112,7 +112,7 @@ async function captureRequestHeaders(
     // installed before triggering the request. Without this the test
     // could fire its fetch/XHR before the patch lands and pass trivially
     // (false negative — no wrapper ever ran).
-    if (scenario.options?.__add_tracing_headers) {
+    if (scenario.options?.tracing_headers || scenario.options?.__add_tracing_headers) {
         await page.waitForFunction(() => !!(window as any).__PosthogExtensions__?.tracingHeadersPatchFns)
     }
     if (scenario.flagsResponseOverrides?.sessionRecording) {

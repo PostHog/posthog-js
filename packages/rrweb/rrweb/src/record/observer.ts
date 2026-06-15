@@ -318,36 +318,43 @@ export function initScrollObserver({
   observerParam,
   'scrollCb' | 'doc' | 'mirror' | 'blockClass' | 'blockSelector' | 'sampling'
 >): listenerHandler {
+  // Dedupe scroll and scrollend — both fire for one gesture.
+  const lastEmitted = new Map<number, string>();
+  const emitScrollPosition = (evt: Event) => {
+    const target = getEventTarget(evt);
+    if (!target || isBlocked(target as Node, blockClass, blockSelector, true)) {
+      return;
+    }
+    const id = mirror.getId(target as Node);
+    let x: number;
+    let y: number;
+    if (target === doc && doc.defaultView) {
+      const scrollLeftTop = getWindowScroll(doc.defaultView);
+      x = scrollLeftTop.left;
+      y = scrollLeftTop.top;
+    } else {
+      x = (target as HTMLElement).scrollLeft;
+      y = (target as HTMLElement).scrollTop;
+    }
+    const key = `${x},${y}`;
+    if (lastEmitted.get(id) === key) {
+      return;
+    }
+    lastEmitted.set(id, key);
+    scrollCb({ id, x, y });
+  };
   const updatePosition = callbackWrapper(
     throttle<UIEvent>(
-      callbackWrapper((evt) => {
-        const target = getEventTarget(evt);
-        if (
-          !target ||
-          isBlocked(target as Node, blockClass, blockSelector, true)
-        ) {
-          return;
-        }
-        const id = mirror.getId(target as Node);
-        if (target === doc && doc.defaultView) {
-          const scrollLeftTop = getWindowScroll(doc.defaultView);
-          scrollCb({
-            id,
-            x: scrollLeftTop.left,
-            y: scrollLeftTop.top,
-          });
-        } else {
-          scrollCb({
-            id,
-            x: (target as HTMLElement).scrollLeft,
-            y: (target as HTMLElement).scrollTop,
-          });
-        }
-      }),
+      callbackWrapper((evt) => emitScrollPosition(evt)),
       sampling.scroll || 100,
     ),
   );
-  return on('scroll', updatePosition, doc);
+  const handlers: listenerHandler[] = [on('scroll', updatePosition, doc)];
+  // scrollend captures the resting offset when scroll alone recorded 0.
+  if ('onscrollend' in doc) {
+    handlers.push(on('scrollend', callbackWrapper(emitScrollPosition), doc));
+  }
+  return () => handlers.forEach((h) => h());
 }
 
 function initViewportResizeObserver(
@@ -376,10 +383,20 @@ function initViewportResizeObserver(
   return on('resize', updateDimension, win);
 }
 
-export function findAndRemoveIframeBuffer(iframeEl: HTMLIFrameElement) {
+// `knownDocs` matches buffers whose iframe.contentDocument has been swapped
+// before removal — bufferBelongsToIframe alone misses them.
+export function findAndRemoveIframeBuffer(
+  iframeEl: HTMLIFrameElement,
+  knownDocs?: Set<Document>,
+) {
   for (let i = mutationBuffers.length - 1; i >= 0; i--) {
     const buf = mutationBuffers[i];
-    if (buf?.bufferBelongsToIframe(iframeEl)) {
+    if (!buf) continue;
+    let match = buf.bufferBelongsToIframe(iframeEl);
+    if (!match && knownDocs && knownDocs.has(buf.bufferDoc())) {
+      match = true;
+    }
+    if (match) {
       buf.reset();
       mutationBuffers.splice(i, 1);
     }
