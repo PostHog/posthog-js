@@ -1,6 +1,9 @@
 {
   "name": "@posthog/core",
   "version": "1.32.3",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

@@ -1,6 +1,9 @@
 {
     "name": "@posthog/react",
     "version": "1.10.1",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
     "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
