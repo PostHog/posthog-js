@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.386.7
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+
+- [#3832](https://github.com/PostHog/posthog-js/pull/3832) [`d3a9462`](https://github.com/PostHog/posthog-js/commit/d3a9462b8b21994764bdd2802973d82ffe472294) Thanks [@archievi](https://github.com/archievi)! - Surveys: guard the remaining unprotected `localStorage` accesses (`reset()` and the `lastSeenSurveyDate` write) so a `SecurityError` in cross-origin iframes is swallowed instead of bubbling up to user monitoring.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad)]:
+    - @posthog/core@1.32.4
+    - @posthog/types@1.386.4
+
 ## 1.386.6
 
 ### Patch Changes

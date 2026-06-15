@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rollup-plugin",
-    "version": "1.4.5",
+    "version": "1.4.6",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
