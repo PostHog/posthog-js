@@ -593,7 +593,8 @@ export class PostHogFeatureFlags implements Extension {
             : ''
         const isPartialFlagsResponse = !!this._config.advanced_only_evaluate_survey_feature_flags
 
-        const url = this._instance.requestRouter.endpointFor('flags', '/flags/?v=2' + queryParams)
+        const flagsPath = this._config.flags_request_path || '/flags/'
+        const url = this._instance.requestRouter.endpointFor('flags', flagsPath + '?v=2' + queryParams)
 
         this._requestInFlight = true
         this._instance._send_request({
@@ -915,7 +916,10 @@ export class PostHogFeatureFlags implements Extension {
 
         this._instance._send_request({
             method: 'POST',
-            url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
+            url: this._instance.requestRouter.endpointFor(
+                'flags',
+                (this._config.flags_request_path || '/flags/') + '?v=2'
+            ),
             data,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,

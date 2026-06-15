@@ -8,6 +8,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "null",
     "string"
   ],
+  "flags_request_path": [
+    "undefined",
+    "string"
+  ],
   "ui_host": [
     "null",
     "string"

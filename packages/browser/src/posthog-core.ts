@@ -214,6 +214,7 @@ const defaultsThatVaryByConfig = (
 export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
     flags_api_host: null,
+    flags_request_path: '/flags/',
     ui_host: null,
     asset_host: null,
     token: '',

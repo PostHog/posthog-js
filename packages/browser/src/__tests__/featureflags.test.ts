@@ -1049,6 +1049,24 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
         })
 
+        it('requests the default /flags path when flags_request_path is not set', () => {
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request.mock.calls[0][0].url).toContain('/flags/?v=2')
+        })
+
+        it('requests a custom flags_request_path instead of /flags', () => {
+            instance.config.flags_request_path = '/api/eaH8aiyu/'
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            const url = instance._send_request.mock.calls[0][0].url
+            expect(url).toContain('/api/eaH8aiyu/?v=2')
+            // The whole point: the request URL no longer contains the ad-blocker-matched /flags/ path
+            expect(url).not.toContain('/flags/')
+        })
+
         it('should call /flags with flags disabled if advanced_disable_feature_flags is set', () => {
             instance.config.advanced_disable_feature_flags = true
             // Call _callFlagsEndpoint directly because reloadFeatureFlags() returns early
@@ -3211,6 +3229,16 @@ describe('getRemoteConfigPayload', () => {
                     evaluation_contexts: ['staging', 'backend'],
                 }),
             })
+        )
+    })
+
+    it('honors a custom flags_request_path', () => {
+        instance.config.flags_request_path = '/api/eaH8aiyu/'
+
+        featureFlags.getRemoteConfigPayload('test-flag', jest.fn())
+
+        expect(instance._send_request).toHaveBeenCalledWith(
+            expect.objectContaining({ method: 'POST', url: 'flags/api/eaH8aiyu/?v=2' })
         )
     })
 

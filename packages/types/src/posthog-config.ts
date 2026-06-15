@@ -740,6 +740,16 @@ export interface PostHogConfig {
     flags_api_host?: string | null
 
     /**
+     * Path used for feature flag requests, appended to the flags host.
+     * Override this to route flag requests via a path that ad blockers don't recognize — some block the
+     * default `/flags` path on any domain, so a reverse proxy alone (which only changes the host) doesn't help.
+     * Your reverse proxy must route this path to PostHog's flags endpoint.
+     *
+     * @default '/flags/'
+     */
+    flags_request_path?: string
+
+    /**
      * If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).
      * This ensures that links to PostHog point to the correct host.
      *
