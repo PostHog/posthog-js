@@ -350,5 +350,8 @@ jobs:
         uses: ./.github/actions/setup
         with:
           build: false
-      - name: Generate references
+      - name: Generate public API references
         run: pnpm generate-references
+
+      - name: Check public API references
+        run: pnpm check:public-api
