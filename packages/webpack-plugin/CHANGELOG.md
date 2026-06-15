@@ -1,5 +1,12 @@
 # @posthog/webpack-plugin
 
+## 1.5.24
+
+### Patch Changes
+
+- [#3821](https://github.com/PostHog/posthog-js/pull/3821) [`2883857`](https://github.com/PostHog/posthog-js/commit/2883857f05c06649be89301981b22c66e1384230) Thanks [@pesoszpesosz](https://github.com/pesoszpesosz)! - Add missing MIT license metadata to the published plugin package manifests.
+  (2026-06-15)
+
 ## 1.5.23
 
 ### Patch Changes
