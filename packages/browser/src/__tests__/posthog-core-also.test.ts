@@ -1693,3 +1693,17 @@ describe('posthog core', () => {
         expect(() => posthog.webPerformance._forceAllowLocalhost).not.toThrow()
     })
 })
+
+describe('_send_request skipIPParam', () => {
+    it('omits the ip query param when skipIPParam is set, and keeps it otherwise', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+        const flagsRequest = { url: 'http://localhost/flags/?v=2', skipIPParam: true }
+        posthog._send_request(flagsRequest)
+        expect(flagsRequest.url).toBe('http://localhost/flags/?v=2')
+
+        const eventRequest = { url: 'http://localhost/e/' }
+        posthog._send_request(eventRequest)
+        expect(eventRequest.url).toContain('ip=0')
+    })
+})

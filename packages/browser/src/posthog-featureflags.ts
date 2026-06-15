@@ -600,6 +600,8 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url,
             data,
+            // Some ad blockers block /flags requests that carry the `ip` query param; it's unused server-side here.
+            skipIPParam: true,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
@@ -917,6 +919,8 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
+            // Some ad blockers block /flags requests that carry the `ip` query param; it's unused server-side here.
+            skipIPParam: true,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
