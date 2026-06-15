@@ -38,7 +38,7 @@ This is generally never helpful.
 
 ## Why we're not anti-AI
 
-We think the best contributions in 2026 often involve AI.
+We think the best contributions today often involve AI.
 A contributor who uses an LLM to help them understand unfamiliar code, draft a first pass, or catch edge cases they'd miss is probably _more_ productive than someone doing everything by hand.
 The key difference is that they're driving the AI, not the other way around.
 
