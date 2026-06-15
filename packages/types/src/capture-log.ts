@@ -31,6 +31,23 @@ export interface CaptureLogOptions {
 }
 
 /**
+ * Pre-send filter. Inspect, mutate, or drop a captured log record before it
+ * enters the rate cap or the buffer. Return the (possibly transformed) record
+ * to keep it; return `null` to drop it.
+ *
+ * Configure as a single function or an array. Arrays form a left-to-right
+ * chain: each function receives the previous function's return value, and a
+ * `null` from any link short-circuits the chain and drops the record. A
+ * function that throws also drops the record (the error is logged).
+ *
+ * @example Redact secrets from log bodies
+ * ```ts
+ * logs: { beforeSend: (record) => ({ ...record, body: record.body.replace(/token=\S+/g, 'token=[REDACTED]') }) }
+ * ```
+ */
+export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions | null
+
+/**
  * Per-level convenience logger. Each method captures a structured log record
  * at the corresponding severity, equivalent to
  * `posthog.captureLog({ body, level, attributes })`.

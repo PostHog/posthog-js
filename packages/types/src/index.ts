@@ -103,4 +103,5 @@ export type {
     OtlpKeyValue,
     OtlpLogRecord,
     OtlpLogsPayload,
+    BeforeSendLogFn,
 } from './capture-log'

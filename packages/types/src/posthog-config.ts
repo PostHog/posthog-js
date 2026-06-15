@@ -3,7 +3,7 @@
  */
 
 import type { JsonType, Properties } from './common'
-import type { LogAttributes } from './capture-log'
+import type { LogAttributes, BeforeSendLogFn } from './capture-log'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
 import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
@@ -687,7 +687,9 @@ export interface LogCaptureOptions {
      */
     flushIntervalMs?: number
     /**
-     * Maximum number of log records to buffer before forcing a flush.
+     * Maximum number of log records to buffer before forcing a flush. The queue
+     * may grow beyond this while a flush is in flight (e.g. during a synchronous
+     * burst) and is bounded separately by the per-interval rate cap.
      *
      * @default 100
      */
@@ -695,11 +697,19 @@ export interface LogCaptureOptions {
     /**
      * Maximum number of log records accepted per flush interval. Subsequent calls
      * within the same window are dropped with a single warning, protecting
-     * against runaway loggers flooding the network.
+     * against runaway loggers flooding the network. Also sizes the in-memory
+     * buffer's eviction backstop, so a window's worth of records is held while a
+     * flush is in flight; raising it raises the worst-case in-memory footprint.
      *
      * @default 1000
      */
     maxLogsPerInterval?: number
+    /**
+     * Pre-send filter for log records, as a single function or a left-to-right
+     * chain. Each function inspects, mutates, or drops a record (return `null`
+     * to drop) before it enters the rate cap or the buffer.
+     */
+    beforeSend?: BeforeSendLogFn | BeforeSendLogFn[]
 }
 
 /**

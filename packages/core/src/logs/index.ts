@@ -1,18 +1,17 @@
 import type { LogAttributeValue } from '@posthog/types'
-import { buildOtlpLogRecord, buildOtlpLogsPayload } from './logs-utils'
+import { buildOtlpLogRecord, buildOtlpLogsPayload, buildResourceAttributes } from './logs-utils'
 import { Logger, PostHogPersistedProperty } from '../types'
-import type { PostHogCoreStateless } from '../posthog-core-stateless'
 import { isArray, safeSetTimeout } from '../utils'
-import type {
-  BeforeSendLogFn,
-  BufferedLogEntry,
-  CaptureLogOptions,
-  LogSdkContext,
-  ResolvedPostHogLogsConfig,
-} from './types'
+import type { BufferedLogEntry, CaptureLogOptions, LogSdkContext, LogsHost, ResolvedPostHogLogsConfig } from './types'
+
+// Caps the retry backoff at 2^6 = 64× the flush interval.
+const MAX_FLUSH_BACKOFF_EXPONENT = 6
 
 export class PostHogLogs {
   private _maxBufferSize: number
+  // Eviction cap; `_maxBufferSize` only triggers a flush. Collapses to
+  // `_maxBufferSize` when the host sets no separate value.
+  private _maxQueueSize: number
   private _flushIntervalMs: number
   // Mutable — halved on 413 to shrink the next POST, and ramped back up by
   // one record after each successful send so a one-off oversized payload
@@ -22,6 +21,12 @@ export class PostHogLogs {
   // Serializes concurrent flushes — the second caller awaits the first rather
   // than racing it and double-sending the same head-of-queue records.
   private _flushPromise: Promise<void> | null = null
+  // Head records evicted (FIFO) while a batch is in flight; the queue-advance
+  // subtracts these so it drops the sent records, not ones captured mid-send.
+  private _evictedSinceAdvance = 0
+  // Consecutive failed flushes; drives exponential backoff on the retry timer.
+  // A successful flush resets it to 0.
+  private _consecutiveFlushFailures = 0
 
   // Fixed-window rate cap. Tumbling (not sliding) for cheap arithmetic on the
   // hot path. Window rolls the first time `captureLog` fires after the window
@@ -34,7 +39,7 @@ export class PostHogLogs {
   private _droppedWarned = false
 
   constructor(
-    private readonly _instance: PostHogCoreStateless,
+    private readonly _instance: LogsHost,
     private readonly _config: ResolvedPostHogLogsConfig,
     private readonly _logger: Logger,
     private readonly _getContext: () => LogSdkContext,
@@ -47,10 +52,36 @@ export class PostHogLogs {
     private readonly _waitForStoragePersist: () => Promise<void> = () => Promise.resolve()
   ) {
     this._maxBufferSize = _config.maxBufferSize
+    // Never below the flush trigger: a smaller eviction cap would stop the
+    // size-based flush from ever firing. Collapses to `maxBufferSize` when unset.
+    this._maxQueueSize = Math.max(_config.maxQueueSize ?? _config.maxBufferSize, _config.maxBufferSize)
     this._flushIntervalMs = _config.flushIntervalMs
     this._maxBatchRecordsPerPost = _config.maxBatchRecordsPerPost
     this._rateCapWindowMs = _config.rateCapWindowMs
     this._maxLogsPerInterval = _config.maxLogsPerInterval
+  }
+
+  /**
+   * Clears the flush timer and rate-cap state. The host owns the record queue
+   * and clears it separately (the browser empties its in-memory store).
+   */
+  reset(): void {
+    this._clearFlushTimer()
+    this._flushPromise = null
+    this._intervalWindowStart = 0
+    this._intervalLogCount = 0
+    this._droppedWarned = false
+    this._evictedSinceAdvance = 0
+    this._consecutiveFlushFailures = 0
+    this._maxBatchRecordsPerPost = this._config.maxBatchRecordsPerPost
+  }
+
+  // Call when connectivity is restored: clear the failure backoff and flush now,
+  // so records don't wait out a (possibly minutes-long) backoff delay after the
+  // network returns. The host owns connectivity detection (web: `online` event).
+  onReconnect(): void {
+    this._consecutiveFlushFailures = 0
+    this._flushInBackground()
   }
 
   captureLog(options: CaptureLogOptions): void {
@@ -186,6 +217,8 @@ export class PostHogLogs {
 
   private async _flushInner(): Promise<void> {
     this._clearFlushTimer()
+    // Count only evictions from here on; the read below already reflects prior ones.
+    this._evictedSinceAdvance = 0
 
     let queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
     if (queue.length === 0) {
@@ -250,36 +283,20 @@ export class PostHogLogs {
   }
 
   private async _persistQueueAdvance(consumed: number): Promise<void> {
-    // Re-read the queue in case captures landed mid-flush, then drop the head.
+    // Re-read in case captures landed mid-flush. Subtract head records the FIFO cap
+    // evicted during the send (already-sent records that left the queue), so we drop
+    // only the still-present sent records, not ones captured during the send.
+    const evicted = this._evictedSinceAdvance
+    this._evictedSinceAdvance = 0
+    const drop = Math.max(0, consumed - evicted)
     const refreshed = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
-    this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, refreshed.slice(consumed))
-    // Wait for the advance to hit disk before the next batch sends, matching
-    // events' `flushStorage()` contract. Prevents duplicates if the app crashes
-    // after the HTTP success but before the queue-advance persists.
+    this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, refreshed.slice(drop))
+    // Persist before the next batch sends so a crash after HTTP success can't dupe.
     await this._waitForStoragePersist()
   }
 
-  /**
-   * OTLP resource attributes for every batch.
-   *
-   * Layout: user `resourceAttributes` spread first, then SDK-controlled
-   * keys layered on top so users cannot accidentally clobber them. Most logs
-   * backends index on `service.name` and `telemetry.sdk.*` for routing,
-   * SDK-version dashboards, and bug-correlation; letting a stray user key
-   * overwrite them silently breaks ingestion attribution. The dedicated
-   * `serviceName` / `environment` / `serviceVersion` config fields are the
-   * supported way to override `service.name` / `deployment.environment` /
-   * `service.version`.
-   */
   private _buildResourceAttributes(): Record<string, LogAttributeValue> {
-    return {
-      ...this._config.resourceAttributes,
-      'service.name': this._config.serviceName || 'unknown_service',
-      ...(this._config.environment && { 'deployment.environment': this._config.environment }),
-      ...(this._config.serviceVersion && { 'service.version': this._config.serviceVersion }),
-      'telemetry.sdk.name': this._instance.getLibraryId(),
-      'telemetry.sdk.version': this._instance.getLibraryVersion(),
-    }
+    return buildResourceAttributes(this._config, this._instance.getLibraryId(), this._instance.getLibraryVersion())
   }
 
   private _enqueue(entry: BufferedLogEntry): void {
@@ -290,28 +307,50 @@ export class PostHogLogs {
     }
 
     const queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
-    if (queue.length >= this._maxBufferSize) {
+    // Drop the oldest only above the eviction cap, not at the flush trigger, so a
+    // burst is held while the async flush drains.
+    if (queue.length >= this._maxQueueSize) {
       queue.shift()
+      this._evictedSinceAdvance++
       this._logger.info('Logs queue is full, dropping oldest record.')
     }
     queue.push(entry)
     this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, queue)
 
-    // Threshold trigger: at-capacity means flushing now reclaims space before
-    // the next capture has to shift something out.
+    // Flush trigger: drain now rather than waiting for the timer. The queue may
+    // grow past this up to the eviction cap while the flush is in flight.
     if (queue.length >= this._maxBufferSize) {
       this._flushInBackground()
       return
     }
 
-    // Timer trigger: only arm one timer at a time. A subsequent enqueue within
-    // the window shouldn't reschedule — that would keep pushing the flush out.
-    if (!this._flushTimer) {
-      this._flushTimer = safeSetTimeout(() => {
-        this._flushTimer = undefined
-        this._flushInBackground()
-      }, this._flushIntervalMs)
+    // Arm one timer at a time; re-arming within the window would push the flush out.
+    this._armFlushTimer()
+  }
+
+  // Arms the flush timer if none is pending. One-shot: the callback clears the
+  // handle so the next enqueue (or a flush that left records) schedules again.
+  private _armFlushTimer(delayMs: number = this._flushIntervalMs): void {
+    if (this._flushTimer) {
+      return
     }
+    this._flushTimer = safeSetTimeout(() => {
+      this._flushTimer = undefined
+      this._flushInBackground()
+    }, delayMs)
+  }
+
+  // Retry delay after a flush that left records: the first retry is at the base
+  // interval, then exponential backoff (capped) so a sustained outage isn't
+  // retried every interval.
+  private _nextFlushDelay(): number {
+    const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
+    return this._flushIntervalMs * 2 ** exponent
+  }
+
+  private _hasQueuedRecords(): boolean {
+    const queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue)
+    return !!queue && queue.length > 0
   }
 
   /**
@@ -371,9 +410,24 @@ export class PostHogLogs {
   }
 
   private _flushInBackground(): void {
-    void this.flush().catch((err) => {
-      this._logger.error('PostHog logs flush failed:', err)
-    })
+    void this.flush()
+      .then(
+        () => {
+          this._consecutiveFlushFailures = 0
+        },
+        (err) => {
+          this._consecutiveFlushFailures++
+          this._logger.error('PostHog logs flush failed:', err)
+        }
+      )
+      .finally(() => {
+        // Records remaining (transient failure or mid-flush captures) would otherwise
+        // sit undelivered on a quiet page; re-arm so the timer retries them, backing
+        // off on consecutive failures.
+        if (!this._instance.isDisabled && this._hasQueuedRecords()) {
+          this._armFlushTimer(this._nextFlushDelay())
+        }
+      })
   }
 
   private _clearFlushTimer(): void {

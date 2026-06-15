@@ -1071,6 +1071,9 @@ export class PostHog implements PostHogInterface {
 
     _send_request(options: QueuedRequestWithOptions): void {
         if (!this.__loaded) {
+            if (options.fireCallbackOnDrop) {
+                options.callback?.({ statusCode: 0 })
+            }
             return
         }
 
@@ -1080,6 +1083,9 @@ export class PostHog implements PostHogInterface {
         }
 
         if (this.rateLimiter.isServerRateLimited(options.batchKey)) {
+            if (options.fireCallbackOnDrop) {
+                options.callback?.({ statusCode: 429 })
+            }
             return
         }
 
