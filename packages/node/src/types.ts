@@ -17,6 +17,12 @@ export type IdentifyMessage = {
   disableGeoip?: boolean
 }
 
+export type UnsetPersonPropertiesMessage = {
+  distinctId: string
+  properties: string | string[]
+  disableGeoip?: boolean
+}
+
 export type SendFeatureFlagsOptions = {
   onlyEvaluateLocally?: boolean
   personProperties?: Record<string, any>
@@ -383,6 +389,20 @@ export interface IPostHog {
    * @param properties with a dict with any key: value pairs
    */
   identifyImmediate({ distinctId, properties }: IdentifyMessage): Promise<void>
+
+  /**
+   * @description Remove properties from a person profile.
+   * @param distinctId which uniquely identifies your user
+   * @param properties property name or property names to unset
+   */
+  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void
+
+  /**
+   * @description Remove properties from a person profile immediately. Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
+   * @param distinctId which uniquely identifies your user
+   * @param properties property name or property names to unset
+   */
+  unsetPersonPropertiesImmediate({ distinctId, properties }: UnsetPersonPropertiesMessage): Promise<void>
 
   /**
    * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.

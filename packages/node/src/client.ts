@@ -23,6 +23,7 @@ import {
   IdentifyMessage,
   IPostHog,
   OverrideFeatureFlagsOptions,
+  UnsetPersonPropertiesMessage,
   PostHogOptions,
   SendFeatureFlagsOptions,
   FlagEvaluationOptions,
@@ -88,6 +89,13 @@ function normalizePersonalApiKey(value?: unknown): string | undefined {
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
+}
+
+function normalizeUnsetPersonProperties(value: string | string[]): string[] {
+  const propertyNames = Array.isArray(value) ? value : [value]
+  return propertyNames.filter(
+    (propertyName): propertyName is string => typeof propertyName === 'string' && propertyName.length > 0
+  )
 }
 
 /**
@@ -701,6 +709,59 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
     await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+  }
+
+  /**
+   * Remove properties from a person profile.
+   *
+   * @example
+   * ```ts
+   * client.unsetPersonProperties({
+   *   distinctId: 'user_123',
+   *   properties: ['plan', 'email']
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The data containing distinctId and property names to unset
+   */
+  unsetPersonProperties({ distinctId, properties, disableGeoip }: UnsetPersonPropertiesMessage): void {
+    const propertyNames = normalizeUnsetPersonProperties(properties)
+    if (propertyNames.length === 0) {
+      return
+    }
+
+    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames }, disableGeoip })
+  }
+
+  /**
+   * Remove properties from a person profile immediately (synchronously).
+   *
+   * @example
+   * ```ts
+   * await client.unsetPersonPropertiesImmediate({
+   *   distinctId: 'user_123',
+   *   properties: 'plan'
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The data containing distinctId and property names to unset
+   * @returns Promise that resolves when the unset is processed
+   */
+  async unsetPersonPropertiesImmediate({
+    distinctId,
+    properties,
+    disableGeoip,
+  }: UnsetPersonPropertiesMessage): Promise<void> {
+    const propertyNames = normalizeUnsetPersonProperties(properties)
+    if (propertyNames.length === 0) {
+      return
+    }
+
+    await this.captureImmediate({ distinctId, event: '$set', properties: { $unset: propertyNames }, disableGeoip })
   }
 
   /**

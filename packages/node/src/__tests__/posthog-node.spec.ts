@@ -287,6 +287,59 @@ describe('PostHog Node.js', () => {
       ])
     })
 
+    it.each([
+      ['single property', 'plan', ['plan']],
+      ['multiple properties', ['plan', 'email'], ['plan', 'email']],
+    ] as Array<[string, string | string[], string[]]>)(
+      'should capture a $set event with a $unset array for %s',
+      async (_, properties, expectedUnset) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+        posthog.unsetPersonProperties({ distinctId: '123', properties })
+        await waitForFlushTimer()
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents).toMatchObject([
+          {
+            distinct_id: '123',
+            event: '$set',
+            properties: {
+              $unset: expectedUnset,
+              $geoip_disable: true,
+            },
+          },
+        ])
+      }
+    )
+
+    it('should not capture an event when unsetPersonProperties is given no valid property names', async () => {
+      posthog.unsetPersonProperties({ distinctId: '123', properties: [] })
+      posthog.unsetPersonProperties({ distinctId: '123', properties: '' })
+      await waitForPromises()
+      jest.runOnlyPendingTimers()
+      await waitForPromises()
+
+      expect(mockedFetch).not.toHaveBeenCalled()
+    })
+
+    it('should await the network request when unsetPersonPropertiesImmediate is awaited', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+      await posthog.unsetPersonPropertiesImmediate({ distinctId: '123', properties: 'plan' })
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toMatchObject([
+        {
+          distinct_id: '123',
+          event: '$set',
+          properties: {
+            $unset: ['plan'],
+            $geoip_disable: true,
+          },
+        },
+      ])
+    })
+
     it('should allow overriding timestamp', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.capture({ event: 'custom-time', distinctId: '123', timestamp: new Date('2021-02-03') })
