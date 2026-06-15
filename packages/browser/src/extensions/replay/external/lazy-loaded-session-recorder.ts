@@ -891,15 +891,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Guarded on the stop-in-progress flag because start() is also called re-entrantly
         // on a live recorder (e.g. opt-in flows) where the queue holds the current session's
         // events and must survive.
-        //
-        // Discard the buffer too: it still holds the prior (stopped) session's snapshots, and
-        // the cleanup we just bailed out of would have cleared it. If left, the very next event
-        // for the new session flushes it under the OLD session id but with the CURRENT (new)
-        // distinct_id — and on a stop()→reset()→identify()→start() sequence that re-entrant
-        // flush is driven synchronously by checkAndGetSessionAndWindowId() below, before
-        // _sessionId is even updated. Server-side `any(distinct_id)` attribution then resolves
-        // the mixed-distinct_id session to the wrong person. Dropping the trailing prior-session
-        // data is the same trade-off the bailed-out stop() path already accepts.
+        // Discard the buffer too — the bailed-out cleanup would have cleared it. Otherwise the
+        // prior session's snapshots flush under the old session id with the new distinct_id,
+        // mis-attributing the recording (#3822).
         if (this._isStoppingAfterCompression) {
             this._invalidateCompressionQueue()
             this._clearBuffer()
