@@ -102,35 +102,6 @@ export const getPayloadsFromFlags = (
   )
 }
 
-/**
- * Get the flag details from the legacy v1 flags and payloads. As such, it will lack the reason, id, version, and description.
- * @param flagsResponse - The flags response
- * @returns The flag details
- */
-export const getFlagDetailsFromFlagsAndPayloads = (
-  flagsResponse: PostHogFeatureFlagsResponse
-): PostHogFlagsResponse['flags'] => {
-  const flags = flagsResponse.featureFlags ?? {}
-  const payloads = flagsResponse.featureFlagPayloads ?? {}
-  return Object.fromEntries(
-    Object.entries(flags).map(([key, value]) => [
-      key,
-      {
-        key: key,
-        enabled: typeof value === 'string' ? true : value,
-        variant: typeof value === 'string' ? value : undefined,
-        reason: undefined,
-        metadata: {
-          id: undefined,
-          version: undefined,
-          payload: payloads?.[key] ? JSON.stringify(payloads[key]) : undefined,
-          description: undefined,
-        },
-      },
-    ])
-  )
-}
-
 export const getFeatureFlagValue = (detail: FeatureFlagDetail | undefined): FeatureFlagValue | undefined => {
   return detail === undefined ? undefined : (detail.variant ?? detail.enabled)
 }
