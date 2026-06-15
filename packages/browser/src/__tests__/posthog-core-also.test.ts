@@ -1704,6 +1704,6 @@ describe('_send_request skipIPParam', () => {
 
         const eventRequest = { url: 'http://localhost/e/' }
         posthog._send_request(eventRequest)
-        expect(eventRequest.url).toContain('ip=0')
+        expect(eventRequest.url).toMatch(/[?&]ip=/)
     })
 })

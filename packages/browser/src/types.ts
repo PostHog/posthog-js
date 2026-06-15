@@ -193,8 +193,9 @@ export interface RequestWithOptions {
     callback?: (response: RequestResponse) => void
     timeout?: number
     noRetries?: boolean
-    // Omit the `ip` query param from the request URL. The param is only meaningful for event ingestion;
-    // flags requests set this so the URL doesn't match ad-blocker filters that key on `/flags…ip=`.
+    // Omit the `ip` query param from the request URL. The param is meaningful for event ingestion
+    // and session recording, but not for flags requests. Flags requests set this so the URL doesn't
+    // match ad-blocker filters that key on `/flags…ip=`.
     skipIPParam?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
