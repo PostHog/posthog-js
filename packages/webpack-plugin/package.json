@@ -5,6 +5,7 @@
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
     "description": "Webpack plugin for Posthog 🦔",
+    "license": "MIT",
     "repository": {
         "type": "git",
         "url": "https://github.com/PostHog/posthog-js.git",

@@ -5,6 +5,7 @@
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
     "description": "PostHog Rollup plugin",
+    "license": "MIT",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/PostHog/posthog-js.git",
