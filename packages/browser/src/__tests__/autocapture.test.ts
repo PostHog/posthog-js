@@ -1657,6 +1657,21 @@ describe('Autocapture system', () => {
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
+        it('uses prefixed element selector matching when matches is unavailable', () => {
+            const button = document.createElement('button')
+            button.innerHTML = 'bla'
+            Object.defineProperty(button, 'matches', { value: undefined })
+            ;(button as any).msMatchesSelector = jest.fn(() => true)
+            const e = makeMouseEvent({ target: button })
+
+            expect(
+                shouldCaptureDomEvent(button, e, {
+                    css_selector_ignorelist: ['.custom-no-autocapture'],
+                })
+            ).toBe(false)
+            expect((button as any).msMatchesSelector).toHaveBeenCalledWith('.custom-no-autocapture')
+        })
+
         it('captures elements that match the css allowlist but not the css ignorelist', () => {
             const main_el = document.createElement('some-element')
             const button = document.createElement('button')

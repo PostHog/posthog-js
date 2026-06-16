@@ -125,6 +125,17 @@ function checkIfElementTreePassesElementAllowList(
     return false
 }
 
+function elementMatchesCSSSelector(el: Element, selector: string): boolean {
+    const matches =
+        el.matches ||
+        (el as any).matchesSelector ||
+        (el as any).msMatchesSelector ||
+        (el as any).mozMatchesSelector ||
+        (el as any).webkitMatchesSelector ||
+        (el as any).oMatchesSelector
+    return matches ? matches.call(el, selector) : false
+}
+
 /*
  if there is no selector list (i.e. it is undefined), then any elements matches
  if there is an empty list, then no elements match
@@ -137,7 +148,7 @@ function checkIfElementsMatchCSSSelector(elements: Element[], selectorList: stri
     }
 
     for (const el of elements) {
-        if (selectorList.some((selector) => el.matches(selector))) {
+        if (selectorList.some((selector) => elementMatchesCSSSelector(el, selector))) {
             return true
         }
     }
