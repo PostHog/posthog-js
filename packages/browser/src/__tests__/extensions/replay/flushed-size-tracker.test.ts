@@ -98,10 +98,18 @@ describe('FlushedSizeTracker', () => {
             expect(tracker.currentTrackedSize('session-b')).toEqual(30)
         })
 
-        it('treats a legacy bare-number persisted value as zero', () => {
-            persistence.set_property('$sess_rec_flush_size', 999999)
+        describe.each([
+            ['legacy bare number', 999999],
+            ['non-numeric size', { sessionId: SESSION_ID, size: 'abc' }],
+            ['missing size', { sessionId: SESSION_ID }],
+            ['non-string sessionId', { sessionId: 42, size: 100 }],
+            ['null', null],
+        ])('treats an invalid persisted value (%s) as zero', (_label, stored) => {
+            it('returns 0', () => {
+                persistence.set_property('$sess_rec_flush_size', stored)
 
-            expect(tracker.currentTrackedSize(SESSION_ID)).toEqual(0)
+                expect(tracker.currentTrackedSize(SESSION_ID)).toEqual(0)
+            })
         })
     })
 })

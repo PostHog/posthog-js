@@ -1,4 +1,4 @@
-import { isObject } from '@posthog/core'
+import { isNumber, isObject, isString } from '@posthog/core'
 import { PostHog } from '../../../posthog-core'
 
 const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
@@ -9,7 +9,7 @@ interface FlushedSize {
 }
 
 function isFlushedSize(value: unknown): value is FlushedSize {
-    return isObject(value) && 'sessionId' in value && 'size' in value
+    return isObject(value) && isString((value as FlushedSize).sessionId) && isNumber((value as FlushedSize).size)
 }
 
 export class FlushedSizeTracker {
