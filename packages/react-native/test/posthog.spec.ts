@@ -1016,6 +1016,29 @@ describe('PostHog React Native', () => {
         expect(cachedProps === undefined || Object.keys(cachedProps).length === 0).toBe(true)
       })
 
+      it('keeps project-level remote config across reset() but clears user-specific survey state', () => {
+        // Project-level config (not user data) — should survive an identity change so session replay
+        // re-arms and surveys stay available without an app restart.
+        posthog.setPersistedProperty(PostHogPersistedProperty.RemoteConfig, { capturePerformance: true } as any)
+        posthog.setPersistedProperty(PostHogPersistedProperty.SessionReplay, { linkedFlag: 'replay-flag' } as any)
+        posthog.setPersistedProperty(PostHogPersistedProperty.Surveys, [{ id: 'survey-1' }] as any)
+        // User-specific survey state — should be cleared so the new user starts fresh.
+        posthog.setPersistedProperty(PostHogPersistedProperty.SurveysSeen, { 'survey-1': true } as any)
+        posthog.setPersistedProperty(PostHogPersistedProperty.SurveyLastSeenDate, '2026-01-01' as any)
+
+        posthog.reset()
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.RemoteConfig)).toEqual({
+          capturePerformance: true,
+        })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplay)).toEqual({
+          linkedFlag: 'replay-flag',
+        })
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.Surveys)).toEqual([{ id: 'survey-1' }])
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveysSeen)).toBeFalsy()
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveyLastSeenDate)).toBeFalsy()
+      })
+
       it('should cache properties from $set when provided', async () => {
         posthog.identify('user-123', {
           $set: { email: 'test@example.com', plan: 'premium' },
@@ -1208,6 +1231,9 @@ describe('PostHog React Native', () => {
           setDefaultPersonProperties: false,
           flushInterval: 0,
           preloadFeatureFlags: false,
+          disableRemoteConfig: true,
+          disableSurveys: true,
+          captureAppLifecycleEvents: false,
         })
         await posthog.ready()
         ;(globalThis as any).window.fetch.mockClear()
@@ -2241,6 +2267,9 @@ describe('Feature flag error tracking', () => {
       preloadFeatureFlags: false,
       sendFeatureFlagEvent: true,
       captureAppLifecycleEvents: false,
+      disableRemoteConfig: true,
+      disableSurveys: true,
+      disableCompression: true,
     })
   })
 
@@ -2281,15 +2310,15 @@ describe('Feature flag error tracking', () => {
     // Access a non-existent flag
     posthog.getFeatureFlag('non-existent-flag')
 
-    await waitForExpect(500, () => {
-      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
-      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
-      expect(captureCall).toBeDefined()
-      const body = JSON.parse(captureCall[1].body)
-      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
-      expect(featureFlagEvent).toBeDefined()
-      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.FLAG_MISSING)
-    })
+    await posthog.flush()
+
+    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    expect(captureCall).toBeDefined()
+    const body = JSON.parse(captureCall[1].body)
+    const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+    expect(featureFlagEvent).toBeDefined()
+    expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.FLAG_MISSING)
   })
 
   it('should set $feature_flag_error to errors_while_computing_flags when server returns that flag', async () => {
@@ -2322,15 +2351,15 @@ describe('Feature flag error tracking', () => {
     // Access the flag that exists
     posthog.getFeatureFlag('some-flag')
 
-    await waitForExpect(500, () => {
-      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
-      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
-      expect(captureCall).toBeDefined()
-      const body = JSON.parse(captureCall[1].body)
-      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
-      expect(featureFlagEvent).toBeDefined()
-      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.ERRORS_WHILE_COMPUTING)
-    })
+    await posthog.flush()
+
+    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    expect(captureCall).toBeDefined()
+    const body = JSON.parse(captureCall[1].body)
+    const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+    expect(featureFlagEvent).toBeDefined()
+    expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.ERRORS_WHILE_COMPUTING)
   })
 
   it('should set $feature_flag_error to quota_limited when quota limited', async () => {
@@ -2357,16 +2386,16 @@ describe('Feature flag error tracking', () => {
     const result = posthog.getFeatureFlag('any-flag')
     expect(result).toBeUndefined()
 
-    await waitForExpect(500, () => {
-      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
-      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
-      expect(captureCall).toBeDefined()
-      const body = JSON.parse(captureCall[1].body)
-      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
-      expect(featureFlagEvent).toBeDefined()
-      // FLAG_MISSING is not tracked when quota limited since we cannot determine if the flag is truly missing
-      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.QUOTA_LIMITED)
-    })
+    await posthog.flush()
+
+    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    expect(captureCall).toBeDefined()
+    const body = JSON.parse(captureCall[1].body)
+    const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+    expect(featureFlagEvent).toBeDefined()
+    // FLAG_MISSING is not tracked when quota limited since we cannot determine if the flag is truly missing
+    expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.QUOTA_LIMITED)
   })
 
   it('should set $feature_flag_error to api_error_500 when request fails with 500', async () => {
@@ -2386,15 +2415,15 @@ describe('Feature flag error tracking', () => {
     // Access a flag when request failed
     posthog.getFeatureFlag('any-flag')
 
-    await waitForExpect(500, () => {
-      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
-      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
-      expect(captureCall).toBeDefined()
-      const body = JSON.parse(captureCall[1].body)
-      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
-      expect(featureFlagEvent).toBeDefined()
-      expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.apiError(500))
-    })
+    await posthog.flush()
+
+    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    expect(captureCall).toBeDefined()
+    const body = JSON.parse(captureCall[1].body)
+    const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+    expect(featureFlagEvent).toBeDefined()
+    expect(featureFlagEvent.properties.$feature_flag_error).toBe(FeatureFlagError.apiError(500))
   })
 
   it('should join multiple errors with commas', async () => {
@@ -2419,17 +2448,17 @@ describe('Feature flag error tracking', () => {
     // Access a non-existent flag when errors while computing
     posthog.getFeatureFlag('missing-flag')
 
-    await waitForExpect(500, () => {
-      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
-      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
-      expect(captureCall).toBeDefined()
-      const body = JSON.parse(captureCall[1].body)
-      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
-      expect(featureFlagEvent).toBeDefined()
-      expect(featureFlagEvent.properties.$feature_flag_error).toBe(
-        `${FeatureFlagError.ERRORS_WHILE_COMPUTING},${FeatureFlagError.FLAG_MISSING}`
-      )
-    })
+    await posthog.flush()
+
+    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    expect(captureCall).toBeDefined()
+    const body = JSON.parse(captureCall[1].body)
+    const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+    expect(featureFlagEvent).toBeDefined()
+    expect(featureFlagEvent.properties.$feature_flag_error).toBe(
+      `${FeatureFlagError.ERRORS_WHILE_COMPUTING},${FeatureFlagError.FLAG_MISSING}`
+    )
   })
 
   it('should not set $feature_flag_error when flag is found successfully', async () => {
@@ -2463,15 +2492,15 @@ describe('Feature flag error tracking', () => {
     const result = posthog.getFeatureFlag('my-flag')
     expect(result).toBe(true)
 
-    await waitForExpect(500, () => {
-      const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
-      const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
-      expect(captureCall).toBeDefined()
-      const body = JSON.parse(captureCall[1].body)
-      const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
-      expect(featureFlagEvent).toBeDefined()
-      // $feature_flag_error should not be present
-      expect(featureFlagEvent.properties.$feature_flag_error).toBeUndefined()
-    })
+    await posthog.flush()
+
+    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    expect(captureCall).toBeDefined()
+    const body = JSON.parse(captureCall[1].body)
+    const featureFlagEvent = body.batch.find((e: any) => e.event === '$feature_flag_called')
+    expect(featureFlagEvent).toBeDefined()
+    // $feature_flag_error should not be present
+    expect(featureFlagEvent.properties.$feature_flag_error).toBeUndefined()
   })
 })

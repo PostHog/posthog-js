@@ -802,6 +802,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
               flags: { ...currentFlagDetails?.flags, ...filteredFlags },
             }
           }
+          // Store the recording config before setKnownFeatureFlagDetails, which synchronously
+          // emits 'featureflags' — listeners (e.g. RN session replay re-evaluation) read this
+          // config and must see the version matching the new flag values.
+          this.cacheSessionReplay('flags', res)
           this.setKnownFeatureFlagDetails({
             flags: newFeatureFlagDetails.flags,
             requestId: res.requestId,
@@ -811,7 +815,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
-          this.cacheSessionReplay('flags', res)
 
           this.maybeNotifyRemoteConfig(triggerOnRemoteConfig, res)
         }

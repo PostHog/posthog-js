@@ -107,7 +107,7 @@ jobs:
 
             - name: Update versions and changelogs
               run: |
-                  pnpm bump && pnpm generate-references
+                  pnpm bump && pnpm generate-references:versioned
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 

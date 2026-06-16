@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next'
 import { PosthogWebpackPlugin, PluginConfig, resolveConfig, ResolvedPluginConfig } from '@posthog/webpack-plugin'
 import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from './utils'
+import { stripDanglingSourceMapComments } from './strip-sourcemap-comments'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
@@ -134,6 +135,9 @@ function withCompilerConfig(
       await userCompilerHook?.(config)
       console.debug('Processing source maps from compilation hook...')
       await processSourceMaps(posthogConfig, config.distDir)
+      if (posthogConfig.sourcemaps.deleteAfterUpload) {
+        await stripDanglingSourceMapComments(config.distDir)
+      }
     }
     return newConfig
   }

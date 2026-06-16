@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "4.47.2",
+    "version": "4.47.1",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -853,7 +853,7 @@
         },
         {
           "category": "Identification",
-          "description": "Resets the user's ID and anonymous ID after logout.\nTo reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out. This also clears all stored super properties and more.\nBy default (when `propertiesToKeep` is not provided), the app lifecycle properties (`InstalledAppBuild` and `InstalledAppVersion`) are automatically preserved to prevent duplicate \"Application Installed\" events on the next app launch.\nIf you pass `propertiesToKeep` explicitly, only the properties you specify will be preserved. To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild` and `PostHogPersistedProperty.InstalledAppVersion` in your array.\nNote: The event queue (`PostHogPersistedProperty.Queue`) and logs queue (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.\nThe project-level remote config (`PostHogPersistedProperty.RemoteConfig`, `PostHogPersistedProperty.SessionReplay`, `PostHogPersistedProperty.Surveys`) is also always preserved — it is not user data — so session replay and surveys keep working after an identity change. The user-specific survey state (`SurveysSeen`, `SurveyLastSeenDate`) is still cleared.",
+          "description": "Resets the user's ID and anonymous ID after logout.\nTo reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out. This also clears all stored super properties and more.\nBy default (when `propertiesToKeep` is not provided), the app lifecycle properties (`InstalledAppBuild` and `InstalledAppVersion`) are automatically preserved to prevent duplicate \"Application Installed\" events on the next app launch.\nIf you pass `propertiesToKeep` explicitly, only the properties you specify will be preserved. To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild` and `PostHogPersistedProperty.InstalledAppVersion` in your array.\nNote: The event queue (`PostHogPersistedProperty.Queue`) and logs queue (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.",
           "details": null,
           "id": "reset",
           "showDocs": true,
