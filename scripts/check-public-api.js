@@ -19,9 +19,34 @@ if (status) {
     console.error(status)
 
     try {
-        const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-color', '--', ...referencePaths], {
-            encoding: 'utf8',
-        }).trim()
+        const trackedDiff = execFileSync(
+            'git',
+            ['diff', '--no-ext-diff', '--no-color', 'HEAD', '--', ...referencePaths],
+            {
+                encoding: 'utf8',
+            }
+        ).trim()
+        const untrackedDiffs = status
+            .split('\n')
+            .filter((line) => line.startsWith('?? '))
+            .map((line) => line.slice(3))
+            .map((path) => {
+                try {
+                    return execFileSync(
+                        'git',
+                        ['diff', '--no-ext-diff', '--no-color', '--no-index', '--', '/dev/null', path],
+                        {
+                            encoding: 'utf8',
+                        }
+                    ).trim()
+                } catch (error) {
+                    if (error.status === 1 && error.stdout) {
+                        return error.stdout.trim()
+                    }
+                    throw error
+                }
+            })
+        const diff = [trackedDiff, ...untrackedDiffs].filter(Boolean).join('\n\n')
         if (diff) {
             console.error(`\nPublic API reference diff:\n${diff}`)
         }
