@@ -1083,10 +1083,12 @@ export class PostHog implements PostHogInterface {
         }
 
         options.transport = options.transport || this.config.api_transport
-        options.url = extendURLParams(options.url, {
-            // Whether to detect ip info or not
-            ip: this.config.ip ? 1 : 0,
-        })
+        if (!options.skipIPParam) {
+            options.url = extendURLParams(options.url, {
+                // Whether to detect ip info or not
+                ip: this.config.ip ? 1 : 0,
+            })
+        }
         options.headers = {
             ...this.config.request_headers,
             ...options.headers,
