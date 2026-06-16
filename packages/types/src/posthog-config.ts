@@ -78,6 +78,8 @@ export interface AutocaptureConfig {
      *
      * Nothing is ignored when there's an empty ignorelist, e.g. []
      * If no ignorelist is set, we default to ignoring .ph-no-autocapture and [data-ph-no-autocapture]
+     * Note: providing any custom list fully replaces the defaults — include .ph-no-autocapture
+     * and [data-ph-no-autocapture] explicitly if you still want them honoured.
      */
     css_selector_ignorelist?: string[]
 

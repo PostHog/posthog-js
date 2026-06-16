@@ -1621,7 +1621,13 @@ describe('Autocapture system', () => {
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
-        it('does not capture elements matching the default autocapture ignorelist', () => {
+        it.each([
+            ['.ph-no-autocapture on the target', (button: Element) => (button.className = 'ph-no-autocapture')],
+            [
+                '[data-ph-no-autocapture] on a parent',
+                (_button: Element, parent: Element) => parent.setAttribute('data-ph-no-autocapture', ''),
+            ],
+        ])('does not capture elements matching the default autocapture ignorelist: %s', (_name, applyIgnore) => {
             const main_el = document.createElement('some-element')
             const button = document.createElement('button')
             button.innerHTML = 'bla'
@@ -1631,11 +1637,7 @@ describe('Autocapture system', () => {
                 composedPath: () => [button, main_el],
             })
 
-            button.className = 'ph-no-autocapture'
-            expect(shouldCaptureDomEvent(button, e)).toBe(false)
-
-            button.className = ''
-            main_el.setAttribute('data-ph-no-autocapture', '')
+            applyIgnore(button, main_el)
             expect(shouldCaptureDomEvent(button, e)).toBe(false)
         })
 
