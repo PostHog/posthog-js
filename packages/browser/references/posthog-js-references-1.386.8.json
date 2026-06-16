@@ -3526,10 +3526,6 @@
           "name": "noRetries"
         },
         {
-          "type": "boolean",
-          "name": "skipIPParam"
-        },
-        {
           "type": "number",
           "name": "timeout"
         },
