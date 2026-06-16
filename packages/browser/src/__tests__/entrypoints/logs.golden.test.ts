@@ -126,25 +126,20 @@ describe('logs entrypoint — golden (current console-capture wire output)', () 
         })
     })
 
-    it('maps each console level to its OTLP severityText', () => {
+    it.each([
+        ['log', 'INFO'],
+        ['info', 'INFO'],
+        ['warn', 'WARNING'],
+        ['error', 'ERROR'],
+        ['debug', 'DEBUG'],
+    ] as const)('maps console.%s to severityText %s', (method, severityText) => {
         initialize()
-        assignableWindow.console.log('a')
-        assignableWindow.console.info('b')
-        assignableWindow.console.warn('c')
-        assignableWindow.console.error('d')
-        assignableWindow.console.debug('e')
+        assignableWindow.console[method]('x')
 
-        const severityByCall = mockEmit.mock.calls.map((call) => [
-            call[0].attributes['log.source'],
-            call[0].severityText,
-        ])
-        expect(severityByCall).toEqual([
-            ['console.log', 'INFO'],
-            ['console.info', 'INFO'],
-            ['console.warn', 'WARNING'],
-            ['console.error', 'ERROR'],
-            ['console.debug', 'DEBUG'],
-        ])
+        expect(mockEmit.mock.calls[0][0]).toMatchObject({
+            severityText,
+            attributes: expect.objectContaining({ 'log.source': `console.${method}` }),
+        })
     })
 
     it('emits the exact record for an object log, flattening the first arg into attributes', () => {
@@ -175,6 +170,11 @@ describe('logs entrypoint — golden (current console-capture wire output)', () 
 
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { resourceFromAttributes } = require('@opentelemetry/resources')
-        expect(resourceFromAttributes).toHaveBeenCalledWith(expect.objectContaining({ 'service.name': 'my-app' }))
+        expect(resourceFromAttributes).toHaveBeenCalledWith({
+            'service.name': 'my-app',
+            host: 'example.com',
+            'session.id': 'session-123',
+            'window.id': 'window-456',
+        })
     })
 })
