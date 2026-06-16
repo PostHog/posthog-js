@@ -407,6 +407,8 @@ describe('SiteApps', () => {
         })
 
         it('prepares style elements inserted with related DOM APIs', () => {
+            const insertedStyles: HTMLStyleElement[] = []
+            const stylesInsertedPerAppInit = 6
             posthog.config.prepare_external_dependency_stylesheet = jest.fn((stylesheet) => {
                 stylesheet.nonce = 'style-nonce'
                 return stylesheet
@@ -422,14 +424,74 @@ describe('SiteApps', () => {
                 const replacedStyle = document.createElement('style')
                 host.replaceChild(replacementStyle, prependedStyle)
                 replacementStyle.replaceWith(replacedStyle)
+
+                const beforeStyle = document.createElement('style')
+                const afterStyle = document.createElement('style')
+                const adjacentStyle = document.createElement('style')
+                host.before(beforeStyle)
+                host.after(afterStyle)
+                host.insertAdjacentElement('afterbegin', adjacentStyle)
+
+                insertedStyles.push(
+                    prependedStyle,
+                    replacementStyle,
+                    replacedStyle,
+                    beforeStyle,
+                    afterStyle,
+                    adjacentStyle
+                )
                 callback(true)
             })
 
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
 
-            const styleElement = document.body.querySelector('style')
-            expect(posthog.config.prepare_external_dependency_stylesheet).toHaveBeenCalledTimes(6)
-            expect(styleElement?.nonce).toBe('style-nonce')
+            const expectedStyleCount = stylesInsertedPerAppInit * appConfigs.length
+            const expectedAttachedStyleCount = 4 * appConfigs.length
+            expect(insertedStyles).toHaveLength(expectedStyleCount)
+            expect(insertedStyles.every((styleElement) => styleElement.nonce === 'style-nonce')).toBe(true)
+            expect(document.body.querySelectorAll('style[nonce="style-nonce"]')).toHaveLength(
+                expectedAttachedStyleCount
+            )
+        })
+
+        it('does not replace DOM insertion methods when no prepare hooks are configured', () => {
+            const win = document.defaultView as Window & typeof globalThis
+            const originalMethods = [
+                ['Node.appendChild', win.Node.prototype.appendChild],
+                ['Node.insertBefore', win.Node.prototype.insertBefore],
+                ['Node.replaceChild', win.Node.prototype.replaceChild],
+                ['Element.append', win.Element.prototype.append],
+                ['Element.prepend', win.Element.prototype.prepend],
+                ['Element.before', win.Element.prototype.before],
+                ['Element.after', win.Element.prototype.after],
+                ['Element.replaceWith', win.Element.prototype.replaceWith],
+                ['Element.insertAdjacentElement', win.Element.prototype.insertAdjacentElement],
+            ] as const
+            const currentMethods = () =>
+                [
+                    ['Node.appendChild', win.Node.prototype.appendChild],
+                    ['Node.insertBefore', win.Node.prototype.insertBefore],
+                    ['Node.replaceChild', win.Node.prototype.replaceChild],
+                    ['Element.append', win.Element.prototype.append],
+                    ['Element.prepend', win.Element.prototype.prepend],
+                    ['Element.before', win.Element.prototype.before],
+                    ['Element.after', win.Element.prototype.after],
+                    ['Element.replaceWith', win.Element.prototype.replaceWith],
+                    ['Element.insertAdjacentElement', win.Element.prototype.insertAdjacentElement],
+                ] as const
+            const expectMethodsUnchanged = () => {
+                currentMethods().forEach(([name, method], index) => {
+                    expect([name, method]).toEqual(originalMethods[index])
+                })
+            }
+
+            init(({ callback }) => {
+                expectMethodsUnchanged()
+                callback(true)
+            })
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            expectMethodsUnchanged()
         })
 
         it('prepares script elements appended while processing site app events', () => {

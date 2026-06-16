@@ -112,6 +112,13 @@ export class SiteApps implements Extension {
     }
 
     private _runWithPreparedSiteAppElements<T>(callback: () => T): T {
+        if (
+            !this._instance.config.prepare_external_dependency_stylesheet &&
+            !this._instance.config.prepare_external_dependency_script
+        ) {
+            return callback()
+        }
+
         const win = document?.defaultView
         const nodePrototype = win?.Node?.prototype
         if (!win || !nodePrototype) {
@@ -198,6 +205,22 @@ export class SiteApps implements Extension {
         ;[win.Element?.prototype, win.CharacterData?.prototype, win.DocumentType?.prototype].forEach((prototype) => {
             patch(
                 prototype,
+                'before',
+                (original) =>
+                    function (this: ChildNode, ...nodes: (Node | string)[]) {
+                        return original.apply(this, prepareNodes(nodes))
+                    }
+            )
+            patch(
+                prototype,
+                'after',
+                (original) =>
+                    function (this: ChildNode, ...nodes: (Node | string)[]) {
+                        return original.apply(this, prepareNodes(nodes))
+                    }
+            )
+            patch(
+                prototype,
                 'replaceWith',
                 (original) =>
                     function (this: ChildNode, ...nodes: (Node | string)[]) {
@@ -206,6 +229,15 @@ export class SiteApps implements Extension {
                     }
             )
         })
+        patch(
+            win.Element?.prototype,
+            'insertAdjacentElement',
+            (original) =>
+                function (this: Element, position: InsertPosition, insertedElement: Element) {
+                    const prepared = prepareNode(insertedElement)
+                    return prepared ? original.call(this, position, prepared) : null
+                }
+        )
 
         try {
             return callback()
