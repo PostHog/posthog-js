@@ -41,6 +41,7 @@ class PosthogReactNativePluginModule(
       sdkReplayConfig = getMap(sessionReplayConfig, "sdkReplayConfig"),
       decideReplayConfig = getMap(sessionReplayConfig, "decideReplayConfig"),
       nativeErrorTrackingAutocapture = getBoolean(errorTrackingConfig, "nativeAutocapture", false),
+      exceptionStepsConfig = getMap(errorTrackingConfig, "exceptionSteps"),
       promise = promise,
     )
   }
@@ -61,6 +62,7 @@ class PosthogReactNativePluginModule(
       sdkReplayConfig = sdkReplayConfig,
       decideReplayConfig = decideReplayConfig,
       nativeErrorTrackingAutocapture = false,
+      exceptionStepsConfig = null,
       promise = promise,
     )
   }
@@ -73,6 +75,7 @@ class PosthogReactNativePluginModule(
     sdkReplayConfig: ReadableMap?,
     decideReplayConfig: ReadableMap?,
     nativeErrorTrackingAutocapture: Boolean,
+    exceptionStepsConfig: ReadableMap?,
     promise: Promise,
   ) {
     val initRunnable =
@@ -98,6 +101,14 @@ class PosthogReactNativePluginModule(
               captureScreenViews = false
               flushAt = theFlushAt
               errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
+
+              // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
+              if (hasKey(exceptionStepsConfig, "enabled")) {
+                errorTrackingConfig.exceptionSteps.enabled = getBoolean(exceptionStepsConfig, "enabled", true)
+              }
+              if (hasKey(exceptionStepsConfig, "maxBytes")) {
+                errorTrackingConfig.exceptionSteps.maxBytes = getInt(exceptionStepsConfig, "maxBytes", errorTrackingConfig.exceptionSteps.maxBytes)
+              }
 
               // React Native rethrows fatal JS errors natively as JavascriptException.
               // The JS layer already captured them, so drop the native duplicate.
@@ -241,6 +252,21 @@ class PosthogReactNativePluginModule(
       PostHog.stopSessionReplay()
     } catch (e: Throwable) {
       logError("stopRecording", e)
+    } finally {
+      promise.resolve(null)
+    }
+  }
+
+  @ReactMethod
+  fun addExceptionStep(
+    message: String,
+    properties: ReadableMap?,
+    promise: Promise,
+  ) {
+    try {
+      PostHog.addExceptionStep(message, properties?.toHashMap())
+    } catch (e: Throwable) {
+      logError("addExceptionStep", e)
     } finally {
       promise.resolve(null)
     }

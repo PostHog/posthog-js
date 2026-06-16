@@ -569,6 +569,7 @@ export class PostHog extends PostHogCore {
    * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    this._errorTracking.clearExceptionSteps()
     const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
     try {
@@ -1667,6 +1668,10 @@ export class PostHog extends PostHogCore {
       mechanism: { handled: true, type: 'generic' },
       syntheticException: new Error('Synthetic Error'),
     }
+
+    // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
+    additionalProperties = this._errorTracking.attachExceptionSteps(additionalProperties)
+
     super.captureException(error, additionalProperties, resolvedHint)
 
     // On a fatal crash, persist the exception + recent logs before the app may die.
@@ -1674,6 +1679,39 @@ export class PostHog extends PostHogCore {
       void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
     }
+  }
+
+  /**
+   * Records a breadcrumb-style exception step. Steps accumulate in a rolling, byte-bounded buffer
+   * and are attached to every captured `$exception` as `$exception_steps`, giving the error tracking
+   * UI a timeline of recent activity before each error.
+   *
+   * The `$timestamp` is captured at call time. The reserved keys `$message` and `$timestamp` are
+   * stripped from `properties` — the SDK sets the canonical values. This method never throws.
+   *
+   * @example
+   * ```js
+   * posthog.addExceptionStep('User tapped Checkout', { screen: 'cart' })
+   * ```
+   *
+   * @param {string} message A non-empty description of the step
+   * @param {Object} [properties] Optional additional context to attach to the step
+   * @returns {void}
+   */
+  addExceptionStep(message: string, properties?: PostHogEventProperties): void {
+    this._errorTracking.addExceptionStep(message, properties)
+    // Mirror the step to the embedded native SDK so native crashes carry the same steps.
+    this._forwardExceptionStepToNative(message, properties)
+  }
+
+  private _forwardExceptionStepToNative(message: string, properties?: PostHogEventProperties): void {
+    if (!this._nativeErrorTrackingInitialized || !OptionalReactNativePlugin?.addExceptionStep) {
+      return
+    }
+    // Fire-and-forget: the native layer validates and buffers independently and must never block.
+    void Promise.resolve(OptionalReactNativePlugin.addExceptionStep(message, properties)).catch((e) => {
+      this._logger.warn(`Failed to forward exception step to native: ${e}`)
+    })
   }
 
   protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
@@ -2120,6 +2158,7 @@ export class PostHog extends PostHogCore {
           },
           errorTracking: {
             nativeAutocapture: enableNativeErrorTracking,
+            exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
           },
         }
         await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)

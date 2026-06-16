@@ -1,5 +1,14 @@
 import type { PostHog } from '../posthog-rn'
-import { JsonType, Logger, ErrorTracking as CoreErrorTracking, isPostHogFetchNetworkError } from '@posthog/core'
+import {
+  JsonType,
+  Logger,
+  ErrorTracking as CoreErrorTracking,
+  isPostHogFetchNetworkError,
+  isNullish,
+  isObject,
+  isString,
+  PostHogEventProperties,
+} from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import { getRemoteConfigBool } from '../utils'
 
@@ -19,8 +28,25 @@ interface AutocaptureOptions {
   nativeCrashes?: boolean
 }
 
+/**
+ * Controls the breadcrumb-style exception steps recorded via `addExceptionStep` and attached
+ * to captured exceptions as `$exception_steps`.
+ */
+export interface ExceptionStepsOptions {
+  /**
+   * Whether exception steps are recorded and attached. Defaults to `true`.
+   */
+  enabled?: boolean
+  /**
+   * Total UTF-8 byte budget for the in-memory buffer. Oldest steps are evicted first when exceeded.
+   * Defaults to `32768` (~32KB).
+   */
+  maxBytes?: number
+}
+
 export interface ErrorTrackingOptions {
   autocapture?: AutocaptureOptions | boolean
+  exceptionSteps?: ExceptionStepsOptions
 }
 
 // resolved configuration
@@ -37,6 +63,8 @@ interface ResolvedErrorTrackingOptions {
 export class ErrorTracking {
   private logger: Logger
   private options: ResolvedErrorTrackingOptions
+  private _exceptionStepsConfig: CoreErrorTracking.ResolvedExceptionStepsConfig
+  private _exceptionStepsBuffer: CoreErrorTracking.ExceptionStepsBuffer
 
   /**
    * Controls whether autocaptured exceptions are actually sent.
@@ -53,7 +81,91 @@ export class ErrorTracking {
   ) {
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
+    const exceptionSteps = options.exceptionSteps
+    this._exceptionStepsConfig = CoreErrorTracking.resolveExceptionStepsConfig(
+      exceptionSteps ? { enabled: exceptionSteps.enabled, max_bytes: exceptionSteps.maxBytes } : undefined
+    )
+    this._exceptionStepsBuffer = new CoreErrorTracking.ExceptionStepsBuffer(this._exceptionStepsConfig)
     this.autocapture(this.options.autocapture)
+  }
+
+  /**
+   * Exception-steps config in the native plugin's shape, so the embedded native SDK keeps one
+   * logical buffer with the same byte budget and enabled state.
+   */
+  getNativePluginExceptionStepsConfig(): ExceptionStepsOptions {
+    return { enabled: this._exceptionStepsConfig.enabled, maxBytes: this._exceptionStepsConfig.max_bytes }
+  }
+
+  /**
+   * Records a breadcrumb-style exception step in the instance buffer. The `$timestamp` is captured
+   * at call time. Invalid messages are ignored with a warning and never throw.
+   */
+  addExceptionStep(message: string, properties?: PostHogEventProperties): void {
+    if (!this._exceptionStepsConfig.enabled) {
+      return
+    }
+
+    try {
+      if (!isString(message) || message.trim().length === 0) {
+        this.logger.warn('Ignoring exception step because message must be a non-empty string')
+        return
+      }
+
+      const userProperties = isObject(properties) ? { ...properties } : {}
+      const { sanitizedProperties, droppedKeys } = CoreErrorTracking.stripReservedExceptionStepFields(userProperties)
+
+      if (droppedKeys.length > 0) {
+        this.logger.warn('Ignoring reserved exception step fields', { droppedKeys })
+      }
+
+      this._exceptionStepsBuffer.add({
+        [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: message,
+        [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
+        ...sanitizedProperties,
+      })
+    } catch (error) {
+      this.logger.error('Failed to add exception step. Ignoring breadcrumb.', error)
+    }
+  }
+
+  /**
+   * Returns `properties` with a snapshot of the buffered steps attached as `$exception_steps`,
+   * unless the feature is disabled, the caller already provided that key, or the buffer is empty.
+   * The buffer is left intact so subsequent exceptions read the same steps.
+   */
+  attachExceptionSteps(properties: PostHogEventProperties): PostHogEventProperties {
+    if (!this._exceptionStepsConfig.enabled || !isNullish(properties.$exception_steps)) {
+      return properties
+    }
+    const steps = this.getAttachableExceptionSteps()
+    if (steps.length === 0) {
+      return properties
+    }
+    // Steps are already normalized to their JSON-safe wire form by the buffer.
+    return { ...properties, $exception_steps: steps as unknown as JsonType }
+  }
+
+  /**
+   * Snapshot of the buffered steps (oldest first), or an empty array when disabled or empty.
+   */
+  getAttachableExceptionSteps(): CoreErrorTracking.ExceptionStep[] {
+    if (!this._exceptionStepsConfig.enabled) {
+      return []
+    }
+    try {
+      return this._exceptionStepsBuffer.getAttachable()
+    } catch (error) {
+      this.logger.error('Failed to read buffered exception steps.', error)
+      return []
+    }
+  }
+
+  /**
+   * Clears the buffer. Called on SDK close, not on capture or identity changes.
+   */
+  clearExceptionSteps(): void {
+    this._exceptionStepsBuffer.clear()
   }
 
   /**
