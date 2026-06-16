@@ -262,6 +262,45 @@ describe('survey-event-receiver', () => {
             hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
             expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
         })
+
+        // A fresh receiver reading the same persistence models a page reload: in-memory
+        // (armed, not yet shown) activations are gone, persisted (shown) ones remain.
+        it('does not let an armed-but-unshown survey survive a reload', () => {
+            const { receiver, hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            // armed in this session...
+            expect(receiver.getSurveys()).toContain('lifecycle-survey')
+            // ...but never written to persistence, so a reload does not re-display it
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
+
+        it('persists a non-repeatable survey only once shown, so it survives a reload', () => {
+            const { hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            expect(new SurveyEventReceiver(instance).getSurveys()).toContain('lifecycle-survey')
+
+            hook(SurveyEventName.DISMISSED, surveyEventPayload('lifecycle-survey', SurveyEventName.DISMISSED))
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
+
+        it.each([
+            [
+                'repeatedActivation',
+                { conditions: { events: { values: [{ name: 'trigger_event' }], repeatedActivation: true } } },
+            ],
+            ['always schedule', { schedule: SurveySchedule.Always }],
+        ])('never persists a repeatable survey (%s), so it cannot survive a reload', (_label, overrides) => {
+            const { hook } = setup(makeSurvey(overrides as unknown as Partial<Survey>))
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
     })
 
     describe('property filter based surveys', () => {
@@ -418,12 +457,14 @@ describe('survey-event-receiver', () => {
             registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium', amount: '200' }))
             expect(surveyEventReceiver.getSurveys()).toContain('multi-filter-test')
 
-            // Clear previous activation
-            surveyEventReceiver.getSurveys().length = 0
+            // A fresh receiver (e.g. after a reload) starts with no in-memory activations
+            const freshReceiver = new SurveyEventReceiver(instance)
+            freshReceiver.register([survey])
+            const freshHook = mockAddCaptureHook.mock.calls.at(-1)?.[0]
 
-            // Should not match when one condition fails
-            registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium', amount: '100' }))
-            expect(surveyEventReceiver.getSurveys()).not.toContain('multi-filter-test')
+            // Should not match when one condition fails (amount is_not 100 fails)
+            freshHook('purchase', createEventPayload('purchase', { product_type: 'premium', amount: '100' }))
+            expect(freshReceiver.getSurveys()).not.toContain('multi-filter-test')
         })
 
         it('does not activate survey when required property is missing', () => {
@@ -621,7 +662,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
             surveyEventReceiver
                 ._getActionMatcher()
-                .on('$autocapture', createCaptureResult('$autocapture', 'https://us.posthog.com'))
+                .on('$autocapture', createCaptureResult('$current_url_regexp', 'https://us.posthog.com'))
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         })
 
