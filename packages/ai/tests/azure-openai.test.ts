@@ -332,6 +332,40 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     }
   )
 
+  conditionalTest('responses stream captures an error generation when the stream fails (#3583)', async () => {
+    const streamError: any = new Error('Stream failed')
+    streamError.status = 503
+
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.stream = jest.fn().mockImplementation(() => ({
+      on: () => undefined,
+      finalResponse: () => Promise.reject(streamError),
+      [Symbol.asyncIterator]() {
+        return { next: () => Promise.reject(streamError) }
+      },
+    }))
+
+    client.responses.stream({
+      model: 'gpt-4',
+      input: 'Hello',
+      posthogTraceId: 'trace_azure_err',
+      posthogDistinctId: 'test-id',
+    } as any)
+
+    // Capture runs in a detached chain off finalResponse(); flush microtasks.
+    await flushPromises()
+    await flushPromises()
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+    expect(properties['$ai_provider']).toBe('azure')
+    expect(properties['$ai_trace_id']).toBe('trace_azure_err')
+    expect(properties['$ai_http_status']).toBe(503)
+    expect(properties['$ai_is_error']).toBe(true)
+    expect(properties['$ai_error']).toContain('503')
+  })
+
   conditionalTest('groups', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
