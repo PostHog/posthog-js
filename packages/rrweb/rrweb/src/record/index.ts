@@ -26,6 +26,8 @@ import {
   EventType,
   type eventWithoutTime,
   type eventWithTime,
+  FullscreenCustomEventTag,
+  type fullscreenEventPayload,
   IncrementalSource,
   type listenerHandler,
   type mutationCallbackParam,
@@ -679,9 +681,51 @@ function record<T = eventWithTime>(
       findAndRemoveIframeBuffer(iframeEl);
     });
 
+    // Native fullscreen produces no DOM mutation (the browser styles the element
+    // via the UA `:fullscreen` pseudo-class), so we record the transition as a
+    // custom event the replayer can act on. We track the last id because on exit
+    // `fullscreenElement` is already null.
+    let lastFullscreenId = -1;
+    const emitFullscreen = (payload: fullscreenEventPayload) =>
+      wrappedEmit({
+        type: EventType.Custom,
+        data: { tag: FullscreenCustomEventTag, payload },
+      });
+    const emitFullscreenChange = () => {
+      const doc = document as Document & {
+        webkitFullscreenElement?: Element | null;
+        mozFullScreenElement?: Element | null;
+        msFullscreenElement?: Element | null;
+      };
+      const fullscreenEl =
+        doc.fullscreenElement ??
+        doc.webkitFullscreenElement ??
+        doc.mozFullScreenElement ??
+        doc.msFullscreenElement ??
+        null;
+      // -1 covers both "no element is fullscreen" and "fullscreen element is
+      // blocked/ignored" (not in the mirror); both clear any prior fullscreen.
+      const id = fullscreenEl ? mirror.getId(fullscreenEl) : -1;
+      if (id === lastFullscreenId) return; // no change
+      // Exit the previous element first. The browser can switch fullscreen
+      // directly from one element to another without passing through null, so
+      // this also fires on a direct switch — not just on a plain exit.
+      if (lastFullscreenId !== -1) {
+        emitFullscreen({ id: lastFullscreenId, enter: false });
+      }
+      lastFullscreenId = id;
+      if (id !== -1) {
+        emitFullscreen({ id, enter: true });
+      }
+    };
+
     const init = () => {
       takeFullSnapshot();
       handlers.push(observe(document));
+      handlers.push(on('fullscreenchange', emitFullscreenChange));
+      handlers.push(on('webkitfullscreenchange', emitFullscreenChange));
+      handlers.push(on('mozfullscreenchange', emitFullscreenChange));
+      handlers.push(on('MSFullscreenChange', emitFullscreenChange));
       recording = true;
     };
     if (['interactive', 'complete'].includes(document.readyState)) {
