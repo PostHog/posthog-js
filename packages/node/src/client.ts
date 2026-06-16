@@ -728,12 +728,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The data containing distinctId and properties to set
    */
-  setPersonProperties({
-    distinctId,
-    properties = {},
-    propertiesOnce = {},
-    disableGeoip,
-  }: SetPersonPropertiesMessage): void {
+  setPersonProperties({ distinctId, properties = {}, propertiesOnce = {} }: SetPersonPropertiesMessage): void {
     if (Object.keys(properties).length === 0 && Object.keys(propertiesOnce).length === 0) {
       return
     }
@@ -742,7 +737,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       distinctId,
       event: '$set',
       properties: { $set: properties, $set_once: propertiesOnce },
-      disableGeoip,
     })
   }
 
@@ -761,13 +755,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @param data - The data containing distinctId and property names to unset
    */
-  unsetPersonProperties({ distinctId, properties, disableGeoip }: UnsetPersonPropertiesMessage): void {
+  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void {
     const propertyNames = normalizeUnsetPersonProperties(properties)
     if (propertyNames.length === 0) {
       return
     }
 
-    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames }, disableGeoip })
+    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames } })
   }
 
   /**

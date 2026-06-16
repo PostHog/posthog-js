@@ -1153,7 +1153,7 @@
               "description": "",
               "isOptional": false,
               "type": "SetPersonPropertiesMessage",
-              "name": "{ distinctId, properties, propertiesOnce, disableGeoip, }"
+              "name": "{ distinctId, properties, propertiesOnce }"
             }
           ],
           "returnType": {
@@ -1182,7 +1182,7 @@
               "description": "",
               "isOptional": false,
               "type": "UnsetPersonPropertiesMessage",
-              "name": "{ distinctId, properties, disableGeoip }"
+              "name": "{ distinctId, properties }"
             }
           ],
           "returnType": {
@@ -2515,7 +2515,7 @@
       "name": "SetPersonPropertiesMessage",
       "properties": [],
       "path": "src/types.ts",
-      "example": "{\n    distinctId: string;\n    properties?: Record<string | number, any>;\n    propertiesOnce?: Record<string | number, any>;\n    disableGeoip?: boolean;\n}"
+      "example": "{\n    distinctId: string;\n    properties?: Record<string | number, any>;\n    propertiesOnce?: Record<string | number, any>;\n}"
     },
     {
       "id": "SeverityLevel",
@@ -2981,7 +2981,7 @@
       "name": "UnsetPersonPropertiesMessage",
       "properties": [],
       "path": "src/types.ts",
-      "example": "{\n    distinctId: string;\n    properties: string | string[];\n    disableGeoip?: boolean;\n}"
+      "example": "{\n    distinctId: string;\n    properties: string | string[];\n}"
     }
   ],
   "categories": [

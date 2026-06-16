@@ -21,13 +21,11 @@ export type SetPersonPropertiesMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   propertiesOnce?: Record<string | number, any>
-  disableGeoip?: boolean
 }
 
 export type UnsetPersonPropertiesMessage = {
   distinctId: string
   properties: string | string[]
-  disableGeoip?: boolean
 }
 
 export type SendFeatureFlagsOptions = {
