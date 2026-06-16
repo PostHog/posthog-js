@@ -38,12 +38,14 @@ import type { playerConfig, missingNodeMap } from '../types';
 import {
   NodeType,
   EventType,
+  FullscreenCustomEventTag,
   IncrementalSource,
   MouseInteractions,
   ReplayerEvents,
 } from '@posthog/rrweb-types';
 import type {
   attributes,
+  fullscreenEventPayload,
   fullSnapshotEvent,
   eventWithTime,
   playerMetaData,
@@ -736,13 +738,52 @@ export class Replayer {
     }
   };
 
+  // We can't (and shouldn't) call requestFullscreen inside the sandboxed replay
+  // iframe, so we emulate it: a marker attribute drives the `[rr_fullscreen]`
+  // rule injected via getInjectStyleRules, pinning the element to fill the
+  // viewport (already resized to screen size via the recorded resize). The
+  // attribute survives `style`-attribute mutations replayed onto the same node,
+  // and a full-snapshot rebuild drops it for free.
+  private applyFullscreen(payload: unknown) {
+    const data = payload as Partial<fullscreenEventPayload> | null;
+    if (
+      !data ||
+      typeof data.id !== 'number' ||
+      typeof data.enter !== 'boolean'
+    ) {
+      return;
+    }
+    const node = this.mirror.getNode(data.id);
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+    const el = node as HTMLElement;
+    if (data.enter) {
+      el.setAttribute('rr_fullscreen', '');
+    } else {
+      el.removeAttribute('rr_fullscreen');
+    }
+  }
+
+  private clearFullscreen() {
+    this.iframe.contentDocument
+      ?.querySelectorAll('[rr_fullscreen]')
+      .forEach((el) => el.removeAttribute('rr_fullscreen'));
+  }
+
   private applyEventsSynchronously = (events: Array<eventWithTime>) => {
     for (const event of events) {
       switch (event.type) {
         case EventType.DomContentLoaded:
         case EventType.Load:
-        case EventType.Custom:
           continue;
+        case EventType.Custom:
+          // Fullscreen carries DOM state that must survive scrubbing; other
+          // custom events are side-effect-free signals and stay skipped.
+          if (event.data.tag !== FullscreenCustomEventTag) {
+            continue;
+          }
+          break;
         case EventType.FullSnapshot:
         case EventType.Meta:
         case EventType.Plugin:
@@ -768,8 +809,16 @@ export class Replayer {
            * emit custom-event and pass the event object.
            *
            * This will add more value to the custom event and allows the client to react for custom-event.
+           *
+           * Skip the external emit during sync catch-up to preserve existing
+           * behaviour; we still apply fullscreen state so scrubbing renders it.
            */
-          this.emitter.emit(ReplayerEvents.CustomEvent, event);
+          if (!isSync) {
+            this.emitter.emit(ReplayerEvents.CustomEvent, event);
+          }
+          if (event.data.tag === FullscreenCustomEventTag) {
+            this.applyFullscreen(event.data.payload);
+          }
         };
         break;
       case EventType.Meta:
@@ -781,6 +830,10 @@ export class Replayer {
         break;
       case EventType.FullSnapshot:
         castFn = () => {
+          // Fullscreen is applied imperatively, outside the snapshot/mutation
+          // model, so reset it whenever the base snapshot is (re)entered — e.g.
+          // scrubbing backward — otherwise the marker leaks past its region.
+          this.clearFullscreen();
           if (this.firstFullSnapshot) {
             if (this.firstFullSnapshot === event) {
               // we've already built this exact FullSnapshot when the player was mounted, and haven't built any other FullSnapshot since

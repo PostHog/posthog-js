@@ -100,6 +100,7 @@ import {
     isEmptyString,
     isFunction,
     isKnownUnsafeEditableEvent,
+    isKnownUnsafeEditableEventProperty,
     isNullish,
     isNumber,
     isString,
@@ -1083,10 +1084,12 @@ export class PostHog implements PostHogInterface {
         }
 
         options.transport = options.transport || this.config.api_transport
-        options.url = extendURLParams(options.url, {
-            // Whether to detect ip info or not
-            ip: this.config.ip ? 1 : 0,
-        })
+        if (!options.skipIPParam) {
+            options.url = extendURLParams(options.url, {
+                // Whether to detect ip info or not
+                ip: this.config.ip ? 1 : 0,
+            })
+        }
         options.headers = {
             ...this.config.request_headers,
             ...options.headers,
@@ -2602,6 +2605,57 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Removes properties from the person profile associated with the current `distinct_id`.
+     * Learn more about [identifying users](/docs/product-analytics/identify)
+     *
+     * {@label Identification}
+     *
+     * @remarks
+     * Deletes the given person properties from the person profile in PostHog. This is the
+     * counterpart to {@link setPersonProperties} — instead of hand-passing `$unset` inside a
+     * `capture()` call, you can remove properties with a dedicated method.
+     * If `person_profiles` is set to `never`, this call is ignored.
+     *
+     * @example
+     * ```js
+     * // remove a single property
+     * posthog.unsetPersonProperties('plan')
+     * ```
+     *
+     * @example
+     * ```js
+     * // remove multiple properties
+     * posthog.unsetPersonProperties(['plan', 'email'])
+     * ```
+     *
+     * @public
+     *
+     * @param {String|String[]} propertyNames The name (or names) of the person properties to remove.
+     */
+    unsetPersonProperties(propertyNames: string | string[]): void {
+        const names = (isArray(propertyNames) ? propertyNames : [propertyNames]).filter(
+            (name) => isString(name) && name.length > 0
+        )
+        if (names.length === 0) {
+            return
+        }
+
+        if (!this._requirePersonProcessing('posthog.unsetPersonProperties')) {
+            return
+        }
+
+        // Remove the properties from the locally-stored person properties used for flag evaluation
+        // so flags re-evaluate without the unset values, mirroring setPersonPropertiesForFlags.
+        this.featureFlags?.unsetPersonPropertiesForFlags(names, true)
+
+        this.capture('$set', { $unset: names })
+
+        // Invalidate the setPersonProperties dedupe cache so a subsequent set of an unset
+        // property is not skipped as a duplicate.
+        this._cachedPersonProperties = null
+    }
+
+    /**
      * Associates the user with a group for group-based analytics.
      * Learn more about [groups](/docs/product-analytics/group-analytics)
      *
@@ -4020,6 +4074,13 @@ export class PostHog implements PostHogInterface {
             return data
         }
 
+        // Some properties are required for the event to be ingested - e.g. `token`
+        // carries the project api_key, and ingest rejects any event that arrives
+        // without it (a 401). Snapshot which of these were present before the hooks
+        // run, so we can tell if a hook removed one (the names are captured here, so
+        // a hook that mutates `data.properties` in place can't hide the removal).
+        const requiredProperties = Object.keys(data.properties ?? {}).filter(isKnownUnsafeEditableEventProperty)
+
         const fns = isArray(this.config.before_send) ? this.config.before_send : [this.config.before_send]
         let beforeSendResult: CaptureResult | null = data
         for (const fn of fns) {
@@ -4037,6 +4098,19 @@ export class PostHog implements PostHogInterface {
                 logger.warn(
                     `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
                 )
+            }
+        }
+        // If a beforeSend hook removed a property the event needs to be ingested
+        // (e.g. a generic token/PII scrubber matching /token/i dropping `token`),
+        // ingest would silently reject every such event with a 401. Drop the event
+        // here and warn instead - we don't restore the property, since the removal
+        // may have been intentional.
+        for (const property of requiredProperties) {
+            if (beforeSendResult.properties && isNullish(beforeSendResult.properties[property])) {
+                logger.warn(
+                    `Event '${data.event}' had its '${property}' property removed in a beforeSend function. This property is required for ingestion, so the event will be dropped.`
+                )
+                return null
             }
         }
         return beforeSendResult

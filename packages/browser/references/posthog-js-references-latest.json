@@ -2163,6 +2163,40 @@
           "path": "lib/src/posthog-core.d.ts"
         },
         {
+          "category": "Identification",
+          "description": "Removes properties from the person profile associated with the current `distinct_id`. Learn more about [identifying users](/docs/product-analytics/identify)",
+          "details": "Deletes the given person properties from the person profile in PostHog. This is the counterpart to  — instead of hand-passing `$unset` inside a `capture()` call, you can remove properties with a dedicated method. If `person_profiles` is set to `never`, this call is ignored.",
+          "id": "unsetPersonProperties",
+          "showDocs": true,
+          "title": "unsetPersonProperties",
+          "examples": [
+            {
+              "id": "remove_a_single_property",
+              "name": "remove a single property",
+              "code": "\n\n// remove a single property\nposthog.unsetPersonProperties('plan')\n\n\n"
+            },
+            {
+              "id": "remove_multiple_properties",
+              "name": "remove multiple properties",
+              "code": "\n\n// remove multiple properties\nposthog.unsetPersonProperties(['plan', 'email'])\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The name (or names) of the person properties to remove.",
+              "isOptional": false,
+              "type": "string | string[]",
+              "name": "propertyNames"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Opt the user in or out of an early access feature. [Learn more in the docs](/docs/feature-flags/early-access-feature-management#option-2-custom-implementation)",
           "details": null,
@@ -3524,6 +3558,10 @@
         {
           "type": "boolean",
           "name": "noRetries"
+        },
+        {
+          "type": "boolean",
+          "name": "skipIPParam"
         },
         {
           "type": "number",

@@ -34,9 +34,12 @@ jobs:
           The following paths are auto-generated and are usually updated
           by tooling, not by hand:
 
-            * packages/*/references/**
+            * packages/*/references/*-references-latest.json
                 api-extractor output, updated by the "Generate References"
                 workflow (.github/workflows/generate-references.yml).
+
+            * packages/*/references/*-references-[0-9]*.json
+                versioned api-extractor output, updated by the release workflow.
 
             * packages/**/CHANGELOG.md
                 Changesets output, updated by the release bot's

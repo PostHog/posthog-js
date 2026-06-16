@@ -1251,6 +1251,41 @@
           "path": "dist/posthog-rn.d.ts"
         },
         {
+          "category": "Identification",
+          "description": "Removes properties from the person profile associated with the current `distinct_id`. Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)",
+          "details": null,
+          "id": "unsetPersonProperties",
+          "showDocs": true,
+          "title": "unsetPersonProperties",
+          "examples": [
+            {
+              "id": "unsetpersonproperties",
+              "name": "Generated example for unsetPersonProperties",
+              "code": "// Generated example for unsetPersonProperties\nposthog.unsetPersonProperties();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The name (or names) of the person properties to remove.",
+              "isOptional": false,
+              "type": "string | string[]",
+              "name": "propertyNames"
+            },
+            {
+              "description": "Whether to reload feature flags after removing the properties. Defaults to true.",
+              "isOptional": true,
+              "type": "boolean",
+              "name": "reloadFeatureFlags"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Replaces (or merges into) the stored feature flags and payloads with locally supplied values, exactly as if they had been returned by the flags endpoint: the values are persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and `onFeatureFlags` listeners fire. Makes no network request.\nIntended for apps that evaluate flags outside the SDK (e.g. server-side local evaluation) and push the results in at runtime, typically together with the `disableRemoteFeatureFlags` option so the SDK never fetches flags itself.",
           "details": "The values are cleared by `reset()`, so push them again after an identity change.",

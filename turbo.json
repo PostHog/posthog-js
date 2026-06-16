@@ -61,7 +61,8 @@
         },
         "generate-references": {
             "dependsOn": ["build"],
-            "cache": false
+            "cache": false,
+            "env": ["GENERATE_VERSIONED_REFERENCES"]
         }
     }
 }

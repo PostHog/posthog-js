@@ -35,7 +35,7 @@ import {
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject } from './utils'
+import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString } from './utils'
 import { EventHint } from './error-tracking'
 
 // Stores the parameters for a pending feature flags reload request
@@ -1508,6 +1508,70 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 
       this._cachedPersonProperties = hash
+    })
+  }
+
+  /**
+   * Removes properties from the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @remarks
+   * Deletes the given person properties from the person profile in PostHog. This is the
+   * counterpart to {@link setPersonProperties} — instead of hand-passing `$unset` inside a
+   * `capture()` call, you can remove properties with a dedicated method.
+   * If `personProfiles` is set to `never`, this call is ignored.
+   *
+   * @example
+   * ```js
+   * // remove a single property
+   * posthog.unsetPersonProperties('plan')
+   * ```
+   *
+   * @example
+   * ```js
+   * // remove multiple properties
+   * posthog.unsetPersonProperties(['plan', 'email'])
+   * ```
+   *
+   * @public
+   *
+   * @param propertyNames - The name (or names) of the person properties to remove.
+   * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   */
+  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
+    this.wrap(() => {
+      const names = (isArray(propertyNames) ? propertyNames : [propertyNames]).filter(
+        (name) => isString(name) && name.length > 0
+      )
+      if (names.length === 0) {
+        return
+      }
+
+      if (!this._requirePersonProcessing('posthog.unsetPersonProperties')) {
+        return
+      }
+
+      // Remove the properties from the locally-stored person properties used for flag evaluation
+      // so flags re-evaluate without the unset values, mirroring setPersonPropertiesForFlags.
+      const existingProperties =
+        this.getPersistedProperty<Record<string, JsonType>>(PostHogPersistedProperty.PersonProperties) || {}
+      const nextProperties = { ...existingProperties }
+      for (const name of names) {
+        delete nextProperties[name]
+      }
+      this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, nextProperties)
+
+      if (reloadFeatureFlags) {
+        this.reloadFeatureFlags()
+      }
+
+      this.capture('$set', { $unset: names })
+
+      // Invalidate the setPersonProperties dedupe cache so a subsequent set of an unset
+      // property is not skipped as a duplicate.
+      this._cachedPersonProperties = null
     })
   }
 
