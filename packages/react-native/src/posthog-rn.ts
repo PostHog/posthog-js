@@ -1772,6 +1772,21 @@ export class PostHog extends PostHogCore {
     super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags)
   }
 
+  /**
+   * Removes properties from the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @public
+   *
+   * @param propertyNames - The name (or names) of the person properties to remove.
+   * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   */
+  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
+    super.unsetPersonProperties(propertyNames, reloadFeatureFlags)
+  }
+
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
     if (this._disableSurveys === true) {
       this._logger.info('Loading surveys is disabled.')

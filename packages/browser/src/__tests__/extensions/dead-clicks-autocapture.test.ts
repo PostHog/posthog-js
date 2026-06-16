@@ -57,6 +57,16 @@ describe('DeadClicksAutocapture', () => {
         expect(mockLoader).toHaveBeenCalledWith(instance, 'dead-clicks-autocapture', expect.any(Function))
     })
 
+    it('should not call loadExternalDependency if script is already loaded', async () => {
+        const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
+        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as jest.Mock
+        mockLoader.mockClear()
+
+        instance.deadClicksAutocapture.startIfEnabledOrStop()
+
+        expect(mockLoader).not.toHaveBeenCalled()
+    })
+
     it('should call lazy loaded stop when stopping', async () => {
         const instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
