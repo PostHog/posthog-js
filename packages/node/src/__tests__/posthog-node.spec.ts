@@ -287,6 +287,30 @@ describe('PostHog Node.js', () => {
       ])
     })
 
+    it('should capture a $set event from setPersonProperties', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+      posthog.setPersonProperties({
+        distinctId: '123',
+        properties: { foo: 'bar' },
+        propertiesOnce: { first_seen: '2026-06-15' },
+      })
+      await waitForFlushTimer()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toMatchObject([
+        {
+          distinct_id: '123',
+          event: '$set',
+          properties: {
+            $set: { foo: 'bar' },
+            $set_once: { first_seen: '2026-06-15' },
+            $geoip_disable: true,
+          },
+        },
+      ])
+    })
+
     it.each([
       ['single property', 'plan', ['plan']],
       ['multiple properties', ['plan', 'email'], ['plan', 'email']],
@@ -312,33 +336,19 @@ describe('PostHog Node.js', () => {
       }
     )
 
-    it('should not capture an event when unsetPersonProperties is given no valid property names', async () => {
-      posthog.unsetPersonProperties({ distinctId: '123', properties: [] })
-      posthog.unsetPersonProperties({ distinctId: '123', properties: '' })
-      await waitForPromises()
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+    it.each([
+      ['empty array', []],
+      ['empty string', ''],
+      ['whitespace string', ' '],
+    ] as Array<[string, string | string[]]>)(
+      'should not capture an event when unsetPersonProperties is given %s',
+      async (_, properties) => {
+        posthog.unsetPersonProperties({ distinctId: '123', properties })
+        await waitForFlushTimer()
 
-      expect(mockedFetch).not.toHaveBeenCalled()
-    })
-
-    it('should await the network request when unsetPersonPropertiesImmediate is awaited', async () => {
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
-
-      await posthog.unsetPersonPropertiesImmediate({ distinctId: '123', properties: 'plan' })
-
-      const batchEvents = getLastBatchEvents()
-      expect(batchEvents).toMatchObject([
-        {
-          distinct_id: '123',
-          event: '$set',
-          properties: {
-            $unset: ['plan'],
-            $geoip_disable: true,
-          },
-        },
-      ])
-    })
+        expect(mockedFetch).not.toHaveBeenCalled()
+      }
+    )
 
     it('should allow overriding timestamp', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
