@@ -745,6 +745,112 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
   })
 
+  conditionalTest(
+    'responses stream is wrapped: captures the generation and strips posthog params (#3583)',
+    async () => {
+      // Regression for #3583: responses.stream() was not wrapped, so posthog_trace_id
+      // reached the API (400 Unknown parameter) and no generation was captured.
+      const mockResponsesResult = {
+        id: 'resp_stream_test',
+        _request_id: 'req_test-responses-stream',
+        model: 'gpt-4',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Hello from the Responses stream!' }],
+          },
+        ],
+        usage: { input_tokens: 12, output_tokens: 7, total_tokens: 19 },
+      } as any
+
+      const streamParams: any[] = []
+      const ResponsesMock: any = openaiModule.Responses || class MockResponses {}
+      ResponsesMock.prototype.stream = jest.fn().mockImplementation((params: any) => {
+        streamParams.push(params)
+        // Minimal stand-in for OpenAI's ResponseStream: emits a first-token event
+        // (for TTFT), finalResponse() resolves with the final Response, and the
+        // helper stays async-iterable for the caller.
+        return {
+          on: (event: string, cb: (e: any) => void) => {
+            if (event === 'event') {
+              cb({ type: 'response.output_text.delta', delta: 'Hello' })
+            }
+          },
+          finalResponse: () => Promise.resolve(mockResponsesResult),
+          async *[Symbol.asyncIterator]() {
+            yield { type: 'response.completed', response: mockResponsesResult } as any
+          },
+        }
+      })
+
+      const stream = client.responses.stream({
+        model: 'gpt-4',
+        input: 'Tell me about PostHog',
+        posthogTraceId: 'trace_stream_123',
+        posthogDistinctId: 'test-user',
+      } as any)
+
+      // The wrapper returns the underlying helper untouched.
+      expect(typeof (stream as any).finalResponse).toBe('function')
+
+      // Capture runs in a detached chain off finalResponse(); flush microtasks.
+      await flushPromises()
+      await flushPromises()
+
+      // 1) posthog params are stripped before the body reaches OpenAI (fixes the 400).
+      expect(streamParams).toHaveLength(1)
+      expect(streamParams[0]).not.toHaveProperty('posthogTraceId')
+      expect(streamParams[0]).not.toHaveProperty('posthog_trace_id')
+      expect(streamParams[0].model).toBe('gpt-4')
+
+      // 2) the generation is captured and associated with the requested trace.
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+      expect(properties['$ai_trace_id']).toBe('trace_stream_123')
+      expect(properties['$ai_completion_id']).toBe('resp_stream_test')
+      expect(properties['$ai_input_tokens']).toBe(12)
+      expect(properties['$ai_output_tokens']).toBe(7)
+      // 3) first-token timing is captured from the streamed events.
+      expect(typeof properties['$ai_time_to_first_token']).toBe('number')
+    }
+  )
+
+  conditionalTest('responses stream captures an error generation when the stream fails (#3583)', async () => {
+    const streamError: any = new Error('Stream failed')
+    streamError.status = 503
+
+    const ResponsesMock: any = openaiModule.Responses || class MockResponses {}
+    ResponsesMock.prototype.stream = jest.fn().mockImplementation(() => ({
+      on: () => undefined,
+      finalResponse: () => Promise.reject(streamError),
+      [Symbol.asyncIterator]() {
+        return { next: () => Promise.reject(streamError) }
+      },
+    }))
+
+    client.responses.stream({
+      model: 'gpt-4',
+      input: 'Tell me about PostHog',
+      posthogTraceId: 'trace_err',
+      posthogDistinctId: 'test-user',
+    } as any)
+
+    // Capture runs in a detached chain off finalResponse(); flush microtasks.
+    await flushPromises()
+    await flushPromises()
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+    expect(properties['$ai_trace_id']).toBe('trace_err')
+    expect(properties['$ai_http_status']).toBe(503)
+    expect(properties['$ai_is_error']).toBe(true)
+    expect(properties['$ai_error']).toContain('503')
+  })
+
   conditionalTest('responses parse with instructions parameter', async () => {
     const response = await client.responses.parse({
       model: 'gpt-4o-2024-08-06',

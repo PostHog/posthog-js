@@ -1,6 +1,7 @@
 import { PostHog } from 'posthog-node'
 import { PostHogAzureOpenAI } from '../src/openai/azure'
 import openaiModule from 'openai'
+import { flushPromises } from './test-utils'
 
 let mockAzureEmbeddingResponse: any = {}
 
@@ -260,6 +261,76 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(typeof properties['$ai_latency']).toBe('number')
     expect(properties['foo']).toBe('bar')
   })
+
+  conditionalTest(
+    'responses stream is wrapped: captures the generation and strips posthog params (#3583)',
+    async () => {
+      // Regression for #3583: responses.stream() was unwrapped on Azure too, so
+      // posthog_trace_id reached the API (400) and no generation was captured.
+      const mockAzureResponsesResult = {
+        id: 'resp_stream_test',
+        _request_id: 'req_test-responses-stream',
+        model: 'gpt-4',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Hello from the Azure Responses stream!' }],
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 10, total_tokens: 30 },
+      }
+
+      const streamParams: any[] = []
+      const ResponsesMock: any = openaiModule.Responses
+      ResponsesMock.prototype.stream = jest.fn().mockImplementation((params: any) => {
+        streamParams.push(params)
+        return {
+          on: (event: string, cb: (e: any) => void) => {
+            if (event === 'event') {
+              cb({ type: 'response.output_text.delta', delta: 'Hello' })
+            }
+          },
+          finalResponse: () => Promise.resolve(mockAzureResponsesResult),
+          async *[Symbol.asyncIterator]() {
+            yield { type: 'response.completed', response: mockAzureResponsesResult } as any
+          },
+        }
+      })
+
+      const stream = client.responses.stream({
+        model: 'gpt-4',
+        input: 'Hello',
+        posthogTraceId: 'trace_azure_stream',
+        posthogDistinctId: 'test-id',
+      } as any)
+
+      // The wrapper returns the underlying helper untouched.
+      expect(typeof (stream as any).finalResponse).toBe('function')
+
+      // Capture runs in a detached chain off finalResponse(); flush microtasks.
+      await flushPromises()
+      await flushPromises()
+
+      // posthog params are stripped before the body reaches Azure OpenAI.
+      expect(streamParams).toHaveLength(1)
+      expect(streamParams[0]).not.toHaveProperty('posthogTraceId')
+      expect(streamParams[0]).not.toHaveProperty('posthog_trace_id')
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { distinctId, event, properties } = captureArgs[0]
+      expect(distinctId).toBe('test-id')
+      expect(event).toBe('$ai_generation')
+      expect(properties['$ai_provider']).toBe('azure')
+      expect(properties['$ai_trace_id']).toBe('trace_azure_stream')
+      expect(properties['$ai_completion_id']).toBe('resp_stream_test')
+      expect(properties['$ai_input_tokens']).toBe(20)
+      expect(properties['$ai_output_tokens']).toBe(10)
+      expect(typeof properties['$ai_time_to_first_token']).toBe('number')
+    }
+  )
 
   conditionalTest('groups', async () => {
     const mockAzureChatResponse = {

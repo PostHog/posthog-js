@@ -11,6 +11,7 @@ import {
 import { captureAiGeneration } from '../captureAiGeneration'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
+import type { ResponseStream, ResponseStreamParams } from 'openai/lib/responses/ResponseStream'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
@@ -532,6 +533,93 @@ export class WrappedResponses extends AzureOpenAI.Responses {
 
       return wrappedPromise
     }
+  }
+
+  public stream<Params extends ResponseStreamParams, ParsedT = ExtractParsedContentFromParams<Params>>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): ResponseStream<ParsedT> {
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
+    const startTime = Date.now()
+
+    // Strip the posthog* params before the body reaches Azure OpenAI; otherwise
+    // they reach the API and cause `400 Unknown parameter` (see #3583).
+    const responseStream = super.stream<Params, ParsedT>(openAIParams, options)
+
+    // `responses.stream()` accepts either inline params or a stream-by-id
+    // payload; only the inline form carries model/input/instructions, so read
+    // them optionally and fall back to the resolved response.
+    const streamParams = openAIParams as Partial<ResponsesCreateParamsBase>
+
+    // Stamp the first streamed token without consuming the caller's stream:
+    // event listeners are additive and don't pull the async iterator. Uses the
+    // same first-token detection as the streaming `create` path.
+    let firstTokenTime: number | undefined
+    responseStream.on('event', (event) => {
+      if (firstTokenTime === undefined && isResponseTokenChunk(event)) {
+        firstTokenTime = Date.now()
+      }
+    })
+
+    // Observe completion without disturbing the caller's consumption: the
+    // ResponseStream is self-driving and finalResponse() resolves from the
+    // accumulated events independently of the user's async iteration.
+    responseStream
+      .finalResponse()
+      .then(
+        async (result) => {
+          const latency = (Date.now() - startTime) / 1000
+          const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
+          await captureAiGeneration(this.phClient, {
+            ...posthogParams,
+            model: streamParams.model ?? result.model,
+            provider: 'azure',
+            input: formatOpenAIResponsesInput(streamParams.input, streamParams.instructions),
+            output: result.output,
+            latency,
+            timeToFirstToken,
+            baseURL: this.baseURL,
+            modelParameters: getModelParams(streamParams as ResponsesCreateParamsBase & MonitoringParams),
+            httpStatus: 200,
+            usage: {
+              inputTokens: result.usage?.input_tokens ?? 0,
+              outputTokens: result.usage?.output_tokens ?? 0,
+              reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+              cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+            },
+            completionId: result.id,
+            providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+          })
+        },
+        async (error: unknown) => {
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error
+              ? ((error as { status?: number }).status ?? 500)
+              : 500
+
+          await captureAiGeneration(this.phClient, {
+            ...posthogParams,
+            model: streamParams.model,
+            provider: 'azure',
+            input: formatOpenAIResponsesInput(streamParams.input, streamParams.instructions),
+            output: [],
+            latency: 0,
+            baseURL: this.baseURL,
+            modelParameters: getModelParams(streamParams as ResponsesCreateParamsBase & MonitoringParams),
+            httpStatus,
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+            },
+            error,
+          })
+        }
+      )
+      // Swallow capture-side failures so instrumentation never surfaces an
+      // unhandled rejection or affects the caller's own stream handling.
+      .catch(() => undefined)
+
+    return responseStream
   }
 
   public parse<Params extends ResponseCreateParamsWithTools, ParsedT = ExtractParsedContentFromParams<Params>>(
