@@ -145,7 +145,7 @@ jobs:
           fi
 
       - name: Find existing compat comment
-        if: steps.process-results.outputs.has_failures == 'true'
+        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-comment
         with:
@@ -154,7 +154,7 @@ jobs:
           body-includes: '<!-- compat-test-results -->'
 
       - name: Create or update compat comment
-        if: steps.process-results.outputs.has_failures == 'true'
+        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
@@ -201,7 +201,7 @@ jobs:
             </details>
 
       - name: Delete compat comment if tests pass
-        if: steps.process-results.outputs.has_failures == 'false' && steps.is-affected.outputs.is-affected == 'true'
+        if: ${{ steps.process-results.outputs.has_failures == 'false' && steps.is-affected.outputs.is-affected == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-passing-comment
         with:
@@ -210,7 +210,7 @@ jobs:
           body-includes: '<!-- compat-test-results -->'
 
       - name: Remove outdated comment
-        if: steps.find-passing-comment.outputs.comment-id != ''
+        if: ${{ steps.find-passing-comment.outputs.comment-id != '' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           COMMENT_ID: ${{ steps.find-passing-comment.outputs.comment-id }}
@@ -350,5 +350,8 @@ jobs:
         uses: ./.github/actions/setup
         with:
           build: false
-      - name: Generate references
+      - name: Generate public API references
         run: pnpm generate-references
+
+      - name: Check public API references
+        run: pnpm check:public-api

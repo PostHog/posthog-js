@@ -1,7 +1,6 @@
 import {
   getFlagValuesFromFlags,
   getPayloadsFromFlags,
-  getFlagDetailsFromFlagsAndPayloads,
   getFeatureFlagValue,
   normalizeFlagsResponse,
 } from '@/featureFlagUtils'
@@ -159,76 +158,6 @@ describe('featureFlagUtils', () => {
       }
 
       expect(getPayloadsFromFlags(flags)).toEqual({})
-    })
-  })
-
-  describe('getFlagDetailsFromFlagsAndPayloads', () => {
-    it('should convert v1 flags and payloads to flag details', () => {
-      const flagsResponse: PostHogFlagsResponse = {
-        featureFlags: {
-          'flag-1': true,
-          'flag-2': 'variant-1',
-          'flag-3': false,
-        },
-        featureFlagPayloads: {
-          'flag-1': { key: 'value1' },
-          'flag-2': { key: 'value2' },
-        },
-        flags: {},
-        errorsWhileComputingFlags: false,
-      }
-
-      const result = getFlagDetailsFromFlagsAndPayloads(flagsResponse)
-
-      expect(result).toEqual({
-        'flag-1': {
-          key: 'flag-1',
-          enabled: true,
-          variant: undefined,
-          reason: undefined,
-          metadata: {
-            id: undefined,
-            version: undefined,
-            payload: '{"key":"value1"}',
-            description: undefined,
-          },
-        },
-        'flag-2': {
-          key: 'flag-2',
-          enabled: true,
-          variant: 'variant-1',
-          reason: undefined,
-          metadata: {
-            id: undefined,
-            version: undefined,
-            payload: '{"key":"value2"}',
-            description: undefined,
-          },
-        },
-        'flag-3': {
-          key: 'flag-3',
-          enabled: false,
-          variant: undefined,
-          reason: undefined,
-          metadata: {
-            id: undefined,
-            version: undefined,
-            payload: undefined,
-            description: undefined,
-          },
-        },
-      })
-    })
-
-    it('should handle empty flags and payloads', () => {
-      const flagsResponse: PostHogFlagsResponse = {
-        featureFlags: {},
-        featureFlagPayloads: {},
-        flags: {},
-        errorsWhileComputingFlags: false,
-      }
-
-      expect(getFlagDetailsFromFlagsAndPayloads(flagsResponse)).toEqual({})
     })
   })
 

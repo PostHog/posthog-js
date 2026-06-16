@@ -203,4 +203,49 @@ describe('native error tracking', () => {
 
     await posthog.shutdown()
   })
+
+  it('pauses and resumes recording across linked-flag changes without re-running setup() when error tracking is on', async () => {
+    // Controllable /flags response: the linked flag starts true, flips later.
+    let recFlagValue = true
+    ;(globalThis as any).window.fetch = jest.fn(async (url: unknown) => {
+      const res = String(url).includes('flags')
+        ? {
+            featureFlags: { 'rec-flag': recFlagValue },
+            sessionRecording: { linkedFlag: 'rec-flag', endpoint: '/s/' },
+          }
+        : { status: 'ok' }
+      return { status: 200, json: () => Promise.resolve(res) }
+    })
+
+    const { PostHog } = await import('../src/posthog-rn')
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      enableSessionReplay: true,
+      errorTracking: { autocapture: { nativeCrashes: true } },
+    })
+
+    await posthog.ready()
+
+    // Linked flag is on: replay + error tracking arm in a single setup().
+    await waitForExpect(2000, () => {
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    })
+    expect(mockPlugin.setup.mock.calls[0][2].errorTracking.nativeAutocapture).toBe(true)
+
+    // Linked flag turns off -> recording pauses; error tracking keeps the native
+    // instance, so setup() must not run again.
+    recFlagValue = false
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(mockPlugin.stopRecording).toHaveBeenCalledTimes(1))
+    expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+
+    // Linked flag flips back on -> recording resumes on the existing instance.
+    recFlagValue = true
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(mockPlugin.startRecording).toHaveBeenCalledTimes(1))
+    expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+
+    await posthog.shutdown()
+  })
 })

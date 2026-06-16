@@ -1,5 +1,6 @@
 {
     "name": "@posthog-tooling/changelog",
+    "private": true,
     "main": "./dist/index.js",
     "type": "module",
     "scripts": {

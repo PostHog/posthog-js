@@ -125,6 +125,9 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
   if (event.toolDescription && event.eventType === MCPAnalyticsEventType.mcpToolsCall) {
     properties[PostHogMCPAnalyticsProperty.ToolDescription] = event.toolDescription
   }
+  if (event.toolCategory && event.eventType === MCPAnalyticsEventType.mcpToolsCall) {
+    properties[PostHogMCPAnalyticsProperty.ToolCategory] = event.toolCategory
+  }
   if (
     event.listedToolNames &&
     event.listedToolNames.length > 0 &&
@@ -202,6 +205,9 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   }
   if (event.toolDescription && event.eventType === MCPAnalyticsEventType.mcpToolsCall) {
     properties[PostHogMCPAnalyticsProperty.ToolDescription] = event.toolDescription
+  }
+  if (event.toolCategory && event.eventType === MCPAnalyticsEventType.mcpToolsCall) {
+    properties[PostHogMCPAnalyticsProperty.ToolCategory] = event.toolCategory
   }
   if (event.serverName) {
     properties[PostHogMCPAnalyticsProperty.ServerName] = event.serverName
