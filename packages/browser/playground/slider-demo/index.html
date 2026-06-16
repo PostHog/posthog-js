@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Slider survey question — local preview</title>
+        <style>
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+                margin: 0;
+                padding: 32px;
+                background: #f7f7f9;
+                color: #1f1f1f;
+            }
+            h1 {
+                margin: 0 0 8px;
+                font-size: 20px;
+            }
+            p {
+                margin: 0 0 16px;
+                color: #555;
+            }
+            .controls {
+                background: #fff;
+                border: 1px solid #e3e3e3;
+                border-radius: 8px;
+                padding: 16px;
+                max-width: 520px;
+                margin-bottom: 24px;
+            }
+            .row {
+                display: grid;
+                grid-template-columns: 140px 1fr;
+                gap: 12px;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+            .row:last-child {
+                margin-bottom: 0;
+            }
+            input,
+            textarea {
+                font: inherit;
+                padding: 6px 8px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            #survey-host {
+                position: relative;
+                min-height: 320px;
+                background: #fff;
+                border: 1px dashed #ccc;
+                border-radius: 8px;
+                padding: 24px;
+            }
+            #result {
+                margin-top: 12px;
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                font-size: 13px;
+                color: #2b6e2b;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Slider survey question — local preview</h1>
+        <p>Edit the controls, the slider re-renders. Submitting prints the response below.</p>
+
+        <div class="controls">
+            <div class="row">
+                <label for="question">Question</label>
+                <input id="question" value="How likely are you to recommend us?" />
+            </div>
+            <div class="row">
+                <label for="description">Description</label>
+                <input id="description" value="Drag the slider, or use the arrow keys." />
+            </div>
+            <div class="row">
+                <label for="min">min</label>
+                <input id="min" type="number" value="0" />
+            </div>
+            <div class="row">
+                <label for="max">max</label>
+                <input id="max" type="number" value="10" />
+            </div>
+            <div class="row">
+                <label for="step">step</label>
+                <input id="step" type="number" value="1" />
+            </div>
+            <div class="row">
+                <label for="prefix">prefix</label>
+                <input id="prefix" value="" />
+            </div>
+            <div class="row">
+                <label for="suffix">suffix</label>
+                <input id="suffix" value="/10" />
+            </div>
+            <div class="row">
+                <label for="lower">lower label</label>
+                <input id="lower" value="Not likely" />
+            </div>
+            <div class="row">
+                <label for="upper">upper label</label>
+                <input id="upper" value="Very likely" />
+            </div>
+        </div>
+
+        <div id="survey-host"></div>
+        <div id="result"></div>
+
+        <script type="module">
+            import { renderSurveysPreview } from '/dist/surveys-preview.js'
+
+            const host = document.getElementById('survey-host')
+            const result = document.getElementById('result')
+
+            const fields = ['question', 'description', 'min', 'max', 'step', 'prefix', 'suffix', 'lower', 'upper']
+
+            const buildSurvey = () => {
+                const get = (id) => document.getElementById(id).value
+                return {
+                    id: 'local-slider-demo',
+                    name: 'Slider demo',
+                    type: 'popover',
+                    questions: [
+                        {
+                            type: 'slider',
+                            id: 'slider_demo_1',
+                            question: get('question'),
+                            description: get('description'),
+                            min: Number(get('min')),
+                            max: Number(get('max')),
+                            step: Number(get('step')),
+                            prefix: get('prefix'),
+                            suffix: get('suffix'),
+                            lowerBoundLabel: get('lower'),
+                            upperBoundLabel: get('upper'),
+                        },
+                    ],
+                    appearance: {
+                        displayThankYouMessage: true,
+                        thankYouMessageHeader: 'Thanks!',
+                        thankYouMessageBody: 'We appreciate your feedback.',
+                    },
+                }
+            }
+
+            const rerender = () => {
+                renderSurveysPreview({
+                    survey: buildSurvey(),
+                    parentElement: host,
+                    previewPageIndex: 0,
+                    positionStyles: { position: 'relative', inset: 'auto', transform: 'none' },
+                    onPreviewSubmit: (response) => {
+                        result.textContent = 'Submitted response: ' + JSON.stringify(response)
+                    },
+                })
+            }
+
+            fields.forEach((id) => document.getElementById(id).addEventListener('input', rerender))
+            rerender()
+        </script>
+    </body>
+</html>
