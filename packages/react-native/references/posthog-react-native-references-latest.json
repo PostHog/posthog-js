@@ -2036,13 +2036,6 @@
       "example": "(event: CaptureEvent | null) => CaptureEvent | null"
     },
     {
-      "id": "BeforeSendLogFn",
-      "name": "BeforeSendLogFn",
-      "properties": [],
-      "path": "../core/src/logs/types.ts",
-      "example": "(record: CaptureLogOptions) => CaptureLogOptions | null"
-    },
-    {
       "id": "CaptureEvent",
       "name": "CaptureEvent",
       "properties": [],
@@ -2694,7 +2687,7 @@
           "name": "maxBatchRecordsPerPost"
         },
         {
-          "description": "Max records held in memory before the queue evicts the oldest on push (FIFO). Bounds memory footprint and on-disk-queue size. When the buffer hits this size, an immediate flush is triggered to reclaim space; if the flush hasn't completed before the next capture, the oldest record is shifted out. Default: 100.",
+          "description": "Number of buffered records that triggers an immediate flush. Records also flush on the periodic interval and on `shutdown()`. The queue can grow past this while an async flush is in flight (e.g. during a synchronous burst); a separate, larger memory backstop evicts the oldest only once the queue exceeds the per-interval rate cap. Default: 100.",
           "type": "number",
           "name": "maxBufferSize"
         },
@@ -2709,7 +2702,7 @@
           "name": "resourceAttributes"
         },
         {
-          "description": "Service name attached to every record as the OTLP `service.name` resource attribute. Used by the Logs UI for filtering / grouping. Default: `'unknown_service'`.",
+          "description": "Service name attached to every record as the OTLP `service.name` resource attribute. Used by the Logs UI for filtering / grouping. Defaults to `'unknown_service'` when unset.",
           "type": "string",
           "name": "serviceName"
         },
