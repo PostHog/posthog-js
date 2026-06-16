@@ -17,6 +17,18 @@ try {
 if (status) {
     console.error('Public API references are out of date. Run `pnpm generate-references` and commit the updated files.')
     console.error(status)
+
+    try {
+        const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-color', '--', ...referencePaths], {
+            encoding: 'utf8',
+        }).trim()
+        if (diff) {
+            console.error(`\nPublic API reference diff:\n${diff}`)
+        }
+    } catch (error) {
+        console.error('Failed to print public API reference diff:', error.message)
+    }
+
     process.exit(1)
 }
 

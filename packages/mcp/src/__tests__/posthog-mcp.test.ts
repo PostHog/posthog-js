@@ -71,6 +71,27 @@ describe('PostHogMCP', () => {
       expect(p.$process_person_profile).toBeUndefined()
     })
 
+    it('maps category to $mcp_tool_category', async () => {
+      posthog.captureToolCall({
+        toolName: 'query-logs',
+        category: 'Logs',
+        distinctId: 'user-123',
+        isError: false,
+      })
+      await tick()
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties[PostHogMCPAnalyticsProperty.ToolCategory]).toBe(
+        'Logs'
+      )
+    })
+
+    it('omits $mcp_tool_category when no category is provided', async () => {
+      posthog.captureToolCall({ toolName: 'query-logs', distinctId: 'user-123', isError: false })
+      await tick()
+      expect(
+        onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties[PostHogMCPAnalyticsProperty.ToolCategory]
+      ).toBeUndefined()
+    })
+
     it('captures parameters and response (sanitized + truncated by the pipeline)', async () => {
       posthog.captureToolCall({
         toolName: 'execute-sql',

@@ -40,6 +40,7 @@ type RequestOptions = Record<string, any>
 export class PostHogAzureOpenAI extends AzureOpenAI {
   private readonly phClient: PostHog
   public chat: WrappedChat
+  public responses: WrappedResponses
   public embeddings: WrappedEmbeddings
 
   constructor(config: MonitoringOpenAIConfig) {
@@ -47,6 +48,7 @@ export class PostHogAzureOpenAI extends AzureOpenAI {
     super(openAIConfig)
     this.phClient = posthog
     this.chat = new WrappedChat(this, this.phClient)
+    this.responses = new WrappedResponses(this, this.phClient)
     this.embeddings = new WrappedEmbeddings(this, this.phClient)
   }
 }

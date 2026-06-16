@@ -212,6 +212,55 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
   })
 
+  conditionalTest('responses create is wrapped and captures a generation', async () => {
+    // Regression test for #2946: PostHogAzureOpenAI must wrap `responses` so that
+    // responses.create(...) is tracked, like the non-Azure PostHogOpenAI client.
+    const mockAzureResponsesResult = {
+      id: 'resp_test-response-id',
+      _request_id: 'req_test-responses-create',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello from Azure Responses!' }],
+        },
+      ],
+      usage: {
+        input_tokens: 20,
+        output_tokens: 10,
+        total_tokens: 30,
+      },
+    }
+
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.create = jest.fn().mockResolvedValue(mockAzureResponsesResult)
+
+    await client.responses.create({
+      model: 'gpt-4',
+      input: 'Hello',
+      posthogDistinctId: 'test-id',
+      posthogProperties: { foo: 'bar' },
+    } as any)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, event, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('test-id')
+    expect(event).toBe('$ai_generation')
+    expect(properties['$ai_provider']).toBe('azure')
+    expect(properties['$ai_model']).toBe('gpt-4')
+    expect(properties['$ai_completion_id']).toBe('resp_test-response-id')
+    expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello' }])
+    expect(properties['$ai_output_choices']).toEqual(mockAzureResponsesResult.output)
+    expect(properties['$ai_input_tokens']).toBe(20)
+    expect(properties['$ai_output_tokens']).toBe(10)
+    expect(properties['$ai_http_status']).toBe(200)
+    expect(typeof properties['$ai_latency']).toBe('number')
+    expect(properties['foo']).toBe('bar')
+  })
+
   conditionalTest('groups', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
