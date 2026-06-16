@@ -1351,7 +1351,7 @@ export class PostHog implements PostHogInterface {
         }
         const unsetProperties = options?.$unset
         if (unsetProperties) {
-            data.$unset = options?.$unset
+            data.$unset = unsetProperties
         }
         // $groupidentify doesn't process person $set_once on the server, so don't mark
         // initial person props as sent. This ensures they're included with subsequent
