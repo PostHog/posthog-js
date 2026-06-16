@@ -759,50 +759,38 @@ describe('posthog-logs', () => {
         describe('beforeSend', () => {
             const bodyOf = (l: PostHogLogs, i = 0) => (l as any)._queue[i]?.record.body.stringValue
 
-            it('mutates the record returned by a single function', () => {
-                ;(mockPostHog.config as any).logs = {
-                    beforeSend: (record: any) => ({ ...record, body: 'redacted' }),
-                }
-                logs = new PostHogLogs(mockPostHog)
-
-                logs.captureLog({ body: 'secret token=abc' })
-
-                expect((logs as any)._queue).toHaveLength(1)
-                expect(bodyOf(logs)).toBe('redacted')
-            })
-
-            it('drops the record when the function returns null', () => {
-                ;(mockPostHog.config as any).logs = {
-                    beforeSend: () => null,
-                }
-                logs = new PostHogLogs(mockPostHog)
-
-                logs.captureLog({ body: 'should be dropped' })
-
-                expect((logs as any)._queue).toHaveLength(0)
-            })
-
-            it('applies a chain left-to-right', () => {
-                ;(mockPostHog.config as any).logs = {
-                    beforeSend: [
+            it.each([
+                ['single function', (record: any) => ({ ...record, body: 'redacted' }), 'secret token=abc', 'redacted'],
+                [
+                    'left-to-right chain',
+                    [
                         (record: any) => ({ ...record, body: record.body + '1' }),
                         (record: any) => ({ ...record, body: record.body + '2' }),
                     ],
+                    'x',
+                    'x12',
+                ],
+            ] as Array<[string, any, string, string]>)(
+                'transforms the record via a %s',
+                (_label, beforeSend, input, expected) => {
+                    ;(mockPostHog.config as any).logs = { beforeSend }
+                    logs = new PostHogLogs(mockPostHog)
+
+                    logs.captureLog({ body: input })
+
+                    expect((logs as any)._queue).toHaveLength(1)
+                    expect(bodyOf(logs)).toBe(expected)
                 }
+            )
+
+            it.each([
+                ['single function returning null', () => null],
+                ['chain with a null-returning link', [(record: any) => record, () => null, (record: any) => record]],
+            ] as Array<[string, any]>)('drops the record when beforeSend is a %s', (_label, beforeSend) => {
+                ;(mockPostHog.config as any).logs = { beforeSend }
                 logs = new PostHogLogs(mockPostHog)
 
-                logs.captureLog({ body: 'x' })
-
-                expect(bodyOf(logs)).toBe('x12')
-            })
-
-            it('drops when any link in the chain returns null', () => {
-                ;(mockPostHog.config as any).logs = {
-                    beforeSend: [(record: any) => record, () => null, (record: any) => record],
-                }
-                logs = new PostHogLogs(mockPostHog)
-
-                logs.captureLog({ body: 'x' })
+                logs.captureLog({ body: 'should be dropped' })
 
                 expect((logs as any)._queue).toHaveLength(0)
             })
