@@ -244,6 +244,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "maxLogsPerInterval": [
         "undefined",
         "number"
+      ],
+      "beforeSend": [
+        "undefined",
+        "BeforeSendLogFn",
+        "BeforeSendLogFn[]"
       ]
     }
   ],
