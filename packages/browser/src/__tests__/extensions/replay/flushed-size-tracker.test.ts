@@ -62,6 +62,8 @@ describe('FlushedSizeTracker', () => {
         })
     })
 
+    const SESSION_ID = 'session-a'
+
     describe('trackSize', () => {
         describe.each([
             [[100, 200, 300], 600],
@@ -71,32 +73,36 @@ describe('FlushedSizeTracker', () => {
             [[0, 0, 100], 100],
         ])('tracking multiple sizes %p', (sizes, expectedTotal) => {
             it(`accumulates to ${expectedTotal}`, () => {
-                sizes.forEach((size) => tracker.trackSize(size))
-                expect(tracker.currentTrackedSize).toEqual(expectedTotal)
+                sizes.forEach((size) => tracker.trackSize(SESSION_ID, size))
+                expect(tracker.currentTrackedSize(SESSION_ID)).toEqual(expectedTotal)
             })
         })
     })
 
-    describe('reset', () => {
-        it('sets property to 0', () => {
-            tracker.reset()
-
-            expect(tracker.currentTrackedSize).toEqual(0)
+    describe('session scoping', () => {
+        it('returns 0 for a session that has never been tracked', () => {
+            expect(tracker.currentTrackedSize('never-seen')).toEqual(0)
         })
 
-        describe.each([
-            [0, 'already zero'],
-            [100, 'has tracked data'],
-            [999999, 'has large tracked data'],
-            [-50, 'has negative value'],
-        ])('when current value is %i (%s)', (currentValue) => {
-            it('sets property to 0 regardless of current value', () => {
-                tracker.trackSize(currentValue)
-                expect(tracker.currentTrackedSize).toEqual(currentValue)
+        it('does not leak the tracked size into another session', () => {
+            tracker.trackSize('session-a', 100)
 
-                tracker.reset()
-                expect(tracker.currentTrackedSize).toEqual(0)
-            })
+            expect(tracker.currentTrackedSize('session-b')).toEqual(0)
+        })
+
+        it('starts a new session from zero, discarding the previous session total', () => {
+            tracker.trackSize('session-a', 100)
+            tracker.trackSize('session-b', 30)
+
+            // storage only ever holds the current session's total
+            expect(tracker.currentTrackedSize('session-a')).toEqual(0)
+            expect(tracker.currentTrackedSize('session-b')).toEqual(30)
+        })
+
+        it('treats a legacy bare-number persisted value as zero', () => {
+            persistence.set_property('$sess_rec_flush_size', 999999)
+
+            expect(tracker.currentTrackedSize(SESSION_ID)).toEqual(0)
         })
     })
 })

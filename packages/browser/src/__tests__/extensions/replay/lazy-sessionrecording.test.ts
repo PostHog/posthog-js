@@ -4108,7 +4108,7 @@ describe('Lazy SessionRecording', () => {
 
             // verify data was tracked
             const flushedSize =
-                sessionRecording['_lazyLoadedSessionRecording']['_flushedSizeTracker'].currentTrackedSize
+                sessionRecording['_lazyLoadedSessionRecording']['_flushedSizeTracker'].currentTrackedSize(sessionId)
             expect(flushedSize).toBeGreaterThan(0)
 
             // clear the mock to only track calls from session change
@@ -4140,8 +4140,10 @@ describe('Lazy SessionRecording', () => {
                 flushed_size: flushedSize,
             })
 
-            // after session change, flushed size should be reset to 0
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushedSizeTracker'].currentTrackedSize).toBe(0)
+            // the new session starts from zero without leaking the previous session's total
+            expect(
+                sessionRecording['_lazyLoadedSessionRecording']['_flushedSizeTracker'].currentTrackedSize(newSessionId)
+            ).toBe(0)
         })
 
         it('does NOT emit linking events when only noSessionId is true (like after reset)', () => {
