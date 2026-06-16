@@ -111,6 +111,7 @@ function buildTrackingData(
     sessionId: newSessionId(),
     lastActivity: new Date(),
     identifiedSessions: new IdentityCache(),
+    toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
     options: { ...DEFAULT_OPTIONS, ...options },

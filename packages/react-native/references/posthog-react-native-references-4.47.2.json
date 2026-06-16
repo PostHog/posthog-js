@@ -1251,41 +1251,6 @@
           "path": "dist/posthog-rn.d.ts"
         },
         {
-          "category": "Identification",
-          "description": "Removes properties from the person profile associated with the current `distinct_id`. Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)",
-          "details": null,
-          "id": "unsetPersonProperties",
-          "showDocs": true,
-          "title": "unsetPersonProperties",
-          "examples": [
-            {
-              "id": "unsetpersonproperties",
-              "name": "Generated example for unsetPersonProperties",
-              "code": "// Generated example for unsetPersonProperties\nposthog.unsetPersonProperties();"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [
-            {
-              "description": "The name (or names) of the person properties to remove.",
-              "isOptional": false,
-              "type": "string | string[]",
-              "name": "propertyNames"
-            },
-            {
-              "description": "Whether to reload feature flags after removing the properties. Defaults to true.",
-              "isOptional": true,
-              "type": "boolean",
-              "name": "reloadFeatureFlags"
-            }
-          ],
-          "returnType": {
-            "id": "void",
-            "name": "void"
-          },
-          "path": "dist/posthog-rn.d.ts"
-        },
-        {
           "category": "",
           "details": null,
           "id": "autocapture",

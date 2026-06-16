@@ -65,6 +65,7 @@ export class DeadClicksAutocapture implements Extension {
         if (assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture) {
             // already loaded
             cb()
+            return
         }
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
             this.instance,

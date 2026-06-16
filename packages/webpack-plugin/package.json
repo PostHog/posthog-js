@@ -1,10 +1,11 @@
 {
     "name": "@posthog/webpack-plugin",
-    "version": "1.5.23",
+    "version": "1.5.24",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
     "description": "Webpack plugin for Posthog 🦔",
+    "license": "MIT",
     "repository": {
         "type": "git",
         "url": "https://github.com/PostHog/posthog-js.git",

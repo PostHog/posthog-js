@@ -18,7 +18,9 @@
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
         "bump": "pnpm changeset version",
-        "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references"
+        "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
+        "generate-references:versioned": "GENERATE_VERSIONED_REFERENCES=1 pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
+        "check:public-api": "node scripts/check-public-api.js"
     },
     "pnpm": {
         "overrides": {

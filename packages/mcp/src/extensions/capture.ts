@@ -53,6 +53,7 @@ export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promi
     identifyActorData: sessionInfo.identifyActorData,
     groups: sessionInfo.identifyActorGroups,
     resourceName: eventInput.resourceName,
+    toolCategory: eventInput.toolCategory,
     toolDescription: eventInput.toolDescription,
     listedToolNames: eventInput.listedToolNames,
     parameters: eventInput.parameters,
