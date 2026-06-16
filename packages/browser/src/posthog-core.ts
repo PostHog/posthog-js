@@ -2604,6 +2604,57 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Removes properties from the person profile associated with the current `distinct_id`.
+     * Learn more about [identifying users](/docs/product-analytics/identify)
+     *
+     * {@label Identification}
+     *
+     * @remarks
+     * Deletes the given person properties from the person profile in PostHog. This is the
+     * counterpart to {@link setPersonProperties} — instead of hand-passing `$unset` inside a
+     * `capture()` call, you can remove properties with a dedicated method.
+     * If `person_profiles` is set to `never`, this call is ignored.
+     *
+     * @example
+     * ```js
+     * // remove a single property
+     * posthog.unsetPersonProperties('plan')
+     * ```
+     *
+     * @example
+     * ```js
+     * // remove multiple properties
+     * posthog.unsetPersonProperties(['plan', 'email'])
+     * ```
+     *
+     * @public
+     *
+     * @param {String|String[]} propertyNames The name (or names) of the person properties to remove.
+     */
+    unsetPersonProperties(propertyNames: string | string[]): void {
+        const names = (isArray(propertyNames) ? propertyNames : [propertyNames]).filter(
+            (name) => isString(name) && name.length > 0
+        )
+        if (names.length === 0) {
+            return
+        }
+
+        if (!this._requirePersonProcessing('posthog.unsetPersonProperties')) {
+            return
+        }
+
+        // Remove the properties from the locally-stored person properties used for flag evaluation
+        // so flags re-evaluate without the unset values, mirroring setPersonPropertiesForFlags.
+        this.featureFlags?.unsetPersonPropertiesForFlags(names, true)
+
+        this.capture('$set', { $unset: names })
+
+        // Invalidate the setPersonProperties dedupe cache so a subsequent set of an unset
+        // property is not skipped as a duplicate.
+        this._cachedPersonProperties = null
+    }
+
+    /**
      * Associates the user with a group for group-based analytics.
      * Learn more about [groups](/docs/product-analytics/group-analytics)
      *

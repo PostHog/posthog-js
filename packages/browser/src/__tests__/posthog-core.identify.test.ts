@@ -34,6 +34,7 @@ describe('identify()', () => {
             featureFlags: {
                 setAnonymousDistinctId: jest.fn(),
                 setPersonPropertiesForFlags: jest.fn(),
+                unsetPersonPropertiesForFlags: jest.fn(),
                 reloadFeatureFlags: jest.fn(),
             },
             unregister: jest.fn(),
@@ -357,6 +358,64 @@ describe('identify()', () => {
                 })
             )
             expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('unsetPersonProperties', () => {
+        beforeEach(() => {
+            instance.persistence!.props['distinct_id'] = 'a-new-id'
+        })
+
+        it.each([
+            ['single property', 'plan', ['plan']],
+            ['multiple properties', ['plan', 'email'], ['plan', 'email']],
+        ] as Array<[string, string | string[], string[]]>)(
+            'captures a $set event with a $unset array for %s',
+            (_, propertyNames, expectedUnset) => {
+                instance.unsetPersonProperties(propertyNames)
+
+                expect(beforeSendMock).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        event: '$set',
+                        properties: expect.objectContaining({
+                            $unset: expectedUnset,
+                        }),
+                    })
+                )
+            }
+        )
+
+        it('removes the properties from the flag person properties and reloads flags', () => {
+            instance.unsetPersonProperties(['plan', 'email'])
+
+            expect(instance.featureFlags.unsetPersonPropertiesForFlags).toHaveBeenCalledWith(['plan', 'email'], true)
+        })
+
+        it('does not capture an event when given no valid property names', () => {
+            beforeSendMock.mockClear()
+            instance.unsetPersonProperties([])
+            instance.unsetPersonProperties('')
+
+            expect(beforeSendMock).not.toHaveBeenCalled()
+        })
+
+        it('lets a previously-set property be re-sent after being unset', () => {
+            beforeSendMock.mockClear()
+
+            instance.setPersonProperties({ plan: 'free' })
+            instance.unsetPersonProperties('plan')
+            instance.setPersonProperties({ plan: 'free' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(3)
+            expect(beforeSendMock).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    event: '$set',
+                    properties: expect.objectContaining({
+                        $set: { plan: 'free' },
+                        $set_once: {},
+                    }),
+                })
+            )
         })
     })
 })
