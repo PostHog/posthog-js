@@ -1,3 +1,4 @@
+import { isObject } from '@posthog/core'
 import { PostHog } from '../../../posthog-core'
 
 const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
@@ -7,8 +8,12 @@ interface FlushedSize {
     size: number
 }
 
+function isFlushedSize(value: unknown): value is FlushedSize {
+    return isObject(value) && 'sessionId' in value && 'size' in value
+}
+
 export class FlushedSizeTracker {
-    private readonly _getProperty: (property_name: string) => any
+    private readonly _getProperty: (property_name: string) => unknown
     private readonly _setProperty: (prop: string, to: any) => void
 
     constructor(posthog: PostHog) {
@@ -28,7 +33,7 @@ export class FlushedSizeTracker {
     }
 
     currentTrackedSize(sessionId: string): number {
-        const stored = this._getProperty(SESSION_RECORDING_FLUSHED_SIZE) as FlushedSize | undefined
-        return stored?.sessionId === sessionId ? stored.size : 0
+        const stored = this._getProperty(SESSION_RECORDING_FLUSHED_SIZE)
+        return isFlushedSize(stored) && stored.sessionId === sessionId ? stored.size : 0
     }
 }

@@ -94,7 +94,6 @@ describe('FlushedSizeTracker', () => {
             tracker.trackSize('session-a', 100)
             tracker.trackSize('session-b', 30)
 
-            // storage only ever holds the current session's total
             expect(tracker.currentTrackedSize('session-a')).toEqual(0)
             expect(tracker.currentTrackedSize('session-b')).toEqual(30)
         })
