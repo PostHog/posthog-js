@@ -43,6 +43,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "undefined",
         "string[]"
       ],
+      "css_selector_ignorelist": [
+        "undefined",
+        "string[]"
+      ],
       "element_attribute_ignorelist": [
         "undefined",
         "string[]"

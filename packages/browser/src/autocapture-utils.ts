@@ -151,6 +151,7 @@ export function getParentElement(curEl: Element): Element | false {
     return parentNode
 }
 
+const DEFAULT_AUTOCAPTURE_IGNORE_LIST = ['.ph-no-autocapture', '[data-ph-no-autocapture]']
 const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
 // +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
 export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
@@ -382,6 +383,11 @@ export function shouldCaptureDomEvent(
     }
 
     if (!checkIfElementsMatchCSSSelector(targetElementList, autocaptureConfig?.css_selector_allowlist)) {
+        return false
+    }
+
+    const selectorIgnoreList = autocaptureConfig?.css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST
+    if (checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)) {
         return false
     }
 

@@ -69,6 +69,19 @@ export interface AutocaptureConfig {
     css_selector_allowlist?: string[]
 
     /**
+     * List of CSS selectors to ignore autocapture on
+     * e.g. ['[data-ph-no-autocapture]']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * and ignore list config `['[id]']`
+     * we will ignore the click if the click-target or its parents has any id
+     *
+     * Nothing is ignored when there's an empty ignorelist, e.g. []
+     * If no ignorelist is set, we default to ignoring .ph-no-autocapture and [data-ph-no-autocapture]
+     */
+    css_selector_ignorelist?: string[]
+
+    /**
      * Exclude certain element attributes from autocapture
      * E.g. ['aria-label'] or [data-attr-pii]
      */

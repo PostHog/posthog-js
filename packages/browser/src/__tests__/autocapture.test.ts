@@ -1621,6 +1621,71 @@ describe('Autocapture system', () => {
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
+        it('does not capture elements matching the default autocapture ignorelist', () => {
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = makeMouseEvent({
+                target: main_el,
+                composedPath: () => [button, main_el],
+            })
+
+            button.className = 'ph-no-autocapture'
+            expect(shouldCaptureDomEvent(button, e)).toBe(false)
+
+            button.className = ''
+            main_el.setAttribute('data-ph-no-autocapture', '')
+            expect(shouldCaptureDomEvent(button, e)).toBe(false)
+        })
+
+        it('does not capture elements matching a custom css ignorelist', () => {
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
+            button.className = 'custom-no-autocapture'
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = makeMouseEvent({
+                target: main_el,
+                composedPath: () => [button, main_el],
+            })
+            const autocapture_config: AutocaptureConfig = {
+                css_selector_ignorelist: ['.custom-no-autocapture'],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+        })
+
+        it('captures elements that match the css allowlist but not the css ignorelist', () => {
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
+            button.setAttribute('data-track', 'yes')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = makeMouseEvent({
+                target: main_el,
+                composedPath: () => [button, main_el],
+            })
+            const autocapture_config: AutocaptureConfig = {
+                css_selector_allowlist: ['[data-track="yes"]'],
+                css_selector_ignorelist: ['[data-ignore]'],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+
+            button.setAttribute('data-ignore', '')
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+        })
+
+        it('captures default ignored elements when the css ignorelist is empty', () => {
+            const button = document.createElement('button')
+            button.className = 'ph-no-autocapture'
+            button.innerHTML = 'bla'
+            const e = makeMouseEvent({ target: button })
+            const autocapture_config: AutocaptureConfig = {
+                css_selector_ignorelist: [],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+        })
+
         it('If a user sets dom_event_allowlist and element_allowlist with css_selector_allowlist it us a union so only the dom events on the element allow list with the css selector', () => {
             const elements = ['button', 'input', 'select']
             const createdElements = []
