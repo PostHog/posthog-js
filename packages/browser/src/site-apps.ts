@@ -1,5 +1,6 @@
 import type { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
+import { isNull } from '@posthog/core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { createLogger } from './utils/logger'
@@ -111,36 +112,105 @@ export class SiteApps implements Extension {
     }
 
     private _runWithPreparedSiteAppElements<T>(callback: () => T): T {
-        const nodePrototype = document?.defaultView?.Node?.prototype
-        if (!nodePrototype) {
+        const win = document?.defaultView
+        const nodePrototype = win?.Node?.prototype
+        if (!win || !nodePrototype) {
             return callback()
         }
 
-        const originalAppendChild = nodePrototype.appendChild
-        const originalInsertBefore = nodePrototype.insertBefore
+        const restore: (() => void)[] = []
         const siteApps = this
-
-        nodePrototype.appendChild = function (this: Node, child: Node) {
-            const prepared = siteApps._prepareElementForSiteApp(child)
-            if (!prepared) {
-                return child
+        const preparedNodes = new WeakSet<Node>()
+        const patch = (
+            prototype: Record<string, any> | undefined,
+            method: string,
+            replacement: (original: (...args: any[]) => any) => (...args: any[]) => any
+        ) => {
+            if (!prototype?.[method]) {
+                return
             }
-            return originalAppendChild.call(this, prepared)
-        } as typeof nodePrototype.appendChild
-
-        nodePrototype.insertBefore = function (this: Node, newChild: Node, refChild: Node | null) {
-            const prepared = siteApps._prepareElementForSiteApp(newChild)
-            if (!prepared) {
-                return newChild
+            const original = prototype[method]
+            prototype[method] = replacement(original)
+            restore.push(() => {
+                prototype[method] = original
+            })
+        }
+        const prepareNode = <N extends Node>(node: N): N | null => {
+            if (preparedNodes.has(node)) {
+                return node
             }
-            return originalInsertBefore.call(this, prepared, refChild)
-        } as typeof nodePrototype.insertBefore
+            const prepared = siteApps._prepareElementForSiteApp(node)
+            if (prepared) {
+                preparedNodes.add(prepared)
+            }
+            return prepared
+        }
+        const prepareNodes = (nodes: (Node | string)[]): (Node | string)[] =>
+            nodes
+                .map((node) => (typeof node === 'string' ? node : prepareNode(node)))
+                .filter((node): node is Node | string => !isNull(node))
+
+        patch(
+            nodePrototype,
+            'appendChild',
+            (original) =>
+                function (this: Node, child: Node) {
+                    const prepared = prepareNode(child)
+                    return prepared ? original.call(this, prepared) : child
+                }
+        )
+        patch(
+            nodePrototype,
+            'insertBefore',
+            (original) =>
+                function (this: Node, newChild: Node, refChild: Node | null) {
+                    const prepared = prepareNode(newChild)
+                    return prepared ? original.call(this, prepared, refChild) : newChild
+                }
+        )
+        patch(
+            nodePrototype,
+            'replaceChild',
+            (original) =>
+                function (this: Node, newChild: Node, oldChild: Node) {
+                    const prepared = prepareNode(newChild)
+                    return prepared ? original.call(this, prepared, oldChild) : oldChild
+                }
+        )
+        ;[win.Element?.prototype, win.Document?.prototype, win.DocumentFragment?.prototype].forEach((prototype) => {
+            patch(
+                prototype,
+                'append',
+                (original) =>
+                    function (this: ParentNode, ...nodes: (Node | string)[]) {
+                        return original.apply(this, prepareNodes(nodes))
+                    }
+            )
+            patch(
+                prototype,
+                'prepend',
+                (original) =>
+                    function (this: ParentNode, ...nodes: (Node | string)[]) {
+                        return original.apply(this, prepareNodes(nodes))
+                    }
+            )
+        })
+        ;[win.Element?.prototype, win.CharacterData?.prototype, win.DocumentType?.prototype].forEach((prototype) => {
+            patch(
+                prototype,
+                'replaceWith',
+                (original) =>
+                    function (this: ChildNode, ...nodes: (Node | string)[]) {
+                        const prepared = prepareNodes(nodes)
+                        return nodes.length && !prepared.length ? undefined : original.apply(this, prepared)
+                    }
+            )
+        })
 
         try {
             return callback()
         } finally {
-            nodePrototype.appendChild = originalAppendChild
-            nodePrototype.insertBefore = originalInsertBefore
+            restore.forEach((restore) => restore())
         }
     }
 

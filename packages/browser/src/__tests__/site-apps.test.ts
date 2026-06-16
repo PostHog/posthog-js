@@ -394,7 +394,7 @@ describe('SiteApps', () => {
                 const styleElement = Object.assign(document.createElement('style'), {
                     innerText: '.foo { color: red; }',
                 })
-                shadow.appendChild(styleElement)
+                shadow.append(styleElement)
                 document.body.appendChild(host)
                 callback(true)
             })
@@ -403,6 +403,32 @@ describe('SiteApps', () => {
 
             const styleElement = document.body.querySelector('div')?.shadowRoot?.querySelector('style')
             expect(posthog.config.prepare_external_dependency_stylesheet).toHaveBeenCalledWith(styleElement)
+            expect(styleElement?.nonce).toBe('style-nonce')
+        })
+
+        it('prepares style elements inserted with related DOM APIs', () => {
+            posthog.config.prepare_external_dependency_stylesheet = jest.fn((stylesheet) => {
+                stylesheet.nonce = 'style-nonce'
+                return stylesheet
+            })
+            init(({ callback }) => {
+                const host = document.createElement('div')
+                document.body.appendChild(host)
+
+                const prependedStyle = document.createElement('style')
+                host.prepend(prependedStyle)
+
+                const replacementStyle = document.createElement('style')
+                const replacedStyle = document.createElement('style')
+                host.replaceChild(replacementStyle, prependedStyle)
+                replacementStyle.replaceWith(replacedStyle)
+                callback(true)
+            })
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+
+            const styleElement = document.body.querySelector('style')
+            expect(posthog.config.prepare_external_dependency_stylesheet).toHaveBeenCalledTimes(6)
             expect(styleElement?.nonce).toBe('style-nonce')
         })
 
@@ -415,7 +441,7 @@ describe('SiteApps', () => {
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             appConfigs[0].processEvent.mockImplementation(() => {
                 const script = document.createElement('script')
-                document.head.appendChild(script)
+                document.head.append(script)
             })
 
             const eventCaptured = (posthog.on as jest.Mock).mock.calls[0][1]
