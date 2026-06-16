@@ -2,6 +2,7 @@
 'posthog-js': minor
 '@posthog/types': minor
 '@posthog/core': minor
+'posthog-react-native': patch
 ---
 
 feat(logs): add a `beforeSend` filter to the web logs API (`logs: { beforeSend }`) to inspect, redact, or drop log records before they are buffered — configurable as a single function or a left-to-right chain (returning `null` drops the record). The programmatic logs API (`posthog.captureLog` / `posthog.logger.*`) now runs through the shared `@posthog/core` logs pipeline, which adds adaptive 413 batch-sizing and per-record retry. A failed flush now retries on its own (first at the flush interval, then exponential backoff) instead of waiting for the next captured log.

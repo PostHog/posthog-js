@@ -55,7 +55,9 @@ export class PostHogLogs implements Extension {
     // The extension is constructed before `init` applies config, so build the core
     // lazily and rebuild when `config.logs` is swapped (e.g. via `set_config`).
     // Reset the old core first so its armed timer can't double-flush the shared,
-    // wrapper-owned queue against the new core.
+    // wrapper-owned queue. A flush already in flight on the old core can still
+    // finish against that queue, so a config swap mid-flush may re-send a head
+    // batch — a duplicate, never a loss.
     private _getCore(): CorePostHogLogs {
         const logsConfig = this._instance?.config?.logs
         if (!this._core || this._resolvedFrom !== logsConfig) {

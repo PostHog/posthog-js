@@ -1206,6 +1206,14 @@ describe('PostHogLogs', () => {
       expect(logger.info).toHaveBeenCalledWith('Log was rejected in beforeSend function')
     })
 
+    it('logs the same info line when a fn empties the body', () => {
+      // An emptied body is a drop too, so it surfaces the same diagnostic as a
+      // null return rather than vanishing silently.
+      const logs = makeLogs((r) => ({ ...r, body: '' }))
+      logs.captureLog({ body: 'will-be-emptied' })
+      expect(logger.info).toHaveBeenCalledWith('Log was rejected in beforeSend function')
+    })
+
     it('never crashes the caller when a fn throws — drops the record (fail closed) and logs', () => {
       const thrower = jest.fn(() => {
         throw new Error('bad filter')

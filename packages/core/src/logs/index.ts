@@ -101,8 +101,10 @@ export class PostHogLogs {
     if (filtered === null) {
       return
     }
-    // beforeSend could return a record with empty body — treat as drop.
+    // beforeSend could return a record with empty body — drop it, mirroring the
+    // null-return path so both beforeSend drops surface the same diagnostic.
     if (!filtered.body) {
+      this._logger.info(`Log was rejected in beforeSend function`)
       return
     }
 
