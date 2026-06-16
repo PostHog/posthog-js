@@ -15,7 +15,7 @@ try {
 }
 
 if (status) {
-    console.error('Public API references are out of date. Run `pnpm generate-references` and commit the updated files.')
+    console.error('Public API references are out of date. Run `pnpm generate-references` and commit the updated latest reference files.')
     console.error(status)
 
     try {
