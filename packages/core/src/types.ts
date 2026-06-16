@@ -67,6 +67,7 @@ export type PostHogCoreOptions = {
    *
    * Note: surveys gated on feature flags will not evaluate unless the survey targeting
    * flags are also provided via `updateFlags()`. This option cannot be toggled at runtime.
+   * `posthog-node` inherits this option but does not implement it (no-op).
    *
    * @default false
    */

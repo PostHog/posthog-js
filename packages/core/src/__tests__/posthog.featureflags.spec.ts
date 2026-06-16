@@ -1693,6 +1693,17 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.isFeatureEnabled('on-flag')).toEqual(true)
     })
 
+    it('should not throw when a payload cannot be serialized, and still apply the flag', () => {
+      const circular: Record<string, unknown> = {}
+      circular.self = circular
+
+      expect(() => posthog.updateFlags({ 'circular-flag': true }, { 'circular-flag': circular })).not.toThrow()
+
+      // the flag value is still applied; only the unserializable payload is dropped
+      expect(posthog.getFeatureFlag('circular-flag')).toEqual(true)
+      expect(posthog.getFeatureFlagPayload('circular-flag')).toBeNull()
+    })
+
     it('should clear all stored flags when called with an empty object (no merge)', async () => {
       await posthog.reloadFeatureFlagsAsync()
       expect(posthog.getFeatureFlags()).toEqual(expectedFeatureFlagResponses)

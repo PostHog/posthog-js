@@ -1215,6 +1215,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const flagDetails: Record<string, FeatureFlagDetail> = {}
       for (const [key, value] of Object.entries(finalFlags)) {
         const payload = finalPayloads[key]
+        let serializedPayload: string | undefined
+        if (payload !== undefined) {
+          try {
+            serializedPayload = JSON.stringify(payload)
+          } catch (e) {
+            this._logger.error(`updateFlags: could not serialize the payload for flag "${key}", dropping it.`, e)
+          }
+        }
         flagDetails[key] = {
           key,
           enabled: getEnabledFromValue(value),
@@ -1225,7 +1233,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             id: undefined,
             version: undefined,
             description: undefined,
-            payload: payload !== undefined ? JSON.stringify(payload) : undefined,
+            payload: serializedPayload,
           },
         }
       }
