@@ -3,7 +3,7 @@
  */
 
 import type { JsonType, Properties } from './common'
-import type { LogAttributes, BeforeSendLogFn } from './capture-log'
+import type { LogAttributes } from './capture-log'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
 import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
@@ -704,12 +704,6 @@ export interface LogCaptureOptions {
      * @default 1000
      */
     maxLogsPerInterval?: number
-    /**
-     * Pre-send filter for log records, as a single function or a left-to-right
-     * chain. Each function inspects, mutates, or drops a record (return `null`
-     * to drop) before it enters the rate cap or the buffer.
-     */
-    beforeSend?: BeforeSendLogFn | BeforeSendLogFn[]
 }
 
 /**
