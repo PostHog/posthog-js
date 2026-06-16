@@ -287,29 +287,54 @@ describe('PostHog Node.js', () => {
       ])
     })
 
-    it('should capture a $set event from setPersonProperties', async () => {
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
+    it.each([
+      ['set properties', { properties: { foo: 'bar' } }, { $set: { foo: 'bar' } }, '$set_once'],
+      [
+        'set once properties',
+        { propertiesOnce: { first_seen: '2026-06-15' } },
+        { $set_once: { first_seen: '2026-06-15' } },
+        '$set',
+      ],
+      [
+        'set and set once properties',
+        { properties: { foo: 'bar' }, propertiesOnce: { first_seen: '2026-06-15' } },
+        { $set: { foo: 'bar' }, $set_once: { first_seen: '2026-06-15' } },
+        undefined,
+      ],
+    ] as Array<
+      [
+        string,
+        { properties?: Record<string, any>; propertiesOnce?: Record<string, any> },
+        Record<string, any>,
+        string | undefined,
+      ]
+    >)(
+      'should capture a $set event from setPersonProperties with %s',
+      async (_, input, expectedProperties, absentKey) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
 
-      posthog.setPersonProperties({
-        distinctId: '123',
-        properties: { foo: 'bar' },
-        propertiesOnce: { first_seen: '2026-06-15' },
-      })
-      await waitForFlushTimer()
+        posthog.setPersonProperties({
+          distinctId: '123',
+          ...input,
+        })
+        await waitForFlushTimer()
 
-      const batchEvents = getLastBatchEvents()
-      expect(batchEvents).toMatchObject([
-        {
-          distinct_id: '123',
-          event: '$set',
-          properties: {
-            $set: { foo: 'bar' },
-            $set_once: { first_seen: '2026-06-15' },
-            $geoip_disable: true,
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents).toMatchObject([
+          {
+            distinct_id: '123',
+            event: '$set',
+            properties: {
+              ...expectedProperties,
+              $geoip_disable: true,
+            },
           },
-        },
-      ])
-    })
+        ])
+        if (absentKey) {
+          expect(batchEvents?.[0]?.properties).not.toHaveProperty(absentKey)
+        }
+      }
+    )
 
     it.each([
       ['single property', 'plan', ['plan']],

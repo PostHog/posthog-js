@@ -733,10 +733,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return
     }
 
+    const eventProperties: Record<string, any> = {}
+    if (Object.keys(properties).length > 0) {
+      eventProperties.$set = properties
+    }
+    if (Object.keys(propertiesOnce).length > 0) {
+      eventProperties.$set_once = propertiesOnce
+    }
+
     this.capture({
       distinctId,
       event: '$set',
-      properties: { $set: properties, $set_once: propertiesOnce },
+      properties: eventProperties,
     })
   }
 
