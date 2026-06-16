@@ -183,8 +183,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       if (this.disableRemoteFeatureFlags && !this.disabled) {
         // No reload runs to emit the change, so emit the now-cleared flags directly
         // (drives onFeatureFlags listeners, e.g. session replay re-arm). Callers re-push
-        // the new identity's flags via updateFlags().
-        this.setKnownFeatureFlagDetails({ flags: {} })
+        // the new identity's flags via updateFlags(). Skip when the caller kept
+        // FeatureFlagDetails — those flags stay as-is, so there's nothing to emit.
+        if (!allPropertiesToKeep.includes(PostHogPersistedProperty.FeatureFlagDetails)) {
+          this.setKnownFeatureFlagDetails({ flags: {} })
+        }
       } else {
         this.reloadFeatureFlags()
       }

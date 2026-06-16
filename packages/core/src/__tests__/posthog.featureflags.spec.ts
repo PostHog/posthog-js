@@ -1847,6 +1847,20 @@ describe('PostHog Feature Flags v4', () => {
       expect(mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))).toHaveLength(0)
     })
 
+    it('reset() keeping FeatureFlagDetails preserves the flags and emits nothing', async () => {
+      posthog.updateFlags({ 'local-flag': true })
+      const received: Record<string, string | boolean>[] = []
+      posthog.onFeatureFlags((flags) => received.push(flags))
+
+      posthog.reset([PostHogPersistedProperty.FeatureFlagDetails])
+      await waitForPromises()
+
+      // The kept flags stay intact, so there's no cleared state to emit.
+      expect(posthog.getFeatureFlags()).toEqual({ 'local-flag': true })
+      expect(received).toEqual([])
+      expect(mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))).toHaveLength(0)
+    })
+
     it('a fully disabled SDK still returns undefined from reloadFeatureFlagsAsync (not stale stored flags)', async () => {
       const storageCache = {
         feature_flag_details: { flags: { 'stale-flag': { key: 'stale-flag', enabled: true } } },
