@@ -32,6 +32,23 @@ print_command_error() {
 
 # WITH_ENVIRONMENT is executed by React Native
 
+POSTHOG_UPLOAD_ARGS=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --posthog-skip-on-conflict)
+      POSTHOG_UPLOAD_ARGS="$POSTHOG_UPLOAD_ARGS --skip-on-conflict"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
 REACT_NATIVE_XCODE_DEFAULT="../node_modules/react-native/scripts/react-native-xcode.sh"
 # Accept $1 only when it actually points at a shell script; guard against the
 # Expo plugin previously passing "/bin/sh" as $1 (issue #3682).
@@ -83,16 +100,6 @@ fi
 if [ -z "$PH_CLI_PATH" ] || [ ! -x "$PH_CLI_PATH" ]; then
   echo "error: posthog-cli not found"
   exit 1
-fi
-
-MIN_POSTHOG_CLI_VERSION="0.7.8"
-PH_CLI_VERSION=$("$PH_CLI_PATH" --version 2>/dev/null | awk '{print $NF}' | tr -d 'v')
-if [ -n "$PH_CLI_VERSION" ]; then
-  LOWEST=$(printf '%s\n%s\n' "$MIN_POSTHOG_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
-  if [ "$LOWEST" != "$MIN_POSTHOG_CLI_VERSION" ]; then
-    echo "error: posthog-cli >= ${MIN_POSTHOG_CLI_VERSION} required (found ${PH_CLI_VERSION}). Upgrade: npm install -g @posthog/cli@latest"
-    exit 1
-  fi
 fi
 
 # mimics how the file is defined in node_modules/react-native/scripts/react-native-xcode.sh (PACKAGER_SOURCEMAP_FILE)
@@ -199,7 +206,7 @@ set -x -e
 
 # Execute posthog cli upload
 set +x +e
-CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR $CLI_RELEASE_ARGS" 2>&1)
+CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR $CLI_RELEASE_ARGS $POSTHOG_UPLOAD_ARGS" 2>&1)
 UPLOAD_EXIT_CODE=$?
 if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
   echo "$CLI_UPLOAD_OUTPUT" | awk '{print "output: posthog-cli - " $0}'

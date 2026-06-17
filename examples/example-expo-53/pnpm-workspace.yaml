@@ -2,5 +2,8 @@ pnpmfile: ../.pnpmfile.cjs
 nodeLinker: hoisted
 minimumReleaseAge: 10080
 
+overrides:
+  node-forge: 1.3.2
+
 blockExoticSubdeps: true
 trustPolicy: no-downgrade

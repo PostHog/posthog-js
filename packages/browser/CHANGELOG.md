@@ -1,5 +1,24 @@
 # posthog-js
 
+## 1.388.1
+
+### Patch Changes
+
+- [#3851](https://github.com/PostHog/posthog-js/pull/3851) [`5c453cd`](https://github.com/PostHog/posthog-js/commit/5c453cd240788e45459dd08be6248d60a1cf1a73) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply CSP nonce preparation hooks to style and script elements appended by site apps.
+  (2026-06-17)
+
+## 1.388.0
+
+### Minor Changes
+
+- [#3863](https://github.com/PostHog/posthog-js/pull/3863) [`b6bc9be`](https://github.com/PostHog/posthog-js/commit/b6bc9be241d6af91cae9d63b3fbb5b1d7ac8f343) Thanks [@marandaneto](https://github.com/marandaneto)! - Add autocapture-only CSS selector opt-outs for web interactions.
+  (2026-06-17)
+
+### Patch Changes
+
+- Updated dependencies [[`b6bc9be`](https://github.com/PostHog/posthog-js/commit/b6bc9be241d6af91cae9d63b3fbb5b1d7ac8f343)]:
+    - @posthog/types@1.388.0
+
 ## 1.387.0
 
 ### Minor Changes

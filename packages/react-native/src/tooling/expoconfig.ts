@@ -11,7 +11,16 @@ const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.2.0'
 const resolvePostHogReactNativePackageJsonPath =
   "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
 
-const withAndroidPlugin = (config: any) => {
+const POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY = 'posthogReactNativeSkipOnConflict'
+
+export function buildAndroidSkipOnConflictGradleLine(skipOnConflict: boolean): string | null {
+  if (!skipOnConflict) {
+    return null
+  }
+  return `project.ext.${POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY} = true`
+}
+
+const withAndroidPlugin = (config: any, skipOnConflict = false) => {
   return withAppBuildGradle(config, (config: any) => {
     if (config.modResults.language !== 'groovy') {
       console.warn('Cannot configure PostHog in the app gradle because the build.gradle is not groovy')
@@ -19,8 +28,19 @@ const withAndroidPlugin = (config: any) => {
 
     const buildGradle = config.modResults.contents
     const applyFrom = `apply from: new File(${resolvePostHogReactNativePackageJsonPath})`
+    const skipOnConflictLine = buildAndroidSkipOnConflictGradleLine(skipOnConflict)
+    const applyBlock = skipOnConflictLine ? `${skipOnConflictLine}\n${applyFrom}` : applyFrom
+    const skipOnConflictPattern = new RegExp(
+      `^project\\.ext\\.${POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY}\\s*=\\s*(true|false)\\n?`,
+      'm'
+    )
 
     if (buildGradle.includes(applyFrom)) {
+      let contents = buildGradle.replace(skipOnConflictPattern, '')
+      if (skipOnConflictLine) {
+        contents = contents.replace(applyFrom, `${skipOnConflictLine}\n${applyFrom}`)
+      }
+      config.modResults.contents = contents
       return config
     }
 
@@ -28,7 +48,7 @@ const withAndroidPlugin = (config: any) => {
     const pattern = /^android\s*\{/m
 
     if (buildGradle.match(pattern)) {
-      config.modResults.contents = buildGradle.replace(pattern, `${applyFrom}\n\nandroid {`)
+      config.modResults.contents = buildGradle.replace(pattern, `${applyBlock}\n\nandroid {`)
     } else {
       console.warn('PostHog: Could not find "android {" block in build.gradle')
     }
@@ -146,12 +166,14 @@ const withAndroidNativeSymbolsPlugin = (config: any) => {
 
 type BuildPhase = { shellScript: string }
 
-export function modifyExistingXcodeBuildScript(script: BuildPhase): void {
+export function modifyExistingXcodeBuildScript(script: BuildPhase, skipOnConflict = false): void {
   if (!script.shellScript.match(/(packager|scripts)\/react-native-xcode\.sh\b/)) {
     return
   }
 
   if (script.shellScript.includes('posthog-xcode.sh')) {
+    const code = JSON.parse(script.shellScript)
+    script.shellScript = JSON.stringify(updatePostHogSkipOnConflictArg(code, skipOnConflict))
     return
   }
 
@@ -160,7 +182,7 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase): void {
   }
 
   const code = JSON.parse(script.shellScript)
-  script.shellScript = JSON.stringify(addPostHogWithBundledScriptsToBundleShellScript(code))
+  script.shellScript = JSON.stringify(addPostHogWithBundledScriptsToBundleShellScript(code, skipOnConflict))
 }
 
 const POSTHOG_REACT_NATIVE_XCODE_PATH =
@@ -169,14 +191,25 @@ const POSTHOG_REACT_NATIVE_XCODE_PATH =
 const REACT_NATIVE_XCODE_LINE =
   /^([ \t]*)(?![A-Za-z_][A-Za-z0-9_]*=)(?:\/bin\/sh\s+)?([^\n]*(?:packager|scripts)\/react-native-xcode\.sh\b[^\n]*)$/m
 
-export function addPostHogWithBundledScriptsToBundleShellScript(script: string): string {
+function updatePostHogSkipOnConflictArg(script: string, skipOnConflict: boolean): string {
+  const skipArg = '--posthog-skip-on-conflict --'
+  const withoutSkipArg = script.replace(new RegExp(`\\s*${skipArg}\\s*`, 'g'), ' ')
+  if (!skipOnConflict) {
+    return withoutSkipArg
+  }
+  return withoutSkipArg.replace(`${POSTHOG_REACT_NATIVE_XCODE_PATH} `, `${POSTHOG_REACT_NATIVE_XCODE_PATH} ${skipArg} `)
+}
+
+export function addPostHogWithBundledScriptsToBundleShellScript(script: string, skipOnConflict = false): string {
+  const postHogArgs = skipOnConflict ? '--posthog-skip-on-conflict -- ' : ''
+
   // Capture the full RN script invocation. Expo uses a backtick-wrapped
   // node --print command, so matching only up to react-native-xcode.sh cuts the
   // command substitution in half and leaves the generated shell invalid.
   return script.replace(
     REACT_NATIVE_XCODE_LINE,
     (_match: string, indent: string, rnCommand: string) =>
-      `${indent}/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${rnCommand}`
+      `${indent}/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${postHogArgs}${rnCommand}`
   )
 }
 
@@ -277,6 +310,13 @@ type PostHogPluginProps = {
    * Requires `posthog-cli` to be available and authenticated during release builds.
    */
   uploadNativeSymbols?: boolean | { includeSource?: boolean }
+
+  /**
+   * Whether to append `--skip-on-conflict` to `posthog-cli hermes upload` on iOS and Android.
+   *
+   * Default: false.
+   */
+  skipOnConflict?: boolean
 }
 
 // Normalizes the uploadNativeSymbols prop (boolean | { includeSource }) into a
@@ -303,7 +343,7 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
       'PBXShellScriptBuildPhase'
     )
 
-    modifyExistingXcodeBuildScript(bundleReactNativePhase)
+    modifyExistingXcodeBuildScript(bundleReactNativePhase, props.skipOnConflict === true)
 
     const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
     if (nativeSymbols.enabled) {
@@ -326,7 +366,7 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
 }
 
 const withPostHogPlugin = (config: any, props: PostHogPluginProps = {}) => {
-  config = withAndroidPlugin(config)
+  config = withAndroidPlugin(config, props.skipOnConflict === true)
   // includeSource is iOS-only, so on Android we only care whether upload is enabled.
   if (resolveNativeSymbolUpload(props.uploadNativeSymbols).enabled) {
     config = withAndroidNativeSymbolsPlugin(config)
@@ -347,5 +387,6 @@ module.exports.disableUserScriptSandboxing = disableUserScriptSandboxing
 module.exports.buildDsymUploadShellScript = buildDsymUploadShellScript
 module.exports.addDsymUploadBuildPhase = addDsymUploadBuildPhase
 module.exports.resolveNativeSymbolUpload = resolveNativeSymbolUpload
+module.exports.buildAndroidSkipOnConflictGradleLine = buildAndroidSkipOnConflictGradleLine
 module.exports.addPostHogAndroidGradlePluginClasspath = addPostHogAndroidGradlePluginClasspath
 module.exports.applyPostHogAndroidGradlePlugin = applyPostHogAndroidGradlePlugin

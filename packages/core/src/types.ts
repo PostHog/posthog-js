@@ -54,6 +54,25 @@ export type PostHogCoreOptions = {
    */
   preloadFeatureFlags?: boolean
   /**
+   * Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely.
+   *
+   * When set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`,
+   * `group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request
+   * to the flags endpoint that still goes out (e.g. to fetch remote config or surveys)
+   * carries `disable_flags: true` so the server skips flag evaluation. Flag values must be
+   * supplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and
+   * related methods keep working against those values. Until `updateFlags()` runs, reads
+   * return their not-loaded defaults, so use `bootstrap` for any flags needed at startup.
+   * Equivalent to the web SDK's `advanced_disable_feature_flags`.
+   *
+   * Note: surveys gated on feature flags will not evaluate unless the survey targeting
+   * flags are also provided via `updateFlags()`. This option cannot be toggled at runtime.
+   * `posthog-node` inherits this option but does not implement it (no-op).
+   *
+   * @default false
+   */
+  disableRemoteFeatureFlags?: boolean
+  /**
    * Whether to load remote config when initialized or not
    * Experimental support
    *
