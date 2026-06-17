@@ -1081,7 +1081,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     details = details ?? { featureFlags: {}, featureFlagPayloads: {}, flags: {} }
 
-    const flags: Record<string, FeatureFlagDetail> = details.flags ?? {}
+    // Copy before applying overrides so reads don't mutate the stored flags in place.
+    const flags: Record<string, FeatureFlagDetail> = { ...(details.flags ?? {}) }
 
     for (const key in overriddenFlags) {
       if (!overriddenFlags[key]) {
@@ -1201,8 +1202,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: { merge?: boolean }
   ): void {
     this.wrap(() => {
-      // Seed from the stored details, not getFeatureFlagPayloads, which drops disabled flags' payloads.
-      const existingDetails = options?.merge ? this.getFeatureFlagDetails()?.flags : undefined
+      // Seed from the raw stored details: preserves disabled flags' payloads (which
+      // getFeatureFlagPayloads drops) and keeps active overrides out of the merged base.
+      const existingDetails = options?.merge ? this.getKnownFeatureFlagDetails()?.flags : undefined
       const existingFlags = existingDetails ? getFlagValuesFromFlags(existingDetails) : {}
       const existingPayloads: Record<string, JsonType> = {}
       for (const key in existingDetails) {

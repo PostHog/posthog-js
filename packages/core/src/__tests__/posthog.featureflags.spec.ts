@@ -1767,6 +1767,20 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.getFeatureFlag('local-flag')).toEqual('overridden')
     })
 
+    it('should not bake an active override into the base when merging', async () => {
+      posthog.updateFlags({ 'base-flag': 'control' })
+      await posthog.overrideFeatureFlag({ 'base-flag': 'test' })
+      expect(posthog.getFeatureFlag('base-flag')).toEqual('test')
+
+      // Merge an unrelated flag — the override must not leak into stored flags.
+      posthog.updateFlags({ 'other-flag': true }, undefined, { merge: true })
+
+      // Clearing the override reveals the original value, not the override.
+      await posthog.overrideFeatureFlag(null)
+      expect(posthog.getFeatureFlag('base-flag')).toEqual('control')
+      expect(posthog.getFeatureFlag('other-flag')).toEqual(true)
+    })
+
     it('should capture $feature_flag_called again after updateFlags changes a value', async () => {
       await posthog.reloadFeatureFlagsAsync()
       expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
