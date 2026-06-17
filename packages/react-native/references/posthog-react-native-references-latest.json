@@ -415,7 +415,7 @@
               "code": "\n\n// get feature flag payload\nconst payload = posthog.getFeatureFlagPayload('key-for-your-multivariate-flag')\n\n\n\n"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [
             {
               "description": "The feature flag key",

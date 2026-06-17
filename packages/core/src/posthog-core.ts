@@ -1052,6 +1052,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return result?.variant ?? result?.enabled
   }
 
+  /**
+   * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
+   */
   getFeatureFlagPayload(key: string): JsonType | undefined {
     const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlagPayload', sendEvent: false })
     return result?.payload
