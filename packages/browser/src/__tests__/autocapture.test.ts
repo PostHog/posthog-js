@@ -1672,6 +1672,18 @@ describe('Autocapture system', () => {
             expect((button as any).msMatchesSelector).toHaveBeenCalledWith('.custom-no-autocapture')
         })
 
+        it('does not match invalid css selectors', () => {
+            const button = document.createElement('button')
+            button.innerHTML = 'bla'
+            const e = makeMouseEvent({ target: button })
+
+            expect(
+                shouldCaptureDomEvent(button, e, {
+                    css_selector_ignorelist: ['['],
+                })
+            ).toBe(true)
+        })
+
         it('captures elements that match the css allowlist but not the css ignorelist', () => {
             const main_el = document.createElement('some-element')
             const button = document.createElement('button')

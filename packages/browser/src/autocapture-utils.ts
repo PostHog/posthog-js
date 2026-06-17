@@ -133,7 +133,11 @@ function elementMatchesCSSSelector(el: Element, selector: string): boolean {
         (el as any).mozMatchesSelector ||
         (el as any).webkitMatchesSelector ||
         (el as any).oMatchesSelector
-    return matches ? matches.call(el, selector) : false
+    try {
+        return matches ? matches.call(el, selector) : false
+    } catch {
+        return false
+    }
 }
 
 /*
