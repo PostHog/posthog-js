@@ -55,14 +55,13 @@ export type PostHogCoreOptions = {
   preloadFeatureFlags?: boolean
   /**
    * Whether to load remote config when initialized or not
-   * Experimental support
    *
+   * @deprecated Remote config is now always loaded and this option is a no-op. It will be removed in a future version.
    * @default false
    */
   disableRemoteConfig?: boolean
   /**
    * Whether to load surveys when initialized or not
-   * Experimental support
    * Requires the `PostHogSurveyProvider` to be used
    *
    * @default false
