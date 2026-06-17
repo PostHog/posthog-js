@@ -29,6 +29,7 @@ export function resolveLogsConfig(config: LogCaptureOptions | undefined): Resolv
         serviceVersion: (resourceAttributes?.['service.version'] as string | undefined) ?? config?.serviceVersion,
         environment: (resourceAttributes?.['deployment.environment'] as string | undefined) ?? config?.environment,
         resourceAttributes,
+        beforeSend: config?.beforeSend,
         flushIntervalMs,
         maxBufferSize,
         maxQueueSize,

@@ -756,6 +756,67 @@ describe('posthog-logs', () => {
             })
         })
 
+        describe('beforeSend', () => {
+            const bodyOf = (l: PostHogLogs, i = 0) => (l as any)._queue[i]?.record.body.stringValue
+
+            it.each([
+                ['single function', (record: any) => ({ ...record, body: 'redacted' }), 'secret token=abc', 'redacted'],
+                [
+                    'left-to-right chain',
+                    [
+                        (record: any) => ({ ...record, body: record.body + '1' }),
+                        (record: any) => ({ ...record, body: record.body + '2' }),
+                    ],
+                    'x',
+                    'x12',
+                ],
+            ] as Array<[string, any, string, string]>)(
+                'transforms the record via a %s',
+                (_label, beforeSend, input, expected) => {
+                    ;(mockPostHog.config as any).logs = { beforeSend }
+                    logs = new PostHogLogs(mockPostHog)
+
+                    logs.captureLog({ body: input })
+
+                    expect((logs as any)._queue).toHaveLength(1)
+                    expect(bodyOf(logs)).toBe(expected)
+                }
+            )
+
+            it.each([
+                ['single function returning null', () => null],
+                ['chain with a null-returning link', [(record: any) => record, () => null, (record: any) => record]],
+            ] as Array<[string, any]>)('drops the record when beforeSend is a %s', (_label, beforeSend) => {
+                ;(mockPostHog.config as any).logs = { beforeSend }
+                logs = new PostHogLogs(mockPostHog)
+
+                logs.captureLog({ body: 'should be dropped' })
+
+                expect((logs as any)._queue).toHaveLength(0)
+            })
+
+            it('drops the record when a beforeSend fn throws', () => {
+                ;(mockPostHog.config as any).logs = {
+                    beforeSend: [
+                        (record: any) => ({ ...record, body: 'kept' }),
+                        () => {
+                            throw new Error('boom')
+                        },
+                    ],
+                }
+                logs = new PostHogLogs(mockPostHog)
+
+                // A throwing filter must not crash captureLog; the record is
+                // dropped and the error logged.
+                expect(() => logs.captureLog({ body: 'x' })).not.toThrow()
+                expect((logs as any)._queue).toHaveLength(0)
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'Error in beforeSend function for log:',
+                    expect.any(Error)
+                )
+            })
+        })
+
         describe('sendBeacon flush', () => {
             it('drains the queue into a single beacon request', () => {
                 logs.captureLog({ body: 'unload 1' })
