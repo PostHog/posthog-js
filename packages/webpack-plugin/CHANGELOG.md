@@ -1,5 +1,85 @@
 # @posthog/webpack-plugin
 
+## 1.5.24
+
+### Patch Changes
+
+- [#3821](https://github.com/PostHog/posthog-js/pull/3821) [`2883857`](https://github.com/PostHog/posthog-js/commit/2883857f05c06649be89301981b22c66e1384230) Thanks [@pesoszpesosz](https://github.com/pesoszpesosz)! - Add missing MIT license metadata to the published plugin package manifests.
+  (2026-06-15)
+
+## 1.5.23
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad)]:
+    - @posthog/core@1.32.4
+    - @posthog/plugin-utils@1.1.2
+
+## 1.5.22
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.32.3
+
+## 1.5.21
+
+### Patch Changes
+
+- Updated dependencies [[`25822ac`](https://github.com/PostHog/posthog-js/commit/25822acc0d16f9f1d6fbbd65da57b3e060c6c558)]:
+    - @posthog/core@1.32.2
+
+## 1.5.20
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.32.1
+
+## 1.5.19
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+    - @posthog/core@1.32.0
+
+## 1.5.18
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.31.4
+
+## 1.5.17
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.31.3
+
+## 1.5.16
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.31.2
+
+## 1.5.15
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/core@1.31.1
+
+## 1.5.14
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+    - @posthog/core@1.31.0
+
 ## 1.5.13
 
 ### Patch Changes

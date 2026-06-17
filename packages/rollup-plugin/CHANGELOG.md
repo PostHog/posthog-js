@@ -1,5 +1,21 @@
 # @posthog/rollup-plugin
 
+## 1.4.7
+
+### Patch Changes
+
+- [#3821](https://github.com/PostHog/posthog-js/pull/3821) [`2883857`](https://github.com/PostHog/posthog-js/commit/2883857f05c06649be89301981b22c66e1384230) Thanks [@pesoszpesosz](https://github.com/pesoszpesosz)! - Add missing MIT license metadata to the published plugin package manifests.
+  (2026-06-15)
+
+## 1.4.6
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad)]:
+    - @posthog/plugin-utils@1.1.2
+
 ## 1.4.5
 
 ### Patch Changes

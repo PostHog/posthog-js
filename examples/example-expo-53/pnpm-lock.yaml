@@ -7,7 +7,7 @@ settings:
 overrides:
   node-forge: 1.3.2
 
-pnpmfileChecksum: sha256-yVJZ6vhbVglHX96LCyXF5k3CRZo/MEv/K0owx+7kTTo=
+pnpmfileChecksum: sha256-f6vDAtfVUQ7ve76eXRJSxDNpBCZVHV6899+eUDXYCAI=
 
 importers:
 
@@ -19,6 +19,9 @@ importers:
       '@expo/vector-icons':
         specifier: ^14.1.0
         version: 14.1.0(expo-font@13.3.2(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      '@posthog/react-native-plugin':
+        specifier: file:../../target/posthog-react-native-plugin.tgz
+        version: file:../../target/posthog-react-native-plugin.tgz(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       '@react-navigation/bottom-tabs':
         specifier: ^7.3.10
         version: 7.15.2(@react-navigation/native@7.1.31(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native-safe-area-context@5.4.0(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native-screens@4.11.1(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
@@ -81,10 +84,7 @@ importers:
         version: 14.2.0(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))
       posthog-react-native:
         specifier: file:../../target/posthog-react-native.tgz
-        version: file:../../target/posthog-react-native.tgz(1ff1fd77b8ed56eadc6790bb20daf3b8)
-      posthog-react-native-session-replay:
-        specifier: ^1.6.0
-        version: 1.6.0(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+        version: file:../../target/posthog-react-native.tgz(9a64a5e4d3e0c4631f591883bb56a133)
       react:
         specifier: 19.0.0
         version: 19.0.0
@@ -867,12 +867,19 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-quPW3CiWHvlntgoePEFedqhBAw8+OJSTjADf6QinTyGnvlLvsDk9QR1mQeEuz+SCrC5mVTD9Bwa4uUUu8Kgchg==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.29.12
+    resolution: {integrity: sha512-QuMH4qY0atWpo5Xvc5LFIQSg1mEz/DspIGqlwPaGX9jOY2CQvK0EOs8yGaiHvWk9VaIRPS8bfQ7Ornjv1YDwow==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.32.3
+
+  '@posthog/react-native-plugin@file:../../target/posthog-react-native-plugin.tgz':
+    resolution: {integrity: sha512-kZ4/gsUEKiRfDq1RZZ4sEwJBYIsmRP715XFgpKE8J4wa3k3lLlJGKDtEeyLg/5U+3xgKySApjAaGxFb8eAkgnQ==, tarball: file:../../target/posthog-react-native-plugin.tgz}
+    version: 2.0.1
+    peerDependencies:
+      react: '*'
+      react-native: '*'
 
   '@posthog/types@file:../../target/posthog-types.tgz':
-    resolution: {integrity: sha512-RILFzuWlEiTjJ2NsyQckUjmYTSl6QJtSELniYltBURPZ9aRRcTpoJEDp8WrRiiBN2+J8KRU4j76chCvsZmDToQ==, tarball: file:../../target/posthog-types.tgz}
-    version: 1.376.3
+    resolution: {integrity: sha512-CHBzPdbQcpGaQpdVCZNgsqEQScMzbsCAJTCYrs0v/cvNNzHU4IdLomzI6YUoO5cJ5le3ow7B0efvtfpFqHmPqw==, tarball: file:../../target/posthog-types.tgz}
+    version: 1.386.3
 
   '@radix-ui/react-compose-refs@1.1.2':
     resolution: {integrity: sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==}
@@ -3140,9 +3147,10 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-F/IwIPXnSB774erZGOYPAyECp14q/7se5A1ANrQeRrMliy1uBiLUpEovlBK3Pi2IXSEfTu4LPI2da2nyd1ss0g==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.46.1
+    resolution: {integrity: sha512-DYOWrGoEivHL/UbgmroKR6B+cEUiKjLjTtua1Pu0tBWmGU3FM+98cXYQTLwcgMP4Z5P3mX/eObpQqZQJIj6dTw==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.46.32
     peerDependencies:
+      '@posthog/react-native-plugin': '>= 2.0.1'
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'
       expo-application: '>= 4.0.0'
@@ -3156,6 +3164,8 @@ packages:
       react-native-safe-area-context: '>= 4.0.0'
       react-native-svg: '>= 15.0.0'
     peerDependenciesMeta:
+      '@posthog/react-native-plugin':
+        optional: true
       '@react-native-async-storage/async-storage':
         optional: true
       '@react-navigation/native':
@@ -3873,6 +3883,7 @@ packages:
 
   uuid@7.0.3:
     resolution: {integrity: sha512-DPSke0pXhTZgoF/d+WSt2QaKMCFSfx7QegxEWT+JOuHF5aWrKEn0G+ztjuJg/gG8/ItK+rbPCD/yNv8yyih6Cg==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   validate-npm-package-name@5.0.1:
@@ -5093,6 +5104,11 @@ snapshots:
   '@posthog/core@file:../../target/posthog-core.tgz':
     dependencies:
       '@posthog/types': file:../../target/posthog-types.tgz
+
+  '@posthog/react-native-plugin@file:../../target/posthog-react-native-plugin.tgz(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)':
+    dependencies:
+      react: 19.0.0
+      react-native: 0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)
 
   '@posthog/types@file:../../target/posthog-types.tgz': {}
 
@@ -7773,12 +7789,14 @@ snapshots:
     dependencies:
       react: 19.0.0
       react-native: 0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)
+    optional: true
 
-  posthog-react-native@file:../../target/posthog-react-native.tgz(1ff1fd77b8ed56eadc6790bb20daf3b8):
+  posthog-react-native@file:../../target/posthog-react-native.tgz(9a64a5e4d3e0c4631f591883bb56a133):
     dependencies:
       '@posthog/core': file:../../target/posthog-core.tgz
       '@posthog/types': file:../../target/posthog-types.tgz
     optionalDependencies:
+      '@posthog/react-native-plugin': file:../../target/posthog-react-native-plugin.tgz(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       '@react-navigation/native': 7.1.31(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       expo-application: 6.1.5(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))
       expo-device: 7.1.4(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0)))(react-native-webview@13.13.5(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))

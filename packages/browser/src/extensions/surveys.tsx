@@ -785,6 +785,7 @@ export const renderSurveysPreview = ({
     previewPageIndex,
     forceDisableHtml,
     onPreviewSubmit,
+    onPreviewBack,
     positionStyles = DEFAULT_PREVIEW_POSITION_STYLES,
 }: {
     survey: Survey
@@ -792,6 +793,7 @@ export const renderSurveysPreview = ({
     previewPageIndex: number
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    onPreviewBack?: () => void
     posthog?: PostHog
     positionStyles?: JSX.CSSProperties
 }) => {
@@ -810,6 +812,7 @@ export const renderSurveysPreview = ({
             forceDisableHtml={forceDisableHtml}
             style={positionStyles}
             onPreviewSubmit={onPreviewSubmit}
+            onPreviewBack={onPreviewBack}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
         />,
@@ -1052,7 +1055,11 @@ export function usePopupVisibility(
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
             }
-            localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            try {
+                localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            } catch {
+                // localStorage is not always available (e.g. in cross-origin iframes).
+            }
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
@@ -1096,6 +1103,7 @@ interface SurveyPopupProps {
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    onPreviewBack?: () => void
     onPopupSurveyDismissed?: () => void
     onCloseConfirmationMessage?: () => void
     /** Additional properties to include in all survey events */
@@ -1137,6 +1145,7 @@ export function SurveyPopup({
     removeSurveyFromFocus = () => {},
     isPopup = true,
     onPreviewSubmit = () => {},
+    onPreviewBack = () => {},
     onPopupSurveyDismissed = () => {},
     onCloseConfirmationMessage = () => {},
     properties,
@@ -1188,6 +1197,7 @@ export function SurveyPopup({
             isPopup: isPopup || false,
             surveySubmissionId,
             onPreviewSubmit,
+            onPreviewBack,
             posthog,
             properties,
             surveyLanguage,
@@ -1200,6 +1210,7 @@ export function SurveyPopup({
         survey,
         onPopupSurveyDismissed,
         onPreviewSubmit,
+        onPreviewBack,
         properties,
         surveyLanguage,
     ])
@@ -1260,6 +1271,7 @@ export function Questions({
         onPopupSurveyDismissed,
         isPopup,
         onPreviewSubmit,
+        onPreviewBack,
         surveySubmissionId,
         isPreviewMode,
         properties,
@@ -1268,6 +1280,10 @@ export function Questions({
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey)
         return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
+    })
+    const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        return inProgressSurveyData?.visitedIndices ?? []
     })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -1304,13 +1320,16 @@ export function Questions({
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
+        const newVisitedIndices = [...visitedIndices, displayQuestionIndex]
 
         if (!isSurveyCompleted) {
+            setVisitedIndices(newVisitedIndices)
             setCurrentQuestionIndex(nextStep)
             setInProgressSurveyState(survey, {
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
                 lastQuestionIndex: nextStep,
+                visitedIndices: newVisitedIndices,
                 surveyLanguage,
             })
         }
@@ -1318,8 +1337,19 @@ export function Questions({
         // If partial responses are enabled, send the survey sent event with with the responses,
         // otherwise only send the event when the survey is completed
         if (survey.enable_partial_responses || isSurveyCompleted) {
+            // Only emit responses for questions actually on the path the user took. This prunes
+            // ghost answers from branches the user abandoned by backing up and choosing differently.
+            const visitedResponseKeys = new Set(
+                newVisitedIndices
+                    .map((i) => surveyQuestions[i]?.id)
+                    .filter((id): id is string => !!id)
+                    .map((id) => getSurveyResponseKey(id))
+            )
+            const responsesOnPath = Object.fromEntries(
+                Object.entries(newResponses).filter(([key]) => visitedResponseKeys.has(key))
+            )
             sendSurveyEvent({
-                responses: newResponses,
+                responses: responsesOnPath,
                 survey,
                 surveySubmissionId,
                 isSurveyCompleted,
@@ -1329,6 +1359,31 @@ export function Questions({
             })
         }
     }
+
+    const onBackButtonClick = () => {
+        // In preview mode the parent owns navigation (via previewPageIndex), so delegate to it.
+        if (isPreviewMode) {
+            onPreviewBack()
+            return
+        }
+        if (visitedIndices.length === 0) {
+            return
+        }
+        const previousIndex = visitedIndices[visitedIndices.length - 1]
+        const newVisitedIndices = visitedIndices.slice(0, -1)
+        setVisitedIndices(newVisitedIndices)
+        setCurrentQuestionIndex(previousIndex)
+        setInProgressSurveyState(survey, {
+            surveySubmissionId,
+            responses: questionsResponses,
+            lastQuestionIndex: previousIndex,
+            visitedIndices: newVisitedIndices,
+            surveyLanguage,
+        })
+    }
+
+    const canGoBack =
+        !!survey.appearance?.allowGoBack && (isPreviewMode ? (previewPageIndex ?? 0) > 0 : visitedIndices.length > 0)
 
     const currentQuestion = surveyQuestions.at(currentQuestionIndex)
 
@@ -1363,6 +1418,8 @@ export function Questions({
                     initialValue: currentQuestion.id
                         ? questionsResponses[getSurveyResponseKey(currentQuestion.id)]
                         : undefined,
+                    canGoBack,
+                    onBack: onBackButtonClick,
                 })}
             </div>
         </form>
@@ -1490,6 +1547,8 @@ const getQuestionComponent = ({
     onSubmit,
     onPreviewSubmit,
     initialValue,
+    canGoBack,
+    onBack,
 }: GetQuestionComponentProps): JSX.Element | null => {
     const baseProps = {
         forceDisableHtml,
@@ -1502,6 +1561,8 @@ const getQuestionComponent = ({
         },
         initialValue,
         displayQuestionIndex,
+        canGoBack,
+        onBack,
     }
 
     switch (question.type) {

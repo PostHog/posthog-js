@@ -1,3 +1,7 @@
+// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
+// Copyright (c) 2025 MCPcat
+// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPServerLike, RegisteredTool } from '../types'
 import { stripConversationId } from './conversation-id'
@@ -6,7 +10,12 @@ import { getServerTrackingData } from './internal'
 import { log } from './logger'
 import { createWrappedTool, getLiteralValue, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
-import { instrumentInitializeHandler, instrumentToolsListHandler, captureToolCall } from './instrumentation'
+import {
+  instrumentInitializeHandler,
+  instrumentToolsListHandler,
+  captureToolCall,
+  readToolMetaCategory,
+} from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
 type MCPRequestHandler = NonNullable<
@@ -278,6 +287,7 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike): void 
 
     if (mcpAnalyticsData) {
       seedToolDescriptionsFromRegistry(mcpAnalyticsData.toolDescriptions, server._registeredTools)
+      seedToolCategoriesFromRegistry(mcpAnalyticsData.toolCategories, server._registeredTools)
     }
 
     instrumentToolsListHandler(server.server)
@@ -292,6 +302,15 @@ function seedToolDescriptionsFromRegistry(cache: Map<string, string>, tools: Rec
   for (const [name, tool] of Object.entries(tools)) {
     if (typeof tool?.description === 'string') {
       cache.set(name, tool.description)
+    }
+  }
+}
+
+function seedToolCategoriesFromRegistry(cache: Map<string, string>, tools: Record<string, RegisteredTool>): void {
+  for (const [name, tool] of Object.entries(tools)) {
+    const category = readToolMetaCategory(tool?._meta)
+    if (category) {
+      cache.set(name, category)
     }
   }
 }

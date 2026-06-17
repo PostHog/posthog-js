@@ -94,6 +94,9 @@ jobs:
                   fetch-depth: 0
                   token: ${{ steps.releaser.outputs.token }}
 
+            - name: Update to latest main before generating release artifacts
+              run: git pull --ff-only origin main
+
             - name: Setup environment
               uses: ./.github/actions/setup
               with:
@@ -104,7 +107,7 @@ jobs:
 
             - name: Update versions and changelogs
               run: |
-                  pnpm bump && pnpm generate-references
+                  pnpm bump && pnpm generate-references:versioned
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
@@ -121,6 +124,14 @@ jobs:
                   fi
                   echo "version=$VERSION" >> "$GITHUB_OUTPUT"
                   echo "Resolved posthog-js version: $VERSION"
+
+            - name: Ensure main did not advance during release artifact generation
+              run: |
+                  git fetch origin main
+                  if [ "$(git rev-parse HEAD)" != "$(git rev-parse FETCH_HEAD)" ]; then
+                    echo "::error::main advanced while generating release artifacts. Re-run the workflow so versions and changelogs include the latest changesets."
+                    exit 1
+                  fi
 
             - name: Commit version bump and lockfile
               id: commit-version-bump
@@ -313,24 +324,6 @@ jobs:
                        -H "Accept: application/vnd.github+json" \
                        -H "Authorization: Bearer $GITHUB_TOKEN" \
                        https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
-                       -d "$(jq -n \
-                         --arg ref "main" \
-                         --arg package_name "$PACKAGE_NAME" \
-                         --arg package_version "$PACKAGE_VERSION" \
-                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
-                       )"
-
-            - name: Dispatch posthog.com upgrade for ${{ matrix.package.name }}
-              if: matrix.package.name == '@posthog/types' && steps.check-package-version.outputs.is-new-version == 'true'
-              env:
-                  PACKAGE_NAME: ${{ matrix.package.name }}
-                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  curl -f -sS -X POST \
-                       -H "Accept: application/vnd.github+json" \
-                       -H "Authorization: Bearer $GITHUB_TOKEN" \
-                       https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-com-upgrade.yml/dispatches \
                        -d "$(jq -n \
                          --arg ref "main" \
                          --arg package_name "$PACKAGE_NAME" \

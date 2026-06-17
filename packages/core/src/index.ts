@@ -1,4 +1,4 @@
-export { getFeatureFlagValue } from './featureFlagUtils'
+export { getFeatureFlagValue, getEnabledFromValue, getVariantFromValue, parsePayload } from './featureFlagUtils'
 export {
   gzipCompress,
   isGzipData,
@@ -12,6 +12,7 @@ export * as ErrorTracking from './error-tracking'
 export {
   buildOtlpLogRecord,
   buildOtlpLogsPayload,
+  buildResourceAttributes,
   getOtlpSeverityNumber,
   getOtlpSeverityText,
   toOtlpAnyValue,

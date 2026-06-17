@@ -1,3 +1,7 @@
+// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
+// Copyright (c) 2025 MCPcat
+// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+
 import type { MCPServerLike, McpEvent } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
@@ -49,6 +53,7 @@ export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promi
     identifyActorData: sessionInfo.identifyActorData,
     groups: sessionInfo.identifyActorGroups,
     resourceName: eventInput.resourceName,
+    toolCategory: eventInput.toolCategory,
     toolDescription: eventInput.toolDescription,
     listedToolNames: eventInput.listedToolNames,
     parameters: eventInput.parameters,

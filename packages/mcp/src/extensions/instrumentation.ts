@@ -1,3 +1,7 @@
+// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
+// Copyright (c) 2025 MCPcat
+// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+
 import {
   InitializeRequestSchema,
   ListToolsRequestSchema,
@@ -138,6 +142,7 @@ async function prepareToolCallEvent(
       parameters: buildCapturedMcpParameters(downstreamRequest),
       eventType,
       timestamp: startTime,
+      toolCategory: toolName ? data.toolCategories.get(toolName) : undefined,
       toolDescription: toolName ? data.toolDescriptions.get(toolName) : undefined,
     }
 
@@ -347,6 +352,7 @@ async function getTracedToolsList(
 
     if (data) {
       cacheToolDescriptions(data.toolDescriptions, tools)
+      cacheToolCategories(data.toolCategories, tools)
     }
 
     return tools
@@ -369,6 +375,28 @@ export function cacheToolDescriptions(cache: Map<string, string>, tools: ListToo
   for (const tool of tools) {
     if (tool?.name && typeof tool.description === 'string') {
       cache.set(tool.name, tool.description)
+    }
+  }
+}
+
+/**
+ * Category declared on a tool's `_meta` block (the MCP spec allows arbitrary
+ * `_meta` keys). Declaring `_meta: { category: "Logs" }` on a tool definition
+ * is all a server needs for every call to carry `$mcp_tool_category`.
+ */
+export function readToolMetaCategory(meta: unknown): string | undefined {
+  const category = (meta as Record<string, unknown> | null | undefined)?.category
+  return typeof category === 'string' && category.length > 0 ? category : undefined
+}
+
+export function cacheToolCategories(cache: Map<string, string>, tools: ListToolsResult['tools'] | undefined): void {
+  if (!tools) {
+    return
+  }
+  for (const tool of tools) {
+    const category = tool?.name ? readToolMetaCategory(tool._meta) : undefined
+    if (category) {
+      cache.set(tool.name, category)
     }
   }
 }

@@ -7,5 +7,9 @@ import { StyleSheet } from 'react-native'
  * See https://github.com/PostHog/posthog-js/issues/3740.
  */
 export const createSafeStyleSheet = <T extends StyleSheet.NamedStyles<T>>(styles: T): T => {
-  return typeof StyleSheet?.create === 'function' ? StyleSheet.create(styles) : styles
+  try {
+    return typeof StyleSheet?.create === 'function' ? StyleSheet.create(styles) : styles
+  } catch {
+    return styles
+  }
 }

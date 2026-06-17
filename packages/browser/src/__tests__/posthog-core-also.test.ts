@@ -7,7 +7,7 @@ import { isUndefined } from '@posthog/core'
 import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
-import { PostHog } from '../posthog-core'
+import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
@@ -59,6 +59,23 @@ describe('posthog core', () => {
 
     afterEach(() => {
         jest.useRealTimers()
+    })
+
+    describe('configRenames()', () => {
+        it.each([
+            [
+                'maps deprecated preview beacon option to the stable config name',
+                { __preview_disable_beacon: true },
+                { disable_beacon: true },
+            ],
+            [
+                'prioritizes stable beacon option name over deprecated preview name',
+                { disable_beacon: false, __preview_disable_beacon: true },
+                { disable_beacon: false },
+            ],
+        ] as [string, Partial<PostHogConfig>, Partial<PostHogConfig>][])('%s', (_description, input, expected) => {
+            expect(configRenames(input)).toMatchObject(expected)
+        })
     })
 
     describe('capture()', () => {
@@ -772,6 +789,22 @@ describe('posthog core', () => {
             expect(posthog._requestQueue.unload).toHaveBeenCalledTimes(1)
         })
 
+        it('drains logs via a sendBeacon flush', () => {
+            const flushLogs = jest.fn()
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { logs: { flushLogs } as unknown as PostHog['logs'] }
+            )
+
+            posthog._handle_unload()
+
+            expect(flushLogs).toHaveBeenCalledWith('sendBeacon')
+        })
+
         describe('without batching', () => {
             it('captures $pageleave', () => {
                 const posthog = posthogWith(
@@ -1222,6 +1255,39 @@ describe('posthog core', () => {
         })
     })
 
+    describe('person properties for flags', () => {
+        let posthog: PostHog
+
+        beforeEach(() => {
+            posthog = defaultPostHog().init(
+                'testtoken',
+                {
+                    persistence: 'memory',
+                },
+                uuidv7()
+            )!
+            posthog.persistence!.clear()
+            posthog.reloadFeatureFlags = jest.fn()
+        })
+
+        it.each([
+            [undefined, 1],
+            [false, 0],
+        ] as const)(
+            'resets person properties for flags (reloadFeatureFlags=%s)',
+            (reloadFeatureFlags, expectedCalls) => {
+                posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
+
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual({ plan: 'pro' })
+
+                posthog.resetPersonPropertiesForFlags(reloadFeatureFlags)
+
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
+                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
+            }
+        )
+    })
+
     describe('group()', () => {
         let posthog: PostHog
 
@@ -1641,5 +1707,19 @@ describe('posthog core', () => {
         const posthog = await createPosthogInstance(uuidv7())
         expect(posthog.webPerformance._forceAllowLocalhost).toBe(false)
         expect(() => posthog.webPerformance._forceAllowLocalhost).not.toThrow()
+    })
+})
+
+describe('_send_request skipIPParam', () => {
+    it('omits the ip query param when skipIPParam is set, and keeps it otherwise', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+        const flagsRequest = { url: 'http://localhost/flags/?v=2', skipIPParam: true }
+        posthog._send_request(flagsRequest)
+        expect(flagsRequest.url).toBe('http://localhost/flags/?v=2')
+
+        const eventRequest = { url: 'http://localhost/e/' }
+        posthog._send_request(eventRequest)
+        expect(eventRequest.url).toMatch(/[?&]ip=/)
     })
 })

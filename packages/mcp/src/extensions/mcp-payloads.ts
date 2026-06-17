@@ -1,3 +1,7 @@
+// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
+// Copyright (c) 2025 MCPcat
+// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+
 const CONTEXT_ARGUMENT_NAME = 'context'
 const REDACTED_VALUE = '[redacted]'
 const BASE64_PATTERN = /^[A-Za-z0-9+/\n\r]+=*$/

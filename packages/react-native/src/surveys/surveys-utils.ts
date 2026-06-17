@@ -147,6 +147,8 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   thankYouMessageDescriptionContentType: SurveyQuestionDescriptionContentType.Text,
   thankYouMessageCloseButtonText: 'Close',
   surveyPopupDelaySeconds: 0,
+  allowGoBack: false,
+  backButtonText: 'Back',
 }
 
 export type SurveyFlexAlign = 'flex-start' | 'center' | 'flex-end'

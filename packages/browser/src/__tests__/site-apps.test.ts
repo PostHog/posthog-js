@@ -383,6 +383,167 @@ describe('SiteApps', () => {
             })
         })
 
+        it('prepares style elements appended during site app init', () => {
+            posthog.config.prepare_external_dependency_stylesheet = jest.fn((stylesheet) => {
+                stylesheet.nonce = 'style-nonce'
+                return stylesheet
+            })
+            init(({ callback }) => {
+                const host = document.createElement('div')
+                const shadow = host.attachShadow({ mode: 'open' })
+                const styleElement = Object.assign(document.createElement('style'), {
+                    innerText: '.foo { color: red; }',
+                })
+                shadow.append(styleElement)
+                document.body.appendChild(host)
+                callback(true)
+            })
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+
+            const styleElement = document.body.querySelector('div')?.shadowRoot?.querySelector('style')
+            expect(posthog.config.prepare_external_dependency_stylesheet).toHaveBeenCalledWith(styleElement)
+            expect(styleElement?.nonce).toBe('style-nonce')
+        })
+
+        it('prepares style elements inserted with related DOM APIs', () => {
+            const insertedStyles: HTMLStyleElement[] = []
+            const stylesInsertedPerAppInit = 6
+            posthog.config.prepare_external_dependency_stylesheet = jest.fn((stylesheet) => {
+                stylesheet.nonce = 'style-nonce'
+                return stylesheet
+            })
+            init(({ callback }) => {
+                const host = document.createElement('div')
+                document.body.appendChild(host)
+
+                const prependedStyle = document.createElement('style')
+                host.prepend(prependedStyle)
+
+                const replacementStyle = document.createElement('style')
+                const replacedStyle = document.createElement('style')
+                host.replaceChild(replacementStyle, prependedStyle)
+                replacementStyle.replaceWith(replacedStyle)
+
+                const beforeStyle = document.createElement('style')
+                const afterStyle = document.createElement('style')
+                const adjacentStyle = document.createElement('style')
+                host.before(beforeStyle)
+                host.after(afterStyle)
+                host.insertAdjacentElement('afterbegin', adjacentStyle)
+
+                insertedStyles.push(
+                    prependedStyle,
+                    replacementStyle,
+                    replacedStyle,
+                    beforeStyle,
+                    afterStyle,
+                    adjacentStyle
+                )
+                callback(true)
+            })
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+
+            const expectedStyleCount = stylesInsertedPerAppInit * appConfigs.length
+            const expectedAttachedStyleCount = 4 * appConfigs.length
+            expect(insertedStyles).toHaveLength(expectedStyleCount)
+            expect(insertedStyles.every((styleElement) => styleElement.nonce === 'style-nonce')).toBe(true)
+            expect(document.body.querySelectorAll('style[nonce="style-nonce"]')).toHaveLength(
+                expectedAttachedStyleCount
+            )
+        })
+
+        it('prepares style elements appended before async init callbacks complete', () => {
+            const finishInit: (() => HTMLStyleElement)[] = []
+            posthog.config.prepare_external_dependency_stylesheet = jest.fn((stylesheet) => {
+                stylesheet.nonce = 'style-nonce'
+                return stylesheet
+            })
+            init(({ callback }) => {
+                finishInit.push(() => {
+                    const styleElement = document.createElement('style')
+                    document.body.append(styleElement)
+                    callback(true)
+                    return styleElement
+                })
+            })
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+
+            const secondAppStyle = finishInit[1]()
+            const stillPendingStyle = document.createElement('style')
+            document.body.append(stillPendingStyle)
+            const firstAppStyle = finishInit[0]()
+            const afterCallbacksStyle = document.createElement('style')
+            document.body.append(afterCallbacksStyle)
+
+            expect(secondAppStyle.nonce).toBe('style-nonce')
+            expect(stillPendingStyle.nonce).toBe('style-nonce')
+            expect(firstAppStyle.nonce).toBe('style-nonce')
+            expect(afterCallbacksStyle.nonce).toBe('')
+        })
+
+        it('does not replace DOM insertion methods when no prepare hooks are configured', () => {
+            const win = document.defaultView as Window & typeof globalThis
+            const originalMethods = [
+                ['Node.appendChild', win.Node.prototype.appendChild],
+                ['Node.insertBefore', win.Node.prototype.insertBefore],
+                ['Node.replaceChild', win.Node.prototype.replaceChild],
+                ['Element.append', win.Element.prototype.append],
+                ['Element.prepend', win.Element.prototype.prepend],
+                ['Element.before', win.Element.prototype.before],
+                ['Element.after', win.Element.prototype.after],
+                ['Element.replaceWith', win.Element.prototype.replaceWith],
+                ['Element.insertAdjacentElement', win.Element.prototype.insertAdjacentElement],
+            ] as const
+            const currentMethods = () =>
+                [
+                    ['Node.appendChild', win.Node.prototype.appendChild],
+                    ['Node.insertBefore', win.Node.prototype.insertBefore],
+                    ['Node.replaceChild', win.Node.prototype.replaceChild],
+                    ['Element.append', win.Element.prototype.append],
+                    ['Element.prepend', win.Element.prototype.prepend],
+                    ['Element.before', win.Element.prototype.before],
+                    ['Element.after', win.Element.prototype.after],
+                    ['Element.replaceWith', win.Element.prototype.replaceWith],
+                    ['Element.insertAdjacentElement', win.Element.prototype.insertAdjacentElement],
+                ] as const
+            const expectMethodsUnchanged = () => {
+                currentMethods().forEach(([name, method], index) => {
+                    expect([name, method]).toEqual(originalMethods[index])
+                })
+            }
+
+            init(({ callback }) => {
+                expectMethodsUnchanged()
+                callback(true)
+            })
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            expectMethodsUnchanged()
+        })
+
+        it('prepares script elements appended while processing site app events', () => {
+            posthog.config.prepare_external_dependency_script = jest.fn((script) => {
+                script.nonce = 'script-nonce'
+                return script
+            })
+            init()
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            appConfigs[0].processEvent.mockImplementation(() => {
+                const script = document.createElement('script')
+                document.head.append(script)
+            })
+
+            const eventCaptured = (posthog.on as jest.Mock).mock.calls[0][1]
+            eventCaptured({ event: 'test_event', properties: {} } as CaptureResult)
+
+            const scriptElement = document.head.querySelector('script')
+            expect(posthog.config.prepare_external_dependency_script).toHaveBeenCalledWith(scriptElement)
+            expect(scriptElement?.nonce).toBe('script-nonce')
+        })
+
         it('marks site app as errored if callback fails', () => {
             init()
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)

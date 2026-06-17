@@ -16,8 +16,9 @@ concurrency:
 jobs:
   browsers:
     name: Test on ${{ matrix.tests.name }}
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-22.04
+    env:
+      CAN_RUN_INTEGRATION_TESTS: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
 
     strategy:
       fail-fast: false
@@ -40,30 +41,37 @@ jobs:
             install: "chromium"
 
     steps:
+      - name: Skip fork PR
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS != 'true' }}
+        run: echo "Skipping ${{ matrix.tests.name }} integration tests for fork PRs because required secrets are unavailable."
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' }}
         with:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' }}
         with:
           build: false
 
       - uses: ./.github/actions/is-affected
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' }}
         id: is-affected
         with:
           package-name: posthog-js
 
       - name: Build packages
-        if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm build
 
       - name: Install Playwright Browsers
-        if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm exec playwright install ${{ matrix.tests.install }} --with-deps --only-shell
         working-directory: packages/browser
 
       - name: Run ${{ matrix.tests.name }} test
-        if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 30
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}

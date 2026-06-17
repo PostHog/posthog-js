@@ -1,6 +1,5 @@
-import { Platform } from 'react-native'
 import { OptionalAsyncStorage } from './optional/OptionalAsyncStorage'
-import { GLOBAL_OBJ, isMacOS, isWeb, isWindows } from './utils'
+import { GLOBAL_OBJ, getPlatformOS, isMacOS, isWeb, isWindows } from './utils'
 import { OptionalExpoApplication } from './optional/OptionalExpoApplication'
 import { OptionalExpoDevice } from './optional/OptionalExpoDevice'
 import { OptionalExpoFileSystem } from './optional/OptionalExpoFileSystem'
@@ -60,7 +59,7 @@ export const getAppProperties = (): PostHogCustomAppProperties => {
     // https://github.com/expo/expo/issues/6990
     // some devices return a value similar to:
     // HUAWEI/SNE-LX1/HWSNE:8.1.0/HUAWEISNE-LX1/131(C432):user/release-keys
-    if (Platform.OS === 'android') {
+    if (getPlatformOS() === 'android') {
       properties.$os_name = 'Android'
     } else {
       properties.$os_name = OptionalExpoDevice.osName

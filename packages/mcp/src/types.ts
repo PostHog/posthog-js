@@ -1,3 +1,7 @@
+// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
+// Copyright (c) 2025 MCPcat
+// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ErrorTracking } from '@posthog/core'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
@@ -107,6 +111,8 @@ export type ToolCallback =
 // RegisteredTool type that supports both MCP SDK 1.23- (callback) and 1.24+ (handler)
 export type RegisteredTool = {
   description?: string
+  /** MCP tool `_meta` block (spec-allowed arbitrary metadata, e.g. `category`). */
+  _meta?: Record<string, unknown>
   inputSchema?: unknown
   update?: (...args: unknown[]) => unknown
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
@@ -151,6 +157,7 @@ export interface Event {
   serverVersion?: string
   sessionId: string
   timestamp: Date
+  toolCategory?: string
   toolDescription?: string
   userIntent?: string
   userIntentSource?: MCPAnalyticsIntentSource
@@ -230,6 +237,7 @@ export interface MCPAnalyticsData {
   sessionId: string
   sessionInfo: SessionInfo
   sessionSource: 'generated' | 'mcp'
+  toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
 }
 
@@ -241,4 +249,67 @@ export interface CaptureEventData {
   event: string
   /** Event properties, spread onto the PostHog event. Values must be JSON-serializable. */
   properties?: JsonRecord
+}
+
+/**
+ * Identity + routing fields shared by every {@link PostHogMCP} capture call. The
+ * caller resolves these per request (there is no wrapped server to derive them
+ * from), so they are passed explicitly on each event.
+ */
+export interface McpCaptureCommon {
+  /**
+   * Resolved person distinct id (becomes `distinct_id`). Supplying it enables
+   * person processing so `$set` lands on a real person; omitting it falls back
+   * to an anonymous capture with `$process_person_profile: false`.
+   */
+  distinctId?: string
+  /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
+  sessionId?: string
+  /** Person properties → `$set` (e.g. `{ name, email, plan }`). */
+  setProperties?: JsonRecord
+  /** Group memberships → `$groups`. */
+  groups?: Record<string, string>
+  /** Extra event properties, spread onto the PostHog event verbatim. */
+  properties?: JsonRecord
+  /** Event timestamp. Defaults to the time of the capture call. */
+  timestamp?: Date
+}
+
+/** Payload for {@link PostHogMCP.captureToolCall}. Emits `$mcp_tool_call`. */
+export interface ToolCallCaptureData extends McpCaptureCommon {
+  /** Tool name → `$mcp_tool_name` / `$mcp_resource_name`. */
+  toolName: string
+  /** Tool description → `$mcp_tool_description`. */
+  toolDescription?: string
+  /** Product category the tool belongs to (e.g. "Logs") → `$mcp_tool_category`. */
+  category?: string
+  /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
+  parameters?: unknown
+  /** Captured tool result → `$mcp_response` (sanitized + truncated). */
+  response?: unknown
+  /** Wall-clock duration → `$mcp_duration_ms`. */
+  durationMs?: number
+  /** Whether the call failed → `$mcp_is_error`. */
+  isError?: boolean
+  /**
+   * The thrown value (Error, string, object, or CallToolResult). When `isError`
+   * is true and `enableExceptionAutocapture` is on, this is turned into the
+   * `$exception` sibling event. If omitted on an error, a generic exception is
+   * synthesized from the tool name.
+   */
+  error?: unknown
+}
+
+/** Payload for {@link PostHogMCP.captureInitialize}. Emits `$mcp_initialize`. */
+export interface InitializeCaptureData extends McpCaptureCommon {
+  /** MCP client name → `$mcp_client_name`. */
+  clientName?: string
+  /** MCP client version → `$mcp_client_version`. */
+  clientVersion?: string
+  /** Captured initialize params → `$mcp_parameters`. */
+  parameters?: unknown
+  /** Captured initialize result → `$mcp_response`. */
+  response?: unknown
+  /** Wall-clock duration → `$mcp_duration_ms`. */
+  durationMs?: number
 }

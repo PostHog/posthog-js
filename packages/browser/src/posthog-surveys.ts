@@ -73,20 +73,24 @@ export class PostHogSurveys implements Extension {
     }
 
     reset(): void {
-        // Drop in-memory event/action activations too; they aren't in persistence (which
-        // reset() has already cleared), so without this an armed-but-unshown survey would
-        // survive a logout/account switch that doesn't reload the page.
-        this._surveyEventReceiver?.reset()
-        localStorage.removeItem('lastSeenSurveyDate')
-        const surveyKeys = []
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
-                surveyKeys.push(key)
+        try {
+            // Drop in-memory event/action activations too; they aren't in persistence (which
+            // reset() has already cleared), so without this an armed-but-unshown survey would
+            // survive a logout/account switch that doesn't reload the page.
+            this._surveyEventReceiver?.reset()
+            localStorage.removeItem('lastSeenSurveyDate')
+            const surveyKeys = []
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i)
+                if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
+                    surveyKeys.push(key)
+                }
             }
-        }
 
-        surveyKeys.forEach((key) => localStorage.removeItem(key))
+            surveyKeys.forEach((key) => localStorage.removeItem(key))
+        } catch {
+            // localStorage is not always available (e.g. in cross-origin iframes); resetting survey state is best-effort.
+        }
     }
 
     loadIfEnabled() {

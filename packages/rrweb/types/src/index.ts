@@ -51,6 +51,20 @@ export type customEvent<T = unknown> = {
   };
 };
 
+/**
+ * Reserved custom-event tag emitted by the recorder when an element enters or
+ * exits the native Fullscreen API. Native fullscreen is rendered by the UA
+ * `:fullscreen` pseudo-class with no DOM mutation, so rrweb captures nothing —
+ * this event lets the replayer re-apply fullscreen layout on playback.
+ */
+export const FullscreenCustomEventTag = 'rrweb/fullscreen';
+
+export type fullscreenEventPayload = {
+  /** mirror id of the element that went fullscreen */
+  id: number;
+  enter: boolean;
+};
+
 export type pluginEvent<T = unknown> = {
   type: EventType.Plugin;
   data: {

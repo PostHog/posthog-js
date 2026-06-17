@@ -1,6 +1,9 @@
 {
   "name": "@posthog/core",
-  "version": "1.30.14",
+  "version": "1.35.1",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -76,7 +79,7 @@
     }
   },
   "dependencies": {
-    "@posthog/types": "workspace:*"
+    "@posthog/types": "workspace:^"
   },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",

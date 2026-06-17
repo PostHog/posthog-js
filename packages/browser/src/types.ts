@@ -193,13 +193,24 @@ export interface RequestWithOptions {
     callback?: (response: RequestResponse) => void
     timeout?: number
     noRetries?: boolean
+    // Omit the `ip` query param from the request URL. The param is meaningful for event ingestion
+    // and session recording, but not for flags requests. Flags requests set this so the URL doesn't
+    // match ad-blocker filters that key on `/flags…ip=`.
+    skipIPParam?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
-    disableXHRCredentials?: boolean
     compression?: Compression | 'best-available'
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions
     }
+    /**
+     * When set, `_send_request` invokes `callback` with a synthetic response
+     * on the paths that otherwise drop a request without notifying the caller
+     * (client not loaded, server rate limit). Opt-in so existing callers keep
+     * their current behavior; the logs pipeline uses it to keep records for a
+     * later retry instead of losing them silently.
+     */
+    fireCallbackOnDrop?: boolean
 }
 
 // Queued request types - the same as a request but with additional queueing information

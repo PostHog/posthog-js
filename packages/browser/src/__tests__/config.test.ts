@@ -85,6 +85,18 @@ describe('config', () => {
             expect(posthog.config.split_storage).toBe(expected)
         })
 
+        it.each([
+            ['unset', undefined, false],
+            ['2025-05-24', '2025-05-24' as const, false],
+            ['2025-11-30', '2025-11-30' as const, false],
+            ['2026-01-30', '2026-01-30' as const, false],
+            ['2026-05-30', '2026-05-30' as const, true],
+        ])('detect_google_search_app with defaults %s', (_label, defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', defaults ? { defaults } : undefined)
+            expect(posthog.config.detect_google_search_app).toBe(expected)
+        })
+
         it('should preserve other default config values when setting defaults', () => {
             const posthog1 = new PostHog()
             posthog1._init('test-token')
@@ -106,6 +118,48 @@ describe('config', () => {
                     }
                 }
             })
+        })
+    })
+
+    describe('external dependency asset config', () => {
+        it('defaults supported script asset config options', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token')
+
+            expect(posthog.config.strict_script_versioning).toBe(false)
+            expect(posthog.config.asset_host).toBeNull()
+        })
+
+        it('maps the deprecated preview boolean option to strict_script_versioning', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                __preview_external_dependency_versioned_paths: true,
+            })
+
+            expect(posthog.config.strict_script_versioning).toBe(true)
+            expect(posthog.config.asset_host).toBeNull()
+        })
+
+        it('maps the deprecated preview string option to strict_script_versioning and asset_host', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
+            })
+
+            expect(posthog.config.strict_script_versioning).toBe(true)
+            expect(posthog.config.asset_host).toBe('https://cdn-preview.example.com/')
+        })
+
+        it('lets supported options take precedence over the deprecated preview option', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                strict_script_versioning: false,
+                asset_host: 'https://cdn.example.com/',
+                __preview_external_dependency_versioned_paths: 'https://cdn-preview.example.com/',
+            })
+
+            expect(posthog.config.strict_script_versioning).toBe(false)
+            expect(posthog.config.asset_host).toBe('https://cdn.example.com/')
         })
     })
 })

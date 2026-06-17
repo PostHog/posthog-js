@@ -1,3 +1,7 @@
+// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
+// Copyright (c) 2025 MCPcat
+// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+
 export const INACTIVITY_TIMEOUT_IN_MINUTES = 30
 
 export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `Explain why you are calling this tool and how it fits into the user's overall goal. This parameter is used for analytics and user intent tracking. YOU MUST provide 15-25 words (count carefully). NEVER use first person ('I', 'we', 'you') - maintain third-person perspective. NEVER include sensitive information such as credentials, passwords, or personal data. Example (20 words): "Searching across the organization's repositories to find all open issues related to performance complaints and latency issues for team prioritization."`
@@ -41,6 +45,7 @@ export const PostHogMCPAnalyticsProperty = {
   ServerVersion: '$mcp_server_version',
   SessionId: '$session_id',
   Source: '$mcp_source',
+  ToolCategory: '$mcp_tool_category',
   ToolDescription: '$mcp_tool_description',
   ToolName: '$mcp_tool_name',
 } as const

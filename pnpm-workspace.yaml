@@ -40,6 +40,12 @@ catalog:
 
 minimumReleaseAge: 10080
 
+onlyBuiltDependencies:
+  - sharp
+
+overrides:
+  node-forge: 1.3.2
+
 minimumReleaseAgeExclude:
   - "@posthog/cli"
   - "posthog-react-native-session-replay"

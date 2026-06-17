@@ -5,9 +5,13 @@ import '@testing-library/jest-dom'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_ID,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_REMOTE_CONFIG,
+    SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
@@ -1297,6 +1301,205 @@ describe('Lazy SessionRecording', () => {
                 expect(recordMock).toHaveBeenCalledTimes(2)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(rotatedSessionId)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(true)
+            })
+
+            it('recorder follows an adopted sibling-tab session id (does not record under the stale id)', () => {
+                // Regression for cross-tab session adoption: when this tab is idle and a
+                // sibling tab has kept the session alive (here under a different id), the
+                // idle check ADOPTS the sibling's id instead of rotating. The recorder must
+                // switch to the adopted id so its snapshots are stamped with the live
+                // session, not this tab's stale one — otherwise the replay splits.
+                config.persistence_save_debounce_ms = 250 // enable the cross-tab hardening (emit on adoption)
+                try {
+                    const firstActivityTimestamp = startingTimestamp + 100
+                    const idleTriggerTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                    // past this tab's own session timeout, so its first idle check fires
+                    const checkTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+
+                    emitActiveEvent(firstActivityTimestamp)
+                    const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                    emitInactiveEvent(idleTriggerTimestamp, true)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+
+                    const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                    recordMock.mockClear()
+
+                    // A sibling tab kept the session alive under its own id. The cross-tab
+                    // refresh pulls that id (with fresh activity) from storage, so the idle
+                    // check adopts it rather than rotating. We must NOT rotate, so the
+                    // generator returning a fresh id would be a bug — assert against it.
+                    const siblingSessionId = 'sibling-tab-session-id'
+                    sessionIdGeneratorMock.mockClear()
+                    sessionIdGeneratorMock.mockImplementation(() => 'should-not-be-generated')
+                    const persistence = sessionManager['_persistence']
+                    const refreshSpy = jest.spyOn(persistence, 'refreshKey').mockImplementation(() => {
+                        persistence.props[SESSION_ID] = [checkTimestamp - 1000, siblingSessionId, startingTimestamp]
+                    })
+
+                    // An analytics event triggers checkAndGetSessionAndWindowId while idle.
+                    jest.useFakeTimers().setSystemTime(new Date(checkTimestamp))
+                    const { sessionId: resultSessionId } = sessionManager.checkAndGetSessionAndWindowId(
+                        false,
+                        checkTimestamp
+                    )
+
+                    // The manager adopted the sibling's id, it did not rotate.
+                    expect(resultSessionId).toEqual(siblingSessionId)
+                    expect(resultSessionId).not.toEqual(firstSessionId)
+                    expect(sessionIdGeneratorMock).not.toHaveBeenCalled()
+
+                    // The recorder followed the adopted id (emit fired synchronously while
+                    // idle), and restarted exactly once — no churn.
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(siblingSessionId)
+                    expect(recordMock).toHaveBeenCalledTimes(1)
+
+                    refreshSpy.mockRestore()
+                } finally {
+                    delete config.persistence_save_debounce_ms
+                }
+            })
+
+            // Verifies the suspected teardown-race between stop()'s async compression-queue
+            // drain and the synchronous start('session_id_changed') that follows. If the
+            // pending cleanup proceeds (its generation check passes because nothing bumped
+            // it during start()), it calls _teardown() on the recorder — silently undoing
+            // the restart. The recorder then appears to be in an ACTIVE strategy state but
+            // rrweb is dead, no listeners are attached, and snapshots never reach the server.
+            it('keeps the new recorder alive when stop() had an in-flight compression queue', async () => {
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                // Establish a recording session and pretend the compression queue is non-empty.
+                emitActiveEvent(startingTimestamp + 100)
+                expect(recordMock).toHaveBeenCalledTimes(1)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                let resolveDrain: () => void = () => {}
+                lazyRecorder['_compressionQueue'] = new Promise<void>((resolve) => {
+                    resolveDrain = resolve
+                })
+
+                // Rotate the session — _updateWindowAndSessionIds runs stop()+start().
+                // stop() takes the _stopAfterCompressionQueueDrains path because the queue
+                // is non-empty, queueing async cleanup. start() then synchronously restarts
+                // the recorder.
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                const rotationTimestamp = startingTimestamp + 100 + sessionManager['_sessionTimeoutMs'] + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                emitActiveEvent(rotationTimestamp)
+
+                expect(recordMock).toHaveBeenCalledTimes(2)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+                expect(lazyRecorder['_sessionId']).toEqual('rotated-session-id')
+
+                // Resolve the queued drain — this fires the async cleanup from the prior
+                // stop(). With the bug, the cleanup calls _teardown() on the new recorder.
+                resolveDrain()
+                await Promise.resolve()
+                await Promise.resolve()
+
+                // The new recorder must still be alive. If the teardown race fired, isStarted
+                // would be false (rrweb stopped) and the V2 strategy would have its matchers
+                // cleared so status returns 'disabled'.
+                expect(lazyRecorder['isStarted']).toEqual(true)
+                expect(['active', 'sampled', 'buffering']).toContain(sessionRecording.status)
+            })
+
+            // The rotation must not leave behind stale stop-in-progress state. If start()
+            // only invalidated the generation, _isStoppingAfterCompression would stay true
+            // (the bailed-out drain never resets it) and _queuedCompressionEvents would stay
+            // counted (stale-generation events never decrement it) — so every later stop()
+            // would hit the in-progress guard in _stopAfterCompressionQueueDrains and
+            // silently no-op, leaving rrweb running forever.
+            it('can still stop the new recorder after surviving an in-flight compression queue', async () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                let resolveDrain: () => void = () => {}
+                lazyRecorder['_compressionQueue'] = new Promise<void>((resolve) => {
+                    resolveDrain = resolve
+                })
+
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                const rotationTimestamp = startingTimestamp + 100 + sessionManager['_sessionTimeoutMs'] + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                emitActiveEvent(rotationTimestamp)
+
+                resolveDrain()
+                await Promise.resolve()
+                await Promise.resolve()
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder.stop()
+
+                expect(lazyRecorder['isStarted']).toEqual(false)
+            })
+
+            // start() is also called re-entrantly on a live recorder (e.g. opt-in calls
+            // _startCapturing twice) with no stop() in between. There is no stale cleanup
+            // to invalidate then — the compression queue holds the CURRENT session's events
+            // (rrweb's FullSnapshot among them) and resetting it would drop them, leaving
+            // a replay with a meta event but no full snapshot.
+            it('re-entrant start() preserves the live compression queue', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 2
+                const liveQueue = Promise.resolve()
+                lazyRecorder['_compressionQueue'] = liveQueue
+                const generationBefore = lazyRecorder['_compressionQueueGeneration']
+
+                lazyRecorder.start()
+
+                expect(lazyRecorder['_queuedCompressionEvents']).toEqual(2)
+                expect(lazyRecorder['_compressionQueue']).toBe(liveQueue)
+                expect(lazyRecorder['_compressionQueueGeneration']).toEqual(generationBefore)
+            })
+
+            // #3822: stopSessionRecording() → reset() → identify() → startSessionRecording()
+            // leaked the prior session's buffer (flushed under the old session id), mis-attributing
+            // the recording. start() must discard it when bailing out the pending stop.
+            it('discards the prior session buffer when start() bails out a pending stop()', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                // Establish a recording session with the prior user's data sitting in the buffer.
+                emitActiveEvent(startingTimestamp + 100)
+                const priorSessionId = lazyRecorder['_sessionId']
+                expect(lazyRecorder['_buffer'].data.length).toBeGreaterThan(0)
+                expect(lazyRecorder['_buffer'].sessionId).toEqual(priorSessionId)
+
+                // stopSessionRecording() via the async compression-drain path: rrweb stops, but the
+                // buffer flush and teardown are deferred until the queue drains.
+                lazyRecorder['_isStoppingAfterCompression'] = true
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                lazyRecorder['_compressionQueue'] = new Promise<void>(() => {})
+                lazyRecorder['_stopRecordingProducers']()
+                expect(lazyRecorder['isStarted']).toEqual(false)
+
+                // reset() clears the session id; the fresh id then makes start()'s
+                // checkAndGetSessionAndWindowId() fire the onSessionId restart synchronously.
+                sessionManager.resetSessionId()
+                ;(posthog.capture as Mock).mockClear()
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'post-reset-session-id')
+
+                lazyRecorder.start()
+
+                // No snapshot from the prior session may be flushed during the restart.
+                const leakedPriorSessionSnapshot = (posthog.capture as Mock).mock.calls.find(
+                    (call) => call[0] === '$snapshot' && call[1]?.$session_id === priorSessionId
+                )
+                expect(leakedPriorSessionSnapshot).toBeUndefined()
+                expect(lazyRecorder['isStarted']).toEqual(true)
             })
         })
 
@@ -2834,6 +3037,143 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_isSampled']).toStrictEqual(false)
         })
 
+        it.each([
+            {
+                scenario: 'keeps stored sampled-in decisions when the sampleRate is unchanged',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: 1,
+                    })
+                },
+                sampleRate: '1.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: 1,
+            },
+            {
+                scenario: 'resamples stored sampled-in decisions when the sampleRate is lowered to 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: 1,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'disabled',
+                expectedIsSampled: () => '!' + sessionId,
+                expectedSampleRate: 0,
+            },
+            {
+                scenario: 'resamples legacy sampled-in decisions without a stored sampleRate',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'disabled',
+                expectedIsSampled: () => '!' + sessionId,
+                expectedSampleRate: 0,
+            },
+            {
+                scenario: 'keeps already-applied sampling overrides when the later sampleRate is 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: null,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: null,
+            },
+            {
+                scenario: 'keeps explicit sampling overrides when sampleRate is 0',
+                setup: () => {
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: null,
+            },
+        ])('$scenario', ({ setup, sampleRate, expectedStatus, expectedIsSampled, expectedSampleRate }) => {
+            setup()
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate },
+                })
+            )
+
+            expect(sessionRecording.status).toBe(expectedStatus)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled())
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(expectedSampleRate)
+        })
+
+        it('does not expose the sampling override null sentinel on event properties', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBeNull()
+            expect(posthog.persistence?.properties()).not.toHaveProperty(SESSION_RECORDING_SAMPLE_RATE)
+
+            posthog.persistence?.register({
+                [SESSION_RECORDING_SAMPLE_RATE]: 0,
+            })
+            expect(posthog.persistence?.properties()[SESSION_RECORDING_SAMPLE_RATE]).toBe(0)
+        })
+
+        it('does not reuse a sampled-in decision when sampleRate is lowered to 0 for URL + linked flag ALL match', () => {
+            const sessionRecordingConfig = {
+                endpoint: '/s/',
+                linkedFlag: 'the-flag-key',
+                urlTriggers: [{ url: 'start-on-me', matching: 'regex' as const }],
+                triggerMatchType: 'all' as const,
+            }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { ...sessionRecordingConfig, sampleRate: '1.00' },
+                })
+            )
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+            fakeNavigateTo('https://test.com/start-on-me')
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+
+            sessionRecording.stopRecording()
+            ;(posthog.capture as jest.Mock).mockClear()
+            sessionRecording = new SessionRecording(posthog)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { ...sessionRecordingConfig, sampleRate: '0.00' },
+                })
+            )
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+            expect(posthog.capture).not.toHaveBeenCalled()
+        })
+
         it('does emit to capture if the sample rate is 1', () => {
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(posthog.capture).not.toHaveBeenCalled()
@@ -2886,8 +3226,8 @@ describe('Lazy SessionRecording', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
             )
-            // then check that a session is sampled (i.e. storage is false not true or null)
-            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+            // then check that a session is sampled out (stored tagged with its session id)
+            expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
             expect(sessionRecording.status).toBe('disabled')
 
             // then turn sample rate to null
@@ -2935,24 +3275,93 @@ describe('Lazy SessionRecording', () => {
 
                 // should be disabled despite legacy true, because 0% sample rate
                 expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
             })
 
-            it('preserves false from persistence (not legacy, still valid format)', () => {
+            it.each([
+                ['a legacy untagged false', false],
+                ["a different session's sampled-out decision", '!some-previous-session-id'],
+                ["a different session's sampled-in decision", 'some-previous-session-id'],
+            ])('re-decides when %s is stored', (_name, storedValue) => {
+                // a decision that cannot be tied to the current session must not be
+                // inherited (e.g. page load after session expiry, or legacy SDK formats)
                 posthog.persistence?.register({
-                    [SESSION_RECORDING_IS_SAMPLED]: false,
+                    [SESSION_RECORDING_IS_SAMPLED]: storedValue,
                 })
 
                 sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '1.00' } })
                 )
 
-                // false is still valid format, should remain disabled
+                // at 100% the fresh decision for this session is sampled in,
+                // proving the stale value was not reused
+                expect(sessionRecording.status).toBe('sampled')
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+            })
+        })
+
+        describe('missing sampling decision (posthog.reset())', () => {
+            // simpleHash('session-a') % 100 === 46 → sampled in at 50%
+            // simpleHash('session-e') % 100 === 50 → sampled out at 50%
+            const SAMPLED_IN_SESSION_ID = 'session-a'
+            const SAMPLED_OUT_SESSION_ID = 'session-e'
+
+            it('re-makes the decision before flushing when the stored decision was wiped', () => {
+                sessionId = SAMPLED_IN_SESSION_ID
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+                expect(sessionRecording.status).toBe('sampled')
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                // posthog.reset() clears persistence (including the stored decision)
+                // while rrweb keeps emitting
+                posthog.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                // the decision was re-made (deterministically, same outcome) before sending
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(SAMPLED_IN_SESSION_ID)
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({ $session_id: SAMPLED_IN_SESSION_ID }),
+                    expect.anything()
+                )
+            })
+
+            it('does not leak snapshots into a new session that is sampled out', () => {
+                sessionId = SAMPLED_IN_SESSION_ID
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
+                )
+                expect(sessionRecording.status).toBe('sampled')
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                // posthog.reset() wipes the stored decision and the persisted remote
+                // config is unavailable at session-change time, then rotates the session
+                posthog.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+                posthog.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                sessionManager.resetSessionId()
+                sessionId = SAMPLED_OUT_SESSION_ID
+                ;(posthog.capture as Mock).mockClear()
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                // the new session must have a (negative) decision, not record unsampled
                 expect(sessionRecording.status).toBe('disabled')
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + SAMPLED_OUT_SESSION_ID)
+
+                // and nothing is ever sent for the sampled-out session
+                expect(posthog.capture).not.toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({ $session_id: SAMPLED_OUT_SESSION_ID }),
+                    expect.anything()
+                )
             })
         })
     })
@@ -4501,6 +4910,126 @@ describe('Lazy SessionRecording', () => {
                     ]),
                 })
             )
+        })
+
+        it('does not reuse a sampled-in trigger group decision when sampleRate is lowered to 0', () => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 1.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 1,
+                sampled: true,
+            })
+
+            sessionRecording.stopRecording()
+            ;(posthog.capture as jest.Mock).mockClear()
+            sessionRecording = new SessionRecording(posthog)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 0.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 0,
+                sampled: false,
+            })
+            expect(posthog.capture).not.toHaveBeenCalled()
+        })
+
+        it.each([
+            {
+                name: 'missing sampleRate',
+                storedDecision: { sessionId, sampled: true },
+            },
+            {
+                name: 'non-numeric sampleRate',
+                storedDecision: { sessionId, sampleRate: '1.0', sampled: true },
+            },
+        ])('does not reuse a trigger group decision with $name', ({ storedDecision }) => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            posthog.persistence?.register({
+                [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id]: storedDecision,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 0.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 0,
+                sampled: false,
+            })
+        })
+
+        it('does not reuse a legacy sampled-out trigger group decision when sampleRate is raised to 1', () => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            posthog.persistence?.register({
+                [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id]: false,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 1.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 1,
+                sampled: true,
+            })
         })
 
         it('respects sampleRate < 1.0 and samples out when triggered', () => {

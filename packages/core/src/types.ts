@@ -54,6 +54,25 @@ export type PostHogCoreOptions = {
    */
   preloadFeatureFlags?: boolean
   /**
+   * Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely.
+   *
+   * When set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`,
+   * `group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request
+   * to the flags endpoint that still goes out (e.g. to fetch remote config or surveys)
+   * carries `disable_flags: true` so the server skips flag evaluation. Flag values must be
+   * supplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and
+   * related methods keep working against those values. Until `updateFlags()` runs, reads
+   * return their not-loaded defaults, so use `bootstrap` for any flags needed at startup.
+   * Equivalent to the web SDK's `advanced_disable_feature_flags`.
+   *
+   * Note: surveys gated on feature flags will not evaluate unless the survey targeting
+   * flags are also provided via `updateFlags()`. This option cannot be toggled at runtime.
+   * `posthog-node` inherits this option but does not implement it (no-op).
+   *
+   * @default false
+   */
+  disableRemoteFeatureFlags?: boolean
+  /**
    * Whether to load remote config when initialized or not
    * Experimental support
    *
@@ -568,6 +587,10 @@ export type SurveyAppearance = {
   placeholder?: string
   shuffleQuestions?: boolean
   surveyPopupDelaySeconds?: number
+  // Show a "Back" button on questions after the first, allowing respondents to return to a previously visited question. Defaults to false.
+  allowGoBack?: boolean
+  // Optional override for the back button label.
+  backButtonText?: string
   // widget options
   widgetType?: SurveyWidgetType
   widgetSelector?: string
@@ -624,6 +647,8 @@ export interface SurveyTranslation {
   thankYouMessageHeader?: string
   thankYouMessageDescription?: string
   thankYouMessageCloseButtonText?: string
+  submitButtonText?: string
+  backButtonText?: string
 }
 
 export interface SurveyQuestionTranslation {
@@ -858,6 +883,17 @@ export const knownUnsafeEditableEvent = [
  * Some features of PostHog rely on receiving 100% of these events
  */
 export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
+
+export const knownUnsafeEditableEventProperty = ['token'] as const
+
+/**
+ * These event properties can be edited by the `before_send` function
+ * but are required for the event to be ingested. For example `token` carries
+ * the project api_key, and ingest rejects any event that arrives without it.
+ *
+ * If a `before_send` function removes one of these, the event is dropped.
+ */
+export type KnownUnsafeEditableEventProperty = (typeof knownUnsafeEditableEventProperty)[number]
 
 /**
  * Represents an event before it's sent to PostHog.

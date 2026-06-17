@@ -1,88 +1,13 @@
-# @posthog/webpack-plugin
+# PostHog JavaScript package
 
-Webpack plugin for uploading source maps to PostHog for error tracking.
+Please see the main [PostHog docs](https://posthog.com/docs).
 
-[SEE FULL DOCS](https://posthog.com/docs/error-tracking/upload-source-maps/webpack)
+SDK usage examples and code snippets live in the official documentation so they stay up to date.
 
-## Installation
+## Documentation
 
-```bash
-npm install @posthog/webpack-plugin --save-dev
-```
-
-## Usage
-
-Add the plugin to your webpack configuration:
-
-```typescript
-import { PosthogWebpackPlugin } from '@posthog/webpack-plugin'
-
-export default {
-    // ... your webpack config
-    plugins: [
-        new PosthogWebpackPlugin({
-            personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-            projectId: process.env.POSTHOG_PROJECT_ID,
-            sourcemaps: {
-                enabled: true,
-                releaseName: 'my-app',
-                releaseVersion: '1.0.0',
-            },
-        }),
-    ],
-}
-```
-
-### Configuration Options
-
-| Option                         | Type                                                 | Required | Default                    | Description                                 |
-| ------------------------------ | ---------------------------------------------------- | -------- | -------------------------- | ------------------------------------------- |
-| `personalApiKey`               | `string`                                             | Yes      | -                          | Your PostHog personal API key               |
-| `projectId`                    | `string`                                             | Yes      | -                          | Your PostHog project/environment ID         |
-| `envId`                        | `string`                                             | No       | -                          | Deprecated alias for `projectId`            |
-| `host`                         | `string`                                             | No       | `https://us.i.posthog.com` | PostHog instance host                       |
-| `logLevel`                     | `'debug' \| 'info' \| 'warn' \| 'error' \| 'silent'` | No       | `'info'`                   | Logging verbosity                           |
-| `cliBinaryPath`                | `string`                                             | No       | Auto-detected              | Path to the PostHog CLI binary              |
-| `sourcemaps.enabled`           | `boolean`                                            | No       | `true`                     | Enable source map processing                |
-| `sourcemaps.releaseName`       | `string`                                             | No       | -                          | Release name for source map grouping        |
-| `sourcemaps.releaseVersion`    | `string`                                             | No       | -                          | Version identifier for the release          |
-| `sourcemaps.deleteAfterUpload` | `boolean`                                            | No       | `true`                     | Delete source maps after upload             |
-| `sourcemaps.batchSize`         | `number`                                             | No       | -                          | Number of source maps to upload in parallel |
-
-### Full Example
-
-```typescript
-import path from 'node:path'
-import webpack from 'webpack'
-import { PosthogWebpackPlugin } from '@posthog/webpack-plugin'
-import packageJson from './package.json'
-
-const config: webpack.Configuration = {
-    mode: 'production',
-    entry: './src/index.ts',
-    output: {
-        filename: 'bundle.js',
-        path: path.resolve(__dirname, 'dist'),
-    },
-    plugins: [
-        new PosthogWebpackPlugin({
-            personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
-            projectId: process.env.POSTHOG_PROJECT_ID,
-            host: process.env.POSTHOG_API_HOST,
-            logLevel: 'error',
-            sourcemaps: {
-                enabled: true,
-                releaseName: packageJson.name,
-                releaseVersion: packageJson.version,
-                deleteAfterUpload: true,
-            },
-        }),
-    ],
-}
-
-export default config
-```
+- [Webpack source map upload docs](https://posthog.com/docs/error-tracking/upload-source-maps/webpack)
 
 ## Questions?
 
-### [Check out our community page.](https://posthog.com/docs/error-tracking/upload-source-maps/webpack)
+### [Check out our community page.](https://posthog.com/posts)

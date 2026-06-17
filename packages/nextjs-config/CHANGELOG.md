@@ -1,5 +1,85 @@
 # @posthog/nextjs-config
 
+## 1.9.68
+
+### Patch Changes
+
+- [#3764](https://github.com/PostHog/posthog-js/pull/3764) [`5b125c1`](https://github.com/PostHog/posthog-js/commit/5b125c1bd2e2afa8aaef2d77b81c3c46b3651f9d) Thanks [@emmayusufu](https://github.com/emmayusufu)! - Strip dangling `//# sourceMappingURL=` comments from Turbopack browser chunks when `deleteAfterUpload` is set, so deleted source maps are no longer referenced (and 404) in production.
+  (2026-06-16)
+
+## 1.9.67
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad)]:
+  - @posthog/plugin-utils@1.1.2
+  - @posthog/webpack-plugin@1.5.23
+
+## 1.9.66
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.22
+
+## 1.9.65
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.21
+
+## 1.9.64
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.20
+
+## 1.9.63
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.19
+
+## 1.9.62
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.18
+
+## 1.9.61
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.17
+
+## 1.9.60
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.16
+
+## 1.9.59
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.15
+
+## 1.9.58
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.14
+
 ## 1.9.57
 
 ### Patch Changes

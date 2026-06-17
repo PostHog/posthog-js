@@ -43,9 +43,12 @@ async function simulateFrozenTabIdle(page: Page): Promise<void> {
         const persistence = ph?.persistence as any
         const sessionManager = ph?.sessionManager as any
 
-        const currentSessionData = persistence.props['$sesid']
-        currentSessionData[0] = Date.now() - 35 * 60 * 1000
-        persistence.register({ $sesid: currentSessionData })
+        const [, sessionId, startTimestamp] = persistence.props['$sesid']
+        // register a NEW array: register() skips reference-equal values, and the
+        // doctored timestamp must reach localStorage because the cross-tab
+        // refresh re-reads it from storage before declaring the session idle
+        persistence.register({ $sesid: [Date.now() - 35 * 60 * 1000, sessionId, startTimestamp] })
+        persistence.flush?.()
         sessionManager._sessionActivityTimestamp = null
     })
 }

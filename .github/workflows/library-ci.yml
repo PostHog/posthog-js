@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   unit:
     name: Unit tests
@@ -21,6 +24,15 @@ jobs:
         uses: ./.github/actions/setup
 
       - run: pnpm test:unit
+
+  edge-runtime:
+    name: Node edge runtime tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
 
       - name: Node edge runtime tests
         run: pnpm --filter=posthog-node test:edge-compat
@@ -68,6 +80,9 @@ jobs:
     name: Backward compatibility tests
     runs-on: depot-ubuntu-latest-8
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -130,7 +145,7 @@ jobs:
           fi
 
       - name: Find existing compat comment
-        if: steps.process-results.outputs.has_failures == 'true'
+        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-comment
         with:
@@ -139,7 +154,7 @@ jobs:
           body-includes: '<!-- compat-test-results -->'
 
       - name: Create or update compat comment
-        if: steps.process-results.outputs.has_failures == 'true'
+        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
@@ -186,7 +201,7 @@ jobs:
             </details>
 
       - name: Delete compat comment if tests pass
-        if: steps.process-results.outputs.has_failures == 'false' && steps.is-affected.outputs.is-affected == 'true'
+        if: ${{ steps.process-results.outputs.has_failures == 'false' && steps.is-affected.outputs.is-affected == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-passing-comment
         with:
@@ -195,7 +210,7 @@ jobs:
           body-includes: '<!-- compat-test-results -->'
 
       - name: Remove outdated comment
-        if: steps.find-passing-comment.outputs.comment-id != ''
+        if: ${{ steps.find-passing-comment.outputs.comment-id != '' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           COMMENT_ID: ${{ steps.find-passing-comment.outputs.comment-id }}
@@ -265,7 +280,7 @@ jobs:
           if-no-files-found: ignore
 
   lint:
-    name: Lint
+    name: Lint packages
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -275,8 +290,32 @@ jobs:
           build: false
       - name: Lint all packages
         run: pnpm lint
+
+  lint-playground:
+    name: Lint playground
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
       - name: Lint playground files
         run: pnpm lint:playground
+
+  package:
+    name: Package tarballs
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Build package tarballs
+        run: pnpm package
 
   write-mangled-property-names:
     name: Write mangled property names
@@ -311,5 +350,8 @@ jobs:
         uses: ./.github/actions/setup
         with:
           build: false
-      - name: Generate references
+      - name: Generate public API references
         run: pnpm generate-references
+
+      - name: Check public API references
+        run: pnpm check:public-api

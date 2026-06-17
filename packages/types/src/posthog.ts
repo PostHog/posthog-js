@@ -162,6 +162,13 @@ export interface PostHog {
     setPersonProperties(userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
 
     /**
+     * Remove properties from the current user.
+     *
+     * @param propertyNames - The name (or names) of the person properties to remove (using $unset)
+     */
+    unsetPersonProperties(propertyNames: string | string[]): void
+
+    /**
      * Create an alias for the current user.
      *
      * @param alias - The alias to create
@@ -179,7 +186,7 @@ export interface PostHog {
     /**
      * Reset the user's identity and start a new session.
      *
-     * @param reset_device_id - Whether to reset the device ID as well
+     * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
      */
     reset(reset_device_id?: boolean): void
 
@@ -351,8 +358,10 @@ export interface PostHog {
 
     /**
      * Reset person properties used for feature flag evaluation.
+     *
+     * @param reloadFeatureFlags - Whether to reload feature flags after resetting
      */
-    resetPersonPropertiesForFlags(): void
+    resetPersonPropertiesForFlags(reloadFeatureFlags?: boolean): void
 
     /**
      * Set group properties to be used for feature flag evaluation.
@@ -475,7 +484,9 @@ export interface PostHog {
     /**
      * Get the URL to view the current session recording.
      *
-     * @param options - Options for the URL
+     * @param {Object} [options] Options for the URL
+     * @param {boolean} [options.withTimestamp] Whether to include the timestamp in the URL
+     * @param {number} [options.timestampLookBack] How many seconds to look back for the timestamp
      * @returns The session replay URL
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string
@@ -631,8 +642,8 @@ export interface PostHog {
     /**
      * Register an event listener.
      *
-     * @param event - The event name (currently only 'eventCaptured' is supported)
-     * @param cb - The callback to call
+     * @param {'eventCaptured' | 'featureFlagsReloading'} event The event name to listen for
+     * @param {(...args: any[]) => void} cb The callback to call
      * @returns A function to unsubscribe
      */
     on(event: 'eventCaptured' | 'featureFlagsReloading', cb: (...args: any[]) => void): () => void

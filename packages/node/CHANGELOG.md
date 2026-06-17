@@ -1,5 +1,96 @@
 # posthog-node
 
+## 5.38.0
+
+### Minor Changes
+
+- [#3845](https://github.com/PostHog/posthog-js/pull/3845) [`a0553b3`](https://github.com/PostHog/posthog-js/commit/a0553b305679f995e244cad7498c7521cb4c849d) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `setPersonProperties()` and `unsetPersonProperties()` helpers to manage person properties from the Node.js SDK.
+  (2026-06-16)
+
+### Patch Changes
+
+- Updated dependencies [[`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+  - @posthog/core@1.33.0
+
+## 5.37.1
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad)]:
+  - @posthog/core@1.32.4
+
+## 5.37.0
+
+### Minor Changes
+
+- [#3705](https://github.com/PostHog/posthog-js/pull/3705) [`d6fc0a5`](https://github.com/PostHog/posthog-js/commit/d6fc0a50fa2c2650869e3444a030533753ff0b4f) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - feat(feature-flags): support the `early_exit` condition option in local evaluation. When a flag enables early exit, evaluation now stops and returns `false` as soon as a condition group's property filters match but the rollout percentage excludes the user, instead of falling through to later groups — matching the server-side evaluation behavior.
+  (2026-06-12)
+
+## 5.36.17
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.32.3
+
+## 5.36.16
+
+### Patch Changes
+
+- Updated dependencies [[`25822ac`](https://github.com/PostHog/posthog-js/commit/25822acc0d16f9f1d6fbbd65da57b3e060c6c558)]:
+  - @posthog/core@1.32.2
+
+## 5.36.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.32.1
+
+## 5.36.14
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+  - @posthog/core@1.32.0
+
+## 5.36.13
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.4
+
+## 5.36.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.3
+
+## 5.36.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.2
+
+## 5.36.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.1
+
+## 5.36.9
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/core@1.31.0
+
 ## 5.36.8
 
 ### Patch Changes

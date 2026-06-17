@@ -37,7 +37,7 @@ import {
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
 } from './constants'
 
-import { isUndefined, isArray, isNull } from '@posthog/core'
+import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
 
@@ -339,20 +339,23 @@ export class PostHogFeatureFlags implements Extension {
         payloads?: Record<string, JsonType>,
         options?: { merge?: boolean }
     ): void {
-        // If merging, combine with existing flags
-        const existingFlags = options?.merge ? this.getFlagVariants() : {}
-        const existingPayloads = options?.merge ? this.getFlagPayloads() : {}
-        const finalFlags = { ...existingFlags, ...flags }
-        const finalPayloads = { ...existingPayloads, ...payloads }
+        // Merge against the raw stored flags/payloads, not the override-applied getters.
+        const existingFlags: Record<string, boolean | string> = options?.merge
+            ? (this._prop(ENABLED_FEATURE_FLAGS) ?? {})
+            : {}
+        const existingPayloads: Record<string, JsonType> = options?.merge
+            ? (this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) ?? {})
+            : {}
+        const finalFlags: Record<string, boolean | string> = { ...existingFlags, ...flags }
+        const finalPayloads: Record<string, JsonType> = { ...existingPayloads, ...payloads }
 
         // Convert simple flags to v4 format to avoid deprecation warning
         const flagDetails: Record<string, FeatureFlagDetail> = {}
         for (const [key, value] of Object.entries(finalFlags)) {
-            const isVariant = typeof value === 'string'
             flagDetails[key] = {
                 key,
-                enabled: isVariant ? true : Boolean(value),
-                variant: isVariant ? value : undefined,
+                enabled: getEnabledFromValue(value),
+                variant: getVariantFromValue(value),
                 reason: undefined,
                 // id: 0 indicates manually injected flags (not from server evaluation)
                 metadata: !isUndefined(finalPayloads?.[key])
@@ -600,6 +603,8 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url,
             data,
+            // Some ad blockers block /flags requests that carry the `ip` query param; it's unused server-side here.
+            skipIPParam: true,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
@@ -865,20 +870,11 @@ export class PostHogFeatureFlags implements Extension {
             return undefined
         }
 
-        let parsedPayload = payload
-        if (!isUndefined(payload)) {
-            try {
-                parsedPayload = JSON.parse(payload as any)
-            } catch {
-                // payload is already parsed or not valid JSON, keep as-is
-            }
-        }
-
         return {
             key,
             enabled: !!flagValue,
             variant: typeof flagValue === 'string' ? flagValue : undefined,
-            payload: parsedPayload,
+            payload: parsePayload(payload),
         }
     }
 
@@ -917,6 +913,8 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
+            // Some ad blockers block /flags requests that carry the `ip` query param; it's unused server-side here.
+            skipIPParam: true,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
@@ -1249,8 +1247,34 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    resetPersonPropertiesForFlags(): void {
+    /**
+     * Remove override person properties used for feature flags.
+     * This is the counterpart to setPersonPropertiesForFlags, used when person properties
+     * are unset so flags re-evaluate without the removed values.
+     */
+    unsetPersonPropertiesForFlags(propertyNames: string[], reloadFeatureFlags = true): void {
+        const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
+
+        const nextProperties: Properties = { ...existingProperties }
+        propertyNames.forEach((name) => {
+            delete nextProperties[name]
+        })
+
+        this._instance.register({
+            [STORED_PERSON_PROPERTIES_KEY]: nextProperties,
+        })
+
+        if (reloadFeatureFlags) {
+            this._instance.reloadFeatureFlags()
+        }
+    }
+
+    resetPersonPropertiesForFlags(reloadFeatureFlags = true): void {
         this._instance.unregister(STORED_PERSON_PROPERTIES_KEY)
+
+        if (reloadFeatureFlags) {
+            this._instance.reloadFeatureFlags()
+        }
     }
 
     /**

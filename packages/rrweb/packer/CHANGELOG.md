@@ -1,11 +1,18 @@
 # @rrweb/packer
 
+## 0.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`f95a0ec`](https://github.com/PostHog/posthog-js/commit/f95a0ec68270bf9116d29875733c1a43e9b91331)]:
+    - @posthog/rrweb-types@0.0.62
+
 ## 2.0.0-alpha.18
 
 ### Patch Changes
 
 - Updated dependencies []:
-  - @rrweb/types@2.0.0-alpha.18
+    - @rrweb/types@2.0.0-alpha.18
 
 ## 2.0.0-alpha.17
 
@@ -14,7 +21,7 @@
 - [`db20184`](https://github.com/rrweb-io/rrweb/commit/db201841accd2b5df3cd7c88779aa62ab158501c) Thanks [@Juice10](https://github.com/Juice10)! - Keep package version in sync with other packages
 
 - Updated dependencies [[`335639a`](https://github.com/rrweb-io/rrweb/commit/335639af9b0ce7f70eb0f38ce113d877c7325158)]:
-  - @rrweb/types@2.0.0-alpha.17
+    - @rrweb/types@2.0.0-alpha.17
 
 ## 2.0.0-alpha.15
 
@@ -27,4 +34,4 @@
 ### Patch Changes
 
 - Updated dependencies [[`2606a2a`](https://github.com/rrweb-io/rrweb/commit/2606a2a28f2a6d897b8ae4ea3ec40ef0eeacbfaf)]:
-  - @rrweb/types@2.0.0-alpha.15
+    - @rrweb/types@2.0.0-alpha.15

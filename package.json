@@ -18,15 +18,9 @@
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
         "bump": "pnpm changeset version",
-        "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references"
-    },
-    "pnpm": {
-        "overrides": {
-            "node-forge": "1.3.2"
-        },
-        "onlyBuiltDependencies": [
-            "sharp"
-        ]
+        "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
+        "generate-references:versioned": "GENERATE_VERSIONED_REFERENCES=1 pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
+        "check:public-api": "node scripts/check-public-api.js"
     },
     "devDependencies": {
         "@changesets/changelog-github": "^0.5.2",
@@ -36,10 +30,10 @@
         "@microsoft/tsdoc": "^0.15.1",
         "@types/eslint": "^8.56.12",
         "@types/node": "^22.19.1",
-        "esbuild": "^0.25.0",
-        "esbuild-plugin-umd-wrapper": "catalog:",
         "@typescript-eslint/eslint-plugin": "^8.48.1",
         "@typescript-eslint/parser": "^8.48.1",
+        "esbuild": "^0.25.0",
+        "esbuild-plugin-umd-wrapper": "catalog:",
         "eslint": "8.57.0",
         "eslint-config-posthog-js": "link:tooling/eslint-plugin-posthog-js",
         "eslint-config-prettier": "^8.10.2",
@@ -56,7 +50,7 @@
         "rollup": "catalog:",
         "rollup-plugin-visualizer": "^5.14.0",
         "ts-node": "^10.9.2",
-        "turbo": "^2.6.3",
+        "turbo": "^2.9.16",
         "typescript": "catalog:"
     },
     "lint-staged": {

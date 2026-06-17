@@ -39,7 +39,25 @@ describe('PostHog React Native', () => {
     })
 
     it('should load storage from the file system', async () => {
+      let resolveRead: (value: string) => void
+      mockedOptionalFileSystem!.readAsStringAsync.mockClear()
+      mockedOptionalFileSystem!.readAsStringAsync.mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveRead = resolve
+          })
+      )
+      storage = createEventsStorage(buildOptimisticAsyncStorage()!)
+
       expect(storage.getItem('foo')).toEqual(undefined)
+      resolveRead!(
+        JSON.stringify({
+          version: 'v1',
+          content: {
+            foo: 'bar',
+          },
+        })
+      )
       await storage.preloadPromise
       expect(mockedOptionalFileSystem!.readAsStringAsync).toHaveBeenCalledTimes(1)
       expect(storage.getItem('foo')).toEqual('bar')

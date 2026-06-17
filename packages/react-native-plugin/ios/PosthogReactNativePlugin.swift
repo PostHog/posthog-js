@@ -5,6 +5,36 @@ private func hedgeLog(_ message: String) {
     print("[PostHog] \(message)")
 }
 
+// Deduplication works on Android (both architectures) and iOS (old architecture only).
+// On the iOS new architecture, fatal JS exception events surface as a generic SIGABRT
+// crash event with no JS-error text in any field, so they currently cannot be filtered.
+private let fatalJsErrorMarkers = ["Unhandled JS Exception", "ExceptionsManager.reportException", "facebook::jsi::JSError"]
+
+private func containsFatalJsErrorMarker(_ text: String?) -> Bool {
+    guard let text else { return false }
+    return fatalJsErrorMarkers.contains { text.contains($0) }
+}
+
+private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
+    guard event.event == "$exception",
+          let exceptionList = event.properties["$exception_list"] as? [[String: Any]]
+    else { return false }
+    return exceptionList.contains { exception in
+        if containsFatalJsErrorMarker(exception["type"] as? String) {
+            return true
+        }
+        if containsFatalJsErrorMarker(exception["value"] as? String) {
+            return true
+        }
+        // New-architecture RN rethrows fatal JS errors as a C++ jsi::JSError (SIGABRT);
+        // the JS-error text only survives in the signal's crash-info message.
+        let mechanism = exception["mechanism"] as? [String: Any]
+        let meta = mechanism?["meta"] as? [String: Any]
+        let signal = meta?["signal"] as? [String: Any]
+        return containsFatalJsErrorMarker(signal?["crash_info_message"] as? String)
+    }
+}
+
 @objc(PosthogReactNativePlugin)
 class PosthogReactNativePlugin: NSObject {
     private var config: PostHogConfig?
@@ -78,47 +108,54 @@ class PosthogReactNativePlugin: NSObject {
         config.debug = debug
         config.errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
 
+        // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
+        // The JS layer already captured them, so drop the native duplicate.
+        config.setBeforeSend { event in
+            isReactNativeFatalJsError(event) ? nil : event
+        }
+
         if #available(iOS 15.0, *) {
             config.surveys = false
         }
 
-        if sessionReplayEnabled {
-            config.sessionReplay = true
-            config.sessionReplayConfig.screenshotMode = true
+        // Always apply the session replay configuration so that recording started later
+        // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+        // sessionReplayEnabled only controls whether recording starts at setup.
+        config.sessionReplay = sessionReplayEnabled
+        config.sessionReplayConfig.screenshotMode = true
 
-            let maskAllTextInputs = sdkReplayConfig["maskAllTextInputs"] as? Bool ?? true
-            config.sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
+        let maskAllTextInputs = sdkReplayConfig["maskAllTextInputs"] as? Bool ?? true
+        config.sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
 
-            let maskAllImages = sdkReplayConfig["maskAllImages"] as? Bool ?? true
-            config.sessionReplayConfig.maskAllImages = maskAllImages
+        let maskAllImages = sdkReplayConfig["maskAllImages"] as? Bool ?? true
+        config.sessionReplayConfig.maskAllImages = maskAllImages
 
-            let maskAllSandboxedViews = sdkReplayConfig["maskAllSandboxedViews"] as? Bool ?? true
-            config.sessionReplayConfig.maskAllSandboxedViews = maskAllSandboxedViews
+        let maskAllSandboxedViews = sdkReplayConfig["maskAllSandboxedViews"] as? Bool ?? true
+        config.sessionReplayConfig.maskAllSandboxedViews = maskAllSandboxedViews
 
-            // read throttleDelayMs and use iOSdebouncerDelayMs as a fallback for back compatibility
-            let throttleDelayMs =
-                (sdkReplayConfig["throttleDelayMs"] as? Int)
-                    ?? (sdkReplayConfig["iOSdebouncerDelayMs"] as? Int)
-                    ?? 1000
+        // read throttleDelayMs and use iOSdebouncerDelayMs as a fallback for back compatibility
+        let throttleDelayMs =
+            (sdkReplayConfig["throttleDelayMs"] as? Int)
+                ?? (sdkReplayConfig["iOSdebouncerDelayMs"] as? Int)
+                ?? 1000
 
-            let timeInterval: TimeInterval = Double(throttleDelayMs) / 1000.0
-            config.sessionReplayConfig.throttleDelay = timeInterval
+        let timeInterval: TimeInterval = Double(throttleDelayMs) / 1000.0
+        config.sessionReplayConfig.throttleDelay = timeInterval
 
-            let captureNetworkTelemetry = sdkReplayConfig["captureNetworkTelemetry"] as? Bool ?? true
-            config.sessionReplayConfig.captureNetworkTelemetry = captureNetworkTelemetry
+        let captureNetworkTelemetry = sdkReplayConfig["captureNetworkTelemetry"] as? Bool ?? true
+        config.sessionReplayConfig.captureNetworkTelemetry = captureNetworkTelemetry
 
-            let captureLog = sdkReplayConfig["captureLog"] as? Bool ?? true
-            config.sessionReplayConfig.captureLogs = captureLog
+        let captureLog = sdkReplayConfig["captureLog"] as? Bool ?? true
+        config.sessionReplayConfig.captureLogs = captureLog
 
-            config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
+        config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
 
-            let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
-            config.sessionReplayConfig.screenshotModeBackgroundCapture = screenshotModeBackgroundCapture
+        let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
+        config.sessionReplayConfig.screenshotModeBackgroundCapture = screenshotModeBackgroundCapture
 
-            let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
-            if !endpoint.isEmpty {
-                config.snapshotEndpoint = endpoint
-            }
+        let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
+        if !endpoint.isEmpty {
+            config.snapshotEndpoint = endpoint
         }
 
         let distinctId = sdkOptions["distinctId"] as? String ?? ""

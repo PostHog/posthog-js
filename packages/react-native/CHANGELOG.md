@@ -1,5 +1,146 @@
 # posthog-react-native
 
+## 4.49.2
+
+### Patch Changes
+
+- [#3876](https://github.com/PostHog/posthog-js/pull/3876) [`d7b1a03`](https://github.com/PostHog/posthog-js/commit/d7b1a031761cdd6aa8cf6b28f828a2fa29ac0765) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Deprecate `getFeatureFlagPayload` in favor of `getFeatureFlagResult`, which returns the flag value and payload from a single evaluation. `getFeatureFlagPayload` continues to work.
+  (2026-06-17)
+- Updated dependencies [[`d7b1a03`](https://github.com/PostHog/posthog-js/commit/d7b1a031761cdd6aa8cf6b28f828a2fa29ac0765)]:
+  - @posthog/core@1.35.1
+
+## 4.49.1
+
+### Patch Changes
+
+- [#3874](https://github.com/PostHog/posthog-js/pull/3874) [`ee7137f`](https://github.com/PostHog/posthog-js/commit/ee7137f5fc9eedf32fc99afcd8082384aa357581) Thanks [@marandaneto](https://github.com/marandaneto)! - Add Expo config plugin support for skipping duplicate sourcemap uploads.
+  (2026-06-17)
+
+## 4.49.0
+
+### Minor Changes
+
+- [#3848](https://github.com/PostHog/posthog-js/pull/3848) [`bd07ec4`](https://github.com/PostHog/posthog-js/commit/bd07ec42968ada9099a31cf7d61b106af22267ca) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add a `disableRemoteFeatureFlags` option and a public `updateFlags(flags, payloads?, { merge })` method, for apps that evaluate feature flags outside the SDK (for example on their own backend) and want to supply the results at runtime instead of having the SDK fetch them.
+
+  With `disableRemoteFeatureFlags: true`, the SDK no longer fetches or evaluates feature flags from PostHog — `identify()`, `group()`, and `reset()` stop triggering `/flags` requests — while `getFeatureFlag()` and `getFeatureFlagPayload()` keep working against the values you supply. Provide those values (with optional payloads) at runtime via `updateFlags(flags, payloads?, { merge })`; they persist across restarts. This mirrors the web SDK's `advanced_disable_feature_flags` and `updateFlags`. (2026-06-17)
+
+### Patch Changes
+
+- Updated dependencies [[`bd07ec4`](https://github.com/PostHog/posthog-js/commit/bd07ec42968ada9099a31cf7d61b106af22267ca)]:
+  - @posthog/core@1.34.0
+
+## 4.48.0
+
+### Minor Changes
+
+- [#3709](https://github.com/PostHog/posthog-js/pull/3709) [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e) Thanks [@posthog](https://github.com/apps/posthog)! - Add `unsetPersonProperties()` to remove person properties, the counterpart to `setPersonProperties()`. Previously the only way to unset a person property was to hand-pass a `$unset` array inside a `capture()` call.
+  (2026-06-16)
+
+### Patch Changes
+
+- Updated dependencies [[`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9), [`c9c7df1`](https://github.com/PostHog/posthog-js/commit/c9c7df1e7f3ae6152aa80f98b49be206fdff1b23), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+  - @posthog/core@1.33.0
+  - @posthog/types@1.387.0
+
+## 4.47.2
+
+### Patch Changes
+
+- [#3828](https://github.com/PostHog/posthog-js/pull/3828) [`8464c92`](https://github.com/PostHog/posthog-js/commit/8464c9296d73376701b72075b48ea69e09bc1d9a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - fix: keep session replay active across `identify()`/`reset()`. The project-level remote config (session replay, error tracking, capture performance) and survey definitions are now preserved across `reset()` instead of being cleared, and replay is re-evaluated whenever feature flags load/reload. A linked flag that becomes active for the identified user now starts (or resumes) recording without an app restart, and a linked flag that turns off pauses recording instead of leaving a gated-off user recorded until restart. Previously replay activation was only evaluated once at startup and the cached config was wiped on `reset()`. The user-specific survey state (which surveys were seen, last-seen date) is still cleared on `reset()`. This now mirrors the native iOS SDK, which keeps the project-level config across an identity change and gates replay on the linked flag once flags have loaded.
+  (2026-06-15)
+- Updated dependencies [[`8464c92`](https://github.com/PostHog/posthog-js/commit/8464c9296d73376701b72075b48ea69e09bc1d9a)]:
+  - @posthog/core@1.32.5
+
+## 4.47.1
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad)]:
+  - @posthog/core@1.32.4
+  - @posthog/types@1.386.4
+
+## 4.47.0
+
+### Minor Changes
+
+- [#3677](https://github.com/PostHog/posthog-js/pull/3677) [`b061628`](https://github.com/PostHog/posthog-js/commit/b06162885401658a8d5a56f1b91497d0d57c5864) Thanks [@ioannisj](https://github.com/ioannisj)! - Add opt-in native iOS and Android crash capture through the optional native plugin:
+  - Runtime: `errorTracking.autocapture.nativeCrashes` enables native crash autocapture.
+  - Build tooling: the Expo config plugin option `uploadNativeSymbols` wires native debug-symbol upload so crashes are symbolicated — iOS dSYMs via posthog-ios's `upload-symbols.sh`, and Android ProGuard/R8 mappings via the `com.posthog.android` Gradle plugin. Pass `uploadNativeSymbols: { includeSource: true }` to also upload native source for crash context (iOS only). (2026-06-12)
+
+## 4.46.32
+
+### Patch Changes
+
+- Updated dependencies [[`dbf2377`](https://github.com/PostHog/posthog-js/commit/dbf23777e1c14a811c67697684d56145518ebe16)]:
+  - @posthog/types@1.386.3
+  - @posthog/core@1.32.3
+
+## 4.46.31
+
+### Patch Changes
+
+- Updated dependencies [[`25822ac`](https://github.com/PostHog/posthog-js/commit/25822acc0d16f9f1d6fbbd65da57b3e060c6c558)]:
+  - @posthog/core@1.32.2
+  - @posthog/types@1.386.2
+
+## 4.46.30
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.386.1
+  - @posthog/core@1.32.1
+
+## 4.46.29
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+  - @posthog/core@1.32.0
+  - @posthog/types@1.386.0
+
+## 4.46.28
+
+### Patch Changes
+
+- Updated dependencies [[`c11794d`](https://github.com/PostHog/posthog-js/commit/c11794dd5fbb73d99bb88600ae487f8f08f625be), [`f601c49`](https://github.com/PostHog/posthog-js/commit/f601c496338ed0be8853f94160ee3edca542ac7d)]:
+  - @posthog/types@1.385.0
+  - @posthog/core@1.31.4
+
+## 4.46.27
+
+### Patch Changes
+
+- Updated dependencies [[`2d21ada`](https://github.com/PostHog/posthog-js/commit/2d21ada24479c0d4f561dd3b6f5922ce3f8e4afd)]:
+  - @posthog/types@1.384.3
+  - @posthog/core@1.31.3
+
+## 4.46.26
+
+### Patch Changes
+
+- Updated dependencies [[`d9462b3`](https://github.com/PostHog/posthog-js/commit/d9462b3567a0b7c9b755552c303814b6fcbe3a97)]:
+  - @posthog/types@1.384.2
+  - @posthog/core@1.31.2
+
+## 4.46.25
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/types@1.384.1
+  - @posthog/core@1.31.1
+
+## 4.46.24
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/core@1.31.0
+  - @posthog/types@1.384.0
+
 ## 4.46.23
 
 ### Patch Changes

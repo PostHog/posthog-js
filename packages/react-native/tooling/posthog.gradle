@@ -92,6 +92,11 @@ plugins.withId('com.android.application') {
                             extraArgs.addAll(["--build", versionCode.toString()])
                         }
 
+                        def posthogUploadArgs = []
+                        if (project.ext.has("posthogReactNativeSkipOnConflict") && project.ext.get("posthogReactNativeSkipOnConflict") == true) {
+                            posthogUploadArgs.add("--skip-on-conflict")
+                        }
+
                         def injected = project.objects.newInstance(InjectedExecOps)
 
                         // Resolve the posthog-cli path at execution time, not during
@@ -130,6 +135,7 @@ plugins.withId('com.android.application') {
                                 "--directory", sourcemapOutput.getParent()      // The path to a sourcemap that should be uploaded.
                             ])
                             args.addAll(extraArgs)
+                            args.addAll(posthogUploadArgs)
                             logger.info("posthog-cli upload arguments: ${args}")
 
                             injected.execOps.exec {
