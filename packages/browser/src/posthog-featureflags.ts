@@ -600,6 +600,8 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url,
             data,
+            // Some ad blockers block /flags requests that carry the `ip` query param; it's unused server-side here.
+            skipIPParam: true,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
@@ -917,6 +919,8 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
+            // Some ad blockers block /flags requests that carry the `ip` query param; it's unused server-side here.
+            skipIPParam: true,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
@@ -1242,6 +1246,28 @@ export class PostHogFeatureFlags implements Extension {
                 ...setOnceProps,
                 ...propsToSet,
             },
+        })
+
+        if (reloadFeatureFlags) {
+            this._instance.reloadFeatureFlags()
+        }
+    }
+
+    /**
+     * Remove override person properties used for feature flags.
+     * This is the counterpart to setPersonPropertiesForFlags, used when person properties
+     * are unset so flags re-evaluate without the removed values.
+     */
+    unsetPersonPropertiesForFlags(propertyNames: string[], reloadFeatureFlags = true): void {
+        const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
+
+        const nextProperties: Properties = { ...existingProperties }
+        propertyNames.forEach((name) => {
+            delete nextProperties[name]
+        })
+
+        this._instance.register({
+            [STORED_PERSON_PROPERTIES_KEY]: nextProperties,
         })
 
         if (reloadFeatureFlags) {

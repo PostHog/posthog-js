@@ -1,5 +1,27 @@
 # @posthog/core
 
+## 1.34.0
+
+### Minor Changes
+
+- [#3848](https://github.com/PostHog/posthog-js/pull/3848) [`bd07ec4`](https://github.com/PostHog/posthog-js/commit/bd07ec42968ada9099a31cf7d61b106af22267ca) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add a `disableRemoteFeatureFlags` option and a public `updateFlags(flags, payloads?, { merge })` method, for apps that evaluate feature flags outside the SDK (for example on their own backend) and want to supply the results at runtime instead of having the SDK fetch them.
+
+  With `disableRemoteFeatureFlags: true`, the SDK no longer fetches or evaluates feature flags from PostHog — `identify()`, `group()`, and `reset()` stop triggering `/flags` requests — while `getFeatureFlag()` and `getFeatureFlagPayload()` keep working against the values you supply. Provide those values (with optional payloads) at runtime via `updateFlags(flags, payloads?, { merge })`; they persist across restarts. This mirrors the web SDK's `advanced_disable_feature_flags` and `updateFlags`. (2026-06-17)
+
+## 1.33.0
+
+### Minor Changes
+
+- [#3709](https://github.com/PostHog/posthog-js/pull/3709) [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e) Thanks [@posthog](https://github.com/apps/posthog)! - Add `unsetPersonProperties()` to remove person properties, the counterpart to `setPersonProperties()`. Previously the only way to unset a person property was to hand-pass a `$unset` array inside a `capture()` call.
+  (2026-06-16)
+
+### Patch Changes
+
+- [#3756](https://github.com/PostHog/posthog-js/pull/3756) [`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9) Thanks [@archievi](https://github.com/archievi)! - Drop the event and log a warning when a `before_send` hook removes the `token` property, instead of silently sending an event that ingest rejects with a 401.
+  (2026-06-16)
+- Updated dependencies [[`c9c7df1`](https://github.com/PostHog/posthog-js/commit/c9c7df1e7f3ae6152aa80f98b49be206fdff1b23), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+  - @posthog/types@1.387.0
+
 ## 1.32.5
 
 ### Patch Changes

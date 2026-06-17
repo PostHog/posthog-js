@@ -1,5 +1,12 @@
 # @posthog/nextjs-config
 
+## 1.9.68
+
+### Patch Changes
+
+- [#3764](https://github.com/PostHog/posthog-js/pull/3764) [`5b125c1`](https://github.com/PostHog/posthog-js/commit/5b125c1bd2e2afa8aaef2d77b81c3c46b3651f9d) Thanks [@emmayusufu](https://github.com/emmayusufu)! - Strip dangling `//# sourceMappingURL=` comments from Turbopack browser chunks when `deleteAfterUpload` is set, so deleted source maps are no longer referenced (and 404) in production.
+  (2026-06-16)
+
 ## 1.9.67
 
 ### Patch Changes

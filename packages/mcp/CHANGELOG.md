@@ -1,5 +1,18 @@
 # @posthog/mcp
 
+## 0.3.0
+
+### Minor Changes
+
+- [#3829](https://github.com/PostHog/posthog-js/pull/3829) [`125dee2`](https://github.com/PostHog/posthog-js/commit/125dee23f6f92d5a4881f20434d5cbd82e7199ad) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Auto-capture `$mcp_tool_category` on `$mcp_tool_call` events. The wrapping path (`track()`/`instrument()`) reads a `category` declared on a tool's `_meta` block (cached from `tools/list` and seeded from `_registeredTools`), and `PostHogMCP.captureToolCall` accepts a first-class `category` field. Declaring `_meta: { category: "Logs" }` on a tool definition is all a server needs for every call to carry the category, enabling per-category dashboards in PostHog MCP analytics.
+  (2026-06-16)
+
+### Patch Changes
+
+- Updated dependencies [[`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9), [`a0553b3`](https://github.com/PostHog/posthog-js/commit/a0553b305679f995e244cad7498c7521cb4c849d), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+  - @posthog/core@1.33.0
+  - posthog-node@5.38.0
+
 ## 0.2.1
 
 ### Patch Changes

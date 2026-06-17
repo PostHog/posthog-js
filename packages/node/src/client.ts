@@ -23,6 +23,8 @@ import {
   IdentifyMessage,
   IPostHog,
   OverrideFeatureFlagsOptions,
+  SetPersonPropertiesMessage,
+  UnsetPersonPropertiesMessage,
   PostHogOptions,
   SendFeatureFlagsOptions,
   FlagEvaluationOptions,
@@ -88,6 +90,13 @@ function normalizePersonalApiKey(value?: unknown): string | undefined {
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
+}
+
+function normalizeUnsetPersonProperties(value: string | string[]): string[] {
+  const propertyNames = Array.isArray(value) ? value : [value]
+  return propertyNames.filter(
+    (propertyName): propertyName is string => typeof propertyName === 'string' && propertyName.trim().length > 0
+  )
 }
 
 /**
@@ -701,6 +710,66 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
     await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+  }
+
+  /**
+   * Set properties on a person profile.
+   *
+   * @example
+   * ```ts
+   * client.setPersonProperties({
+   *   distinctId: 'user_123',
+   *   properties: { plan: 'premium' },
+   *   propertiesOnce: { first_seen: '2026-06-15' }
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The data containing distinctId and properties to set
+   */
+  setPersonProperties({ distinctId, properties = {}, propertiesOnce = {} }: SetPersonPropertiesMessage): void {
+    if (Object.keys(properties).length === 0 && Object.keys(propertiesOnce).length === 0) {
+      return
+    }
+
+    const eventProperties: Record<string, any> = {}
+    if (Object.keys(properties).length > 0) {
+      eventProperties.$set = properties
+    }
+    if (Object.keys(propertiesOnce).length > 0) {
+      eventProperties.$set_once = propertiesOnce
+    }
+
+    this.capture({
+      distinctId,
+      event: '$set',
+      properties: eventProperties,
+    })
+  }
+
+  /**
+   * Remove properties from a person profile.
+   *
+   * @example
+   * ```ts
+   * client.unsetPersonProperties({
+   *   distinctId: 'user_123',
+   *   properties: ['plan', 'email']
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The data containing distinctId and property names to unset
+   */
+  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void {
+    const propertyNames = normalizeUnsetPersonProperties(properties)
+    if (propertyNames.length === 0) {
+      return
+    }
+
+    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames } })
   }
 
   /**

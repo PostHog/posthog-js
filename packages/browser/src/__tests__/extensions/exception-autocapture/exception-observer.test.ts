@@ -84,6 +84,15 @@ describe('Exception Observer', () => {
             expect((window?.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__).toBe(true)
         })
 
+        it('does not call loadExternalDependency if script is already loaded', () => {
+            addErrorWrappingFlagToWindow()
+            loadScriptMock.mockClear()
+
+            exceptionObserver.startIfEnabledOrStop()
+
+            expect(loadScriptMock).not.toHaveBeenCalled()
+        })
+
         it('should remove instrument handlers when stopped', () => {
             exceptionObserver['_stopCapturing']()
             expectNoHandlers()

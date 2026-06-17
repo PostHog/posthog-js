@@ -1026,6 +1026,10 @@ export class PostHog extends PostHogCore {
    *
    * {@label Feature flags}
    *
+   * @remarks
+   * When the `disableRemoteFeatureFlags` option is set, this method is a no-op; supply
+   * flag values via `updateFlags()` instead.
+   *
    * @example
    * ```js
    * // reload feature flags
@@ -1054,10 +1058,61 @@ export class PostHog extends PostHogCore {
    *
    * @public
    *
+   * @remarks
+   * When the `disableRemoteFeatureFlags` option is set, no request is made and the
+   * promise resolves with the currently stored flags (from `bootstrap` or `updateFlags()`).
+   *
    * @returns Promise that resolves with the refreshed flags
    */
   reloadFeatureFlagsAsync(): Promise<Record<string, boolean | string> | undefined> {
     return super.reloadFeatureFlagsAsync()
+  }
+
+  /**
+   * Replaces (or merges into) the stored feature flags and payloads with locally supplied
+   * values, exactly as if they had been returned by the flags endpoint: the values are
+   * persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and
+   * `onFeatureFlags` listeners fire. Makes no network request.
+   *
+   * Intended for apps that evaluate flags outside the SDK (e.g. server-side local
+   * evaluation) and push the results in at runtime, typically together with the
+   * `disableRemoteFeatureFlags` option so the SDK never fetches flags itself.
+   *
+   * {@label Feature flags}
+   *
+   * @remarks
+   * The values are cleared by `reset()`, so push them again after an identity change.
+   *
+   * @example
+   * ```js
+   * // replace all stored flags with locally evaluated ones
+   * posthog.updateFlags({ 'my-flag': true, 'multivariate-flag': 'variant-1' })
+   * ```
+   *
+   * @example
+   * ```js
+   * // include payloads
+   * posthog.updateFlags({ 'my-flag': true }, { 'my-flag': { color: 'blue' } })
+   * ```
+   *
+   * @example
+   * ```js
+   * // merge into the stored flags instead of replacing them
+   * posthog.updateFlags({ 'my-flag': false }, undefined, { merge: true })
+   * ```
+   *
+   * @public
+   *
+   * @param flags - Flag keys mapped to their values (boolean, or a variant string)
+   * @param payloads - Optional flag keys mapped to their JSON payloads
+   * @param options - Set `merge: true` to merge with the currently stored flags instead of replacing them
+   */
+  updateFlags(
+    flags: Record<string, boolean | string>,
+    payloads?: Record<string, JsonType>,
+    options?: { merge?: boolean }
+  ): void {
+    super.updateFlags(flags, payloads, options)
   }
 
   /**
@@ -1770,6 +1825,21 @@ export class PostHog extends PostHogCore {
     reloadFeatureFlags = true
   ): void {
     super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags)
+  }
+
+  /**
+   * Removes properties from the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @public
+   *
+   * @param propertyNames - The name (or names) of the person properties to remove.
+   * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   */
+  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
+    super.unsetPersonProperties(propertyNames, reloadFeatureFlags)
   }
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
