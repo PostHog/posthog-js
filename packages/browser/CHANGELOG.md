@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.389.1
+
+### Patch Changes
+
+- [#3875](https://github.com/PostHog/posthog-js/pull/3875) [`43b4137`](https://github.com/PostHog/posthog-js/commit/43b413713440e7d62739d56ee7ffa01a6cf45678) Thanks [@marandaneto](https://github.com/marandaneto)! - Limit retries for transport failures without an HTTP response.
+  (2026-06-17)
+
 ## 1.389.0
 
 ### Minor Changes
