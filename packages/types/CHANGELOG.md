@@ -1,5 +1,27 @@
 # @posthog/types
 
+## 1.390.0
+
+### Minor Changes
+
+- [#3869](https://github.com/PostHog/posthog-js/pull/3869) [`81b79fb`](https://github.com/PostHog/posthog-js/commit/81b79fb9bcab3f4619e8fc7f1022f2ab24936b4e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add a `beforeSend` option to the logs config, so you can inspect, redact, or drop log records before they're sent:
+
+    ```js
+    posthog.init('<token>', {
+        logs: {
+            beforeSend: (log) => {
+                // return null to drop the log, or return the (optionally modified) log to keep it
+                if (log.body.includes('password')) {
+                    return null
+                }
+                return log
+            },
+        },
+    })
+    ```
+
+    `beforeSend` accepts a single function or an array of functions (applied left to right); returning `null` from any of them drops the record. It runs for logs sent via both `posthog.captureLog()` and `posthog.logger.*`. (2026-06-17)
+
 ## 1.389.0
 
 ### Minor Changes
