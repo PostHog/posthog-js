@@ -1,4 +1,4 @@
-export { getFeatureFlagValue } from './featureFlagUtils'
+export { getFeatureFlagValue, parsePayload } from './featureFlagUtils'
 export {
   gzipCompress,
   isGzipData,

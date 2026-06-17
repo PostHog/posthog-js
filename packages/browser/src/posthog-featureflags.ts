@@ -37,7 +37,7 @@ import {
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
 } from './constants'
 
-import { isUndefined, isArray, isNull } from '@posthog/core'
+import { isUndefined, isArray, isNull, parsePayload } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
 
@@ -867,20 +867,11 @@ export class PostHogFeatureFlags implements Extension {
             return undefined
         }
 
-        let parsedPayload = payload
-        if (!isUndefined(payload)) {
-            try {
-                parsedPayload = JSON.parse(payload as any)
-            } catch {
-                // payload is already parsed or not valid JSON, keep as-is
-            }
-        }
-
         return {
             key,
             enabled: !!flagValue,
             variant: typeof flagValue === 'string' ? flagValue : undefined,
-            payload: parsedPayload,
+            payload: parsePayload(payload),
         }
     }
 
