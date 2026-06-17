@@ -7,6 +7,15 @@ import { log } from './logger'
 
 export const GET_MORE_TOOLS_NAME = 'get_more_tools' as const
 
+/**
+ * The configured name of the `get_more_tools` virtual tool, falling back to the
+ * default. Resolve through here everywhere (inject + detect) so a custom name
+ * can't drift between call sites.
+ */
+export function reportMissingToolName(options?: { getMoreToolsName?: string }): string {
+  return options?.getMoreToolsName ?? GET_MORE_TOOLS_NAME
+}
+
 type ReportMissingToolDescriptor = ListToolsResult['tools'][number]
 
 export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAME): ReportMissingToolDescriptor {

@@ -7,7 +7,7 @@ import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } fro
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
-import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
+import { handleReportMissing, reportMissingToolName } from './tools'
 import { instrumentInitializeHandler, instrumentToolsListHandler, captureToolCall } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
@@ -52,7 +52,7 @@ async function handleToolCallRequest(
     return await originalCallToolHandler?.(request, extra)
   }
 
-  if (request.params?.name === GET_MORE_TOOLS_NAME) {
+  if (request.params?.name === reportMissingToolName(data.options)) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,

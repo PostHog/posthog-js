@@ -149,4 +149,34 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       await capture.stop()
     })
   })
+
+  describe('custom getMoreToolsName', () => {
+    const CUSTOM = 'posthog_find_tools'
+
+    it('advertises and handles the virtual tool under the custom name', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { reportMissing: true, getMoreToolsName: CUSTOM })
+
+      // advertised under the custom name, not the default
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.find((t: any) => t.name === CUSTOM)).toBeDefined()
+      expect(tools.find((t: any) => t.name === GET_MORE_TOOLS)).toBeUndefined()
+
+      // detected + captured when called under the custom name
+      const result = await client.request(
+        { method: 'tools/call', params: { name: CUSTOM, arguments: { context: 'Need a deploy tool' } } },
+        CallToolResultSchema
+      )
+      expect(result.content[0].text).toContain('Unfortunately')
+
+      await new Promise((r) => setTimeout(r, 50))
+      const event = capture
+        .getEvents()
+        .find((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability && e.resourceName === CUSTOM)
+      expect(event?.userIntent).toBe('Need a deploy tool')
+
+      await capture.stop()
+    })
+  })
 })

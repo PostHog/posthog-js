@@ -10,4 +10,4 @@ Bring the `PostHogMCP` custom-dispatcher path to feature parity with `instrument
 - `captureMissingCapability(...)` emits `$mcp_missing_capability`, plus a standalone `getMoreToolsResult()` for the canned response.
 - `captureToolsList(...)` emits `$mcp_tools_list` with the advertised tool names.
 - `setLogger` is now exported so custom servers can surface the SDK's internal warnings.
-- The `get_more_tools` tool name is now customizable via the `getMoreToolsName` constructor option (defaults to `get_more_tools`). Setting it once keeps `prepareToolList` injection and `prepareToolCall` detection in sync.
+- The `get_more_tools` tool name is now customizable via `getMoreToolsName` (defaults to `get_more_tools`) on **both** paths: the `PostHogMCP` constructor option and the `instrument()` `MCPAnalyticsOptions`. Set once, it's used for both advertising the tool and detecting calls to it, so the name can't drift between injection and detection.

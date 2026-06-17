@@ -70,9 +70,12 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
   return modifiedTool
 }
 
-export function addConversationIdToTools<TTool extends ConversationIdInjectableTool>(tools: TTool[]): TTool[] {
+export function addConversationIdToTools<TTool extends ConversationIdInjectableTool>(
+  tools: TTool[],
+  getMoreToolsName: string = GET_MORE_TOOLS_NAME
+): TTool[] {
   return tools.map((tool) => {
-    if (tool.name === GET_MORE_TOOLS_NAME) {
+    if (tool.name === getMoreToolsName) {
       return tool
     }
     return addConversationIdToTool(tool)
@@ -92,9 +95,10 @@ export type ConversationIdResolution =
 export function resolveConversationId(
   enabled: boolean,
   args: unknown,
-  toolName: string | undefined
+  toolName: string | undefined,
+  getMoreToolsName: string = GET_MORE_TOOLS_NAME
 ): ConversationIdResolution {
-  if (!enabled || toolName === GET_MORE_TOOLS_NAME) {
+  if (!enabled || toolName === getMoreToolsName) {
     return { minted: false, conversationId: undefined }
   }
   const supplied = extractConversationId(args)
