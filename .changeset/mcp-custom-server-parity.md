@@ -2,7 +2,7 @@
 '@posthog/mcp': minor
 ---
 
-Bring the `PostHogMCP` custom-dispatcher path to feature parity with `instrument()`. Custom MCP servers (hono, edge, any setup without a `Server`/`McpServer` to wrap) can now capture intent, the `get_more_tools` virtual tool, and tool listings:
+Bring the `PostHogMCP` custom-dispatcher path up to the same `$mcp_*` events as `instrument()` for intent, the `get_more_tools` virtual tool, and tool listings. Custom MCP servers (hono, edge, any setup without a `Server`/`McpServer` to wrap) can now emit those events too. (`instrument()`'s server-side `intentFallback` and `enableConversationId` callbacks aren't mirrored — a custom dispatcher owns its request loop and can do both inline.)
 
 - `prepareToolList(tools, { context, reportMissing })` injects the `context` argument into tool input schemas and optionally appends the `get_more_tools` tool.
 - `prepareToolCall(name, args)` returns `{ intent, intentSource, args, isMissingCapability }` — pulls the agent-supplied intent, strips the injected `context` argument before your handler runs, and flags `get_more_tools` calls.
