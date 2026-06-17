@@ -266,4 +266,85 @@ describe('PostHog onRemoteConfig', () => {
       })
     })
   })
+
+  describe('disableRemoteFeatureFlags', () => {
+    const mockRemoteConfigEndpoint = (
+      remoteConfigResponse: Record<string, unknown>
+    ): Parameters<typeof createTestClient>[2] => {
+      return (_mocks) => {
+        _mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/config')) {
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve(remoteConfigResponse),
+            })
+          }
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ status: 'ok' }),
+          })
+        })
+      }
+    }
+
+    it('fires onRemoteConfig from the remote config response and skips the flags request', async () => {
+      ;[posthog, mocks] = createTestClientWithRemoteConfig(
+        'TEST_API_KEY',
+        {
+          flushAt: 1,
+          preloadFeatureFlags: true,
+          disableRemoteConfig: false,
+          disableRemoteFeatureFlags: true,
+        },
+        mockRemoteConfigEndpoint({
+          hasFeatureFlags: true,
+          supportedCompression: ['gzip-js'],
+          errorTracking: { autocaptureExceptions: true },
+          capturePerformance: { network_timing: true },
+          sessionRecording: false,
+          surveys: false,
+        })
+      )
+
+      await posthog.reloadRemoteConfigAsync()
+      await waitForPromises()
+
+      // Fires from the remote config path because the flags request is skipped entirely
+      expect(posthog.onRemoteConfigCalls).toHaveLength(1)
+      expect(posthog.onRemoteConfigCalls[0]).toMatchObject({
+        errorTracking: { autocaptureExceptions: true },
+      })
+      const flagsCalls = mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))
+      expect(flagsCalls).toHaveLength(0)
+    })
+
+    it('does not wipe locally supplied flags when remote config has no feature flags', async () => {
+      ;[posthog, mocks] = createTestClientWithRemoteConfig(
+        'TEST_API_KEY',
+        {
+          flushAt: 1,
+          preloadFeatureFlags: true,
+          disableRemoteConfig: false,
+          disableRemoteFeatureFlags: true,
+        },
+        mockRemoteConfigEndpoint({
+          hasFeatureFlags: false,
+          supportedCompression: ['gzip-js'],
+          errorTracking: false,
+          capturePerformance: false,
+          sessionRecording: false,
+          surveys: false,
+        })
+      )
+
+      posthog.updateFlags({ 'local-flag': true })
+
+      await posthog.reloadRemoteConfigAsync()
+      await waitForPromises()
+
+      expect(posthog.getFeatureFlags()).toEqual({ 'local-flag': true })
+    })
+  })
 })

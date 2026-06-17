@@ -286,4 +286,24 @@ describe('PostHogWeb', () => {
       }
     })
   })
+
+  describe('disableRemoteFeatureFlags (inherited from PostHogCore)', () => {
+    it('does not fetch flags on init and reads back updateFlags values', async () => {
+      const posthog = new PostHog('TEST_API_KEY', {
+        flushAt: 1,
+        disableRemoteFeatureFlags: true,
+      })
+      await waitForPromises()
+
+      // The web constructor calls reloadFeatureFlags() on init; the option must make it a no-op.
+      const flagsCalls = fetch.mock.calls.filter((call) => String(call[0]).includes('flags'))
+      expect(flagsCalls).toHaveLength(0)
+
+      posthog.updateFlags({ 'local-flag': true, 'local-variant': 'variant-a' }, { 'local-flag': { color: 'blue' } })
+
+      expect(posthog.getFeatureFlag('local-flag')).toEqual(true)
+      expect(posthog.getFeatureFlag('local-variant')).toEqual('variant-a')
+      expect(posthog.getFeatureFlagPayload('local-flag')).toEqual({ color: 'blue' })
+    })
+  })
 })
