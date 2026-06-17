@@ -24,9 +24,9 @@ export function useFeatureFlagWithPayload(flag: string, client?: PostHog): Featu
   const [featureFlag, setFeatureFlag] = useState<FeatureFlagWithPayload>([undefined, undefined])
 
   useEffect(() => {
-    setFeatureFlag([posthog?.getFeatureFlag(flag), posthog?.getFeatureFlagPayload(flag)])
+    setFeatureFlag([posthog?.getFeatureFlag(flag), posthog?.getFeatureFlagResult(flag, { sendEvent: false })?.payload])
     return posthog?.onFeatureFlags(() => {
-      setFeatureFlag([posthog.getFeatureFlag(flag), posthog.getFeatureFlagPayload(flag)])
+      setFeatureFlag([posthog.getFeatureFlag(flag), posthog.getFeatureFlagResult(flag, { sendEvent: false })?.payload])
     })
   }, [posthog, flag])
 
