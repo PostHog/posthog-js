@@ -171,9 +171,8 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase, skipOnConflic
     return
   }
 
-  const code = JSON.parse(script.shellScript)
-
   if (script.shellScript.includes('posthog-xcode.sh')) {
+    const code = JSON.parse(script.shellScript)
     script.shellScript = JSON.stringify(updatePostHogSkipOnConflictArg(code, skipOnConflict))
     return
   }
@@ -182,6 +181,7 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase, skipOnConflic
     return
   }
 
+  const code = JSON.parse(script.shellScript)
   script.shellScript = JSON.stringify(addPostHogWithBundledScriptsToBundleShellScript(code, skipOnConflict))
 }
 

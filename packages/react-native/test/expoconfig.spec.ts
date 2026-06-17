@@ -192,6 +192,13 @@ describe('modifyExistingXcodeBuildScript', () => {
     expect(script.shellScript).toBe(firstPass)
   })
 
+  it('skips already posthog-react-native-wrapped scripts without parsing them', () => {
+    const script = { shellScript: 'posthog-react-native node_modules/react-native/scripts/react-native-xcode.sh' }
+    const original = script.shellScript
+    expect(() => modifyExistingXcodeBuildScript(script)).not.toThrow()
+    expect(script.shellScript).toBe(original)
+  })
+
   it('skips scripts that do not invoke react-native-xcode.sh', () => {
     const script = { shellScript: JSON.stringify('echo "hello"') }
     const original = script.shellScript
