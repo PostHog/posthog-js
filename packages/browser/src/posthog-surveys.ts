@@ -73,6 +73,10 @@ export class PostHogSurveys implements Extension {
     }
 
     reset(): void {
+        // Drop in-memory event/action activations too; they aren't in persistence (which
+        // reset() has already cleared), so without this an armed-but-unshown survey would
+        // survive a logout/account switch that doesn't reload the page.
+        this._surveyEventReceiver?.reset()
         localStorage.removeItem('lastSeenSurveyDate')
         const surveyKeys = []
         for (let i = 0; i < localStorage.length; i++) {

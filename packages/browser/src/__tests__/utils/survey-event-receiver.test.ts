@@ -301,6 +301,28 @@ describe('survey-event-receiver', () => {
             hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
             expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
         })
+
+        it('reset() clears an armed-but-unshown activation (e.g. on logout without a reload)', () => {
+            const { receiver, hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            expect(receiver.getSurveys()).toContain('lifecycle-survey')
+
+            receiver.reset()
+            expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
+        })
+
+        it('reset() clears a shown (persisted) activation too', () => {
+            const { receiver, hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            expect(receiver.getSurveys()).toContain('lifecycle-survey')
+
+            receiver.reset()
+            expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
     })
 
     describe('property filter based surveys', () => {

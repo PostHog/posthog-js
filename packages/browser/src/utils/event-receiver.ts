@@ -294,6 +294,18 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         return all.filter((itemId) => !this._isItemPermanentlyIneligible(itemId))
     }
 
+    /**
+     * Clear all activations. Called on `posthog.reset()` so a logout or account switch
+     * (without a full page reload) does not leave an event-armed item live for the next
+     * user — the in-memory set would otherwise survive `persistence.clear()`.
+     */
+    reset(): void {
+        this._pendingActivatedItems = []
+        if (this._getPersistedActivatedIds().length > 0) {
+            this._setActivatedItems([])
+        }
+    }
+
     getEventToItemsMap(): Map<string, string[]> {
         return this._eventToItems
     }
