@@ -1003,6 +1003,8 @@ export class PostHog extends PostHogCore {
    *
    * {@label Feature flags}
    *
+   * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
+   *
    * @example
    * ```js
    * // get feature flag payload
