@@ -1,7 +1,7 @@
 import { PRODUCT_TOURS_ACTIVATED } from '../constants'
 import { ProductTour, ProductTourEventName } from '../posthog-product-tours-types'
 import { PostHog } from '../posthog-core'
-import { EventReceiver } from './event-receiver'
+import { ActivationOutcome, EventReceiver } from './event-receiver'
 import { createLogger } from './logger'
 import { localStore } from '../storage'
 import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX } from '../extensions/product-tours/constants'
@@ -42,6 +42,11 @@ export class ProductTourEventReceiver extends EventReceiver<ProductTour> {
         const completedKey = `${TOUR_COMPLETED_KEY_PREFIX}${itemId}`
         const dismissedKey = `${TOUR_DISMISSED_KEY_PREFIX}${itemId}`
         return !!(localStore._get(completedKey) || localStore._get(dismissedKey))
+    }
+
+    protected _activationOutcome(event: string): ActivationOutcome {
+        // Tours show once per trigger: consumed when shown, never persisted across a reload.
+        return event === this._getShownEventName() ? 'consume' : 'ignore'
     }
 
     getTours(): string[] {
