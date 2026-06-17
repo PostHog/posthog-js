@@ -317,6 +317,42 @@ describe('survey-event-receiver', () => {
             expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
         })
 
+        it('getSurveys() returns the union of armed (memory) and shown (persisted) surveys', () => {
+            const armed = makeSurvey({
+                id: 'armed-survey',
+                conditions: { events: { values: [{ name: 'arm_event' }] } },
+            })
+            const shown = makeSurvey({
+                id: 'shown-survey',
+                conditions: { events: { values: [{ name: 'show_event' }] } },
+            })
+            config = createMockConfig({
+                token: 'testtoken',
+                api_host: 'https://app.posthog.com',
+                persistence: 'memory',
+            })
+            instance = createMockPostHog({
+                config,
+                persistence: new PostHogPersistence(config),
+                _addCaptureHook: mockAddCaptureHook,
+                getSurveys: jest.fn((callback) => callback([armed, shown])),
+            })
+            const receiver = new SurveyEventReceiver(instance)
+            receiver.register([armed, shown])
+            const hook = mockAddCaptureHook.mock.calls[0][0]
+
+            hook('arm_event') // armed in memory only
+            hook('show_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('shown-survey', SurveyEventName.SHOWN)) // promoted to persistence
+
+            // Both are active in-session (the union of memory + persistence)...
+            expect(receiver.getSurveys()).toEqual(expect.arrayContaining(['armed-survey', 'shown-survey']))
+            // ...but only the shown one survives a reload.
+            const afterReload = new SurveyEventReceiver(instance)
+            expect(afterReload.getSurveys()).toContain('shown-survey')
+            expect(afterReload.getSurveys()).not.toContain('armed-survey')
+        })
+
         it('reset() clears an armed-but-unshown activation (e.g. on logout without a reload)', () => {
             const { receiver, hook } = setup(makeSurvey({}))
 
