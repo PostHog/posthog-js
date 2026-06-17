@@ -277,12 +277,11 @@ describe('resolveNativeSymbolUpload', () => {
 })
 
 describe('buildAndroidSkipOnConflictGradleLine', () => {
-  it('returns no Gradle line when skipOnConflict is disabled', () => {
-    expect(buildAndroidSkipOnConflictGradleLine(false)).toBeNull()
-  })
-
-  it('serializes skipOnConflict for posthog.gradle', () => {
-    expect(buildAndroidSkipOnConflictGradleLine(true)).toBe('project.ext.posthogReactNativeSkipOnConflict = true')
+  it.each([
+    [false, null],
+    [true, 'project.ext.posthogReactNativeSkipOnConflict = true'],
+  ])('serializes skipOnConflict=%s', (skipOnConflict, expected) => {
+    expect(buildAndroidSkipOnConflictGradleLine(skipOnConflict)).toBe(expected)
   })
 })
 

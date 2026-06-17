@@ -129,12 +129,6 @@ describe('posthog-xcode.sh skipOnConflict upload flag', () => {
     )
     expect(contents).not.toContain('hermes clone --skip-on-conflict')
   })
-
-  it('requires a posthog-cli version that supports --skip-on-conflict', () => {
-    const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
-
-    expect(contents).toContain('MIN_POSTHOG_CLI_VERSION="0.7.12"')
-  })
 })
 
 describe('posthog-xcode.sh posthog-cli error formatting', () => {

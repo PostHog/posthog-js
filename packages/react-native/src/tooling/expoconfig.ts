@@ -313,6 +313,8 @@ type PostHogPluginProps = {
 
   /**
    * Whether to append `--skip-on-conflict` to `posthog-cli hermes upload` on iOS and Android.
+   *
+   * Default: false.
    */
   skipOnConflict?: boolean
 }
