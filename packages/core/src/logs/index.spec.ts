@@ -1450,5 +1450,41 @@ describe('PostHogLogs', () => {
       // The sent batch [a, b, c] leaves the queue; d and e survive for next flush.
       expect(readQueue(mockInstance).map((entry) => entry.record.body.stringValue)).toEqual(['d', 'e'])
     })
+
+    it('advances correctly across batches when eviction happens between iterations', async () => {
+      // Regression: the eviction counter was reset once per flush, so an eviction
+      // during the persist-await between batches got counted against the NEXT
+      // batch's advance — under-dropping and re-sending an already-sent record.
+      const entry = (body: string): any => ({ record: { body: { stringValue: body } } })
+      mockInstance._store[PostHogPersistedProperty.LogsQueue] = [entry('a'), entry('b'), entry('c'), entry('d')]
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'ok' }))
+
+      let persistCalls = 0
+      let logs: PostHogLogs
+      // eslint-disable-next-line prefer-const
+      logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBufferSize: 4, maxQueueSize: 4, maxBatchRecordsPerPost: 2 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady,
+        () => {
+          persistCalls++
+          if (persistCalls === 1) {
+            // After batch 1 [a,b] advances, captures arrive before batch 2 and
+            // evict the head record 'c' at capacity.
+            logs.captureLog({ body: 'e' })
+            logs.captureLog({ body: 'f' })
+            logs.captureLog({ body: 'g' })
+          }
+          return Promise.resolve()
+        }
+      )
+
+      await logs.flush()
+
+      // batch1 [a,b] dropped, 'c' evicted, batch2 [d,e] dropped — nothing sent twice.
+      expect(readQueue(mockInstance).map((x) => x.record.body.stringValue)).toEqual(['f', 'g'])
+    })
   })
 })

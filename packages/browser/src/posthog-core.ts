@@ -2917,6 +2917,7 @@ export class PostHog implements PostHogInterface {
         this._remoteConfigLoader?.stop()
         this.featureFlags?.reset()
         this.conversations?.reset()
+        this.logs?.reset()
         this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null

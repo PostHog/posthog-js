@@ -219,8 +219,6 @@ export class PostHogLogs {
 
   private async _flushInner(): Promise<void> {
     this._clearFlushTimer()
-    // Count only evictions from here on; the read below already reflects prior ones.
-    this._evictedSinceAdvance = 0
 
     let queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
     if (queue.length === 0) {
@@ -231,6 +229,12 @@ export class PostHogLogs {
     let sentCount = 0
 
     while (queue.length > 0 && sentCount < originalQueueLength) {
+      // Reset per batch so the advance below counts only evictions during THIS
+      // batch's send. Evictions during the persist await or between iterations
+      // are already reflected in the next iteration's queue read, so they must
+      // not carry into the next batch's drop math.
+      this._evictedSinceAdvance = 0
+
       const batchSize = Math.min(queue.length, this._maxBatchRecordsPerPost)
       const batch = queue.slice(0, batchSize)
       const records = batch.map((e) => e.record)
@@ -289,7 +293,6 @@ export class PostHogLogs {
     // evicted during the send (already-sent records that left the queue), so we drop
     // only the still-present sent records, not ones captured during the send.
     const evicted = this._evictedSinceAdvance
-    this._evictedSinceAdvance = 0
     const drop = Math.max(0, consumed - evicted)
     const refreshed = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
     this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, refreshed.slice(drop))
