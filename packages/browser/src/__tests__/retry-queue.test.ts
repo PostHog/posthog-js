@@ -15,6 +15,7 @@ describe('RetryQueue', () => {
 
         jest.useFakeTimers()
         jest.setSystemTime(now)
+        assignableWindow.POSTHOG_DEBUG = false
         jest.spyOn(assignableWindow.console, 'warn').mockImplementation()
     })
 
@@ -164,6 +165,43 @@ describe('RetryQueue', () => {
         })
 
         expect(retryQueue.length).toEqual(0)
+    })
+
+    it('does not enqueue statusCode 0 requests after 3 retries and logs the likely causes', () => {
+        assignableWindow.POSTHOG_DEBUG = true
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 0 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+            retriesPerformedSoFar: 3,
+        })
+
+        expect(retryQueue.length).toEqual(0)
+        expect(cb).toHaveBeenCalledWith({ statusCode: 0 })
+        expect(assignableWindow.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            'Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after 3 retries.'
+        )
+    })
+
+    it('keeps retrying statusCode 0 requests below 3 retries', () => {
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 0 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'retryable', timestamp: now },
+            retriesPerformedSoFar: 2,
+        })
+
+        expect(retryQueue.length).toEqual(1)
+        expect(retryQueue['_queue'][0].requestOptions.retriesPerformedSoFar).toEqual(3)
     })
 
     it('only calls the callback when successful', () => {
