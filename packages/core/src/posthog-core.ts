@@ -1202,8 +1202,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: { merge?: boolean }
   ): void {
     this.wrap(() => {
-      // Seed from the raw stored details: preserves disabled flags' payloads (which
-      // getFeatureFlagPayloads drops) and keeps active overrides out of the merged base.
+      // Merge against the raw stored flags, not the override-applied view.
       const existingDetails = options?.merge ? this.getKnownFeatureFlagDetails()?.flags : undefined
       const existingFlags = existingDetails ? getFlagValuesFromFlags(existingDetails) : {}
       const existingPayloads: Record<string, JsonType> = {}
