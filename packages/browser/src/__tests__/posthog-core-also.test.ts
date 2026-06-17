@@ -850,6 +850,32 @@ describe('posthog core', () => {
         })
     })
 
+    describe('bfcache (pageshow) feature flag rehydration', () => {
+        const dispatchPageShow = (persisted: boolean): void => {
+            const event = new Event('pageshow')
+            Object.defineProperty(event, 'persisted', { value: persisted })
+            window.dispatchEvent(event)
+        }
+
+        it('reloads feature flags when the page is restored from the back-forward cache', () => {
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
+            const reloadSpy = jest.spyOn(posthog.featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            dispatchPageShow(true)
+
+            expect(reloadSpy).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not reload feature flags on a normal (non-persisted) page show', () => {
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
+            const reloadSpy = jest.spyOn(posthog.featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            dispatchPageShow(false)
+
+            expect(reloadSpy).not.toHaveBeenCalled()
+        })
+    })
+
     describe('bootstrapping feature flags', () => {
         it('sets the right distinctID', () => {
             const posthog = posthogWith(

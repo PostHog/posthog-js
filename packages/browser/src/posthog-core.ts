@@ -803,6 +803,19 @@ export class PostHog implements PostHogInterface {
             passive: false,
         })
 
+        // When a page is restored from the browser's back-forward cache (bfcache), the SDK is NOT
+        // re-initialized — the whole JS heap, including cached feature flags, is restored as-is and
+        // no `/flags` request is made. If those cached flags are past `feature_flag_cache_ttl_ms`,
+        // they're treated as stale and `getFeatureFlag()` returns undefined until something else
+        // triggers a reload, silently disabling gated features. Re-evaluate flags on bfcache restore
+        // so a restored page self-heals within one network round-trip. Some Chromium-based browsers
+        // (e.g. Arc) restore from bfcache aggressively, even on a plain refresh.
+        addEventListener(window, 'pageshow', (event) => {
+            if ((event as PageTransitionEvent).persisted) {
+                this.featureFlags?.reloadFeatureFlags()
+            }
+        })
+
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
             setupSegmentIntegration(this, () => this._loaded())
