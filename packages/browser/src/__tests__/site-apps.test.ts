@@ -454,6 +454,36 @@ describe('SiteApps', () => {
             )
         })
 
+        it('prepares style elements appended before async init callbacks complete', () => {
+            const finishInit: (() => HTMLStyleElement)[] = []
+            posthog.config.prepare_external_dependency_stylesheet = jest.fn((stylesheet) => {
+                stylesheet.nonce = 'style-nonce'
+                return stylesheet
+            })
+            init(({ callback }) => {
+                finishInit.push(() => {
+                    const styleElement = document.createElement('style')
+                    document.body.append(styleElement)
+                    callback(true)
+                    return styleElement
+                })
+            })
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+
+            const secondAppStyle = finishInit[1]()
+            const stillPendingStyle = document.createElement('style')
+            document.body.append(stillPendingStyle)
+            const firstAppStyle = finishInit[0]()
+            const afterCallbacksStyle = document.createElement('style')
+            document.body.append(afterCallbacksStyle)
+
+            expect(secondAppStyle.nonce).toBe('style-nonce')
+            expect(stillPendingStyle.nonce).toBe('style-nonce')
+            expect(firstAppStyle.nonce).toBe('style-nonce')
+            expect(afterCallbacksStyle.nonce).toBe('')
+        })
+
         it('does not replace DOM insertion methods when no prepare hooks are configured', () => {
             const win = document.defaultView as Window & typeof globalThis
             const originalMethods = [

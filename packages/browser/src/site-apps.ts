@@ -13,6 +13,8 @@ export class SiteApps implements Extension {
 
     private _stopBuffering?: () => void
     private _bufferedInvocations: SiteAppGlobals[]
+    private _siteAppElementPatchCount = 0
+    private _restoreSiteAppElementPatches?: () => void
 
     constructor(private _instance: PostHog) {
         // events captured between loading posthog-js and the site app; up to 1000 events
@@ -111,18 +113,24 @@ export class SiteApps implements Extension {
         return element
     }
 
-    private _runWithPreparedSiteAppElements<T>(callback: () => T): T {
+    private _patchSiteAppElementInsertionMethods(): () => void {
         if (
             !this._instance.config.prepare_external_dependency_stylesheet &&
             !this._instance.config.prepare_external_dependency_script
         ) {
-            return callback()
+            return () => {}
         }
 
         const win = document?.defaultView
         const nodePrototype = win?.Node?.prototype
         if (!win || !nodePrototype) {
-            return callback()
+            return () => {}
+        }
+
+        this._siteAppElementPatchCount++
+
+        if (this._restoreSiteAppElementPatches) {
+            return this._releaseSiteAppElementPatches()
         }
 
         const restore: (() => void)[] = []
@@ -239,10 +247,39 @@ export class SiteApps implements Extension {
                 }
         )
 
-        try {
-            return callback()
-        } finally {
+        this._restoreSiteAppElementPatches = () => {
             restore.forEach((restore) => restore())
+            this._restoreSiteAppElementPatches = undefined
+        }
+
+        return this._releaseSiteAppElementPatches()
+    }
+
+    private _releaseSiteAppElementPatches(): () => void {
+        let released = false
+        return () => {
+            if (released) {
+                return
+            }
+            released = true
+            this._siteAppElementPatchCount--
+            if (this._siteAppElementPatchCount === 0) {
+                this._restoreSiteAppElementPatches?.()
+            }
+        }
+    }
+
+    private _runWithPreparedSiteAppElements<T>(callback: (restore: () => void) => T, restoreSynchronously = true): T {
+        const restore = this._patchSiteAppElementInsertionMethods()
+        try {
+            const result = callback(restore)
+            if (restoreSynchronously) {
+                restore()
+            }
+            return result
+        } catch (e) {
+            restore()
+            throw e
         }
     }
 
@@ -274,13 +311,16 @@ export class SiteApps implements Extension {
         }
 
         try {
-            const { processEvent } = this._runWithPreparedSiteAppElements(() =>
-                loader.init({
-                    posthog: this._instance,
-                    callback: (success) => {
-                        onLoaded(success)
-                    },
-                })
+            const { processEvent } = this._runWithPreparedSiteAppElements(
+                (restore) =>
+                    loader.init({
+                        posthog: this._instance,
+                        callback: (success) => {
+                            restore()
+                            onLoaded(success)
+                        },
+                    }),
+                false
             )
             if (processEvent) {
                 app.processEvent = processEvent
