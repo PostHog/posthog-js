@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.49.1
+
+### Patch Changes
+
+- [#3874](https://github.com/PostHog/posthog-js/pull/3874) [`ee7137f`](https://github.com/PostHog/posthog-js/commit/ee7137f5fc9eedf32fc99afcd8082384aa357581) Thanks [@marandaneto](https://github.com/marandaneto)! - Add Expo config plugin support for skipping duplicate sourcemap uploads.
+  (2026-06-17)
+
 ## 4.49.0
 
 ### Minor Changes
