@@ -339,9 +339,9 @@ export class PostHogFeatureFlags implements Extension {
         payloads?: Record<string, JsonType>,
         options?: { merge?: boolean }
     ): void {
-        // If merging, combine with existing flags
-        const existingFlags = options?.merge ? this.getFlagVariants() : {}
-        const existingPayloads = options?.merge ? this.getFlagPayloads() : {}
+        // Merge against the raw stored flags/payloads, not the override-applied getters.
+        const existingFlags = options?.merge ? (this._prop(ENABLED_FEATURE_FLAGS) ?? {}) : {}
+        const existingPayloads = options?.merge ? (this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) ?? {}) : {}
         const finalFlags = { ...existingFlags, ...flags }
         const finalPayloads = { ...existingPayloads, ...payloads }
 
