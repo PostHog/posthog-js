@@ -13,7 +13,9 @@ function isRecord(value: unknown): value is SanitizedRecord {
 
 /**
  * Sanitizes an event by redacting non-text content blocks from responses
- * and large base64-encoded strings from parameters.
+ * and large base64-encoded strings from parameters, and applying the same
+ * string redaction (PostHog tokens, base64 blobs, sensitive keys) to the
+ * agent-supplied intent.
  *
  * This is a synchronous operation that returns a new object without mutating the original.
  * It should run after customer redaction in the event pipeline.
@@ -27,6 +29,13 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 
   if (result.parameters != null) {
     result.parameters = sanitizeParameters(result.parameters)
+  }
+
+  // The intent comes straight from an agent-narrated `context` string, so it
+  // can contain a secret the LLM read aloud. Redact it like any other captured
+  // value rather than shipping it raw as `$mcp_intent`.
+  if (result.userIntent != null) {
+    result.userIntent = sanitizeCapturedValue(result.userIntent) as string
   }
 
   return result

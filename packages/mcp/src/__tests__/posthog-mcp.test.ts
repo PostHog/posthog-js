@@ -153,35 +153,60 @@ describe('PostHogMCP', () => {
   })
 
   describe('intent capture', () => {
-    it('sets $mcp_intent / $mcp_intent_source from the intent fields', async () => {
+    it.each([
+      {
+        name: 'sets intent + source from the fields',
+        intent: 'Find which tool fails most often',
+        intentSource: 'context_parameter' as const,
+        expectIntent: 'Find which tool fails most often',
+        expectSource: 'context_parameter',
+      },
+      {
+        name: 'defaults source to context_parameter when only intent is given',
+        intent: 'do a thing',
+        intentSource: undefined,
+        expectIntent: 'do a thing',
+        expectSource: 'context_parameter',
+      },
+      {
+        name: 'passes through an inferred source',
+        intent: 'inferred goal',
+        intentSource: 'inferred' as const,
+        expectIntent: 'inferred goal',
+        expectSource: 'inferred',
+      },
+      {
+        name: 'omits both properties when no intent is captured',
+        intent: undefined,
+        intentSource: undefined,
+        expectIntent: undefined,
+        expectSource: undefined,
+      },
+    ])('$name', async ({ intent, intentSource, expectIntent, expectSource }) => {
+      posthog.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: false, intent, intentSource })
+      await tick()
+
+      const p = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
+      if (expectIntent === undefined) {
+        expect(p).not.toHaveProperty(PostHogMCPAnalyticsProperty.Intent)
+        expect(p).not.toHaveProperty(PostHogMCPAnalyticsProperty.IntentSource)
+      } else {
+        expect(p[PostHogMCPAnalyticsProperty.Intent]).toBe(expectIntent)
+        expect(p[PostHogMCPAnalyticsProperty.IntentSource]).toBe(expectSource)
+      }
+    })
+
+    it('redacts secrets the agent narrated into the intent', async () => {
       posthog.captureToolCall({
         toolName: 'execute-sql',
         distinctId: 'user-123',
         isError: false,
-        intent: 'Find which tool fails most often',
-        intentSource: 'context_parameter',
+        intent: 'use token phx_123456789012345678901234567890 to query',
       })
       await tick()
-
       const p = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
-      expect(p[PostHogMCPAnalyticsProperty.Intent]).toBe('Find which tool fails most often')
-      expect(p[PostHogMCPAnalyticsProperty.IntentSource]).toBe('context_parameter')
-    })
-
-    it('defaults intentSource to context_parameter when only intent is given', async () => {
-      posthog.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: false, intent: 'do a thing' })
-      await tick()
-      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties[PostHogMCPAnalyticsProperty.IntentSource]).toBe(
-        'context_parameter'
-      )
-    })
-
-    it('omits intent properties when no intent is captured', async () => {
-      posthog.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: false })
-      await tick()
-      const p = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
-      expect(p).not.toHaveProperty(PostHogMCPAnalyticsProperty.Intent)
-      expect(p).not.toHaveProperty(PostHogMCPAnalyticsProperty.IntentSource)
+      expect(p[PostHogMCPAnalyticsProperty.Intent]).not.toContain('phx_123456789012345678901234567890')
+      expect(p[PostHogMCPAnalyticsProperty.Intent]).toContain('[redacted]')
     })
   })
 

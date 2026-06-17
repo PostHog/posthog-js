@@ -176,6 +176,12 @@ export class PostHogMCP extends PostHog {
    * Pass the returned `intent` / `intentSource` to {@link captureToolCall}, and
    * dispatch the returned `args` to your tool.
    *
+   * This only extracts the explicit `context` argument (`intentSource:
+   * 'context_parameter'`); it does not infer intent. If you run your own
+   * inference, pass that string with `intentSource: 'inferred'` straight to
+   * {@link captureToolCall} (the `instrument()` path's `intentFallback`
+   * equivalent).
+   *
    * @example
    * ```ts
    * const { intent, intentSource, args, isMissingCapability } = posthog.prepareToolCall(name, rawArgs)
