@@ -283,6 +283,19 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
   toolDescription?: string
   /** Product category the tool belongs to (e.g. "Logs") → `$mcp_tool_category`. */
   category?: string
+  /**
+   * The agent's stated intent for this call → `$mcp_intent`. On the custom
+   * dispatcher path, read it off the incoming call with
+   * {@link PostHogMCP.prepareToolCall} (which pulls the injected `context`
+   * argument). Omitted when no intent was captured.
+   */
+  intent?: string
+  /**
+   * Where {@link ToolCallCaptureData.intent} came from → `$mcp_intent_source`.
+   * `context_parameter` when the client supplied it on the call, `inferred` when
+   * the host derived it. Defaults to `context_parameter` when an intent is set.
+   */
+  intentSource?: MCPAnalyticsIntentSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
   /** Captured tool result → `$mcp_response` (sanitized + truncated). */
@@ -312,4 +325,67 @@ export interface InitializeCaptureData extends McpCaptureCommon {
   response?: unknown
   /** Wall-clock duration → `$mcp_duration_ms`. */
   durationMs?: number
+}
+
+/** Payload for {@link PostHogMCP.captureToolsList}. Emits `$mcp_tools_list`. */
+export interface ToolsListCaptureData extends McpCaptureCommon {
+  /**
+   * Names of the tools advertised in this `tools/list` response →
+   * `$mcp_listed_tool_names`. Powers "advertised but never called" analysis.
+   */
+  toolNames?: string[]
+  /** Captured request params → `$mcp_parameters` (sanitized + truncated). */
+  parameters?: unknown
+  /** Captured listing result → `$mcp_response` (sanitized + truncated). */
+  response?: unknown
+  /** Wall-clock duration → `$mcp_duration_ms`. */
+  durationMs?: number
+  /** Whether building the listing failed → `$mcp_is_error`. */
+  isError?: boolean
+  /** The thrown value when `isError` is true → fans out an `$exception` sibling. */
+  error?: unknown
+}
+
+/** Options for {@link PostHogMCP.prepareToolList}. */
+export interface PrepareToolListOptions {
+  /**
+   * Inject the `context` argument into every tool so agents state their intent
+   * (captured as `$mcp_intent`). `true` (default) uses the standard prompt;
+   * pass `{ description }` to customize it, or `false` to skip injection.
+   */
+  context?: boolean | MCPAnalyticsContextOptions
+  /**
+   * Append the `get_more_tools` virtual tool so agents can report a missing
+   * capability. Defaults to `false`. When the agent calls it, route the call to
+   * {@link PostHogMCP.captureMissingCapability} and reply with `getMoreToolsResult()`.
+   */
+  reportMissing?: boolean
+}
+
+/**
+ * Result of {@link PostHogMCP.prepareToolCall}: the intent pulled off the
+ * incoming call, the arguments with the injected `context` removed (so your tool
+ * handler and its schema validation never see it), and whether the call targeted
+ * the `get_more_tools` virtual tool.
+ */
+export interface PreparedToolCall {
+  /** The agent's stated intent (the `context` argument), if present. */
+  intent?: string
+  /** Where the intent came from. Always `context_parameter` here when set. */
+  intentSource?: MCPAnalyticsIntentSource
+  /** The call arguments with the injected `context` key stripped out. */
+  args?: Record<string, unknown>
+  /** True when `name` is the `get_more_tools` virtual tool. */
+  isMissingCapability: boolean
+}
+
+/** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */
+export interface MissingCapabilityCaptureData extends McpCaptureCommon {
+  /**
+   * The agent's description of the capability it wanted (the `context` argument
+   * on the `get_more_tools` call) → `$mcp_intent`.
+   */
+  context?: string
+  /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
+  parameters?: unknown
 }

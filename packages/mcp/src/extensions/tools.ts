@@ -40,9 +40,13 @@ export function getReportMissingToolDescriptor(): ReportMissingToolDescriptor {
   }
 }
 
-export function handleReportMissing(args: { context: string }): CallToolResult {
-  log(`Missing tool reported: ${JSON.stringify(args)}`)
-
+/**
+ * The canned acknowledgement returned to the agent after it calls
+ * `get_more_tools`. Reply with this from your dispatcher so the agent knows the
+ * report was recorded (custom dispatcher path); the `instrument()` path returns
+ * it automatically.
+ */
+export function getMoreToolsResult(): CallToolResult {
   return {
     content: [
       {
@@ -51,4 +55,9 @@ export function handleReportMissing(args: { context: string }): CallToolResult {
       },
     ],
   }
+}
+
+export function handleReportMissing(args: { context: string }): CallToolResult {
+  log(`Missing tool reported: ${JSON.stringify(args)}`)
+  return getMoreToolsResult()
 }

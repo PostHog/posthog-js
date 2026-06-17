@@ -167,6 +167,8 @@ export {
   PostHogMCPAnalyticsProperty,
 } from './extensions/constants'
 export { PostHogMCP } from './extensions/posthog-mcp'
+export { getMoreToolsResult } from './extensions/tools'
+export { setLogger } from './extensions/logger'
 export type {
   BeforeSendFn,
   CaptureEventData,
@@ -176,7 +178,11 @@ export type {
   MCPAnalyticsContextOptions,
   MCPAnalyticsIntentSource,
   MCPAnalyticsOptions,
+  MissingCapabilityCaptureData,
+  PreparedToolCall,
+  PrepareToolListOptions,
   ToolCallCaptureData,
+  ToolsListCaptureData,
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']
