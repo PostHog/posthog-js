@@ -1,4 +1,4 @@
-# @posthog/browser-extensions
+# @posthog/browser-common
 
 The shared contract for PostHog browser-SDK extensions: the interface an
 extension implements (`Extension`), the host capabilities it is handed
@@ -22,7 +22,7 @@ responsible for bundling/transpiling the TypeScript sources they import.
 What you implement. The host calls only `setup` and `dispose`:
 
 ```ts
-import type { Disposable, Extension } from '@posthog/browser-extensions'
+import type { Disposable, Extension } from '@posthog/browser-common'
 
 export function webContext(): Extension {
     let removeProperties: Disposable | undefined
@@ -71,7 +71,7 @@ extensions or to app-facing controls. Keep the publisher private, expose only it
 `listener`, and dispose it when the extension is torn down:
 
 ```ts
-import { Publisher, type Listener } from '@posthog/browser-extensions'
+import { Publisher, type Listener } from '@posthog/browser-common'
 
 const changes = new Publisher<FeatureFlagsChange>()
 

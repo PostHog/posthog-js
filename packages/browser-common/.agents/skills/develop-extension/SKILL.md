@@ -1,7 +1,7 @@
 ---
 name: develop-extension
 description:
-    Author a new PostHog browser extension, or port a posthog-js v1 extension, against the @posthog/browser-extensions
+    Author a new PostHog browser extension, or port a posthog-js v1 extension, against the @posthog/browser-common
     Client/Extension contract. Use when adding or porting an extension (autocapture, pageview, surveys, replay,
     exceptions, web-vitals, campaign-params, feature flags, …).
 ---
@@ -23,7 +23,7 @@ Prefer a class when porting a posthog-js v1 extension that is already a class. R
 fixes easy to compare with v1. Don't flatten a good class into a bag of closures.
 
 ```ts
-import type { Client, Extension } from '@posthog/browser-extensions'
+import type { Client, Extension } from '@posthog/browser-common'
 
 export interface MyExtensionOptions {
     enabled?: boolean
@@ -98,7 +98,7 @@ export class MyExtension implements Extension {
   `setup`; `await client.getRemoteConfig()` / the providing extension's reads resolve once ready.
 - **Persist through `client.kv`, not globals.** It is namespaced to your extension; JSON-serializable values only;
   `null`/`undefined` removes a key.
-- **browser-extensions owns shared extensions outright.** SDKs must not wrap, subclass, or re-export per-extension
+- **browser-common owns shared extensions outright.** SDKs must not wrap, subclass, or re-export per-extension
   adapter classes. An SDK may construct the shared extension with SDK-derived constructor options, but the only
   extension method the SDK calls directly is `setup(clientAdapter)`. After that, interaction goes through the generic
   `Client` adapter. If an extension needs controls (`start`, `stop`, etc.), expose them on the shared extension itself,
@@ -111,7 +111,7 @@ If your extension exposes something others depend on (e.g. feature flags), decla
 
 ```ts
 // flags/token.ts — implementation-free, importable without pulling flags' code
-import type { Extension, ExtensionToken, Listener } from '@posthog/browser-extensions'
+import type { Extension, ExtensionToken, Listener } from '@posthog/browser-common'
 
 export interface FeatureFlagsChange {
     flag: string
@@ -128,7 +128,7 @@ export const FeatureFlags: ExtensionToken<FeatureFlagsExtension> = { name: 'feat
 
 ```ts
 // flags/index.ts
-import { Publisher } from '@posthog/browser-extensions'
+import { Publisher } from '@posthog/browser-common'
 import { FeatureFlags, type FeatureFlagsChange, type FeatureFlagsExtension } from './token'
 
 export function featureFlags(): FeatureFlagsExtension {
