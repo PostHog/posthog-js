@@ -166,7 +166,7 @@ export {
   PostHogMCPAnalyticsEvent,
   PostHogMCPAnalyticsProperty,
 } from './extensions/constants'
-export { PostHogMCP } from './extensions/posthog-mcp'
+export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
 export { setLogger } from './extensions/logger'
 export type {

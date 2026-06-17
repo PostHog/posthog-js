@@ -9,9 +9,9 @@ export const GET_MORE_TOOLS_NAME = 'get_more_tools' as const
 
 type ReportMissingToolDescriptor = ListToolsResult['tools'][number]
 
-export function getReportMissingToolDescriptor(): ReportMissingToolDescriptor {
+export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAME): ReportMissingToolDescriptor {
   return {
-    name: GET_MORE_TOOLS_NAME,
+    name,
     description:
       'Check for additional tools whenever your task might benefit from specialized capabilities - even if existing tools could work as a fallback.',
     inputSchema: {

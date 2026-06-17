@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-node'
+import { PostHog, type PostHogOptions } from 'posthog-node'
 
 import type {
   InitializeCaptureData,
@@ -22,6 +22,20 @@ import { captureException } from './exceptions'
 import { log } from './logger'
 import { McpEventSink } from './sink'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
+
+/**
+ * Options for {@link PostHogMCP}. A superset of `posthog-node`'s options, plus
+ * MCP-specific knobs.
+ */
+export interface PostHogMCPOptions extends PostHogOptions {
+  /**
+   * Name of the virtual "report a missing capability" tool injected by
+   * {@link PostHogMCP.prepareToolList} and detected by
+   * {@link PostHogMCP.prepareToolCall}. Set once here so injection and detection
+   * can't drift. Defaults to `get_more_tools`.
+   */
+  getMoreToolsName?: string
+}
 
 /**
  * A `posthog-node` client with first-class MCP analytics. Use this when there is
@@ -62,6 +76,15 @@ export class PostHogMCP extends PostHog {
   // publishes via `this` (the inherited `capture()`), so the client's own
   // `beforeSend` and batching apply.
   readonly #sink = new McpEventSink(this)
+
+  // The get_more_tools name lives here (not on the per-call options) so that
+  // prepareToolList (inject) and prepareToolCall (detect) always agree.
+  readonly #getMoreToolsName: string
+
+  constructor(apiKey: string, options: PostHogMCPOptions = {}) {
+    super(apiKey, options)
+    this.#getMoreToolsName = options.getMoreToolsName ?? GET_MORE_TOOLS_NAME
+  }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */
   captureToolCall(data: ToolCallCaptureData): void {
@@ -114,7 +137,8 @@ export class PostHogMCP extends PostHog {
    * Decorate your `tools/list` response with PostHog's analytics affordances:
    * injects the `context` argument into every tool (so agents state their intent,
    * captured as `$mcp_intent`) and, when `reportMissing` is on, appends the
-   * `get_more_tools` virtual tool. Returns a new array; your tools are untouched.
+   * `get_more_tools` virtual tool (rename it via the `getMoreToolsName`
+   * constructor option). Returns a new array; your tools are untouched.
    *
    * The appended `get_more_tools` descriptor carries only the base MCP tool fields
    * (name, description, input schema) — not any framework-specific fields your
@@ -137,8 +161,8 @@ export class PostHogMCP extends PostHog {
       ? addContextParameterToTools(tools, getContextDescription(contextOption))
       : [...tools]
 
-    if (options.reportMissing && !prepared.some((tool) => tool?.name === GET_MORE_TOOLS_NAME)) {
-      prepared = [...prepared, getReportMissingToolDescriptor() as TTool]
+    if (options.reportMissing && !prepared.some((tool) => tool?.name === this.#getMoreToolsName)) {
+      prepared = [...prepared, getReportMissingToolDescriptor(this.#getMoreToolsName) as TTool]
     }
     return prepared
   }
@@ -170,7 +194,7 @@ export class PostHogMCP extends PostHog {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
       args: stripContext(args),
-      isMissingCapability: name === GET_MORE_TOOLS_NAME,
+      isMissingCapability: name === this.#getMoreToolsName,
     }
   }
 
@@ -181,7 +205,7 @@ export class PostHogMCP extends PostHog {
    */
   captureMissingCapability(data: MissingCapabilityCaptureData): void {
     const event = baseEvent(MCPAnalyticsEventType.mcpMissingCapability, data)
-    event.resourceName = GET_MORE_TOOLS_NAME
+    event.resourceName = this.#getMoreToolsName
     event.parameters = data.parameters
     applyIntent(event, data.context, 'context_parameter')
     this.#emit(event)

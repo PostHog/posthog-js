@@ -220,6 +220,20 @@ describe('PostHogMCP', () => {
       const withMissing = posthog.prepareToolList(tools, { reportMissing: true })
       expect(withMissing.some((t) => t.name === GET_MORE_TOOLS_NAME)).toBe(true)
     })
+
+    it('honors a custom getMoreToolsName, and inject + detect stay consistent', async () => {
+      const client = newClient({ getMoreToolsName: 'posthog_find_tools' })
+      const prepared = client.prepareToolList(tools, { reportMissing: true })
+
+      // injected under the custom name, not the default
+      expect(prepared.some((t) => t.name === 'posthog_find_tools')).toBe(true)
+      expect(prepared.some((t) => t.name === GET_MORE_TOOLS_NAME)).toBe(false)
+
+      // detection matches the same custom name
+      expect(client.prepareToolCall('posthog_find_tools', { context: 'x' }).isMissingCapability).toBe(true)
+      expect(client.prepareToolCall(GET_MORE_TOOLS_NAME, { context: 'x' }).isMissingCapability).toBe(false)
+      await client.shutdown()
+    })
   })
 
   describe('prepareToolCall', () => {
