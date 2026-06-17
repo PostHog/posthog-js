@@ -209,6 +209,12 @@ describe('PostHogMCP', () => {
       expect(prepared[0].inputSchema?.properties).not.toHaveProperty('context')
     })
 
+    it('returns a fresh array even when nothing is added', () => {
+      const prepared = posthog.prepareToolList(tools, { context: false })
+      expect(prepared).not.toBe(tools)
+      expect(prepared).toEqual(tools)
+    })
+
     it('appends get_more_tools only when reportMissing is on', () => {
       expect(posthog.prepareToolList(tools).some((t) => t.name === GET_MORE_TOOLS_NAME)).toBe(false)
       const withMissing = posthog.prepareToolList(tools, { reportMissing: true })

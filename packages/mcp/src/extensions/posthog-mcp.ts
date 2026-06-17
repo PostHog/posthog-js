@@ -116,6 +116,11 @@ export class PostHogMCP extends PostHog {
    * captured as `$mcp_intent`) and, when `reportMissing` is on, appends the
    * `get_more_tools` virtual tool. Returns a new array; your tools are untouched.
    *
+   * The appended `get_more_tools` descriptor carries only the base MCP tool fields
+   * (name, description, input schema) — not any framework-specific fields your
+   * `TTool` may add (e.g. a `handler`). It is meant to be detected via
+   * {@link prepareToolCall}'s `isMissingCapability`, not dispatched through a handler.
+   *
    * Call this when there is no `Server` to wrap — it does for a custom dispatcher
    * what `instrument()` does for a `Server`. Pair it with {@link prepareToolCall}
    * on the inbound side.
@@ -130,7 +135,7 @@ export class PostHogMCP extends PostHog {
     const contextOption = options.context ?? true
     let prepared = isContextEnabled(contextOption)
       ? addContextParameterToTools(tools, getContextDescription(contextOption))
-      : tools
+      : [...tools]
 
     if (options.reportMissing && !prepared.some((tool) => tool?.name === GET_MORE_TOOLS_NAME)) {
       prepared = [...prepared, getReportMissingToolDescriptor() as TTool]
