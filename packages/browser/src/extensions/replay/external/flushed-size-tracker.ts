@@ -1,7 +1,6 @@
 import { isNumber, isObject, isString } from '@posthog/core'
+import { SESSION_RECORDING_FLUSHED_SIZE } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
-
-const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
 
 interface FlushedSize {
     sessionId: string
