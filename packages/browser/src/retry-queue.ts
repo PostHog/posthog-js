@@ -90,7 +90,7 @@ export class RetryQueue {
 
                     if (response.statusCode === 0) {
                         logger.warn(
-                            `Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after ${STATUS_CODE_ZERO_MAX_RETRIES} retries.`
+                            `Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after ${retriesPerformedSoFar ?? 0} retries.`
                         )
                     }
                 }
