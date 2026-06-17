@@ -302,6 +302,21 @@ describe('survey-event-receiver', () => {
             expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
         })
 
+        it('consumes on shown when the survey cannot be resolved (does not promote to persistence)', () => {
+            const { receiver, hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            expect(receiver.getSurveys()).toContain('lifecycle-survey')
+
+            // The survey is no longer resolvable (e.g. surveys unloaded): shown should consume it,
+            // not promote an unknown survey into persistence where it would re-display on reload.
+            ;(instance.getSurveys as jest.Mock).mockImplementation((cb) => cb([]))
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+
+            expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
+
         it('reset() clears an armed-but-unshown activation (e.g. on logout without a reload)', () => {
             const { receiver, hook } = setup(makeSurvey({}))
 

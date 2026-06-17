@@ -46,14 +46,21 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
             survey = surveys.find((s) => s.id === itemId)
         })
 
+        // `_getItems` is expected to call back synchronously (surveys are cached by the time one is
+        // shown). If the survey still can't be resolved, fall back to consuming on shown rather than
+        // promoting an unknown survey into persistence, where it could re-display on later loads.
+        if (!survey) {
+            return event === SurveyEventName.SHOWN
+        }
+
         // A survey is repeatable when it shows on every captured trigger ("Show every time the event
         // is captured", or an "always" schedule). Repeatable surveys are consumed when shown, so each
         // trigger shows them once. Non-repeatable surveys stay activated until dismissed or answered,
         // so they survive a page reload and re-display until the user actually interacts with them.
-        const hasEvents = (survey?.conditions?.events?.values?.length ?? 0) > 0
+        const hasEvents = (survey.conditions?.events?.values?.length ?? 0) > 0
         const repeatable =
-            survey?.schedule === SurveySchedule.Always ||
-            !!(survey?.conditions?.events?.repeatedActivation && hasEvents)
+            survey.schedule === SurveySchedule.Always ||
+            !!(survey.conditions?.events?.repeatedActivation && hasEvents)
 
         return repeatable
             ? event === SurveyEventName.SHOWN
