@@ -307,6 +307,28 @@ export class SessionIdManager {
         this._setSessionId(null, null, null)
     }
 
+    // Force a session rotation because the recording reached its size budget.
+    // Unlike resetSessionId() — which nulls the id and reads downstream as a
+    // posthog.reset() (noSessionId), suppressing session linking — this mints a
+    // fresh session immediately and notifies handlers with sessionMaximumSize so
+    // the recorder links the old and new sessions instead of treating it as a wipe.
+    rotateSessionForReplaySize(): void {
+        const timestamp = new Date().getTime()
+        const sessionId = this._sessionIdGenerator()
+        const windowId = this._windowIdGenerator()
+        this._setWindowId(windowId)
+        this._setSessionId(sessionId, timestamp, timestamp)
+        this._resetIdleTimer()
+        const changeReason = {
+            noSessionId: false,
+            activityTimeout: false,
+            sessionPastMaximumLength: false,
+            crossTabAdoption: false,
+            sessionMaximumSize: true,
+        }
+        this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId, changeReason))
+    }
+
     /**
      * Cleans up resources used by SessionIdManager.
      * Should be called when the SessionIdManager is no longer needed to prevent memory leaks.

@@ -106,6 +106,8 @@ export type SessionIdChangedCallback = (
         sessionPastMaximumLength: boolean
         /** This tab picked up a session rotation another tab had already written to storage, instead of minting its own. */
         crossTabAdoption?: boolean
+        /** The recording reached its configured size budget, so the SDK rotated to a new linked session. */
+        sessionMaximumSize?: boolean
     }
 ) => void
 

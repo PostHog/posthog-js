@@ -487,6 +487,35 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return this._instance.sessionManager
     }
 
+    // The size budget (in bytes) after which the current recording session is rotated,
+    // or undefined when size-based rotation is disabled. Configured in MiB and clamped to
+    // the supported 1-500 range (see SessionRecordingOptions.maxSessionSizeMb).
+    private get _maxSessionSizeBytes(): number | undefined {
+        const configuredMb = this._instance.config.session_recording?.maxSessionSizeMb
+        if (!isNumber(configuredMb)) {
+            return undefined
+        }
+        const clampedMb = Math.min(500, Math.max(1, configuredMb))
+        return clampedMb * 1024 * 1024
+    }
+
+    private _maybeRotateForSessionSize(): void {
+        const maxBytes = this._maxSessionSizeBytes
+        if (!maxBytes) {
+            return
+        }
+
+        const currentSize = this._flushedSizeTracker?.currentTrackedSize(this.sessionId) ?? 0
+        if (currentSize < maxBytes) {
+            return
+        }
+
+        // mark where the old session reached its budget, then rotate to a new linked session.
+        // the new session's tracker starts at zero, so this won't immediately re-fire.
+        this._tryAddCustomEvent('$session_size_rotation', { sizeBytes: currentSize, thresholdBytes: maxBytes })
+        this._sessionManager.rotateSessionForReplaySize()
+    }
+
     private get _sessionIdleThresholdMilliseconds(): number {
         return this._instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
     }
@@ -1044,7 +1073,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const wasLikelyReset = changeReason.noSessionId
         const shouldLinkSessions =
-            !wasLikelyReset && (changeReason.activityTimeout || changeReason.sessionPastMaximumLength)
+            !wasLikelyReset &&
+            (changeReason.activityTimeout || changeReason.sessionPastMaximumLength || changeReason.sessionMaximumSize)
 
         // Capture old IDs before start() updates them
         const oldSessionId = this._sessionId
@@ -1562,7 +1592,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // buffer is empty, we clear it in case the session id has changed
-        return this._clearBuffer()
+        const flushedBuffer = this._clearBuffer()
+        // rotate after clearing so the rotation custom events land in the fresh buffer
+        this._maybeRotateForSessionSize()
+        return flushedBuffer
     }
 
     private _hasPassedMinimumDuration = (): boolean => {

@@ -34,6 +34,22 @@ describe('config', () => {
                 content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS,
                 ignore_text_selection: true,
             })
+            expect(posthog.config.session_recording).toStrictEqual({
+                strictMinimumDuration: true,
+                maxSessionSizeMb: 300,
+            })
+        })
+
+        it('does not set maxSessionSizeMb before the 2026-05-30 defaults', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2025-11-30' })
+            expect(posthog.config.session_recording.maxSessionSizeMb).toBeUndefined()
+        })
+
+        it('lets an explicit maxSessionSizeMb override the date-gated default', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30', session_recording: { maxSessionSizeMb: 100 } })
+            expect(posthog.config.session_recording.maxSessionSizeMb).toEqual(100)
         })
 
         it('merges a partial rageclick object with the date-gated defaults', () => {

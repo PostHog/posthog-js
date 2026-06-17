@@ -626,6 +626,23 @@ export interface SessionRecordingOptions {
      * @default undefined
      */
     sampleRate?: number
+
+    /**
+     * ADVANCED: the maximum size in MiB a single recording session may reach before the SDK
+     * rotates to a new, linked session. This keeps any one recording bounded so it stays
+     * playable and within ingestion limits; recording continues uninterrupted under a new
+     * session id, linked to the previous one via the `$session_ending` / `$session_starting`
+     * events. The point at which it rotates is recorded as a `$session_size_rotation` custom event.
+     *
+     * Accepts values between 1 and 500. Values outside that range are clamped.
+     * Normally only changed after interaction with the PostHog support team.
+     *
+     * When `defaults` is `'2026-05-30'` or later this defaults to `300`; otherwise size-based
+     * rotation is off.
+     *
+     * @default undefined
+     */
+    maxSessionSizeMb?: number
 }
 
 // we used to call a request that was sent to the queue with options attached `RequestQueueOptions`
