@@ -12,6 +12,7 @@ export * as ErrorTracking from './error-tracking'
 export {
   buildOtlpLogRecord,
   buildOtlpLogsPayload,
+  buildResourceAttributes,
   getOtlpSeverityNumber,
   getOtlpSeverityText,
   toOtlpAnyValue,

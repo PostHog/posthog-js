@@ -789,6 +789,22 @@ describe('posthog core', () => {
             expect(posthog._requestQueue.unload).toHaveBeenCalledTimes(1)
         })
 
+        it('drains logs via a sendBeacon flush', () => {
+            const flushLogs = jest.fn()
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { logs: { flushLogs } as unknown as PostHog['logs'] }
+            )
+
+            posthog._handle_unload()
+
+            expect(flushLogs).toHaveBeenCalledWith('sendBeacon')
+        })
+
         describe('without batching', () => {
             it('captures $pageleave', () => {
                 const posthog = posthogWith(

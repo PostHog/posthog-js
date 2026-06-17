@@ -256,6 +256,49 @@ describe('PostHogLogs', () => {
       expect(queue.map((e) => e.record.body.stringValue)).toEqual(['two', 'three', 'four'])
     })
 
+    it('holds a burst up to maxQueueSize, evicting only above it (flush trigger decoupled from eviction cap)', () => {
+      // maxBufferSize triggers a flush at 2, but the async drain can't run mid-burst,
+      // so the queue grows to the larger eviction cap (4) before the oldest is dropped.
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBufferSize: 2, maxQueueSize: 4 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+
+      logs.captureLog({ body: 'one' })
+      logs.captureLog({ body: 'two' })
+      logs.captureLog({ body: 'three' })
+      logs.captureLog({ body: 'four' })
+      logs.captureLog({ body: 'five' })
+
+      const queue = readQueue(mockInstance)
+      // Grew past the flush trigger (2) to the eviction cap (4); only 'one' evicted.
+      expect(queue.map((e) => e.record.body.stringValue)).toEqual(['two', 'three', 'four', 'five'])
+    })
+
+    it('clamps a maxQueueSize below maxBufferSize up to maxBufferSize (flush trigger always reachable)', () => {
+      // A misconfigured eviction cap below the flush trigger would otherwise stop
+      // the size-based flush from ever firing; it collapses to single-knob instead.
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBufferSize: 3, maxQueueSize: 1 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+
+      logs.captureLog({ body: 'one' })
+      logs.captureLog({ body: 'two' })
+      logs.captureLog({ body: 'three' })
+      logs.captureLog({ body: 'four' })
+
+      const queue = readQueue(mockInstance)
+      // Evicts at maxBufferSize (3), not the bogus maxQueueSize (1).
+      expect(queue.map((e) => e.record.body.stringValue)).toEqual(['two', 'three', 'four'])
+    })
+
     it('logs a diagnostic when evicting on overflow', () => {
       const logs = new PostHogLogs(
         mockInstance,
@@ -808,6 +851,140 @@ describe('PostHogLogs', () => {
       jest.advanceTimersByTime(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
     })
+
+    it('re-arms the timer after a failed flush so a retry happens without a new capture', async () => {
+      // First flush fails (retry-later keeps the records); the second succeeds.
+      mockInstance._sendLogsBatch = jest
+        .fn()
+        .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('net') })
+        .mockResolvedValueOnce({ kind: 'ok' })
+
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'retry-me' })
+
+      // First timer fires → flush #1 → retry-later → record retained, timer re-armed.
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+      expect(readQueue(mockInstance)).toHaveLength(1)
+
+      // No new capture: the re-armed timer alone fires the retry, which drains.
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
+
+    it('stops re-arming once the queue is empty', async () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'one' })
+
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+      expect(readQueue(mockInstance)).toHaveLength(0)
+
+      // Successful drain leaves nothing queued, so no further timer should fire.
+      await jest.advanceTimersByTimeAsync(20000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('backs off exponentially across consecutive failed flushes', async () => {
+      // Every flush fails, so the record stays queued and the retry interval grows:
+      // base (initial), base (1st retry), 2x, 4x, ...
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'retry-later', error: new Error('down') }))
+      const base = 1000
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: base }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'x' })
+
+      await jest.advanceTimersByTimeAsync(base) // initial timer → attempt #1
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+      await jest.advanceTimersByTimeAsync(base) // 1st retry still at base → attempt #2
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      // Now backoff: next retry is 2x base — base alone must not fire it.
+      await jest.advanceTimersByTimeAsync(base)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+      await jest.advanceTimersByTimeAsync(base) // 2x base elapsed → attempt #3
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+
+      // Next retry is 4x base.
+      await jest.advanceTimersByTimeAsync(2 * base)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+      await jest.advanceTimersByTimeAsync(2 * base) // 4x base elapsed → attempt #4
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(4)
+    })
+
+    it('resets the backoff after a successful flush', async () => {
+      let shouldFail = true
+      mockInstance._sendLogsBatch = jest.fn(() =>
+        Promise.resolve(shouldFail ? { kind: 'retry-later', error: new Error('down') } : { kind: 'ok' })
+      )
+      const base = 1000
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: base }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'a' })
+
+      await jest.advanceTimersByTimeAsync(base) // attempt #1 fail (failures→1)
+      await jest.advanceTimersByTimeAsync(base) // attempt #2 fail (failures→2, next 2x)
+      await jest.advanceTimersByTimeAsync(2 * base) // attempt #3 fail (failures→3, next 4x)
+      shouldFail = false
+      await jest.advanceTimersByTimeAsync(4 * base) // attempt #4 succeeds → drains + resets
+      expect(readQueue(mockInstance)).toHaveLength(0)
+
+      // A new capture flushes at the base interval again, not the backed-off one.
+      ;(mockInstance._sendLogsBatch as jest.Mock).mockClear()
+      logs.captureLog({ body: 'b' })
+      await jest.advanceTimersByTimeAsync(base)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('onReconnect flushes immediately without waiting out the backoff', async () => {
+      let shouldFail = true
+      mockInstance._sendLogsBatch = jest.fn(() =>
+        Promise.resolve(shouldFail ? { kind: 'retry-later', error: new Error('down') } : { kind: 'ok' })
+      )
+      const base = 1000
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: base }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'x' })
+
+      await jest.advanceTimersByTimeAsync(base) // attempt #1 fails → record retained, backoff armed
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+      expect(readQueue(mockInstance)).toHaveLength(1)
+
+      // Reconnect drains now — no timer advance needed.
+      shouldFail = false
+      logs.onReconnect()
+      await jest.advanceTimersByTimeAsync(0)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
   })
 
   describe('shutdown', () => {
@@ -1029,6 +1206,14 @@ describe('PostHogLogs', () => {
       expect(logger.info).toHaveBeenCalledWith('Log was rejected in beforeSend function')
     })
 
+    it('logs the same info line when a fn empties the body', () => {
+      // An emptied body is a drop too, so it surfaces the same diagnostic as a
+      // null return rather than vanishing silently.
+      const logs = makeLogs((r) => ({ ...r, body: '' }))
+      logs.captureLog({ body: 'will-be-emptied' })
+      expect(logger.info).toHaveBeenCalledWith('Log was rejected in beforeSend function')
+    })
+
     it('never crashes the caller when a fn throws — drops the record (fail closed) and logs', () => {
       const thrower = jest.fn(() => {
         throw new Error('bad filter')
@@ -1226,6 +1411,80 @@ describe('PostHogLogs', () => {
       await flushP2
       expect(readQueue(mockInstance)).toHaveLength(0)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('queue advance under FIFO eviction', () => {
+    it('keeps records captured during an in-flight flush at capacity', async () => {
+      // Regression: the advance used to drop `consumed` records positionally,
+      // but the FIFO cap evicts from the head while a batch is in flight, so a
+      // positional drop discarded the records that arrived during the send.
+      let resolveSend: (v: any) => void = () => {}
+      const sendGate = new Promise((r) => {
+        resolveSend = r
+      })
+      mockInstance._sendLogsBatch = jest.fn(() => sendGate)
+
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBufferSize: 3, maxBatchRecordsPerPost: 3 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+
+      // Fill to capacity → triggers a background flush that awaits the gate.
+      logs.captureLog({ body: 'a' })
+      logs.captureLog({ body: 'b' })
+      logs.captureLog({ body: 'c' })
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // While the send is in flight, two captures arrive at capacity and evict
+      // the (already-sent) head records a and b.
+      logs.captureLog({ body: 'd' })
+      logs.captureLog({ body: 'e' })
+
+      resolveSend({ kind: 'ok' })
+      await logs.flush()
+
+      // The sent batch [a, b, c] leaves the queue; d and e survive for next flush.
+      expect(readQueue(mockInstance).map((entry) => entry.record.body.stringValue)).toEqual(['d', 'e'])
+    })
+
+    it('advances correctly across batches when eviction happens between iterations', async () => {
+      // Regression: the eviction counter was reset once per flush, so an eviction
+      // during the persist-await between batches got counted against the NEXT
+      // batch's advance — under-dropping and re-sending an already-sent record.
+      const entry = (body: string): any => ({ record: { body: { stringValue: body } } })
+      mockInstance._store[PostHogPersistedProperty.LogsQueue] = [entry('a'), entry('b'), entry('c'), entry('d')]
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'ok' }))
+
+      let persistCalls = 0
+      let logs: PostHogLogs
+      // eslint-disable-next-line prefer-const
+      logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBufferSize: 4, maxQueueSize: 4, maxBatchRecordsPerPost: 2 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady,
+        () => {
+          persistCalls++
+          if (persistCalls === 1) {
+            // After batch 1 [a,b] advances, captures arrive before batch 2 and
+            // evict the head record 'c' at capacity.
+            logs.captureLog({ body: 'e' })
+            logs.captureLog({ body: 'f' })
+            logs.captureLog({ body: 'g' })
+          }
+          return Promise.resolve()
+        }
+      )
+
+      await logs.flush()
+
+      // batch1 [a,b] dropped, 'c' evicted, batch2 [d,e] dropped — nothing sent twice.
+      expect(readQueue(mockInstance).map((x) => x.record.body.stringValue)).toEqual(['f', 'g'])
     })
   })
 })

@@ -44,6 +44,14 @@ describe('reset()', () => {
         expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
     })
 
+    it('resets the logs extension so buffered logs are dropped', () => {
+        const logsReset = jest.spyOn(instance.logs, 'reset')
+
+        instance.reset()
+
+        expect(logsReset).toHaveBeenCalled()
+    })
+
     it('does not reset the device id', () => {
         const initialDeviceId = instance.get_property('$device_id')
 
