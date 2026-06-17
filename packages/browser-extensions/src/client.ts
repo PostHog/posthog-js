@@ -139,8 +139,8 @@ export interface Client {
     readonly onNewSession: Listener<NewSessionInfo>
 
     /**
-     * Resolves another enrolled extension by a capability token it provides, or
-     * `undefined` if nothing enrolled provides it (not installed, or not loaded
+     * Resolves another registered extension by a capability token it provides, or
+     * `undefined` if nothing registered provides it (not installed, or not loaded
      * yet). Lets one extension use another without importing its implementation.
      */
     getExtension<T>(token: ExtensionToken<T>): T | undefined

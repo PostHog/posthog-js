@@ -6,7 +6,7 @@ extension implements (`Extension`), the host capabilities it is handed
 
 An extension written against this contract runs unchanged across major versions of the web SDK:
 
-- **v1** is synchronous; extensions are enrolled statically.
+- **v1** is synchronous; extensions are registered statically.
 - **v2** is asynchronous; extensions are loaded dynamically.
 
 Each SDK provides a _client adapter_ that implements `Client` over its own
@@ -22,19 +22,21 @@ responsible for bundling/transpiling the TypeScript sources they import.
 What you implement. The host calls only `setup` and `dispose`:
 
 ```ts
-import type { Extension } from '@posthog/browser-extensions'
+import type { Disposable, Extension } from '@posthog/browser-extensions'
 
 export function webContext(): Extension {
+    let removeProperties: Disposable | undefined
+
     return {
         name: 'webContext',
         setup(client) {
-            client.enroll(
-                client.registerDynamicEventProperties(() => ({
-                    $current_url: window.location.href,
-                }))
-            )
+            removeProperties = client.registerDynamicEventProperties(() => ({
+                $current_url: window.location.href,
+            }))
         },
-        dispose() {},
+        dispose() {
+            removeProperties?.dispose()
+        },
     }
 }
 ```
@@ -43,8 +45,8 @@ export function webContext(): Extension {
 may be async (final flush). Static config the app sets goes in your factory
 options, not on the `Client`.
 
-Anything in `setup` that returns a `Disposable` must either be passed to
-`client.enroll(...)` or held by the extension and disposed in `dispose()`.
+Anything in `setup` that returns a `Disposable` must be held by the extension
+and disposed in `dispose()`.
 
 ### `Client`
 
@@ -54,7 +56,7 @@ What an extension is given in `setup` — the host's capability surface:
 - **events**: `capture(...)`, `registerDynamicEventProperties(...)` (contribute properties), `onEvent(...)` (observe)
 - **transport**: `apiRequest(path, init?)`
 - **server config**: `getRemoteConfig()` (current), `onRemoteConfig(...)` (changes)
-- **lifecycle**: `onNewSession(...)`, `enroll(disposable)`
+- **lifecycle**: `onNewSession(...)`
 - **registry**: `getExtension(token)`
 - **storage & logging**: `kv`, `logger`
 
@@ -102,9 +104,9 @@ loadable. An extension that provides a capability declares its token(s) in
 See the **`author-extension`** skill
 ([`.agents/skills/author-extension/SKILL.md`](./.agents/skills/author-extension/SKILL.md))
 for the full guide: the capability cheatsheet, the rules (enrichers are
-synchronous, dispose or enroll your disposables, design for asynchronous
-readiness, cross-extension state goes through `getExtension`, not shared
-storage), and the v1 → `Client` porting map.
+synchronous, dispose your disposables, design for asynchronous readiness,
+cross-extension state goes through `getExtension`, not shared storage), and the
+v1 → `Client` porting map.
 
 ## Status
 

@@ -24,7 +24,7 @@
         "lint:fix": "eslint src --fix",
         "build": "tsc -p tsconfig.json --noEmit",
         "test:unit": "node --test \"src/**/*.spec.ts\"",
-        "check-types": "tsc -p tsconfig.json --noEmit"
+        "check-types": "pnpm build"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",

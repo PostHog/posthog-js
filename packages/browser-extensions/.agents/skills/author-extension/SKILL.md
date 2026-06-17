@@ -8,7 +8,7 @@ description: Author a new PostHog browser extension, or port a posthog-js v1 ext
 A browser extension is an opt-in feature (autocapture, replay, surveys, …) that
 plugs into a host SDK through one contract: it implements `Extension` and talks
 to the host only through the `Client` it is handed. The same extension runs on
-both posthog-js v1 (synchronous, statically enrolled) and v2 (asynchronous,
+both posthog-js v1 (synchronous, statically registered) and v2 (asynchronous,
 dynamically loaded) — you write it once, against `Client`.
 
 The package is source-only: there is no emitted JS build to import. Consumers are
@@ -23,10 +23,10 @@ export function myExtension(options: MyOptions = {}): Extension {
     return {
         name: 'myExtension',
         setup(client) {
-            // wire up capabilities here; enroll or keep any Disposables you create
+            // wire up capabilities here; keep any Disposables you create
         },
         dispose() {
-            // dispose anything you kept instead of passing to client.enroll(...)
+            // dispose anything you created in setup
         },
     }
 }
@@ -52,7 +52,6 @@ export function myExtension(options: MyOptions = {}): Extension {
 | call a PostHog endpoint (`/s/`, `/flags/`, `/api/surveys/`) | `await client.apiRequest(path, init?)`                                            |
 | server config (decide/flags response)                       | `await client.getRemoteConfig()` (current) / `client.onRemoteConfig(…)` (changes) |
 | react to a new session / reset                              | `client.onNewSession(({ reason, … }) => …)`                                       |
-| let the host dispose setup-time resources                   | `client.enroll(disposable)`                                                       |
 | use another extension                                       | `client.getExtension(SomeToken)`                                                  |
 | persist small state                                         | `client.kv` (async `get`/`set`/`remove`, namespaced to you)                       |
 | log                                                         | `client.logger`                                                                   |
@@ -68,8 +67,7 @@ export function myExtension(options: MyOptions = {}): Extension {
   an extension's job.
 - **Do not drop disposables.** Anything returned from `onEvent`,
   `registerDynamicEventProperties`, `onNewSession`, another `Listener`, or a
-  timer wrapper must either be passed to `client.enroll(...)` or stored and
-  disposed in your `dispose()`.
+  timer wrapper must be stored and disposed in your `dispose()`.
 - **Reads are sync, I/O is async.** Identity and session are synchronous
   in-memory reads. `capture`, `apiRequest`, `kv`, `getRemoteConfig` are async.
 - **Design for async readiness.** Your extension may be set up _after_ events
@@ -115,10 +113,10 @@ export function featureFlags(): FeatureFlagsExtension {
         name: 'featureFlags',
         provides: [FeatureFlags],
         onChange: changes.listener,
-        setup(client) {
-            client.enroll(changes)
+        setup() {},
+        dispose() {
+            changes.dispose()
         },
-        dispose() {},
         async getFeatureFlag(key) {
             // read flag state from this extension's internals
             return undefined
@@ -167,7 +165,7 @@ Map v1's reach-into-`this._instance` calls onto `Client`:
 | `instance.config.X` (server-driven)                           | `client.getRemoteConfig()` / `onRemoteConfig`          |
 | `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `client.session` (sync)                                |
 | `_addCaptureHook` / observing events                          | `client.onEvent(...)`                                  |
-| returned unregister / subscription disposables                | `client.enroll(disposable)` or store + dispose         |
+| returned unregister / subscription disposables                | store and dispose in `dispose()`                       |
 | `instance.onFeatureFlags(cb)`                                 | `client.getExtension(FeatureFlags)?.onChange(cb)`      |
 | `instance.featureFlags.getFeatureFlag(k)`                     | `client.getExtension(FeatureFlags)?.getFeatureFlag(k)` |
 | registering an enricher                                       | `client.registerDynamicEventProperties(fn)`            |
@@ -177,7 +175,7 @@ Map v1's reach-into-`this._instance` calls onto `Client`:
 ## Checklist
 
 - [ ] Factory returns an `Extension` (`name`, `setup`, `dispose`); static config via options.
-- [ ] `Disposable`s created in `setup` are either passed to `client.enroll(...)` or released in `dispose`.
+- [ ] `Disposable`s created in `setup` are released in `dispose`.
 - [ ] Enrichers are synchronous; async data read in `setup`.
 - [ ] Cross-extension deps via `getExtension(token)`, undefined handled.
 - [ ] If you provide a capability: token + interface defined, listed in `provides`.
@@ -194,7 +192,7 @@ when they are:
 - **Canonical file/dir layout** for an extension within the package.
 - **Test harness** — a `createTestClient()` fake `Client` to author and assert
   against (to be shipped from the package).
-- **v1 adapter mechanics** — exactly how a shared extension is enrolled into v1's
-  static `__extensionClasses` model.
+- **v1 adapter mechanics** — exactly how a shared extension is registered into
+  v1's static `__extensionClasses` model.
 - **Reference extension** — the first ported extension to copy from.
 - **Known gotchas** discovered during porting.
