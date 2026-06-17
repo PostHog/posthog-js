@@ -20,6 +20,14 @@ export interface EventTriggerable {
 }
 
 /**
+ * What a captured lifecycle event (shown / dismissed / sent) does to an already-activated item:
+ * - `consume`: it's done — drop it from both the in-memory and persisted sets.
+ * - `persist`: it was shown and should survive a reload — move it from memory into persistence.
+ * - `ignore`: no transition for this item on this event.
+ */
+export type ActivationOutcome = 'consume' | 'persist' | 'ignore'
+
+/**
  * Abstract base class for receiving events and matching them to triggerable items.
  * Subclasses implement type-specific behavior for surveys and product tours.
  */
@@ -60,12 +68,12 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     protected abstract _isItemPermanentlyIneligible(itemId?: string): boolean
 
     /**
-     * Whether a captured `event` should remove the already-activated `itemId` from the activated list.
-     * Most items are consumed when shown (so they only reappear when their trigger fires again).
-     * Surveys keep non-repeatable ones activated until the user dismisses or answers them, so an
-     * event-triggered survey survives a page reload and re-displays until it's actually interacted with.
+     * Decide what a captured lifecycle `event` does to an already-activated `itemId`. Most items are
+     * consumed when shown (so they only reappear when their trigger fires again). Surveys keep
+     * non-repeatable ones activated — promoting them to persistence on shown — until the user dismisses
+     * or answers them, so an event-triggered survey survives a reload until it's actually interacted with.
      */
-    protected abstract _shouldConsumeActivation(event: string, itemId: string): boolean
+    protected abstract _activationOutcome(event: string, itemId: string): ActivationOutcome
 
     private _doesEventMatchFilter(
         eventConfig: SurveyEventWithFilters | undefined,
@@ -200,19 +208,18 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         // An item reacting to one of its own lifecycle events (shown / dismissed / sent).
         const itemId = eventPayload?.properties?.$survey_id || eventPayload?.properties?.$product_tour_id
         if (itemId && this.getActivatedIds().includes(itemId)) {
-            if (this._shouldConsumeActivation(event, itemId)) {
-                // The item is done for this activation: drop it from memory and persistence.
+            const outcome = this._activationOutcome(event, itemId)
+            if (outcome === 'consume') {
                 logger.info('event consumed activated item, removing it', { event, itemId })
                 this._deactivateItems([itemId])
                 return
             }
-            if (event === this._getShownEventName()) {
-                // Shown but not consumed (a non-repeatable survey): promote the in-memory
-                // activation into persistence so it survives a reload until interacted with.
+            if (outcome === 'persist') {
                 logger.info('shown item promoted to persisted activation', { event, itemId })
                 this._persistActivation(itemId)
                 return
             }
+            // 'ignore': no activation transition for this item on this event — fall through.
         }
 
         // check if this event should cancel any pending items
