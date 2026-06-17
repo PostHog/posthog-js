@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.388.2
+
+### Patch Changes
+
+- [#3870](https://github.com/PostHog/posthog-js/pull/3870) [`5edfee1`](https://github.com/PostHog/posthog-js/commit/5edfee1575860dda0a5bb099bc0e621ba6668bbb) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `updateFlags(flags, payloads, { merge: true })` baking an active feature flag override into the stored flags. The merge now seeds from the raw stored flags rather than the override-applied values, so clearing the override afterwards correctly restores the original flag.
+  (2026-06-17)
+
 ## 1.388.1
 
 ### Patch Changes
