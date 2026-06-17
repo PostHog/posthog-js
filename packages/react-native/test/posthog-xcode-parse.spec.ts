@@ -119,6 +119,24 @@ describe('posthog-xcode.sh REACT_NATIVE_XCODE resolution', () => {
   })
 })
 
+describe('posthog-xcode.sh skipOnConflict upload flag', () => {
+  it('passes --skip-on-conflict only to hermes upload', () => {
+    const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
+
+    expect(contents).toContain('POSTHOG_UPLOAD_ARGS="$POSTHOG_UPLOAD_ARGS --skip-on-conflict"')
+    expect(contents).toContain(
+      'CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR $CLI_RELEASE_ARGS $POSTHOG_UPLOAD_ARGS" 2>&1)'
+    )
+    expect(contents).not.toContain('hermes clone --skip-on-conflict')
+  })
+
+  it('requires a posthog-cli version that supports --skip-on-conflict', () => {
+    const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
+
+    expect(contents).toContain('MIN_POSTHOG_CLI_VERSION="0.7.12"')
+  })
+})
+
 describe('posthog-xcode.sh posthog-cli error formatting', () => {
   it('uses multiline Xcode error formatting for clone and upload failures', () => {
     const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
