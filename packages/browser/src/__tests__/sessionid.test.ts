@@ -1198,4 +1198,34 @@ describe('Session ID manager', () => {
             jest.useRealTimers()
         })
     })
+
+    describe('rotateSessionForReplaySize', () => {
+        it('mints a new session and notifies handlers with sessionMaximumSize (not a reset)', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager.checkAndGetSessionAndWindowId(undefined, timestamp)
+            const handler = jest.fn()
+            sessionIdManager.onSessionId(handler)
+            handler.mockClear() // ignore the immediate emit on registration
+            ;(uuidv7 as jest.Mock).mockReturnValue('rotated-id')
+
+            sessionIdManager.rotateSessionForReplaySize()
+
+            expect(handler).toHaveBeenCalledTimes(1)
+            expect(handler).toHaveBeenCalledWith(
+                'rotated-id',
+                'rotated-id',
+                expect.objectContaining({ sessionMaximumSize: true, noSessionId: false })
+            )
+        })
+
+        it('persists the rotated session id so it is read back', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager.checkAndGetSessionAndWindowId(undefined, timestamp)
+            ;(uuidv7 as jest.Mock).mockReturnValue('rotated-id')
+
+            sessionIdManager.rotateSessionForReplaySize()
+
+            expect(sessionIdManager.checkAndGetSessionAndWindowId(true, now).sessionId).toEqual('rotated-id')
+        })
+    })
 })

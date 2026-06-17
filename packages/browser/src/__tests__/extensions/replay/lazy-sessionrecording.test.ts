@@ -4096,6 +4096,72 @@ describe('Lazy SessionRecording', () => {
             expect(tryAddCustomEvent).toHaveBeenCalledTimes(3)
         })
 
+        it('emits session linking events on session maximum size', () => {
+            const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            tryAddCustomEvent.mockClear()
+
+            const newSessionId = 'new-session-id-size'
+            const newWindowId = 'new-window-id-size'
+
+            sessionManager['_sessionIdChangedHandlers'].forEach((handler) => {
+                handler(newSessionId, newWindowId, {
+                    noSessionId: false,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: false,
+                    sessionMaximumSize: true,
+                })
+            })
+
+            expect(tryAddCustomEvent).toHaveBeenCalledWith(
+                '$session_ending',
+                expect.objectContaining({ currentSessionId: sessionId, nextSessionId: newSessionId })
+            )
+            expect(tryAddCustomEvent).toHaveBeenCalledWith(
+                '$session_starting',
+                expect.objectContaining({ previousSessionId: sessionId, nextSessionId: newSessionId })
+            )
+        })
+
+        describe('size-based rotation', () => {
+            const oneMb = 1024 * 1024
+            let recorder: any
+            let rotateSpy: jest.SpyInstance
+
+            beforeEach(() => {
+                recorder = sessionRecording['_lazyLoadedSessionRecording']
+                config.session_recording.maxSessionSizeMb = 1
+                rotateSpy = jest.spyOn(sessionManager, 'rotateSessionForReplaySize').mockImplementation(() => {})
+                ;(recorder['_tryAddCustomEvent'] as any).mockClear()
+            })
+
+            it('rotates and emits $session_size_rotation once the budget is reached', () => {
+                recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 2 * oneMb)
+
+                recorder['_maybeRotateForSessionSize']()
+
+                expect(recorder['_tryAddCustomEvent']).toHaveBeenCalledWith(
+                    '$session_size_rotation',
+                    expect.objectContaining({ thresholdBytes: oneMb, sizeBytes: expect.any(Number) })
+                )
+                expect(rotateSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not rotate below the budget', () => {
+                recorder['_maybeRotateForSessionSize']()
+
+                expect(rotateSpy).not.toHaveBeenCalled()
+            })
+
+            it('does not rotate when maxSessionSizeMb is unset', () => {
+                config.session_recording.maxSessionSizeMb = undefined
+                recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 10 * oneMb)
+
+                recorder['_maybeRotateForSessionSize']()
+
+                expect(rotateSpy).not.toHaveBeenCalled()
+            })
+        })
+
         it('includes flushed_size with actual data size in session ending event', () => {
             const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
 
