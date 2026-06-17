@@ -53,6 +53,7 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
+  private disableRemoteFeatureFlags: boolean
   private flagCallReported: { [key: string]: boolean } = {}
   private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
@@ -82,6 +83,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     super(apiKey, { ...options, disableGeoip: disableGeoipOption, featureFlagsRequestTimeoutMs })
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
+    this.disableRemoteFeatureFlags = options?.disableRemoteFeatureFlags ?? false
     this._sessionExpirationTimeSeconds = options?.sessionExpirationTimeSeconds ?? 1800 // 30 minutes
     this._personProfiles = options?.personProfiles ?? 'identified_only'
     this._beforeSend = options?.before_send
@@ -178,7 +180,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
       }
 
-      this.reloadFeatureFlags()
+      if (this.disableRemoteFeatureFlags && !this.disabled) {
+        // No reload runs to emit the change, so emit the now-cleared flags directly
+        // (drives onFeatureFlags listeners, e.g. session replay re-arm). Callers re-push
+        // the new identity's flags via updateFlags(). Skip when the caller kept
+        // FeatureFlagDetails — those flags stay as-is, so there's nothing to emit.
+        if (!allPropertiesToKeep.includes(PostHogPersistedProperty.FeatureFlagDetails)) {
+          this.setKnownFeatureFlagDetails({ flags: {} })
+        }
+      } else {
+        this.reloadFeatureFlags()
+      }
     })
   }
 
@@ -585,6 +597,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     if (this.disabled) {
       return undefined
     }
+    // Config-fetching requests still go out (carrying disable_flags); only pure reloads no-op.
+    if (this.disableRemoteFeatureFlags && !fetchConfig) {
+      this._logger.info('Feature flags are disabled (disableRemoteFeatureFlags), skipping reload.')
+      return undefined
+    }
     if (this._flagsResponsePromise) {
       // Queue the reload request instead of dropping it
       // This ensures that requests with $anon_distinct_id (from identify()) are not lost
@@ -696,11 +713,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             // we only dont load flags if the remote config has no feature flags
             let willLoadFlags = false
             if (response.hasFeatureFlags === false) {
-              // resetting flags to empty object
-              this.setKnownFeatureFlagDetails({ flags: {} })
+              if (!this.disableRemoteFeatureFlags) {
+                this.setKnownFeatureFlagDetails({ flags: {} })
+              }
 
               this._logger.warn('Remote config has no feature flags, will not load feature flags.')
-            } else if (this.preloadFeatureFlags !== false) {
+            } else if (this.preloadFeatureFlags !== false && !this.disableRemoteFeatureFlags) {
               willLoadFlags = true
               this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true, triggerOnRemoteConfig: true })
             }
@@ -746,6 +764,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           $anon_distinct_id: sendAnonDistinctId ? this.getAnonymousId() : undefined,
           // Only set by the React Native SDK; omitted from JSON when DeviceId is not persisted
           $device_id: deviceId ?? undefined,
+          ...(this.disableRemoteFeatureFlags ? { disable_flags: true } : {}),
         }
 
         const result = await super.getFlags(
@@ -758,20 +777,24 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         )
 
         if (!result.success) {
-          this.setKnownFeatureFlagDetails({
-            flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
-            requestError: result.error,
-          })
+          if (!this.disableRemoteFeatureFlags) {
+            this.setKnownFeatureFlagDetails({
+              flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
+              requestError: result.error,
+            })
+          }
           return undefined
         }
 
         const res = result.response
 
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
-          this.setKnownFeatureFlagDetails({
-            flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
-            quotaLimited: res.quotaLimited,
-          })
+          if (!this.disableRemoteFeatureFlags) {
+            this.setKnownFeatureFlagDetails({
+              flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
+              quotaLimited: res.quotaLimited,
+            })
+          }
           this._logger.warn(
             '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
           )
@@ -779,6 +802,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           return res
         }
         if (res?.featureFlags) {
+          if (this.disableRemoteFeatureFlags) {
+            this.cacheSessionReplay('flags', res)
+            this.maybeNotifyRemoteConfig(triggerOnRemoteConfig, res)
+            return res
+          }
+
           // clear flag call reported if we have new flags since they might have changed
           if (this.sendFeatureFlagEvent) {
             this.flagCallReported = {}
@@ -1052,7 +1081,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     details = details ?? { featureFlags: {}, featureFlagPayloads: {}, flags: {} }
 
-    const flags: Record<string, FeatureFlagDetail> = details.flags ?? {}
+    // Copy before applying overrides so reads don't mutate the stored flags in place.
+    const flags: Record<string, FeatureFlagDetail> = { ...(details.flags ?? {}) }
 
     for (const key in overriddenFlags) {
       if (!overriddenFlags[key]) {
@@ -1093,6 +1123,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   // Used when we want to trigger the reload but we don't care about the result
   reloadFeatureFlags(options?: { cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void }): void {
+    if (this.disableRemoteFeatureFlags && !this.disabled) {
+      this._initPromise.then(() => options?.cb?.(undefined, this.getFeatureFlags()))
+      return
+    }
     this.flagsAsync({ sendAnonDistinctId: true })
       .then((res) => {
         options?.cb?.(undefined, res?.featureFlags)
@@ -1112,6 +1146,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   async reloadFeatureFlagsAsync(
     sendAnonDistinctId?: boolean
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
+    if (this.disableRemoteFeatureFlags && !this.disabled) {
+      await this._initPromise
+      return this.getFeatureFlags()
+    }
     return (await this.flagsAsync({ sendAnonDistinctId: sendAnonDistinctId }))?.featureFlags
   }
 
@@ -1139,6 +1177,75 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         return this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, null)
       }
       return this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, flags)
+    })
+  }
+
+  /**
+   * Replaces (or merges into) the stored feature flags and payloads with locally supplied
+   * values, exactly as if they had been returned by the flags endpoint: the values are
+   * persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and
+   * `onFeatureFlags` listeners fire. Makes no network request.
+   *
+   * Intended for apps that evaluate flags outside the SDK (e.g. server-side local
+   * evaluation) and push the results in at runtime, typically together with the
+   * `disableRemoteFeatureFlags` option so the SDK never fetches flags itself.
+   *
+   * The values are cleared by `reset()`, so push them again after an identity change.
+   *
+   * @param flags - Flag keys mapped to their values (boolean, or a variant string)
+   * @param payloads - Optional flag keys mapped to their JSON payloads
+   * @param options - Set `merge: true` to merge with the currently stored flags instead of replacing them
+   */
+  updateFlags(
+    flags: Record<string, FeatureFlagValue>,
+    payloads?: Record<string, JsonType>,
+    options?: { merge?: boolean }
+  ): void {
+    this.wrap(() => {
+      // Merge against the raw stored flags, not the override-applied view.
+      const existingDetails = options?.merge ? this.getKnownFeatureFlagDetails()?.flags : undefined
+      const existingFlags = existingDetails ? getFlagValuesFromFlags(existingDetails) : {}
+      const existingPayloads: Record<string, JsonType> = {}
+      for (const key in existingDetails) {
+        const storedPayload = existingDetails[key].metadata?.payload
+        if (storedPayload !== undefined) {
+          existingPayloads[key] = parsePayload(storedPayload)
+        }
+      }
+      const finalFlags = { ...existingFlags, ...flags }
+      const finalPayloads = { ...existingPayloads, ...(payloads ?? {}) }
+
+      // Built by hand, not via createFlagsResponseFromFlagsAndPayloads, which drops false flags.
+      const flagDetails: Record<string, FeatureFlagDetail> = {}
+      for (const [key, value] of Object.entries(finalFlags)) {
+        const payload = finalPayloads[key]
+        let serializedPayload: string | undefined
+        if (payload !== undefined) {
+          try {
+            serializedPayload = JSON.stringify(payload)
+          } catch (e) {
+            this._logger.error(`updateFlags: could not serialize the payload for flag "${key}", dropping it.`, e)
+          }
+        }
+        flagDetails[key] = {
+          key,
+          enabled: getEnabledFromValue(value),
+          variant: getVariantFromValue(value),
+          reason: undefined,
+          // Locally supplied flags have no server-side id/version
+          metadata: {
+            id: undefined,
+            version: undefined,
+            description: undefined,
+            payload: serializedPayload,
+          },
+        }
+      }
+
+      if (this.sendFeatureFlagEvent) {
+        this.flagCallReported = {}
+      }
+      this.setKnownFeatureFlagDetails({ flags: flagDetails })
     })
   }
 

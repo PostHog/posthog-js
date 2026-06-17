@@ -1,5 +1,60 @@
 # posthog-js
 
+## 1.388.2
+
+### Patch Changes
+
+- [#3870](https://github.com/PostHog/posthog-js/pull/3870) [`5edfee1`](https://github.com/PostHog/posthog-js/commit/5edfee1575860dda0a5bb099bc0e621ba6668bbb) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `updateFlags(flags, payloads, { merge: true })` baking an active feature flag override into the stored flags. The merge now seeds from the raw stored flags rather than the override-applied values, so clearing the override afterwards correctly restores the original flag.
+  (2026-06-17)
+
+## 1.388.1
+
+### Patch Changes
+
+- [#3851](https://github.com/PostHog/posthog-js/pull/3851) [`5c453cd`](https://github.com/PostHog/posthog-js/commit/5c453cd240788e45459dd08be6248d60a1cf1a73) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply CSP nonce preparation hooks to style and script elements appended by site apps.
+  (2026-06-17)
+
+## 1.388.0
+
+### Minor Changes
+
+- [#3863](https://github.com/PostHog/posthog-js/pull/3863) [`b6bc9be`](https://github.com/PostHog/posthog-js/commit/b6bc9be241d6af91cae9d63b3fbb5b1d7ac8f343) Thanks [@marandaneto](https://github.com/marandaneto)! - Add autocapture-only CSS selector opt-outs for web interactions.
+  (2026-06-17)
+
+### Patch Changes
+
+- Updated dependencies [[`b6bc9be`](https://github.com/PostHog/posthog-js/commit/b6bc9be241d6af91cae9d63b3fbb5b1d7ac8f343)]:
+    - @posthog/types@1.388.0
+
+## 1.387.0
+
+### Minor Changes
+
+- [#3709](https://github.com/PostHog/posthog-js/pull/3709) [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e) Thanks [@posthog](https://github.com/apps/posthog)! - Add `unsetPersonProperties()` to remove person properties, the counterpart to `setPersonProperties()`. Previously the only way to unset a person property was to hand-pass a `$unset` array inside a `capture()` call.
+  (2026-06-16)
+
+### Patch Changes
+
+- [#3756](https://github.com/PostHog/posthog-js/pull/3756) [`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9) Thanks [@archievi](https://github.com/archievi)! - Drop the event and log a warning when a `before_send` hook removes the `token` property, instead of silently sending an event that ingest rejects with a 401.
+  (2026-06-16)
+
+- [#3860](https://github.com/PostHog/posthog-js/pull/3860) [`c9c7df1`](https://github.com/PostHog/posthog-js/commit/c9c7df1e7f3ae6152aa80f98b49be206fdff1b23) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `$unset` to capture options and pass it through in browser capture payloads.
+  (2026-06-16)
+
+- [#3855](https://github.com/PostHog/posthog-js/pull/3855) [`fadaa4f`](https://github.com/PostHog/posthog-js/commit/fadaa4f38e9216cd5c8b43127202dbb4e8f5629a) Thanks [@haacked](https://github.com/haacked)! - Stop sending the `ip` query parameter on feature flag requests. The flags endpoint ignores it, and some ad blockers match `/flags…ip=` to block flag evaluation on any domain. Dropping it from flag requests avoids the block with no functional change. Event and session recording requests are unchanged.
+  (2026-06-16)
+
+- [#3830](https://github.com/PostHog/posthog-js/pull/3830) [`0d837f5`](https://github.com/PostHog/posthog-js/commit/0d837f5aed4c7360b815a35866aba8f1a9a11852) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Avoid reloading exception and dead-click autocapture external scripts when they are already present.
+  (2026-06-16)
+
+- [#3853](https://github.com/PostHog/posthog-js/pull/3853) [`f95a0ec`](https://github.com/PostHog/posthog-js/commit/f95a0ec68270bf9116d29875733c1a43e9b91331) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Capture native Fullscreen API transitions in session replay. Entering native fullscreen (`element.requestFullscreen()`) is rendered by the browser via the UA `:fullscreen` pseudo-class with no DOM mutation, so the recorder previously captured nothing and replays showed the element at its pre-fullscreen size with drifted click coordinates. The recorder now emits a reserved custom event on `fullscreenchange` (standard plus `webkit`/`moz`/`MS` prefixes), and the replayer re-applies fullscreen layout to the element on playback (including when scrubbing into a fullscreen region) via a reserved `rr_fullscreen` attribute, consistent with rrweb's existing `rr_*` attribute namespace.
+
+    Known limitation: fullscreen of an element inside a same-origin iframe is recorded against the `<iframe>` element rather than the inner element, so replay pins the iframe. (2026-06-16)
+
+- Updated dependencies [[`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9), [`c9c7df1`](https://github.com/PostHog/posthog-js/commit/c9c7df1e7f3ae6152aa80f98b49be206fdff1b23), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+    - @posthog/core@1.33.0
+    - @posthog/types@1.387.0
+
 ## 1.386.8
 
 ### Patch Changes

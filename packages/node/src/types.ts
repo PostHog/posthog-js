@@ -17,6 +17,17 @@ export type IdentifyMessage = {
   disableGeoip?: boolean
 }
 
+export type SetPersonPropertiesMessage = {
+  distinctId: string
+  properties?: Record<string | number, any>
+  propertiesOnce?: Record<string | number, any>
+}
+
+export type UnsetPersonPropertiesMessage = {
+  distinctId: string
+  properties: string | string[]
+}
+
 export type SendFeatureFlagsOptions = {
   onlyEvaluateLocally?: boolean
   personProperties?: Record<string, any>
@@ -383,6 +394,21 @@ export interface IPostHog {
    * @param properties with a dict with any key: value pairs
    */
   identifyImmediate({ distinctId, properties }: IdentifyMessage): Promise<void>
+
+  /**
+   * @description Set properties on a person profile.
+   * @param distinctId which uniquely identifies your user
+   * @param properties properties to set on the person profile
+   * @param propertiesOnce properties to set once on the person profile
+   */
+  setPersonProperties({ distinctId, properties, propertiesOnce }: SetPersonPropertiesMessage): void
+
+  /**
+   * @description Remove properties from a person profile.
+   * @param distinctId which uniquely identifies your user
+   * @param properties property name or property names to unset
+   */
+  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void
 
   /**
    * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.

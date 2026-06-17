@@ -5,6 +5,7 @@ import {
   addPostHogAndroidGradlePluginClasspath,
   addPostHogWithBundledScriptsToBundleShellScript,
   applyPostHogAndroidGradlePlugin,
+  buildAndroidSkipOnConflictGradleLine,
   buildDsymUploadShellScript,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
@@ -125,6 +126,14 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expect(wrapped).not.toContain("` '/scripts/react-native-xcode.sh'\"`")
     expectValidShellSyntax(wrapped)
   })
+
+  it('passes skipOnConflict before the react-native-xcode.sh command', () => {
+    const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
+    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, true)
+
+    expect(wrapped).toContain('--posthog-skip-on-conflict -- node_modules/react-native/scripts/react-native-xcode.sh')
+    expectValidShellSyntax(wrapped)
+  })
 })
 
 describe('modifyExistingXcodeBuildScript', () => {
@@ -133,6 +142,25 @@ describe('modifyExistingXcodeBuildScript', () => {
     modifyExistingXcodeBuildScript(script)
     const parsed = JSON.parse(script.shellScript)
     expect(parsed).toContain('posthog-xcode.sh')
+  })
+
+  it('wraps the bundle phase shellScript with skipOnConflict', () => {
+    const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
+    modifyExistingXcodeBuildScript(script, true)
+    const parsed = JSON.parse(script.shellScript)
+    expect(parsed).toContain('--posthog-skip-on-conflict --')
+  })
+
+  it('updates skipOnConflict on an already wrapped bundle phase', () => {
+    const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
+    modifyExistingXcodeBuildScript(script)
+    modifyExistingXcodeBuildScript(script, true)
+    let parsed = JSON.parse(script.shellScript)
+    expect(parsed).toContain('--posthog-skip-on-conflict --')
+
+    modifyExistingXcodeBuildScript(script, false)
+    parsed = JSON.parse(script.shellScript)
+    expect(parsed).not.toContain('--posthog-skip-on-conflict --')
   })
 
   it('wraps Expo backtick bundle phase shellScript without creating invalid shell syntax', () => {
@@ -162,6 +190,13 @@ describe('modifyExistingXcodeBuildScript', () => {
     const firstPass = script.shellScript
     modifyExistingXcodeBuildScript(script)
     expect(script.shellScript).toBe(firstPass)
+  })
+
+  it('skips already posthog-react-native-wrapped scripts without parsing them', () => {
+    const script = { shellScript: 'posthog-react-native node_modules/react-native/scripts/react-native-xcode.sh' }
+    const original = script.shellScript
+    expect(() => modifyExistingXcodeBuildScript(script)).not.toThrow()
+    expect(script.shellScript).toBe(original)
   })
 
   it('skips scripts that do not invoke react-native-xcode.sh', () => {
@@ -245,6 +280,15 @@ describe('resolveNativeSymbolUpload', () => {
     expect(resolveNativeSymbolUpload({ includeSource: true })).toEqual({ enabled: true, includeSource: true })
     expect(resolveNativeSymbolUpload({ includeSource: false })).toEqual({ enabled: true, includeSource: false })
     expect(resolveNativeSymbolUpload({})).toEqual({ enabled: true, includeSource: false })
+  })
+})
+
+describe('buildAndroidSkipOnConflictGradleLine', () => {
+  it.each([
+    [false, null],
+    [true, 'project.ext.posthogReactNativeSkipOnConflict = true'],
+  ])('serializes skipOnConflict=%s', (skipOnConflict, expected) => {
+    expect(buildAndroidSkipOnConflictGradleLine(skipOnConflict)).toBe(expected)
   })
 })
 

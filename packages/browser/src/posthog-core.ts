@@ -100,6 +100,7 @@ import {
     isEmptyString,
     isFunction,
     isKnownUnsafeEditableEvent,
+    isKnownUnsafeEditableEventProperty,
     isNullish,
     isNumber,
     isString,
@@ -1348,6 +1349,10 @@ export class PostHog implements PostHogInterface {
         const setProperties = options?.$set
         if (setProperties) {
             data.$set = options?.$set
+        }
+        const unsetProperties = options?.$unset
+        if (unsetProperties) {
+            data.$unset = unsetProperties
         }
         // $groupidentify doesn't process person $set_once on the server, so don't mark
         // initial person props as sent. This ensures they're included with subsequent
@@ -4073,6 +4078,13 @@ export class PostHog implements PostHogInterface {
             return data
         }
 
+        // Some properties are required for the event to be ingested - e.g. `token`
+        // carries the project api_key, and ingest rejects any event that arrives
+        // without it (a 401). Snapshot which of these were present before the hooks
+        // run, so we can tell if a hook removed one (the names are captured here, so
+        // a hook that mutates `data.properties` in place can't hide the removal).
+        const requiredProperties = Object.keys(data.properties ?? {}).filter(isKnownUnsafeEditableEventProperty)
+
         const fns = isArray(this.config.before_send) ? this.config.before_send : [this.config.before_send]
         let beforeSendResult: CaptureResult | null = data
         for (const fn of fns) {
@@ -4090,6 +4102,19 @@ export class PostHog implements PostHogInterface {
                 logger.warn(
                     `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
                 )
+            }
+        }
+        // If a beforeSend hook removed a property the event needs to be ingested
+        // (e.g. a generic token/PII scrubber matching /token/i dropping `token`),
+        // ingest would silently reject every such event with a 401. Drop the event
+        // here and warn instead - we don't restore the property, since the removal
+        // may have been intentional.
+        for (const property of requiredProperties) {
+            if (beforeSendResult.properties && isNullish(beforeSendResult.properties[property])) {
+                logger.warn(
+                    `Event '${data.event}' had its '${property}' property removed in a beforeSend function. This property is required for ingestion, so the event will be dropped.`
+                )
+                return null
             }
         }
         return beforeSendResult

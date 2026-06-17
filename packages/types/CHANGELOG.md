@@ -1,5 +1,24 @@
 # @posthog/types
 
+## 1.388.0
+
+### Minor Changes
+
+- [#3863](https://github.com/PostHog/posthog-js/pull/3863) [`b6bc9be`](https://github.com/PostHog/posthog-js/commit/b6bc9be241d6af91cae9d63b3fbb5b1d7ac8f343) Thanks [@marandaneto](https://github.com/marandaneto)! - Add autocapture-only CSS selector opt-outs for web interactions.
+  (2026-06-17)
+
+## 1.387.0
+
+### Minor Changes
+
+- [#3709](https://github.com/PostHog/posthog-js/pull/3709) [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e) Thanks [@posthog](https://github.com/apps/posthog)! - Add `unsetPersonProperties()` to remove person properties, the counterpart to `setPersonProperties()`. Previously the only way to unset a person property was to hand-pass a `$unset` array inside a `capture()` call.
+  (2026-06-16)
+
+### Patch Changes
+
+- [#3860](https://github.com/PostHog/posthog-js/pull/3860) [`c9c7df1`](https://github.com/PostHog/posthog-js/commit/c9c7df1e7f3ae6152aa80f98b49be206fdff1b23) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `$unset` to capture options and pass it through in browser capture payloads.
+  (2026-06-16)
+
 ## 1.386.4
 
 ### Patch Changes

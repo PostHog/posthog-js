@@ -22,14 +22,6 @@
         "generate-references:versioned": "GENERATE_VERSIONED_REFERENCES=1 pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
         "check:public-api": "node scripts/check-public-api.js"
     },
-    "pnpm": {
-        "overrides": {
-            "node-forge": "1.3.2"
-        },
-        "onlyBuiltDependencies": [
-            "sharp"
-        ]
-    },
     "devDependencies": {
         "@changesets/changelog-github": "^0.5.2",
         "@changesets/cli": "^2.29.8",

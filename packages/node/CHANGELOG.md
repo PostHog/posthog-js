@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.38.0
+
+### Minor Changes
+
+- [#3845](https://github.com/PostHog/posthog-js/pull/3845) [`a0553b3`](https://github.com/PostHog/posthog-js/commit/a0553b305679f995e244cad7498c7521cb4c849d) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `setPersonProperties()` and `unsetPersonProperties()` helpers to manage person properties from the Node.js SDK.
+  (2026-06-16)
+
+### Patch Changes
+
+- Updated dependencies [[`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+  - @posthog/core@1.33.0
+
 ## 5.37.1
 
 ### Patch Changes
