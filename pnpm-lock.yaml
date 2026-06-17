@@ -506,6 +506,15 @@ importers:
         specifier: ^17.7.2
         version: 17.7.2
 
+  packages/browser-extensions:
+    devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/convex:
     dependencies:
       '@posthog/core':
@@ -15302,6 +15311,11 @@ packages:
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -35130,6 +35144,8 @@ snapshots:
 
   typescript@5.9.3:
     optional: true
+
+  typescript@6.0.3: {}
 
   ua-parser-js@0.7.40: {}
 
