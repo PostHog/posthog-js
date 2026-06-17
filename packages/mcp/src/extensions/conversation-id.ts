@@ -72,10 +72,10 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
 
 export function addConversationIdToTools<TTool extends ConversationIdInjectableTool>(
   tools: TTool[],
-  getMoreToolsName: string = GET_MORE_TOOLS_NAME
+  missingCapabilityToolName: string = GET_MORE_TOOLS_NAME
 ): TTool[] {
   return tools.map((tool) => {
-    if (tool.name === getMoreToolsName) {
+    if (tool.name === missingCapabilityToolName) {
       return tool
     }
     return addConversationIdToTool(tool)
@@ -96,9 +96,9 @@ export function resolveConversationId(
   enabled: boolean,
   args: unknown,
   toolName: string | undefined,
-  getMoreToolsName: string = GET_MORE_TOOLS_NAME
+  missingCapabilityToolName: string = GET_MORE_TOOLS_NAME
 ): ConversationIdResolution {
-  if (!enabled || toolName === getMoreToolsName) {
+  if (!enabled || toolName === missingCapabilityToolName) {
     return { minted: false, conversationId: undefined }
   }
   const supplied = extractConversationId(args)

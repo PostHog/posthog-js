@@ -150,13 +150,13 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     })
   })
 
-  describe('custom getMoreToolsName', () => {
+  describe('custom missingCapabilityToolName', () => {
     const CUSTOM = 'posthog_find_tools'
 
     it('advertises and handles the virtual tool under the custom name', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, fakePostHog(), { reportMissing: true, getMoreToolsName: CUSTOM })
+      instrument(server, fakePostHog(), { reportMissing: true, missingCapabilityToolName: CUSTOM })
 
       // advertised under the custom name, not the default
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)

@@ -34,7 +34,7 @@ export interface PostHogMCPOptions extends PostHogOptions {
    * {@link PostHogMCP.prepareToolCall}. Set once here so injection and detection
    * can't drift. Defaults to `get_more_tools`.
    */
-  getMoreToolsName?: string
+  missingCapabilityToolName?: string
 }
 
 /**
@@ -79,11 +79,11 @@ export class PostHogMCP extends PostHog {
 
   // The get_more_tools name lives here (not on the per-call options) so that
   // prepareToolList (inject) and prepareToolCall (detect) always agree.
-  readonly #getMoreToolsName: string
+  readonly #missingCapabilityToolName: string
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
-    this.#getMoreToolsName = options.getMoreToolsName ?? GET_MORE_TOOLS_NAME
+    this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
   }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */
@@ -137,7 +137,7 @@ export class PostHogMCP extends PostHog {
    * Decorate your `tools/list` response with PostHog's analytics affordances:
    * injects the `context` argument into every tool (so agents state their intent,
    * captured as `$mcp_intent`) and, when `reportMissing` is on, appends the
-   * `get_more_tools` virtual tool (rename it via the `getMoreToolsName`
+   * `get_more_tools` virtual tool (rename it via the `missingCapabilityToolName`
    * constructor option). Returns a new array; your tools are untouched.
    *
    * The appended `get_more_tools` descriptor carries only the base MCP tool fields
@@ -161,8 +161,8 @@ export class PostHogMCP extends PostHog {
       ? addContextParameterToTools(tools, getContextDescription(contextOption))
       : [...tools]
 
-    if (options.reportMissing && !prepared.some((tool) => tool?.name === this.#getMoreToolsName)) {
-      prepared = [...prepared, getReportMissingToolDescriptor(this.#getMoreToolsName) as TTool]
+    if (options.reportMissing && !prepared.some((tool) => tool?.name === this.#missingCapabilityToolName)) {
+      prepared = [...prepared, getReportMissingToolDescriptor(this.#missingCapabilityToolName) as TTool]
     }
     return prepared
   }
@@ -194,7 +194,7 @@ export class PostHogMCP extends PostHog {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
       args: stripContext(args),
-      isMissingCapability: name === this.#getMoreToolsName,
+      isMissingCapability: name === this.#missingCapabilityToolName,
     }
   }
 
@@ -205,7 +205,7 @@ export class PostHogMCP extends PostHog {
    */
   captureMissingCapability(data: MissingCapabilityCaptureData): void {
     const event = baseEvent(MCPAnalyticsEventType.mcpMissingCapability, data)
-    event.resourceName = this.#getMoreToolsName
+    event.resourceName = this.#missingCapabilityToolName
     event.parameters = data.parameters
     applyIntent(event, data.context, 'context_parameter')
     this.#emit(event)

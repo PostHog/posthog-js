@@ -221,8 +221,8 @@ describe('PostHogMCP', () => {
       expect(withMissing.some((t) => t.name === GET_MORE_TOOLS_NAME)).toBe(true)
     })
 
-    it('honors a custom getMoreToolsName, and inject + detect stay consistent', async () => {
-      const client = newClient({ getMoreToolsName: 'posthog_find_tools' })
+    it('honors a custom missingCapabilityToolName, and inject + detect stay consistent', async () => {
+      const client = newClient({ missingCapabilityToolName: 'posthog_find_tools' })
       const prepared = client.prepareToolList(tools, { reportMissing: true })
 
       // injected under the custom name, not the default

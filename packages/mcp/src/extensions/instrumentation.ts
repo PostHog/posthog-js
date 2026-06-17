@@ -25,7 +25,7 @@ import { getServerTrackingData, handleIdentify } from './internal'
 import { log } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { getServerSessionId } from './session'
-import { getReportMissingToolDescriptor, reportMissingToolName } from './tools'
+import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
 /**
@@ -87,7 +87,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     data.options.enableConversationId ?? false,
     request.params?.arguments,
     request.params?.name,
-    reportMissingToolName(data.options)
+    resolveMissingCapabilityToolName(data.options)
   )
   const downstreamRequest = conversation.conversationId ? cloneRequestWithoutConversationId(request) : request
 
@@ -341,14 +341,14 @@ async function getTracedToolsList(
     }
 
     if (data?.options.enableConversationId) {
-      tools = addConversationIdToTools(tools, reportMissingToolName(data.options))
+      tools = addConversationIdToTools(tools, resolveMissingCapabilityToolName(data.options))
     }
 
     if (data?.options.reportMissing) {
-      const moreToolsName = reportMissingToolName(data.options)
-      const alreadyPresent = tools.some((tool) => tool?.name === moreToolsName)
+      const missingToolName = resolveMissingCapabilityToolName(data.options)
+      const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
       if (!alreadyPresent) {
-        tools.push(getReportMissingToolDescriptor(moreToolsName))
+        tools.push(getReportMissingToolDescriptor(missingToolName))
       }
     }
 

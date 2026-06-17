@@ -12,8 +12,8 @@ export const GET_MORE_TOOLS_NAME = 'get_more_tools' as const
  * default. Resolve through here everywhere (inject + detect) so a custom name
  * can't drift between call sites.
  */
-export function reportMissingToolName(options?: { getMoreToolsName?: string }): string {
-  return options?.getMoreToolsName ?? GET_MORE_TOOLS_NAME
+export function resolveMissingCapabilityToolName(options?: { missingCapabilityToolName?: string }): string {
+  return options?.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
 }
 
 type ReportMissingToolDescriptor = ListToolsResult['tools'][number]

@@ -55,7 +55,7 @@ export interface MCPAnalyticsOptions {
    * Defaults to `get_more_tools`. Set once here so the tool is advertised and
    * detected under the same name.
    */
-  getMoreToolsName?: string
+  missingCapabilityToolName?: string
   /** Enables the `conversation_id` tool parameter + prompt-back loop. */
   enableConversationId?: boolean
   /**
