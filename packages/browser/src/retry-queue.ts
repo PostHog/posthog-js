@@ -8,6 +8,8 @@ import { extendURLParams } from './request'
 import { addEventListener } from './utils'
 
 const thirtyMinutes = 30 * 60 * 1000
+const DEFAULT_MAX_RETRIES = 10
+const STATUS_CODE_ZERO_MAX_RETRIES = 3
 
 /**
  * Generates a jitter-ed exponential backoff delay in milliseconds
@@ -76,12 +78,20 @@ export class RetryQueue {
             ...options,
             callback: (response) => {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
-                    if ((retriesPerformedSoFar ?? 0) < 10) {
+                    const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES
+
+                    if ((retriesPerformedSoFar ?? 0) < maxRetries) {
                         this._enqueue({
                             retriesPerformedSoFar,
                             ...options,
                         })
                         return
+                    }
+
+                    if (response.statusCode === 0) {
+                        logger.warn(
+                            `Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after ${retriesPerformedSoFar ?? 0} retries.`
+                        )
                     }
                 }
 

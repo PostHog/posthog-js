@@ -1,5 +1,14 @@
 # posthog-js-lite
 
+## 4.7.1
+
+### Patch Changes
+
+- [#3876](https://github.com/PostHog/posthog-js/pull/3876) [`d7b1a03`](https://github.com/PostHog/posthog-js/commit/d7b1a031761cdd6aa8cf6b28f828a2fa29ac0765) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Deprecate `getFeatureFlagPayload` in favor of `getFeatureFlagResult`, which returns the flag value and payload from a single evaluation. `getFeatureFlagPayload` continues to work.
+  (2026-06-17)
+- Updated dependencies [[`d7b1a03`](https://github.com/PostHog/posthog-js/commit/d7b1a031761cdd6aa8cf6b28f828a2fa29ac0765)]:
+  - @posthog/core@1.35.1
+
 ## 4.7.0
 
 ### Minor Changes
