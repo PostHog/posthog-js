@@ -114,6 +114,16 @@ describe('posthog core', () => {
             expect(actual['token']).toBeUndefined()
         })
 
+        it('passes $unset capture option through', () => {
+            const { posthog, beforeSendMock } = setup()
+
+            posthog.capture(eventName, eventProperties, { $unset: ['email'] })
+
+            expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
+                $unset: ['email'],
+            })
+        })
+
         describe('rate limiting', () => {
             it('includes information about remaining rate limit', () => {
                 const { posthog, beforeSendMock } = setup()

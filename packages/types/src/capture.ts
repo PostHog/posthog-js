@@ -46,6 +46,7 @@ export interface CaptureResult {
     properties: Properties
     $set?: Properties
     $set_once?: Properties
+    $unset?: string[]
     timestamp?: Date
 }
 
@@ -61,6 +62,11 @@ export interface CaptureOptions {
      * Will set person properties but only once, it will NOT override previous values
      */
     $set_once?: Properties
+
+    /**
+     * Used to unset person properties
+     */
+    $unset?: string[]
 
     /**
      * Used to override the desired endpoint for the captured event
