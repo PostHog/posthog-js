@@ -5,6 +5,14 @@ import { SURVEY_LOGGER as logger } from './survey-utils'
 import { EventReceiver } from './event-receiver'
 import { createLogger } from './logger'
 
+// A survey is "repeatable" when it shows on every captured trigger: an "always" schedule, or the
+// "Show every time the event is captured" option. Config-only (no dependency on the lazy-loaded
+// surveys extension) so it stays out of the core bundle.
+function isRepeatableSurvey(survey: Survey): boolean {
+    const hasEvents = (survey.conditions?.events?.values?.length ?? 0) > 0
+    return survey.schedule === SurveySchedule.Always || !!(survey.conditions?.events?.repeatedActivation && hasEvents)
+}
+
 export class SurveyEventReceiver extends EventReceiver<Survey> {
     constructor(instance: PostHog) {
         super(instance)
@@ -46,22 +54,12 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
             survey = surveys.find((s) => s.id === itemId)
         })
 
-        // `_getItems` is expected to call back synchronously (surveys are cached by the time one is
-        // shown). If the survey still can't be resolved, fall back to consuming on shown rather than
-        // promoting an unknown survey into persistence, where it could re-display on later loads.
-        if (!survey) {
-            return event === SurveyEventName.SHOWN
-        }
-
-        // A survey is repeatable when it shows on every captured trigger ("Show every time the event
-        // is captured", or an "always" schedule). Repeatable surveys are consumed when shown, so each
-        // trigger shows them once. Non-repeatable surveys stay activated until dismissed or answered,
-        // so they survive a page reload and re-display until the user actually interacts with them.
-        const hasEvents = (survey.conditions?.events?.values?.length ?? 0) > 0
-        const repeatable =
-            survey.schedule === SurveySchedule.Always || !!(survey.conditions?.events?.repeatedActivation && hasEvents)
-
-        return repeatable
+        // Repeatable surveys are consumed when shown (one display per captured trigger). Non-repeatable
+        // surveys instead stay activated — and get promoted to persistence — until the user dismisses or
+        // answers them, so they survive a reload. An unresolvable survey (not loaded yet) is treated as
+        // repeatable: consume it on shown rather than persist an unknown that could re-display later.
+        const consumedOnShown = !survey || isRepeatableSurvey(survey)
+        return consumedOnShown
             ? event === SurveyEventName.SHOWN
             : event === SurveyEventName.DISMISSED || event === SurveyEventName.SENT
     }
