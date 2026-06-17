@@ -59,8 +59,7 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
         // so they survive a page reload and re-display until the user actually interacts with them.
         const hasEvents = (survey.conditions?.events?.values?.length ?? 0) > 0
         const repeatable =
-            survey.schedule === SurveySchedule.Always ||
-            !!(survey.conditions?.events?.repeatedActivation && hasEvents)
+            survey.schedule === SurveySchedule.Always || !!(survey.conditions?.events?.repeatedActivation && hasEvents)
 
         return repeatable
             ? event === SurveyEventName.SHOWN
