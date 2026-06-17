@@ -43,6 +43,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set<string>([
     constants.PRODUCT_TOURS_ENABLED_SERVER_SIDE,
     constants.SESSION_RECORDING_REMOTE_CONFIG,
     constants.PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
+    constants.SESSION_RECORDING_FLUSHED_SIZE,
 ])
 
 const isUpperSnakeCase = (value: string): boolean => /^[A-Z0-9_]+$/.test(value)
