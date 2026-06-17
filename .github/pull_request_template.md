@@ -27,6 +27,7 @@
 - [ ] @posthog/rollup-plugin
 - [ ] @posthog/webpack-plugin
 - [ ] @posthog/types
+- [ ] @posthog/browser-extensions
 
 ## Checklist
 
