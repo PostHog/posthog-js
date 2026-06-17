@@ -42,8 +42,8 @@ export function webContext(): Extension {
 ```
 
 `setup(client)` may be async (read async state before you're ready); `dispose()`
-may be async (final flush). Static config the app sets goes in your factory
-options, not on the `Client`.
+may be async (final flush). Static config the app sets goes in your constructor,
+not on the `Client`.
 
 Anything in `setup` that returns a `Disposable` must be held by the extension
 and disposed in `dispose()`.
@@ -101,8 +101,8 @@ loadable. An extension that provides a capability declares its token(s) in
 
 ## Authoring
 
-See the **`author-extension`** skill
-([`.agents/skills/author-extension/SKILL.md`](./.agents/skills/author-extension/SKILL.md))
+See the **`develop-extension`** skill
+([`.agents/skills/develop-extension/SKILL.md`](./.agents/skills/develop-extension/SKILL.md))
 for the full guide: the capability cheatsheet, the rules (enrichers are
 synchronous, dispose your disposables, design for asynchronous readiness,
 cross-extension state goes through `getExtension`, not shared storage), and the

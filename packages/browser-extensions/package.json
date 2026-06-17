@@ -20,14 +20,20 @@
         }
     },
     "scripts": {
-        "lint": "eslint src",
-        "lint:fix": "eslint src --fix",
+        "lint": "eslint src tests",
+        "lint:fix": "eslint src tests --fix",
         "build": "tsc -p tsconfig.json --noEmit",
-        "test:unit": "node --test \"src/**/*.spec.ts\"",
+        "test:unit": "pnpm --filter=@posthog/types build && pnpm --filter=@posthog/core build && jest -c jest.config.cjs",
         "check-types": "pnpm build"
+    },
+    "dependencies": {
+        "@posthog/core": "workspace:^"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@types/jest": "catalog:",
+        "jest": "catalog:",
+        "ts-jest": "catalog:",
         "typescript": "^6.0.3"
     }
 }

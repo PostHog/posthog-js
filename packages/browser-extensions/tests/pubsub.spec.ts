@@ -1,7 +1,4 @@
-import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
-
-import { Publisher } from '../pubsub.ts'
+import { Publisher } from '../src/pubsub'
 
 describe('Publisher', () => {
     it('publishes payloads to registered listeners', () => {
@@ -13,7 +10,7 @@ describe('Publisher', () => {
         })
         publisher.publish({ value: 1 })
 
-        assert.deepEqual(calls, [{ value: 1 }])
+        expect(calls).toEqual([{ value: 1 }])
     })
 
     it('unregisters a listener when its subscription is disposed', () => {
@@ -32,8 +29,8 @@ describe('Publisher', () => {
         subscription.dispose()
         publisher.publish('payload')
 
-        assert.deepEqual(removedCalls, [])
-        assert.deepEqual(activeCalls, ['payload'])
+        expect(removedCalls).toEqual([])
+        expect(activeCalls).toEqual(['payload'])
     })
 
     it('drops all listeners when the publisher is disposed', () => {
@@ -52,8 +49,8 @@ describe('Publisher', () => {
         publisher.dispose()
         publisher.publish('payload')
 
-        assert.deepEqual(firstCalls, [])
-        assert.deepEqual(secondCalls, [])
+        expect(firstCalls).toEqual([])
+        expect(secondCalls).toEqual([])
     })
 
     it('does not call listeners registered during the current publish', () => {
@@ -70,7 +67,7 @@ describe('Publisher', () => {
         publisher.publish('one')
         publisher.publish('two')
 
-        assert.deepEqual(calls, ['first:one', 'first:two', 'late:two'])
+        expect(calls).toEqual(['first:one', 'first:two', 'late:two'])
     })
 
     it('does not call listeners disposed during the current publish', () => {
@@ -92,6 +89,6 @@ describe('Publisher', () => {
         publisher.publish('one')
         publisher.publish('two')
 
-        assert.deepEqual(calls, ['first:one', 'first:two'])
+        expect(calls).toEqual(['first:one', 'first:two'])
     })
 })

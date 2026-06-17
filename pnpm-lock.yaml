@@ -507,6 +507,10 @@ importers:
         version: 17.7.2
 
   packages/browser-extensions:
+    dependencies:
+      '@posthog/core':
+        specifier: workspace:^
+        version: link:../core
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
