@@ -456,6 +456,32 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
+    it('uses the scopeName constructor param as the OTLP scope name', async () => {
+      jest.useFakeTimers()
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady,
+        () => Promise.resolve(),
+        'console'
+      )
+      logs.captureLog({ body: 'test' })
+
+      await logs.flush()
+
+      const payload = mockInstance._sendLogsBatch.mock.calls[0][0]
+      const scope = payload.resourceLogs[0].scopeLogs[0].scope
+      // scopeName param overrides getLibraryId(); telemetry.sdk.name still uses getLibraryId().
+      expect(scope.name).toBe('console')
+      const resourceAttrs = Object.fromEntries(
+        payload.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
+      )
+      expect(resourceAttrs['telemetry.sdk.name']).toEqual({ stringValue: 'posthog-core-tests' })
+      jest.useRealTimers()
+    })
+
     it('defaults service.name to "unknown_service" when not configured', async () => {
       const logs = new PostHogLogs(
         mockInstance,

@@ -1,46 +1,11 @@
 import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 
-// Mock external OpenTelemetry dependencies
-jest.mock('@opentelemetry/api-logs', () => ({
-    logs: {
-        setGlobalLoggerProvider: jest.fn(),
-        getLogger: jest.fn(() => ({
-            emit: jest.fn(),
-        })),
-    },
-}))
-
-jest.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
-    OTLPLogExporter: jest.fn().mockImplementation(() => ({
-        export: jest.fn(),
-        shutdown: jest.fn(),
-    })),
-}))
-
-jest.mock('@opentelemetry/sdk-logs', () => ({
-    LoggerProvider: jest.fn().mockImplementation(() => ({
-        getLogger: jest.fn(() => ({
-            emit: jest.fn(),
-        })),
-        shutdown: jest.fn(),
-    })),
-    BatchLogRecordProcessor: jest.fn().mockImplementation(() => ({
-        onEmit: jest.fn(),
-        shutdown: jest.fn(),
-    })),
-}))
-
-jest.mock('@opentelemetry/resources', () => ({
-    resourceFromAttributes: jest.fn((attrs) => ({
-        attributes: attrs,
-    })),
-}))
-
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
-    let mockLogger: any
+    // Console capture now routes through the core pipeline via
+    // `posthog.logs.captureConsoleLog`; assert against that seam.
     let mockEmit: jest.Mock
 
     beforeEach(() => {
@@ -50,13 +15,8 @@ describe('logs entrypoint', () => {
         // Store original console
         originalConsole = { ...console }
 
-        // Set up mock logger
+        // Set up capture spy
         mockEmit = jest.fn()
-        mockLogger = { emit: mockEmit }
-
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { logs } = require('@opentelemetry/api-logs')
-        logs.getLogger.mockReturnValue(mockLogger)
 
         // Mock PostHog instance
         mockPostHog = {
@@ -74,6 +34,7 @@ describe('logs entrypoint', () => {
             },
             get_distinct_id: jest.fn(() => 'user-123'),
             is_capturing: jest.fn(() => true),
+            logs: { captureConsoleLog: mockEmit },
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -105,48 +66,53 @@ describe('logs entrypoint', () => {
         Object.assign(console, originalConsole)
     })
 
-    describe('configuration handling', () => {
+    describe('core capture routing', () => {
         beforeEach(() => {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
-        it('should use PostHog config for exporter URL', () => {
-            const customPostHog = {
-                ...mockPostHog,
-                config: {
-                    api_host: 'https://custom.example.com',
-                    token: 'custom-token-123',
-                },
-            }
-
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http')
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(customPostHog)
-
-            expect(OTLPLogExporter).toHaveBeenCalledWith({
-                url: 'https://custom.example.com/i/v1/logs?token=custom-token-123',
-                headers: {
-                    'Content-Type': 'text/plain',
-                },
-            })
-        })
-
-        it('should use current location host in resource attributes', () => {
-            Object.defineProperty(assignableWindow, 'location', {
-                value: { host: 'different.example.com', href: 'https://different.example.com' },
-                writable: true,
-            })
-
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const { resourceFromAttributes } = require('@opentelemetry/resources')
+        it('routes console capture through posthog.logs.captureConsoleLog with the mapped level', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
-            expect(resourceFromAttributes).toHaveBeenCalledWith(
+            assignableWindow.console.warn('uh oh')
+
+            expect(mockEmit).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    host: 'different.example.com',
+                    level: 'warn',
+                    body: '"uh oh"',
+                    attributes: expect.objectContaining({
+                        'log.source': 'console.warn',
+                    }),
+                })
+            )
+        })
+
+        it('does not set distinct_id or location.href — core adds posthogDistinctId/url.full downstream', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('hello')
+
+            const attributes = mockEmit.mock.calls[0][0].attributes
+            expect(attributes).not.toHaveProperty('distinct_id')
+            expect(attributes).not.toHaveProperty('location.href')
+        })
+
+        it('includes window.id and session timestamps in attributes', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('hello')
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    attributes: expect.objectContaining({
+                        'window.id': 'window-456',
+                        sessionStartTimestamp: expect.any(String),
+                        lastActivityTimestamp: expect.any(String),
+                    }),
                 })
             )
         })
@@ -578,6 +544,26 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+        })
+    })
+
+    describe('console output safety', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('still calls the original console method when capture throws', () => {
+            const originalConsoleLog = assignableWindow.console.log as jest.Mock
+            mockEmit.mockImplementation(() => {
+                throw new Error('capture blew up')
+            })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect(() => assignableWindow.console.log('user message')).not.toThrow()
+            expect(originalConsoleLog).toHaveBeenCalledWith('user message')
         })
     })
 

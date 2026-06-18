@@ -1,45 +1,7 @@
-import { logs } from '@opentelemetry/api-logs'
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
-import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
-import { resourceFromAttributes } from '@opentelemetry/resources'
-
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
-
-const setupOpenTelemetry = (posthog: PostHog) => {
-    const serviceName = posthog.config.logs?.serviceName || 'posthog-browser-logs'
-    let attributes: Record<string, string> = {
-        'service.name': serviceName,
-        host: assignableWindow.location.host,
-    }
-
-    if (posthog.sessionManager) {
-        const { sessionId, windowId } = posthog.sessionManager.checkAndGetSessionAndWindowId(true)
-        attributes = {
-            ...attributes,
-            'session.id': sessionId,
-            'window.id': windowId,
-        }
-    }
-
-    logs.setGlobalLoggerProvider(
-        new LoggerProvider({
-            resource: resourceFromAttributes(attributes),
-            processors: [
-                new BatchLogRecordProcessor(
-                    new OTLPLogExporter({
-                        url: `${posthog.config.api_host}/i/v1/logs?token=${posthog.config.token}`,
-                        // 1. Force the content type to text/plain to avoid OPTIONS preflight
-                        headers: {
-                            'Content-Type': 'text/plain',
-                        },
-                    })
-                ),
-            ],
-        })
-    )
-}
+import type { LogSeverityLevel } from '@posthog/types'
 
 const LOG_BODY_SIZE_LIMIT = 10000
 const LOG_ATTRIBUTES_LIMIT = 50
@@ -327,58 +289,60 @@ const flattenObject = (
     return result
 }
 
-const SEVERITY_MAP = {
-    log: 'INFO',
-    warn: 'WARNING',
-    error: 'ERROR',
-    debug: 'DEBUG',
-    info: 'INFO',
+type ConsoleLevel = 'debug' | 'log' | 'warn' | 'error' | 'info'
+
+// Console method → OTLP severity level. `log` and `info` both map to `info`;
+// the originating method is preserved separately via the `log.source` attribute.
+const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
+    debug: 'debug',
+    log: 'info',
+    warn: 'warn',
+    error: 'error',
+    info: 'info',
 }
 
 const initializeLogs = (posthog: PostHog) => {
-    setupOpenTelemetry(posthog)
-
-    const logger = logs.getLogger('console')
-    let attributes: Record<string, string> = {}
+    // `host` is carried per record because the core SDK context has no equivalent.
+    let attributes: Record<string, string> = { host: assignableWindow.location.host }
     if (posthog.sessionManager) {
-        const { sessionStartTimestamp, lastActivityTimestamp } =
+        const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
             posthog.sessionManager.checkAndGetSessionAndWindowId(true)
         attributes = {
+            ...attributes,
+            'window.id': windowId,
             sessionStartTimestamp: sessionStartTimestamp.toString(),
             lastActivityTimestamp: lastActivityTimestamp.toString(),
         }
     }
 
-    for (const level of ['debug', 'log', 'warn', 'error', 'info'] as ('debug' | 'log' | 'warn' | 'error' | 'info')[]) {
+    for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {
         const logWrapper =
             (originalConsoleLog: any) =>
             (...args: any[]) => {
-                if (args.length === 0) {
-                    return
-                }
-
-                if (!posthog.is_capturing()) {
+                try {
+                    if (args.length > 0 && posthog.is_capturing()) {
+                        const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
+                        const logAttributes = {
+                            ...attributes,
+                            ...(truncated ? { body_truncated: 'true' } : {}),
+                        }
+                        // The core pipeline adds posthogDistinctId and url.full from the SDK context.
+                        posthog.logs?.captureConsoleLog({
+                            level: LEVEL_MAP[level],
+                            body,
+                            attributes: {
+                                'log.source': `console.${level}`,
+                                ...logAttributes,
+                                ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
+                            },
+                        })
+                    }
+                } catch {
+                    // Capture must never break the page's own console output, so the
+                    // real console call below always runs even if capture throws.
+                } finally {
                     originalConsoleLog.apply(assignableWindow.console, args)
-                    return
                 }
-
-                const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
-                const logAttributes = {
-                    ...attributes,
-                    ...(truncated ? { body_truncated: 'true' } : {}),
-                }
-                logger.emit({
-                    severityText: SEVERITY_MAP[level],
-                    body: body,
-                    attributes: {
-                        'log.source': `console.${level}`,
-                        distinct_id: posthog.get_distinct_id(),
-                        'location.href': assignableWindow.location.href,
-                        ...logAttributes,
-                        ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
-                    },
-                })
-                originalConsoleLog.apply(assignableWindow.console, args)
             }
 
         const originalConsoleLog = assignableWindow.console[level]
