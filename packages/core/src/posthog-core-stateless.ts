@@ -115,6 +115,10 @@ function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHt
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
 
+function isPostHogEventProperties(value: JsonType | undefined): value is PostHogEventProperties {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 /**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core
  * (single source of truth — same policy events already use in `_flush()`) so
@@ -1064,7 +1068,7 @@ export abstract class PostHogCoreStateless {
     // `$lib_version` in properties are the canonical SDK metadata fields.
     // Keep these as fallbacks for legacy persisted queue entries.
     const { type: _type, library, library_version, ...sanitizedMessage } = message
-    let properties = sanitizedMessage.properties as PostHogEventProperties | undefined
+    let properties = isPostHogEventProperties(sanitizedMessage.properties) ? sanitizedMessage.properties : undefined
 
     if (library !== undefined && properties?.$lib === undefined) {
       properties = { ...(properties || {}), $lib: library }
@@ -1090,10 +1094,10 @@ export abstract class PostHogCoreStateless {
 
     const addGeoipDisableProperty = options?.disableGeoip ?? this.disableGeoip
     if (addGeoipDisableProperty) {
-      if (!message.properties) {
+      if (!isPostHogEventProperties(message.properties)) {
         message.properties = {}
       }
-      ;(message.properties as PostHogEventProperties)['$geoip_disable'] = true
+      message.properties['$geoip_disable'] = true
     }
 
     if (message.distinctId) {
