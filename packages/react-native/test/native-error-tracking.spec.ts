@@ -11,6 +11,7 @@ const mockPlugin = {
   identify: jest.fn(() => Promise.resolve()),
   startRecording: jest.fn(() => Promise.resolve()),
   stopRecording: jest.fn(() => Promise.resolve()),
+  addExceptionStep: jest.fn(() => Promise.resolve()),
 }
 
 const setupFetch = (): void => {
@@ -245,6 +246,60 @@ describe('native error tracking', () => {
     await posthog.reloadFeatureFlagsAsync()
     await waitForExpect(2000, () => expect(mockPlugin.startRecording).toHaveBeenCalledTimes(1))
     expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+
+    await posthog.shutdown()
+  })
+
+  it('plumbs the exception-steps config to native and forwards both replayed and live steps', async () => {
+    const { PostHog } = await import('../src/posthog-rn')
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      errorTracking: { autocapture: { nativeCrashes: true }, exceptionSteps: { maxBytes: 4096 } },
+    })
+
+    // Recorded before native init: buffered in JS only (native forwarding is a no-op until ready),
+    // then replayed to native once native error tracking initializes.
+    posthog.addExceptionStep('before-init', { screen: 'home' })
+
+    await posthog.ready()
+
+    await waitForExpect(100, () => {
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    })
+
+    // The resolved config is forwarded so the native buffer shares the same enabled/budget.
+    const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
+    expect(pluginConfig.errorTracking.exceptionSteps).toEqual({ enabled: true, maxBytes: 4096 })
+
+    // The pre-init step is replayed to native exactly once after init.
+    await waitForExpect(100, () => {
+      expect(mockPlugin.addExceptionStep).toHaveBeenCalledWith(
+        'before-init',
+        expect.objectContaining({ screen: 'home' })
+      )
+    })
+    expect(mockPlugin.addExceptionStep).toHaveBeenCalledTimes(1)
+
+    // A step recorded after init is forwarded live.
+    mockPlugin.addExceptionStep.mockClear()
+    posthog.addExceptionStep('after-init')
+    expect(mockPlugin.addExceptionStep).toHaveBeenCalledWith('after-init', undefined)
+
+    await posthog.shutdown()
+  })
+
+  it('does not forward exception steps to native when native error tracking is not enabled', async () => {
+    const { PostHog } = await import('../src/posthog-rn')
+    const posthog = new PostHog('test-token', { persistence: 'memory', flushInterval: 0 })
+
+    await posthog.ready()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    posthog.addExceptionStep('orphan')
+
+    expect(mockPlugin.setup).not.toHaveBeenCalled()
+    expect(mockPlugin.addExceptionStep).not.toHaveBeenCalled()
 
     await posthog.shutdown()
   })
