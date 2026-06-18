@@ -7,7 +7,9 @@ import { BrowserContext, Page } from '@playwright/test'
 // encoded frame back to the canvas's display size, so playback dimensions/aspect are unchanged -
 // only the encoded bytes shrink. Uses a canvas whose backing store (2000x1500) differs from its
 // CSS display size (1000x750), i.e. the "is it 1000 or 2000?" case, and drives the real init
-// config path (not a private method) across two independent contexts.
+// config path (not a private method) via two sequential recordings on the same page.
+// The canvas redraws random content each frame, so we assert the byte-size trend
+// (half-res frame is meaningfully smaller), not pixel identity between the two runs.
 
 type CanvasFrame = { dw: number; dh: number; base64Len: number }
 
@@ -112,9 +114,6 @@ test.describe('canvas capture resolution', () => {
         const fullRes = await recordCanvasFrame(page, context, undefined)
         // half resolution via the real init config
         const halfRes = await recordCanvasFrame(page, context, 0.5)
-
-        // eslint-disable-next-line no-console
-        console.log('\n=== CANVAS RESOLUTION VALIDATION ===\n' + JSON.stringify({ fullRes, halfRes }, null, 2))
 
         expect(fullRes).toBeDefined()
         expect(halfRes).toBeDefined()

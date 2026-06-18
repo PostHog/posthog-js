@@ -3960,6 +3960,9 @@ describe('Lazy SessionRecording', () => {
             ['a fraction', { resolutionScale: 0.6 }, 0.6],
             ['clamped up to 1', { resolutionScale: 2 }, 1],
             ['clamped to the floor', { resolutionScale: 0.01 }, 0.1],
+            ['zero clamped to the floor', { resolutionScale: 0 }, 0.1],
+            ['negative clamped to the floor', { resolutionScale: -1 }, 0.1],
+            ['NaN ignored (full res)', { resolutionScale: NaN }, 1],
             ['ignored when not a number', { resolutionScale: 'big' as any }, 1],
         ])('passes canvasResolutionScale when canvasCapture is %s', (_label, canvasCapture, expected) => {
             config.session_recording.canvasCapture = canvasCapture

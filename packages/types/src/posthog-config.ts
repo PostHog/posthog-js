@@ -568,10 +568,11 @@ export interface SessionRecordingOptions {
      * is enabled.
      *
      * - `resolutionScale`: capture canvas frames at a fraction of their display resolution. A
-     *   number in `(0, 1]`; `1` is full resolution (the default, matching today's behaviour) and,
-     *   e.g., `0.6` captures at 60%. Aspect ratio is preserved and replay upscales the frame back
-     *   to the original display size, so playback dimensions are unchanged, just softer. Resolution
-     *   is the highest-leverage lever for canvas byte size, since bytes scale with pixel area.
+     *   number in `(0, 1]`; `1` is full-resolution capture (the default) and, e.g., `0.6` captures
+     *   at 60%. Out-of-range or non-finite values are clamped into `(0, 1]`. Aspect ratio is
+     *   preserved and replay upscales the frame back to the original display size, so playback
+     *   dimensions are unchanged, just softer. Resolution is the highest-leverage lever for canvas
+     *   byte size, since bytes scale with pixel area.
      */
     canvasCapture?: {
         resolutionScale?: number
