@@ -1059,6 +1059,10 @@ export abstract class PostHogCoreStateless {
   }
 
   private normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+    // Top-level `type` is deprecated and a no-op for batch ingestion.
+    // Top-level `library` and `library_version` are deprecated; `$lib` and
+    // `$lib_version` in properties are the canonical SDK metadata fields.
+    // Keep these as fallbacks for legacy persisted queue entries.
     const { type: _type, library, library_version, ...sanitizedMessage } = message
     let properties = sanitizedMessage.properties as PostHogEventProperties | undefined
 

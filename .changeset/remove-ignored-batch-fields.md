@@ -8,4 +8,4 @@
 '@posthog/nuxt': patch
 ---
 
-Stop sending ignored top-level SDK metadata fields in event batch payloads.
+Stop sending deprecated no-op top-level `type`, `library`, and `library_version` fields in event batch payloads. Use `properties.$lib` and `properties.$lib_version` for SDK metadata; legacy queued `library` and `library_version` values are used as fallbacks when the official `$` properties are missing.
