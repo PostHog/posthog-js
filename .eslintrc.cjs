@@ -69,6 +69,7 @@ module.exports = {
             files: [
                 'packages/core/**',
                 'packages/mcp/**',
+                'packages/cli-analytics/**',
                 'packages/nextjs-config/**',
                 'packages/nuxt/**',
                 'packages/react-native/**',

@@ -1,0 +1,82 @@
+{
+  "name": "@posthog/cli-analytics",
+  "version": "0.1.0",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
+  "description": "PostHog SDK for command-line tools — tracks command usage, flags, intent, identity, and whether an AI agent or a human is driving the CLI",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/cli-analytics"
+  },
+  "scripts": {
+    "clean": "rimraf dist coverage",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "generate-version": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "pretest:unit": "pnpm generate-version",
+    "test:unit": "jest",
+    "prebuild": "pnpm generate-version",
+    "build": "rslib build",
+    "dev": "rslib build -w",
+    "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "engines": {
+    "node": "^20.20.0 || >=22.22.0"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/__tests__"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "PostHog",
+    "email": "engineering@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@posthog/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "catalog:",
+    "@babel/preset-typescript": "catalog:",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@rslib/core": "catalog:",
+    "@types/jest": "catalog:",
+    "@types/node": "^20.0.0",
+    "jest": "catalog:",
+    "posthog-node": "workspace:^"
+  },
+  "peerDependencies": {
+    "posthog-node": "^5.0.0"
+  },
+  "keywords": [
+    "posthog",
+    "cli",
+    "command-line",
+    "analytics",
+    "telemetry",
+    "agent",
+    "llm"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./commander": {
+      "types": "./dist/adapters/commander.d.ts",
+      "import": "./dist/adapters/commander.mjs",
+      "require": "./dist/adapters/commander.js",
+      "default": "./dist/adapters/commander.js"
+    }
+  }
+}
