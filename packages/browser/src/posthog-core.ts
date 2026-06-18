@@ -1855,8 +1855,9 @@ export class PostHog implements PostHogInterface {
      *
      * @example
      * ```js
-     * if(posthog.getFeatureFlag('beta-feature') === 'some-value') {
-     *      const someValue = posthog.getFeatureFlagPayload('beta-feature')
+     * const betaFeature = posthog.getFeatureFlagResult('beta-feature')
+     * if (betaFeature?.variant === 'some-value') {
+     *      const someValue = betaFeature?.payload
      *      // do something
      * }
      * ```
