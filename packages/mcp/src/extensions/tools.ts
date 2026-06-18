@@ -7,11 +7,20 @@ import { log } from './logger'
 
 export const GET_MORE_TOOLS_NAME = 'get_more_tools' as const
 
+/**
+ * The configured name of the `get_more_tools` virtual tool, falling back to the
+ * default. Resolve through here everywhere (inject + detect) so a custom name
+ * can't drift between call sites.
+ */
+export function resolveMissingCapabilityToolName(options?: { missingCapabilityToolName?: string }): string {
+  return options?.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
+}
+
 type ReportMissingToolDescriptor = ListToolsResult['tools'][number]
 
-export function getReportMissingToolDescriptor(): ReportMissingToolDescriptor {
+export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAME): ReportMissingToolDescriptor {
   return {
-    name: GET_MORE_TOOLS_NAME,
+    name,
     description:
       'Check for additional tools whenever your task might benefit from specialized capabilities - even if existing tools could work as a fallback.',
     inputSchema: {
@@ -40,9 +49,13 @@ export function getReportMissingToolDescriptor(): ReportMissingToolDescriptor {
   }
 }
 
-export function handleReportMissing(args: { context: string }): CallToolResult {
-  log(`Missing tool reported: ${JSON.stringify(args)}`)
-
+/**
+ * The canned acknowledgement returned to the agent after it calls
+ * `get_more_tools`. Reply with this from your dispatcher so the agent knows the
+ * report was recorded (custom dispatcher path); the `instrument()` path returns
+ * it automatically.
+ */
+export function getMoreToolsResult(): CallToolResult {
   return {
     content: [
       {
@@ -51,4 +64,9 @@ export function handleReportMissing(args: { context: string }): CallToolResult {
       },
     ],
   }
+}
+
+export function handleReportMissing(args: { context: string }): CallToolResult {
+  log(`Missing tool reported: ${JSON.stringify(args)}`)
+  return getMoreToolsResult()
 }

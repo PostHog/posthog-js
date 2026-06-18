@@ -9,7 +9,7 @@ import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
 import { createWrappedTool, getLiteralValue, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
-import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
+import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   instrumentInitializeHandler,
   instrumentToolsListHandler,
@@ -135,9 +135,12 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 function addTracingToToolCallbackInternal(
   tool: RegisteredTool,
   toolName: string,
-  _server: HighLevelMCPServerLike
+  server: HighLevelMCPServerLike
 ): RegisteredTool {
   const originalCallback = getToolFunction(tool)
+  const missingToolName = resolveMissingCapabilityToolName(
+    getServerTrackingData(server.server as MCPServerLike)?.options
+  )
 
   if (wrappedCallbacks.has(originalCallback)) {
     log(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
@@ -169,7 +172,7 @@ function addTracingToToolCallbackInternal(
       return input
     }
 
-    const cleanedArgs = toolName === GET_MORE_TOOLS_NAME ? args : stripConversationId(removeContextFromArgs(args))
+    const cleanedArgs = toolName === missingToolName ? args : stripConversationId(removeContextFromArgs(args))
 
     try {
       if (cleanedArgs === undefined) {
@@ -242,7 +245,7 @@ async function handleWrappedToolsCall(
     return await originalHandler(request, extra)
   }
 
-  if (request.params?.name === GET_MORE_TOOLS_NAME) {
+  if (request.params?.name === resolveMissingCapabilityToolName(data.options)) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,
