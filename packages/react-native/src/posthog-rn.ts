@@ -1008,7 +1008,7 @@ export class PostHog extends PostHogCore {
    * @example
    * ```js
    * // get feature flag payload
-   * const payload = posthog.getFeatureFlagPayload('key-for-your-multivariate-flag')
+   * const payload = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')?.payload
    * ```
    *
    * @public
