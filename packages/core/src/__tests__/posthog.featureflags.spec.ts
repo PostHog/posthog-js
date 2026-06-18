@@ -797,7 +797,6 @@ describe('PostHog Feature Flags v4', () => {
                   $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
                   $feature_flag_evaluated_at: expect.any(Number),
                 },
-                type: 'capture',
               },
             ],
           })
@@ -826,7 +825,6 @@ describe('PostHog Feature Flags v4', () => {
                 $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
                 $feature_flag_evaluated_at: expect.any(Number),
               },
-              type: 'capture',
             },
           ],
         })
@@ -848,7 +846,6 @@ describe('PostHog Feature Flags v4', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -870,7 +867,6 @@ describe('PostHog Feature Flags v4', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -914,7 +910,6 @@ describe('PostHog Feature Flags v4', () => {
                 '$feature/json-payload': true,
                 '$feature/feature-variant': 'variant',
               },
-              type: 'capture',
             },
           ],
         })
@@ -1002,7 +997,6 @@ describe('PostHog Feature Flags v4', () => {
                   $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
                   $feature_flag_evaluated_at: 1640995200000,
                 },
-                type: 'capture',
               },
             ],
           })
@@ -1404,7 +1398,6 @@ describe('PostHog Feature Flags v4', () => {
               $feature_flag_bootstrapped_payload: { some: 'key' },
               $used_bootstrap_value: true,
             },
-            type: 'capture',
           },
         ],
       })
@@ -1550,7 +1543,6 @@ describe('PostHog Feature Flags v4', () => {
                 $feature_flag_bootstrapped_payload: { color: 'feature-1-bootstrap-color' },
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })

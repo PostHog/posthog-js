@@ -294,8 +294,8 @@ export type PostHogFetchResponse = {
 }
 
 export type PostHogQueueItem = {
-  message: any
-  callback?: (err: any) => void
+  message?: PostHogEventProperties
+  callback?: (err: unknown) => void
 }
 
 export type PostHogEventProperties = {

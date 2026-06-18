@@ -115,6 +115,10 @@ function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHt
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
 
+function isPostHogEventProperties(value: JsonType | undefined): value is PostHogEventProperties {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 /**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core
  * (single source of truth — same policy events already use in `_flush()`) so
@@ -966,13 +970,14 @@ export abstract class PostHogCoreStateless {
         return
       }
 
-      let message: PostHogEventProperties | null = this.prepareMessage(type, _message, options)
+      let message: PostHogEventProperties | null = this.prepareMessage(_message, options)
 
       // Allow subclasses to transform or filter the message
       message = this.processBeforeEnqueue(message)
       if (message === null) {
         return
       }
+      message = this.normalizeMessage(message)
 
       const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
 
@@ -1012,13 +1017,14 @@ export abstract class PostHogCoreStateless {
       return
     }
 
-    let message: PostHogEventProperties | null = this.prepareMessage(type, _message, options)
+    let message: PostHogEventProperties | null = this.prepareMessage(_message, options)
 
     // Allow subclasses to transform or filter the message (e.g., before_send hook)
     message = this.processBeforeEnqueue(message)
     if (message === null) {
       return
     }
+    message = this.normalizeMessage(message)
 
     const data: Record<string, any> = {
       api_key: this.apiKey,
@@ -1056,22 +1062,42 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  protected prepareMessage(type: string, _message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+  private normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+    // Top-level `type` is deprecated and a no-op for batch ingestion.
+    // Top-level `library` and `library_version` are deprecated; `$lib` and
+    // `$lib_version` in properties are the canonical SDK metadata fields.
+    // Keep these as fallbacks for legacy persisted queue entries.
+    const { type: _type, library, library_version, ...sanitizedMessage } = message
+    let properties = isPostHogEventProperties(sanitizedMessage.properties) ? sanitizedMessage.properties : undefined
+
+    if (library !== undefined && properties?.$lib === undefined) {
+      properties = { ...(properties || {}), $lib: library }
+    }
+
+    if (library_version !== undefined && properties?.$lib_version === undefined) {
+      properties = { ...(properties || {}), $lib_version: library_version }
+    }
+
+    if (properties) {
+      sanitizedMessage.properties = properties
+    }
+
+    return sanitizedMessage
+  }
+
+  protected prepareMessage(_message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
     const message = {
       ..._message,
-      type: type,
-      library: this.getLibraryId(),
-      library_version: this.getLibraryVersion(),
       timestamp: options?.timestamp ? options?.timestamp : currentISOTime(),
       uuid: options?.uuid ? options.uuid : uuidv7(),
     }
 
     const addGeoipDisableProperty = options?.disableGeoip ?? this.disableGeoip
     if (addGeoipDisableProperty) {
-      if (!message.properties) {
+      if (!isPostHogEventProperties(message.properties)) {
         message.properties = {}
       }
-      message['properties']['$geoip_disable'] = true
+      message.properties['$geoip_disable'] = true
     }
 
     if (message.distinctId) {
@@ -1181,7 +1207,9 @@ export abstract class PostHogCoreStateless {
 
     while (queue.length > 0 && sentMessages.length < originalQueueLength) {
       const batchItems = queue.slice(0, this.maxBatchSize)
-      const batchMessages = batchItems.map((item) => item.message)
+      const batchMessages = batchItems.map((item) =>
+        item.message === undefined ? item.message : this.normalizeMessage(item.message)
+      )
 
       const persistQueueChange = async (): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
