@@ -1203,7 +1203,9 @@ export abstract class PostHogCoreStateless {
 
     while (queue.length > 0 && sentMessages.length < originalQueueLength) {
       const batchItems = queue.slice(0, this.maxBatchSize)
-      const batchMessages = batchItems.map((item) => this.normalizeMessage(item.message))
+      const batchMessages = batchItems.map((item) =>
+        item.message === undefined ? item.message : this.normalizeMessage(item.message)
+      )
 
       const persistQueueChange = async (): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
