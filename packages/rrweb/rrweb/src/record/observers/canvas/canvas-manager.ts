@@ -119,11 +119,6 @@ export class CanvasManager {
     this.mutationCb = options.mutationCb;
     this.mirror = options.mirror;
 
-    const scale =
-      typeof resolutionScale === 'number' && Number.isFinite(resolutionScale)
-        ? Math.min(1, Math.max(MIN_CANVAS_RESOLUTION_SCALE, resolutionScale))
-        : 1;
-
     if (recordCanvas && sampling === 'all')
       this.initCanvasMutationObserver(
         win,
@@ -134,7 +129,7 @@ export class CanvasManager {
     if (recordCanvas && typeof sampling === 'number')
       this.initCanvasFPSObserver(sampling, win, blockClass, blockSelector, {
         dataURLOptions,
-        scale,
+        resolutionScale,
       });
   }
 
@@ -162,12 +157,23 @@ export class CanvasManager {
     blockSelector: string | null,
     options: {
       dataURLOptions: DataURLOptions;
-      scale: number;
+      resolutionScale?: number;
     },
   ) {
     if (!('OffscreenCanvas' in win)) {
       return;
     }
+
+    // fraction of the canvas display size to capture frames at, clamped to
+    // [MIN_CANVAS_RESOLUTION_SCALE, 1]; invalid/unset means full resolution.
+    const scale =
+      typeof options.resolutionScale === 'number' &&
+      Number.isFinite(options.resolutionScale)
+        ? Math.min(
+            1,
+            Math.max(MIN_CANVAS_RESOLUTION_SCALE, options.resolutionScale),
+          )
+        : 1;
 
     const canvasContextReset = initCanvasContextObserver(
       win,
@@ -223,7 +229,7 @@ export class CanvasManager {
       });
     };
 
-    const scale = options.scale;
+    const timeBetweenSnapshots = 1000 / fps;
     let lastSnapshotTime = 0;
     let rafId: number;
 
@@ -250,7 +256,7 @@ export class CanvasManager {
     };
 
     const takeCanvasSnapshots = (timestamp: DOMHighResTimeStamp) => {
-      if (lastSnapshotTime && timestamp - lastSnapshotTime < 1000 / fps) {
+      if (lastSnapshotTime && timestamp - lastSnapshotTime < timeBetweenSnapshots) {
         rafId = requestAnimationFrame(takeCanvasSnapshots);
         return;
       }
