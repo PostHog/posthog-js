@@ -45,11 +45,11 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         const {
             LazyLoadedSessionRecording,
         } = require('../../../extensions/replay/external/lazy-loaded-session-recorder')
-        const { assignableWindow } = require('../../../utils/globals')
+        const { assignableWindow } = require('@posthog/browser-common/utils/globals')
         const { PostHogPersistence } = require('../../../posthog-persistence')
         const { SessionIdManager } = require('../../../sessionid')
-        const { RequestRouter } = require('../../../utils/request-router')
-        const { SimpleEventEmitter } = require('../../../utils/simple-event-emitter')
+        const { RequestRouter } = require('@posthog/browser-common/utils/request-router')
+        const { SimpleEventEmitter } = require('@posthog/browser-common/utils/simple-event-emitter')
         const { createMockConfig, createMockPostHog } = require('../../helpers/posthog-instance')
         const { SESSION_RECORDING_REMOTE_CONFIG, SESSION_RECORDING_IS_SAMPLED } = require('../../../constants')
 

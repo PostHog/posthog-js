@@ -1,6 +1,6 @@
 import { PostHog } from '../posthog-core'
-import { assignableWindow } from '../utils/globals'
-import { createLogger } from '../utils/logger'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 const logger = createLogger('[PostHog Intercom integration]')
 

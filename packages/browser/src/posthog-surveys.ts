@@ -13,8 +13,8 @@ import {
     SurveyRenderReason,
 } from './posthog-surveys-types'
 import { Properties, RemoteConfig } from './types'
-import { assignableWindow, document } from './utils/globals'
-import { SurveyEventReceiver } from './utils/survey-event-receiver'
+import { assignableWindow, document } from '@posthog/browser-common/utils/globals'
+import { SurveyEventReceiver } from '@posthog/browser-common/utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
@@ -23,7 +23,7 @@ import {
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
-} from './utils/survey-utils'
+} from '@posthog/browser-common/utils/survey-utils'
 import { isNullish, isUndefined, isArray } from '@posthog/core'
 
 export class PostHogSurveys implements Extension {

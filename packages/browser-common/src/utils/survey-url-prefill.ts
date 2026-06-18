@@ -1,5 +1,5 @@
-import { Survey, SurveyQuestion, SurveyQuestionBranchingType, SurveyQuestionType } from '../posthog-surveys-types'
-import { getSurveyResponseKey } from '../extensions/surveys/surveys-extension-utils'
+import { SurveyQuestionBranchingType, SurveyQuestionType, type Survey, type SurveyQuestion } from '../types'
+import { getSurveyResponseKey } from '@posthog/core/surveys'
 import { logger } from './logger'
 import { isUndefined } from '@posthog/core'
 import { getNextSurveyStep } from './survey-branching'

@@ -4,7 +4,7 @@ import '../../entrypoints/default-extensions'
 import { PostHog, init_as_module } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
 import { PostHogPersistence } from '../../posthog-persistence'
-import { assignableWindow } from '../../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '../../uuidv7'
 
 export const createPosthogInstance = async (

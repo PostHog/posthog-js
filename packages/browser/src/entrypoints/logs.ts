@@ -3,7 +3,7 @@ import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
 import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { PostHog } from '../posthog-core'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
 

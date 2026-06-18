@@ -1,4 +1,4 @@
-import { ProductTour } from '../posthog-product-tours-types'
+import type { ProductTour } from '../types'
 
 export function doesTourActivateByEvent(tour: Pick<ProductTour, 'conditions'>): boolean {
     return !!(tour.conditions?.events && tour.conditions.events.values?.length > 0)

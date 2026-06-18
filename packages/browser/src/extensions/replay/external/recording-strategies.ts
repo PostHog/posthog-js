@@ -37,8 +37,8 @@ import {
 } from './triggerMatching'
 import { sampleOnProperty } from '../../sampling'
 import { isBoolean, isNull, isNullish, isNumber, isObject, isUndefined } from '@posthog/core'
-import { createLogger } from '../../../utils/logger'
-import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { matchTriggerPropertyFilters } from '@posthog/browser-common/utils/property-utils'
 
 const logger = createLogger('[SessionRecording]')
 

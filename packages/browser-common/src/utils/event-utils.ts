@@ -1,20 +1,21 @@
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
-import { isNull, stripLeadingDollar } from '@posthog/core'
-import { Properties } from '../types'
-import Config from '../config'
-import { SDK_DIST_CHANNEL } from '../constants'
-import { each, extend, stripEmptyProperties } from './index'
-import { document, location, userAgent, window } from './globals'
 import {
-    BrowserDetectionHints,
     detectBrowser,
     detectBrowserVersion,
     detectDevice,
     detectDeviceType,
     detectOS,
+    isNull,
+    isUndefined,
+    stripLeadingDollar,
 } from '@posthog/core'
-import { cookieStore } from '../storage'
+import type { BrowserDetectionHints } from '@posthog/core'
+import type { Properties } from '../types'
+import { getBrowserCommonRuntime } from './runtime'
+import { each, extend, stripEmptyProperties } from './index'
+import { document, location, userAgent, window } from './globals'
 
+const SDK_DIST_CHANNEL = '$sdk_dist_channel'
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
 // CAMPAIGN_PARAMS and EVENT_TO_PERSON_PROPERTIES should be kept in sync with
@@ -126,9 +127,10 @@ function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record
 
 function _getCampaignParamsFromCookie(): Record<string, string> {
     const params: Record<string, any> = {}
+    const cookieStore = getBrowserCommonRuntime().cookieStore
     each(COOKIE_CAMPAIGN_PARAMS, function (kwkey) {
-        const kw = cookieStore._get(kwkey)
-        params[kwkey] = kw ? kw : null
+        const kw = cookieStore?._get(kwkey)
+        params[kwkey] = kw ? String(kw) : null
     })
 
     return params
@@ -291,7 +293,31 @@ export function getEventProperties(
         : []
     const [os_name, os_version] = detectOS(userAgent)
     const browserHints = getBrowserDetectionHints()
-    const browserOptions = { detectGoogleSearchApp }
+    const browserOptions = isUndefined(detectGoogleSearchApp) ? undefined : { detectGoogleSearchApp }
+    const deviceOptions: {
+        userAgentDataPlatform?: string
+        maxTouchPoints?: number
+        screenWidth?: number
+        screenHeight?: number
+        devicePixelRatio?: number
+    } = {}
+    // eslint-disable-next-line compat/compat
+    if (!isUndefined(navigator?.userAgentData?.platform)) {
+        // eslint-disable-next-line compat/compat
+        deviceOptions.userAgentDataPlatform = navigator.userAgentData.platform
+    }
+    if (!isUndefined(navigator?.maxTouchPoints)) {
+        deviceOptions.maxTouchPoints = navigator.maxTouchPoints
+    }
+    if (!isUndefined(window?.screen?.width)) {
+        deviceOptions.screenWidth = window.screen.width
+    }
+    if (!isUndefined(window?.screen?.height)) {
+        deviceOptions.screenHeight = window.screen.height
+    }
+    if (!isUndefined(window?.devicePixelRatio)) {
+        deviceOptions.devicePixelRatio = window.devicePixelRatio
+    }
 
     const properties = extend(
         stripEmptyProperties({
@@ -299,14 +325,7 @@ export function getEventProperties(
             $os_version: os_version,
             $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions),
             $device: detectDevice(userAgent),
-            $device_type: detectDeviceType(userAgent, {
-                // eslint-disable-next-line compat/compat
-                userAgentDataPlatform: navigator?.userAgentData?.platform,
-                maxTouchPoints: navigator?.maxTouchPoints,
-                screenWidth: window?.screen?.width,
-                screenHeight: window?.screen?.height,
-                devicePixelRatio: window?.devicePixelRatio,
-            }),
+            $device_type: detectDeviceType(userAgent, deviceOptions),
             $timezone: getTimezone(),
             $timezone_offset: getTimezoneOffset(),
         }),
@@ -322,15 +341,16 @@ export function getEventProperties(
             $screen_width: window?.screen.width,
             $viewport_height: window?.innerHeight,
             $viewport_width: window?.innerWidth,
-            $lib: Config.LIB_NAME,
-            $lib_version: Config.LIB_VERSION,
+            $lib: getBrowserCommonRuntime().libName,
+            $lib_version: getBrowserCommonRuntime().libVersion,
             $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
             $time: Date.now() / 1000, // epoch time in seconds
         }
     )
 
-    if (Config.SDK_DIST_CHANNEL) {
-        properties[SDK_DIST_CHANNEL] = Config.SDK_DIST_CHANNEL
+    const sdkDistChannel = getBrowserCommonRuntime().sdkDistChannel
+    if (sdkDistChannel) {
+        properties[SDK_DIST_CHANNEL] = sdkDistChannel
     }
 
     return properties

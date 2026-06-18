@@ -1,10 +1,12 @@
-import { PRODUCT_TOURS_ACTIVATED } from '../constants'
-import { ProductTour, ProductTourEventName } from '../posthog-product-tours-types'
-import { PostHog } from '../posthog-core'
-import { ActivationOutcome, EventReceiver } from './event-receiver'
+import { ProductTourEventName, type ProductTour } from '../types'
+import type { PostHogLike as PostHog } from '../types'
+import { getBrowserCommonRuntime } from './runtime'
+import { EventReceiver, type ActivationOutcome } from './event-receiver'
 import { createLogger } from './logger'
-import { localStore } from '../storage'
-import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX } from '../extensions/product-tours/constants'
+
+const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
+const TOUR_COMPLETED_KEY_PREFIX = 'ph_tour_completed_'
+const TOUR_DISMISSED_KEY_PREFIX = 'ph_tour_dismissed_'
 
 const logger = createLogger('[Product Tour Event Receiver]')
 
@@ -22,11 +24,11 @@ export class ProductTourEventReceiver extends EventReceiver<ProductTour> {
     }
 
     protected _getItems(callback: (items: ProductTour[]) => void): void {
-        this._instance?.productTours?.getProductTours(callback)
+        this._instance?.productTours?.getProductTours?.(callback)
     }
 
     protected _cancelPendingItem(itemId: string): void {
-        this._instance?.productTours?.cancelPendingTour(itemId)
+        this._instance?.productTours?.cancelPendingTour?.(itemId)
     }
 
     protected _getLogger(): ReturnType<typeof createLogger> {
@@ -41,7 +43,8 @@ export class ProductTourEventReceiver extends EventReceiver<ProductTour> {
         if (!itemId) return true
         const completedKey = `${TOUR_COMPLETED_KEY_PREFIX}${itemId}`
         const dismissedKey = `${TOUR_DISMISSED_KEY_PREFIX}${itemId}`
-        return !!(localStore._get(completedKey) || localStore._get(dismissedKey))
+        const localStore = getBrowserCommonRuntime().localStore
+        return !!(localStore?._get(completedKey) || localStore?._get(dismissedKey))
     }
 
     protected _activationOutcome(event: string): ActivationOutcome {

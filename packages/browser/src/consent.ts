@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import { COOKIELESS_ALWAYS, COOKIELESS_ON_REJECT } from './constants'
-import { assignableWindow, navigator } from './utils/globals'
+import { assignableWindow, navigator } from '@posthog/browser-common/utils/globals'
 import { cookieStore, localStore } from './storage'
 import { PersistentStore } from './types'
 import { isNoLike, isYesLike } from '@posthog/core'

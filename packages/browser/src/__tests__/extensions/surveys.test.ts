@@ -24,7 +24,7 @@ import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
 import { FlagsResponse } from '../../types'
-import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
+import { SURVEY_IN_PROGRESS_PREFIX } from '@posthog/browser-common/utils/survey-utils'
 import { createMockPostHog } from '../helpers/posthog-instance'
 
 declare const global: any

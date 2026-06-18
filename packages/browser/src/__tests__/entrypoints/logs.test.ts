@@ -1,4 +1,4 @@
-import { assignableWindow } from '../../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { PostHog } from '../../posthog-core'
 
 // Mock external OpenTelemetry dependencies

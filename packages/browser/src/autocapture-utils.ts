@@ -1,10 +1,10 @@
 import { AutocaptureConfig, PostHogConfig, Properties } from './types'
-import { each, entries } from './utils'
+import { each, entries } from '@posthog/browser-common/utils'
 
 import { isNullish, isString, isUndefined, isArray, isBoolean } from '@posthog/core'
-import { logger } from './utils/logger'
-import { window } from './utils/globals'
-import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { window } from '@posthog/browser-common/utils/globals'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from '@posthog/browser-common/utils/element-utils'
 import { includes, trim } from '@posthog/core'
 
 export function splitClassString(s: string): string[] {

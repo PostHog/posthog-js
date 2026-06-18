@@ -1,0 +1,17 @@
+{
+    "extends": "@posthog-tooling/tsconfig-base",
+    "compilerOptions": {
+        "rootDir": "./src",
+        "noEmit": true,
+        "target": "ES2024",
+        "lib": ["ES2024", "DOM", "DOM.Iterable"],
+        "types": ["node"],
+        "module": "preserve",
+        "moduleResolution": "bundler",
+        "moduleDetection": "force",
+        "allowImportingTsExtensions": true,
+        "verbatimModuleSyntax": true,
+        "exactOptionalPropertyTypes": true
+    },
+    "include": ["src/**/*"]
+}

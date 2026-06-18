@@ -3,7 +3,7 @@ import {
     convertPrefillToResponses,
     calculatePrefillStartIndex,
     PrefillParams,
-} from '../../utils/survey-url-prefill'
+} from '@posthog/browser-common/utils/survey-url-prefill'
 import {
     Survey,
     SurveyQuestion,

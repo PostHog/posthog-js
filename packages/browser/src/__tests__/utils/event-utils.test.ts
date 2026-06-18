@@ -5,8 +5,8 @@ import {
     getEventProperties,
     getTimezone,
     getTimezoneOffset,
-} from '../../utils/event-utils'
-import * as globals from '../../utils/globals'
+} from '@posthog/browser-common/utils/event-utils'
+import * as globals from '@posthog/browser-common/utils/globals'
 import { isUndefined } from '@posthog/core'
 
 describe(`event-utils`, () => {

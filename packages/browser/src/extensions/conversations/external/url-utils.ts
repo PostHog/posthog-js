@@ -1,5 +1,5 @@
-import { createLogger } from '../../../utils/logger'
-import { window } from '../../../utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { window } from '@posthog/browser-common/utils/globals'
 
 const logger = createLogger('[ConversationsManager]')
 

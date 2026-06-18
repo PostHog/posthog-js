@@ -1,4 +1,4 @@
-import { addEventListener, each, extend } from './utils'
+import { addEventListener, each, extend } from '@posthog/browser-common/utils'
 import {
     autocaptureCompatibleElements,
     getClassNames,
@@ -22,10 +22,10 @@ import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { isBoolean, isFunction, isNull, isObject } from '@posthog/core'
-import { createLogger } from './utils/logger'
-import { document, window } from './utils/globals'
-import { convertToURL } from './utils/request-utils'
-import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from '@posthog/browser-common/utils/element-utils'
 import { includes } from '@posthog/core'
 import type { Extension } from './extensions/types'
 

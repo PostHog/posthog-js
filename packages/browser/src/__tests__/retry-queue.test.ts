@@ -1,7 +1,7 @@
 /* eslint-disable compat/compat */
 
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 
 describe('RetryQueue', () => {
     const mockPosthog = {

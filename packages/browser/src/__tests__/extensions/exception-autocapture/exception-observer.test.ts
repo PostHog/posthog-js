@@ -2,7 +2,7 @@
 import { PostHog } from '../../../posthog-core'
 import { FlagsResponse } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
-import { assignableWindow, window } from '../../../utils/globals'
+import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { uuidv7 } from '../../../uuidv7'
 

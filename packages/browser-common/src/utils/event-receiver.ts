@@ -1,7 +1,7 @@
-import { SurveyActionType, SurveyEventType, SurveyEventWithFilters } from '../posthog-surveys-types'
-import { ActionMatcher } from '../extensions/surveys/action-matcher'
-import { PostHog } from '../posthog-core'
-import { CaptureResult } from '../types'
+import { SurveyEventType, type SurveyActionType, type SurveyEventWithFilters } from '../types'
+import { ActionMatcher } from './action-matcher'
+import type { PostHogLike as PostHog } from '../types'
+import type { CaptureResult } from '../types'
 import { matchPropertyFilters } from './property-utils'
 import { isUndefined } from '@posthog/core'
 import { createLogger } from './logger'
@@ -196,7 +196,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         const matchEventToItem = (eventName: string, eventPayload?: CaptureResult) => {
             this.onEvent(eventName, eventPayload)
         }
-        this._instance?._addCaptureHook(matchEventToItem)
+        this._instance?._addCaptureHook?.(matchEventToItem)
 
         this._eventToItems = this._buildEventToItemMap(items, SurveyEventType.Activation)
         this._cancelEventToItems = this._buildEventToItemMap(items, SurveyEventType.Cancellation)

@@ -15,7 +15,7 @@ import {
     getClassNames,
     makeSafeText,
 } from '../autocapture-utils'
-import { document } from '../utils/globals'
+import { document } from '@posthog/browser-common/utils/globals'
 import { makeMouseEvent } from './autocapture.test'
 import { AutocaptureConfig } from '../types'
 

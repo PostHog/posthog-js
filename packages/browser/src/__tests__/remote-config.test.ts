@@ -1,9 +1,9 @@
 import { RemoteConfigLoader } from '../remote-config'
-import { RequestRouter } from '../utils/request-router'
+import { RequestRouter } from '@posthog/browser-common/utils/request-router'
 import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig } from '../types'
 import '../entrypoints/external-scripts-loader'
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
 
 describe('RemoteConfigLoader', () => {
@@ -251,8 +251,8 @@ describe('RemoteConfigLoader', () => {
         it('skips refresh when no document is available', async () => {
             try {
                 await jest.isolateModulesAsync(async () => {
-                    jest.doMock('../utils/globals', () => ({
-                        ...jest.requireActual('../utils/globals'),
+                    jest.doMock('@posthog/browser-common/utils/globals', () => ({
+                        ...jest.requireActual('@posthog/browser-common/utils/globals'),
                         document: undefined,
                     }))
 
@@ -268,7 +268,7 @@ describe('RemoteConfigLoader', () => {
                     expect(reloadFeatureFlags).not.toHaveBeenCalled()
                 })
             } finally {
-                jest.dontMock('../utils/globals')
+                jest.dontMock('@posthog/browser-common/utils/globals')
             }
         })
     })

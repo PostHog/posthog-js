@@ -9,7 +9,7 @@
  */
 
 // polyfill for IE11
-import { window } from './utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 
 import { isNumber, isUndefined } from '@posthog/core'
 

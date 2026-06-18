@@ -1,6 +1,6 @@
-import { PostHog } from '../posthog-core'
-import { Survey } from '../posthog-surveys-types'
-import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
+import type { PostHogLike as PostHog } from '../types'
+import type { Survey } from '../types'
+const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 import { createLogger } from './logger'
 import { getBrowserLanguage } from './event-utils'
 import { isFunction } from '@posthog/core'
@@ -41,10 +41,10 @@ export function detectUserLanguage(instance: PostHog): string | null {
  * @param instance - PostHog instance to retrieve person properties
  * @returns An object containing the translated survey and the language used (or null if no translation applied)
  */
-export function applySurveyTranslationForUser(
-    survey: Survey,
+export function applySurveyTranslationForUser<TSurvey extends Survey>(
+    survey: TSurvey,
     instance: PostHog
-): { survey: Survey; language: string | null } {
+): { survey: TSurvey; language: string | null } {
     const userLanguage = detectUserLanguage(instance)
 
     if (!userLanguage) {

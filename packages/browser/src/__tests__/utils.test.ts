@@ -7,14 +7,19 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, extend, isCrossDomainCookie, migrateConfigField } from '../utils'
-import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
+import { _copyAndTruncateStrings, extend, isCrossDomainCookie, migrateConfigField } from '@posthog/browser-common/utils'
+import {
+    isLikelyBot,
+    DEFAULT_BLOCKED_UA_STRS,
+    isBlockedUA,
+    NavigatorUAData,
+} from '@posthog/browser-common/utils/blocked-uas'
 import { expect } from '@jest/globals'
 
-import { _base64Encode } from '../utils/encode-utils'
-import { getPersonPropertiesHash, propertyComparisons } from '../utils/property-utils'
+import { _base64Encode } from '@posthog/browser-common/utils/encode-utils'
+import { getPersonPropertiesHash, propertyComparisons } from '@posthog/browser-common/utils/property-utils'
 import { detectDeviceType } from '@posthog/core'
-import { getEventProperties } from '../utils/event-utils'
+import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
 
 function userAgentFor(botString: string) {
     const randOne = (Math.random() + 1).toString(36).substring(7)

@@ -15,7 +15,7 @@
  *
  * @see web-vitals-with-attribution.ts
  */
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 
 import { onINP, onLCP, onCLS, onFCP } from 'web-vitals'
 

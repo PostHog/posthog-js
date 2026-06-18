@@ -28,10 +28,15 @@ import {
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
-import { addEventListener } from '../../../utils'
+import {
+    assignableWindow,
+    LazyLoadedSessionRecordingInterface,
+    window,
+    document,
+} from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils'
 import { MutationThrottler } from './mutation-throttler'
-import { createLogger } from '../../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import {
     clampToRange,
     gzipCompress,
@@ -72,7 +77,7 @@ import {
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
-import { isLocalhost } from '../../../utils/request-utils'
+import { isLocalhost } from '@posthog/browser-common/utils/request-utils'
 import Config from '../../../config'
 import { FlushedSizeTracker } from './flushed-size-tracker'
 import {

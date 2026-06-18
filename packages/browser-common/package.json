@@ -1,0 +1,60 @@
+{
+    "name": "@posthog/browser-common",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Shared browser extension primitives for PostHog JavaScript SDKs",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/browser-common"
+    },
+    "type": "module",
+    "sideEffects": false,
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "typesVersions": {
+        "*": {
+            "types": ["src/types.ts"],
+            "utils": ["src/utils/index.ts"],
+            "utils/*": ["src/utils/*.ts"]
+        }
+    },
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "import": "./src/index.ts"
+        },
+        "./types": {
+            "types": "./src/types.ts",
+            "import": "./src/types.ts"
+        },
+        "./utils": {
+            "types": "./src/utils/index.ts",
+            "import": "./src/utils/index.ts"
+        },
+        "./utils/*": {
+            "types": "./src/utils/*.ts",
+            "import": "./src/utils/*.ts"
+        }
+    },
+    "scripts": {
+        "lint": "eslint src tests",
+        "lint:fix": "eslint src tests --fix",
+        "build": "tsc -p tsconfig.json --noEmit",
+        "test:unit": "pnpm --filter=@posthog/types build && pnpm --filter=@posthog/core build && jest -c jest.config.cjs",
+        "check-types": "pnpm build"
+    },
+    "dependencies": {
+        "@posthog/core": "workspace:^",
+        "@posthog/types": "workspace:^"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@types/jest": "catalog:",
+        "jest": "catalog:",
+        "ts-jest": "catalog:",
+        "tslib": "catalog:",
+        "typescript": "^6.0.3"
+    }
+}

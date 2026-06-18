@@ -1,6 +1,6 @@
 import { PostHog } from '../../posthog-core'
 import LazyLoadedDeadClicksAutocapture from '../../entrypoints/dead-clicks-autocapture'
-import { assignableWindow, document } from '../../utils/globals'
+import { assignableWindow, document } from '@posthog/browser-common/utils/globals'
 
 // need to fake the timer before jsdom inits
 jest.useFakeTimers()
