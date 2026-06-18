@@ -794,7 +794,11 @@ record.takeFullSnapshot = (isCheckout?: boolean) => {
   takeFullSnapshot(isCheckout);
 };
 
-record.reconfigureCanvas = (config: { fps?: number; quality?: number }) => {
+record.reconfigureCanvas = (config: {
+  fps?: number;
+  quality?: number;
+  scale?: number;
+}) => {
   canvasManager?.setCaptureConfig(config);
 };
 

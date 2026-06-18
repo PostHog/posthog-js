@@ -5547,6 +5547,26 @@ describe('Lazy SessionRecording', () => {
             expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 1 }))
         })
 
+        it('steps capture resolution down per crossed threshold when varyResolution is set', () => {
+            config.session_recording.canvasCapture = { varyResolution: true, thresholdsMb: [1, 2, 3] }
+            const tracker = recorder['_flushedSizeTracker']
+
+            recorder['_maybeVaryCanvasCapture']() // level 0 → full resolution
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 1 }))
+
+            tracker.trackSize(recorder.sessionId, 1.5 * oneMb) // level 1
+            recorder['_maybeVaryCanvasCapture']()
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.75 }))
+
+            tracker.trackSize(recorder.sessionId, 1 * oneMb) // level 2
+            recorder['_maybeVaryCanvasCapture']()
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.6 }))
+
+            tracker.trackSize(recorder.sessionId, 1 * oneMb) // level 3
+            recorder['_maybeVaryCanvasCapture']()
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.5 }))
+        })
+
         it.each([
             ['wrong length', [10, 20]],
             ['not strictly increasing', [30, 20, 10]],

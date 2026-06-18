@@ -568,12 +568,16 @@ export interface SessionRecordingOptions {
      * so heavy canvas recordings (e.g. animation/video) cost less without dropping data. Keyed
      * on the per-session flushed-bytes counter; resets to full fidelity on a new session.
      *
-     * Both levers are off by default and intended for careful, opt-in rollout. Playback fidelity
-     * matters, so each step is gentle: at each crossed threshold fps drops by one (e.g. 4 -> 3 -> 2)
-     * and/or webp quality drops slightly.
+     * All levers are off by default and intended for careful, opt-in rollout. Playback fidelity
+     * matters, so each step is gentle: at each crossed threshold fps drops by one (e.g. 4 -> 3 -> 2),
+     * webp quality drops slightly, and/or the captured resolution is scaled down.
      *
      * - `varyFps`: step the canvas snapshot fps down by one per crossed threshold.
      * - `varyQuality`: step the webp encode quality down slightly per crossed threshold.
+     * - `varyResolution`: step the captured frame resolution down per crossed threshold (aspect
+     *   ratio preserved; replay upscales it back to the original display size, so playback
+     *   dimensions are unchanged, just softer). Resolution is the highest-leverage lever since
+     *   bytes scale with pixel area.
      * - `thresholdsMb`: the three (ascending) per-session size boundaries, in MiB, at which each
      *   successive degradation step kicks in. Must be exactly three values, strictly increasing,
      *   each between 1 and 1024 MiB — anything else is ignored and the defaults ([50, 150, 300])
@@ -584,6 +588,7 @@ export interface SessionRecordingOptions {
     canvasCapture?: {
         varyFps?: boolean
         varyQuality?: boolean
+        varyResolution?: boolean
         thresholdsMb?: [number, number, number]
     }
 

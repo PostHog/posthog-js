@@ -99,6 +99,10 @@ const DEFAULT_CANVAS_VARY_THRESHOLDS_MB = [50, 150, 300]
 const MIN_CANVAS_VARY_FPS = 1
 const CANVAS_QUALITY_STEP = 0.05
 const CANVAS_VARIED_QUALITY_FLOOR = 0.25
+// capture-resolution scale per crossed threshold (index === level). aspect ratio is preserved
+// and replay upscales back to display size, so playback dimensions are unchanged, just softer.
+// floored at 0.5 (half each dimension ~= a quarter of the pixels) to keep it legible.
+const CANVAS_RESOLUTION_SCALE_BY_LEVEL = [1, 0.75, 0.6, 0.5]
 const TWO_SECONDS = 2000
 const ONE_KB = 1024
 
@@ -567,6 +571,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _lastAppliedCanvasFps?: number
     private _lastAppliedCanvasQuality?: number
+    private _lastAppliedCanvasScale?: number
     private _loggedInvalidCanvasThresholds = false
 
     // the three ascending per-session byte boundaries at which canvas fidelity steps down.
@@ -611,8 +616,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
-        const { varyFps, varyQuality } = this._instance.config.session_recording.canvasCapture || {}
-        if (!varyFps && !varyQuality) {
+        const { varyFps, varyQuality, varyResolution } = this._instance.config.session_recording.canvasCapture || {}
+        if (!varyFps && !varyQuality && !varyResolution) {
             return
         }
 
@@ -624,13 +629,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const targetQuality = varyQuality
             ? Math.max(CANVAS_VARIED_QUALITY_FLOOR, canvas.quality - level * CANVAS_QUALITY_STEP)
             : canvas.quality
+        const targetScale = varyResolution ? CANVAS_RESOLUTION_SCALE_BY_LEVEL[level] : 1
 
-        if (targetFps === this._lastAppliedCanvasFps && targetQuality === this._lastAppliedCanvasQuality) {
+        if (
+            targetFps === this._lastAppliedCanvasFps &&
+            targetQuality === this._lastAppliedCanvasQuality &&
+            targetScale === this._lastAppliedCanvasScale
+        ) {
             return
         }
         this._lastAppliedCanvasFps = targetFps
         this._lastAppliedCanvasQuality = targetQuality
-        getRRWebRecord()?.reconfigureCanvas?.({ fps: targetFps, quality: targetQuality })
+        this._lastAppliedCanvasScale = targetScale
+        getRRWebRecord()?.reconfigureCanvas?.({ fps: targetFps, quality: targetQuality, scale: targetScale })
     }
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {

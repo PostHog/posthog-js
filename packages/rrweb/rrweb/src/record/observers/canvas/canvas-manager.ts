@@ -38,14 +38,20 @@ export class CanvasManager {
   private rafIdFlush: number | null = null;
   private refCount = 0;
   private torndown = false;
-  // live fps/quality for the FPS-snapshot canvas observer, so callers can
+  // live fps/quality/scale for the FPS-snapshot canvas observer, so callers can
   // adjust capture fidelity mid-session without restarting recording.
+  // scale (0,1] downsamples the captured frame; it is upscaled back to its display
+  // size on replay, so playback dimensions/aspect are unchanged, just softer.
   // undefined until the FPS observer is initialised (sampling is a number).
-  private _captureConfig?: { fps: number; quality: number | undefined };
+  private _captureConfig?: { fps: number; quality: number | undefined; scale: number };
 
   // adjust the active canvas FPS-snapshot fidelity in place. no-op if the FPS
   // observer is not running (e.g. canvas recording disabled or sampling==='all').
-  public setCaptureConfig(config: { fps?: number; quality?: number }): void {
+  public setCaptureConfig(config: {
+    fps?: number;
+    quality?: number;
+    scale?: number;
+  }): void {
     if (!this._captureConfig) {
       return;
     }
@@ -54,6 +60,9 @@ export class CanvasManager {
     }
     if (typeof config.quality === 'number') {
       this._captureConfig.quality = config.quality;
+    }
+    if (typeof config.scale === 'number' && config.scale > 0 && config.scale <= 1) {
+      this._captureConfig.scale = config.scale;
     }
   }
 
@@ -185,17 +194,21 @@ export class CanvasManager {
 
       if (!('base64' in e.data)) return;
 
-      const { base64, type, width, height } = e.data;
+      const { base64, type, width, height, displayWidth, displayHeight } = e.data;
+      // the encoded image may be downscaled (width/height); draw it stretched back to the
+      // display size so playback keeps the original dimensions and aspect ratio, just softer.
+      const dw = displayWidth ?? width;
+      const dh = displayHeight ?? height;
       this.mutationCb({
         id,
         type: CanvasContext['2D'],
         commands: [
           {
             property: 'clearRect', // wipe canvas
-            args: [0, 0, width, height],
+            args: [0, 0, dw, dh],
           },
           {
-            property: 'drawImage', // draws (semi-transparent) image
+            property: 'drawImage', // draws (semi-transparent) image, stretched to display size
             args: [
               {
                 rr_type: 'ImageBitmap',
@@ -209,15 +222,17 @@ export class CanvasManager {
               } as CanvasArg,
               0,
               0,
+              dw,
+              dh,
             ],
           },
         ],
-        displayWidth: width,
-        displayHeight: height,
+        displayWidth: dw,
+        displayHeight: dh,
       });
     };
 
-    this._captureConfig = { fps, quality: options.dataURLOptions.quality };
+    this._captureConfig = { fps, quality: options.dataURLOptions.quality, scale: 1 };
     let lastSnapshotTime = 0;
     let rafId: number;
 
@@ -295,18 +310,26 @@ export class CanvasManager {
             }
             // createImageBitmap throws if resizing to 0
             // Fallback to intrinsic size if canvas has not yet rendered
-            const width = canvas.clientWidth || canvas.width;
-            const height = canvas.clientHeight || canvas.height;
+            const displayWidth = canvas.clientWidth || canvas.width;
+            const displayHeight = canvas.clientHeight || canvas.height;
+            // capture at a (optionally downscaled) resolution; replay upscales it back to the
+            // display size, so playback dimensions/aspect are unchanged, just softer.
+            const scale = this._captureConfig!.scale;
+            const captureWidth = Math.max(1, Math.round(displayWidth * scale));
+            const captureHeight = Math.max(1, Math.round(displayHeight * scale));
             const bitmap = await createImageBitmap(canvas, {
-              resizeWidth: width,
-              resizeHeight: height,
+              resizeWidth: captureWidth,
+              resizeHeight: captureHeight,
+              resizeQuality: 'medium',
             });
             worker.postMessage(
               {
                 id,
                 bitmap,
-                width: width,
-                height: height,
+                width: captureWidth,
+                height: captureHeight,
+                displayWidth,
+                displayHeight,
                 dataURLOptions: { ...options.dataURLOptions, quality: this._captureConfig!.quality },
               },
               [bitmap],

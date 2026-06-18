@@ -530,8 +530,13 @@ export type canvasManagerMutationCallback = (
 export type ImageBitmapDataURLWorkerParams = {
   id: number;
   bitmap: ImageBitmap;
+  // the size the bitmap is encoded at (may be downscaled from the display size)
   width: number;
   height: number;
+  // the size the frame should occupy on replay (defaults to width/height). when the
+  // captured bitmap is downscaled these are larger, so replay upscales it back to fit.
+  displayWidth?: number;
+  displayHeight?: number;
   dataURLOptions: DataURLOptions;
 };
 
@@ -545,6 +550,8 @@ export type ImageBitmapDataURLWorkerResponse =
       base64: string;
       width: number;
       height: number;
+      displayWidth?: number;
+      displayHeight?: number;
     };
 
 export type fontParam = {

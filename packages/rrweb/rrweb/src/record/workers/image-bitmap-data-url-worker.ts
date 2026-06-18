@@ -62,7 +62,7 @@ let reusableCtx: OffscreenCanvasRenderingContext2D | null = null;
 // eslint-disable-next-line @typescript-eslint/no-misused-promises
 worker.onmessage = async function (e) {
   if ('OffscreenCanvas' in globalThis) {
-    const { id, bitmap, width, height, dataURLOptions } = e.data;
+    const { id, bitmap, width, height, displayWidth, displayHeight, dataURLOptions } = e.data;
 
     try {
       const transparentBase64 = getTransparentBlobFor(
@@ -97,7 +97,7 @@ worker.onmessage = async function (e) {
           return worker.postMessage({ id });
         }
         lastFingerprintMap.set(id, fingerprint);
-        worker.postMessage({ id, type, base64, width, height });
+        worker.postMessage({ id, type, base64, width, height, displayWidth, displayHeight });
         return;
       }
 

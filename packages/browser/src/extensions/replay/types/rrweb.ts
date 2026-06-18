@@ -106,7 +106,7 @@ export type rrwebRecord = {
     (options: recordOptions): (() => void) | undefined
     addCustomEvent: (tag: string, payload: any) => void
     takeFullSnapshot: () => void
-    reconfigureCanvas?: (config: { fps?: number; quality?: number }) => void
+    reconfigureCanvas?: (config: { fps?: number; quality?: number; scale?: number }) => void
     mirror: {
         getId(n: Node | undefined | null): number
         getNode(id: number): Node | null
