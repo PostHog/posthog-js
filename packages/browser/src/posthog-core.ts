@@ -650,8 +650,10 @@ export class PostHog implements PostHogInterface {
         if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
             mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
         }
-        // likewise a partial user-supplied session_recording object should keep the date-gated
-        // defaults (e.g. strictMinimumDuration, canvasCapture) rather than replacing them wholesale
+        // likewise a partial user-supplied session_recording keeps the date-gated top-level
+        // defaults (e.g. strictMinimumDuration, canvasCapture) it doesn't set. this is a shallow
+        // one-level merge: a user-supplied nested object (e.g. their own canvasCapture) still
+        // replaces the default one wholesale rather than merging into it.
         if (isObject(baseConfig.session_recording) && isObject(userConfig.session_recording)) {
             mergedConfig.session_recording = extend({}, baseConfig.session_recording, userConfig.session_recording)
         }

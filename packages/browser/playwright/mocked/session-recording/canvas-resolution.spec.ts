@@ -125,7 +125,10 @@ test.describe('canvas capture resolution', () => {
         expect(halfRes!.dw).toBe(fullRes!.dw)
         expect(halfRes!.dh).toBe(fullRes!.dh)
 
-        // ...but the encoded frame is meaningfully smaller at half resolution
-        expect(halfRes!.base64Len).toBeLessThan(fullRes!.base64Len * 0.7)
+        // ...but the encoded frame is meaningfully smaller at half resolution. half scale is a
+        // 0.25x pixel area, so bytes should drop well below this loose ceiling - kept loose
+        // because webp compression of the random-per-frame content is noisy.
+        const MAX_HALF_RES_BYTE_RATIO = 0.7
+        expect(halfRes!.base64Len).toBeLessThan(fullRes!.base64Len * MAX_HALF_RES_BYTE_RATIO)
     })
 })
