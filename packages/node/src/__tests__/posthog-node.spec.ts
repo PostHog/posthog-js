@@ -102,9 +102,6 @@ describe('PostHog Node.js', () => {
           },
           uuid: expect.any(String),
           timestamp: expect.any(String),
-          type: 'capture',
-          library: 'posthog-node',
-          library_version: '1.2.3',
         },
       ])
     })
@@ -150,8 +147,6 @@ describe('PostHog Node.js', () => {
             $groups: { org: 123 },
             foo: 'bar',
           }),
-          library: 'posthog-node',
-          library_version: '1.2.3',
         })
       )
       mockedFetch.mockClear()
@@ -173,8 +168,6 @@ describe('PostHog Node.js', () => {
             foo: 'bar',
             $geoip_disable: true,
           }),
-          library: 'posthog-node',
-          library_version: '1.2.3',
         })
       )
     })
@@ -772,15 +765,12 @@ describe('PostHog Node.js', () => {
         // last event in batch
         distinct_id: '9',
         event: 'test-event',
-        library: 'posthog-node',
-        library_version: '1.2.3',
         properties: {
           $lib: 'posthog-node',
           $lib_version: '1.2.3',
           $geoip_disable: true,
         },
         timestamp: expect.any(String),
-        type: 'capture',
       })
       expect(10).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('capture')).length)
       // 1 for the captured events, 1 for the final flush of feature flag called events

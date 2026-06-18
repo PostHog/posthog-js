@@ -6,7 +6,7 @@ import {
   PostHogCoreTestClientMocks,
 } from '@/testing'
 import { uuidv7 } from '@/vendor/uuidv7'
-import { CaptureEvent } from '@/types'
+import { CaptureEvent, PostHogPersistedProperty } from '@/types'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
@@ -37,8 +37,6 @@ describe('PostHog Core', () => {
           {
             event: 'custom-event',
             distinct_id: posthog.getDistinctId(),
-            library: 'posthog-core-tests',
-            library_version: '2.0.0-alpha',
             properties: {
               $lib: 'posthog-core-tests',
               $lib_version: '2.0.0-alpha',
@@ -48,7 +46,6 @@ describe('PostHog Core', () => {
             },
             timestamp: '2022-01-01T00:00:00.000Z',
             uuid: expect.any(String),
-            type: 'capture',
           },
         ],
         sent_at: expect.any(String),
@@ -88,6 +85,36 @@ describe('PostHog Core', () => {
             uuid: expect.any(String),
           },
         ],
+      })
+    })
+
+    it('should use legacy queued top-level library fields as $lib fallbacks without sending them', async () => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      posthog.setPersistedProperty(PostHogPersistedProperty.Queue, [
+        {
+          message: {
+            distinct_id: 'legacy-distinct-id',
+            event: 'legacy-event',
+            library: 'legacy-lib',
+            library_version: '1.2.3',
+            type: 'capture',
+            properties: { foo: 'bar' },
+            timestamp: '2022-01-01T00:00:00.000Z',
+            uuid: uuidv7(),
+          },
+        },
+      ])
+
+      await posthog.flush()
+
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0]).not.toHaveProperty('type')
+      expect(body.batch[0]).not.toHaveProperty('library')
+      expect(body.batch[0]).not.toHaveProperty('library_version')
+      expect(body.batch[0].properties).toMatchObject({
+        foo: 'bar',
+        $lib: 'legacy-lib',
+        $lib_version: '1.2.3',
       })
     })
   })

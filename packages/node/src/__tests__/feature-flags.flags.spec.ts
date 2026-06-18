@@ -40,8 +40,6 @@ describe('flags v2', () => {
       expect(capturedMessage).toMatchObject({
         distinct_id: 'some-distinct-id',
         event: '$feature_flag_called',
-        library: posthog.getLibraryId(),
-        library_version: posthog.getLibraryVersion(),
         properties: {
           '$feature/non-existent-flag': undefined,
           $feature_flag: 'non-existent-flag',
@@ -156,8 +154,6 @@ describe('flags v2', () => {
         expect(capturedMessage).toMatchObject({
           distinct_id: 'some-distinct-id',
           event: '$feature_flag_called',
-          library: posthog.getLibraryId(),
-          library_version: posthog.getLibraryVersion(),
           properties: {
             [`$feature/${key}`]: expectedResponse,
             $feature_flag: key,
@@ -335,8 +331,6 @@ describe('flags v1', () => {
       expect(capturedMessage).toMatchObject({
         distinct_id: 'some-distinct-id',
         event: '$feature_flag_called',
-        library: posthog.getLibraryId(),
-        library_version: posthog.getLibraryVersion(),
         properties: {
           '$feature/non-existent-flag': undefined,
           $feature_flag: 'non-existent-flag',

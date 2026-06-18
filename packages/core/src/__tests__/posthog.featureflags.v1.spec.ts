@@ -444,7 +444,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -470,7 +469,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -492,7 +490,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -514,7 +511,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -557,7 +553,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/json-payload': true,
                 '$feature/feature-variant': 'variant',
               },
-              type: 'capture',
             },
           ],
         })
@@ -725,7 +720,6 @@ describe('PostHog Feature Flags v1', () => {
               $feature_flag_bootstrapped_payload: { some: 'key' },
               $used_bootstrap_value: true,
             },
-            type: 'capture',
           },
         ],
       })
@@ -872,7 +866,6 @@ describe('PostHog Feature Flags v1', () => {
                 $feature_flag_bootstrapped_payload: { color: 'feature-1-bootstrap-color' },
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })

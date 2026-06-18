@@ -973,6 +973,7 @@ export abstract class PostHogCoreStateless {
       if (message === null) {
         return
       }
+      message = this.normalizeMessage(message)
 
       const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
 
@@ -1019,6 +1020,7 @@ export abstract class PostHogCoreStateless {
     if (message === null) {
       return
     }
+    message = this.normalizeMessage(message)
 
     const data: Record<string, any> = {
       api_key: this.apiKey,
@@ -1056,22 +1058,38 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  protected prepareMessage(type: string, _message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
-    const message = {
+  private normalizeMessage(message: PostHogEventProperties): PostHogEventProperties {
+    const { type: _type, library, library_version, ...sanitizedMessage } = message
+    let properties = sanitizedMessage.properties as PostHogEventProperties | undefined
+
+    if (library !== undefined && properties?.$lib === undefined) {
+      properties = { ...(properties || {}), $lib: library }
+    }
+
+    if (library_version !== undefined && properties?.$lib_version === undefined) {
+      properties = { ...(properties || {}), $lib_version: library_version }
+    }
+
+    if (properties) {
+      sanitizedMessage.properties = properties
+    }
+
+    return sanitizedMessage
+  }
+
+  protected prepareMessage(_type: string, _message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+    const message = this.normalizeMessage({
       ..._message,
-      type: type,
-      library: this.getLibraryId(),
-      library_version: this.getLibraryVersion(),
       timestamp: options?.timestamp ? options?.timestamp : currentISOTime(),
       uuid: options?.uuid ? options.uuid : uuidv7(),
-    }
+    })
 
     const addGeoipDisableProperty = options?.disableGeoip ?? this.disableGeoip
     if (addGeoipDisableProperty) {
       if (!message.properties) {
         message.properties = {}
       }
-      message['properties']['$geoip_disable'] = true
+      ;(message.properties as PostHogEventProperties)['$geoip_disable'] = true
     }
 
     if (message.distinctId) {
@@ -1181,7 +1199,7 @@ export abstract class PostHogCoreStateless {
 
     while (queue.length > 0 && sentMessages.length < originalQueueLength) {
       const batchItems = queue.slice(0, this.maxBatchSize)
-      const batchMessages = batchItems.map((item) => item.message)
+      const batchMessages = batchItems.map((item) => this.normalizeMessage(item.message))
 
       const persistQueueChange = async (): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
