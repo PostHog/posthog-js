@@ -89,13 +89,16 @@ const DEFAULT_CANVAS_FPS = 4
 const MAX_CANVAS_FPS = 12
 const MAX_CANVAS_QUALITY = 1
 
-// adaptive canvas capture (session_recording.canvasCapture) — deliberately gentle,
-// playback fidelity matters. once a session has flushed this many bytes we may nudge
-// the canvas fps down by one and/or slightly lower webp quality.
-const CANVAS_VARY_THRESHOLD_BYTES = 50 * 1024 * 1024
-const CANVAS_VARIED_FPS = 3
+// adaptive canvas capture (session_recording.canvasCapture) — deliberately gentle, playback
+// fidelity matters. as a session crosses each ascending byte threshold we step the canvas fps
+// down by one and/or lower webp quality a notch.
+const CANVAS_VARY_THRESHOLD_COUNT = 3
+const CANVAS_VARY_THRESHOLD_MIN_MB = 1
+const CANVAS_VARY_THRESHOLD_MAX_MB = 1024
+const DEFAULT_CANVAS_VARY_THRESHOLDS_MB = [50, 150, 300]
+const MIN_CANVAS_VARY_FPS = 1
 const CANVAS_QUALITY_STEP = 0.05
-const CANVAS_VARIED_QUALITY_FLOOR = 0.3
+const CANVAS_VARIED_QUALITY_FLOOR = 0.25
 const TWO_SECONDS = 2000
 const ONE_KB = 1024
 
@@ -564,6 +567,40 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _lastAppliedCanvasFps?: number
     private _lastAppliedCanvasQuality?: number
+    private _loggedInvalidCanvasThresholds = false
+
+    // the three ascending per-session byte boundaries at which canvas fidelity steps down.
+    // validates session_recording.canvasCapture.thresholdsMb (exactly three, strictly increasing,
+    // each within the allowed MiB range) and falls back to the defaults otherwise — so a test can
+    // set tiny boundaries but a misconfiguration can't push it out of a sane range in prod.
+    private get _canvasVaryThresholdsBytes(): number[] {
+        const configured = this._instance.config.session_recording.canvasCapture?.thresholdsMb
+        let mb: number[] = DEFAULT_CANVAS_VARY_THRESHOLDS_MB
+        if (!isUndefined(configured)) {
+            const valid =
+                isArray(configured) &&
+                configured.length === CANVAS_VARY_THRESHOLD_COUNT &&
+                configured.every(
+                    (v) =>
+                        isNumber(v) &&
+                        Number.isFinite(v) &&
+                        v >= CANVAS_VARY_THRESHOLD_MIN_MB &&
+                        v <= CANVAS_VARY_THRESHOLD_MAX_MB
+                ) &&
+                configured[0] < configured[1] &&
+                configured[1] < configured[2]
+            if (valid) {
+                mb = configured
+            } else if (!this._loggedInvalidCanvasThresholds) {
+                this._loggedInvalidCanvasThresholds = true
+                logger.warn(
+                    `ignoring invalid session_recording.canvasCapture.thresholdsMb - expected ${CANVAS_VARY_THRESHOLD_COUNT} strictly-increasing values between ${CANVAS_VARY_THRESHOLD_MIN_MB} and ${CANVAS_VARY_THRESHOLD_MAX_MB} MiB`,
+                    configured
+                )
+            }
+        }
+        return mb.map((v) => v * 1024 * 1024)
+    }
 
     // adaptively step canvas capture fidelity down as the session accumulates bytes, gated by
     // session_recording.canvasCapture.{varyFps,varyQuality}. keyed on the per-session flushed
@@ -580,13 +617,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         const sessionBytes = this._flushedSizeTracker?.currentTrackedSize(this.sessionId) ?? 0
-        const overBudget = sessionBytes >= CANVAS_VARY_THRESHOLD_BYTES
+        // level = how many ascending thresholds the session has crossed (0..3)
+        const level = this._canvasVaryThresholdsBytes.filter((threshold) => sessionBytes >= threshold).length
 
-        const targetFps = varyFps && overBudget ? Math.min(canvas.fps, CANVAS_VARIED_FPS) : canvas.fps
-        const targetQuality =
-            varyQuality && overBudget
-                ? Math.max(CANVAS_VARIED_QUALITY_FLOOR, canvas.quality - CANVAS_QUALITY_STEP)
-                : canvas.quality
+        const targetFps = varyFps ? Math.max(MIN_CANVAS_VARY_FPS, canvas.fps - level) : canvas.fps
+        const targetQuality = varyQuality
+            ? Math.max(CANVAS_VARIED_QUALITY_FLOOR, canvas.quality - level * CANVAS_QUALITY_STEP)
+            : canvas.quality
 
         if (targetFps === this._lastAppliedCanvasFps && targetQuality === this._lastAppliedCanvasQuality) {
             return

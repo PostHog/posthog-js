@@ -5529,5 +5529,37 @@ describe('Lazy SessionRecording', () => {
 
             expect(reconfigure).not.toHaveBeenCalled()
         })
+
+        it('steps fps down once per crossed threshold, with tiny configurable boundaries', () => {
+            config.session_recording.canvasCapture = { varyFps: true, thresholdsMb: [1, 2, 3] }
+            const tracker = recorder['_flushedSizeTracker']
+
+            tracker.trackSize(recorder.sessionId, 1.5 * oneMb) // crossed [1] → level 1
+            recorder['_maybeVaryCanvasCapture']()
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 3 }))
+
+            tracker.trackSize(recorder.sessionId, 1 * oneMb) // total 2.5 → crossed [1,2] → level 2
+            recorder['_maybeVaryCanvasCapture']()
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 2 }))
+
+            tracker.trackSize(recorder.sessionId, 1 * oneMb) // total 3.5 → crossed all → level 3
+            recorder['_maybeVaryCanvasCapture']()
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 1 }))
+        })
+
+        it.each([
+            ['wrong length', [10, 20]],
+            ['not strictly increasing', [30, 20, 10]],
+            ['below the allowed range', [0, 50, 100]],
+            ['above the allowed range', [50, 150, 5000]],
+        ])('ignores invalid thresholdsMb (%s) and falls back to the defaults', (_label, thresholdsMb) => {
+            config.session_recording.canvasCapture = { varyFps: true, thresholdsMb: thresholdsMb as any }
+            // 2 MiB would trip a tiny invalid boundary but is far below the default 50 MiB first step
+            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 2 * oneMb)
+
+            recorder['_maybeVaryCanvasCapture']()
+
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 4 }))
+        })
     })
 })
