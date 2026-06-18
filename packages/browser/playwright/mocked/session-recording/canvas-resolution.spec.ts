@@ -110,9 +110,13 @@ test.describe('canvas capture resolution', () => {
         context: BrowserContext
         browserName: string
     }) => {
-        // the canvas FPS-snapshot observer requires OffscreenCanvas, which webkit doesn't support,
-        // so no canvas frames are captured there - skip rather than assert on a frame that can't exist.
-        test.skip(browserName === 'webkit', 'canvas FPS capture requires OffscreenCanvas (unsupported on webkit)')
+        // canvas FPS capture emits no canvas mutations under Playwright's headless WebKit (the
+        // primitives - OffscreenCanvas, createImageBitmap resize, the worker - are all present and
+        // recording itself works, but the bundled canvas snapshot pipeline produces nothing there).
+        // this is a pre-existing property of the capture path, independent of resolution scaling
+        // (rrweb's own canvas FPS tests are chromium-only), so skip rather than assert on a frame
+        // that is never produced.
+        test.skip(browserName === 'webkit', 'canvas FPS capture produces no frames under Playwright WebKit')
 
         // two sequential recordings on the same page: each start() navigates fresh and re-inits
         // posthog with the given canvasCapture config (the later route registration wins).
