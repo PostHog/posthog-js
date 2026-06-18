@@ -649,7 +649,8 @@ export interface SessionRecordingOptions {
      * session id, linked to the previous one via the `$session_ending` / `$session_starting`
      * events. The point at which it rotates is recorded as a `$session_size_rotation` custom event.
      *
-     * Accepts values between 1 and 500. Values outside that range are clamped.
+     * Accepts values between 1 and 500. Values outside that range are clamped (so `0` becomes
+     * `1`, not "off" — leave it `undefined` to disable size-based rotation).
      * Normally only changed after interaction with the PostHog support team.
      *
      * When `defaults` is `'2026-05-30'` or later this defaults to `300`; otherwise size-based

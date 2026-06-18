@@ -112,6 +112,11 @@ export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
+const BYTES_PER_MIB = 1024 * 1024
+// supported range for session_recording.maxSessionSizeMb; 500 is a hard SDK ceiling
+const MIN_SESSION_SIZE_MB = 1
+const MAX_SESSION_SIZE_MB = 500
+
 interface QueuedRRWebEvent {
     rrwebMethod: () => void
     attempt: number
@@ -492,11 +497,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // the supported 1-500 range (see SessionRecordingOptions.maxSessionSizeMb).
     private get _maxSessionSizeBytes(): number | undefined {
         const configuredMb = this._instance.config.session_recording?.maxSessionSizeMb
-        if (!isNumber(configuredMb)) {
+        if (!isNumber(configuredMb) || !Number.isFinite(configuredMb)) {
             return undefined
         }
-        const clampedMb = Math.min(500, Math.max(1, configuredMb))
-        return clampedMb * 1024 * 1024
+        const clampedMb = Math.min(MAX_SESSION_SIZE_MB, Math.max(MIN_SESSION_SIZE_MB, configuredMb))
+        return clampedMb * BYTES_PER_MIB
     }
 
     private _maybeRotateForSessionSize(): void {
@@ -512,7 +517,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // mark where the old session reached its budget, then rotate to a new linked session.
         // the new session's tracker starts at zero, so this won't immediately re-fire.
-        this._tryAddCustomEvent('$session_size_rotation', { sizeBytes: currentSize, thresholdBytes: maxBytes })
+        // overshootBytes makes the (multi-tab undercount driven) late-firing observable.
+        this._tryAddCustomEvent('$session_size_rotation', {
+            sizeBytes: currentSize,
+            thresholdBytes: maxBytes,
+            overshootBytes: currentSize - maxBytes,
+        })
         this._sessionManager.rotateSessionForReplaySize()
     }
 

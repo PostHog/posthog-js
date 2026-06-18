@@ -312,6 +312,8 @@ export class SessionIdManager {
     // posthog.reset() (noSessionId), suppressing session linking — this mints a
     // fresh session immediately and notifies handlers with sessionMaximumSize so
     // the recorder links the old and new sessions instead of treating it as a wipe.
+    // Handlers run synchronously (as on the checkAndGetSessionAndWindowId rotation
+    // path); they must not synchronously flush, or rotation would re-enter itself.
     rotateSessionForReplaySize(): void {
         const timestamp = new Date().getTime()
         const sessionId = this._sessionIdGenerator()
