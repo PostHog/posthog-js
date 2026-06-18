@@ -104,10 +104,16 @@ test.describe('canvas capture resolution', () => {
     test('downscaling keeps the recorded display size and only shrinks the encoded frame', async ({
         page,
         context,
+        browserName,
     }: {
         page: Page
         context: BrowserContext
+        browserName: string
     }) => {
+        // the canvas FPS-snapshot observer requires OffscreenCanvas, which webkit doesn't support,
+        // so no canvas frames are captured there - skip rather than assert on a frame that can't exist.
+        test.skip(browserName === 'webkit', 'canvas FPS capture requires OffscreenCanvas (unsupported on webkit)')
+
         // two sequential recordings on the same page: each start() navigates fresh and re-inits
         // posthog with the given canvasCapture config (the later route registration wins).
         // full resolution (resolutionScale unset -> 1)
