@@ -186,6 +186,10 @@ export class CanvasManager {
       true,
     );
     const snapshotInProgressMap: Map<number, boolean> = new Map();
+    // the display (replay) size per canvas id, kept on the main thread so a downscaled capture
+    // is still recorded at — and stretched back to — its real display size. never relies on the
+    // worker echoing it across the thread boundary.
+    const displayDimsMap: Map<number, { width: number; height: number }> = new Map();
     const worker =
       new ImageBitmapDataURLWorker() as ImageBitmapDataURLRequestWorker;
     worker.onmessage = (e) => {
@@ -194,11 +198,13 @@ export class CanvasManager {
 
       if (!('base64' in e.data)) return;
 
-      const { base64, type, width, height, displayWidth, displayHeight } = e.data;
+      const { base64, type, width, height } = e.data;
       // the encoded image may be downscaled (width/height); draw it stretched back to the
-      // display size so playback keeps the original dimensions and aspect ratio, just softer.
-      const dw = displayWidth ?? width;
-      const dh = displayHeight ?? height;
+      // display size (looked up on the main thread) so playback keeps the original dimensions
+      // and aspect ratio, just softer.
+      const display = displayDimsMap.get(id);
+      const dw = display ? display.width : width;
+      const dh = display ? display.height : height;
       this.mutationCb({
         id,
         type: CanvasContext['2D'],
@@ -322,14 +328,15 @@ export class CanvasManager {
               resizeHeight: captureHeight,
               resizeQuality: 'medium',
             });
+            // record the display size on the main thread; the worker only encodes the
+            // (possibly downscaled) bitmap and never needs to know the display size.
+            displayDimsMap.set(id, { width: displayWidth, height: displayHeight });
             worker.postMessage(
               {
                 id,
                 bitmap,
                 width: captureWidth,
                 height: captureHeight,
-                displayWidth,
-                displayHeight,
                 dataURLOptions: { ...options.dataURLOptions, quality: this._captureConfig!.quality },
               },
               [bitmap],
