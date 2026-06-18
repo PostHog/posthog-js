@@ -83,19 +83,26 @@ import {
     isCrossDomainCookie,
     migrateConfigField,
     safewrapClass,
-} from './utils'
-import { isLikelyBot } from './utils/blocked-uas'
-import { getEventProperties } from './utils/event-utils'
-import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { logger } from './utils/logger'
-import { getPersonPropertiesHash } from './utils/property-utils'
-import { RequestRouter, RequestRouterRegion } from './utils/request-router'
-import { SimpleEventEmitter } from './utils/simple-event-emitter'
+} from '@posthog/browser-common/utils'
+import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
+import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
+import {
+    assignableWindow,
+    document,
+    location,
+    navigator,
+    userAgent,
+    window,
+} from '@posthog/browser-common/utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { getPersonPropertiesHash } from '@posthog/browser-common/utils/property-utils'
+import { RequestRouter, RequestRouterRegion } from '@posthog/browser-common/utils/request-router'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import {
     DEFAULT_DISPLAY_SURVEY_OPTIONS,
     getSurveyInteractionProperty,
     setSurveySeenOnLocalStorage,
-} from './utils/survey-utils'
+} from '@posthog/browser-common/utils/survey-utils'
 import {
     isEmptyString,
     isFunction,

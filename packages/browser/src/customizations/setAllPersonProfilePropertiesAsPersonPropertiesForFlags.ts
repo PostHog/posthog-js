@@ -5,8 +5,8 @@ import {
     EVENT_TO_PERSON_PROPERTIES,
     getEventProperties,
     getReferrerInfo,
-} from '../utils/event-utils'
-import { each, extend } from '../utils'
+} from '@posthog/browser-common/utils/event-utils'
+import { each, extend } from '@posthog/browser-common/utils'
 import { includes } from '@posthog/core'
 
 export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog: PostHog): void => {

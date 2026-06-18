@@ -11,7 +11,7 @@ import {
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, shouldCaptureDomEvent } from '../autocapture-utils'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { window } from '../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'

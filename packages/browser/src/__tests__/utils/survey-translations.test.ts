@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
-import { detectUserLanguage, applySurveyTranslationForUser } from '../../utils/survey-translations'
+import { detectUserLanguage, applySurveyTranslationForUser } from '@posthog/browser-common/utils/survey-translations'
 import { Survey, SurveyType, SurveyQuestionType } from '../../posthog-surveys-types'
 import { PostHog } from '../../posthog-core'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'

@@ -12,7 +12,7 @@ import {
     SurveyType,
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
-import { document as _document, window as _window } from '../../utils/globals'
+import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
 import {
     getSurveyInteractionProperty,
     getSurveySeenKey,
@@ -20,11 +20,11 @@ import {
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
-} from '../../utils/survey-utils'
+} from '@posthog/browser-common/utils/survey-utils'
 import { isNullish, type SurveyResponses } from '@posthog/core'
 import { buildSurveyResponseProperties, getSurveyResponseKey, surveyHasResponses } from '@posthog/core/surveys'
 
-import { propertyComparisons } from '../../utils/property-utils'
+import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
 import { localStore } from '../../storage'
 import { Properties, PropertyMatchType } from '../../types'
 import { Z_INDEX_SURVEYS } from '../../constants'

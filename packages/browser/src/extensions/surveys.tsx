@@ -18,15 +18,15 @@ import {
     SurveyWidgetType,
     SurveyWithTypeAndAppearance,
 } from '../posthog-surveys-types'
-import { addEventListener } from '../utils'
-import { document as _document, window as _window } from '../utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils'
+import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
-} from '../utils/survey-utils'
+} from '@posthog/browser-common/utils/survey-utils'
 import { isArray, isNull, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
 import { SURVEYS } from '../constants'
@@ -67,9 +67,9 @@ import {
     extractPrefillParamsFromUrl,
     convertPrefillToResponses,
     calculatePrefillStartIndex,
-} from '../utils/survey-url-prefill'
-import { getNextSurveyStep } from '../utils/survey-branching'
-import { applySurveyTranslationForUser } from '../utils/survey-translations'
+} from '@posthog/browser-common/utils/survey-url-prefill'
+import { getNextSurveyStep } from '@posthog/browser-common/utils/survey-branching'
+import { applySurveyTranslationForUser } from '@posthog/browser-common/utils/survey-translations'
 
 // Re-export for surveys-preview entrypoint
 export { getNextSurveyStep }

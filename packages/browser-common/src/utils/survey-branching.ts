@@ -1,4 +1,4 @@
-import { Survey, SurveyQuestionBranchingType, SurveyQuestionType } from '../posthog-surveys-types'
+import { SurveyQuestionBranchingType, SurveyQuestionType, type Survey } from '../types'
 import { createLogger } from './logger'
 
 const logger = createLogger('[Surveys]')

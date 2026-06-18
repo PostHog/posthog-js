@@ -30,8 +30,8 @@ import {
     SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import { assignableWindow, window } from '../../../utils/globals'
-import { RequestRouter } from '../../../utils/request-router'
+import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
+import { RequestRouter } from '@posthog/browser-common/utils/request-router'
 import {
     type customEvent,
     EventType,
@@ -44,7 +44,7 @@ import {
     type pluginEvent,
 } from '../../../extensions/replay/types/rrweb-types'
 import { ConsentManager } from '../../../consent'
-import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import Mock = jest.Mock
 import { SessionRecording } from '../../../extensions/replay/session-recording'
 import {

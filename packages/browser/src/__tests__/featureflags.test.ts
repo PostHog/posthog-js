@@ -7,11 +7,11 @@ import {
     FeatureFlagError,
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
-import { RequestRouter } from '../utils/request-router'
+import { RequestRouter } from '@posthog/browser-common/utils/request-router'
 import { isUndefined } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
-import { SimpleEventEmitter } from '../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')

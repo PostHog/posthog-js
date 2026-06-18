@@ -1,4 +1,4 @@
-import { PostHog } from '../posthog-core'
+import type { PostHogLike as PostHog } from '../types'
 
 /**
  * The request router helps simplify the logic to determine which endpoints should be called for which things

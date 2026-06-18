@@ -4,7 +4,7 @@ import { ProductTour, ProductTourEventName } from '../../posthog-product-tours-t
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { CaptureResult, PostHogConfig } from '../../types'
-import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
+import { ProductTourEventReceiver } from '@posthog/browser-common/utils/product-tour-event-receiver'
 import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance'
 
 // Product tours share the EventReceiver base, so the activation lifecycle behaves the same as

@@ -10,8 +10,8 @@ import {
 import { PostHog } from '../../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject, isUndefined } from '@posthog/core'
-import { window } from '../../../utils/globals'
-import { logger } from '../../../utils/logger'
+import { window } from '@posthog/browser-common/utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'

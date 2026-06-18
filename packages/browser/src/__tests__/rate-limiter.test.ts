@@ -1,5 +1,5 @@
 import { clearLoggerMocks, mockLogger } from './helpers/mock-logger'
-import { window } from '../../src/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import { RateLimiter } from '../rate-limiter'
 
 describe('Rate Limiter', () => {

@@ -1,11 +1,11 @@
 import { RetriableRequestWithOptions } from './types'
 
 import { isPositiveNumber, isUndefined } from '@posthog/core'
-import { logger } from './utils/logger'
-import { window } from './utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { window } from '@posthog/browser-common/utils/globals'
 import { PostHog } from './posthog-core'
 import { extendURLParams } from './request'
-import { addEventListener } from './utils'
+import { addEventListener } from '@posthog/browser-common/utils'
 
 const thirtyMinutes = 30 * 60 * 1000
 const DEFAULT_MAX_RETRIES = 10

@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { navigator, window } from './utils/globals'
+import { navigator, window } from '@posthog/browser-common/utils/globals'
 import {
     WebExperiment,
     WebExperimentsCallback,
@@ -9,11 +9,11 @@ import {
 } from './web-experiments-types'
 import { WEB_EXPERIMENTS } from './constants'
 import { isNullish, isString } from '@posthog/core'
-import { getQueryParam } from './utils/request-utils'
-import { isMatchingRegex } from './utils/regex-utils'
-import { logger } from './utils/logger'
-import { isLikelyBot } from './utils/blocked-uas'
-import { getCampaignParams } from './utils/event-utils'
+import { getQueryParam } from '@posthog/browser-common/utils/request-utils'
+import { isMatchingRegex } from '@posthog/browser-common/utils/regex-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
+import { getCampaignParams } from '@posthog/browser-common/utils/event-utils'
 import { Extension } from './extensions/types'
 
 const BOT_REFUSE_MSG = 'Refusing to render web experiment since the viewer is a likely bot'

@@ -9,7 +9,7 @@ import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
 
 import sinon from 'sinon'
-import { assignableWindow, window } from '../utils/globals'
+import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
 
 describe(`Module-based loader in Node env`, () => {
     const posthog = defaultPostHog()

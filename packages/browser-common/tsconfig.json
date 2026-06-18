@@ -11,8 +11,7 @@
         "moduleDetection": "force",
         "allowImportingTsExtensions": true,
         "verbatimModuleSyntax": true,
-        "exactOptionalPropertyTypes": true,
-        "noUncheckedIndexedAccess": true
+        "exactOptionalPropertyTypes": true
     },
     "include": ["src/**/*"]
 }

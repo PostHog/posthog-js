@@ -1,4 +1,4 @@
-import { each } from './'
+import { each } from './index'
 
 import { isArray, isFile, isUndefined } from '@posthog/core'
 import { logger } from './logger'

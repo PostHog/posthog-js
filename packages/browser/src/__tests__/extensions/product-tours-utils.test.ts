@@ -7,7 +7,7 @@ import {
     hasTourWaitPeriodPassed,
 } from '../../extensions/product-tours/product-tours-utils'
 import { ProductTourStep } from '../../posthog-product-tours-types'
-import { doesTourActivateByEvent, doesTourActivateByAction } from '../../utils/product-tour-utils'
+import { doesTourActivateByEvent, doesTourActivateByAction } from '@posthog/browser-common/utils/product-tour-utils'
 import { LAST_SEEN_TOUR_DATE_KEY_PREFIX } from '../../extensions/product-tours/constants'
 
 describe('calculateTooltipPosition', () => {

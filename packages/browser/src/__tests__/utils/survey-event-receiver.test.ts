@@ -12,7 +12,7 @@ import {
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { CaptureResult, PostHogConfig, PropertyMatchType } from '../../types'
-import { SurveyEventReceiver } from '../../utils/survey-event-receiver'
+import { SurveyEventReceiver } from '@posthog/browser-common/utils/survey-event-receiver'
 import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance'
 
 describe('survey-event-receiver', () => {

@@ -6,8 +6,8 @@ import {
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
 import { UserProvidedTraits } from '../../../posthog-conversations-types'
-import { createLogger } from '../../../utils/logger'
-import { window } from '../../../utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { window } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '../../../uuidv7'
 
 const logger = createLogger('[ConversationsPersistence]')

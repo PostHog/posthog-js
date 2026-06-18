@@ -1,6 +1,6 @@
 import type { PostHog } from '../posthog-core'
-import { assignableWindow, document, PostHogExtensionKind } from '../utils/globals'
-import { createLogger } from '../utils/logger'
+import { assignableWindow, document, PostHogExtensionKind } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 const logger = createLogger('[ExternalScriptsLoader]')
 

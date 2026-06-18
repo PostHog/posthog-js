@@ -1,29 +1,26 @@
-import type { PostHog } from '../posthog-core'
-import { SessionIdManager } from '../sessionid'
-import {
-    DeadClicksAutoCaptureConfig,
-    ExternalIntegrationKind,
-    Properties,
-    RemoteConfig,
-    SiteAppLoader,
-    SessionStartReason,
-} from '../types'
 import type {
     ConversationsRemoteConfig,
+    DeadClicksAutoCaptureConfig,
+    EventWithTime,
+    ExternalIntegrationKind,
     GetMessagesResponse,
     GetTicketsOptions,
     GetTicketsResponse,
     MarkAsReadResponse,
-    RestoreFromTokenResponse,
+    PostHogLike as PostHog,
+    Properties,
+    RemoteConfig,
     RequestRestoreLinkResponse,
+    RestoreFromTokenResponse,
     SendMessageResponse,
+    SessionRecordingStatus,
+    SessionStartReason,
+    SiteAppLoader,
+    TracingHeadersDistinctId,
+    TracingHeadersHostnames,
+    TriggerType,
     UserProvidedTraits,
-} from '../posthog-conversations-types'
-// only importing types here, so won't affect the bundle
-// eslint-disable-next-line posthog-js/no-external-replay-imports
-import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
-import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
-import { eventWithTime } from '../extensions/replay/types/rrweb-types'
+} from '../types'
 import { ErrorTracking } from '@posthog/core'
 
 /*
@@ -185,7 +182,7 @@ export interface LazyLoadedSessionRecordingInterface {
     discard: () => void
     sessionId: string
     status: SessionRecordingStatus
-    onRRwebEmit: (rawEvent: eventWithTime) => void
+    onRRwebEmit: (rawEvent: EventWithTime) => void
     log: (message: string, level: 'log' | 'warn' | 'error') => void
     sdkDebugProperties: Properties
     overrideLinkedFlag: () => void
@@ -262,12 +259,12 @@ interface PostHogExtensions {
         _patchFetch: (
             hostnames: TracingHeadersHostnames,
             distinctId: TracingHeadersDistinctId,
-            sessionManager?: SessionIdManager
+            sessionManager?: any
         ) => () => void
         _patchXHR: (
             hostnames: TracingHeadersHostnames,
             distinctId: TracingHeadersDistinctId,
-            sessionManager?: SessionIdManager
+            sessionManager?: any
         ) => () => void
     }
     initDeadClicksAutocapture?: (

@@ -1,8 +1,8 @@
 import { PostHog } from '../posthog-core'
 import { EVENT_PAGEVIEW } from '../constants'
-import { window } from '../utils/globals'
-import { addEventListener } from '../utils'
-import { logger } from '../utils/logger'
+import { window } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils'
+import { logger } from '@posthog/browser-common/utils/logger'
 import { patch } from './replay/rrweb-plugins/patch'
 import type { Extension } from './types'
 

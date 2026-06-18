@@ -1,4 +1,4 @@
-import { RequestRouter, RequestRouterTarget } from '../../utils/request-router'
+import { RequestRouter, RequestRouterTarget } from '@posthog/browser-common/utils/request-router'
 
 describe('request-router', () => {
     const router = (

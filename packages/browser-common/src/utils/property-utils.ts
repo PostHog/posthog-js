@@ -1,8 +1,10 @@
 import { isArray, isNull, isUndefined } from '@posthog/core'
-import { jsonStringify } from '../request'
-import { PropertyFilters, PropertyOperator } from '../posthog-surveys-types'
+import type { PropertyFilters, PropertyOperator } from '../types'
 import type { Properties, SessionRecordingTriggerPropertyFilter } from '../types'
 import { isMatchingRegex } from './regex-utils'
+
+const jsonStringify = (data: any, space?: string | number): string =>
+    JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
 
 export function getPersonPropertiesHash(
     distinct_id: string,

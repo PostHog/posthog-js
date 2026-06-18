@@ -2,8 +2,8 @@ import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION
 import { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
-import { createLogger } from './utils/logger'
-import { propertyComparisons } from './utils/property-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
 import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
 
 const logger = createLogger('[Error tracking]')

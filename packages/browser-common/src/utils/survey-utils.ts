@@ -1,5 +1,5 @@
-import { DisplaySurveyOptions, Survey, SurveyType, DisplaySurveyType } from '../posthog-surveys-types'
-import { createLogger } from '../utils/logger'
+import { DisplaySurveyType, SurveyType, type DisplaySurveyOptions, type Survey } from '../types'
+import { createLogger } from './logger'
 
 export { getSurveyInteractionProperty } from '@posthog/core/surveys'
 

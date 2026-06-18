@@ -4,8 +4,8 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
     return {
@@ -34,7 +34,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter } = require('@posthog/browser-common/utils/globals')
 
 describe('group before identify bug', () => {
     beforeEach(() => {

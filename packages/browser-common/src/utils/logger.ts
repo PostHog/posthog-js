@@ -1,4 +1,4 @@
-import Config from '../config'
+import { getBrowserCommonRuntime } from './runtime'
 import { isUndefined } from '@posthog/core'
 import { assignableWindow, window } from './globals'
 import type { Logger } from '@posthog/core'
@@ -18,7 +18,7 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
         _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
                 window &&
-                (Config.DEBUG || assignableWindow.POSTHOG_DEBUG || debugEnabled) &&
+                (getBrowserCommonRuntime().debug || assignableWindow.POSTHOG_DEBUG || debugEnabled) &&
                 !isUndefined(window.console) &&
                 window.console
             ) {

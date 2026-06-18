@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import { createLogger } from '../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 const logger = createLogger('[Stylesheet Loader]')
 

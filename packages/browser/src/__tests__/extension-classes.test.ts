@@ -6,7 +6,7 @@ import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 
 describe('__extensionClasses enrollment', () => {
     let savedDefaults: PostHogConfig['__extensionClasses']

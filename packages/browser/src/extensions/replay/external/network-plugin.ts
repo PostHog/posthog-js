@@ -26,9 +26,9 @@ import {
     isUndefined,
     isObject,
 } from '@posthog/core'
-import { isDocument } from '../../../utils/type-utils'
-import { createLogger } from '../../../utils/logger'
-import { formDataToQuery } from '../../../utils/request-utils'
+import { isDocument } from '@posthog/browser-common/utils/type-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
 import { defaultNetworkOptions } from './config'

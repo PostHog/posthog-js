@@ -2,7 +2,7 @@ import { WebExperiments } from '../web-experiments'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { WebExperiment } from '../web-experiments-types'
-import { RequestRouter } from '../utils/request-router'
+import { RequestRouter } from '@posthog/browser-common/utils/request-router'
 import { ConsentManager } from '../consent'
 import { createMockPostHog, createMockConfig, createMockPersistence } from './helpers/posthog-instance'
 

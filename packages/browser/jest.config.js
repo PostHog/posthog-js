@@ -26,6 +26,8 @@ module.exports = {
         '^preact/test-utils$': path.join(preactRoot, 'test-utils/dist/testUtils.js'),
         '^@testing-library/preact$': path.join(testingLibraryPreactCjs, 'index.js'),
         '^@posthog/core/surveys$': '<rootDir>/../core/src/surveys/index.ts',
+        '^@posthog/browser-common/utils$': '<rootDir>/../browser-common/src/utils/index.ts',
+        '^@posthog/browser-common/(.*)$': '<rootDir>/../browser-common/src/$1.ts',
     },
     transform: {
         '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',

@@ -2,8 +2,8 @@ import type { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import { isNull } from '@posthog/core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
-import { assignableWindow, document } from './utils/globals'
-import { createLogger } from './utils/logger'
+import { assignableWindow, document } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 const logger = createLogger('[SiteApps]')
 const APP_INIT_ERROR = 'Error while initializing PostHog app with config id '

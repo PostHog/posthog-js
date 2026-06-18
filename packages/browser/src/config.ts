@@ -1,3 +1,4 @@
+import { configureBrowserCommon } from '@posthog/browser-common/utils/runtime'
 import packageInfo from '../package.json'
 
 type SDKDistChannel = 'npm' | 'cdn'
@@ -17,5 +18,12 @@ const Config: {
     /** The actual JS SDK version, unaffected by _overrideSDKInfo. Used for the `ver` request param. */
     JS_SDK_VERSION: packageInfo.version,
 }
+
+configureBrowserCommon({
+    debug: () => Config.DEBUG,
+    libName: () => Config.LIB_NAME,
+    libVersion: () => Config.LIB_VERSION,
+    sdkDistChannel: () => Config.SDK_DIST_CHANNEL,
+})
 
 export default Config

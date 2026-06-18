@@ -1,9 +1,10 @@
-import { SURVEYS_ACTIVATED } from '../constants'
-import { Survey, SurveyEventName, SurveySchedule } from '../posthog-surveys-types'
-import { PostHog } from '../posthog-core'
+import { SurveyEventName, SurveySchedule, type Survey } from '../types'
+import type { PostHogLike as PostHog } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
-import { ActivationOutcome, EventReceiver } from './event-receiver'
+import { EventReceiver, type ActivationOutcome } from './event-receiver'
 import { createLogger } from './logger'
+
+const SURVEYS_ACTIVATED = '$surveys_activated'
 
 // A survey is "repeatable" when it shows on every captured trigger: an "always" schedule, or the
 // "Show every time the event is captured" option. Config-only (no dependency on the lazy-loaded
@@ -27,11 +28,11 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
     }
 
     protected _getItems(callback: (items: Survey[]) => void): void {
-        this._instance?.getSurveys(callback)
+        this._instance?.getSurveys?.(callback)
     }
 
     protected _cancelPendingItem(itemId: string): void {
-        this._instance?.cancelPendingSurvey(itemId)
+        this._instance?.cancelPendingSurvey?.(itemId)
     }
 
     protected _getLogger(): ReturnType<typeof createLogger> {

@@ -1,4 +1,5 @@
-import { extend } from './utils'
+import { configureBrowserCommon } from '@posthog/browser-common/utils/runtime'
+import { extend } from '@posthog/browser-common/utils'
 import { PersistentStore, Properties } from './types'
 import {
     DEVICE_ID,
@@ -11,8 +12,8 @@ import {
 } from './constants'
 
 import { isNull, isUndefined } from '@posthog/core'
-import { logger } from './utils/logger'
-import { window, document } from './utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { window, document } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from './uuidv7'
 
 // we store the discovered subdomain in memory because it might be read multiple times
@@ -258,6 +259,11 @@ export const localStore: PersistentStore = {
         }
     },
 }
+
+configureBrowserCommon({
+    cookieStore,
+    localStore,
+})
 
 // Use localstorage for most data but still use cookie for COOKIE_PERSISTED_PROPERTIES
 // This solves issues with cookies having too much data in them causing headers too large

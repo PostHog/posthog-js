@@ -1,5 +1,5 @@
-import { getQueryParam, formDataToQuery, maskQueryParams } from '../utils/request-utils'
-import { isMatchingRegex } from '../utils/regex-utils'
+import { getQueryParam, formDataToQuery, maskQueryParams } from '@posthog/browser-common/utils/request-utils'
+import { isMatchingRegex } from '@posthog/browser-common/utils/regex-utils'
 
 describe('request utils', () => {
     describe('_HTTPBuildQuery', () => {

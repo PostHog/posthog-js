@@ -17,7 +17,7 @@
  *  ```
  */
 import { PostHog } from '../posthog-core'
-import { createLogger } from '../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 import { EVENT_IDENTIFY, EVENT_PAGEVIEW, USER_STATE, USER_STATE_IDENTIFIED } from '../constants'
 import { isFunction } from '@posthog/core'

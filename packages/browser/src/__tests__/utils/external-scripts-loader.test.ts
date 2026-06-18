@@ -1,5 +1,5 @@
-import { RequestRouter } from '../../utils/request-router'
-import { assignableWindow } from '../../utils/globals'
+import { RequestRouter } from '@posthog/browser-common/utils/request-router'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { PostHog } from '../../posthog-core'
 import '../../entrypoints/external-scripts-loader'
 

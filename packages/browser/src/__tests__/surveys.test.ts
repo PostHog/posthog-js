@@ -21,11 +21,11 @@ import {
     SurveyType,
 } from '../posthog-surveys-types'
 import { FlagsResponse, PostHogConfig, Properties, RemoteConfig } from '../types'
-import * as globals from '../utils/globals'
-import { assignableWindow, window } from '../utils/globals'
-import { RequestRouter } from '../utils/request-router'
-import { SurveyEventReceiver } from '../utils/survey-event-receiver'
-import { SURVEY_LOGGER as logger } from '../utils/survey-utils'
+import * as globals from '@posthog/browser-common/utils/globals'
+import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
+import { RequestRouter } from '@posthog/browser-common/utils/request-router'
+import { SurveyEventReceiver } from '@posthog/browser-common/utils/survey-event-receiver'
+import { SURVEY_LOGGER as logger } from '@posthog/browser-common/utils/survey-utils'
 import { createMockPostHog, createMockConfig } from './helpers/posthog-instance'
 
 describe('surveys', () => {

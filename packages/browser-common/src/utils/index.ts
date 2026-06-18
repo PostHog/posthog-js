@@ -1,4 +1,4 @@
-import { PostHogConfig, Properties } from '../types'
+import type { PostHogConfigLike as PostHogConfig, Properties } from '../types'
 import { logger } from './logger'
 import { isFormData, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
 

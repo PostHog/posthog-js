@@ -1,4 +1,5 @@
-import { TOOLBAR_CONTAINER_CLASS, TOOLBAR_ID } from '../constants'
+const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
+const TOOLBAR_CONTAINER_CLASS = 'toolbar-global-fade-container'
 
 // Node.nodeType integer constants. We use the integers directly rather than
 // `Node.ELEMENT_NODE` etc. for browser portability (IE11) and to avoid a

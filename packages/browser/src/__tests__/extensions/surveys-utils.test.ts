@@ -10,7 +10,7 @@ import {
 } from '../../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
-import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
+import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '@posthog/browser-common/utils/survey-utils'
 
 describe('hasWaitPeriodPassed', () => {
     let originalDate: DateConstructor

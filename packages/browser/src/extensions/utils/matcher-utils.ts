@@ -1,6 +1,6 @@
 import { detectDeviceType } from '@posthog/core'
-import { navigator, userAgent, window } from '../../utils/globals'
-import { propertyComparisons } from '../../utils/property-utils'
+import { navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
+import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
 import { PropertyMatchType } from '../../types'
 
 export function doesDeviceTypeMatch(deviceTypes?: string[], matchType?: PropertyMatchType): boolean {
