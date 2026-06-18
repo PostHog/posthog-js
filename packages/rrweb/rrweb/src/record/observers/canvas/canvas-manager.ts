@@ -38,33 +38,6 @@ export class CanvasManager {
   private rafIdFlush: number | null = null;
   private refCount = 0;
   private torndown = false;
-  // live fps/quality/scale for the FPS-snapshot canvas observer, so callers can
-  // adjust capture fidelity mid-session without restarting recording.
-  // scale (0,1] downsamples the captured frame; it is upscaled back to its display
-  // size on replay, so playback dimensions/aspect are unchanged, just softer.
-  // undefined until the FPS observer is initialised (sampling is a number).
-  private _captureConfig?: { fps: number; quality: number | undefined; scale: number };
-
-  // adjust the active canvas FPS-snapshot fidelity in place. no-op if the FPS
-  // observer is not running (e.g. canvas recording disabled or sampling==='all').
-  public setCaptureConfig(config: {
-    fps?: number;
-    quality?: number;
-    scale?: number;
-  }): void {
-    if (!this._captureConfig) {
-      return;
-    }
-    if (typeof config.fps === 'number' && config.fps > 0) {
-      this._captureConfig.fps = config.fps;
-    }
-    if (typeof config.quality === 'number') {
-      this._captureConfig.quality = config.quality;
-    }
-    if (typeof config.scale === 'number' && config.scale > 0 && config.scale <= 1) {
-      this._captureConfig.scale = config.scale;
-    }
-  }
 
   // Shared by the main document and every iframe/shadow-root observer, so reference-count
   // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
@@ -124,6 +97,10 @@ export class CanvasManager {
     mirror: Mirror;
     sampling?: 'all' | number;
     dataURLOptions: DataURLOptions;
+    // (0,1] fraction of the canvas display size to capture frames at; the frame is upscaled
+    // back to its display size on replay, so playback dimensions/aspect are unchanged, just
+    // softer. defaults to 1 (full resolution).
+    resolutionScale?: number;
   }) {
     const {
       sampling = 'all',
@@ -132,9 +109,17 @@ export class CanvasManager {
       blockSelector,
       recordCanvas,
       dataURLOptions,
+      resolutionScale,
     } = options;
     this.mutationCb = options.mutationCb;
     this.mirror = options.mirror;
+
+    const scale =
+      typeof resolutionScale === 'number' &&
+      resolutionScale > 0 &&
+      resolutionScale <= 1
+        ? resolutionScale
+        : 1;
 
     if (recordCanvas && sampling === 'all')
       this.initCanvasMutationObserver(
@@ -146,6 +131,7 @@ export class CanvasManager {
     if (recordCanvas && typeof sampling === 'number')
       this.initCanvasFPSObserver(sampling, win, blockClass, blockSelector, {
         dataURLOptions,
+        scale,
       });
   }
 
@@ -173,6 +159,7 @@ export class CanvasManager {
     blockSelector: string | null,
     options: {
       dataURLOptions: DataURLOptions;
+      scale: number;
     },
   ) {
     if (!('OffscreenCanvas' in win)) {
@@ -238,7 +225,7 @@ export class CanvasManager {
       });
     };
 
-    this._captureConfig = { fps, quality: options.dataURLOptions.quality, scale: 1 };
+    const scale = options.scale;
     let lastSnapshotTime = 0;
     let rafId: number;
 
@@ -265,10 +252,7 @@ export class CanvasManager {
     };
 
     const takeCanvasSnapshots = (timestamp: DOMHighResTimeStamp) => {
-      if (
-        lastSnapshotTime &&
-        timestamp - lastSnapshotTime < 1000 / this._captureConfig!.fps
-      ) {
+      if (lastSnapshotTime && timestamp - lastSnapshotTime < 1000 / fps) {
         rafId = requestAnimationFrame(takeCanvasSnapshots);
         return;
       }
@@ -320,14 +304,20 @@ export class CanvasManager {
             const displayHeight = canvas.clientHeight || canvas.height;
             // capture at a (optionally downscaled) resolution; replay upscales it back to the
             // display size, so playback dimensions/aspect are unchanged, just softer.
-            const scale = this._captureConfig!.scale;
             const captureWidth = Math.max(1, Math.round(displayWidth * scale));
             const captureHeight = Math.max(1, Math.round(displayHeight * scale));
-            const bitmap = await createImageBitmap(canvas, {
-              resizeWidth: captureWidth,
-              resizeHeight: captureHeight,
-              resizeQuality: 'medium',
-            });
+            const bitmap = await createImageBitmap(
+              canvas,
+              // only ask for a quality resampling filter when we're actually downscaling;
+              // at full resolution this keeps capture identical to before.
+              scale < 1
+                ? {
+                    resizeWidth: captureWidth,
+                    resizeHeight: captureHeight,
+                    resizeQuality: 'medium',
+                  }
+                : { resizeWidth: captureWidth, resizeHeight: captureHeight },
+            );
             // record the display size on the main thread; the worker only encodes the
             // (possibly downscaled) bitmap and never needs to know the display size.
             displayDimsMap.set(id, { width: displayWidth, height: displayHeight });
@@ -337,7 +327,7 @@ export class CanvasManager {
                 bitmap,
                 width: captureWidth,
                 height: captureHeight,
-                dataURLOptions: { ...options.dataURLOptions, quality: this._captureConfig!.quality },
+                dataURLOptions: options.dataURLOptions,
               },
               [bitmap],
             );

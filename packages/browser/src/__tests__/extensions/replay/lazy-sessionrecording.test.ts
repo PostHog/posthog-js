@@ -215,7 +215,6 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
         })
         assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
-        assignableWindow.__PosthogExtensions__.rrweb.record.reconfigureCanvas = jest.fn()
 
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
             getRecordConsolePlugin: jest.fn(),
@@ -3951,7 +3950,29 @@ describe('Lazy SessionRecording', () => {
                         type: 'image/webp',
                         quality: 0.2,
                     },
+                    canvasResolutionScale: 1,
                 })
+            )
+        })
+
+        it.each([
+            ['unset', undefined, 1],
+            ['a fraction', { resolutionScale: 0.6 }, 0.6],
+            ['clamped up to 1', { resolutionScale: 2 }, 1],
+            ['clamped to the floor', { resolutionScale: 0.01 }, 0.1],
+            ['ignored when not a number', { resolutionScale: 'big' as any }, 1],
+        ])('passes canvasResolutionScale when canvasCapture is %s', (_label, canvasCapture, expected) => {
+            config.session_recording.canvasCapture = canvasCapture
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ canvasResolutionScale: expected })
             )
         })
 
@@ -5461,151 +5482,6 @@ describe('Lazy SessionRecording', () => {
 
             // Status should remain the same (no new trigger processing)
             expect(statusAfter).toBe(statusBefore)
-        })
-    })
-
-    describe('adaptive canvas capture', () => {
-        const oneMb = 1024 * 1024
-        let recorder: any
-        let reconfigure: jest.Mock
-
-        beforeEach(() => {
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-            expect(sessionRecording.status).toEqual('active')
-            recorder = sessionRecording['_lazyLoadedSessionRecording']
-            reconfigure = assignableWindow.__PosthogExtensions__.rrweb.record.reconfigureCanvas as jest.Mock
-            config.session_recording.captureCanvas = { recordCanvas: true }
-            reconfigure.mockClear()
-        })
-
-        it('does nothing when neither lever is enabled', () => {
-            config.session_recording.canvasCapture = undefined
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 100 * oneMb)
-
-            recorder['_maybeVaryCanvasCapture']()
-
-            expect(reconfigure).not.toHaveBeenCalled()
-        })
-
-        it('does nothing when canvas recording is disabled', () => {
-            config.session_recording.captureCanvas = { recordCanvas: false }
-            config.session_recording.canvasCapture = { varyFps: true }
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 100 * oneMb)
-
-            recorder['_maybeVaryCanvasCapture']()
-
-            expect(reconfigure).not.toHaveBeenCalled()
-        })
-
-        it('keeps base fps below the byte threshold and drops it by one above', () => {
-            config.session_recording.canvasCapture = { varyFps: true }
-
-            recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 4 }))
-
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 60 * oneMb)
-            recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 3 }))
-        })
-
-        it('lowers quality above the threshold only when varyQuality is set', () => {
-            config.session_recording.canvasCapture = { varyQuality: true }
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 60 * oneMb)
-
-            recorder['_maybeVaryCanvasCapture']()
-
-            expect(reconfigure).toHaveBeenLastCalledWith(
-                expect.objectContaining({ fps: 4, quality: expect.closeTo(0.35, 5) })
-            )
-        })
-
-        it('only reconfigures when the target changes', () => {
-            config.session_recording.canvasCapture = { varyFps: true }
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 60 * oneMb)
-            recorder['_maybeVaryCanvasCapture']()
-            reconfigure.mockClear()
-
-            recorder['_maybeVaryCanvasCapture']()
-
-            expect(reconfigure).not.toHaveBeenCalled()
-        })
-
-        it('steps fps down once per crossed threshold, with tiny configurable boundaries', () => {
-            config.session_recording.canvasCapture = { varyFps: true, thresholdsMb: [1, 2, 3] }
-            const tracker = recorder['_flushedSizeTracker']
-
-            tracker.trackSize(recorder.sessionId, 1.5 * oneMb) // crossed [1] → level 1
-            recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 3 }))
-
-            tracker.trackSize(recorder.sessionId, 1 * oneMb) // total 2.5 → crossed [1,2] → level 2
-            recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 2 }))
-
-            tracker.trackSize(recorder.sessionId, 1 * oneMb) // total 3.5 → crossed all → level 3
-            recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 1 }))
-        })
-
-        it('steps resolution down per threshold (never full) when varyResolution is true', () => {
-            config.session_recording.canvasCapture = { varyResolution: true, thresholdsMb: [1, 2, 3] }
-            const tracker = recorder['_flushedSizeTracker']
-
-            recorder['_maybeVaryCanvasCapture']() // level 0 → already below full res
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.75 }))
-
-            tracker.trackSize(recorder.sessionId, 1.5 * oneMb) // level 1
-            recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.6 }))
-
-            tracker.trackSize(recorder.sessionId, 2 * oneMb) // level 3
-            recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.5 }))
-        })
-
-        it('forces a fixed scale at every step when varyResolution is a number', () => {
-            config.session_recording.canvasCapture = { varyResolution: 0.6, thresholdsMb: [1, 2, 3] }
-
-            recorder['_maybeVaryCanvasCapture']() // level 0 → already 0.6
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.6 }))
-
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 5 * oneMb) // crossed thresholds
-            recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.6 })) // unchanged
-        })
-
-        it('captures at full resolution by default (matches today)', () => {
-            // varyResolution unset; varyFps makes the reconfigure call fire so we can assert scale
-            config.session_recording.canvasCapture = { varyFps: true }
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 60 * oneMb)
-
-            recorder['_maybeVaryCanvasCapture']()
-
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 1 }))
-        })
-
-        it('captures at full resolution when varyResolution is explicitly 1', () => {
-            config.session_recording.canvasCapture = { varyFps: true, varyResolution: 1 }
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 60 * oneMb)
-
-            recorder['_maybeVaryCanvasCapture']()
-
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 1 }))
-        })
-
-        it.each([
-            ['wrong length', [10, 20]],
-            ['not strictly increasing', [30, 20, 10]],
-            ['below the allowed range', [0, 50, 100]],
-            ['above the allowed range', [50, 150, 5000]],
-        ])('ignores invalid thresholdsMb (%s) and falls back to the defaults', (_label, thresholdsMb) => {
-            config.session_recording.canvasCapture = { varyFps: true, thresholdsMb: thresholdsMb as any }
-            // 2 MiB would trip a tiny invalid boundary but is far below the default 50 MiB first step
-            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 2 * oneMb)
-
-            recorder['_maybeVaryCanvasCapture']()
-
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 4 }))
         })
     })
 })

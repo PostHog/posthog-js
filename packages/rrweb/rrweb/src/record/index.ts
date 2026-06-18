@@ -92,6 +92,7 @@ function record<T = eventWithTime>(
     packFn,
     sampling = {},
     dataURLOptions: _dataURLOptions = {},
+    canvasResolutionScale,
     mousemoveWait,
     recordDOM = true,
     recordCanvas = false,
@@ -367,6 +368,7 @@ function record<T = eventWithTime>(
     mirror,
     sampling: sampling.canvas,
     dataURLOptions,
+    resolutionScale: canvasResolutionScale,
   });
 
   const shadowDomManager = new ShadowDomManager({
@@ -792,14 +794,6 @@ record.takeFullSnapshot = (isCheckout?: boolean) => {
     throw new Error('please take full snapshot after start recording');
   }
   takeFullSnapshot(isCheckout);
-};
-
-record.reconfigureCanvas = (config: {
-  fps?: number;
-  quality?: number;
-  scale?: number;
-}) => {
-  canvasManager?.setCaptureConfig(config);
 };
 
 record.mirror = mirror;

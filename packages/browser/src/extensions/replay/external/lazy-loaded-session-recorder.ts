@@ -89,23 +89,8 @@ const DEFAULT_CANVAS_FPS = 4
 const MAX_CANVAS_FPS = 12
 const MAX_CANVAS_QUALITY = 1
 
-// adaptive canvas capture (session_recording.canvasCapture) — deliberately gentle, playback
-// fidelity matters. as a session crosses each ascending byte threshold we step the canvas fps
-// down by one and/or lower webp quality a notch.
-const CANVAS_VARY_THRESHOLD_COUNT = 3
-const CANVAS_VARY_THRESHOLD_MIN_MB = 1
-const CANVAS_VARY_THRESHOLD_MAX_MB = 1024
-const DEFAULT_CANVAS_VARY_THRESHOLDS_MB = [50, 150, 300]
-const MIN_CANVAS_VARY_FPS = 1
-const CANVAS_QUALITY_STEP = 0.05
-const CANVAS_VARIED_QUALITY_FLOOR = 0.25
-// capture-resolution scale per crossed threshold (index === level) used when varyResolution is
-// `true`. aspect ratio is preserved and replay upscales back to display size, so playback
-// dimensions are unchanged, just softer. never 1 (opting into stepping means never full res),
-// floored at 0.5 (half each dimension ~= a quarter of the pixels) to keep it legible.
-const CANVAS_RESOLUTION_SCALE_BY_LEVEL = [0.75, 0.6, 0.5, 0.5]
-// lower bound for an explicitly-configured fixed scale, so a misconfiguration can't capture
-// at a degenerate resolution.
+// lower bound for session_recording.canvasCapture.resolutionScale, so a misconfiguration can't
+// capture at a degenerate resolution.
 const MIN_CANVAS_SCALE = 0.1
 const TWO_SECONDS = 2000
 const ONE_KB = 1024
@@ -573,95 +558,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             : undefined
     }
 
-    private _lastAppliedCanvasFps?: number
-    private _lastAppliedCanvasQuality?: number
-    private _lastAppliedCanvasScale?: number
-    private _loggedInvalidCanvasThresholds = false
-
-    // the three ascending per-session byte boundaries at which canvas fidelity steps down.
-    // validates session_recording.canvasCapture.thresholdsMb (exactly three, strictly increasing,
-    // each within the allowed MiB range) and falls back to the defaults otherwise — so a test can
-    // set tiny boundaries but a misconfiguration can't push it out of a sane range in prod.
-    private get _canvasVaryThresholdsBytes(): number[] {
-        const configured = this._instance.config.session_recording.canvasCapture?.thresholdsMb
-        let mb: number[] = DEFAULT_CANVAS_VARY_THRESHOLDS_MB
-        if (!isUndefined(configured)) {
-            const valid =
-                isArray(configured) &&
-                configured.length === CANVAS_VARY_THRESHOLD_COUNT &&
-                configured.every(
-                    (v) =>
-                        isNumber(v) &&
-                        Number.isFinite(v) &&
-                        v >= CANVAS_VARY_THRESHOLD_MIN_MB &&
-                        v <= CANVAS_VARY_THRESHOLD_MAX_MB
-                ) &&
-                configured[0] < configured[1] &&
-                configured[1] < configured[2]
-            if (valid) {
-                mb = configured
-            } else if (!this._loggedInvalidCanvasThresholds) {
-                this._loggedInvalidCanvasThresholds = true
-                logger.warn(
-                    `ignoring invalid session_recording.canvasCapture.thresholdsMb - expected ${CANVAS_VARY_THRESHOLD_COUNT} strictly-increasing values between ${CANVAS_VARY_THRESHOLD_MIN_MB} and ${CANVAS_VARY_THRESHOLD_MAX_MB} MiB`,
-                    configured
-                )
-            }
+    // (0,1] fraction of the canvas display size to capture frames at, from
+    // session_recording.canvasCapture.resolutionScale. clamped to a sane range; defaults to 1
+    // (full resolution, matching today's production) so capture only drops below full resolution
+    // when explicitly configured. replay upscales the frame back to its display size.
+    private get _canvasResolutionScale(): number {
+        const configured = this._instance.config.session_recording.canvasCapture?.resolutionScale
+        if (!isNumber(configured) || !Number.isFinite(configured)) {
+            return 1
         }
-        return mb.map((v) => v * 1024 * 1024)
-    }
-
-    // a number forces a fixed capture scale at every step (1 = full resolution, the only way to
-    // capture at full res); `true` steps down per crossed threshold and never returns full res;
-    // unset/false is full resolution, matching today's production.
-    private _resolveCanvasScale(varyResolution: boolean | number | undefined, level: number): number {
-        if (isNumber(varyResolution)) {
-            return Number.isFinite(varyResolution) ? Math.min(1, Math.max(MIN_CANVAS_SCALE, varyResolution)) : 1
-        }
-        if (varyResolution === true) {
-            return CANVAS_RESOLUTION_SCALE_BY_LEVEL[level]
-        }
-        return 1
-    }
-
-    // adaptively step canvas capture fidelity down as the session accumulates bytes, gated by
-    // session_recording.canvasCapture.{varyFps,varyQuality,varyResolution}. keyed on the
-    // per-session flushed byte counter, so it resets to the configured fidelity when a new
-    // session starts.
-    private _maybeVaryCanvasCapture(): void {
-        const canvas = this._canvasRecording
-        if (!canvas.enabled) {
-            return
-        }
-
-        const { varyFps, varyQuality, varyResolution } = this._instance.config.session_recording.canvasCapture || {}
-
-        const sessionBytes = this._flushedSizeTracker?.currentTrackedSize(this.sessionId) ?? 0
-        // level = how many ascending thresholds the session has crossed (0..3)
-        const level = this._canvasVaryThresholdsBytes.filter((threshold) => sessionBytes >= threshold).length
-
-        const targetScale = this._resolveCanvasScale(varyResolution, level)
-        // only act if at least one lever changes something (a scale < 1 counts)
-        if (!varyFps && !varyQuality && targetScale >= 1) {
-            return
-        }
-
-        const targetFps = varyFps ? Math.max(MIN_CANVAS_VARY_FPS, canvas.fps - level) : canvas.fps
-        const targetQuality = varyQuality
-            ? Math.max(CANVAS_VARIED_QUALITY_FLOOR, canvas.quality - level * CANVAS_QUALITY_STEP)
-            : canvas.quality
-
-        if (
-            targetFps === this._lastAppliedCanvasFps &&
-            targetQuality === this._lastAppliedCanvasQuality &&
-            targetScale === this._lastAppliedCanvasScale
-        ) {
-            return
-        }
-        this._lastAppliedCanvasFps = targetFps
-        this._lastAppliedCanvasQuality = targetQuality
-        this._lastAppliedCanvasScale = targetScale
-        getRRWebRecord()?.reconfigureCanvas?.({ fps: targetFps, quality: targetQuality, scale: targetScale })
+        return Math.min(1, Math.max(MIN_CANVAS_SCALE, configured))
     }
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {
@@ -1671,9 +1577,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._strategy?.onFlushComplete()
         }
 
-        // adjust canvas capture fidelity now the session's byte counter is up to date
-        this._maybeVaryCanvasCapture()
-
         // buffer is empty, we clear it in case the session id has changed
         return this._clearBuffer()
     }
@@ -2000,6 +1903,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.recordCanvas = true
             sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
+            sessionRecordingOptions.canvasResolutionScale = this._canvasResolutionScale
         }
 
         if (this._masking) {
