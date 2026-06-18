@@ -966,7 +966,7 @@ export abstract class PostHogCoreStateless {
         return
       }
 
-      let message: PostHogEventProperties | null = this.prepareMessage(type, _message, options)
+      let message: PostHogEventProperties | null = this.prepareMessage(_message, options)
 
       // Allow subclasses to transform or filter the message
       message = this.processBeforeEnqueue(message)
@@ -1013,7 +1013,7 @@ export abstract class PostHogCoreStateless {
       return
     }
 
-    let message: PostHogEventProperties | null = this.prepareMessage(type, _message, options)
+    let message: PostHogEventProperties | null = this.prepareMessage(_message, options)
 
     // Allow subclasses to transform or filter the message (e.g., before_send hook)
     message = this.processBeforeEnqueue(message)
@@ -1081,12 +1081,12 @@ export abstract class PostHogCoreStateless {
     return sanitizedMessage
   }
 
-  protected prepareMessage(_type: string, _message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
-    const message = this.normalizeMessage({
+  protected prepareMessage(_message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+    const message = {
       ..._message,
       timestamp: options?.timestamp ? options?.timestamp : currentISOTime(),
       uuid: options?.uuid ? options.uuid : uuidv7(),
-    })
+    }
 
     const addGeoipDisableProperty = options?.disableGeoip ?? this.disableGeoip
     if (addGeoipDisableProperty) {

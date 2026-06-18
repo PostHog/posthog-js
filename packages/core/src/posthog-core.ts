@@ -1595,6 +1595,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * This runs after prepareMessage, giving users full control over the final event.
    *
    * The internal message contains many fields (event, distinct_id, properties, timestamp, uuid).
+   * Deprecated top-level type, library, and library_version values may still be present on legacy
+   * queued messages; type is a no-op, while library and library_version are only used as fallbacks
+   * for the official properties.$lib and properties.$lib_version fields.
    * CaptureEvent exposes a subset matching the web SDK's
    * CaptureResult: uuid, event, properties, $set, $set_once, timestamp.
    * Note: $set/$set_once are extracted from properties.$set and properties.$set_once.
