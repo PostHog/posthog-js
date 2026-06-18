@@ -650,6 +650,11 @@ export class PostHog implements PostHogInterface {
         if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
             mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
         }
+        // likewise a partial user-supplied session_recording object should keep the date-gated
+        // defaults (e.g. strictMinimumDuration, canvasCapture) rather than replacing them wholesale
+        if (isObject(baseConfig.session_recording) && isObject(userConfig.session_recording)) {
+            mergedConfig.session_recording = extend({}, baseConfig.session_recording, userConfig.session_recording)
+        }
         this.set_config(mergedConfig)
 
         if (this.config.on_xhr_error) {
