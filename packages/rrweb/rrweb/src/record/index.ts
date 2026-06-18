@@ -794,6 +794,10 @@ record.takeFullSnapshot = (isCheckout?: boolean) => {
   takeFullSnapshot(isCheckout);
 };
 
+record.reconfigureCanvas = (config: { fps?: number; quality?: number }) => {
+  canvasManager?.setCaptureConfig(config);
+};
+
 record.mirror = mirror;
 
 export default record;

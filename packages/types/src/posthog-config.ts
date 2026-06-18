@@ -564,6 +564,25 @@ export interface SessionRecordingOptions {
     captureCanvas?: SessionRecordingCanvasOptions
 
     /**
+     * EXPERIMENTAL: adaptively reduce canvas capture fidelity as a session accumulates bytes,
+     * so heavy canvas recordings (e.g. animation/video) cost less without dropping data. Keyed
+     * on the per-session flushed-bytes counter; resets to full fidelity on a new session.
+     *
+     * Both levers are off by default and intended for careful, opt-in rollout. Playback fidelity
+     * matters, so the steps are deliberately gentle (fps is only nudged down by one).
+     *
+     * - `varyFps`: once the session crosses a byte threshold, drop the canvas snapshot fps by one
+     *   (e.g. 4 -> 3).
+     * - `varyQuality`: once over the threshold, slightly lower the webp encode quality.
+     *
+     * Only has any effect when canvas recording is enabled.
+     */
+    canvasCapture?: {
+        varyFps?: boolean
+        varyQuality?: boolean
+    }
+
+    /**
      * Modify the network request before it is captured. Returning null or undefined stops it being captured
      */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null

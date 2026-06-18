@@ -38,6 +38,24 @@ export class CanvasManager {
   private rafIdFlush: number | null = null;
   private refCount = 0;
   private torndown = false;
+  // live fps/quality for the FPS-snapshot canvas observer, so callers can
+  // adjust capture fidelity mid-session without restarting recording.
+  // undefined until the FPS observer is initialised (sampling is a number).
+  private _captureConfig?: { fps: number; quality: number | undefined };
+
+  // adjust the active canvas FPS-snapshot fidelity in place. no-op if the FPS
+  // observer is not running (e.g. canvas recording disabled or sampling==='all').
+  public setCaptureConfig(config: { fps?: number; quality?: number }): void {
+    if (!this._captureConfig) {
+      return;
+    }
+    if (typeof config.fps === 'number' && config.fps > 0) {
+      this._captureConfig.fps = config.fps;
+    }
+    if (typeof config.quality === 'number') {
+      this._captureConfig.quality = config.quality;
+    }
+  }
 
   // Shared by the main document and every iframe/shadow-root observer, so reference-count
   // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
@@ -199,7 +217,7 @@ export class CanvasManager {
       });
     };
 
-    const timeBetweenSnapshots = 1000 / fps;
+    this._captureConfig = { fps, quality: options.dataURLOptions.quality };
     let lastSnapshotTime = 0;
     let rafId: number;
 
@@ -228,7 +246,7 @@ export class CanvasManager {
     const takeCanvasSnapshots = (timestamp: DOMHighResTimeStamp) => {
       if (
         lastSnapshotTime &&
-        timestamp - lastSnapshotTime < timeBetweenSnapshots
+        timestamp - lastSnapshotTime < 1000 / this._captureConfig!.fps
       ) {
         rafId = requestAnimationFrame(takeCanvasSnapshots);
         return;
@@ -289,7 +307,7 @@ export class CanvasManager {
                 bitmap,
                 width: width,
                 height: height,
-                dataURLOptions: options.dataURLOptions,
+                dataURLOptions: { ...options.dataURLOptions, quality: this._captureConfig!.quality },
               },
               [bitmap],
             );

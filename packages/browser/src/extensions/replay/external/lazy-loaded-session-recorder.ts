@@ -88,6 +88,14 @@ const DEFAULT_CANVAS_QUALITY = 0.4
 const DEFAULT_CANVAS_FPS = 4
 const MAX_CANVAS_FPS = 12
 const MAX_CANVAS_QUALITY = 1
+
+// adaptive canvas capture (session_recording.canvasCapture) — deliberately gentle,
+// playback fidelity matters. once a session has flushed this many bytes we may nudge
+// the canvas fps down by one and/or slightly lower webp quality.
+const CANVAS_VARY_THRESHOLD_BYTES = 50 * 1024 * 1024
+const CANVAS_VARIED_FPS = 3
+const CANVAS_QUALITY_STEP = 0.05
+const CANVAS_VARIED_QUALITY_FLOOR = 0.3
 const TWO_SECONDS = 2000
 const ONE_KB = 1024
 
@@ -552,6 +560,40 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                   blockSelector,
               }
             : undefined
+    }
+
+    private _lastAppliedCanvasFps?: number
+    private _lastAppliedCanvasQuality?: number
+
+    // adaptively step canvas capture fidelity down as the session accumulates bytes, gated by
+    // session_recording.canvasCapture.{varyFps,varyQuality}. keyed on the per-session flushed
+    // byte counter, so it resets to the configured fidelity when a new session starts.
+    private _maybeVaryCanvasCapture(): void {
+        const canvas = this._canvasRecording
+        if (!canvas.enabled) {
+            return
+        }
+
+        const { varyFps, varyQuality } = this._instance.config.session_recording.canvasCapture || {}
+        if (!varyFps && !varyQuality) {
+            return
+        }
+
+        const sessionBytes = this._flushedSizeTracker?.currentTrackedSize(this.sessionId) ?? 0
+        const overBudget = sessionBytes >= CANVAS_VARY_THRESHOLD_BYTES
+
+        const targetFps = varyFps && overBudget ? Math.min(canvas.fps, CANVAS_VARIED_FPS) : canvas.fps
+        const targetQuality =
+            varyQuality && overBudget
+                ? Math.max(CANVAS_VARIED_QUALITY_FLOOR, canvas.quality - CANVAS_QUALITY_STEP)
+                : canvas.quality
+
+        if (targetFps === this._lastAppliedCanvasFps && targetQuality === this._lastAppliedCanvasQuality) {
+            return
+        }
+        this._lastAppliedCanvasFps = targetFps
+        this._lastAppliedCanvasQuality = targetQuality
+        getRRWebRecord()?.reconfigureCanvas?.({ fps: targetFps, quality: targetQuality })
     }
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {
@@ -1560,6 +1602,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // Notify strategy that initial flush is complete (performance optimization)
             this._strategy?.onFlushComplete()
         }
+
+        // adjust canvas capture fidelity now the session's byte counter is up to date
+        this._maybeVaryCanvasCapture()
 
         // buffer is empty, we clear it in case the session id has changed
         return this._clearBuffer()
