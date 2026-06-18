@@ -161,26 +161,21 @@ describe('logs entrypoint', () => {
             })
         })
 
-        it('should use correct levels for different console methods', () => {
-            const testCases = [
-                { method: 'log', expectedLevel: 'info' },
-                { method: 'info', expectedLevel: 'info' },
-                { method: 'warn', expectedLevel: 'warn' },
-                { method: 'error', expectedLevel: 'error' },
-                { method: 'debug', expectedLevel: 'debug' },
-            ] as const
+        it.each([
+            ['log', 'info'],
+            ['info', 'info'],
+            ['warn', 'warn'],
+            ['error', 'error'],
+            ['debug', 'debug'],
+        ] as const)('should map console.%s to level %s', (method, expectedLevel) => {
+            ;(assignableWindow.console[method] as any)(`Test ${method} message`)
 
-            testCases.forEach(({ method, expectedLevel }) => {
-                mockEmit.mockClear()
-                ;(assignableWindow.console[method] as any)(`Test ${method} message`)
-
-                expect(mockEmit).toHaveBeenCalledWith({
-                    level: expectedLevel,
-                    body: `"Test ${method} message"`,
-                    attributes: expect.objectContaining({
-                        'log.source': `console.${method}`,
-                    }),
-                })
+            expect(mockEmit).toHaveBeenCalledWith({
+                level: expectedLevel,
+                body: `"Test ${method} message"`,
+                attributes: expect.objectContaining({
+                    'log.source': `console.${method}`,
+                }),
             })
         })
 
