@@ -264,7 +264,10 @@ class PosthogReactNativePluginModule(
     promise: Promise,
   ) {
     try {
-      PostHog.addExceptionStep(message, properties?.toHashMap())
+      // ReadableMap.toHashMap() is HashMap<String, Any?>; the native API takes Map<String, Any>?.
+      @Suppress("UNCHECKED_CAST")
+      val nativeProperties = properties?.toHashMap() as Map<String, Any>?
+      PostHog.addExceptionStep(message, nativeProperties)
     } catch (e: Throwable) {
       logError("addExceptionStep", e)
     } finally {
