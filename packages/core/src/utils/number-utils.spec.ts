@@ -76,6 +76,46 @@ describe('number-utils', () => {
           fallback: '20',
         },
       ],
+      [
+        'returns the fallback when value is NaN (NaN is not a valid number)',
+        {
+          value: NaN,
+          min: 10,
+          max: 100,
+          expected: 20,
+          fallback: 20,
+        },
+      ],
+      [
+        'returns max when value is NaN and no fallback is provided',
+        {
+          value: NaN,
+          min: 10,
+          max: 100,
+          expected: 100,
+          fallback: undefined,
+        },
+      ],
+      [
+        'clamps positive Infinity to max',
+        {
+          value: Infinity,
+          min: 10,
+          max: 100,
+          expected: 100,
+          fallback: undefined,
+        },
+      ],
+      [
+        'clamps negative Infinity to min',
+        {
+          value: -Infinity,
+          min: 10,
+          max: 100,
+          expected: 10,
+          fallback: undefined,
+        },
+      ],
     ])('%s', (_description, { value, min, max, expected, fallback }) => {
       const result = clampToRange(value, min, max, mockLogger, fallback as any)
       expect(result).toBe(expected)

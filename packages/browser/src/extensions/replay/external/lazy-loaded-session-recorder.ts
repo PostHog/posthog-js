@@ -559,15 +559,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     // (0,1] fraction of the canvas display size to capture frames at, from
-    // session_recording.canvasCapture.resolutionScale. clamped to a sane range; defaults to 1
-    // (full resolution, matching today's production) so capture only drops below full resolution
-    // when explicitly configured. replay upscales the frame back to its display size.
+    // session_recording.canvasCapture.resolutionScale. clamped to [MIN_CANVAS_SCALE, 1]; defaults
+    // to 1 (full resolution) so capture only drops below full resolution when explicitly
+    // configured. replay upscales the frame back to its display size.
     private get _canvasResolutionScale(): number {
-        const configured = this._instance.config.session_recording.canvasCapture?.resolutionScale
-        if (!isNumber(configured) || !Number.isFinite(configured)) {
-            return 1
-        }
-        return Math.min(1, Math.max(MIN_CANVAS_SCALE, configured))
+        return clampToRange(
+            this._instance.config.session_recording.canvasCapture?.resolutionScale,
+            MIN_CANVAS_SCALE,
+            1,
+            createLogger('canvas recording resolution scale'),
+            1
+        )
     }
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {
