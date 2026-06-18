@@ -99,10 +99,14 @@ const DEFAULT_CANVAS_VARY_THRESHOLDS_MB = [50, 150, 300]
 const MIN_CANVAS_VARY_FPS = 1
 const CANVAS_QUALITY_STEP = 0.05
 const CANVAS_VARIED_QUALITY_FLOOR = 0.25
-// capture-resolution scale per crossed threshold (index === level). aspect ratio is preserved
-// and replay upscales back to display size, so playback dimensions are unchanged, just softer.
+// capture-resolution scale per crossed threshold (index === level) used when varyResolution is
+// `true`. aspect ratio is preserved and replay upscales back to display size, so playback
+// dimensions are unchanged, just softer. never 1 (opting into stepping means never full res),
 // floored at 0.5 (half each dimension ~= a quarter of the pixels) to keep it legible.
-const CANVAS_RESOLUTION_SCALE_BY_LEVEL = [1, 0.75, 0.6, 0.5]
+const CANVAS_RESOLUTION_SCALE_BY_LEVEL = [0.75, 0.6, 0.5, 0.5]
+// lower bound for an explicitly-configured fixed scale, so a misconfiguration can't capture
+// at a degenerate resolution.
+const MIN_CANVAS_SCALE = 0.1
 const TWO_SECONDS = 2000
 const ONE_KB = 1024
 
@@ -607,9 +611,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return mb.map((v) => v * 1024 * 1024)
     }
 
+    // a number forces a fixed capture scale at every step (1 = full resolution, the only way to
+    // capture at full res); `true` steps down per crossed threshold and never returns full res;
+    // unset/false is full resolution, matching today's production.
+    private _resolveCanvasScale(varyResolution: boolean | number | undefined, level: number): number {
+        if (isNumber(varyResolution)) {
+            return Number.isFinite(varyResolution) ? Math.min(1, Math.max(MIN_CANVAS_SCALE, varyResolution)) : 1
+        }
+        if (varyResolution === true) {
+            return CANVAS_RESOLUTION_SCALE_BY_LEVEL[level]
+        }
+        return 1
+    }
+
     // adaptively step canvas capture fidelity down as the session accumulates bytes, gated by
-    // session_recording.canvasCapture.{varyFps,varyQuality}. keyed on the per-session flushed
-    // byte counter, so it resets to the configured fidelity when a new session starts.
+    // session_recording.canvasCapture.{varyFps,varyQuality,varyResolution}. keyed on the
+    // per-session flushed byte counter, so it resets to the configured fidelity when a new
+    // session starts.
     private _maybeVaryCanvasCapture(): void {
         const canvas = this._canvasRecording
         if (!canvas.enabled) {
@@ -617,19 +635,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         const { varyFps, varyQuality, varyResolution } = this._instance.config.session_recording.canvasCapture || {}
-        if (!varyFps && !varyQuality && !varyResolution) {
-            return
-        }
 
         const sessionBytes = this._flushedSizeTracker?.currentTrackedSize(this.sessionId) ?? 0
         // level = how many ascending thresholds the session has crossed (0..3)
         const level = this._canvasVaryThresholdsBytes.filter((threshold) => sessionBytes >= threshold).length
 
+        const targetScale = this._resolveCanvasScale(varyResolution, level)
+        // only act if at least one lever changes something (a scale < 1 counts)
+        if (!varyFps && !varyQuality && targetScale >= 1) {
+            return
+        }
+
         const targetFps = varyFps ? Math.max(MIN_CANVAS_VARY_FPS, canvas.fps - level) : canvas.fps
         const targetQuality = varyQuality
             ? Math.max(CANVAS_VARIED_QUALITY_FLOOR, canvas.quality - level * CANVAS_QUALITY_STEP)
             : canvas.quality
-        const targetScale = varyResolution ? CANVAS_RESOLUTION_SCALE_BY_LEVEL[level] : 1
 
         if (
             targetFps === this._lastAppliedCanvasFps &&

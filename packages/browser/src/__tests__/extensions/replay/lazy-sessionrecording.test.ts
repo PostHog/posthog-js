@@ -5547,24 +5547,50 @@ describe('Lazy SessionRecording', () => {
             expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ fps: 1 }))
         })
 
-        it('steps capture resolution down per crossed threshold when varyResolution is set', () => {
+        it('steps resolution down per threshold (never full) when varyResolution is true', () => {
             config.session_recording.canvasCapture = { varyResolution: true, thresholdsMb: [1, 2, 3] }
             const tracker = recorder['_flushedSizeTracker']
 
-            recorder['_maybeVaryCanvasCapture']() // level 0 → full resolution
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 1 }))
+            recorder['_maybeVaryCanvasCapture']() // level 0 → already below full res
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.75 }))
 
             tracker.trackSize(recorder.sessionId, 1.5 * oneMb) // level 1
             recorder['_maybeVaryCanvasCapture']()
-            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.75 }))
-
-            tracker.trackSize(recorder.sessionId, 1 * oneMb) // level 2
-            recorder['_maybeVaryCanvasCapture']()
             expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.6 }))
 
-            tracker.trackSize(recorder.sessionId, 1 * oneMb) // level 3
+            tracker.trackSize(recorder.sessionId, 2 * oneMb) // level 3
             recorder['_maybeVaryCanvasCapture']()
             expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.5 }))
+        })
+
+        it('forces a fixed scale at every step when varyResolution is a number', () => {
+            config.session_recording.canvasCapture = { varyResolution: 0.6, thresholdsMb: [1, 2, 3] }
+
+            recorder['_maybeVaryCanvasCapture']() // level 0 → already 0.6
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.6 }))
+
+            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 5 * oneMb) // crossed thresholds
+            recorder['_maybeVaryCanvasCapture']()
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 0.6 })) // unchanged
+        })
+
+        it('captures at full resolution by default (matches today)', () => {
+            // varyResolution unset; varyFps makes the reconfigure call fire so we can assert scale
+            config.session_recording.canvasCapture = { varyFps: true }
+            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 60 * oneMb)
+
+            recorder['_maybeVaryCanvasCapture']()
+
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 1 }))
+        })
+
+        it('captures at full resolution when varyResolution is explicitly 1', () => {
+            config.session_recording.canvasCapture = { varyFps: true, varyResolution: 1 }
+            recorder['_flushedSizeTracker'].trackSize(recorder.sessionId, 60 * oneMb)
+
+            recorder['_maybeVaryCanvasCapture']()
+
+            expect(reconfigure).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 1 }))
         })
 
         it.each([

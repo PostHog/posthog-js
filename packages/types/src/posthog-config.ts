@@ -574,10 +574,14 @@ export interface SessionRecordingOptions {
      *
      * - `varyFps`: step the canvas snapshot fps down by one per crossed threshold.
      * - `varyQuality`: step the webp encode quality down slightly per crossed threshold.
-     * - `varyResolution`: step the captured frame resolution down per crossed threshold (aspect
-     *   ratio preserved; replay upscales it back to the original display size, so playback
-     *   dimensions are unchanged, just softer). Resolution is the highest-leverage lever since
-     *   bytes scale with pixel area.
+     * - `varyResolution`: scale the captured frame resolution down (aspect ratio preserved; replay
+     *   upscales it back to the original display size, so playback dimensions are unchanged, just
+     *   softer). Resolution is the highest-leverage lever since bytes scale with pixel area.
+     *   - a number `(0, 1]` forces that fixed scale at every step (e.g. `0.6` always captures at
+     *     60% resolution); `1` is full resolution.
+     *   - `true` steps the scale down per crossed threshold and never captures at full resolution.
+     *   - The effective default (unset) is `1` — full resolution, matching today's behaviour. So
+     *     capture only ever drops below full resolution when this is explicitly set.
      * - `thresholdsMb`: the three (ascending) per-session size boundaries, in MiB, at which each
      *   successive degradation step kicks in. Must be exactly three values, strictly increasing,
      *   each between 1 and 1024 MiB — anything else is ignored and the defaults ([50, 150, 300])
@@ -588,7 +592,7 @@ export interface SessionRecordingOptions {
     canvasCapture?: {
         varyFps?: boolean
         varyQuality?: boolean
-        varyResolution?: boolean
+        varyResolution?: boolean | number
         thresholdsMb?: [number, number, number]
     }
 
