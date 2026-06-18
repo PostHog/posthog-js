@@ -47,6 +47,7 @@
         "_cancelEventToItems",
         "_cancelPendingItem",
         "_canvasRecording",
+        "_canvasResolutionScale",
         "_capture",
         "_captureDeadClick",
         "_captureEvent",
