@@ -1704,6 +1704,17 @@ export class PostHog extends PostHogCore {
     this._forwardExceptionStepToNative(message, properties)
   }
 
+  /**
+   * Native error tracking initializes asynchronously, so steps recorded before then are buffered
+   * only in JS. Replay the buffer once native is ready so a native crash shortly after startup
+   * carries the same timeline. Runs once (native setup can't re-run); later steps mirror live.
+   */
+  private _replayBufferedExceptionStepsToNative(): void {
+    for (const step of this._errorTracking.getAttachableExceptionSteps()) {
+      this._forwardExceptionStepToNative(step.$message, step as PostHogEventProperties)
+    }
+  }
+
   private _forwardExceptionStepToNative(message: string, properties?: PostHogEventProperties): void {
     if (!this._nativeErrorTrackingInitialized || !OptionalReactNativePlugin?.addExceptionStep) {
       return
@@ -2196,6 +2207,7 @@ export class PostHog extends PostHogCore {
       }
       if (enableNativeErrorTracking) {
         this._nativeErrorTrackingInitialized = true
+        this._replayBufferedExceptionStepsToNative()
         this._logger.info('Native error tracking started.')
       }
       return true

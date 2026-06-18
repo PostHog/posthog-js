@@ -266,7 +266,7 @@ class PosthogReactNativePlugin: NSObject {
 
     @objc(addExceptionStep:withProperties:withResolver:withRejecter:)
     func addExceptionStep(
-        message: String, properties: [String: Any], resolve: RCTPromiseResolveBlock,
+        message: String, properties: [String: Any]?, resolve: RCTPromiseResolveBlock,
         reject _: RCTPromiseRejectBlock
     ) {
         PostHogSDK.shared.addExceptionStep(message, properties: properties)
