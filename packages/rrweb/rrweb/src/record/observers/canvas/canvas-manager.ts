@@ -25,6 +25,10 @@ type pendingCanvasMutationsMap = Map<
   canvasMutationWithType[]
 >;
 
+// lower bound for resolutionScale, so a misconfiguration can't capture at a degenerate
+// resolution. matches the floor the PostHog SDK applies before passing the option in.
+const MIN_CANVAS_RESOLUTION_SCALE = 0.1;
+
 export class CanvasManager {
   private pendingCanvasMutations: pendingCanvasMutationsMap = new Map();
   private rafStamps: RafStamps = { latestId: 0, invokeId: null };
@@ -97,9 +101,10 @@ export class CanvasManager {
     mirror: Mirror;
     sampling?: 'all' | number;
     dataURLOptions: DataURLOptions;
-    // (0,1] fraction of the canvas display size to capture frames at; the frame is upscaled
-    // back to its display size on replay, so playback dimensions/aspect are unchanged, just
-    // softer. defaults to 1 (full resolution).
+    // fraction of the canvas display size to capture frames at, clamped to
+    // [MIN_CANVAS_RESOLUTION_SCALE, 1]; the frame is upscaled back to its display size on replay,
+    // so playback dimensions/aspect are unchanged, just softer. invalid/unset defaults to 1
+    // (full resolution).
     resolutionScale?: number;
   }) {
     const {
@@ -115,10 +120,8 @@ export class CanvasManager {
     this.mirror = options.mirror;
 
     const scale =
-      typeof resolutionScale === 'number' &&
-      resolutionScale > 0 &&
-      resolutionScale <= 1
-        ? resolutionScale
+      typeof resolutionScale === 'number' && Number.isFinite(resolutionScale)
+        ? Math.min(1, Math.max(MIN_CANVAS_RESOLUTION_SCALE, resolutionScale))
         : 1;
 
     if (recordCanvas && sampling === 'all')
