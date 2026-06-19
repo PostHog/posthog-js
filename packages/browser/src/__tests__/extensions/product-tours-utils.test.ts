@@ -7,25 +7,74 @@ import {
     hasTourWaitPeriodPassed,
     getProductTourStylesheet,
 } from '../../extensions/product-tours/product-tours-utils'
+import { PostHog } from '../../posthog-core'
 import { ProductTourStep } from '../../posthog-product-tours-types'
 import { doesTourActivateByEvent, doesTourActivateByAction } from '../../utils/product-tour-utils'
 import { LAST_SEEN_TOUR_DATE_KEY_PREFIX } from '../../extensions/product-tours/constants'
 
 describe('getProductTourStylesheet', () => {
-    it('runs the stylesheet through prepare_external_dependency_stylesheet', () => {
-        const prepareExternalDependencyStylesheet = jest.fn((stylesheet: HTMLStyleElement) => {
-            stylesheet.setAttribute('nonce', 'test-nonce')
-            return stylesheet
-        })
+    it.each([
+        {
+            name: 'no posthog instance passed',
+            setup: () => ({}),
+            expectedHookCalls: 0,
+            expectedNonce: null,
+            expectedStylesheet: true,
+        },
+        {
+            name: 'posthog without prepare_external_dependency_stylesheet configured',
+            setup: () => ({ posthog: { config: {} } as unknown as PostHog }),
+            expectedHookCalls: 0,
+            expectedNonce: null,
+            expectedStylesheet: true,
+        },
+        {
+            name: 'runs the stylesheet through prepare_external_dependency_stylesheet',
+            setup: () => {
+                const prepareExternalDependencyStylesheet = jest.fn((stylesheet: HTMLStyleElement) => {
+                    stylesheet.setAttribute('nonce', 'test-nonce')
+                    return stylesheet
+                })
+                return {
+                    posthog: {
+                        config: { prepare_external_dependency_stylesheet: prepareExternalDependencyStylesheet },
+                    } as unknown as PostHog,
+                    prepareExternalDependencyStylesheet,
+                }
+            },
+            expectedHookCalls: 1,
+            expectedNonce: 'test-nonce',
+            expectedStylesheet: true,
+        },
+        {
+            name: 'returns null when prepare_external_dependency_stylesheet returns null',
+            setup: () => {
+                const prepareExternalDependencyStylesheet = jest.fn(() => null)
+                return {
+                    posthog: {
+                        config: { prepare_external_dependency_stylesheet: prepareExternalDependencyStylesheet },
+                    } as unknown as PostHog,
+                    prepareExternalDependencyStylesheet,
+                }
+            },
+            expectedHookCalls: 1,
+            expectedNonce: null,
+            expectedStylesheet: false,
+        },
+    ])('$name', ({ setup, expectedHookCalls, expectedNonce, expectedStylesheet }) => {
+        const { posthog, prepareExternalDependencyStylesheet } = setup() as {
+            posthog?: PostHog
+            prepareExternalDependencyStylesheet?: jest.Mock
+        }
 
-        const stylesheet = getProductTourStylesheet({
-            config: { prepare_external_dependency_stylesheet: prepareExternalDependencyStylesheet },
-        } as any)
+        const stylesheet = getProductTourStylesheet(posthog)
 
-        expect(prepareExternalDependencyStylesheet).toHaveBeenCalledTimes(1)
-        expect(prepareExternalDependencyStylesheet).toHaveBeenCalledWith(stylesheet)
-        expect(stylesheet?.getAttribute('nonce')).toBe('test-nonce')
-        expect(stylesheet?.getAttribute('data-ph-product-tour-style')).toBe('true')
+        if (prepareExternalDependencyStylesheet) {
+            expect(prepareExternalDependencyStylesheet).toHaveBeenCalledTimes(expectedHookCalls)
+        }
+        expect(!!stylesheet).toBe(expectedStylesheet)
+        expect(stylesheet?.getAttribute('nonce') ?? null).toBe(expectedNonce)
+        expect(stylesheet?.getAttribute('data-ph-product-tour-style') ?? null).toBe(expectedStylesheet ? 'true' : null)
     })
 })
 
