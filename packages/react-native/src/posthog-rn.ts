@@ -1699,9 +1699,10 @@ export class PostHog extends PostHogCore {
    * @returns {void}
    */
   addExceptionStep(message: string, properties?: PostHogEventProperties): void {
-    this._errorTracking.addExceptionStep(message, properties)
-    // Mirror the step to the embedded native SDK so native crashes carry the same steps.
-    this._forwardExceptionStepToNative(message, properties)
+    // Skip native forwarding when the step wasn't buffered (disabled or invalid).
+    if (this._errorTracking.addExceptionStep(message, properties)) {
+      this._forwardExceptionStepToNative(message, properties)
+    }
   }
 
   /**

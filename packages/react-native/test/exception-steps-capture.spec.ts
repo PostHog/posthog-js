@@ -9,7 +9,7 @@ const newPostHog = (errorTracking?: Record<string, unknown>): PostHog =>
 
 const captureSpy = (posthog: PostHog): jest.SpyInstance => jest.spyOn(posthog as any, 'capture')
 
-const lastExceptionSteps = (spy: jest.SpyInstance): any => {
+const exceptionSteps = (spy: jest.SpyInstance): any => {
   const call = spy.mock.calls.find(([event]) => event === '$exception')
   return call?.[1]?.$exception_steps
 }
@@ -25,7 +25,7 @@ describe('PostHog React Native exception steps capture', () => {
     posthog.addExceptionStep('B', { screen: 'cart' })
     posthog.captureException(new Error('boom'))
 
-    const steps = lastExceptionSteps(spy)
+    const steps = exceptionSteps(spy)
     expect(steps.map((s: any) => s.$message)).toEqual(['A', 'B'])
     expect(steps[1].screen).toBe('cart')
   })
@@ -51,7 +51,7 @@ describe('PostHog React Native exception steps capture', () => {
     posthog.addExceptionStep('buffered')
     posthog.captureException(new Error('boom'), { $exception_steps: [{ $message: 'caller' }] } as any)
 
-    const steps = lastExceptionSteps(spy)
+    const steps = exceptionSteps(spy)
     expect(steps.map((s: any) => s.$message)).toEqual(['caller'])
   })
 
@@ -62,6 +62,6 @@ describe('PostHog React Native exception steps capture', () => {
     posthog.addExceptionStep('A')
     posthog.captureException(new Error('boom'))
 
-    expect(lastExceptionSteps(spy)).toBeUndefined()
+    expect(exceptionSteps(spy)).toBeUndefined()
   })
 })

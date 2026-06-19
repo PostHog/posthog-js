@@ -100,16 +100,18 @@ export class ErrorTracking {
   /**
    * Records a breadcrumb-style exception step in the instance buffer. The `$timestamp` is captured
    * at call time. Invalid messages are ignored with a warning and never throw.
+   *
+   * @returns `true` if the step was buffered, `false` if ignored.
    */
-  addExceptionStep(message: string, properties?: PostHogEventProperties): void {
+  addExceptionStep(message: string, properties?: PostHogEventProperties): boolean {
     if (!this._exceptionStepsConfig.enabled) {
-      return
+      return false
     }
 
     try {
       if (!isString(message) || message.trim().length === 0) {
         this.logger.warn('Ignoring exception step because message must be a non-empty string')
-        return
+        return false
       }
 
       const userProperties = isObject(properties) ? { ...properties } : {}
@@ -124,8 +126,10 @@ export class ErrorTracking {
         [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
         ...sanitizedProperties,
       })
+      return true
     } catch (error) {
       this.logger.error('Failed to add exception step. Ignoring breadcrumb.', error)
+      return false
     }
   }
 

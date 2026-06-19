@@ -303,4 +303,24 @@ describe('native error tracking', () => {
 
     await posthog.shutdown()
   })
+
+  it('does not forward exception steps to native when exception steps are disabled', async () => {
+    const { PostHog } = await import('../src/posthog-rn')
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      errorTracking: { autocapture: { nativeCrashes: true }, exceptionSteps: { enabled: false } },
+    })
+
+    await posthog.ready()
+    await waitForExpect(100, () => {
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    })
+
+    // Native is initialized, but disabled steps must not reach the bridge.
+    posthog.addExceptionStep('ignored')
+    expect(mockPlugin.addExceptionStep).not.toHaveBeenCalled()
+
+    await posthog.shutdown()
+  })
 })
