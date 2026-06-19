@@ -270,7 +270,7 @@ export type PostHogFetchOptions = {
 
 // Check out posthog-js for these additional options and try to keep them in sync
 export type PostHogCaptureOptions = {
-  /** If provided overrides the auto-generated event ID */
+  /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
   /** If provided overrides the auto-generated timestamp */
   timestamp?: Date
@@ -900,7 +900,7 @@ export type KnownUnsafeEditableEventProperty = (typeof knownUnsafeEditableEventP
  * This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
  */
 export type CaptureEvent = {
-  /** UUID for the event (optional to allow compatibility with Node SDK's EventMessage) */
+  /** UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. */
   uuid?: string
   /** The name of the event */
   event: string

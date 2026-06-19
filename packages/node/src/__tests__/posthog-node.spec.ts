@@ -399,6 +399,16 @@ describe('PostHog Node.js', () => {
       ])
     })
 
+    it('should generate a new uuid when provided uuid is invalid', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+      const invalidUuid = 'not-a-uuid'
+      posthog.capture({ event: 'custom-time', distinctId: '123', uuid: invalidUuid })
+      await waitForFlushTimer()
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0].uuid).toEqual(expect.any(String))
+      expect(batchEvents?.[0].uuid).not.toBe(invalidUuid)
+    })
+
     it('should respect disableGeoip setting if passed in', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.capture({

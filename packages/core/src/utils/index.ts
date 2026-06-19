@@ -11,6 +11,21 @@ export * from './user-agent-utils'
 
 export const STRING_FORMAT = 'utf8'
 
+const UUID_HEX_32_REGEX = /^[0-9a-f]{32}$/i
+const UUID_HYPHENATED_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const UUID_BRACED_REGEX = /^\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}$/i
+const UUID_URN_REGEX = /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function isValidUUID(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    (UUID_HEX_32_REGEX.test(value) ||
+      UUID_HYPHENATED_REGEX.test(value) ||
+      UUID_BRACED_REGEX.test(value) ||
+      UUID_URN_REGEX.test(value))
+  )
+}
+
 export function assert(truthyValue: any, message: string): void {
   if (!truthyValue || typeof truthyValue !== 'string' || isEmpty(truthyValue)) {
     throw new Error(message)

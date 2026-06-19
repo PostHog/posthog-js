@@ -1642,7 +1642,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     return {
       ...message,
-      uuid: result.uuid ?? message.uuid,
+      uuid: this.getEventUuid(result.uuid ?? message.uuid),
       event: result.event,
       properties: resultProps,
       timestamp: result.timestamp as unknown as JsonType,

@@ -24,6 +24,8 @@ const editingEventFn = (captureResult: CaptureResult): CaptureResult => {
     }
 }
 
+const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 describe('posthog core - before send', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
     const eventName = '$event'
@@ -74,6 +76,40 @@ describe('posthog core - before send', () => {
             method: 'POST',
             url: 'https://us.i.posthog.com/e/',
         })
+    })
+
+    it('uses a valid provided uuid', () => {
+        const posthog = posthogWith({})
+        ;(posthog._send_request as jest.Mock).mockClear()
+        const uuid = uuidv7()
+
+        const capturedData = posthog.capture(eventName, {}, { uuid })
+
+        expect(capturedData).toHaveProperty('uuid', uuid)
+    })
+
+    it('generates a new uuid when the provided uuid is invalid', () => {
+        const posthog = posthogWith({})
+        ;(posthog._send_request as jest.Mock).mockClear()
+        const invalidUuid = 'not-a-uuid'
+
+        const capturedData = posthog.capture(eventName, {}, { uuid: invalidUuid })
+
+        expect(capturedData).toHaveProperty('uuid', expect.stringMatching(uuidV7Pattern))
+        expect(capturedData?.uuid).not.toBe(invalidUuid)
+    })
+
+    it('generates a new uuid when before_send returns an invalid uuid', () => {
+        const invalidUuid = 'not-a-uuid'
+        const posthog = posthogWith({
+            before_send: (cr) => cr && { ...cr, uuid: invalidUuid },
+        })
+        ;(posthog._send_request as jest.Mock).mockClear()
+
+        const capturedData = posthog.capture(eventName, {}, {})
+
+        expect(capturedData).toHaveProperty('uuid', expect.stringMatching(uuidV7Pattern))
+        expect(capturedData?.uuid).not.toBe(invalidUuid)
     })
 
     it('can take an array of fns', () => {

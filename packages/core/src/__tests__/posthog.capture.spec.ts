@@ -82,10 +82,21 @@ describe('PostHog Core', () => {
         batch: [
           {
             event: 'custom-event',
-            uuid: expect.any(String),
+            uuid: id,
           },
         ],
       })
+    })
+
+    it('should generate a new uuid when the provided uuid is invalid', async () => {
+      const invalidUuid = 'not-a-uuid'
+
+      posthog.capture('custom-event', { foo: 'bar' }, { uuid: invalidUuid })
+      await waitForPromises()
+      const body = parseBody(mocks.fetch.mock.calls[0])
+
+      expect(body.batch[0].uuid).toEqual(expect.any(String))
+      expect(body.batch[0].uuid).not.toBe(invalidUuid)
     })
 
     it('should use legacy queued top-level library fields as $lib fallbacks without sending them', async () => {
@@ -263,7 +274,7 @@ describe('PostHog Core', () => {
 
     it('should allow modifying timestamp and uuid in before_send', async () => {
       const modifiedDate = new Date('2020-01-01T00:00:00.000Z')
-      const modifiedUuid = 'modified-uuid-123'
+      const modifiedUuid = uuidv7()
       const beforeSend = jest.fn((event: CaptureEvent | null) => {
         if (event) {
           return {
@@ -294,6 +305,32 @@ describe('PostHog Core', () => {
           },
         ],
       })
+    })
+
+    it('should generate a new uuid when before_send returns an invalid uuid', async () => {
+      const invalidUuid = 'modified-uuid-123'
+      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+        if (event) {
+          return {
+            ...event,
+            uuid: invalidUuid,
+          }
+        }
+        return event
+      })
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: beforeSend,
+      })
+
+      posthog.capture('custom-event')
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const body = parseBody(mocks.fetch.mock.calls[0])
+
+      expect(body.batch[0].uuid).toEqual(expect.any(String))
+      expect(body.batch[0].uuid).not.toBe(invalidUuid)
     })
 
     it('should expose $set and $set_once from identify events', async () => {
