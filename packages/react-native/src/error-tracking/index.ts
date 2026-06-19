@@ -11,6 +11,7 @@ import {
 } from '@posthog/core'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import { getRemoteConfigBool } from '../utils'
+import { OptionalReactNativePlugin } from '../optional/OptionalPlugin'
 
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
@@ -34,12 +35,13 @@ interface AutocaptureOptions {
  */
 export interface ExceptionStepsOptions {
   /**
-   * Whether exception steps are recorded and attached. Defaults to `true`.
+   * Whether exception steps are recorded and attached.
+   * @default true
    */
   enabled?: boolean
   /**
-   * Total UTF-8 byte budget for the in-memory buffer. Oldest steps are evicted first when exceeded.
-   * Defaults to `32768` (~32KB).
+   * Total UTF-8 byte budget (~32KB) for the in-memory buffer. Oldest steps are evicted first when exceeded.
+   * @default 32768
    */
   maxBytes?: number
 }
@@ -65,6 +67,7 @@ export class ErrorTracking {
   private options: ResolvedErrorTrackingOptions
   private _exceptionStepsConfig: CoreErrorTracking.ResolvedExceptionStepsConfig
   private _exceptionStepsBuffer: CoreErrorTracking.ExceptionStepsBuffer
+  private _nativeForwardingEnabled: boolean = false
 
   /**
    * Controls whether autocaptured exceptions are actually sent.
@@ -98,20 +101,19 @@ export class ErrorTracking {
   }
 
   /**
-   * Records a breadcrumb-style exception step in the instance buffer. The `$timestamp` is captured
-   * at call time. Invalid messages are ignored with a warning and never throw.
-   *
-   * @returns `true` if the step was buffered, `false` if ignored.
+   * Records a breadcrumb-style exception step in the instance buffer and mirrors it to the embedded
+   * native SDK. The `$timestamp` is captured at call time. Invalid messages are ignored with a
+   * warning and never throw. The step only reaches native when it was actually buffered.
    */
-  addExceptionStep(message: string, properties?: PostHogEventProperties): boolean {
+  addExceptionStep(message: string, properties?: PostHogEventProperties): void {
     if (!this._exceptionStepsConfig.enabled) {
-      return false
+      return
     }
 
     try {
       if (!isString(message) || message.trim().length === 0) {
         this.logger.warn('Ignoring exception step because message must be a non-empty string')
-        return false
+        return
       }
 
       const userProperties = isObject(properties) ? { ...properties } : {}
@@ -126,10 +128,35 @@ export class ErrorTracking {
         [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
         ...sanitizedProperties,
       })
-      return true
+      this.forwardExceptionStepToNative(message, properties)
     } catch (error) {
       this.logger.error('Failed to add exception step. Ignoring breadcrumb.', error)
-      return false
+    }
+  }
+
+  /**
+   * Native error tracking initializes asynchronously, so steps recorded before then are buffered
+   * only in JS. The host calls this once native is ready to enable forwarding and replay the buffer,
+   * so a native crash shortly after startup carries the steps recorded before native was ready.
+   */
+  onNativeErrorTrackingReady(): void {
+    this._nativeForwardingEnabled = true
+    for (const step of this.getAttachableExceptionSteps()) {
+      this.forwardExceptionStepToNative(step.$message, step as PostHogEventProperties)
+    }
+  }
+
+  private forwardExceptionStepToNative(message: string, properties?: PostHogEventProperties): void {
+    if (!this._nativeForwardingEnabled || !OptionalReactNativePlugin?.addExceptionStep) {
+      return
+    }
+    try {
+      // Fire-and-forget: the native layer validates and buffers independently and must never block.
+      void Promise.resolve(OptionalReactNativePlugin.addExceptionStep(message, properties)).catch((e) => {
+        this.logger.warn(`Failed to forward exception step to native: ${e}`)
+      })
+    } catch (e) {
+      this.logger.warn(`Failed to forward exception step to native: ${e}`)
     }
   }
 

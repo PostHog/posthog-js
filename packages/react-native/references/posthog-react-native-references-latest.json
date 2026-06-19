@@ -2348,12 +2348,12 @@
       "name": "ExceptionStepsOptions",
       "properties": [
         {
-          "description": "Whether exception steps are recorded and attached. Defaults to `true`.",
+          "description": "Whether exception steps are recorded and attached.   true",
           "type": "boolean",
           "name": "enabled"
         },
         {
-          "description": "Total UTF-8 byte budget for the in-memory buffer. Oldest steps are evicted first when exceeded. Defaults to `32768` (~32KB).",
+          "description": "Total UTF-8 byte budget (~32KB) for the in-memory buffer. Oldest steps are evicted first when exceeded.   32768",
           "type": "number",
           "name": "maxBytes"
         }

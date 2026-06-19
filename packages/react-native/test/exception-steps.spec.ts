@@ -114,14 +114,4 @@ describe('ErrorTracking exception steps', () => {
     const et = newErrorTracking({ maxBytes: 1024 })
     expect(et.getNativePluginExceptionStepsConfig()).toEqual({ enabled: true, maxBytes: 1024 })
   })
-
-  it('returns whether the step was buffered (so the caller can skip native forwarding)', () => {
-    const et = newErrorTracking()
-    expect(et.addExceptionStep('valid')).toBe(true)
-    expect(et.addExceptionStep('')).toBe(false)
-    expect(et.addExceptionStep('   ')).toBe(false)
-
-    const disabled = newErrorTracking({ enabled: false })
-    expect(disabled.addExceptionStep('x')).toBe(false)
-  })
 })

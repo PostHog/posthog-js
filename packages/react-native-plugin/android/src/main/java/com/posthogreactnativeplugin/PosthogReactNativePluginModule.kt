@@ -103,12 +103,9 @@ class PosthogReactNativePluginModule(
               errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
 
               // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
-              if (hasKey(exceptionStepsConfig, "enabled")) {
-                errorTrackingConfig.exceptionSteps.enabled = getBoolean(exceptionStepsConfig, "enabled", true)
-              }
-              if (hasKey(exceptionStepsConfig, "maxBytes")) {
-                errorTrackingConfig.exceptionSteps.maxBytes = getInt(exceptionStepsConfig, "maxBytes", errorTrackingConfig.exceptionSteps.maxBytes)
-              }
+              // Absent keys fall back to the native defaults the helpers receive.
+              errorTrackingConfig.exceptionSteps.enabled = getBoolean(exceptionStepsConfig, "enabled", errorTrackingConfig.exceptionSteps.enabled)
+              errorTrackingConfig.exceptionSteps.maxBytes = getInt(exceptionStepsConfig, "maxBytes", errorTrackingConfig.exceptionSteps.maxBytes)
 
               // React Native rethrows fatal JS errors natively as JavascriptException.
               // The JS layer already captured them, so drop the native duplicate.
