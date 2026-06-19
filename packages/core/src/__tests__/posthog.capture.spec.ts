@@ -7,8 +7,8 @@ import {
 } from '@/testing'
 import { uuidv7 } from '@/vendor/uuidv7'
 import { CaptureEvent, PostHogPersistedProperty } from '@/types'
+import { UUID_REGEX } from '@/utils'
 
-const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const invalidUuidCases = [
   ['arbitrary string', 'not-a-uuid'],
   ['empty string', ''],
@@ -104,7 +104,7 @@ describe('PostHog Core', () => {
         await waitForPromises()
         const body = parseBody(mocks.fetch.mock.calls[0])
 
-        expect(body.batch[0].uuid).toMatch(uuidV7Pattern)
+        expect(body.batch[0].uuid).toMatch(UUID_REGEX)
         expect(body.batch[0].uuid).not.toBe(invalidUuid)
       }
     )
@@ -340,7 +340,7 @@ describe('PostHog Core', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
         const body = parseBody(mocks.fetch.mock.calls[0])
 
-        expect(body.batch[0].uuid).toMatch(uuidV7Pattern)
+        expect(body.batch[0].uuid).toMatch(UUID_REGEX)
         expect(body.batch[0].uuid).not.toBe(invalidUuid)
       }
     )

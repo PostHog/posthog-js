@@ -1,12 +1,12 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
+import { UUID_REGEX } from '@posthog/core'
 
 jest.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
-const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const invalidUuidCases = [
   ['arbitrary string', 'not-a-uuid'],
   ['empty string', ''],
@@ -415,7 +415,7 @@ describe('PostHog Node.js', () => {
         posthog.capture({ event: 'custom-time', distinctId: '123', uuid: invalidUuid })
         await waitForFlushTimer()
         const batchEvents = getLastBatchEvents()
-        expect(batchEvents?.[0].uuid).toMatch(uuidV7Pattern)
+        expect(batchEvents?.[0].uuid).toMatch(UUID_REGEX)
         expect(batchEvents?.[0].uuid).not.toBe(invalidUuid)
       }
     )

@@ -4,7 +4,7 @@ import { uuidv7 } from '../uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { CaptureResult, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { knownUnsafeEditableEvent } from '@posthog/core'
+import { knownUnsafeEditableEvent, UUID_REGEX } from '@posthog/core'
 
 const rejectingEventFn = () => {
     return null
@@ -24,7 +24,6 @@ const editingEventFn = (captureResult: CaptureResult): CaptureResult => {
     }
 }
 
-const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const invalidUuidCases = [
     ['arbitrary string', 'not-a-uuid'],
     ['empty string', ''],
@@ -101,7 +100,7 @@ describe('posthog core - before send', () => {
 
         const capturedData = posthog.capture(eventName, {}, { uuid: invalidUuid })
 
-        expect(capturedData).toHaveProperty('uuid', expect.stringMatching(uuidV7Pattern))
+        expect(capturedData).toHaveProperty('uuid', expect.stringMatching(UUID_REGEX))
         expect(capturedData?.uuid).not.toBe(invalidUuid)
     })
 
@@ -113,7 +112,7 @@ describe('posthog core - before send', () => {
 
         const capturedData = posthog.capture(eventName, {}, {})
 
-        expect(capturedData).toHaveProperty('uuid', expect.stringMatching(uuidV7Pattern))
+        expect(capturedData).toHaveProperty('uuid', expect.stringMatching(UUID_REGEX))
         expect(capturedData?.uuid).not.toBe(invalidUuid)
     })
 
