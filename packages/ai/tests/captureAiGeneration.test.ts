@@ -2,6 +2,7 @@ import { PostHog } from 'posthog-node'
 import { captureAiGeneration } from '../src/captureAiGeneration'
 import { AIEvent } from '../src/utils'
 import { version } from '../package.json'
+import { UUIDV7_REGEX } from './test-utils'
 
 jest.mock('posthog-node')
 
@@ -11,8 +12,6 @@ const baseRequiredOptions = {
   input: 'hello',
   output: 'world',
 }
-
-const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 const buildClient = (overrides: Partial<{ enableExceptionAutocapture: boolean; privacy_mode: boolean }> = {}) =>
   ({

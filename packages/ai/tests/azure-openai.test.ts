@@ -1,10 +1,9 @@
 import { PostHog } from 'posthog-node'
 import { PostHogAzureOpenAI } from '../src/openai/azure'
 import openaiModule from 'openai'
+import { UUIDV7_REGEX } from './test-utils'
 
 let mockAzureEmbeddingResponse: any = {}
-
-const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 jest.mock('posthog-node', () => {
   return {

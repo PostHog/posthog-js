@@ -23,3 +23,5 @@ export async function waitForAsyncOperations(): Promise<void> {
 export async function flushPromises(): Promise<void> {
   await new Promise(process.nextTick)
 }
+
+export const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/

@@ -1,6 +1,5 @@
 import { toContentString, getTokensSource, extractPosthogParams } from '../src/utils'
-
-const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+import { UUIDV7_REGEX } from './test-utils'
 
 describe('extractPosthogParams', () => {
   it('defaults missing trace IDs to UUID v7', () => {
