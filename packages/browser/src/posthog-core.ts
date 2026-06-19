@@ -40,7 +40,7 @@ import {
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
-import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { request, SUPPORTS_REQUEST } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
@@ -1090,12 +1090,6 @@ export class PostHog implements PostHogInterface {
         }
 
         options.transport = options.transport || this.config.api_transport
-        if (!options.skipIPParam) {
-            options.url = extendURLParams(options.url, {
-                // Whether to detect ip info or not
-                ip: this.config.ip ? 1 : 0,
-            })
-        }
         options.headers = {
             ...this.config.request_headers,
             ...options.headers,

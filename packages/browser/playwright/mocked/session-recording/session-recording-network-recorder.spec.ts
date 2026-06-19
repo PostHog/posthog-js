@@ -150,7 +150,7 @@ test.beforeEach(async ({ context }) => {
                 expect(hasEntry(/https:\/\/localhost:\d+\/static\/array.js/, 'script')).toBe(true)
                 expect(
                     hasEntry(
-                        /https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=0&_=\d+&ver=1\.\d\d\d\.\d+/,
+                        /https:\/\/localhost:\d+\/array\/test%20token\/config\?_=\d+&ver=1\.\d\d\d\.\d+/,
                         'fetch'
                     )
                 ).toBe(true)
