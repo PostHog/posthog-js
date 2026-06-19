@@ -195,6 +195,9 @@ export class PostHog extends PostHogCore {
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
   private _sessionReplayOptions?: PostHogOptions
+  // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
+  // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
+  private _sessionReplayEventTriggers: string[] = []
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
@@ -1408,6 +1411,12 @@ export class PostHog extends PostHogCore {
         }
       }
       this._currentSessionId = sessionId
+
+      // Event triggers are armed per session: the previous activation no longer matches the new
+      // session id, so re-evaluate to stop recording until a fresh matching event fires.
+      if (this._sessionReplayEventTriggers.length > 0) {
+        void this._evaluateAndStartSessionReplay()
+      }
     } else {
       this._logger.info(`sessionId not rotated, sessionId ${sessionId} and currentSessionId ${this._currentSessionId}.`)
     }
@@ -2298,6 +2307,8 @@ export class PostHog extends PostHogCore {
 
     if (!this._isEnableSessionReplay()) {
       this._logger.info('Session replay is not enabled.')
+      // Replay off — disarm event triggers so the capture hook stays inert.
+      this._sessionReplayEventTriggers = []
       if (enableNativeErrorTracking) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
@@ -2348,6 +2359,21 @@ export class PostHog extends PostHogCore {
       this._logger.info(`Session replay has no cached linkedFlag.`)
     }
 
+    // Event triggers: replay records only once the client captures an event whose name matches a
+    // configured trigger, and stays active for the rest of that session. Cache the armed triggers in
+    // memory for the capture hot path (processBeforeEnqueue), then AND the activation into the gate —
+    // an unfired trigger blocks recording exactly like an unsatisfied linked flag (restrictive AND).
+    const eventTriggers = this._parseEventTriggers(cachedSessionReplayConfig['eventTriggers'])
+    this._sessionReplayEventTriggers = eventTriggers
+
+    if (eventTriggers.length > 0) {
+      const activated = this._isEventTriggerActivatedForSession(super.getSessionId())
+      if (!activated) {
+        recordingActive = false
+      }
+      this._logger.info(`Session replay event triggers configured (${eventTriggers.length}); activated: ${activated}.`)
+    }
+
     if (recordingActive) {
       if (this._sessionReplayRecordingActive === true) {
         // Already recording — nothing to do.
@@ -2373,6 +2399,54 @@ export class PostHog extends PostHogCore {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
+  }
+
+  /**
+   * Capture chokepoint for session-replay event triggers. Every captured event (capture, $screen,
+   * autocapture, lifecycle) passes through here. When event triggers are armed and the current
+   * session hasn't activated yet, a matching event name activates replay for the session and kicks
+   * a re-evaluation that starts native recording. Always returns the message unchanged; it must
+   * never drop an event or throw into the capture path.
+   */
+  protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    try {
+      this._maybeActivateEventTrigger(message?.['event'])
+    } catch (e) {
+      this._logger.error(`Session replay event trigger check failed: ${e}.`)
+    }
+    return message
+  }
+
+  private _maybeActivateEventTrigger(eventName: unknown): void {
+    if (this._sessionReplayEventTriggers.length === 0 || typeof eventName !== 'string') {
+      return
+    }
+    if (!this._sessionReplayEventTriggers.includes(eventName)) {
+      return
+    }
+    const sessionId = super.getSessionId()
+    if (!sessionId || this._isEventTriggerActivatedForSession(sessionId)) {
+      return
+    }
+    this._activateEventTrigger(sessionId)
+    this._logger.info(`Session replay event trigger '${eventName}' activated for session ${sessionId}.`)
+    // Re-evaluate so the native recorder starts; fire-and-forget keeps the capture path synchronous.
+    void this._evaluateAndStartSessionReplay()
+  }
+
+  private _parseEventTriggers(value: JsonType | undefined): string[] {
+    if (!Array.isArray(value)) {
+      return []
+    }
+    return value.filter((entry): entry is string => typeof entry === 'string')
+  }
+
+  private _isEventTriggerActivatedForSession(sessionId: string): boolean {
+    return this.getPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession) === sessionId
+  }
+
+  private _activateEventTrigger(sessionId: string): void {
+    this.setPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession, sessionId)
   }
 
   private async captureAppLifecycleEvents(): Promise<void> {
