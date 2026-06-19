@@ -606,6 +606,7 @@
         "_sharedState",
         "_shouldCapturePageleave",
         "_shouldDisableFlags",
+        "_shouldDisplaySurvey",
         "_shouldIncludeEvaluationEnvironments",
         "_showOrQueueTour",
         "_showPreviewWebExperiment",
