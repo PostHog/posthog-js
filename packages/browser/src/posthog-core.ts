@@ -111,6 +111,7 @@ import {
     isEmptyObject,
     isObject,
     isBoolean,
+    getEventUuid,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -1345,7 +1346,8 @@ export class PostHog implements PostHogInterface {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
-        const uuid = options?.uuid || uuidv7()
+        // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
+        const uuid = getEventUuid(options?.uuid, uuidv7)
         let data: CaptureResult = {
             uuid,
             event: event_name,
@@ -1438,6 +1440,8 @@ export class PostHog implements PostHogInterface {
                 return
             } else {
                 data = beforeSendResult
+                // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
+                data.uuid = getEventUuid(data.uuid, uuidv7)
             }
         }
 

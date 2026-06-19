@@ -52,6 +52,7 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
    */
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
   timestamp?: Date
+  /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
   /**
    * Internal flag set by captureException() to indicate this $exception

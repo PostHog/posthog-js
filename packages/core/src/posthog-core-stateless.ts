@@ -33,6 +33,7 @@ import {
   safeSetTimeout,
   STRING_FORMAT,
   createLogger,
+  getEventUuid,
 } from './utils'
 import { uuidv7 } from './vendor/uuidv7'
 import {
@@ -1082,6 +1083,8 @@ export abstract class PostHogCoreStateless {
       sanitizedMessage.properties = properties
     }
 
+    sanitizedMessage.uuid = getEventUuid(sanitizedMessage.uuid, uuidv7)
+
     return sanitizedMessage
   }
 
@@ -1089,7 +1092,7 @@ export abstract class PostHogCoreStateless {
     const message = {
       ..._message,
       timestamp: options?.timestamp ? options?.timestamp : currentISOTime(),
-      uuid: options?.uuid ? options.uuid : uuidv7(),
+      uuid: getEventUuid(options?.uuid, uuidv7),
     }
 
     const addGeoipDisableProperty = options?.disableGeoip ?? this.disableGeoip
