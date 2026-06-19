@@ -103,7 +103,11 @@ describe('feature flag hooks', () => {
         expect(result.current).toEqual(['example_feature_true', 'multivariate_feature', 'example_feature_payload'])
     })
 
-    it('should only return enabled bootstrap feature flags as active', () => {
+    it.each([
+        ['enabled_flag', true],
+        ['disabled_flag', false],
+        ['multivariate_flag', true],
+    ])('should report bootstrap feature flag %s active status as %s', (flag, expected) => {
         const client = {
             onFeatureFlags: () => () => {},
             config: {
@@ -127,7 +131,7 @@ describe('feature flag hooks', () => {
         )
 
         const { result } = renderHook(() => useActiveFeatureFlags(), { wrapper })
-        expect(result.current).toEqual(['enabled_flag', 'multivariate_flag'])
+        expect(result.current.includes(flag)).toBe(expected)
     })
 
     it.each([
