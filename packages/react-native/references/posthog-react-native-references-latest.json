@@ -83,6 +83,41 @@
           "path": "dist/posthog-rn.d.ts"
         },
         {
+          "category": "",
+          "description": "Records a breadcrumb-style exception step. Steps accumulate in a rolling, byte-bounded buffer and are attached to every captured `$exception` as `$exception_steps`, giving the error tracking UI a timeline of recent activity before each error.\nThe `$timestamp` is captured at call time. The reserved keys `$message` and `$timestamp` are stripped from `properties` — the SDK sets the canonical values. This method never throws.",
+          "details": null,
+          "id": "addExceptionStep",
+          "showDocs": true,
+          "title": "addExceptionStep",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nposthog.addExceptionStep('User tapped Checkout', { screen: 'cart' })\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "A non-empty description of the step",
+              "isOptional": false,
+              "type": "string",
+              "name": "message"
+            },
+            {
+              "description": "Optional additional context to attach to the step",
+              "isOptional": true,
+              "type": "Properties",
+              "name": "properties"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
           "category": "Identification",
           "description": "Assigns an alias to the current user.\nSometimes, you want to assign multiple distinct IDs to a single user. This is helpful when your primary distinct ID is inaccessible. For example, if a distinct ID used on the frontend is not available in your backend.",
           "details": null,
@@ -2193,6 +2228,10 @@
         {
           "type": "AutocaptureOptions | boolean",
           "name": "autocapture"
+        },
+        {
+          "type": "ExceptionStepsOptions",
+          "name": "exceptionSteps"
         }
       ],
       "path": "dist/error-tracking/index.d.ts"
@@ -2303,6 +2342,23 @@
       "properties": [],
       "path": "../core/src/error-tracking/exception-steps.ts",
       "example": "{\n    enabled?: boolean;\n    max_bytes?: number;\n}"
+    },
+    {
+      "id": "ExceptionStepsOptions",
+      "name": "ExceptionStepsOptions",
+      "properties": [
+        {
+          "description": "Whether exception steps are recorded and attached.   true",
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "description": "Total UTF-8 byte budget (~32KB) for the in-memory buffer. Oldest steps are evicted first when exceeded.   32768",
+          "type": "number",
+          "name": "maxBytes"
+        }
+      ],
+      "path": "dist/error-tracking/index.d.ts"
     },
     {
       "id": "FeatureFlagDetail",
@@ -3016,7 +3072,7 @@
       "name": "PostHogReactNativePluginExtended",
       "properties": [],
       "path": "dist/optional/OptionalPlugin.d.ts",
-      "example": "typeof PostHogReactNativePlugin & {\n    setup?: (sessionId: string, sdkOptions: {\n        [key: string]: any;\n    }, pluginConfig: {\n        [key: string]: any;\n    }) => Promise<void>;\n    startRecording?: (resumeCurrent: boolean) => Promise<void>;\n    stopRecording?: () => Promise<void>;\n}"
+      "example": "typeof PostHogReactNativePlugin & {\n    setup?: (sessionId: string, sdkOptions: {\n        [key: string]: any;\n    }, pluginConfig: {\n        [key: string]: any;\n    }) => Promise<void>;\n    startRecording?: (resumeCurrent: boolean) => Promise<void>;\n    stopRecording?: () => Promise<void>;\n    addExceptionStep?: (message: string, properties?: {\n        [key: string]: any;\n    }) => Promise<void>;\n}"
     },
     {
       "id": "PostHogRemoteConfig",
