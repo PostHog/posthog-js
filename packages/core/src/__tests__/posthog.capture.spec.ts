@@ -8,6 +8,15 @@ import {
 import { uuidv7 } from '@/vendor/uuidv7'
 import { CaptureEvent, PostHogPersistedProperty } from '@/types'
 
+const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const invalidUuidCases = [
+  ['arbitrary string', 'not-a-uuid'],
+  ['empty string', ''],
+  ['32-character hex string', '0189dcd553117d408db09496a2eef37b'],
+  ['braced UUID', '{0189dcd5-5311-7d40-8db0-9496a2eef37b}'],
+  ['URN UUID', 'urn:uuid:0189dcd5-5311-7d40-8db0-9496a2eef37b'],
+] as const
+
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
@@ -88,16 +97,17 @@ describe('PostHog Core', () => {
       })
     })
 
-    it('should generate a new uuid when the provided uuid is invalid', async () => {
-      const invalidUuid = 'not-a-uuid'
+    it.each(invalidUuidCases)(
+      'should generate a new uuid when the provided uuid is an invalid %s',
+      async (_, invalidUuid) => {
+        posthog.capture('custom-event', { foo: 'bar' }, { uuid: invalidUuid })
+        await waitForPromises()
+        const body = parseBody(mocks.fetch.mock.calls[0])
 
-      posthog.capture('custom-event', { foo: 'bar' }, { uuid: invalidUuid })
-      await waitForPromises()
-      const body = parseBody(mocks.fetch.mock.calls[0])
-
-      expect(body.batch[0].uuid).toEqual(expect.any(String))
-      expect(body.batch[0].uuid).not.toBe(invalidUuid)
-    })
+        expect(body.batch[0].uuid).toMatch(uuidV7Pattern)
+        expect(body.batch[0].uuid).not.toBe(invalidUuid)
+      }
+    )
 
     it('should use legacy queued top-level library fields as $lib fallbacks without sending them', async () => {
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
@@ -307,31 +317,33 @@ describe('PostHog Core', () => {
       })
     })
 
-    it('should generate a new uuid when before_send returns an invalid uuid', async () => {
-      const invalidUuid = 'modified-uuid-123'
-      const beforeSend = jest.fn((event: CaptureEvent | null) => {
-        if (event) {
-          return {
-            ...event,
-            uuid: invalidUuid,
+    it.each(invalidUuidCases)(
+      'should generate a new uuid when before_send returns an invalid %s',
+      async (_, invalidUuid) => {
+        const beforeSend = jest.fn((event: CaptureEvent | null) => {
+          if (event) {
+            return {
+              ...event,
+              uuid: invalidUuid,
+            }
           }
-        }
-        return event
-      })
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
-        flushAt: 1,
-        before_send: beforeSend,
-      })
+          return event
+        })
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 1,
+          before_send: beforeSend,
+        })
 
-      posthog.capture('custom-event')
-      await waitForPromises()
+        posthog.capture('custom-event')
+        await waitForPromises()
 
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
-      const body = parseBody(mocks.fetch.mock.calls[0])
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        const body = parseBody(mocks.fetch.mock.calls[0])
 
-      expect(body.batch[0].uuid).toEqual(expect.any(String))
-      expect(body.batch[0].uuid).not.toBe(invalidUuid)
-    })
+        expect(body.batch[0].uuid).toMatch(uuidV7Pattern)
+        expect(body.batch[0].uuid).not.toBe(invalidUuid)
+      }
+    )
 
     it('should expose $set and $set_once from identify events', async () => {
       const beforeSend = jest.fn((event: CaptureEvent | null) => event)

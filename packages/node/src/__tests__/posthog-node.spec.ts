@@ -6,6 +6,15 @@ jest.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
+const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const invalidUuidCases = [
+  ['arbitrary string', 'not-a-uuid'],
+  ['empty string', ''],
+  ['32-character hex string', '0189dcd553117d408db09496a2eef37b'],
+  ['braced UUID', '{0189dcd5-5311-7d40-8db0-9496a2eef37b}'],
+  ['URN UUID', 'urn:uuid:0189dcd5-5311-7d40-8db0-9496a2eef37b'],
+] as const
+
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
 }
@@ -399,15 +408,17 @@ describe('PostHog Node.js', () => {
       ])
     })
 
-    it('should generate a new uuid when provided uuid is invalid', async () => {
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
-      const invalidUuid = 'not-a-uuid'
-      posthog.capture({ event: 'custom-time', distinctId: '123', uuid: invalidUuid })
-      await waitForFlushTimer()
-      const batchEvents = getLastBatchEvents()
-      expect(batchEvents?.[0].uuid).toEqual(expect.any(String))
-      expect(batchEvents?.[0].uuid).not.toBe(invalidUuid)
-    })
+    it.each(invalidUuidCases)(
+      'should generate a new uuid when provided uuid is an invalid %s',
+      async (_, invalidUuid) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
+        posthog.capture({ event: 'custom-time', distinctId: '123', uuid: invalidUuid })
+        await waitForFlushTimer()
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents?.[0].uuid).toMatch(uuidV7Pattern)
+        expect(batchEvents?.[0].uuid).not.toBe(invalidUuid)
+      }
+    )
 
     it('should respect disableGeoip setting if passed in', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)

@@ -25,6 +25,13 @@ const editingEventFn = (captureResult: CaptureResult): CaptureResult => {
 }
 
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const invalidUuidCases = [
+    ['arbitrary string', 'not-a-uuid'],
+    ['empty string', ''],
+    ['32-character hex string', '0189dcd553117d408db09496a2eef37b'],
+    ['braced UUID', '{0189dcd5-5311-7d40-8db0-9496a2eef37b}'],
+    ['URN UUID', 'urn:uuid:0189dcd5-5311-7d40-8db0-9496a2eef37b'],
+] as const
 
 describe('posthog core - before send', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -88,10 +95,9 @@ describe('posthog core - before send', () => {
         expect(capturedData).toHaveProperty('uuid', uuid)
     })
 
-    it('generates a new uuid when the provided uuid is invalid', () => {
+    it.each(invalidUuidCases)('generates a new uuid when the provided uuid is an invalid %s', (_, invalidUuid) => {
         const posthog = posthogWith({})
         ;(posthog._send_request as jest.Mock).mockClear()
-        const invalidUuid = 'not-a-uuid'
 
         const capturedData = posthog.capture(eventName, {}, { uuid: invalidUuid })
 
@@ -99,8 +105,7 @@ describe('posthog core - before send', () => {
         expect(capturedData?.uuid).not.toBe(invalidUuid)
     })
 
-    it('generates a new uuid when before_send returns an invalid uuid', () => {
-        const invalidUuid = 'not-a-uuid'
+    it.each(invalidUuidCases)('generates a new uuid when before_send returns an invalid %s', (_, invalidUuid) => {
         const posthog = posthogWith({
             before_send: (cr) => cr && { ...cr, uuid: invalidUuid },
         })

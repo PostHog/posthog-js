@@ -111,7 +111,7 @@ import {
     isEmptyObject,
     isObject,
     isBoolean,
-    isValidUUID,
+    getEventUuid,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -168,7 +168,6 @@ const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
-const getEventUuid = (uuid: unknown): string => (isValidUUID(uuid) ? uuid : uuidv7())
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -1347,7 +1346,7 @@ export class PostHog implements PostHogInterface {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
-        const uuid = getEventUuid(options?.uuid)
+        const uuid = getEventUuid(options?.uuid, uuidv7)
         let data: CaptureResult = {
             uuid,
             event: event_name,
@@ -1440,7 +1439,7 @@ export class PostHog implements PostHogInterface {
                 return
             } else {
                 data = beforeSendResult
-                data.uuid = getEventUuid(data.uuid)
+                data.uuid = getEventUuid(data.uuid, uuidv7)
             }
         }
 
