@@ -5,10 +5,29 @@ import {
     normalizeUrl,
     resolveStepTranslation,
     hasTourWaitPeriodPassed,
+    getProductTourStylesheet,
 } from '../../extensions/product-tours/product-tours-utils'
 import { ProductTourStep } from '../../posthog-product-tours-types'
 import { doesTourActivateByEvent, doesTourActivateByAction } from '../../utils/product-tour-utils'
 import { LAST_SEEN_TOUR_DATE_KEY_PREFIX } from '../../extensions/product-tours/constants'
+
+describe('getProductTourStylesheet', () => {
+    it('runs the stylesheet through prepare_external_dependency_stylesheet', () => {
+        const prepareExternalDependencyStylesheet = jest.fn((stylesheet: HTMLStyleElement) => {
+            stylesheet.setAttribute('nonce', 'test-nonce')
+            return stylesheet
+        })
+
+        const stylesheet = getProductTourStylesheet({
+            config: { prepare_external_dependency_stylesheet: prepareExternalDependencyStylesheet },
+        } as any)
+
+        expect(prepareExternalDependencyStylesheet).toHaveBeenCalledTimes(1)
+        expect(prepareExternalDependencyStylesheet).toHaveBeenCalledWith(stylesheet)
+        expect(stylesheet?.getAttribute('nonce')).toBe('test-nonce')
+        expect(stylesheet?.getAttribute('data-ph-product-tour-style')).toBe('true')
+    })
+})
 
 describe('calculateTooltipPosition', () => {
     const mockWindow = {
