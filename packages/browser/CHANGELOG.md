@@ -1,5 +1,127 @@
 # posthog-js
 
+## 1.390.2
+
+### Patch Changes
+
+- [#3868](https://github.com/PostHog/posthog-js/pull/3868) [`a5dd54a`](https://github.com/PostHog/posthog-js/commit/a5dd54afbc10dc2df32f401a68e57e2887b0f35e) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(replay): scope the session-recording flushed-size tracker to the session
+
+    `$sdk_debug_replay_flushed_size` was stored as a single device-global value in persistence and only reset on an in-page session rotation, so it leaked across page loads and tabs and over-counted on returning visitors. The tracker now keys the running total to the current session id, so a new session starts from zero and a fresh load reading an ongoing session sees the correct total.
+
+    The internal persistence key backing this counter (`$sess_rec_flush_size`) was also unintentionally attached to every captured event as a super-property; it is now marked hidden so it no longer ships on events. The value remains available on session-replay debug events as `$sdk_debug_replay_flushed_size`. (2026-06-17)
+
+## 1.390.1
+
+### Patch Changes
+
+- [#3784](https://github.com/PostHog/posthog-js/pull/3784) [`e25e629`](https://github.com/PostHog/posthog-js/commit/e25e629a8bb11a0f467a5c69241130bcaba600bd) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Surveys: event-triggered surveys are now scoped to the page load the event fired in, and only persist across a page reload once they have actually been shown.
+
+    Previously an event armed a survey by writing it to localStorage, where it stayed until shown. Because the activation survived reloads and the URL condition was only checked at display time, a survey armed by an exit-intent event (which fires as the user is leaving or reloading) could surface on a later page load with no event behind it. Activations now live in memory until the survey is shown, so an armed-but-unshown survey no longer reappears after a reload.
+
+    Once a survey is shown it is promoted to persistence, so a non-repeatable survey survives a reload and re-displays until the user dismisses or answers it (instead of vanishing if they reload before interacting). Repeatable surveys (`schedule: 'always'` or "Show every time the event is captured") are still consumed when shown, so each captured trigger shows them once. Product tours follow the same model. Cross-page deferral (arm on one full page load, display on a later one) is no longer supported via event triggers; use audience targeting for that. (2026-06-17)
+
+## 1.390.0
+
+### Minor Changes
+
+- [#3869](https://github.com/PostHog/posthog-js/pull/3869) [`81b79fb`](https://github.com/PostHog/posthog-js/commit/81b79fb9bcab3f4619e8fc7f1022f2ab24936b4e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add a `beforeSend` option to the logs config, so you can inspect, redact, or drop log records before they're sent:
+
+    ```js
+    posthog.init('<token>', {
+        logs: {
+            beforeSend: (log) => {
+                // return null to drop the log, or return the (optionally modified) log to keep it
+                if (log.body.includes('password')) {
+                    return null
+                }
+                return log
+            },
+        },
+    })
+    ```
+
+    `beforeSend` accepts a single function or an array of functions (applied left to right); returning `null` from any of them drops the record. It runs for logs sent via both `posthog.captureLog()` and `posthog.logger.*`. (2026-06-17)
+
+### Patch Changes
+
+- Updated dependencies [[`81b79fb`](https://github.com/PostHog/posthog-js/commit/81b79fb9bcab3f4619e8fc7f1022f2ab24936b4e)]:
+    - @posthog/types@1.390.0
+
+## 1.389.1
+
+### Patch Changes
+
+- [#3875](https://github.com/PostHog/posthog-js/pull/3875) [`43b4137`](https://github.com/PostHog/posthog-js/commit/43b413713440e7d62739d56ee7ffa01a6cf45678) Thanks [@marandaneto](https://github.com/marandaneto)! - Limit retries for transport failures without an HTTP response.
+  (2026-06-17)
+
+## 1.389.0
+
+### Minor Changes
+
+- [#3865](https://github.com/PostHog/posthog-js/pull/3865) [`b469830`](https://github.com/PostHog/posthog-js/commit/b469830a308761005c963872c349de5fa4b35f39) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - The browser's programmatic logs API (`posthog.captureLog()` / `posthog.logger.*`) now runs through the shared `@posthog/core` logs pipeline that React Native already uses — no change to the public API or existing behavior. Log delivery is more resilient as a result: oversized batches are split automatically, failed sends retry with exponential backoff, and delivery resumes when the browser comes back online.
+  (2026-06-17)
+
+### Patch Changes
+
+- Updated dependencies [[`b469830`](https://github.com/PostHog/posthog-js/commit/b469830a308761005c963872c349de5fa4b35f39)]:
+    - @posthog/core@1.35.0
+    - @posthog/types@1.389.0
+
+## 1.388.2
+
+### Patch Changes
+
+- [#3870](https://github.com/PostHog/posthog-js/pull/3870) [`5edfee1`](https://github.com/PostHog/posthog-js/commit/5edfee1575860dda0a5bb099bc0e621ba6668bbb) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `updateFlags(flags, payloads, { merge: true })` baking an active feature flag override into the stored flags. The merge now seeds from the raw stored flags rather than the override-applied values, so clearing the override afterwards correctly restores the original flag.
+  (2026-06-17)
+
+## 1.388.1
+
+### Patch Changes
+
+- [#3851](https://github.com/PostHog/posthog-js/pull/3851) [`5c453cd`](https://github.com/PostHog/posthog-js/commit/5c453cd240788e45459dd08be6248d60a1cf1a73) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply CSP nonce preparation hooks to style and script elements appended by site apps.
+  (2026-06-17)
+
+## 1.388.0
+
+### Minor Changes
+
+- [#3863](https://github.com/PostHog/posthog-js/pull/3863) [`b6bc9be`](https://github.com/PostHog/posthog-js/commit/b6bc9be241d6af91cae9d63b3fbb5b1d7ac8f343) Thanks [@marandaneto](https://github.com/marandaneto)! - Add autocapture-only CSS selector opt-outs for web interactions.
+  (2026-06-17)
+
+### Patch Changes
+
+- Updated dependencies [[`b6bc9be`](https://github.com/PostHog/posthog-js/commit/b6bc9be241d6af91cae9d63b3fbb5b1d7ac8f343)]:
+    - @posthog/types@1.388.0
+
+## 1.387.0
+
+### Minor Changes
+
+- [#3709](https://github.com/PostHog/posthog-js/pull/3709) [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e) Thanks [@posthog](https://github.com/apps/posthog)! - Add `unsetPersonProperties()` to remove person properties, the counterpart to `setPersonProperties()`. Previously the only way to unset a person property was to hand-pass a `$unset` array inside a `capture()` call.
+  (2026-06-16)
+
+### Patch Changes
+
+- [#3756](https://github.com/PostHog/posthog-js/pull/3756) [`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9) Thanks [@archievi](https://github.com/archievi)! - Drop the event and log a warning when a `before_send` hook removes the `token` property, instead of silently sending an event that ingest rejects with a 401.
+  (2026-06-16)
+
+- [#3860](https://github.com/PostHog/posthog-js/pull/3860) [`c9c7df1`](https://github.com/PostHog/posthog-js/commit/c9c7df1e7f3ae6152aa80f98b49be206fdff1b23) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `$unset` to capture options and pass it through in browser capture payloads.
+  (2026-06-16)
+
+- [#3855](https://github.com/PostHog/posthog-js/pull/3855) [`fadaa4f`](https://github.com/PostHog/posthog-js/commit/fadaa4f38e9216cd5c8b43127202dbb4e8f5629a) Thanks [@haacked](https://github.com/haacked)! - Stop sending the `ip` query parameter on feature flag requests. The flags endpoint ignores it, and some ad blockers match `/flags…ip=` to block flag evaluation on any domain. Dropping it from flag requests avoids the block with no functional change. Event and session recording requests are unchanged.
+  (2026-06-16)
+
+- [#3830](https://github.com/PostHog/posthog-js/pull/3830) [`0d837f5`](https://github.com/PostHog/posthog-js/commit/0d837f5aed4c7360b815a35866aba8f1a9a11852) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Avoid reloading exception and dead-click autocapture external scripts when they are already present.
+  (2026-06-16)
+
+- [#3853](https://github.com/PostHog/posthog-js/pull/3853) [`f95a0ec`](https://github.com/PostHog/posthog-js/commit/f95a0ec68270bf9116d29875733c1a43e9b91331) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Capture native Fullscreen API transitions in session replay. Entering native fullscreen (`element.requestFullscreen()`) is rendered by the browser via the UA `:fullscreen` pseudo-class with no DOM mutation, so the recorder previously captured nothing and replays showed the element at its pre-fullscreen size with drifted click coordinates. The recorder now emits a reserved custom event on `fullscreenchange` (standard plus `webkit`/`moz`/`MS` prefixes), and the replayer re-applies fullscreen layout to the element on playback (including when scrubbing into a fullscreen region) via a reserved `rr_fullscreen` attribute, consistent with rrweb's existing `rr_*` attribute namespace.
+
+    Known limitation: fullscreen of an element inside a same-origin iframe is recorded against the `<iframe>` element rather than the inner element, so replay pins the iframe. (2026-06-16)
+
+- Updated dependencies [[`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9), [`c9c7df1`](https://github.com/PostHog/posthog-js/commit/c9c7df1e7f3ae6152aa80f98b49be206fdff1b23), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+    - @posthog/core@1.33.0
+    - @posthog/types@1.387.0
+
 ## 1.386.8
 
 ### Patch Changes

@@ -3400,6 +3400,20 @@ describe('updateFlags', () => {
         expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
     })
 
+    it('merge does not bake an active override into the stored flags', async () => {
+        const posthog = await createPosthogInstance()
+        posthog.updateFlags({ 'base-flag': 'control' })
+        posthog.featureFlags.overrideFeatureFlags({ flags: { 'base-flag': 'test' } })
+        expect(posthog.getFeatureFlag('base-flag')).toBe('test')
+
+        // Merging an unrelated flag must not fold the override into the base.
+        posthog.updateFlags({ 'other-flag': true }, undefined, { merge: true })
+        posthog.featureFlags.overrideFeatureFlags(false) // clear the override
+
+        expect(posthog.getFeatureFlag('base-flag')).toBe('control')
+        expect(posthog.getFeatureFlag('other-flag')).toBe(true)
+    })
+
     it('should update feature flags with payloads', async () => {
         const posthog = await createPosthogInstance()
 

@@ -232,6 +232,43 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(2))
   })
 
+  it('arms recording from updateFlags when the SDK never fetches flags (disableRemoteFeatureFlags)', async () => {
+    // Warm-up launch (flag fetching enabled) caches the linkedFlag recording config and a
+    // FALSE flag value, so the next launch evaluates the linked flag from cache at bootstrap.
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': false }
+    const warmup = newPostHog()
+    await warmup.ready()
+    await warmup.reloadFeatureFlagsAsync()
+    await wait(50)
+    await warmup.shutdown()
+    replay.start.mockClear()
+    ;((globalThis as any).window.fetch as jest.Mock).mockClear()
+
+    // Next launch never evaluates flags itself: the cached linked flag (false) gates bootstrap.
+    posthog = new PostHog('test-token', {
+      customStorage: mockStorage,
+      enableSessionReplay: true,
+      flushInterval: 0,
+      disableRemoteConfig: true,
+      disableRemoteFeatureFlags: true,
+    })
+    await posthog.ready()
+    await wait(50)
+    expect(replay.start).not.toHaveBeenCalled()
+
+    // The app pushes its locally evaluated flags -> the featureflags emit re-arms replay.
+    posthog.updateFlags({ 'replay-flag': true })
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+
+    // Only the single init config request hit the flags endpoint, with evaluation disabled.
+    const flagsCalls = ((globalThis as any).window.fetch as jest.Mock).mock.calls.filter(([url]: [string]) =>
+      String(url).includes('flags')
+    )
+    expect(flagsCalls).toHaveLength(1)
+    expect(JSON.parse(flagsCalls[0][1].body)).toMatchObject({ disable_flags: true })
+  })
+
   it('retries native init on the next flags reload when the first attempt fails', async () => {
     currentSessionRecording = { endpoint: '/s/' } // no linkedFlag => recording active
 

@@ -102,9 +102,6 @@ describe('PostHog Node.js', () => {
           },
           uuid: expect.any(String),
           timestamp: expect.any(String),
-          type: 'capture',
-          library: 'posthog-node',
-          library_version: '1.2.3',
         },
       ])
     })
@@ -150,8 +147,6 @@ describe('PostHog Node.js', () => {
             $groups: { org: 123 },
             foo: 'bar',
           }),
-          library: 'posthog-node',
-          library_version: '1.2.3',
         })
       )
       mockedFetch.mockClear()
@@ -173,8 +168,6 @@ describe('PostHog Node.js', () => {
             foo: 'bar',
             $geoip_disable: true,
           }),
-          library: 'posthog-node',
-          library_version: '1.2.3',
         })
       )
     })
@@ -286,6 +279,94 @@ describe('PostHog Node.js', () => {
         },
       ])
     })
+
+    it.each([
+      ['set properties', { properties: { foo: 'bar' } }, { $set: { foo: 'bar' } }, '$set_once'],
+      [
+        'set once properties',
+        { propertiesOnce: { first_seen: '2026-06-15' } },
+        { $set_once: { first_seen: '2026-06-15' } },
+        '$set',
+      ],
+      [
+        'set and set once properties',
+        { properties: { foo: 'bar' }, propertiesOnce: { first_seen: '2026-06-15' } },
+        { $set: { foo: 'bar' }, $set_once: { first_seen: '2026-06-15' } },
+        undefined,
+      ],
+    ] as Array<
+      [
+        string,
+        { properties?: Record<string, any>; propertiesOnce?: Record<string, any> },
+        Record<string, any>,
+        string | undefined,
+      ]
+    >)(
+      'should capture a $set event from setPersonProperties with %s',
+      async (_, input, expectedProperties, absentKey) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+        posthog.setPersonProperties({
+          distinctId: '123',
+          ...input,
+        })
+        await waitForFlushTimer()
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents).toMatchObject([
+          {
+            distinct_id: '123',
+            event: '$set',
+            properties: {
+              ...expectedProperties,
+              $geoip_disable: true,
+            },
+          },
+        ])
+        if (absentKey) {
+          expect(batchEvents?.[0]?.properties).not.toHaveProperty(absentKey)
+        }
+      }
+    )
+
+    it.each([
+      ['single property', 'plan', ['plan']],
+      ['multiple properties', ['plan', 'email'], ['plan', 'email']],
+    ] as Array<[string, string | string[], string[]]>)(
+      'should capture a $set event with a $unset array for %s',
+      async (_, properties, expectedUnset) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+        posthog.unsetPersonProperties({ distinctId: '123', properties })
+        await waitForFlushTimer()
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents).toMatchObject([
+          {
+            distinct_id: '123',
+            event: '$set',
+            properties: {
+              $unset: expectedUnset,
+              $geoip_disable: true,
+            },
+          },
+        ])
+      }
+    )
+
+    it.each([
+      ['empty array', []],
+      ['empty string', ''],
+      ['whitespace string', ' '],
+    ] as Array<[string, string | string[]]>)(
+      'should not capture an event when unsetPersonProperties is given %s',
+      async (_, properties) => {
+        posthog.unsetPersonProperties({ distinctId: '123', properties })
+        await waitForFlushTimer()
+
+        expect(mockedFetch).not.toHaveBeenCalled()
+      }
+    )
 
     it('should allow overriding timestamp', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
@@ -684,15 +765,12 @@ describe('PostHog Node.js', () => {
         // last event in batch
         distinct_id: '9',
         event: 'test-event',
-        library: 'posthog-node',
-        library_version: '1.2.3',
         properties: {
           $lib: 'posthog-node',
           $lib_version: '1.2.3',
           $geoip_disable: true,
         },
         timestamp: expect.any(String),
-        type: 'capture',
       })
       expect(10).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('capture')).length)
       // 1 for the captured events, 1 for the final flush of feature flag called events

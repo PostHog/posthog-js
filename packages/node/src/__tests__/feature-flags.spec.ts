@@ -2819,8 +2819,6 @@ describe('getFeatureFlag', () => {
     expect(capturedMessage).toMatchObject({
       distinct_id: 'some-distinct-id',
       event: '$feature_flag_called',
-      library: posthog.getLibraryId(),
-      library_version: posthog.getLibraryVersion(),
       properties: {
         '$feature/complex-flag': true,
         $feature_flag: 'complex-flag',

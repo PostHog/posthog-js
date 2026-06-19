@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "4.47.2",
+    "version": "4.49.3",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -447,10 +447,10 @@
             {
               "id": "get_feature_flag_payload",
               "name": "get feature flag payload",
-              "code": "\n\n// get feature flag payload\nconst payload = posthog.getFeatureFlagPayload('key-for-your-multivariate-flag')\n\n\n\n"
+              "code": "\n\n// get feature flag payload\nconst payload = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')?.payload\n\n\n\n"
             }
           ],
-          "releaseTag": "public",
+          "releaseTag": "deprecated",
           "params": [
             {
               "description": "The feature flag key",
@@ -845,7 +845,7 @@
         {
           "category": "Feature flags",
           "description": "Reloads feature flags from the server.\nPostHog loads feature flags when instantiated and refreshes whenever methods are called that affect the flag. If you want to manually trigger a refresh, you can call this method.",
-          "details": null,
+          "details": "When the `disableRemoteFeatureFlags` option is set, this method is a no-op; supply flag values via `updateFlags()` instead.",
           "id": "reloadFeatureFlags",
           "showDocs": true,
           "title": "reloadFeatureFlags",
@@ -867,7 +867,7 @@
         {
           "category": "Feature flags",
           "description": "Reloads feature flags from the server asynchronously.\nPostHog loads feature flags when instantiated and refreshes whenever methods are called that affect the flag. If you want to manually trigger a refresh and get the result, you can call this method.",
-          "details": null,
+          "details": "When the `disableRemoteFeatureFlags` option is set, no request is made and the promise resolves with the currently stored flags (from `bootstrap` or `updateFlags()`).",
           "id": "reloadFeatureFlagsAsync",
           "showDocs": true,
           "title": "reloadFeatureFlagsAsync",
@@ -1312,6 +1312,57 @@
               "isOptional": true,
               "type": "boolean",
               "name": "reloadFeatureFlags"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Replaces (or merges into) the stored feature flags and payloads with locally supplied values, exactly as if they had been returned by the flags endpoint: the values are persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and `onFeatureFlags` listeners fire. Makes no network request.\nIntended for apps that evaluate flags outside the SDK (e.g. server-side local evaluation) and push the results in at runtime, typically together with the `disableRemoteFeatureFlags` option so the SDK never fetches flags itself.",
+          "details": "The values are cleared by `reset()`, so push them again after an identity change.",
+          "id": "updateFlags",
+          "showDocs": true,
+          "title": "updateFlags",
+          "examples": [
+            {
+              "id": "replace_all_stored_flags_with_locally_evaluated_ones",
+              "name": "replace all stored flags with locally evaluated ones",
+              "code": "\n\n// replace all stored flags with locally evaluated ones\nposthog.updateFlags({ 'my-flag': true, 'multivariate-flag': 'variant-1' })\n\n\n"
+            },
+            {
+              "id": "include_payloads",
+              "name": "include payloads",
+              "code": "\n\n// include payloads\nposthog.updateFlags({ 'my-flag': true }, { 'my-flag': { color: 'blue' } })\n\n\n"
+            },
+            {
+              "id": "merge_into_the_stored_flags_instead_of_replacing_them",
+              "name": "merge into the stored flags instead of replacing them",
+              "code": "\n\n// merge into the stored flags instead of replacing them\nposthog.updateFlags({ 'my-flag': false }, undefined, { merge: true })\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "Flag keys mapped to their values (boolean, or a variant string)",
+              "isOptional": false,
+              "type": "Record<string, boolean | string>",
+              "name": "flags"
+            },
+            {
+              "description": "Optional flag keys mapped to their JSON payloads",
+              "isOptional": true,
+              "type": "Record<string, JsonType>",
+              "name": "payloads"
+            },
+            {
+              "description": "Set `merge: true` to merge with the currently stored flags instead of replacing them",
+              "isOptional": true,
+              "type": "{\n        merge?: boolean;\n    }",
+              "name": "options"
             }
           ],
           "returnType": {
@@ -2071,13 +2122,6 @@
       "example": "(event: CaptureEvent | null) => CaptureEvent | null"
     },
     {
-      "id": "BeforeSendLogFn",
-      "name": "BeforeSendLogFn",
-      "properties": [],
-      "path": "../core/src/logs/types.ts",
-      "example": "(record: CaptureLogOptions) => CaptureLogOptions | null"
-    },
-    {
       "id": "CaptureEvent",
       "name": "CaptureEvent",
       "properties": [],
@@ -2566,7 +2610,7 @@
       "name": "PostHogCoreOptions",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    addTracingHeaders?: string[];\n}"
+      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    addTracingHeaders?: string[];\n}"
     },
     {
       "id": "PostHogCustomAppProperties",
@@ -2750,7 +2794,7 @@
           "name": "maxBatchRecordsPerPost"
         },
         {
-          "description": "Max records held in memory before the queue evicts the oldest on push (FIFO). Bounds memory footprint and on-disk-queue size. When the buffer hits this size, an immediate flush is triggered to reclaim space; if the flush hasn't completed before the next capture, the oldest record is shifted out. Default: 100.",
+          "description": "Number of buffered records that triggers an immediate flush. Records also flush on the periodic interval and on `shutdown()`. The queue can grow past this while an async flush is in flight (e.g. during a synchronous burst); a separate, larger memory backstop evicts the oldest only once the queue exceeds the per-interval rate cap. Default: 100.",
           "type": "number",
           "name": "maxBufferSize"
         },
@@ -2765,7 +2809,7 @@
           "name": "resourceAttributes"
         },
         {
-          "description": "Service name attached to every record as the OTLP `service.name` resource attribute. Used by the Logs UI for filtering / grouping. Default: `'unknown_service'`.",
+          "description": "Service name attached to every record as the OTLP `service.name` resource attribute. Used by the Logs UI for filtering / grouping. Defaults to `'unknown_service'` when unset.",
           "type": "string",
           "name": "serviceName"
         },

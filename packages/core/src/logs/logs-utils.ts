@@ -9,7 +9,7 @@ import type {
   OtlpSeverityEntry,
   OtlpSeverityText,
 } from '@posthog/types'
-import type { LogSdkContext } from './types'
+import type { LogSdkContext, ResolvedPostHogLogsConfig } from './types'
 import { isArray, isBoolean, isNull, isUndefined } from '../utils'
 
 // ============================================================================
@@ -167,6 +167,35 @@ export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSd
 // ============================================================================
 // OTLP envelope construction
 // ============================================================================
+
+/**
+ * OTLP resource attributes for every batch, shared by the core flush path and
+ * SDK-specific paths that bypass it (e.g. the browser's synchronous sendBeacon
+ * drain). Having one builder keeps those paths from drifting.
+ *
+ * Layout: user `resourceAttributes` spread first, then SDK-controlled keys
+ * (`service.name`, `deployment.environment`, `service.version`,
+ * `telemetry.sdk.*`) layered on top so a stray user key can't clobber the
+ * ingestion-attribution keys. The dedicated `serviceName` / `environment` /
+ * `serviceVersion` config fields are the supported way to override the first
+ * three; each SDK resolves its own `service.name` default before this point, so
+ * the `unknown_service` fallback here only fires if a config slips through with
+ * an empty `serviceName`.
+ */
+export function buildResourceAttributes(
+  config: ResolvedPostHogLogsConfig,
+  scopeName: string,
+  scopeVersion: string
+): Record<string, LogAttributeValue> {
+  return {
+    ...config.resourceAttributes,
+    'service.name': config.serviceName || 'unknown_service',
+    ...(config.environment && { 'deployment.environment': config.environment }),
+    ...(config.serviceVersion && { 'service.version': config.serviceVersion }),
+    'telemetry.sdk.name': scopeName,
+    'telemetry.sdk.version': scopeVersion,
+  }
+}
 
 /**
  * Wraps a list of records in the OTLP `resourceLogs` envelope.

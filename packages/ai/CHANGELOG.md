@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 8.2.1
+
+### Patch Changes
+
+- [#3754](https://github.com/PostHog/posthog-js/pull/3754) [`d8419d4`](https://github.com/PostHog/posthog-js/commit/d8419d4981a6fe9411a116b1545d12020ee920f7) Thanks [@archievi](https://github.com/archievi)! - Wrap the Azure OpenAI `responses` API in `PostHogAzureOpenAI` so `responses.create` calls are tracked, matching the non-Azure `PostHogOpenAI` client.
+  (2026-06-16)
+- Updated dependencies [[`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9), [`a0553b3`](https://github.com/PostHog/posthog-js/commit/a0553b305679f995e244cad7498c7521cb4c849d), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+  - @posthog/core@1.33.0
+  - posthog-node@5.38.0
+
 ## 8.2.0
 
 ### Minor Changes

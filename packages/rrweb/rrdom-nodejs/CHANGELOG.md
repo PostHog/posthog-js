@@ -1,5 +1,13 @@
 # rrdom-nodejs
 
+## 0.0.5
+
+### Patch Changes
+
+- Updated dependencies [[`f95a0ec`](https://github.com/PostHog/posthog-js/commit/f95a0ec68270bf9116d29875733c1a43e9b91331)]:
+    - @posthog/rrweb-types@0.0.62
+    - @posthog/rrdom@0.0.65
+
 ## 0.0.4
 
 ### Patch Changes

@@ -50,6 +50,8 @@ file-cid-0
 
 noscript { display: none !important; }
 
+[rr_fullscreen] { position: fixed !important; inset: 0px !important; width: 100% !important; height: 100% !important; margin: 0px !important; max-width: none !important; max-height: none !important; z-index: 2147483647 !important; }
+
 html.rrweb-paused *, html.rrweb-paused ::before, html.rrweb-paused ::after { animation-play-state: paused !important; }
 
 
@@ -130,6 +132,8 @@ file-cid-0
 
 noscript { display: none !important; }
 
+[rr_fullscreen] { position: fixed !important; inset: 0px !important; width: 100% !important; height: 100% !important; margin: 0px !important; max-width: none !important; max-height: none !important; z-index: 2147483647 !important; }
+
 html.rrweb-paused *, html.rrweb-paused ::before, html.rrweb-paused ::after { animation-play-state: paused !important; }
 
 
@@ -202,6 +206,8 @@ file-cid-0
 
 noscript { display: none !important; }
 
+[rr_fullscreen] { position: fixed !important; inset: 0px !important; width: 100% !important; height: 100% !important; margin: 0px !important; max-width: none !important; max-height: none !important; z-index: 2147483647 !important; }
+
 html.rrweb-paused *, html.rrweb-paused ::before, html.rrweb-paused ::after { animation-play-state: paused !important; }
 "
 `;
@@ -253,6 +259,8 @@ file-cid-0
 
 noscript { display: none !important; }
 
+[rr_fullscreen] { position: fixed !important; inset: 0px !important; width: 100% !important; height: 100% !important; margin: 0px !important; max-width: none !important; max-height: none !important; z-index: 2147483647 !important; }
+
 html.rrweb-paused *, html.rrweb-paused ::before, html.rrweb-paused ::after { animation-play-state: paused !important; }
 "
 `;
@@ -303,6 +311,8 @@ file-cid-0
 .rr-block { background: currentcolor; }
 
 noscript { display: none !important; }
+
+[rr_fullscreen] { position: fixed !important; inset: 0px !important; width: 100% !important; height: 100% !important; margin: 0px !important; max-width: none !important; max-height: none !important; z-index: 2147483647 !important; }
 
 html.rrweb-paused *, html.rrweb-paused ::before, html.rrweb-paused ::after { animation-play-state: paused !important; }
 "

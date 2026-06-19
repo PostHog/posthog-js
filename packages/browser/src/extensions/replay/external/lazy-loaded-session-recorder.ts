@@ -1060,13 +1060,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // we'll need to correct the time of this if it's captured when idle
                 // so we don't extend reported session time with a debug event
                 lastActivityTimestamp: this._lastActivityTimestamp,
-                flushed_size: this._flushedSizeTracker?.currentTrackedSize,
+                flushed_size: this._flushedSizeTracker?.currentTrackedSize(oldSessionId),
             })
-        }
-
-        // reset flushed size tracker after capturing the ending event
-        if (this._flushedSizeTracker) {
-            this._flushedSizeTracker.reset()
         }
 
         // Reset first full snapshot timestamp for the new session
@@ -1551,7 +1546,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (this._buffer.data.length > 0) {
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
-                this._flushedSizeTracker?.trackSize(snapshotBuffer.size)
+                this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
                 this._captureSnapshot({
                     $snapshot_bytes: snapshotBuffer.size,
                     $snapshot_data: snapshotBuffer.data,
@@ -1839,7 +1834,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_current_session_duration: this._sessionDuration,
             $sdk_debug_session_start: sessionStartTimestamp,
-            $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize,
+            $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
             $sdk_debug_replay_rrweb_error: this._rrwebError,

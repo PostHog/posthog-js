@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.386.8",
+    "version": "1.390.2",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -109,7 +109,7 @@
         "@types/sinon": "^17.0.1",
         "@types/web": "^0.0.222",
         "babel-jest": "^29.7.0",
-        "browserslist": "^4.24.5",
+        "browserslist": "^4.28.2",
         "compare-versions": "^6.1.0",
         "cssnano": "^7.0.7",
         "date-fns": "^3.6.0",

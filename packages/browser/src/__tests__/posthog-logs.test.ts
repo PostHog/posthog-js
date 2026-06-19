@@ -68,7 +68,7 @@ describe('posthog-logs', () => {
                 requestRouter: {
                     endpointFor: jest.fn(() => 'https://us.i.posthog.com'),
                 },
-                _send_retriable_request: jest.fn(),
+                _send_request: jest.fn((opts: any) => opts.callback?.({ statusCode: 200 })),
                 get_property: jest.fn(),
                 is_capturing: jest.fn(() => true),
                 get_distinct_id: jest.fn(() => 'distinct-id-123'),
@@ -186,7 +186,7 @@ describe('posthog-logs', () => {
         })
 
         describe('reset', () => {
-            it('should have a reset method that does nothing', () => {
+            it('should not throw when the queue is empty', () => {
                 expect(() => logs.reset()).not.toThrow()
             })
         })
@@ -465,52 +465,69 @@ describe('posthog-logs', () => {
 
                 logs.captureLog({ body: 'should not be captured' })
 
-                expect((logs as any)._logBuffer).toHaveLength(0)
-                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
+                expect((logs as any)._queue).toHaveLength(0)
+                expect(mockPostHog._send_request).not.toHaveBeenCalled()
             })
 
-            it('should warn and skip if no body provided', () => {
+            it('should skip if no body provided', () => {
                 logs.captureLog({} as any)
 
-                expect(mockLogger.warn).toHaveBeenCalledWith('captureLog requires a body')
-                expect((logs as any)._logBuffer).toHaveLength(0)
+                expect((logs as any)._queue).toHaveLength(0)
             })
 
-            it('should warn and skip if body is empty string', () => {
+            it('should skip if body is empty string', () => {
                 logs.captureLog({ body: '' })
 
-                expect(mockLogger.warn).toHaveBeenCalledWith('captureLog requires a body')
+                expect((logs as any)._queue).toHaveLength(0)
             })
 
             it('should add a log record to the buffer', () => {
                 logs.captureLog({ body: 'test message' })
 
-                expect((logs as any)._logBuffer).toHaveLength(1)
-                expect((logs as any)._logBuffer[0].record.body.stringValue).toBe('test message')
+                expect((logs as any)._queue).toHaveLength(1)
+                expect((logs as any)._queue[0].record.body.stringValue).toBe('test message')
             })
 
-            it('should schedule a flush after adding a record', () => {
+            it('should not send before the flush timer expires', () => {
                 logs.captureLog({ body: 'test message' })
 
-                expect((logs as any)._flushTimeout).toBeDefined()
+                expect(mockPostHog._send_request).not.toHaveBeenCalled()
             })
 
-            it('should flush on timer expiry', () => {
+            it('should flush on timer expiry and clear the queue on success', async () => {
                 logs.captureLog({ body: 'test message' })
 
-                jest.advanceTimersByTime(3000)
+                await jest.advanceTimersByTimeAsync(3000)
 
-                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
-                expect((logs as any)._logBuffer).toHaveLength(0)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+                expect((logs as any)._queue).toHaveLength(0)
             })
 
             it('should flush immediately when buffer reaches max size', () => {
-                for (let i = 0; i < 100; i++) {
+                ;(mockPostHog.config as any).logs = { maxBufferSize: 5, maxLogsPerInterval: 1000 }
+                logs = new PostHogLogs(mockPostHog)
+
+                for (let i = 0; i < 5; i++) {
                     logs.captureLog({ body: `message ${i}` })
                 }
 
-                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
-                expect((logs as any)._logBuffer).toHaveLength(0)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+            })
+
+            it('retains a burst past maxBufferSize up to the rate-cap reservoir (no eviction at the flush trigger)', () => {
+                // Hold the flush open so capture outpaces drain. maxBufferSize (2) only
+                // triggers a flush; the eviction backstop sits at the rate cap (1000), so
+                // a burst the cap admits is held in full rather than dropped at the trigger.
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog.config as any).logs = { maxBufferSize: 2, maxLogsPerInterval: 1000 }
+                logs = new PostHogLogs(mockPostHog)
+
+                logs.captureLog({ body: 'oldest' })
+                logs.captureLog({ body: 'middle' })
+                logs.captureLog({ body: 'newest' })
+
+                const bodies = (logs as any)._queue.map((e: any) => e.record.body.stringValue)
+                expect(bodies).toEqual(['oldest', 'middle', 'newest'])
             })
 
             it('should send to the correct URL with token', () => {
@@ -518,7 +535,7 @@ describe('posthog-logs', () => {
                 jest.advanceTimersByTime(3000)
 
                 expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 expect(call.url).toContain('token=test-token')
             })
 
@@ -526,7 +543,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test', level: 'error' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 expect(call.data.resourceLogs).toBeDefined()
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(1)
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords[0].severityText).toBe('ERROR')
@@ -536,7 +553,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 expect(call.batchKey).toBe('logs')
             })
 
@@ -544,7 +561,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 expect(call.compression).toBe('best-available')
             })
 
@@ -554,8 +571,8 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'log 3' })
                 jest.advanceTimersByTime(3000)
 
-                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(3)
             })
 
@@ -563,7 +580,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -581,10 +598,11 @@ describe('posthog-logs', () => {
                     serviceVersion: '1.2.3',
                     environment: 'production',
                 }
+                logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -597,18 +615,25 @@ describe('posthog-logs', () => {
                 ;(mockPostHog.config as any).logs = {
                     ...mockPostHog.config.logs,
                     serviceName: 'from-named',
+                    serviceVersion: 'from-named',
+                    environment: 'from-named',
                     resourceAttributes: {
                         'service.name': 'from-resource-attrs',
+                        'service.version': 'from-resource-attrs',
+                        'deployment.environment': 'from-resource-attrs',
                     },
                 }
+                logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
                 expect(attrsMap['service.name']).toEqual({ stringValue: 'from-resource-attrs' })
+                expect(attrsMap['service.version']).toEqual({ stringValue: 'from-resource-attrs' })
+                expect(attrsMap['deployment.environment']).toEqual({ stringValue: 'from-resource-attrs' })
             })
 
             it('should use consistent resource attributes across all logs in a batch', () => {
@@ -616,11 +641,12 @@ describe('posthog-logs', () => {
                     ...mockPostHog.config.logs,
                     serviceName: 'my-service',
                 }
+                logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'log 1' })
                 logs.captureLog({ body: 'log 2' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -632,7 +658,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -642,7 +668,7 @@ describe('posthog-logs', () => {
             it('should not send anything if buffer is empty on flush', () => {
                 logs.flushLogs()
 
-                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
+                expect(mockPostHog._send_request).not.toHaveBeenCalled()
             })
 
             it('should drop logs that exceed maxLogsPerInterval and warn once', () => {
@@ -651,12 +677,13 @@ describe('posthog-logs', () => {
                     maxLogsPerInterval: 3,
                     maxBufferSize: 1000,
                 }
+                logs = new PostHogLogs(mockPostHog)
 
                 for (let i = 0; i < 10; i++) {
                     logs.captureLog({ body: `msg ${i}` })
                 }
 
-                expect((logs as any)._logBuffer).toHaveLength(3)
+                expect((logs as any)._queue).toHaveLength(3)
                 expect(mockLogger.warn).toHaveBeenCalledTimes(1)
                 expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('dropping logs'))
             })
@@ -668,15 +695,16 @@ describe('posthog-logs', () => {
                     flushIntervalMs: 3000,
                     maxBufferSize: 1000,
                 }
+                logs = new PostHogLogs(mockPostHog)
 
                 logs.captureLog({ body: 'a' })
                 logs.captureLog({ body: 'b' })
                 logs.captureLog({ body: 'dropped' })
-                expect((logs as any)._logBuffer).toHaveLength(2)
+                expect((logs as any)._queue).toHaveLength(2)
 
                 jest.advanceTimersByTime(3001)
                 logs.captureLog({ body: 'c' })
-                expect((logs as any)._logBuffer.some((e: any) => e.record.body.stringValue === 'c')).toBe(true)
+                expect((logs as any)._queue.some((e: any) => e.record.body.stringValue === 'c')).toBe(true)
             })
 
             it('should work without console log autocapture enabled', () => {
@@ -686,14 +714,14 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'works without autocapture' })
                 jest.advanceTimersByTime(3000)
 
-                expect(mockPostHog._send_retriable_request).toHaveBeenCalledTimes(1)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
             })
 
             it('should support transport override for unload', () => {
                 logs.captureLog({ body: 'unload log' })
                 logs.flushLogs('sendBeacon')
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 expect(call.transport).toBe('sendBeacon')
             })
         })
@@ -709,7 +737,7 @@ describe('posthog-logs', () => {
                     logs.logger[level]('test message', { key: 'value' })
                     jest.advanceTimersByTime(3000)
 
-                    const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                     const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
 
                     expect(record.body.stringValue).toBe('test message')
@@ -722,9 +750,281 @@ describe('posthog-logs', () => {
                 logs.logger.info('no attrs')
                 jest.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_retriable_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 expect(record.body.stringValue).toBe('no attrs')
+            })
+        })
+
+        describe('beforeSend', () => {
+            const bodyOf = (l: PostHogLogs, i = 0) => (l as any)._queue[i]?.record.body.stringValue
+
+            it.each([
+                ['single function', (record: any) => ({ ...record, body: 'redacted' }), 'secret token=abc', 'redacted'],
+                [
+                    'left-to-right chain',
+                    [
+                        (record: any) => ({ ...record, body: record.body + '1' }),
+                        (record: any) => ({ ...record, body: record.body + '2' }),
+                    ],
+                    'x',
+                    'x12',
+                ],
+            ] as Array<[string, any, string, string]>)(
+                'transforms the record via a %s',
+                (_label, beforeSend, input, expected) => {
+                    ;(mockPostHog.config as any).logs = { beforeSend }
+                    logs = new PostHogLogs(mockPostHog)
+
+                    logs.captureLog({ body: input })
+
+                    expect((logs as any)._queue).toHaveLength(1)
+                    expect(bodyOf(logs)).toBe(expected)
+                }
+            )
+
+            it.each([
+                ['single function returning null', () => null],
+                ['chain with a null-returning link', [(record: any) => record, () => null, (record: any) => record]],
+            ] as Array<[string, any]>)('drops the record when beforeSend is a %s', (_label, beforeSend) => {
+                ;(mockPostHog.config as any).logs = { beforeSend }
+                logs = new PostHogLogs(mockPostHog)
+
+                logs.captureLog({ body: 'should be dropped' })
+
+                expect((logs as any)._queue).toHaveLength(0)
+            })
+
+            it('drops the record when a beforeSend fn throws', () => {
+                ;(mockPostHog.config as any).logs = {
+                    beforeSend: [
+                        (record: any) => ({ ...record, body: 'kept' }),
+                        () => {
+                            throw new Error('boom')
+                        },
+                    ],
+                }
+                logs = new PostHogLogs(mockPostHog)
+
+                // A throwing filter must not crash captureLog; the record is
+                // dropped and the error logged.
+                expect(() => logs.captureLog({ body: 'x' })).not.toThrow()
+                expect((logs as any)._queue).toHaveLength(0)
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'Error in beforeSend function for log:',
+                    expect.any(Error)
+                )
+            })
+        })
+
+        describe('sendBeacon flush', () => {
+            it('drains the queue into a single beacon request', () => {
+                logs.captureLog({ body: 'unload 1' })
+                logs.captureLog({ body: 'unload 2' })
+
+                logs.flushLogs('sendBeacon')
+
+                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                expect(call.transport).toBe('sendBeacon')
+                expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
+                expect((logs as any)._queue).toHaveLength(0)
+
+                // The beacon path builds resource attributes itself; confirm it matches
+                // the core path (default service.name + SDK telemetry keys).
+                const attrs = Object.fromEntries(
+                    call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
+                )
+                expect(attrs['service.name']).toEqual({ stringValue: 'unknown_service' })
+                expect(attrs['telemetry.sdk.name']).toEqual({ stringValue: expect.any(String) })
+                expect(attrs['telemetry.sdk.version']).toEqual({ stringValue: expect.any(String) })
+            })
+
+            it('does nothing when the queue is empty', () => {
+                logs.flushLogs('sendBeacon')
+
+                expect(mockPostHog._send_request).not.toHaveBeenCalled()
+            })
+
+            it.each(['XHR', 'fetch'] as const)(
+                'forces the %s transport and drains the queue in one request',
+                (transport) => {
+                    logs.captureLog({ body: 'a' })
+                    logs.captureLog({ body: 'b' })
+
+                    logs.flushLogs(transport)
+
+                    const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                    expect(call.transport).toBe(transport)
+                    expect(call.batchKey).toBe('logs')
+                    expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
+                    expect((logs as any)._queue).toHaveLength(0)
+                }
+            )
+        })
+
+        describe('reconnect', () => {
+            it('flushes queued logs when the browser comes back online', () => {
+                logs.captureLog({ body: 'queued while offline' })
+                expect((logs as any)._queue).toHaveLength(1)
+                expect(mockPostHog._send_request).not.toHaveBeenCalled()
+
+                assignableWindow.dispatchEvent(new Event('online'))
+
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+            })
+        })
+
+        describe('flush outcome handling', () => {
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            afterEach(() => {
+                jest.useRealTimers()
+            })
+
+            const flushWith = async (statusCode: number) => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode })
+                )
+                logs.captureLog({ body: 'x' })
+                // core.flush() rejects on a retry-later/fatal outcome; swallow so we can assert queue state.
+                await (logs as any)._core.flush().catch(() => {})
+            }
+
+            it('clears the queue on a 2xx response', async () => {
+                await flushWith(200)
+                expect((logs as any)._queue).toHaveLength(0)
+            })
+
+            it('keeps records on a 429 so they retry later', async () => {
+                await flushWith(429)
+                expect((logs as any)._queue).toHaveLength(1)
+            })
+
+            it('keeps records on a 5xx so they retry later', async () => {
+                await flushWith(503)
+                expect((logs as any)._queue).toHaveLength(1)
+            })
+
+            it('drops records on a 4xx client error', async () => {
+                await flushWith(400)
+                expect((logs as any)._queue).toHaveLength(0)
+            })
+
+            it('settles as retry-later (keeps records) when _send_request never calls back', async () => {
+                // Models the callback-less paths (request enqueued before load, or a
+                // transport that does not report back). Without the backstop timer the
+                // flush promise would never settle and wedge all future flushes.
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                logs.captureLog({ body: 'x' })
+
+                const flushPromise = (logs as any)._core.flush().catch(() => {})
+                let settled = false
+                void flushPromise.then(() => {
+                    settled = true
+                })
+
+                // The promise must stay pending until the 90s backstop fires, so a
+                // queue length of 1 here can't be confused with "no flush ran at all".
+                await jest.advanceTimersByTimeAsync(89000)
+                expect(settled).toBe(false)
+                await jest.advanceTimersByTimeAsync(2000)
+                await flushPromise
+                expect(settled).toBe(true)
+
+                expect((logs as any)._queue).toHaveLength(1)
+            })
+
+            it('keeps records after a timer-driven flush hits a 429', async () => {
+                // Drives the real timer-expiry path (not _core.flush() directly) to
+                // confirm a transient response requeues end to end.
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 429 })
+                )
+                logs.captureLog({ body: 'x' })
+
+                await jest.advanceTimersByTimeAsync(3000)
+
+                expect((logs as any)._queue).toHaveLength(1)
+            })
+        })
+
+        describe('live config resolution', () => {
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            afterEach(() => {
+                jest.useRealTimers()
+            })
+
+            const beaconResourceAttrs = () =>
+                Object.fromEntries(
+                    (mockPostHog._send_request as jest.Mock).mock.calls
+                        .at(-1)![0]
+                        .data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
+                )
+
+            it('honors logs config applied after the extension is constructed', () => {
+                // Mirrors the full-bundle init order: the extension is built in the PostHog
+                // constructor (no logs config yet), then init applies config via set_config.
+                // No reconstruction here — the wrapper must read config at first use.
+                ;(mockPostHog.config as any).logs = {
+                    serviceName: 'late-config',
+                    maxLogsPerInterval: 2,
+                    maxBufferSize: 1000,
+                }
+
+                logs.captureLog({ body: 'a' })
+                logs.captureLog({ body: 'b' })
+                logs.captureLog({ body: 'rate-capped' })
+
+                // maxLogsPerInterval: 2 from the late config is honored
+                expect((logs as any)._queue).toHaveLength(2)
+
+                logs.flushLogs('sendBeacon')
+                // serviceName from the late config is honored
+                expect(beaconResourceAttrs()['service.name']).toEqual({ stringValue: 'late-config' })
+            })
+
+            it('picks up logs config changed via set_config after first use', () => {
+                logs.captureLog({ body: 'first' })
+                logs.flushLogs('sendBeacon')
+                expect(beaconResourceAttrs()['service.name']).toEqual({ stringValue: 'unknown_service' })
+
+                // set_config replaces config.logs with a new object reference
+                ;(mockPostHog.config as any).logs = { serviceName: 'changed' }
+                logs.captureLog({ body: 'second' })
+                logs.flushLogs('sendBeacon')
+                expect(beaconResourceAttrs()['service.name']).toEqual({ stringValue: 'changed' })
+            })
+
+            it('does not double-flush when set_config rebuilds the core mid-buffer', async () => {
+                // Defer callbacks so both a (hypothetically) orphaned timer and the
+                // new core's timer would have their flushes in flight at once. The
+                // rebuild must reset the old core, clearing its armed timer, so only
+                // the surviving core POSTs — otherwise both read the same head of the
+                // shared queue and double-send.
+                const callbacks: Array<(r: any) => void> = []
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) => {
+                    if (opts.callback) {
+                        callbacks.push(opts.callback)
+                    }
+                })
+
+                logs.captureLog({ body: 'a' }) // arms the first core's flush timer
+                ;(mockPostHog.config as any).logs = { serviceName: 'changed' }
+                logs.captureLog({ body: 'b' }) // _getCore rebuilds → second core arms its timer
+
+                await jest.advanceTimersByTimeAsync(3000)
+
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+
+                // Resolve the in-flight send: the queue drains exactly once.
+                callbacks.forEach((cb) => cb({ statusCode: 200 }))
+                await Promise.resolve()
+                expect((logs as any)._queue).toHaveLength(0)
             })
         })
 
@@ -740,17 +1040,15 @@ describe('posthog-logs', () => {
             it('should clear the buffer and cancel pending flush', () => {
                 logs.captureLog({ body: 'log 1' })
                 logs.captureLog({ body: 'log 2' })
-                expect((logs as any)._logBuffer).toHaveLength(2)
-                expect((logs as any)._flushTimeout).toBeDefined()
+                expect((logs as any)._queue).toHaveLength(2)
 
                 logs.reset()
 
-                expect((logs as any)._logBuffer).toHaveLength(0)
-                expect((logs as any)._flushTimeout).toBeUndefined()
+                expect((logs as any)._queue).toHaveLength(0)
 
                 // Advancing time should not trigger a flush
                 jest.advanceTimersByTime(5000)
-                expect(mockPostHog._send_retriable_request).not.toHaveBeenCalled()
+                expect(mockPostHog._send_request).not.toHaveBeenCalled()
             })
         })
 

@@ -11,6 +11,7 @@ export type {
   OtlpKeyValue,
   OtlpLogRecord,
   OtlpLogsPayload,
+  BeforeSendLogFn,
 } from '@posthog/types'
 
 /**
@@ -39,44 +40,34 @@ export interface LogSdkContext {
 import type { Logger as CaptureLoggerType } from '@posthog/types'
 export type CaptureLogger = CaptureLoggerType
 
-import type { LogAttributeValue, CaptureLogOptions, OtlpLogRecord } from '@posthog/types'
+import type {
+  LogAttributeValue,
+  CaptureLogOptions,
+  OtlpLogRecord,
+  OtlpLogsPayload,
+  BeforeSendLogFn,
+} from '@posthog/types'
+import type { PostHogPersistedProperty } from '../types'
+import type { SendLogsBatchOutcome } from '../posthog-core-stateless'
 
 export interface BufferedLogEntry {
   record: OtlpLogRecord
 }
 
 /**
- * Pre-send filter. Inspect, mutate, or drop a captured record before it
- * enters the rate-cap or the queue. Return the (possibly transformed) record
- * to keep it; return `null` to drop it.
- *
- * Configure as a single fn or an array. Arrays form a left-to-right chain:
- * each fn receives the previous fn's return value. A `null` from any link
- * short-circuits the chain and drops the record.
- *
- * Runs *before* the rate cap so dropped records don't consume the
- * per-interval budget. Throwing fns are logged and skipped — the chain
- * continues with the previous return value, so a buggy filter degrades to a
- * no-op rather than crashing `captureLog()`.
- *
- * @example Redact secrets from log bodies
- * ```ts
- * logs: {
- *   beforeSend: (record) => ({
- *     ...record,
- *     body: record.body.replace(/api_key=\S+/g, 'api_key=[REDACTED]'),
- *   }),
- * }
- * ```
- *
- * @example Drop noisy debug logs in production
- * ```ts
- * logs: {
- *   beforeSend: (record) => (record.level === 'debug' ? null : record),
- * }
- * ```
+ * The minimal host surface `PostHogLogs` depends on. `PostHogCoreStateless`
+ * satisfies it structurally (mobile/node); the browser supplies an adapter
+ * backed by its own persistence and request layer.
  */
-export type BeforeSendLogFn = (record: CaptureLogOptions) => CaptureLogOptions | null
+export interface LogsHost {
+  readonly isDisabled: boolean
+  readonly optedOut: boolean
+  getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined
+  setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
+  _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome>
+  getLibraryId(): string
+  getLibraryVersion(): string
+}
 
 /**
  * Configuration for the logs feature on `new PostHog(key, { logs: ... })`.
@@ -87,7 +78,7 @@ export interface PostHogLogsConfig {
   /**
    * Service name attached to every record as the OTLP `service.name`
    * resource attribute. Used by the Logs UI for filtering / grouping.
-   * Default: `'unknown_service'`.
+   * Defaults to `'unknown_service'` when unset.
    */
   serviceName?: string
 
@@ -121,11 +112,11 @@ export interface PostHogLogsConfig {
   flushIntervalMs?: number
 
   /**
-   * Max records held in memory before the queue evicts the oldest on push
-   * (FIFO). Bounds memory footprint and on-disk-queue size. When the buffer
-   * hits this size, an immediate flush is triggered to reclaim space; if
-   * the flush hasn't completed before the next capture, the oldest record
-   * is shifted out. Default: 100.
+   * Number of buffered records that triggers an immediate flush. Records also
+   * flush on the periodic interval and on `shutdown()`. The queue can grow past
+   * this while an async flush is in flight (e.g. during a synchronous burst); a
+   * separate, larger memory backstop evicts the oldest only once the queue
+   * exceeds the per-interval rate cap. Default: 100.
    */
   maxBufferSize?: number
 
@@ -182,6 +173,10 @@ export interface PostHogLogsConfig {
 // Flat names internally — public API uses `rateCap: { maxLogs, windowMs }`.
 export interface ResolvedPostHogLogsConfig extends Omit<PostHogLogsConfig, 'rateCap'> {
   maxBufferSize: number
+  // Eviction cap: the queue drops the oldest record once it exceeds this. Separate
+  // from `maxBufferSize` (the flush trigger) so a burst is held, not evicted, while
+  // the async flush drains. Defaults to `maxBufferSize` when unset.
+  maxQueueSize?: number
   flushIntervalMs: number
   maxBatchRecordsPerPost: number
   rateCapWindowMs: number

@@ -1,5 +1,53 @@
 # @posthog/types
 
+## 1.390.0
+
+### Minor Changes
+
+- [#3869](https://github.com/PostHog/posthog-js/pull/3869) [`81b79fb`](https://github.com/PostHog/posthog-js/commit/81b79fb9bcab3f4619e8fc7f1022f2ab24936b4e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add a `beforeSend` option to the logs config, so you can inspect, redact, or drop log records before they're sent:
+
+    ```js
+    posthog.init('<token>', {
+        logs: {
+            beforeSend: (log) => {
+                // return null to drop the log, or return the (optionally modified) log to keep it
+                if (log.body.includes('password')) {
+                    return null
+                }
+                return log
+            },
+        },
+    })
+    ```
+
+    `beforeSend` accepts a single function or an array of functions (applied left to right); returning `null` from any of them drops the record. It runs for logs sent via both `posthog.captureLog()` and `posthog.logger.*`. (2026-06-17)
+
+## 1.389.0
+
+### Minor Changes
+
+- [#3865](https://github.com/PostHog/posthog-js/pull/3865) [`b469830`](https://github.com/PostHog/posthog-js/commit/b469830a308761005c963872c349de5fa4b35f39) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - The browser's programmatic logs API (`posthog.captureLog()` / `posthog.logger.*`) now runs through the shared `@posthog/core` logs pipeline that React Native already uses — no change to the public API or existing behavior. Log delivery is more resilient as a result: oversized batches are split automatically, failed sends retry with exponential backoff, and delivery resumes when the browser comes back online.
+  (2026-06-17)
+
+## 1.388.0
+
+### Minor Changes
+
+- [#3863](https://github.com/PostHog/posthog-js/pull/3863) [`b6bc9be`](https://github.com/PostHog/posthog-js/commit/b6bc9be241d6af91cae9d63b3fbb5b1d7ac8f343) Thanks [@marandaneto](https://github.com/marandaneto)! - Add autocapture-only CSS selector opt-outs for web interactions.
+  (2026-06-17)
+
+## 1.387.0
+
+### Minor Changes
+
+- [#3709](https://github.com/PostHog/posthog-js/pull/3709) [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e) Thanks [@posthog](https://github.com/apps/posthog)! - Add `unsetPersonProperties()` to remove person properties, the counterpart to `setPersonProperties()`. Previously the only way to unset a person property was to hand-pass a `$unset` array inside a `capture()` call.
+  (2026-06-16)
+
+### Patch Changes
+
+- [#3860](https://github.com/PostHog/posthog-js/pull/3860) [`c9c7df1`](https://github.com/PostHog/posthog-js/commit/c9c7df1e7f3ae6152aa80f98b49be206fdff1b23) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `$unset` to capture options and pass it through in browser capture payloads.
+  (2026-06-16)
+
 ## 1.386.4
 
 ### Patch Changes
