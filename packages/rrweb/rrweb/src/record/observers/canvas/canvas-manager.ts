@@ -25,6 +25,10 @@ type pendingCanvasMutationsMap = Map<
   canvasMutationWithType[]
 >;
 
+// lower bound for resolutionScale, so a misconfiguration can't capture at a degenerate
+// resolution. matches the floor the PostHog SDK applies before passing the option in.
+const MIN_CANVAS_RESOLUTION_SCALE = 0.1;
+
 export class CanvasManager {
   private pendingCanvasMutations: pendingCanvasMutationsMap = new Map();
   private rafStamps: RafStamps = { latestId: 0, invokeId: null };
@@ -97,6 +101,11 @@ export class CanvasManager {
     mirror: Mirror;
     sampling?: 'all' | number;
     dataURLOptions: DataURLOptions;
+    // fraction of the canvas display size to capture frames at, clamped to
+    // [MIN_CANVAS_RESOLUTION_SCALE, 1]; the frame is upscaled back to its display size on replay,
+    // so playback dimensions/aspect are unchanged, just softer. invalid/unset defaults to 1
+    // (full resolution).
+    resolutionScale?: number;
   }) {
     const {
       sampling = 'all',
@@ -105,6 +114,7 @@ export class CanvasManager {
       blockSelector,
       recordCanvas,
       dataURLOptions,
+      resolutionScale,
     } = options;
     this.mutationCb = options.mutationCb;
     this.mirror = options.mirror;
@@ -119,6 +129,7 @@ export class CanvasManager {
     if (recordCanvas && typeof sampling === 'number')
       this.initCanvasFPSObserver(sampling, win, blockClass, blockSelector, {
         dataURLOptions,
+        resolutionScale,
       });
   }
 
@@ -146,11 +157,23 @@ export class CanvasManager {
     blockSelector: string | null,
     options: {
       dataURLOptions: DataURLOptions;
+      resolutionScale?: number;
     },
   ) {
     if (!('OffscreenCanvas' in win)) {
       return;
     }
+
+    // fraction of the canvas display size to capture frames at, clamped to
+    // [MIN_CANVAS_RESOLUTION_SCALE, 1]; invalid/unset means full resolution.
+    const scale =
+      typeof options.resolutionScale === 'number' &&
+      Number.isFinite(options.resolutionScale)
+        ? Math.min(
+            1,
+            Math.max(MIN_CANVAS_RESOLUTION_SCALE, options.resolutionScale),
+          )
+        : 1;
 
     const canvasContextReset = initCanvasContextObserver(
       win,
@@ -167,17 +190,22 @@ export class CanvasManager {
 
       if (!('base64' in e.data)) return;
 
-      const { base64, type, width, height } = e.data;
+      const { base64, type, displayWidth, displayHeight } = e.data;
+      // the encoded image may be downscaled; draw it stretched back to the canvas's display
+      // size — carried through the worker with the frame, so playback keeps the original
+      // dimensions and aspect ratio, just softer.
+      const dw = displayWidth;
+      const dh = displayHeight;
       this.mutationCb({
         id,
         type: CanvasContext['2D'],
         commands: [
           {
             property: 'clearRect', // wipe canvas
-            args: [0, 0, width, height],
+            args: [0, 0, dw, dh],
           },
           {
-            property: 'drawImage', // draws (semi-transparent) image
+            property: 'drawImage', // draws (semi-transparent) image, stretched to display size
             args: [
               {
                 rr_type: 'ImageBitmap',
@@ -191,11 +219,13 @@ export class CanvasManager {
               } as CanvasArg,
               0,
               0,
+              dw,
+              dh,
             ],
           },
         ],
-        displayWidth: width,
-        displayHeight: height,
+        displayWidth: dw,
+        displayHeight: dh,
       });
     };
 
@@ -226,10 +256,7 @@ export class CanvasManager {
     };
 
     const takeCanvasSnapshots = (timestamp: DOMHighResTimeStamp) => {
-      if (
-        lastSnapshotTime &&
-        timestamp - lastSnapshotTime < timeBetweenSnapshots
-      ) {
+      if (lastSnapshotTime && timestamp - lastSnapshotTime < timeBetweenSnapshots) {
         rafId = requestAnimationFrame(takeCanvasSnapshots);
         return;
       }
@@ -277,18 +304,34 @@ export class CanvasManager {
             }
             // createImageBitmap throws if resizing to 0
             // Fallback to intrinsic size if canvas has not yet rendered
-            const width = canvas.clientWidth || canvas.width;
-            const height = canvas.clientHeight || canvas.height;
-            const bitmap = await createImageBitmap(canvas, {
-              resizeWidth: width,
-              resizeHeight: height,
-            });
+            const displayWidth = canvas.clientWidth || canvas.width;
+            const displayHeight = canvas.clientHeight || canvas.height;
+            // capture at a (optionally downscaled) resolution; replay upscales it back to the
+            // display size, so playback dimensions/aspect are unchanged, just softer.
+            const captureWidth = Math.max(1, Math.round(displayWidth * scale));
+            const captureHeight = Math.max(1, Math.round(displayHeight * scale));
+            const bitmap = await createImageBitmap(
+              canvas,
+              // only ask for a quality resampling filter when we're actually downscaling;
+              // at full resolution this keeps capture identical to before.
+              scale < 1
+                ? {
+                    resizeWidth: captureWidth,
+                    resizeHeight: captureHeight,
+                    resizeQuality: 'medium',
+                  }
+                : { resizeWidth: captureWidth, resizeHeight: captureHeight },
+            );
+            // pass the display size through with the frame so the worker's reply can draw it
+            // back to the right dimensions — no per-id state retained on the main thread.
             worker.postMessage(
               {
                 id,
                 bitmap,
-                width: width,
-                height: height,
+                width: captureWidth,
+                height: captureHeight,
+                displayWidth,
+                displayHeight,
                 dataURLOptions: options.dataURLOptions,
               },
               [bitmap],

@@ -453,6 +453,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "SessionRecordingCanvasOptions"
     ],
+    "canvasCapture": [
+      "undefined",
+      "{ resolutionScale?: number | undefined; }"
+    ],
     "maskCapturedNetworkRequestFn": [
       "undefined",
       "null",

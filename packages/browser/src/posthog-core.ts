@@ -201,7 +201,12 @@ const defaultsThatVaryByConfig = (
               ? { content_ignorelist: true }
               : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+    session_recording:
+        defaults && defaults >= '2026-05-30'
+            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 } }
+            : defaults && defaults >= '2025-11-30'
+              ? { strictMinimumDuration: true }
+              : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
@@ -644,6 +649,13 @@ export class PostHog implements PostHogInterface {
         // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
         if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
             mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
+        }
+        // likewise a partial user-supplied session_recording keeps the date-gated top-level
+        // defaults (e.g. strictMinimumDuration, canvasCapture) it doesn't set. this is a shallow
+        // one-level merge: a user-supplied nested object (e.g. their own canvasCapture) still
+        // replaces the default one wholesale rather than merging into it.
+        if (isObject(baseConfig.session_recording) && isObject(userConfig.session_recording)) {
+            mergedConfig.session_recording = extend({}, baseConfig.session_recording, userConfig.session_recording)
         }
         this.set_config(mergedConfig)
 

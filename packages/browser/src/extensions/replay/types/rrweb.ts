@@ -88,6 +88,7 @@ export type recordOptions = {
     packFn?: PackFn
     sampling?: SamplingStrategy
     dataURLOptions?: DataURLOptions
+    canvasResolutionScale?: number
     recordDOM?: boolean
     recordCanvas?: boolean
     recordCrossOriginIframes?: boolean

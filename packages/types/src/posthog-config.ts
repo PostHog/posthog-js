@@ -564,6 +564,21 @@ export interface SessionRecordingOptions {
     captureCanvas?: SessionRecordingCanvasOptions
 
     /**
+     * Tune how canvas frames are captured for replay. Only has any effect when canvas recording
+     * is enabled.
+     *
+     * - `resolutionScale`: capture canvas frames at a fraction of their display resolution. A
+     *   number in `(0, 1]`; `1` is full-resolution capture (the default) and, e.g., `0.6` captures
+     *   at 60%. Out-of-range or non-finite values are clamped into `(0, 1]`. Aspect ratio is
+     *   preserved and replay upscales the frame back to the original display size, so playback
+     *   dimensions are unchanged, just softer. Resolution is the highest-leverage lever for canvas
+     *   byte size, since bytes scale with pixel area.
+     */
+    canvasCapture?: {
+        resolutionScale?: number
+    }
+
+    /**
      * Modify the network request before it is captured. Returning null or undefined stops it being captured
      */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
