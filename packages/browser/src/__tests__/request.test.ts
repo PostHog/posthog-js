@@ -505,7 +505,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -531,7 +531,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64&beacon=1',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -557,7 +557,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
