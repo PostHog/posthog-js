@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.38.2
+
+### Patch Changes
+
+- [#3903](https://github.com/PostHog/posthog-js/pull/3903) [`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate custom event UUID overrides and generate new UUIDs when invalid.
+  (2026-06-19)
+- Updated dependencies [[`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce)]:
+  - @posthog/core@1.35.3
+
 ## 5.38.1
 
 ### Patch Changes
