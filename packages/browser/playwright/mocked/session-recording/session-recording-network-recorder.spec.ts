@@ -149,10 +149,7 @@ test.beforeEach(async ({ context }) => {
                 expect(hasEntry(/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation')).toBe(true)
                 expect(hasEntry(/https:\/\/localhost:\d+\/static\/array.js/, 'script')).toBe(true)
                 expect(
-                    hasEntry(
-                        /https:\/\/localhost:\d+\/array\/test%20token\/config\?_=\d+&ver=1\.\d\d\d\.\d+/,
-                        'fetch'
-                    )
+                    hasEntry(/https:\/\/localhost:\d+\/array\/test%20token\/config\?_=\d+&ver=1\.\d\d\d\.\d+/, 'fetch')
                 ).toBe(true)
                 expect(
                     hasEntry(/https:\/\/localhost:\d+\/static\/(lazy-)?recorder.js\?v=1\.\d\d\d\.\d+/, 'script')
