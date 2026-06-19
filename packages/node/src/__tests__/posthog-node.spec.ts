@@ -181,6 +181,27 @@ describe('PostHog Node.js', () => {
       )
     })
 
+    it('should keep $groups passed via properties when no top-level groups is set (#3888)', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+      posthog.capture({
+        distinctId: '123',
+        event: 'test-event',
+        properties: { foo: 'bar', $groups: { account: 'acct-123' } },
+      })
+
+      await waitForFlushTimer()
+      expect(getLastBatchEvents()?.[0]).toEqual(
+        expect.objectContaining({
+          distinct_id: '123',
+          event: 'test-event',
+          properties: expect.objectContaining({
+            $groups: { account: 'acct-123' },
+            foo: 'bar',
+          }),
+        })
+      )
+    })
+
     it('should capture identify events on shared queue', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.identify({ distinctId: '123', properties: { foo: 'bar' } })

@@ -114,10 +114,18 @@ export class McpEventSink {
     const { event: fullEvent, captures } = result
     try {
       for (const captureEvent of captures) {
+        // `$groups` is written into `properties` by `buildPostHogCaptureEvents`, but
+        // posthog-node only stamps the outgoing `$groups` from the top-level `groups`
+        // field. Forward it as a first-class `groups` so the group association survives
+        // and group-scoped flag evaluation is correct. See
+        // https://github.com/PostHog/posthog-js/issues/3888.
+        const groups = captureEvent.properties.$groups as Record<string, string> | undefined
+
         this.posthog.capture({
           distinctId: captureEvent.distinct_id,
           event: captureEvent.event,
           properties: captureEvent.properties,
+          ...(groups ? { groups } : {}),
           timestamp: new Date(captureEvent.timestamp),
           uuid: uuidv7(),
         })

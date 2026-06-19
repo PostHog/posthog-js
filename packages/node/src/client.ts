@@ -2591,10 +2591,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
       .then((additionalProperties) => {
         // No matter what - capture the event
+        const resolvedGroups = eventMessage.groups || groups
         const props = {
           ...additionalProperties,
           ...(eventMessage.properties || {}),
-          $groups: eventMessage.groups || groups,
+          // Only stamp $groups from the top-level `groups` when present — otherwise a
+          // caller-provided properties.$groups would be clobbered with undefined (#3888).
+          ...(resolvedGroups !== undefined ? { $groups: resolvedGroups } : {}),
         } as PostHogEventProperties
         return props
       })
