@@ -1346,6 +1346,7 @@ export class PostHog implements PostHogInterface {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
+        // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
         const uuid = getEventUuid(options?.uuid, uuidv7)
         let data: CaptureResult = {
             uuid,
@@ -1439,6 +1440,7 @@ export class PostHog implements PostHogInterface {
                 return
             } else {
                 data = beforeSendResult
+                // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
                 data.uuid = getEventUuid(data.uuid, uuidv7)
             }
         }
