@@ -10,7 +10,7 @@ import type {
   LanguageModelV3Prompt,
   LanguageModelV3StreamPart,
 } from '@ai-sdk/provider'
-import { v4 as uuidv4 } from 'uuid'
+import { uuidv7 } from '@posthog/core'
 import { PostHog } from 'posthog-node'
 import {
   CostOverride,
@@ -460,7 +460,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
   phClient: PostHog,
   options: ClientOptions
 ): T => {
-  const traceId = options.posthogTraceId ?? uuidv4()
+  const traceId = options.posthogTraceId ?? uuidv7()
   const mergedOptions = {
     ...options,
     posthogTraceId: traceId,

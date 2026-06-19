@@ -1,4 +1,16 @@
-import { toContentString, getTokensSource } from '../src/utils'
+import { toContentString, getTokensSource, extractPosthogParams } from '../src/utils'
+
+const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+describe('extractPosthogParams', () => {
+  it('defaults missing trace IDs to UUID v7', () => {
+    const { providerParams, posthogParams } = extractPosthogParams({ prompt: 'hello' } as { prompt: string })
+
+    expect(providerParams).toEqual({ prompt: 'hello' })
+    expect(posthogParams.traceId).toMatch(UUIDV7_REGEX)
+    expect(posthogParams.privacyMode).toBe(false)
+  })
+})
 
 describe('getTokensSource', () => {
   it.each([

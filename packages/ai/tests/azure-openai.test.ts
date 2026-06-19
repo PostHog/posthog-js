@@ -4,6 +4,8 @@ import openaiModule from 'openai'
 
 let mockAzureEmbeddingResponse: any = {}
 
+const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
 jest.mock('posthog-node', () => {
   return {
     PostHog: jest.fn().mockImplementation(() => {
@@ -708,7 +710,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
 
       // Should have a generated trace ID
       expect(typeof properties['$ai_trace_id']).toBe('string')
-      expect(properties['$ai_trace_id']).toHaveLength(36) // UUID v4 length
+      expect(properties['$ai_trace_id']).toMatch(UUIDV7_REGEX)
     })
 
     conditionalTest('embeddings with custom trace ID', async () => {

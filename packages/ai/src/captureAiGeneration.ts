@@ -1,5 +1,4 @@
 import { EventMessage, PostHog } from 'posthog-node'
-import { v4 as uuidv4 } from 'uuid'
 import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
@@ -99,7 +98,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
 
   warnIfPostHogAiGateway(options.baseURL)
 
-  const traceId = options.traceId ?? uuidv4()
+  const traceId = options.traceId ?? uuidv7()
   const eventType = options.eventType ?? AIEvent.Generation
   const privacyMode = options.privacyMode ?? false
   const usage = options.usage ?? {}

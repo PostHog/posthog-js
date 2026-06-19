@@ -12,6 +12,8 @@ const baseRequiredOptions = {
   output: 'world',
 }
 
+const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
 const buildClient = (overrides: Partial<{ enableExceptionAutocapture: boolean; privacy_mode: boolean }> = {}) =>
   ({
     capture: jest.fn(),
@@ -83,7 +85,7 @@ describe('captureAiGeneration', () => {
     await captureAiGeneration(client, baseRequiredOptions)
 
     const event = (client.capture as jest.Mock).mock.calls[0][0]
-    expect(event.properties.$ai_trace_id).toEqual(expect.any(String))
+    expect(event.properties.$ai_trace_id).toMatch(UUIDV7_REGEX)
     expect(event.distinctId).toBe(event.properties.$ai_trace_id)
     // Anonymous events disable person processing
     expect(event.properties.$process_person_profile).toBe(false)
