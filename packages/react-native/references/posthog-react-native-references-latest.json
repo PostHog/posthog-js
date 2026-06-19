@@ -107,7 +107,7 @@
             {
               "description": "Optional additional context to attach to the step",
               "isOptional": true,
-              "type": "PostHogEventProperties",
+              "type": "Properties",
               "name": "properties"
             }
           ],

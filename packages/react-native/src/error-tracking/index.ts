@@ -9,6 +9,7 @@ import {
   isString,
   PostHogEventProperties,
 } from '@posthog/core'
+import { Properties } from '@posthog/types'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import { getRemoteConfigBool } from '../utils'
 import { OptionalReactNativePlugin } from '../optional/OptionalPlugin'
@@ -105,7 +106,7 @@ export class ErrorTracking {
    * native SDK. The `$timestamp` is captured at call time. Invalid messages are ignored with a
    * warning and never throw. The step only reaches native when it was actually buffered.
    */
-  addExceptionStep(message: string, properties?: PostHogEventProperties): void {
+  addExceptionStep(message: string, properties?: Properties): void {
     if (!this._exceptionStepsConfig.enabled) {
       return
     }
@@ -142,11 +143,11 @@ export class ErrorTracking {
   onNativeErrorTrackingReady(): void {
     this._nativeForwardingEnabled = true
     for (const step of this.getAttachableExceptionSteps()) {
-      this.forwardExceptionStepToNative(step.$message, step as PostHogEventProperties)
+      this.forwardExceptionStepToNative(step.$message, step as Properties)
     }
   }
 
-  private forwardExceptionStepToNative(message: string, properties?: PostHogEventProperties): void {
+  private forwardExceptionStepToNative(message: string, properties?: Properties): void {
     if (!this._nativeForwardingEnabled || !OptionalReactNativePlugin?.addExceptionStep) {
       return
     }

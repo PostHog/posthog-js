@@ -24,6 +24,7 @@ import {
   FeatureFlagValue,
   ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
+import { Properties } from '@posthog/types'
 import {
   PostHogRNStorage,
   createEventsStorage,
@@ -1755,7 +1756,7 @@ export class PostHog extends PostHogCore {
    * @param {Object} [properties] Optional additional context to attach to the step
    * @returns {void}
    */
-  addExceptionStep(message: string, properties?: PostHogEventProperties): void {
+  addExceptionStep(message: string, properties?: Properties): void {
     this._errorTracking.addExceptionStep(message, properties)
   }
 
