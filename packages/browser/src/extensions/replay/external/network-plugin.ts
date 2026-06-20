@@ -136,6 +136,19 @@ function isRequest(value: unknown): value is Request {
     }
 }
 
+// binary/asset bodies are large and useless for replay debugging (and capturing an image body
+// duplicates what the recording already shows), so we never record them even when recordBody is on
+const NEVER_RECORD_BODY_CONTENT_TYPES = [
+    'image/',
+    'video/',
+    'audio/',
+    'font/',
+    'application/octet-stream',
+    'application/pdf',
+    'application/zip',
+    'application/wasm',
+]
+
 export function shouldRecordBody({
     type,
     recordBody,
@@ -177,6 +190,8 @@ export function shouldRecordBody({
     }
     if (!recordBody) return false
     if (isBlobURL(url)) return false
+    // never record binary/asset bodies, regardless of the recordBody setting
+    if (matchesContentType(NEVER_RECORD_BODY_CONTENT_TYPES)) return false
     if (isBoolean(recordBody)) return true
     if (isArray(recordBody)) return matchesContentType(recordBody)
     const recordBodyType = recordBody[type]

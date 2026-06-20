@@ -216,6 +216,28 @@ describe('network plugin', () => {
             })
         })
 
+        describe('binary content types are never recorded', () => {
+            it.each([
+                ['image/webp', false],
+                ['image/png', false],
+                ['video/mp4', false],
+                ['audio/mpeg', false],
+                ['font/woff2', false],
+                ['application/octet-stream', false],
+                ['application/pdf', false],
+                ['application/json', true],
+                ['text/plain', true],
+            ])('recordBody:true with content-type %s should record=%s', (contentType, expected) => {
+                const result = shouldRecordBody({
+                    type: 'response',
+                    headers: { 'content-type': contentType } as unknown as Headers,
+                    url: 'https://example.com/asset',
+                    recordBody: true,
+                })
+                expect(result).toBe(expected)
+            })
+        })
+
         describe('edge cases', () => {
             edgeCaseTestCases.forEach(({ recordBody, headers = {}, url = 'https://example.com', expected }, index) => {
                 it(`should handle edge case ${index + 1}: ${JSON.stringify({ recordBody, headers, url })}`, () => {
