@@ -292,7 +292,11 @@ exports[`integration tests > [html file]: base64-images.html 1`] = `
     <img id=\\"small-image\\" src=\\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==\\" alt=\\"Small red pixel\\" width=\\"100\\" height=\\"100\\" />    <!-- Medium 16x16 gradient PNG (base64: ~200 bytes) -->
     <img id=\\"medium-image\\" src=\\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAABJSURBVDiNY2AYBaNgFIwCoAAggBhIBP8h+D8DA8N/SjCIjYxBbGQM4oPEkDEMYmNikBgyRjaAZAAQwNRA/0YBqQAggBgYhg4AANm8Awz/4Ll3AAAAAElFTkSuQmCC\\" alt=\\"Medium gradient\\" width=\\"100\\" height=\\"100\\" />    <!-- Script to create a large base64 image dynamically -->
     <noscript>SCRIPT_PLACEHOLDER</noscript><img id=\\"large-image\\" src=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\" alt=\\"Large test image\\" width=\\"200\\" height=\\"200\\" />    <!-- Create an extremely large image that should be skipped from recompression -->
-    <noscript>SCRIPT_PLACEHOLDER</noscript><img id=\\"huge-image\\" src=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\" alt=\\"Huge test image\\" width=\\"300\\" height=\\"300\\" />
+    <noscript>SCRIPT_PLACEHOLDER</noscript><img id=\\"huge-image\\" src=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\" alt=\\"Huge test image\\" width=\\"300\\" height=\\"300\\" />    <!-- Small static SVG <image> with a data: href (under any reasonable cap) -->
+    <svg id=\\"svg-with-small-image\\" xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"100\\" height=\\"100\\">
+      <image id=\\"svg-small-image\\" href=\\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==\\" width=\\"100\\" height=\\"100\\"/>
+    </svg>    <!-- Scripts to create large SVG <image> data URIs for both href and xlink:href -->
+    <noscript>SCRIPT_PLACEHOLDER</noscript><svg xmlns=\\"http://www.w3.org/2000/svg\\" id=\\"svg-with-large-href-image\\" width=\\"200\\" height=\\"200\\"><image id=\\"svg-large-href-image\\" width=\\"200\\" height=\\"200\\" href=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\"/></svg><svg xmlns=\\"http://www.w3.org/2000/svg\\" id=\\"svg-with-large-xlink-image\\" width=\\"200\\" height=\\"200\\"><image id=\\"svg-large-xlink-image\\" width=\\"200\\" height=\\"200\\" xmlns:xlink=\\"http://www.w3.org/1999/xlink\\" xlink:href=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\"/></svg>
   </body></html>"
 `;
 

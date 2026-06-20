@@ -871,3 +871,62 @@ describe('preload link load-listener accumulation', () => {
     document.head.removeChild(link);
   });
 });
+
+describe('SVG <image> data: URI size cap', () => {
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const SMALL_DATA_URI =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+  const LARGE_DATA_URI = 'data:image/png;base64,' + 'A'.repeat(20000);
+
+  function svgImage(): HTMLElement {
+    return document.createElementNS(SVG_NS, 'image') as unknown as HTMLElement;
+  }
+
+  it.each(['href', 'xlink:href'])(
+    'caps an oversized SVG <image> %s data URI to the striped placeholder',
+    (attrName) => {
+      const result = transformAttribute(
+        document,
+        'image',
+        attrName as Lowercase<string>,
+        LARGE_DATA_URI,
+        svgImage(),
+        { maxBase64ImageLength: 10000 },
+      );
+
+      expect(result).toMatch(/^data:image\/svg\+xml;base64,/);
+    },
+  );
+
+  it.each(['href', 'xlink:href'])(
+    'preserves a small SVG <image> %s data URI under the cap',
+    (attrName) => {
+      const result = transformAttribute(
+        document,
+        'image',
+        attrName as Lowercase<string>,
+        SMALL_DATA_URI,
+        svgImage(),
+        { maxBase64ImageLength: 10000 },
+      );
+
+      expect(result).toBe(SMALL_DATA_URI);
+    },
+  );
+
+  it.each(['href', 'xlink:href'])(
+    'leaves an oversized SVG <image> %s data URI untouched when no cap is configured',
+    (attrName) => {
+      const result = transformAttribute(
+        document,
+        'image',
+        attrName as Lowercase<string>,
+        LARGE_DATA_URI,
+        svgImage(),
+        {},
+      );
+
+      expect(result).toBe(LARGE_DATA_URI);
+    },
+  );
+});
