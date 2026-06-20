@@ -2403,18 +2403,19 @@ export class PostHog extends PostHogCore {
 
   /**
    * Capture chokepoint for session-replay event triggers. Every captured event (capture, $screen,
-   * autocapture, lifecycle) passes through here. When event triggers are armed and the current
-   * session hasn't activated yet, a matching event name activates replay for the session and kicks
-   * a re-evaluation that starts native recording. Always returns the message unchanged; it must
-   * never drop an event or throw into the capture path.
+   * autocapture, lifecycle) passes through here. Chains to super first so `before_send` still runs;
+   * when a surviving event's name matches an armed trigger and the session hasn't activated yet, it
+   * activates replay for the session and kicks a re-evaluation that starts native recording. The
+   * trigger check never drops an event or throws into the capture path.
    */
   protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    const processed = super.processBeforeEnqueue(message)
     try {
-      this._maybeActivateEventTrigger(message?.['event'])
+      this._maybeActivateEventTrigger(processed?.['event'])
     } catch (e) {
       this._logger.error(`Session replay event trigger check failed: ${e}.`)
     }
-    return message
+    return processed
   }
 
   private _maybeActivateEventTrigger(eventName: unknown): void {
@@ -2428,7 +2429,7 @@ export class PostHog extends PostHogCore {
     if (!sessionId || this._isEventTriggerActivatedForSession(sessionId)) {
       return
     }
-    this._activateEventTrigger(sessionId)
+    this.setPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession, sessionId)
     this._logger.info(`Session replay event trigger '${eventName}' activated for session ${sessionId}.`)
     // Re-evaluate so the native recorder starts; fire-and-forget keeps the capture path synchronous.
     void this._evaluateAndStartSessionReplay()
@@ -2443,10 +2444,6 @@ export class PostHog extends PostHogCore {
 
   private _isEventTriggerActivatedForSession(sessionId: string): boolean {
     return this.getPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession) === sessionId
-  }
-
-  private _activateEventTrigger(sessionId: string): void {
-    this.setPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession, sessionId)
   }
 
   private async captureAppLifecycleEvents(): Promise<void> {
