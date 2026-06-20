@@ -67,6 +67,34 @@ describe('config', () => {
                 })
             })
 
+            it('redacts denied request and response headers, including credential-shaped custom names', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        'x-gist-encoded-user-token': 'abc',
+                        'content-type': 'application/json',
+                    },
+                    responseHeaders: {
+                        'set-cookie': 'session=secret',
+                        'x-session-id': 'xyz',
+                        'content-type': 'application/json',
+                    },
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'x-gist-encoded-user-token': 'redacted',
+                        'content-type': 'application/json',
+                    },
+                    responseHeaders: {
+                        'set-cookie': 'redacted',
+                        'x-session-id': 'redacted',
+                        'content-type': 'application/json',
+                    },
+                })
+            })
+
             it.each([
                 [
                     {
