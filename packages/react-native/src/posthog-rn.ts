@@ -2425,6 +2425,9 @@ export class PostHog extends PostHogCore {
     if (!this._sessionReplayEventTriggers.includes(eventName)) {
       return
     }
+    // Use super.getSessionId() (not this.getSessionId()) deliberately: the capture path already ran the
+    // overriding getSessionId() during enrichProperties, so rotation handling has fired and the id is
+    // synced. Calling the override again here would re-enter rotation logic from inside capture.
     const sessionId = super.getSessionId()
     if (!sessionId || this._isEventTriggerActivatedForSession(sessionId)) {
       return

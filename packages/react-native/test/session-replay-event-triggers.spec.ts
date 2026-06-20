@@ -198,6 +198,52 @@ describe('PostHog RN session replay event triggers', () => {
     expect(replay.start).toHaveBeenCalledTimes(1)
   })
 
+  it('activates on any of several configured triggers and ignores non-string entries', async () => {
+    // Mixed-type array: only the string entries should arm. A malformed entry must not throw or match.
+    currentSessionRecording = { eventTriggers: ['$pageview', 42, null, '$screen'], endpoint: '/s/' }
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+    expect(replay.start).not.toHaveBeenCalled()
+
+    // The second configured string trigger activates recording.
+    await posthog.screen('Home')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+  })
+
+  it('treats a non-array eventTriggers config as no triggers (records normally)', async () => {
+    // Malformed remote config (object instead of array) must not arm triggers nor block recording.
+    currentSessionRecording = { eventTriggers: { not: 'an array' }, endpoint: '/s/' }
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    // No triggers configured -> replay records without waiting for a matching event.
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+  })
+
+  it('does not activate when before_send drops the matching event', async () => {
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmup()
+
+    posthog = new PostHog('test-token', {
+      customStorage: mockStorage,
+      enableSessionReplay: true,
+      flushInterval: 0,
+      // Drop the trigger event before it is enqueued.
+      before_send: (event) => (event?.event === '$pageview' ? null : event),
+    })
+    await posthog.ready()
+    await wait(50)
+
+    // The matching event is dropped by before_send -> processBeforeEnqueue returns null -> no activation.
+    posthog.capture('$pageview')
+    await wait(50)
+    expect(replay.start).not.toHaveBeenCalled()
+  })
+
   it('does not arm event triggers when session replay is disabled locally', async () => {
     currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
     posthog = new PostHog('test-token', {
