@@ -929,4 +929,24 @@ describe('SVG <image> data: URI size cap', () => {
       expect(result).toBe(LARGE_DATA_URI);
     },
   );
+
+  it.each([
+    { tagName: 'use', attrName: 'xlink:href' },
+    { tagName: 'a', attrName: 'xlink:href' },
+    { tagName: 'use', attrName: 'href' },
+  ])(
+    'does not cap a <$tagName> $attrName data URI — only SVG <image> is an image payload',
+    ({ tagName, attrName }) => {
+      const result = transformAttribute(
+        document,
+        tagName as Lowercase<string>,
+        attrName as Lowercase<string>,
+        LARGE_DATA_URI,
+        document.createElementNS(SVG_NS, tagName) as unknown as HTMLElement,
+        { maxBase64ImageLength: 10000 },
+      );
+
+      expect(result).toBe(LARGE_DATA_URI);
+    },
+  );
 });

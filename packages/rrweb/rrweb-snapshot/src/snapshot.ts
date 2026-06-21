@@ -211,8 +211,8 @@ export function transformAttribute(
     // href starts with a # is an id pointer for svg
     const transformedValue = absoluteToDoc(doc, value);
 
-    if (transformedValue.startsWith('data:') && element) {
-      if (tagName === 'img') {
+    if (transformedValue.startsWith('data:')) {
+      if (tagName === 'img' && element) {
         let processedDataURL = transformedValue;
 
         if (dataURLOptions?.type || dataURLOptions?.quality !== undefined) {
@@ -236,7 +236,7 @@ export function transformAttribute(
   } else if (name === 'xlink:href' && value[0] !== '#') {
     // xlink:href starts with # is an id pointer
     const transformedValue = absoluteToDoc(doc, value);
-    if (transformedValue.startsWith('data:')) {
+    if (tagName === 'image' && transformedValue.startsWith('data:')) {
       return capDataURLSize(transformedValue, dataURLOptions);
     }
     return transformedValue;
