@@ -28,7 +28,8 @@ function App() {
     const myFlagsRow = flagRows.find((r) => r.distinctId === myDistinctId)
     let myFlags: Record<string, boolean | string> = {}
     try {
-        myFlags = myFlagsRow ? JSON.parse(myFlagsRow.flagsJson) : {}
+        const parsed = myFlagsRow ? JSON.parse(myFlagsRow.flagsJson) : {}
+        myFlags = parsed && typeof parsed === 'object' ? parsed : {}
     } catch {
         myFlags = {}
     }
