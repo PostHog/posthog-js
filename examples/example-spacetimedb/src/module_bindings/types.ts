@@ -24,6 +24,7 @@ export type FlagRequest = __Infer<typeof FlagRequest>;
 
 export const Person = __t.object("Person", {
   name: __t.string(),
+  addedBy: __t.identity(),
 });
 export type Person = __Infer<typeof Person>;
 

@@ -12,4 +12,5 @@ import {
 
 export default __t.row({
   name: __t.string(),
+  addedBy: __t.identity().name("added_by"),
 });

@@ -8,6 +8,7 @@ const person = table(
     { name: 'person', public: true },
     {
         name: t.string(),
+        addedBy: t.identity(),
     }
 )
 
@@ -34,7 +35,7 @@ const spacetimedb = schema({ person, featureFlag, flagRequest })
 export default spacetimedb
 
 export const add = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
-    ctx.db.person.insert({ name })
+    ctx.db.person.insert({ name, addedBy: ctx.sender })
 })
 
 export const sayHello = spacetimedb.reducer((ctx) => {
@@ -44,12 +45,14 @@ export const sayHello = spacetimedb.reducer((ctx) => {
     console.info('Hello, World!')
 })
 
-// Signal the sidecar to evaluate flags for `distinctId` (reducers can't, no network).
-export const requestFlagEval = spacetimedb.reducer({ distinctId: t.string() }, (ctx, { distinctId }) => {
-    ctx.db.flagRequest.insert({ distinctId })
+// Signal the sidecar to evaluate flags for the caller (reducers can't, no network).
+// Keyed on ctx.sender so a client can only ever request its own flags.
+export const requestFlagEval = spacetimedb.reducer((ctx) => {
+    ctx.db.flagRequest.insert({ distinctId: ctx.sender.toHexString() })
 })
 
-// Upsert evaluated flags. Called by the sidecar only — the personal key stays server-side.
+// Upsert evaluated flags. Demo: any client can call this. In production, gate on
+// caller identity — store the owner in `init` and require ctx.sender === owner.
 export const setFeatureFlags = spacetimedb.reducer(
     { distinctId: t.string(), flagsJson: t.string() },
     (ctx, { distinctId, flagsJson }) => {

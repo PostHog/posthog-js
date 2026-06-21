@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePostHog } from '@posthog/react'
 import { useSpacetimeDB, useTable, useReducer, useProcedure } from 'spacetimedb/react'
 import { tables, reducers, procedures } from './module_bindings'
@@ -19,8 +19,19 @@ function App() {
     const requestFlagEval = useReducer(reducers.requestFlagEval)
     const captureEvent = useProcedure(procedures.captureEvent)
 
+    // Tie posthog-js to the SpacetimeDB identity so frontend, sidecar, and
+    // procedure events all land on one person.
+    useEffect(() => {
+        if (connected && conn.identity) posthog.identify(conn.identity.toHexString())
+    }, [connected, conn.identity, posthog])
+
     const myFlagsRow = flagRows.find((r) => r.distinctId === myDistinctId)
-    const myFlags: Record<string, boolean | string> = myFlagsRow ? JSON.parse(myFlagsRow.flagsJson) : {}
+    let myFlags: Record<string, boolean | string> = {}
+    try {
+        myFlags = myFlagsRow ? JSON.parse(myFlagsRow.flagsJson) : {}
+    } catch {
+        myFlags = {}
+    }
 
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault()
@@ -86,10 +97,7 @@ function App() {
                     <code>feature_flag</code> table — which this view subscribes to. Your distinct id:{' '}
                     <code>{myDistinctId.slice(0, 16)}…</code>
                 </p>
-                <button
-                    onClick={() => connected && requestFlagEval({ distinctId: myDistinctId })}
-                    disabled={!connected}
-                >
+                <button onClick={() => connected && requestFlagEval()} disabled={!connected}>
                     Evaluate my flags
                 </button>
                 {myFlagsRow ? (

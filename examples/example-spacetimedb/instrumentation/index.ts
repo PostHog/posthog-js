@@ -32,10 +32,13 @@ conn.db.person.onInsert((ctx, person) => {
     // 'Transaction' = live change; the initial backfill is 'SubscribeApplied'. Skip it.
     if (ctx.event.tag !== 'Transaction') return
 
+    // distinctId is the actor's SpacetimeDB identity (the same id the frontend
+    // identifies as), so client + sidecar events stitch to one person.
     posthog.capture({
-        distinctId: person.name,
+        distinctId: person.addedBy.toHexString(),
         event: 'person_added',
         properties: {
+            name: person.name,
             source: 'spacetimedb-sidecar',
         },
     })

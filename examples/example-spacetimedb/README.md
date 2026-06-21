@@ -32,7 +32,7 @@ clients the SpacetimeDB way — through a subscribed table:
 
 ```
 client clicks "Evaluate my flags"
-  → requestFlagEval(distinctId)          [reducer inserts into the flag_request event table]
+  → requestFlagEval()                    [reducer inserts ctx.sender into the flag_request event table]
     → sidecar onInsert → posthog.getAllFlags(distinctId)   [LOCAL eval with the personal key]
       → setFeatureFlags(distinctId, json) [reducer upserts the feature_flag table]
         → client useTable(feature_flag)   [renders the flags reactively]
