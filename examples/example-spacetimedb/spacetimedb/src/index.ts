@@ -1,7 +1,7 @@
 import { schema, table, t } from 'spacetimedb/server'
 
-// Project API key — publishable, safe to embed. Only used by the procedure below.
-const POSTHOG_API_KEY = 'phc_REPLACE_WITH_YOUR_PROJECT_API_KEY'
+// Project token (phc_) — publishable, safe to embed. Only used by the procedure below.
+const POSTHOG_PROJECT_TOKEN = 'phc_REPLACE_WITH_YOUR_PROJECT_TOKEN'
 const POSTHOG_HOST = 'https://us.i.posthog.com'
 
 const person = table(
@@ -75,7 +75,7 @@ export const captureEvent = spacetimedb.procedure(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                api_key: POSTHOG_API_KEY,
+                api_key: POSTHOG_PROJECT_TOKEN,
                 event,
                 distinct_id: distinctId,
                 properties: {

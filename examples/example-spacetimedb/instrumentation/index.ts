@@ -9,7 +9,7 @@ const DB_NAME = process.env.SPACETIMEDB_DB_NAME ?? 'posthog-spacetimedb'
 
 // Personal key (phx_…) enables local flag eval. Secret — backend only.
 const personalApiKey = process.env.POSTHOG_PERSONAL_API_KEY
-const posthog = new PostHog(process.env.POSTHOG_API_KEY ?? '', {
+const posthog = new PostHog(process.env.POSTHOG_PROJECT_TOKEN ?? '', {
     host: process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com',
     personalApiKey,
 })

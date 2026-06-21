@@ -24,7 +24,7 @@ const connectionBuilder = DbConnection.builder()
 createRoot(document.getElementById('root')!).render(
     <StrictMode>
         <PostHogProvider
-            apiKey={import.meta.env.VITE_POSTHOG_KEY ?? ''}
+            apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN ?? ''}
             options={{ api_host: import.meta.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com' }}
         >
             <SpacetimeDBProvider connectionBuilder={connectionBuilder}>

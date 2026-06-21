@@ -72,8 +72,9 @@ pnpm install
 cp .env.example .env.local   # then set your PostHog project API key
 ```
 
-Set `VITE_POSTHOG_KEY` / `POSTHOG_API_KEY` to your project key (Project settings → API keys), and —
-for layer 3 — replace `POSTHOG_API_KEY` at the top of `spacetimedb/src/index.ts` with the same key.
+Set `VITE_POSTHOG_PROJECT_TOKEN` / `POSTHOG_PROJECT_TOKEN` to your project key (Project settings →
+API keys), and — for layer 3 — replace `POSTHOG_PROJECT_TOKEN` at the top of
+`spacetimedb/src/index.ts` with the same key.
 For local flag evaluation (layer 4), set `POSTHOG_PERSONAL_API_KEY` to a personal key (`phx_…`); without
 it the sidecar still works but evaluates flags remotely instead of locally.
 
