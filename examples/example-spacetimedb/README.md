@@ -31,28 +31,23 @@ trusted backend, not the module or the browser. So the sidecar owns it, and resu
 clients the SpacetimeDB way — through a subscribed table:
 
 ```
-client clicks "Evaluate my flags"
-  → requestFlagEval()                    [reducer inserts ctx.sender into the flag_request event table]
-    → sidecar onInsert → posthog.getAllFlags(distinctId)   [LOCAL eval with the personal key]
-      → setFeatureFlags(distinctId, json) [reducer upserts the feature_flag table]
-        → client useTable(feature_flag)   [renders the flags reactively]
+"Evaluate my flags"
+  → requestFlagEval()             — reducer inserts ctx.sender into flag_request (event table)
+  → sidecar onInsert              — posthog.getAllFlags(), local eval with the personal key
+  → setFeatureFlags()             — reducer upserts the feature_flag table
+  → client useTable(feature_flag) — renders the flags reactively
 ```
 
 `flag_request` is an _event table_ (rows are never stored — they only fire `onInsert`), making it a
 clean request channel. The personal key lives only in the sidecar's environment. Change a flag in
 PostHog and click again to see the new value flow through.
 
+Three capture paths, all keyed on the same SpacetimeDB identity so they stitch to one person:
+
 ```
-                  ┌─────────────┐  add_person_clicked   ┌──────────┐
-   Browser ──────▶│  posthog-js │ ─────────────────────▶│          │
-   (React)        └─────────────┘                       │          │
-      │  add()  / captureEvent()                         │ PostHog  │
-      ▼                                                  │          │
-┌──────────────┐   onInsert   ┌──────────────┐ person_  │          │
-│ SpacetimeDB  │ ────────────▶│ Node sidecar │ added ──▶│          │
-│   module     │              │ (posthog-node)│          │          │
-│              │  ctx.http  server_side_ping ───────────▶│          │
-└──────────────┘ ────────────────────────────────────── └──────────┘
+add_person_clicked  (posthog-js, browser)       ─┐
+person_added        (posthog-node, sidecar)     ─┼─▶  PostHog
+server_side_ping    (procedure, ctx.http)       ─┘
 ```
 
 ## Prerequisites
