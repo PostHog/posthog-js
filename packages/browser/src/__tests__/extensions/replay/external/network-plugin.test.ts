@@ -1,7 +1,10 @@
 /// <reference lib="dom" />
 
 import { expect } from '@jest/globals'
-import { shouldRecordBody } from '../../../../extensions/replay/external/network-plugin'
+import {
+    NEVER_RECORD_BODY_CONTENT_TYPES,
+    shouldRecordBody,
+} from '../../../../extensions/replay/external/network-plugin'
 
 // Mock Request class since jsdom might not provide it
 class MockRequest {
@@ -213,6 +216,48 @@ describe('network plugin', () => {
                     })
                     expect(result).toBe(expected)
                 })
+            })
+        })
+
+        describe('binary content types are never recorded', () => {
+            const neverRecordCases: [string, boolean][] = NEVER_RECORD_BODY_CONTENT_TYPES.map((prefix) => [
+                prefix.endsWith('/') ? `${prefix}example` : prefix,
+                false,
+            ])
+            const alwaysRecordCases: [string, boolean][] = [
+                ['application/json', true],
+                ['text/plain', true],
+            ]
+            it.each([...neverRecordCases, ...alwaysRecordCases])(
+                'recordBody:true with content-type %s should record=%s',
+                (contentType, expected) => {
+                    const result = shouldRecordBody({
+                        type: 'response',
+                        headers: { 'content-type': contentType } as unknown as Headers,
+                        url: 'https://example.com/asset',
+                        recordBody: true,
+                    })
+                    expect(result).toBe(expected)
+                }
+            )
+
+            it('should ignore content-type casing (RFC 9110)', () => {
+                expect(
+                    shouldRecordBody({
+                        type: 'response',
+                        headers: { 'content-type': 'Image/WebP' } as unknown as Headers,
+                        url: 'https://example.com/asset',
+                        recordBody: true,
+                    })
+                ).toBe(false)
+                expect(
+                    shouldRecordBody({
+                        type: 'response',
+                        headers: { 'content-type': 'APPLICATION/PDF' } as unknown as Headers,
+                        url: 'https://example.com/asset',
+                        recordBody: true,
+                    })
+                ).toBe(false)
             })
         })
 
