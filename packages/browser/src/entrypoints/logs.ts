@@ -372,7 +372,13 @@ const initializeLogs = (posthog: PostHog) => {
                     body: body,
                     attributes: {
                         'log.source': `console.${level}`,
-                        distinct_id: posthog.get_distinct_id(),
+                        // `posthogDistinctId` matches the OTLP attribute key emitted by the
+                        // canonical `posthog.logger.*` / `captureLog` path (see
+                        // `@posthog/core/src/logs/logs-utils.ts`) and the backend default
+                        // `DEFAULT_LOGS_DISTINCT_ID_ATTRIBUTE_KEY` used by Logs → "Link
+                        // to person". Without this, console logs never auto-link to a
+                        // profile even though the docs/default imply they should.
+                        posthogDistinctId: posthog.get_distinct_id(),
                         'location.href': assignableWindow.location.href,
                         ...logAttributes,
                         ...(isObject(args[0]) ? flattenObject(args[0]) : {}),

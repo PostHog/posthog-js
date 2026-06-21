@@ -118,7 +118,7 @@ describe('logs entrypoint — golden (current console-capture wire output)', () 
             body: '"hello"',
             attributes: {
                 'log.source': 'console.log',
-                distinct_id: 'user-123',
+                posthogDistinctId: 'user-123',
                 'location.href': 'https://example.com/test',
                 sessionStartTimestamp: String(SESSION_START),
                 lastActivityTimestamp: String(LAST_ACTIVITY),
@@ -151,7 +151,7 @@ describe('logs entrypoint — golden (current console-capture wire output)', () 
             body: '{"user":{"id":5},"msg":"hi"}',
             attributes: {
                 'log.source': 'console.warn',
-                distinct_id: 'user-123',
+                posthogDistinctId: 'user-123',
                 'location.href': 'https://example.com/test',
                 sessionStartTimestamp: String(SESSION_START),
                 lastActivityTimestamp: String(LAST_ACTIVITY),
