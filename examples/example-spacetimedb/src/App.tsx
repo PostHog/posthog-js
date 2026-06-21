@@ -26,8 +26,7 @@ function App() {
         e.preventDefault()
         if (!name.trim() || !connected) return
 
-        // Frontend instrumentation (posthog-js): the click that triggers the reducer.
-        // The resulting row insert is captured separately, server-side, by the sidecar.
+        // Frontend capture; the resulting insert is captured server-side by the sidecar.
         posthog.capture('add_person_clicked', { name })
         addPerson({ name })
         setName('')
@@ -35,7 +34,6 @@ function App() {
 
     const handleInModuleCapture = async () => {
         if (!connected) return
-        // Calls the module procedure, which posts to PostHog from inside the database.
         const ok = await captureEvent({ distinctId: myDistinctId, event: 'server_side_ping' })
         setProcedureStatus(ok ? 'sent ✓' : 'failed ✗')
     }

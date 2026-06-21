@@ -1,8 +1,6 @@
 import { schema, table, t } from 'spacetimedb/server'
 
-// PostHog project API keys are publishable — they ship in browser bundles and are
-// safe to embed here too. Swap in your own from Project settings → API keys, or
-// leave the placeholder and rely on the Node sidecar for backend capture instead.
+// Project API key — publishable, safe to embed. Only used by the procedure below.
 const POSTHOG_API_KEY = 'phc_REPLACE_WITH_YOUR_PROJECT_API_KEY'
 const POSTHOG_HOST = 'https://us.i.posthog.com'
 
@@ -13,9 +11,7 @@ const person = table(
     }
 )
 
-// Holds the locally-evaluated feature flags for a given distinct id. Written only
-// by the sidecar (via the `setFeatureFlags` reducer) and read by clients through a
-// subscription. One row per distinct id; `flagsJson` is the serialized flag map.
+// Evaluated flags per distinct id. Written by the sidecar, read by clients via subscription.
 const featureFlag = table(
     { name: 'feature_flag', public: true },
     {
@@ -25,9 +21,8 @@ const featureFlag = table(
     }
 )
 
-// A request signal: clients append a row to ask the sidecar to evaluate flags for a
-// distinct id. As an event table, rows are never stored — they only fire `onInsert`
-// on subscribers (the sidecar), so this is a clean fire-and-forget channel.
+// Request signal asking the sidecar to evaluate flags. Event table: rows fire
+// `onInsert` on subscribers but are never stored.
 const flagRequest = table(
     { name: 'flag_request', public: true, event: true },
     {
@@ -49,16 +44,12 @@ export const sayHello = spacetimedb.reducer((ctx) => {
     console.info('Hello, World!')
 })
 
-// Ask the backend to evaluate feature flags for `distinctId`. The sidecar picks this
-// up, evaluates locally with the personal API key, and writes the result back via
-// `setFeatureFlags`. Reducers can't reach PostHog themselves (no network), so flag
-// evaluation has to happen out-of-band in the sidecar.
+// Signal the sidecar to evaluate flags for `distinctId` (reducers can't, no network).
 export const requestFlagEval = spacetimedb.reducer({ distinctId: t.string() }, (ctx, { distinctId }) => {
     ctx.db.flagRequest.insert({ distinctId })
 })
 
-// Upsert the evaluated flag map for a distinct id. Called by the sidecar, never the
-// browser — the personal key that produced these values stays server-side.
+// Upsert evaluated flags. Called by the sidecar only — the personal key stays server-side.
 export const setFeatureFlags = spacetimedb.reducer(
     { distinctId: t.string(), flagsJson: t.string() },
     (ctx, { distinctId, flagsJson }) => {
@@ -71,10 +62,8 @@ export const setFeatureFlags = spacetimedb.reducer(
     }
 )
 
-// In-module instrumentation. Reducers are deterministic and cannot touch the
-// network, but procedures (unstable) may perform side effects — including the
-// outbound HTTP call needed to reach PostHog. This posts an event straight from
-// inside the database, no sidecar process required.
+// In-module capture: procedures (unstable) can do network I/O, reducers can't.
+// Posts an event straight to PostHog, no sidecar needed.
 export const captureEvent = spacetimedb.procedure(
     { distinctId: t.string(), event: t.string() },
     t.bool(),
