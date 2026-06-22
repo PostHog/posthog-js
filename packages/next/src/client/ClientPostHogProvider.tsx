@@ -2,6 +2,7 @@
 
 import React from 'react'
 import posthogJs from 'posthog-js'
+import { isUndefined } from '@posthog/core'
 import { PostHogContext } from '@posthog/react'
 import type { BootstrapConfig, PostHogConfig } from 'posthog-js'
 
@@ -9,9 +10,9 @@ export type { BootstrapConfig }
 
 function hasTracingHeadersConfig(options?: Partial<PostHogConfig>): boolean {
     return (
-        options?.tracing_headers !== undefined ||
-        options?.addTracingHeaders !== undefined ||
-        options?.__add_tracing_headers !== undefined
+        !isUndefined(options?.tracing_headers) ||
+        !isUndefined(options?.addTracingHeaders) ||
+        !isUndefined(options?.__add_tracing_headers)
     )
 }
 
