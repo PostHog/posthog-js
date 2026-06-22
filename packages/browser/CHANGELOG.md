@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.391.6
+
+### Patch Changes
+
+- [#3901](https://github.com/PostHog/posthog-js/pull/3901) [`049eeb6`](https://github.com/PostHog/posthog-js/commit/049eeb654138ba3e3345665b94046e29e8f8c899) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop adding the unused `beacon` query parameter to browser SDK sendBeacon requests.
+  (2026-06-22)
+
+- [#3900](https://github.com/PostHog/posthog-js/pull/3900) [`3ee8667`](https://github.com/PostHog/posthog-js/commit/3ee8667652fbd77b4e2b764bc4c19d748ef90c06) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop adding the unused `ip` query parameter to browser SDK requests.
+  (2026-06-22)
+
 ## 1.391.5
 
 ### Patch Changes
