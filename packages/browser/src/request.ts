@@ -255,20 +255,20 @@ const _fetch = (options: RequestWithOptions) => {
     }
 
     let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
-    let timedOut = false
+    let timeoutReason: Error | null = null
 
     if (AbortController) {
         const controller = new AbortController()
         aborter = {
             signal: controller.signal,
             timeout: setTimeout(() => {
-                timedOut = true
                 // Abort with an explicit reason. Without one, the browser rejects the fetch with
                 // a reason-less `DOMException: AbortError: signal is aborted without reason`, which
                 // is indistinguishable from a host app's own aborted fetches and can show up as
                 // noise in error tracking. We keep `name === 'AbortError'` so existing timeout
                 // handling (e.g. feature flag timeout detection) keeps working.
-                controller.abort(timeoutAbortReason(options.timeout))
+                timeoutReason = timeoutAbortReason(options.timeout)
+                controller.abort(timeoutReason)
             }, options.timeout),
         }
     }
@@ -307,7 +307,9 @@ const _fetch = (options: RequestWithOptions) => {
             })
         })
         .catch((error) => {
-            if (timedOut) {
+            // Identity comparison against the exact reason we created, so a genuine network error
+            // that happens to settle in the same turn as the timeout is never misclassified.
+            if (error === timeoutReason) {
                 // This is our own timeout abort, not a genuine failure. Log it at `warn` so it is
                 // never re-captured by console-error exception autocapture (which only wraps
                 // `console.error`).
