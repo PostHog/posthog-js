@@ -7,6 +7,30 @@ import type { BootstrapConfig, PostHogConfig } from 'posthog-js'
 
 export type { BootstrapConfig }
 
+function hasTracingHeadersConfig(options?: Partial<PostHogConfig>): boolean {
+    return (
+        options?.tracing_headers !== undefined ||
+        options?.addTracingHeaders !== undefined ||
+        options?.__add_tracing_headers !== undefined
+    )
+}
+
+function withDefaultTracingHeaders(options?: Partial<PostHogConfig>): Partial<PostHogConfig> | undefined {
+    if (typeof window === 'undefined' || hasTracingHeadersConfig(options)) {
+        return options
+    }
+
+    const hostname = window.location.hostname
+    if (!hostname) {
+        return options
+    }
+
+    return {
+        ...options,
+        tracing_headers: [hostname],
+    }
+}
+
 export interface ClientPostHogProviderProps {
     /** PostHog project API key (starts with phc_) */
     apiKey: string
@@ -44,7 +68,7 @@ export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: 
     // see a fully configured posthog instance. The `__loaded` guard prevents
     // double-init (e.g. React StrictMode).
     if (typeof window !== 'undefined' && !posthogJs.__loaded) {
-        posthogJs.init(apiKey, mergedOptions)
+        posthogJs.init(apiKey, withDefaultTracingHeaders(mergedOptions))
     }
 
     return <PostHogContext.Provider value={{ client: posthogJs, bootstrap }}>{children}</PostHogContext.Provider>
