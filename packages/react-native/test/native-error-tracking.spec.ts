@@ -30,12 +30,9 @@ const mockPlugin = OptionalReactNativePlugin as unknown as {
   addExceptionStep: jest.Mock
 }
 
-const waitForNativePluginEvaluation = async (posthog: PostHog): Promise<void> => {
-  await (posthog as unknown as { _sessionReplayEvalChain: Promise<void> })._sessionReplayEvalChain
-}
-
 const resetMockPlugin = (): void => {
   mockPlugin.start.mockImplementation(() => Promise.resolve())
+  // `setup` may have been deleted by the legacy-plugin test; restore it if so.
   mockPlugin.setup = mockPlugin.setup ?? jest.fn()
   mockPlugin.setup.mockImplementation(() => Promise.resolve())
   mockPlugin.startSession.mockImplementation(() => Promise.resolve())
@@ -69,7 +66,7 @@ describe('native error tracking', () => {
     const posthog = new PostHog('test-token', { persistence: 'memory', flushInterval: 0 })
 
     await posthog.ready()
-    await waitForNativePluginEvaluation(posthog)
+    await posthog._drainNativePluginEvaluationForTesting()
 
     expect(mockPlugin.setup).not.toHaveBeenCalled()
     expect(mockPlugin.start).not.toHaveBeenCalled()
@@ -298,7 +295,7 @@ describe('native error tracking', () => {
     const posthog = new PostHog('test-token', { persistence: 'memory', flushInterval: 0 })
 
     await posthog.ready()
-    await waitForNativePluginEvaluation(posthog)
+    await posthog._drainNativePluginEvaluationForTesting()
 
     posthog.addExceptionStep('orphan')
 

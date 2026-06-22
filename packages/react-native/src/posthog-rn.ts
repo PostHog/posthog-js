@@ -2285,6 +2285,20 @@ export class PostHog extends PostHogCore {
     return this._sessionReplayEvalChain
   }
 
+  /**
+   * @internal Test-only helper for waiting until queued native plugin evaluation has completed.
+   */
+  async _drainNativePluginEvaluationForTesting(): Promise<void> {
+    const isTestEnvironment =
+      (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV === 'test'
+
+    if (!isTestEnvironment) {
+      throw new Error('_drainNativePluginEvaluationForTesting() can only be used in tests.')
+    }
+
+    await this._sessionReplayEvalChain
+  }
+
   private async _evaluateAndStartSessionReplayInternal(
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
   ): Promise<void> {
