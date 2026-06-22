@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.391.3
+
+### Patch Changes
+
+- [#3909](https://github.com/PostHog/posthog-js/pull/3909) [`ab4a220`](https://github.com/PostHog/posthog-js/commit/ab4a2203392af6e63225fcfc93483bc8577c16ae) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid `style-src-attr` CSP violations when diffing rrweb style mutations.
+  (2026-06-22)
+
+- [#3912](https://github.com/PostHog/posthog-js/pull/3912) [`78ac40c`](https://github.com/PostHog/posthog-js/commit/78ac40c5e69a016455abe0fbb2ef94f6f4302e8a) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: never record binary/asset response or request bodies (image, video, audio, font, octet-stream, pdf, zip, wasm) even when `recordBody` is enabled - they bloat recordings, duplicate what the replay already shows, and the body is no longer read.
+  (2026-06-22)
+
 ## 1.391.2
 
 ### Patch Changes
