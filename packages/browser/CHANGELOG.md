@@ -1,5 +1,64 @@
 # posthog-js
 
+## 1.391.5
+
+### Patch Changes
+
+- [#3915](https://github.com/PostHog/posthog-js/pull/3915) [`beaccc3`](https://github.com/PostHog/posthog-js/commit/beaccc392d840a201412e28bebda157004f88adb) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay: apply the existing base64 image size cap (`maxBase64ImageLength`) to SVG `<image>` elements with `data:` URIs on both `href` and `xlink:href`. Previously the cap only covered `<img>` elements, so large inline data URIs inside SVGs were recorded in full - this also covers them in mutations, replacing oversized ones with the striped placeholder.
+  (2026-06-22)
+
+## 1.391.4
+
+### Patch Changes
+
+- [#3913](https://github.com/PostHog/posthog-js/pull/3913) [`ee9f2a8`](https://github.com/PostHog/posthog-js/commit/ee9f2a839e0e05f27a612f2be29c0a4eda6bcdca) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: expand the default payload host deny list to skip third-party analytics, RUM, and session-replay telemetry whose payloads have no replay value - Datadog, Segment, RudderStack, Amplitude, Mixpanel, Hotjar (both `.com` and `.io`), and FullStory. Also covers both Google Analytics beacon hosts (`google-analytics.com`, plus `analytics.google.com` which gtag uses when Google Signals is enabled) and widens New Relic to `nr-data.net`.
+  (2026-06-22)
+
+## 1.391.3
+
+### Patch Changes
+
+- [#3909](https://github.com/PostHog/posthog-js/pull/3909) [`ab4a220`](https://github.com/PostHog/posthog-js/commit/ab4a2203392af6e63225fcfc93483bc8577c16ae) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid `style-src-attr` CSP violations when diffing rrweb style mutations.
+  (2026-06-22)
+
+- [#3912](https://github.com/PostHog/posthog-js/pull/3912) [`78ac40c`](https://github.com/PostHog/posthog-js/commit/78ac40c5e69a016455abe0fbb2ef94f6f4302e8a) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: never record binary/asset response or request bodies (image, video, audio, font, octet-stream, pdf, zip, wasm) even when `recordBody` is enabled - they bloat recordings, duplicate what the replay already shows, and the body is no longer read.
+  (2026-06-22)
+
+## 1.391.2
+
+### Patch Changes
+
+- [#3903](https://github.com/PostHog/posthog-js/pull/3903) [`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate custom event UUID overrides and generate new UUIDs when invalid.
+  (2026-06-19)
+- Updated dependencies [[`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce)]:
+    - @posthog/core@1.35.3
+    - @posthog/types@1.390.2
+
+## 1.391.1
+
+### Patch Changes
+
+- [#3899](https://github.com/PostHog/posthog-js/pull/3899) [`d090a7c`](https://github.com/PostHog/posthog-js/commit/d090a7c295b2a9990cd83c2be5f051a21e27fc2e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Surveys: re-check eligibility when a popover's display delay elapses, instead of only re-checking the URL.
+
+    A survey with a display delay could be queued while a visitor was still anonymous (the targeting flag passed for the anonymous profile), and then displayed after the delay even though `identify()` had reloaded feature flags and the survey's internal targeting flag was now false for the identified profile (e.g. a "show once per user" survey the person had already dismissed). The delayed display now re-runs the full display predicate (eligibility, URL/device/selector conditions, event/action trigger, and feature flags) before rendering, so a survey that became ineligible during the delay is no longer shown. Pending delayed surveys are also cancelled promptly when a later evaluation cycle finds them ineligible. (2026-06-19)
+
+## 1.391.0
+
+### Minor Changes
+
+- [#3885](https://github.com/PostHog/posthog-js/pull/3885) [`5392a55`](https://github.com/PostHog/posthog-js/commit/5392a55f75ac94e98bb49a04db9453e62e188927) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(replay): capture canvas at reduced resolution
+
+    Adds `session_recording.canvasCapture.resolutionScale` - a `(0, 1]` fraction of the canvas display size to capture replay frames at. The captured bitmap is downscaled (pixel-area savings are quadratic) while the canvas's true display size is still recorded, so playback stretches the smaller frame back to the correct dimensions and aspect ratio - only sharpness drops, never layout. It defaults to `1` (full resolution, matching today's behaviour), and the latest `defaults` bundle (`2026-05-30`) opts new installs into `0.6`.
+
+    The canvas's true display size travels with each frame through the encode worker (as required message fields), so the encoded reply is always drawn back to the correct dimensions — no per-canvas state is retained on the main thread, and downscaling can never mislabel a canvas's dimensions. At full resolution the captured pixels are unchanged (the quality resampling hint is only applied when actually downscaling); the emitted `drawImage` now always uses the explicit destination-size form, which is pixel-equivalent on replay.
+
+    Mechanically, `@posthog/rrweb`'s canvas FPS-snapshot observer takes an optional `canvasResolutionScale` record option and downscales each captured frame accordingly. (2026-06-19)
+
+### Patch Changes
+
+- Updated dependencies [[`5392a55`](https://github.com/PostHog/posthog-js/commit/5392a55f75ac94e98bb49a04db9453e62e188927)]:
+    - @posthog/types@1.390.1
+
 ## 1.390.2
 
 ### Patch Changes

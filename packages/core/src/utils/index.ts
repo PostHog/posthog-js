@@ -11,6 +11,16 @@ export * from './user-agent-utils'
 
 export const STRING_FORMAT = 'utf8'
 
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function isValidUUID(value: unknown): value is string {
+  return typeof value === 'string' && UUID_REGEX.test(value)
+}
+
+export function getEventUuid(uuid: unknown, generateUuid: () => string): string {
+  return isValidUUID(uuid) ? uuid : generateUuid()
+}
+
 export function assert(truthyValue: any, message: string): void {
   if (!truthyValue || typeof truthyValue !== 'string' || isEmpty(truthyValue)) {
     throw new Error(message)

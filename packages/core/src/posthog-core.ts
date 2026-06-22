@@ -35,7 +35,7 @@ import {
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString } from './utils'
+import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString, getEventUuid } from './utils'
 import { EventHint } from './error-tracking'
 
 // Stores the parameters for a pending feature flags reload request
@@ -1642,7 +1642,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     return {
       ...message,
-      uuid: result.uuid ?? message.uuid,
+      uuid: getEventUuid(result.uuid ?? message.uuid, uuidv7),
       event: result.event,
       properties: resultProps,
       timestamp: result.timestamp as unknown as JsonType,

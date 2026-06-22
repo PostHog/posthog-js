@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.391.5",
+    "version": "1.391.3",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -3563,6 +3563,10 @@
         {
           "type": "boolean",
           "name": "noRetries"
+        },
+        {
+          "type": "boolean",
+          "name": "skipIPParam"
         },
         {
           "type": "number",

@@ -163,16 +163,17 @@ describe('capture', () => {
     test('sends custom uuid', async () => {
         global.fetch = mockFetch()
         const t = initConvexTest()
+        const uuid = '0189dcd5-5311-4d40-8db0-9496a2eef37b'
 
         await t.mutation(api.example.testCapture, {
             distinctId: 'user-123',
             event: 'test',
-            uuid: 'custom-uuid-abc',
+            uuid,
         })
         await finishScheduledFunctions(t)
 
         const event = firstBatchEvent()
-        expect(event.uuid).toBe('custom-uuid-abc')
+        expect(event.uuid).toBe(uuid)
     })
 
     test('sends timestamp', async () => {
