@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.391.4
+
+### Patch Changes
+
+- [#3913](https://github.com/PostHog/posthog-js/pull/3913) [`ee9f2a8`](https://github.com/PostHog/posthog-js/commit/ee9f2a839e0e05f27a612f2be29c0a4eda6bcdca) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: expand the default payload host deny list to skip third-party analytics, RUM, and session-replay telemetry whose payloads have no replay value - Datadog, Segment, RudderStack, Amplitude, Mixpanel, Hotjar (both `.com` and `.io`), and FullStory. Also covers both Google Analytics beacon hosts (`google-analytics.com`, plus `analytics.google.com` which gtag uses when Google Signals is enabled) and widens New Relic to `nr-data.net`.
+  (2026-06-22)
+
 ## 1.391.3
 
 ### Patch Changes
