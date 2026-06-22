@@ -73,6 +73,7 @@ export const defaultNetworkOptions: Required<NetworkRecordOptions> = {
         'hotjar.io',
         'fullstory.com',
     ],
+    streamNetworkBody: false,
 }
 
 const HEADER_DENY_LIST = [
@@ -311,5 +312,6 @@ export const buildNetworkRequestOptions = (
         recordBody: canRecordBody,
         recordPerformance: canRecordPerformance,
         recordInitialRequests: canRecordPerformance,
+        streamNetworkBody: instanceConfig.session_recording.streamNetworkBody === true,
     }
 }

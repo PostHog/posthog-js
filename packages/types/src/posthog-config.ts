@@ -559,6 +559,15 @@ export interface SessionRecordingOptions {
     recordBody?: boolean
 
     /**
+     * When recording network bodies, read them through a streaming reader that stops at the
+     * payload size limit instead of buffering the whole body and then discarding it. Bounds the
+     * memory and pre-request latency of capturing a very large body. Reads only a clone of the
+     * body, never the stream the page consumes.
+     * @default false
+     */
+    streamNetworkBody?: boolean
+
+    /**
      * Allows local config to override remote canvas recording settings from the flags response
      */
     captureCanvas?: SessionRecordingCanvasOptions

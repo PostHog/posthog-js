@@ -67,6 +67,7 @@ describe('config', () => {
             expect(posthog.config.session_recording).toStrictEqual({
                 strictMinimumDuration: true,
                 canvasCapture: { resolutionScale: 0.6 },
+                streamNetworkBody: true,
                 maskAllInputs: false,
             })
         })
@@ -80,6 +81,7 @@ describe('config', () => {
             expect(posthog.config.session_recording).toStrictEqual({
                 strictMinimumDuration: true,
                 canvasCapture: { resolutionScale: 0.8 },
+                streamNetworkBody: true,
             })
         })
 
@@ -130,6 +132,18 @@ describe('config', () => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
             expect(posthog.config.disable_capture_url_hashes).toBe(expected)
+        })
+
+        it.each([
+            ['unset', undefined, undefined],
+            ['2025-05-24', '2025-05-24' as const, undefined],
+            ['2025-11-30', '2025-11-30' as const, undefined],
+            ['2026-01-30', '2026-01-30' as const, undefined],
+            ['2026-05-30', '2026-05-30' as const, true],
+        ])('session_recording.streamNetworkBody with defaults %s', (_label, defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', defaults ? { defaults } : undefined)
+            expect(posthog.config.session_recording.streamNetworkBody).toBe(expected)
         })
 
         it('should preserve other default config values when setting defaults', () => {

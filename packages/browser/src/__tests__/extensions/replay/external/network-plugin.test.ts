@@ -1,7 +1,9 @@
 /// <reference lib="dom" />
 
 import { expect } from '@jest/globals'
+import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
 import {
+    _tryReadBodyStreaming,
     NEVER_RECORD_BODY_CONTENT_TYPES,
     shouldRecordBody,
 } from '../../../../extensions/replay/external/network-plugin'
@@ -424,6 +426,86 @@ describe('network plugin', () => {
                     expect(testXhr.getListenerCount('timeout')).toBe(0)
                 })
             })
+        })
+    })
+
+    describe('_tryReadBodyStreaming', () => {
+        // jsdom omits TextEncoder/TextDecoder; every browser that supports fetch + streams has them,
+        // so shim them here to exercise the real streaming path (the function falls back to text()
+        // when TextDecoder is absent, which is covered by the no-stream case).
+        const originalTextEncoder = (global as any).TextEncoder
+        const originalTextDecoder = (global as any).TextDecoder
+        beforeAll(() => {
+            ;(global as any).TextEncoder = (global as any).TextEncoder ?? NodeTextEncoder
+            ;(global as any).TextDecoder = (global as any).TextDecoder ?? NodeTextDecoder
+        })
+        afterAll(() => {
+            ;(global as any).TextEncoder = originalTextEncoder
+            ;(global as any).TextDecoder = originalTextDecoder
+        })
+
+        const encode = (s: string): Uint8Array => new TextEncoder().encode(s)
+
+        function fakeStreamingBody(
+            chunks: Uint8Array[],
+            opts: { readRejects?: boolean; cloneThrows?: boolean; noStream?: boolean; textFallback?: string } = {}
+        ): Request | Response {
+            let i = 0
+            const reader = {
+                read: () =>
+                    opts.readRejects
+                        ? Promise.reject(new Error('boom'))
+                        : Promise.resolve(
+                              i < chunks.length ? { done: false, value: chunks[i++] } : { done: true, value: undefined }
+                          ),
+                cancel: () => Promise.resolve(),
+            }
+            const clone = {
+                body: opts.noStream ? null : { getReader: () => reader },
+                text: () => Promise.resolve(opts.textFallback ?? ''),
+            }
+            return {
+                clone: () => {
+                    if (opts.cloneThrows) {
+                        throw new Error('cannot clone')
+                    }
+                    return clone
+                },
+            } as unknown as Response
+        }
+
+        it('returns the full body when under the limit', async () => {
+            const r = fakeStreamingBody([encode('hello '), encode('world')])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('hello world')
+        })
+
+        it('stops at the limit and returns a placeholder, without buffering past it', async () => {
+            const r = fakeStreamingBody([encode('a'.repeat(8)), encode('b'.repeat(8))])
+            await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe(
+                '[SessionReplay] Body too large to record (> 10 bytes)'
+            )
+        })
+
+        it('records a body that exactly fills the limit', async () => {
+            const r = fakeStreamingBody([encode('1234567890')])
+            await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe('1234567890')
+        })
+
+        it('falls back to text() when there is no readable stream', async () => {
+            const r = fakeStreamingBody([], { noStream: true, textFallback: 'plain text body' })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('plain text body')
+        })
+
+        it('resolves with a failure placeholder when the clone cannot be read', async () => {
+            const r = fakeStreamingBody([], { cloneThrows: true })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('[SessionReplay] Failed to read body')
+        })
+
+        it('resolves (never rejects) when the reader errors mid-stream', async () => {
+            const r = fakeStreamingBody([encode('partial')], { readRejects: true })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe(
+                '[SessionReplay] Failed to read body: Error: boom'
+            )
         })
     })
 })

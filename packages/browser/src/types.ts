@@ -504,6 +504,12 @@ export type NetworkRecordOptions = {
      */
     payloadSizeLimitBytes: number
     /**
+     * when true, read bodies through a streaming reader that stops at payloadSizeLimitBytes
+     * instead of buffering the whole body and then enforcing the limit. Reads only a clone of
+     * the body, so it never consumes the stream the page itself reads.
+     */
+    streamNetworkBody?: boolean
+    /**
      * some domains we should never record the payload
      * for example other companies session replay ingestion payloads aren't super useful but are gigantic
      * if this isn't provided we use a default list

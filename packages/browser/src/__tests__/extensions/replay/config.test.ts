@@ -284,6 +284,25 @@ describe('config', () => {
                 ])
             })
         })
+
+        describe('streamNetworkBody', () => {
+            it('defaults to false when no defaults date and no explicit config', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                expect(networkOptions.streamNetworkBody).toBe(false)
+            })
+
+            it('is true when session_recording.streamNetworkBody is set explicitly', () => {
+                const posthogConfig = defaultConfig()
+                posthogConfig.session_recording.streamNetworkBody = true
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+                expect(networkOptions.streamNetworkBody).toBe(true)
+            })
+
+            it('is true when the 2026-05-30 defaults are applied', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig('2026-05-30'), {})
+                expect(networkOptions.streamNetworkBody).toBe(true)
+            })
+        })
     })
 
     describe('masking/privacy', () => {

@@ -536,6 +536,17 @@ function isReadableStreamBody(body: unknown): body is ReadableStream<Uint8Array>
     return isObject(body) && isFunction(body.getReader) && isFunction(body.tee)
 }
 
+// matches the hard ceiling enforced in config.ts limitPayloadSize
+const MAX_PAYLOAD_SIZE_BYTES = 1000000
+
+function effectivePayloadLimitBytes(options: NetworkRecordOptions): number {
+    return Math.min(MAX_PAYLOAD_SIZE_BYTES, options.payloadSizeLimitBytes ?? MAX_PAYLOAD_SIZE_BYTES)
+}
+
+function _readBody(r: Request | Response, options: NetworkRecordOptions): Promise<string> {
+    return options.streamNetworkBody ? _tryReadBodyStreaming(r, effectivePayloadLimitBytes(options)) : _tryReadBody(r)
+}
+
 function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
@@ -556,6 +567,95 @@ function _tryReadBody(r: Request | Response): Promise<string> {
     })
 }
 
+// Reads a clone of the body chunk by chunk, stopping as soon as the running total exceeds the
+// limit, so a very large body is never fully buffered. Like _tryReadBody it only ever reads a
+// clone (never the stream the page consumes) and is guaranteed to resolve, never reject.
+export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number): Promise<string> {
+    // eslint-disable-next-line compat/compat
+    return new Promise((resolve) => {
+        let settled = false
+        const timeout = setTimeout(() => done('[SessionReplay] Timeout while trying to read body'), 500)
+
+        function done(value: string): void {
+            if (settled) {
+                return
+            }
+            settled = true
+            clearTimeout(timeout)
+            resolve(value)
+        }
+
+        let clone: Request | Response
+        try {
+            clone = r.clone()
+        } catch {
+            done('[SessionReplay] Failed to read body')
+            return
+        }
+
+        const body = clone.body
+        // no readable stream (or no TextDecoder) available — fall back to the buffered read of the clone
+        if (!body || !isFunction(body.getReader) || typeof TextDecoder === 'undefined') {
+            clone.text().then(
+                (txt) => done(txt),
+                (reason) => done('[SessionReplay] Failed to read body: ' + reason)
+            )
+            return
+        }
+
+        let reader: ReadableStreamDefaultReader<Uint8Array>
+        try {
+            reader = body.getReader()
+        } catch {
+            done('[SessionReplay] Failed to read body')
+            return
+        }
+
+        function cancel(): void {
+            try {
+                void reader.cancel()
+            } catch {
+                // the reader may already be released; nothing to clean up
+            }
+        }
+
+        const chunks: Uint8Array[] = []
+        let received = 0
+
+        function pump(): void {
+            reader.read().then(
+                ({ done: streamDone, value }) => {
+                    if (streamDone) {
+                        const merged = new Uint8Array(received)
+                        let offset = 0
+                        for (const chunk of chunks) {
+                            merged.set(chunk, offset)
+                            offset += chunk.byteLength
+                        }
+                        done(new TextDecoder().decode(merged))
+                        return
+                    }
+
+                    if (value) {
+                        if (received + value.byteLength > limitBytes) {
+                            cancel()
+                            done(`[SessionReplay] Body too large to record (> ${limitBytes} bytes)`)
+                            return
+                        }
+                        received += value.byteLength
+                        chunks.push(value)
+                    }
+
+                    pump()
+                },
+                (reason) => done('[SessionReplay] Failed to read body: ' + reason)
+            )
+        }
+
+        pump()
+    })
+}
+
 async function _tryReadRequestBody({
     r,
     options,
@@ -570,7 +670,7 @@ async function _tryReadRequestBody({
         return Promise.resolve(hostname + ' is in deny list')
     }
 
-    return _tryReadBody(r)
+    return _readBody(r, options)
 }
 
 async function _tryReadResponseBody({
@@ -587,7 +687,7 @@ async function _tryReadResponseBody({
         return Promise.resolve(cannotReadBodyReason)
     }
 
-    return _tryReadBody(r)
+    return _readBody(r, options)
 }
 
 function initFetchObserver(

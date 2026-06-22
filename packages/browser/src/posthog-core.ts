@@ -205,7 +205,7 @@ const defaultsThatVaryByConfig = (
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording:
         defaults && defaults >= '2026-05-30'
-            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 } }
+            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 }, streamNetworkBody: true }
             : defaults && defaults >= '2025-11-30'
               ? { strictMinimumDuration: true }
               : {},
