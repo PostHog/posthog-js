@@ -4371,6 +4371,40 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('URL masking with maskCapturedNetworkRequestFn', () => {
+        it('masks personal data query params and hashes in rrweb meta URLs', () => {
+            posthog.config.mask_personal_data_properties = true
+            posthog.config.disable_capture_url_hashes = true
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?gclid=secret123&other=value#section' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?gclid=<masked>&other=value',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+
         it('uses maskCapturedNetworkRequestFn to mask page URLs when configured', () => {
             const maskFn = jest.fn((data) => {
                 // CapturedNetworkRequest uses 'name' for the URL

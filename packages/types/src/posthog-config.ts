@@ -877,6 +877,8 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should strip URL fragments (`#...`) from automatically captured URL fields.
+     * If you want to capture hashes selectively, set this to `false` and use `before_send` to remove
+     * sensitive hash values before events are sent.
      *
      * @default true
      */
