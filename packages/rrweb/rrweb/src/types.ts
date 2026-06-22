@@ -62,6 +62,9 @@ export type recordOptions<T> = {
   packFn?: PackFn;
   sampling?: SamplingStrategy;
   dataURLOptions?: DataURLOptions;
+  // (0,1] fraction of canvas display size to capture FPS-snapshot frames at; replay upscales
+  // back to display size, so playback dimensions are unchanged, just softer. defaults to 1.
+  canvasResolutionScale?: number;
   recordDOM?: boolean;
   recordCanvas?: boolean;
   recordCrossOriginIframes?: boolean;

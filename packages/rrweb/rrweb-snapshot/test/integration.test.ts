@@ -612,6 +612,92 @@ describe('base64 image compression tests', function (this: ISuite) {
 
     await page.close();
   });
+
+  it.each([
+    { id: 'svg-large-href-image', attr: 'href' },
+    { id: 'svg-large-xlink-image', attr: 'xlink:href' },
+  ])(
+    'should replace oversized SVG <image> $attr data URIs with striped placeholder',
+    async ({ id, attr }) => {
+      const page: puppeteer.Page = await browser.newPage();
+      await page.goto(`${serverURL}/html/base64-images.html`, {
+        waitUntil: 'load',
+      });
+      await page.waitForSelector(`#${id}`, { timeout: 5000 });
+
+      const result = await page.evaluate(`${code}
+        const snapshot = rrwebSnapshot.snapshot(document, {
+          dataURLOptions: { type: "image/webp", quality: 0.4, maxBase64ImageLength: 10000 }
+        });
+
+        function findByTag(node, tagName, acc = []) {
+          if (node.type === 2 && node.tagName === tagName) {
+            acc.push(node);
+          }
+          if (node.childNodes) {
+            node.childNodes.forEach(child => findByTag(child, tagName, acc));
+          }
+          return acc;
+        }
+
+        const svgImages = findByTag(snapshot, 'image');
+        const target = svgImages.find(n => n.attributes.id === '${id}');
+        const href = target.attributes['${attr}'];
+
+        ({
+          href,
+          isPlaceholder: href.startsWith('data:image/svg+xml'),
+          length: href.length
+        });
+      `);
+
+      expect(result.isPlaceholder).toBe(true);
+      expect(result.href).toMatch(/^data:image\/svg\+xml;base64,/);
+      expect(result.length).toBeLessThan(1000);
+
+      await page.close();
+    }
+  );
+
+  it('should preserve small SVG <image> data URIs under the limit', async () => {
+    const page: puppeteer.Page = await browser.newPage();
+    await page.goto(`${serverURL}/html/base64-images.html`, {
+      waitUntil: 'load',
+    });
+    await page.waitForSelector('#svg-small-image', { timeout: 2000 });
+
+    const result = await page.evaluate(`${code}
+      const snapshot = rrwebSnapshot.snapshot(document, {
+        dataURLOptions: { type: "image/webp", quality: 0.4, maxBase64ImageLength: 1048576 }
+      });
+
+      function findByTag(node, tagName, acc = []) {
+        if (node.type === 2 && node.tagName === tagName) {
+          acc.push(node);
+        }
+        if (node.childNodes) {
+          node.childNodes.forEach(child => findByTag(child, tagName, acc));
+        }
+        return acc;
+      }
+
+      const svgImages = findByTag(snapshot, 'image');
+      const small = svgImages.find(n => n.attributes.id === 'svg-small-image');
+      const href = small.attributes.href;
+
+      ({
+        href,
+        isNotPlaceholder: !href.includes('svg+xml'),
+        length: href.length
+      });
+    `);
+
+    expect(result.isNotPlaceholder).toBe(true);
+    expect(result.href).toMatch(/^data:image\/png;base64,/);
+    expect(result.length).toBeGreaterThan(0);
+
+    await page.close();
+  });
 });
 
 describe('iframe integration tests', function (this: ISuite) {

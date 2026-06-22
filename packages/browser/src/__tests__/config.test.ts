@@ -61,6 +61,28 @@ describe('config', () => {
             expect(posthog.config.rageclick).toBe(false)
         })
 
+        it('keeps date-gated session_recording defaults when the user sets a partial session_recording', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: '2026-05-30', session_recording: { maskAllInputs: false } })
+            expect(posthog.config.session_recording).toStrictEqual({
+                strictMinimumDuration: true,
+                canvasCapture: { resolutionScale: 0.6 },
+                maskAllInputs: false,
+            })
+        })
+
+        it('lets a user-supplied session_recording sub-option override the date-gated default', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                defaults: '2026-05-30',
+                session_recording: { canvasCapture: { resolutionScale: 0.8 } },
+            })
+            expect(posthog.config.session_recording).toStrictEqual({
+                strictMinimumDuration: true,
+                canvasCapture: { resolutionScale: 0.8 },
+            })
+        })
+
         it.each([
             ['unset', undefined, 0],
             ['2025-05-24', '2025-05-24' as const, 0],

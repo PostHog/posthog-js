@@ -1,5 +1,12 @@
 # @rrweb/rrweb-plugin-console-replay
 
+## 0.0.13
+
+### Patch Changes
+
+- Updated dependencies [[`5392a55`](https://github.com/PostHog/posthog-js/commit/5392a55f75ac94e98bb49a04db9453e62e188927)]:
+    - @posthog/rrweb@0.0.74
+
 ## 0.0.12
 
 ### Patch Changes

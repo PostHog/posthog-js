@@ -40,7 +40,7 @@ import {
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
-import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { request, SUPPORTS_REQUEST } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
@@ -111,6 +111,7 @@ import {
     isEmptyObject,
     isObject,
     isBoolean,
+    getEventUuid,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -201,7 +202,12 @@ const defaultsThatVaryByConfig = (
               ? { content_ignorelist: true }
               : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+    session_recording:
+        defaults && defaults >= '2026-05-30'
+            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 } }
+            : defaults && defaults >= '2025-11-30'
+              ? { strictMinimumDuration: true }
+              : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
@@ -644,6 +650,13 @@ export class PostHog implements PostHogInterface {
         // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
         if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
             mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
+        }
+        // likewise a partial user-supplied session_recording keeps the date-gated top-level
+        // defaults (e.g. strictMinimumDuration, canvasCapture) it doesn't set. this is a shallow
+        // one-level merge: a user-supplied nested object (e.g. their own canvasCapture) still
+        // replaces the default one wholesale rather than merging into it.
+        if (isObject(baseConfig.session_recording) && isObject(userConfig.session_recording)) {
+            mergedConfig.session_recording = extend({}, baseConfig.session_recording, userConfig.session_recording)
         }
         this.set_config(mergedConfig)
 
@@ -1090,12 +1103,6 @@ export class PostHog implements PostHogInterface {
         }
 
         options.transport = options.transport || this.config.api_transport
-        if (!options.skipIPParam) {
-            options.url = extendURLParams(options.url, {
-                // Whether to detect ip info or not
-                ip: this.config.ip ? 1 : 0,
-            })
-        }
         options.headers = {
             ...this.config.request_headers,
             ...options.headers,
@@ -1333,7 +1340,8 @@ export class PostHog implements PostHogInterface {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
-        const uuid = options?.uuid || uuidv7()
+        // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
+        const uuid = getEventUuid(options?.uuid, uuidv7)
         let data: CaptureResult = {
             uuid,
             event: event_name,
@@ -1426,6 +1434,8 @@ export class PostHog implements PostHogInterface {
                 return
             } else {
                 data = beforeSendResult
+                // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
+                data.uuid = getEventUuid(data.uuid, uuidv7)
             }
         }
 
@@ -1855,8 +1865,9 @@ export class PostHog implements PostHogInterface {
      *
      * @example
      * ```js
-     * if(posthog.getFeatureFlag('beta-feature') === 'some-value') {
-     *      const someValue = posthog.getFeatureFlagPayload('beta-feature')
+     * const betaFeature = posthog.getFeatureFlagResult('beta-feature')
+     * if (betaFeature?.variant === 'some-value') {
+     *      const someValue = betaFeature?.payload
      *      // do something
      * }
      * ```

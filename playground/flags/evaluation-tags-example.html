@@ -434,8 +434,9 @@
             const results = [];
             
             testFlags.forEach(flagKey => {
-                const value = posthogInstance.getFeatureFlag(flagKey);
-                const payload = posthogInstance.getFeatureFlagPayload(flagKey);
+                const result = posthogInstance.getFeatureFlagResult(flagKey);
+                const value = result?.variant ?? result?.enabled;
+                const payload = result?.payload;
                 
                 results.push({
                     key: flagKey,
@@ -494,7 +495,7 @@
             
             if (allFlags && Object.keys(allFlags).length > 0) {
                 Object.entries(allFlags).forEach(([key, value]) => {
-                    const payload = posthogInstance.getFeatureFlagPayload(key);
+                    const payload = posthogInstance.getFeatureFlagResult(key)?.payload;
                     results.push({
                         key: key,
                         value: value,

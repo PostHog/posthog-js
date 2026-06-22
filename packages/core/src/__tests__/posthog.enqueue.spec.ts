@@ -30,14 +30,14 @@ describe('PostHog Core', () => {
 
       expect(item).toMatchObject({
         message: {
-          library: 'posthog-core-tests',
-          library_version: '2.0.0-alpha',
-          type: 'capture',
           properties: {
             foo: 'bar',
           },
         },
       })
+      expect(item.message).not.toHaveProperty('library')
+      expect(item.message).not.toHaveProperty('library_version')
+      expect(item.message).not.toHaveProperty('type')
 
       expect(mocks.fetch).not.toHaveBeenCalled()
     })
@@ -63,29 +63,29 @@ describe('PostHog Core', () => {
 
       expect(item).toMatchObject({
         message: {
-          library: 'posthog-core-tests',
-          library_version: '2.0.0-alpha',
-          type: 'capture',
           properties: {
             foo: 'bar',
           },
           event: 'type3',
         },
       })
+      expect(item.message).not.toHaveProperty('library')
+      expect(item.message).not.toHaveProperty('library_version')
+      expect(item.message).not.toHaveProperty('type')
 
       item = posthog.getPersistedProperty<any[]>(PostHogPersistedProperty.Queue)?.pop()
 
       expect(item).toMatchObject({
         message: {
-          library: 'posthog-core-tests',
-          library_version: '2.0.0-alpha',
-          type: 'capture',
           properties: {
             foo: 'bar',
           },
           event: 'type2',
         },
       })
+      expect(item.message).not.toHaveProperty('library')
+      expect(item.message).not.toHaveProperty('library_version')
+      expect(item.message).not.toHaveProperty('type')
 
       expect(mocks.fetch).not.toHaveBeenCalled()
     })

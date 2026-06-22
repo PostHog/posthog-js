@@ -1,10 +1,19 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
+import { UUID_REGEX } from '@posthog/core'
 
 jest.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+
+const invalidUuidCases = [
+  ['arbitrary string', 'not-a-uuid'],
+  ['empty string', ''],
+  ['32-character hex string', '0189dcd553117d408db09496a2eef37b'],
+  ['braced UUID', '{0189dcd5-5311-7d40-8db0-9496a2eef37b}'],
+  ['URN UUID', 'urn:uuid:0189dcd5-5311-7d40-8db0-9496a2eef37b'],
+] as const
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
@@ -102,9 +111,6 @@ describe('PostHog Node.js', () => {
           },
           uuid: expect.any(String),
           timestamp: expect.any(String),
-          type: 'capture',
-          library: 'posthog-node',
-          library_version: '1.2.3',
         },
       ])
     })
@@ -150,8 +156,6 @@ describe('PostHog Node.js', () => {
             $groups: { org: 123 },
             foo: 'bar',
           }),
-          library: 'posthog-node',
-          library_version: '1.2.3',
         })
       )
       mockedFetch.mockClear()
@@ -173,8 +177,6 @@ describe('PostHog Node.js', () => {
             foo: 'bar',
             $geoip_disable: true,
           }),
-          library: 'posthog-node',
-          library_version: '1.2.3',
         })
       )
     })
@@ -405,6 +407,18 @@ describe('PostHog Node.js', () => {
         },
       ])
     })
+
+    it.each(invalidUuidCases)(
+      'should generate a new uuid when provided uuid is an invalid %s',
+      async (_, invalidUuid) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
+        posthog.capture({ event: 'custom-time', distinctId: '123', uuid: invalidUuid })
+        await waitForFlushTimer()
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents?.[0].uuid).toMatch(UUID_REGEX)
+        expect(batchEvents?.[0].uuid).not.toBe(invalidUuid)
+      }
+    )
 
     it('should respect disableGeoip setting if passed in', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
@@ -772,15 +786,12 @@ describe('PostHog Node.js', () => {
         // last event in batch
         distinct_id: '9',
         event: 'test-event',
-        library: 'posthog-node',
-        library_version: '1.2.3',
         properties: {
           $lib: 'posthog-node',
           $lib_version: '1.2.3',
           $geoip_disable: true,
         },
         timestamp: expect.any(String),
-        type: 'capture',
       })
       expect(10).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('capture')).length)
       // 1 for the captured events, 1 for the final flush of feature flag called events

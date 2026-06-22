@@ -59,7 +59,6 @@ describe('PostHog Core', () => {
               $group_key: 'team',
               $group_set: { foo: 'bar' },
             },
-            type: 'capture',
           },
         ],
       })
@@ -81,7 +80,6 @@ describe('PostHog Core', () => {
               $group_type: 'other',
               $group_key: 'team',
             },
-            type: 'capture',
           },
         ],
       })
@@ -150,8 +148,6 @@ describe('PostHog Core', () => {
           {
             event: '$groupidentify',
             distinct_id: posthog.getDistinctId(),
-            library: 'posthog-core-tests',
-            library_version: '2.0.0-alpha',
             properties: {
               $lib: 'posthog-core-tests',
               $lib_version: '2.0.0-alpha',
@@ -160,7 +156,6 @@ describe('PostHog Core', () => {
               $group_set: { analytics: true },
             },
             timestamp: '2022-01-01T00:00:00.000Z',
-            type: 'capture',
           },
         ],
       })

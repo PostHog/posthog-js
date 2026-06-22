@@ -53,8 +53,25 @@ export const defaultNetworkOptions: Required<NetworkRecordOptions> = {
         '.ingest.sentry.io',
         '.clarity.ms',
         // NB no leading dot here
+        // GA4/gtag beacons go to *.google-analytics.com; with Google Signals on they also hit
+        // analytics.google.com (region1.analytics.google.com/g/collect), so deny both
+        'google-analytics.com',
         'analytics.google.com',
-        'bam.nr-data.net',
+        // New Relic browser agent (bam + bam-cell)
+        'nr-data.net',
+        // Datadog browser RUM intake
+        'datadoghq.com',
+        'datadoghq.eu',
+        'ddog-gov.com',
+        // other third-party analytics / session-replay vendors whose telemetry has no replay value
+        'segment.io',
+        'rudderstack.com',
+        'amplitude.com',
+        'mixpanel.com',
+        // Hotjar uses both .com and .io for data collection
+        'hotjar.com',
+        'hotjar.io',
+        'fullstory.com',
     ],
 }
 
@@ -88,16 +105,44 @@ const PAYLOAD_CONTENT_DENY_LIST = [
     'token',
 ]
 
-// we always remove headers on the deny list because we never want to capture this sensitive data
-const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
-    const headers = data.requestHeaders
+// substrings that mark a header as credential-bearing - catches custom names
+// (e.g. x-gist-encoded-user-token) that aren't in the exact deny list above
+const HEADER_DENY_SUBSTRINGS = [
+    'auth',
+    'token',
+    'secret',
+    'session',
+    'api-key',
+    'apikey',
+    'api_key',
+    'credential',
+    'password',
+    'passwd',
+    'cookie',
+    'csrf',
+    'xsrf',
+]
+
+const isDeniedHeader = (header: string): boolean => {
+    const lower = header.toLowerCase()
+    return HEADER_DENY_LIST.includes(lower) || HEADER_DENY_SUBSTRINGS.some((s) => lower.includes(s))
+}
+
+const redactDeniedHeaders = (headers: CapturedNetworkRequest['requestHeaders']): void => {
     if (!isNullish(headers)) {
-        each(Object.keys(headers ?? {}), (header) => {
-            if (HEADER_DENY_LIST.includes(header.toLowerCase())) {
+        each(Object.keys(headers), (header) => {
+            if (isDeniedHeader(header)) {
                 headers[header] = REDACTED
             }
         })
     }
+}
+
+// we always remove headers on the deny list because we never want to capture this sensitive data.
+// applies to both request and response headers (e.g. set-cookie is a response header)
+const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
+    redactDeniedHeaders(data.requestHeaders)
+    redactDeniedHeaders(data.responseHeaders)
     return data
 }
 

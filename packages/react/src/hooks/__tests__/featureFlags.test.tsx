@@ -104,6 +104,37 @@ describe('feature flag hooks', () => {
     })
 
     it.each([
+        ['enabled_flag', true],
+        ['disabled_flag', false],
+        ['multivariate_flag', true],
+    ])('should report bootstrap feature flag %s active status as %s', (flag, expected) => {
+        const client = {
+            onFeatureFlags: () => () => {},
+            config: {
+                bootstrap: {
+                    featureFlags: {
+                        enabled_flag: true,
+                        disabled_flag: false,
+                        multivariate_flag: 'variant-a',
+                    },
+                },
+            },
+            featureFlags: {
+                getFlags: () => [],
+                hasLoadedFlags: false,
+            } as unknown as PostHog['featureFlags'],
+        } as unknown as PostHog
+
+        // eslint-disable-next-line react/display-name
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+            <PostHogProvider client={client}>{children}</PostHogProvider>
+        )
+
+        const { result } = renderHook(() => useActiveFeatureFlags(), { wrapper })
+        expect(result.current.includes(flag)).toBe(expected)
+    })
+
+    it.each([
         ['example_feature_true', true],
         ['example_feature_false', false],
         ['missing', undefined],

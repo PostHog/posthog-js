@@ -687,7 +687,7 @@ export default class MutationBuffer {
             }
             const old = this.unattachedDoc.createElement('span');
             if (m.oldValue) {
-              old.setAttribute('style', m.oldValue);
+              old.style.cssText = m.oldValue;
             }
             for (const pname of Array.from(target.style)) {
               const newValue = target.style.getPropertyValue(pname);

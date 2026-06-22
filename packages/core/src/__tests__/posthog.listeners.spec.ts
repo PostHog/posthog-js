@@ -22,7 +22,8 @@ describe('PostHog Core', () => {
       posthog.identify('user-1')
       expect(mock).toHaveBeenCalledTimes(1)
       expect(mockOther).toHaveBeenCalledTimes(1)
-      expect(mock.mock.lastCall[0]).toMatchObject({ type: 'identify' })
+      expect(mock.mock.lastCall[0]).toMatchObject({ event: '$identify' })
+      expect(mock.mock.lastCall[0]).not.toHaveProperty('type')
     })
 
     it('should unsubscribe when called', () => {
