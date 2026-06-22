@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.391.7",
+    "version": "1.392.0",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -80,11 +80,6 @@
         "@babel/preset-typescript": "catalog:",
         "@jest/globals": "^29.7.0",
         "@jridgewell/sourcemap-codec": "^1.5.5",
-        "@opentelemetry/api": "^1.9.0",
-        "@opentelemetry/api-logs": "^0.208.0",
-        "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
-        "@opentelemetry/resources": "^2.2.0",
-        "@opentelemetry/sdk-logs": "^0.208.0",
         "@playwright/test": "^1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
         "@posthog/rrweb": "workspace:*",

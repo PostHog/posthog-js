@@ -70,11 +70,12 @@ function firstBatchEvent(): Record<string, unknown> {
 }
 
 async function finishScheduledFunctions(t: ReturnType<typeof initConvexTest>) {
-    // Run only the Convex scheduler timer that was pending before this call. `runAllTimers()` also
-    // executes timers created by the scheduled action itself, such as PostHog request timeout/retry
-    // timers, which can make these tests race or hang under fake timers.
-    await jest.runOnlyPendingTimersAsync()
-    await t.finishInProgressScheduledFunctions()
+    // Let convex-test advance scheduler timers and wait for each scheduled function to finish.
+    // A single timer pass can race with the scheduled action starting, which makes assertions
+    // observe no PostHog batch call or leaves scheduled writes running during the next test.
+    await t.finishAllScheduledFunctions(() => {
+        jest.runOnlyPendingTimers()
+    })
 }
 
 describe('capture', () => {

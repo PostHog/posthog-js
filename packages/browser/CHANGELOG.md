@@ -1,5 +1,48 @@
 # posthog-js
 
+## 1.392.0
+
+### Minor Changes
+
+- [#3895](https://github.com/PostHog/posthog-js/pull/3895) [`ce528ed`](https://github.com/PostHog/posthog-js/commit/ce528ed73936bbefa47f52e90cce8e11bb4205cc) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Console log auto-capture (`logs: { captureConsoleLogs: true }`) now flows through the same pipeline as `posthog.captureLog()`, `posthog.logger.*`, and PostHog's other SDKs, instead of OpenTelemetry. As a result:
+    - the bundled OpenTelemetry dependencies are removed, shrinking the lazily-loaded logs chunk
+    - auto-captured console logs now run through `logs.beforeSend` (the same hook as `captureLog`/`logger.*`), so you can redact or drop sensitive console output before it's sent. To treat console logs differently from manual logs, branch on the record's `log.source` attribute: auto-captured console logs set it to `console.<method>` (e.g. `console.error`), while manual `captureLog`/`logger.*` logs leave it unset
+    - console logs now link to the person's profile: they carry the person id as `posthogDistinctId`, the attribute PostHog uses to associate logs with a person ([docs](https://posthog.com/docs/logs/link-person)). The old path used `distinct_id`, which isn't used for person linking by default, so console logs previously didn't appear on person profiles unless you'd configured a custom key.
+
+    Console logs keep their `posthog-browser-logs` `service.name`, their `console` instrumentation scope, and their `log.source: console.<level>` attribute.
+
+    As part of moving onto the shared pipeline, console records now use PostHog's standard log field names — the same ones programmatic web logs and other SDKs use, and the ones the Logs UI surfaces. For the fields below the **values are unchanged** — only the attribute names/locations differ:
+    - `distinct_id` → `posthogDistinctId` (record attribute)
+    - `location.href` → `url.full` (record attribute; same value — the page URL)
+    - `session.id` (resource attribute) → `sessionId` (record attribute) — renamed and moved
+    - `host` and `window.id` move from resource attributes to record attributes (names unchanged)
+    - records also now carry the standard SDK context shared by other logs, including `feature_flags`
+
+    For most projects this needs no action — these are already the canonical log fields. The only thing to update is a saved Logs query or dashboard built specifically on an **old** console attribute name, for example:
+    - `attributes.distinct_id` → `attributes.posthogDistinctId`
+    - `attributes.location.href` → `attributes.url.full`
+    - `resource.attributes.session.id` → `attributes.sessionId`
+    - `resource.attributes.host` / `resource.attributes.window.id` → `attributes.host` / `attributes.window.id` (2026-06-22)
+
+### Patch Changes
+
+- Updated dependencies [[`ce528ed`](https://github.com/PostHog/posthog-js/commit/ce528ed73936bbefa47f52e90cce8e11bb4205cc)]:
+    - @posthog/core@1.35.4
+
+## 1.391.9
+
+### Patch Changes
+
+- [#3922](https://github.com/PostHog/posthog-js/pull/3922) [`26aa9ba`](https://github.com/PostHog/posthog-js/commit/26aa9ba470313835ec81eebaa156b7620b287274) Thanks [@posthog](https://github.com/apps/posthog)! - Exception autocapture: posthog-js's own fetch timeout now aborts with an explicit, descriptive reason (`PostHog request timed out after <n>ms`) instead of a reason-less `DOMException: AbortError: signal is aborted without reason`. This keeps `name === 'AbortError'` so existing timeout handling (e.g. feature flag timeout detection) is unchanged, but makes our own timeouts identifiable and stops them being re-captured as noise by console-error exception autocapture.
+  (2026-06-22)
+
+## 1.391.8
+
+### Patch Changes
+
+- [#3908](https://github.com/PostHog/posthog-js/pull/3908) [`1fce04f`](https://github.com/PostHog/posthog-js/commit/1fce04f79240971dc2776e4d9381dadeb0aff1c3) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply CSP stylesheet preparation hook to Product Tours styles.
+  (2026-06-22)
+
 ## 1.391.7
 
 ### Patch Changes

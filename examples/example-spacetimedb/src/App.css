@@ -1,0 +1,79 @@
+:root {
+    font-family:
+        system-ui,
+        -apple-system,
+        sans-serif;
+    color: #1d1d1f;
+}
+
+.app {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+}
+
+h1 {
+    margin-bottom: 0.5rem;
+}
+
+h2 {
+    font-size: 1.05rem;
+    margin-bottom: 0.25rem;
+}
+
+section {
+    padding: 1rem 0;
+    border-top: 1px solid #e5e5e7;
+}
+
+.status .ok {
+    color: #2e7d32;
+}
+
+.status .bad {
+    color: #c62828;
+}
+
+.hint {
+    color: #6e6e73;
+    font-size: 0.9rem;
+}
+
+form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+input {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid #d2d2d7;
+    border-radius: 6px;
+}
+
+button {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 6px;
+    background: #1d1d1f;
+    color: white;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+ul {
+    margin: 0.5rem 0 0;
+    padding-left: 1.25rem;
+}
+
+code {
+    background: #f5f5f7;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+}

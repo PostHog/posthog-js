@@ -50,6 +50,28 @@ describe('resolveLogsConfig', () => {
         expect(resolveLogsConfig({ maxBufferSize: 2000, maxLogsPerInterval: 500 }).maxQueueSize).toBe(2000)
     })
 
+    it('uncaps the rate for the console instance (OTel parity) with a deep buffer', () => {
+        const resolved = resolveLogsConfig(undefined, { consoleCapture: true })
+        // No per-interval rate cap — the old OpenTelemetry console path had none.
+        expect(resolved.maxLogsPerInterval).toBeUndefined()
+        // Falls back to the OTel-parity buffer depth so a burst is held, not dropped.
+        expect(resolved.maxQueueSize).toBe(2048)
+    })
+
+    it('ignores a user-set rate cap on the console instance (never rate-limits console)', () => {
+        // Console capture was uncapped before; a user-set maxLogsPerInterval must not
+        // silently start dropping console logs. consoleCapture wins over the user value.
+        const resolved = resolveLogsConfig({ maxLogsPerInterval: 300 }, { consoleCapture: true })
+        expect(resolved.maxLogsPerInterval).toBeUndefined()
+        expect(resolved.maxQueueSize).toBe(2048)
+    })
+
+    it('still applies a user-set rate cap to the programmatic instance', () => {
+        const resolved = resolveLogsConfig({ maxLogsPerInterval: 300 })
+        expect(resolved.maxLogsPerInterval).toBe(300)
+        expect(resolved.maxQueueSize).toBe(300)
+    })
+
     it('keeps the batch size fixed and independent of the buffer size', () => {
         // The buffer is a burst reservoir; the batch bounds each request. A large
         // buffer must not produce an oversized single POST.
