@@ -719,7 +719,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (this._instance.config.capture_pageview || !window) {
                 return
             }
-            const currentUrl = this._maskReplayUrl(window.location.href, true)
+            // Preserve the previous normalization behavior for this fallback (e.g. https://test.com -> https://test.com/)
+            // while still applying query masking. This path was already hashless before disable_capture_url_hashes.
+            // eslint-disable-next-line compat/compat
+            const url = new URL(window.location.href)
+            const currentUrl = this._maskReplayUrl(url.origin + url.pathname + url.search)
             if (this._lastHref !== currentUrl) {
                 this._lastHref = currentUrl
                 this._tryAddCustomEvent('$url_changed', { href: currentUrl })
