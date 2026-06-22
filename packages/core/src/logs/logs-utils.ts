@@ -184,26 +184,26 @@ export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSd
  */
 export function buildResourceAttributes(
   config: ResolvedPostHogLogsConfig,
-  scopeName: string,
-  scopeVersion: string
+  sdkName: string,
+  sdkVersion: string
 ): Record<string, LogAttributeValue> {
   return {
     ...config.resourceAttributes,
     'service.name': config.serviceName || 'unknown_service',
     ...(config.environment && { 'deployment.environment': config.environment }),
     ...(config.serviceVersion && { 'service.version': config.serviceVersion }),
-    'telemetry.sdk.name': scopeName,
-    'telemetry.sdk.version': scopeVersion,
+    'telemetry.sdk.name': sdkName,
+    'telemetry.sdk.version': sdkVersion,
   }
 }
 
 /**
  * Wraps a list of records in the OTLP `resourceLogs` envelope.
  *
- * `scopeName` is the SDK package name (`posthog-js`, `posthog-react-native`,
- * etc.). `scopeVersion` is the SDK semver. The server combines them into a
- * single `instrumentation_scope` field (`{name}@{version}`) used for
- * SDK-version-level attribution in queries and dashboards.
+ * `scopeName` is the OTLP instrumentation scope name (`web`/`console` for
+ * browser, or the SDK library ID for other platforms). `scopeVersion` is the
+ * SDK semver. The server combines them into a single `instrumentation_scope`
+ * field (`{name}@{version}`) used for attribution in queries and dashboards.
  */
 export function buildOtlpLogsPayload(
   logRecords: OtlpLogRecord[],

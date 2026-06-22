@@ -17,6 +17,9 @@ import { Extension } from './extensions/types'
 import { resolveLogsConfig } from './logs-defaults'
 
 const LOGS_ENDPOINT = '/i/v1/logs'
+// OTLP instrumentation-scope name for console auto-capture, distinguishing it from
+// programmatic logs (which use the SDK scope) in scope-based dashboards/queries.
+const CONSOLE_SCOPE_NAME = 'console'
 // Safety backstop for a `_send_request` that never calls back. Set above the
 // request layer's own 60s timeout so a real (slow-but-completing) request always
 // settles via its callback first; this only fires on a genuinely callback-less
@@ -36,13 +39,18 @@ export class PostHogLogs implements Extension {
     private _resolvedFrom: PostHog['config']['logs']
     private _capture_logger: Logger | undefined
 
+    // Console auto-capture uses a dedicated core + queue (its `service.name`
+    // defaults to `posthog-browser-logs`). Built lazily, only when console runs.
+    private _consoleQueue: BufferedLogEntry[] = []
+    private _consoleCore: CorePostHogLogs | undefined
+    private _consoleResolvedConfig: ResolvedPostHogLogsConfig | undefined
+    private _consoleResolvedFrom: PostHog['config']['logs']
+
     constructor(private readonly _instance: PostHog) {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
         }
-        // Flush promptly when the tab regains connectivity instead of waiting out
-        // the retry backoff. One listener for the wrapper's lifetime, routed to the
-        // current core (which may be rebuilt on a config change).
+        // Flush on reconnect rather than waiting out the retry backoff.
         if (window) {
             addEventListener(window, 'online', this._onReconnect)
         }
@@ -50,35 +58,63 @@ export class PostHogLogs implements Extension {
 
     private _onReconnect = (): void => {
         this._core?.onReconnect()
+        this._consoleCore?.onReconnect()
     }
 
-    // The extension is constructed before `init` applies config, so build the core
-    // lazily and rebuild when `config.logs` is swapped (e.g. via `set_config`).
-    // Reset the old core first so its armed timer can't double-flush the shared,
-    // wrapper-owned queue. A flush already in flight on the old core can still
-    // finish against that queue, so a config swap mid-flush may re-send a head
-    // batch — a duplicate, never a loss.
+    // Cores are built lazily (the extension exists before `init` applies config)
+    // and rebuilt when `config.logs` is swapped. Callers reset the old core first
+    // so its timer can't double-flush the shared queue; a flush already in flight
+    // may still re-send its head batch on a mid-swap — a duplicate, never a loss.
+    private _buildCore(
+        getQueue: () => BufferedLogEntry[],
+        setQueue: (q: BufferedLogEntry[]) => void,
+        opts?: Parameters<typeof resolveLogsConfig>[1],
+        scopeName?: string
+    ): [CorePostHogLogs, ResolvedPostHogLogsConfig] {
+        const config = resolveLogsConfig(this._instance?.config?.logs, opts)
+        const core = new CorePostHogLogs(
+            this._createHost(getQueue, setQueue),
+            config,
+            this._logger,
+            () => this._getSdkContext(),
+            (fn) => fn(),
+            undefined,
+            scopeName
+        )
+        return [core, config]
+    }
+
     private _getCore(): CorePostHogLogs {
         const logsConfig = this._instance?.config?.logs
         if (!this._core || this._resolvedFrom !== logsConfig) {
             this._core?.reset()
             this._resolvedFrom = logsConfig
-            this._resolvedConfig = resolveLogsConfig(logsConfig)
-            this._core = new CorePostHogLogs(
-                this._createHost(),
-                this._resolvedConfig,
-                this._logger,
-                () => this._getSdkContext(),
-                (fn) => fn()
+            ;[this._core, this._resolvedConfig] = this._buildCore(
+                () => this._queue,
+                (q) => {
+                    this._queue = q
+                }
             )
         }
         return this._core
     }
 
-    // `_getCore` assigns `_resolvedConfig` alongside `_core`, so it's set on return.
-    private _getResolvedConfig(): ResolvedPostHogLogsConfig {
-        this._getCore()
-        return this._resolvedConfig as ResolvedPostHogLogsConfig
+    // Like `_getCore`, but with the console service name + scope, backed by `_consoleQueue`.
+    private _getConsoleCore(): CorePostHogLogs {
+        const logsConfig = this._instance?.config?.logs
+        if (!this._consoleCore || this._consoleResolvedFrom !== logsConfig) {
+            this._consoleCore?.reset()
+            this._consoleResolvedFrom = logsConfig
+            ;[this._consoleCore, this._consoleResolvedConfig] = this._buildCore(
+                () => this._consoleQueue,
+                (q) => {
+                    this._consoleQueue = q
+                },
+                { serviceNameDefault: 'posthog-browser-logs', consoleCapture: true },
+                CONSOLE_SCOPE_NAME
+            )
+        }
+        return this._consoleCore
     }
 
     initialize() {
@@ -97,10 +133,19 @@ export class PostHogLogs implements Extension {
     reset(): void {
         this._queue = []
         this._core?.reset()
+        this._consoleQueue = []
+        this._consoleCore?.reset()
     }
 
     captureLog(options: CaptureLogOptions): void {
         this._getCore().captureLog(options)
+    }
+
+    // Console auto-capture (the lazy `logs` chunk) routes here so its records run
+    // through the shared core pipeline and carry `service.name: posthog-browser-logs`.
+    /** @internal */
+    _captureConsoleLog(options: CaptureLogOptions): void {
+        this._getConsoleCore().captureLog(options)
     }
 
     get logger(): Logger {
@@ -125,9 +170,12 @@ export class PostHogLogs implements Extension {
             this._flushViaTransport(transport)
             return
         }
-        void this._getCore()
-            .flush()
-            .catch((err) => this._logger.error('PostHog logs flush failed:', err))
+        if (this._core) {
+            void this._core.flush().catch((err) => this._logger.error('PostHog logs flush failed:', err))
+        }
+        if (this._consoleCore) {
+            void this._consoleCore.flush().catch((err) => this._logger.error('PostHog logs flush failed:', err))
+        }
     }
 
     loadIfEnabled() {
@@ -158,8 +206,10 @@ export class PostHogLogs implements Extension {
     }
 
     // Host adapter for core's `PostHogLogs`; structurally checked against `LogsHost`
-    // at the `new CorePostHogLogs` call, so no explicit annotation is needed.
-    private _createHost() {
+    // at the `new CorePostHogLogs` call, so no explicit annotation is needed. The
+    // queue accessors are parameterized so the programmatic and console instances
+    // each bind to their own queue.
+    private _createHost(getQueue: () => BufferedLogEntry[], setQueue: (q: BufferedLogEntry[]) => void) {
         const ph = this._instance
         return {
             // The browser gates capture through `is_capturing()` (see `optedOut`).
@@ -171,10 +221,10 @@ export class PostHogLogs implements Extension {
             },
             // Live queue by reference; core mutates it in place and persists via the setter.
             getPersistedProperty: <T>(key: PostHogPersistedProperty): T | undefined =>
-                key === PostHogPersistedProperty.LogsQueue ? (this._queue as unknown as T) : undefined,
+                key === PostHogPersistedProperty.LogsQueue ? (getQueue() as unknown as T) : undefined,
             setPersistedProperty: <T>(key: PostHogPersistedProperty, value: T | null): void => {
                 if (key === PostHogPersistedProperty.LogsQueue) {
-                    this._queue = (value as unknown as BufferedLogEntry[]) ?? []
+                    setQueue((value as unknown as BufferedLogEntry[]) ?? [])
                 }
             },
             _sendLogsBatch: (payload: OtlpLogsPayload) => this._sendLogsBatch(payload),
@@ -232,18 +282,52 @@ export class PostHogLogs implements Extension {
         })
     }
 
+    // Drains both the programmatic and console queues over the given transport.
+    // Each queue carries its own resolved config so the two `service.name`s are
+    // preserved. Non-empty queue → its core was built → its resolved config is set,
+    // so the length guards also avoid lazily building an unused core for config.
+    // TODO: future optimization — merge both into one multi-`resourceLogs` payload
+    //       so a page-unload only fires a single sendBeacon instead of two.
     private _flushViaTransport(transport: 'XHR' | 'fetch' | 'sendBeacon'): void {
-        const config = this._getResolvedConfig()
-        if (this._queue.length === 0) {
+        if (this._queue.length > 0) {
+            // Invariant: _resolvedConfig is set whenever _queue has items.
+            this._drainQueueViaTransport(transport, this._queue, this._resolvedConfig!, Config.LIB_NAME, (q) => {
+                this._queue = q
+            })
+        }
+        if (this._consoleQueue.length > 0) {
+            // Invariant: _consoleResolvedConfig is set whenever _consoleQueue has items.
+            this._drainQueueViaTransport(
+                transport,
+                this._consoleQueue,
+                this._consoleResolvedConfig!,
+                CONSOLE_SCOPE_NAME,
+                (q) => {
+                    this._consoleQueue = q
+                }
+            )
+        }
+    }
+
+    private _drainQueueViaTransport(
+        transport: 'XHR' | 'fetch' | 'sendBeacon',
+        queue: BufferedLogEntry[],
+        config: ResolvedPostHogLogsConfig,
+        scopeName: string,
+        setQueue: (q: BufferedLogEntry[]) => void
+    ): void {
+        if (queue.length === 0) {
             return
         }
-        const records = this._queue.map((e) => e.record)
-        this._queue = []
-        // Shared with the core flush path so resource attributes can't drift.
+        const records = queue.map((e) => e.record)
+        setQueue([])
+        // Shared with the core flush path so resource attributes can't drift. The
+        // scope name labels the stream (console vs SDK); `telemetry.sdk.name` stays
+        // the SDK id (`Config.LIB_NAME`) regardless.
         const payload = buildOtlpLogsPayload(
             records,
             buildResourceAttributes(config, Config.LIB_NAME, Config.LIB_VERSION),
-            Config.LIB_NAME,
+            scopeName,
             Config.LIB_VERSION
         )
         this._instance._send_request({
