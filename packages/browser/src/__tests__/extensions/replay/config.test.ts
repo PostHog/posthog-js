@@ -214,8 +214,19 @@ describe('config', () => {
                     '.lr-ingest.io',
                     '.ingest.sentry.io',
                     '.clarity.ms',
+                    'google-analytics.com',
                     'analytics.google.com',
-                    'bam.nr-data.net',
+                    'nr-data.net',
+                    'datadoghq.com',
+                    'datadoghq.eu',
+                    'ddog-gov.com',
+                    'segment.io',
+                    'rudderstack.com',
+                    'amplitude.com',
+                    'mixpanel.com',
+                    'hotjar.com',
+                    'hotjar.io',
+                    'fullstory.com',
                 ])
             })
 
@@ -229,8 +240,19 @@ describe('config', () => {
                     '.lr-ingest.io',
                     '.ingest.sentry.io',
                     '.clarity.ms',
+                    'google-analytics.com',
                     'analytics.google.com',
-                    'bam.nr-data.net',
+                    'nr-data.net',
+                    'datadoghq.com',
+                    'datadoghq.eu',
+                    'ddog-gov.com',
+                    'segment.io',
+                    'rudderstack.com',
+                    'amplitude.com',
+                    'mixpanel.com',
+                    'hotjar.com',
+                    'hotjar.io',
+                    'fullstory.com',
                 ])
             })
         })
