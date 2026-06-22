@@ -112,6 +112,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "readonly string[]"
   ],
   "loaded": "(posthog_instance: PostHog) => void",
+  "disable_capture_url_hashes": [
+    "false",
+    "true"
+  ],
   "save_referrer": [
     "false",
     "true"
