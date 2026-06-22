@@ -454,6 +454,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
+    "streamNetworkBody": [
+      "undefined",
+      "false",
+      "true"
+    ],
     "captureCanvas": [
       "undefined",
       "SessionRecordingCanvasOptions"
