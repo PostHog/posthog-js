@@ -451,17 +451,28 @@ describe('network plugin', () => {
 
         function fakeStreamingBody(
             chunks: Uint8Array[],
-            opts: { readRejects?: boolean; cloneThrows?: boolean; noStream?: boolean; textFallback?: string } = {}
+            opts: {
+                readRejects?: boolean
+                cloneThrows?: boolean
+                noStream?: boolean
+                textFallback?: string
+                readNeverResolves?: boolean
+                cancel?: () => Promise<void>
+            } = {}
         ): Request | Response {
             let i = 0
             const reader = {
                 read: () =>
-                    opts.readRejects
-                        ? Promise.reject(new Error('boom'))
-                        : Promise.resolve(
-                              i < chunks.length ? { done: false, value: chunks[i++] } : { done: true, value: undefined }
-                          ),
-                cancel: () => Promise.resolve(),
+                    opts.readNeverResolves
+                        ? new Promise(() => {})
+                        : opts.readRejects
+                          ? Promise.reject(new Error('boom'))
+                          : Promise.resolve(
+                                i < chunks.length
+                                    ? { done: false, value: chunks[i++] }
+                                    : { done: true, value: undefined }
+                            ),
+                cancel: opts.cancel ?? (() => Promise.resolve()),
             }
             const clone = {
                 body: opts.noStream ? null : { getReader: () => reader },
@@ -509,6 +520,20 @@ describe('network plugin', () => {
             await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe(
                 '[SessionReplay] Failed to read body: Error: boom'
             )
+        })
+
+        it('times out a hung stream and cancels the reader so it stops being read', async () => {
+            jest.useFakeTimers()
+            try {
+                const cancel = jest.fn(() => Promise.resolve())
+                const r = fakeStreamingBody([], { readNeverResolves: true, cancel })
+                const result = _tryReadBodyStreaming(r, 1000)
+                jest.advanceTimersByTime(500)
+                await expect(result).resolves.toBe('[SessionReplay] Timeout while trying to read body')
+                expect(cancel).toHaveBeenCalled()
+            } finally {
+                jest.useRealTimers()
+            }
         })
     })
 

@@ -601,16 +601,29 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
     // eslint-disable-next-line compat/compat
     return new Promise((resolve) => {
         let settled = false
-        const timeout = setTimeout(() => done('[SessionReplay] Timeout while trying to read body'), 500)
+        let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
 
+        function cancel(): void {
+            try {
+                void reader?.cancel()
+            } catch {
+                // the reader may already be released; nothing to clean up
+            }
+        }
+
+        // resolving always releases the reader, so a slow/hung stream stops being pulled (and stops
+        // buffering the clone) the moment we settle — whether via success, the cap, an error, or the timeout
         function done(value: string): void {
             if (settled) {
                 return
             }
             settled = true
             clearTimeout(timeout)
+            cancel()
             resolve(value)
         }
+
+        const timeout = setTimeout(() => done('[SessionReplay] Timeout while trying to read body'), 500)
 
         let clone: Request | Response
         try {
@@ -630,7 +643,6 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
             return
         }
 
-        let reader: ReadableStreamDefaultReader<Uint8Array>
         try {
             reader = body.getReader()
         } catch {
@@ -638,20 +650,18 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
             return
         }
 
-        function cancel(): void {
-            try {
-                void reader.cancel()
-            } catch {
-                // the reader may already be released; nothing to clean up
-            }
-        }
-
         const chunks: Uint8Array[] = []
         let received = 0
 
         function pump(): void {
-            reader.read().then(
+            reader!.read().then(
                 ({ done: streamDone, value }) => {
+                    // already resolved (e.g. the timeout fired) — stop reading and release the stream
+                    if (settled) {
+                        cancel()
+                        return
+                    }
+
                     if (streamDone) {
                         const merged = new Uint8Array(received)
                         let offset = 0
@@ -665,7 +675,6 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
 
                     if (value) {
                         if (received + value.byteLength > limitBytes) {
-                            cancel()
                             done(bodyTooLargeMessage(limitBytes))
                             return
                         }
