@@ -5,7 +5,7 @@ describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
     // Console capture now routes through the core pipeline via
-    // `posthog.logs.captureConsoleLog`; assert against that seam.
+    // `posthog.logs._captureConsoleLog`; assert against that seam.
     let mockEmit: jest.Mock
 
     beforeEach(() => {
@@ -34,7 +34,7 @@ describe('logs entrypoint', () => {
             },
             get_distinct_id: jest.fn(() => 'user-123'),
             is_capturing: jest.fn(() => true),
-            logs: { captureConsoleLog: mockEmit },
+            logs: { _captureConsoleLog: mockEmit },
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -72,7 +72,7 @@ describe('logs entrypoint', () => {
             require('../../entrypoints/logs')
         })
 
-        it('routes console capture through posthog.logs.captureConsoleLog with the mapped level', () => {
+        it('routes console capture through posthog.logs._captureConsoleLog with the mapped level', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 

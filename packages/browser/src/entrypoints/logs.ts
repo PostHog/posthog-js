@@ -327,7 +327,7 @@ const initializeLogs = (posthog: PostHog) => {
                             ...(truncated ? { body_truncated: 'true' } : {}),
                         }
                         // The core pipeline adds posthogDistinctId and url.full from the SDK context.
-                        posthog.logs?.captureConsoleLog({
+                        posthog.logs?._captureConsoleLog({
                             level: LEVEL_MAP[level],
                             body,
                             attributes: {

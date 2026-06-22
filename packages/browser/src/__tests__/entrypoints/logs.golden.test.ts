@@ -2,7 +2,7 @@ import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 
 // Asserts the exact `{ level, body, attributes }` record the console wrapper hands
-// to `posthog.logs.captureConsoleLog`, so any attribute rename or change is caught.
+// to `posthog.logs._captureConsoleLog`, so any attribute rename or change is caught.
 
 // Deterministic session timestamps used in the golden values below.
 const SESSION_START = new Date('2023-01-01T10:00:00Z').getTime() // 1672567200000
@@ -39,7 +39,7 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
             },
             get_distinct_id: jest.fn(() => 'user-123'),
             is_capturing: jest.fn(() => true),
-            logs: { captureConsoleLog: mockCapture },
+            logs: { _captureConsoleLog: mockCapture },
         } as unknown as PostHog
 
         Object.defineProperty(assignableWindow, 'location', {

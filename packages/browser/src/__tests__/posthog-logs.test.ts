@@ -876,7 +876,7 @@ describe('posthog-logs', () => {
 
             it('buffers console captures on a separate queue from programmatic logs', () => {
                 logs.captureLog({ body: 'programmatic' })
-                logs.captureConsoleLog({ body: 'console' })
+                logs._captureConsoleLog({ body: 'console' })
 
                 expect((logs as any)._queue).toHaveLength(1)
                 expect((logs as any)._consoleQueue).toHaveLength(1)
@@ -885,7 +885,7 @@ describe('posthog-logs', () => {
             })
 
             it('flushes console captures with service.name posthog-browser-logs', () => {
-                logs.captureConsoleLog({ body: 'console' })
+                logs._captureConsoleLog({ body: 'console' })
                 jest.advanceTimersByTime(3000)
 
                 const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
@@ -896,7 +896,7 @@ describe('posthog-logs', () => {
             })
 
             it('flushes console captures under the OTel-parity scope name "console"', () => {
-                logs.captureConsoleLog({ body: 'console' })
+                logs._captureConsoleLog({ body: 'console' })
                 jest.advanceTimersByTime(3000)
 
                 const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
@@ -918,7 +918,7 @@ describe('posthog-logs', () => {
             })
 
             it('auto-populates the shared SDK context (incl. feature_flags) on console records', () => {
-                logs.captureConsoleLog({ body: 'console' })
+                logs._captureConsoleLog({ body: 'console' })
                 jest.advanceTimersByTime(3000)
 
                 const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
@@ -933,8 +933,8 @@ describe('posthog-logs', () => {
             })
 
             it('emits standard OTLP severity (text + number) on console records', () => {
-                logs.captureConsoleLog({ body: 'uh oh', level: 'warn' })
-                logs.captureConsoleLog({ body: 'boom', level: 'error' })
+                logs._captureConsoleLog({ body: 'uh oh', level: 'warn' })
+                logs._captureConsoleLog({ body: 'boom', level: 'error' })
                 jest.advanceTimersByTime(3000)
 
                 const records = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0].data.resourceLogs[0]
@@ -947,7 +947,7 @@ describe('posthog-logs', () => {
                 ;(mockPostHog.config as any).logs = { serviceName: 'my-app' }
                 logs = new PostHogLogs(mockPostHog)
 
-                logs.captureConsoleLog({ body: 'console' })
+                logs._captureConsoleLog({ body: 'console' })
                 jest.advanceTimersByTime(3000)
 
                 const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
@@ -959,7 +959,7 @@ describe('posthog-logs', () => {
 
             it('drains both queues on a sendBeacon flush, each with its own service.name', () => {
                 logs.captureLog({ body: 'programmatic' })
-                logs.captureConsoleLog({ body: 'console' })
+                logs._captureConsoleLog({ body: 'console' })
 
                 logs.flushLogs('sendBeacon')
 
@@ -985,7 +985,7 @@ describe('posthog-logs', () => {
 
             it('clears both queues on reset', () => {
                 logs.captureLog({ body: 'programmatic' })
-                logs.captureConsoleLog({ body: 'console' })
+                logs._captureConsoleLog({ body: 'console' })
 
                 logs.reset()
 
@@ -1003,7 +1003,7 @@ describe('posthog-logs', () => {
                 ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
 
                 for (let i = 0; i < 1500; i++) {
-                    logs.captureConsoleLog({ body: `console ${i}` })
+                    logs._captureConsoleLog({ body: `console ${i}` })
                 }
 
                 expect((logs as any)._consoleQueue).toHaveLength(1500)
@@ -1022,7 +1022,7 @@ describe('posthog-logs', () => {
             })
 
             it('flushes queued console logs when the browser comes back online', () => {
-                logs.captureConsoleLog({ body: 'console queued while offline' })
+                logs._captureConsoleLog({ body: 'console queued while offline' })
                 expect((logs as any)._consoleQueue).toHaveLength(1)
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
 
@@ -1196,9 +1196,9 @@ describe('posthog-logs', () => {
                     }
                 })
 
-                logs.captureConsoleLog({ body: 'a' }) // arms the first console core's timer
+                logs._captureConsoleLog({ body: 'a' }) // arms the first console core's timer
                 ;(mockPostHog.config as any).logs = { captureConsoleLogs: true, serviceName: 'changed' }
-                logs.captureConsoleLog({ body: 'b' }) // _getConsoleCore rebuilds → new timer
+                logs._captureConsoleLog({ body: 'b' }) // _getConsoleCore rebuilds → new timer
 
                 await jest.advanceTimersByTimeAsync(3000)
 

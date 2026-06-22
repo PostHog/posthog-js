@@ -39,10 +39,8 @@ export class PostHogLogs implements Extension {
     private _resolvedFrom: PostHog['config']['logs']
     private _capture_logger: Logger | undefined
 
-    // Console auto-capture flows through a dedicated core instance with its own
-    // queue so its `service.name` defaults to `posthog-browser-logs`, distinct
-    // from the programmatic instance's default `service.name`. Built lazily,
-    // only when console capture is active, so non-console users pay nothing.
+    // Console auto-capture uses a dedicated core + queue (its `service.name`
+    // defaults to `posthog-browser-logs`). Built lazily, only when console runs.
     private _consoleQueue: BufferedLogEntry[] = []
     private _consoleCore: CorePostHogLogs | undefined
     private _consoleResolvedConfig: ResolvedPostHogLogsConfig | undefined
@@ -52,9 +50,7 @@ export class PostHogLogs implements Extension {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
         }
-        // Flush promptly when the tab regains connectivity instead of waiting out
-        // the retry backoff. One listener for the wrapper's lifetime, routed to the
-        // current core (which may be rebuilt on a config change).
+        // Flush on reconnect rather than waiting out the retry backoff.
         if (window) {
             addEventListener(window, 'online', this._onReconnect)
         }
@@ -65,13 +61,10 @@ export class PostHogLogs implements Extension {
         this._consoleCore?.onReconnect()
     }
 
-    // Builds a `CorePostHogLogs` instance together with its resolved config,
-    // keeping the two values in sync. The extension is constructed before `init`
-    // applies config, so cores are built lazily and rebuilt when `config.logs`
-    // is swapped (e.g. via `set_config`). Reset the old core first so its armed
-    // timer can't double-flush the shared, wrapper-owned queue. A flush already
-    // in flight on the old core can still finish against that queue, so a config
-    // swap mid-flush may re-send a head batch — a duplicate, never a loss.
+    // Cores are built lazily (the extension exists before `init` applies config)
+    // and rebuilt when `config.logs` is swapped. Callers reset the old core first
+    // so its timer can't double-flush the shared queue; a flush already in flight
+    // may still re-send its head batch on a mid-swap — a duplicate, never a loss.
     private _buildCore(
         getQueue: () => BufferedLogEntry[],
         setQueue: (q: BufferedLogEntry[]) => void,
@@ -106,8 +99,7 @@ export class PostHogLogs implements Extension {
         return this._core
     }
 
-    // Console capture's own core instance: identical config to `_getCore` except
-    // `service.name` defaults to `posthog-browser-logs`, backed by `_consoleQueue`.
+    // Like `_getCore`, but with the console service name + scope, backed by `_consoleQueue`.
     private _getConsoleCore(): CorePostHogLogs {
         const logsConfig = this._instance?.config?.logs
         if (!this._consoleCore || this._consoleResolvedFrom !== logsConfig) {
@@ -152,7 +144,7 @@ export class PostHogLogs implements Extension {
     // Console auto-capture (the lazy `logs` chunk) routes here so its records run
     // through the shared core pipeline and carry `service.name: posthog-browser-logs`.
     /** @internal */
-    captureConsoleLog(options: CaptureLogOptions): void {
+    _captureConsoleLog(options: CaptureLogOptions): void {
         this._getConsoleCore().captureLog(options)
     }
 
