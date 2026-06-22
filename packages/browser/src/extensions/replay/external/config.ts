@@ -12,6 +12,11 @@ const REDACTED = 'redacted'
 // the hard ceiling for a recorded request/response body — 1MB, even if a larger limit is configured
 export const MAX_PAYLOAD_SIZE_BYTES = 1000000
 
+// the smallest of the 1MB ceiling or the configured limit if there is one
+export function effectivePayloadLimitBytes(options: Pick<NetworkRecordOptions, 'payloadSizeLimitBytes'>): number {
+    return Math.min(MAX_PAYLOAD_SIZE_BYTES, options.payloadSizeLimitBytes ?? MAX_PAYLOAD_SIZE_BYTES)
+}
+
 export const defaultNetworkOptions: Required<NetworkRecordOptions> = {
     initiatorTypes: [
         'audio',
@@ -202,8 +207,7 @@ function enforcePayloadSizeLimit(
 const limitPayloadSize = (
     options: NetworkRecordOptions
 ): ((data: CapturedNetworkRequest | undefined) => CapturedNetworkRequest | undefined) => {
-    // the smallest of 1MB or the specified limit if there is one
-    const limit = Math.min(MAX_PAYLOAD_SIZE_BYTES, options.payloadSizeLimitBytes ?? MAX_PAYLOAD_SIZE_BYTES)
+    const limit = effectivePayloadLimitBytes(options)
 
     return (data) => {
         if (data?.requestBody) {

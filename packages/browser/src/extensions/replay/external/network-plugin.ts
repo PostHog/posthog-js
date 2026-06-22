@@ -31,7 +31,7 @@ import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions, MAX_PAYLOAD_SIZE_BYTES } from './config'
+import { defaultNetworkOptions, effectivePayloadLimitBytes } from './config'
 
 const logger = createLogger('[Recorder]')
 
@@ -549,10 +549,6 @@ function bodyTooLargeMessage(limitBytes: number): string {
     return `[SessionReplay] Body too large to record (> ${limitBytes} bytes)`
 }
 
-function effectivePayloadLimitBytes(options: NetworkRecordOptions): number {
-    return Math.min(MAX_PAYLOAD_SIZE_BYTES, options.payloadSizeLimitBytes ?? MAX_PAYLOAD_SIZE_BYTES)
-}
-
 // when the body declares a content-length over the limit we can skip reading it entirely.
 // this trusts content-length the same way config.ts enforcePayloadSizeLimit does.
 // known accepted risk: for a compressed response content-length is the compressed size while the
@@ -697,7 +693,7 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
 
                     pump()
                 },
-                (reason) => done('[SessionReplay] Failed to read body: ' + reason)
+                (reason) => done(bodyReadFailedMessage(reason))
             )
         }
 
