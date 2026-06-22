@@ -16,7 +16,8 @@ jest.mock('next/router.js', () => ({
 describe('Pages PostHogPageView', () => {
     beforeEach(() => {
         mockCapture.mockClear()
-        mockUsePostHog.mockClear()
+        mockUsePostHog.mockReset()
+        mockUsePostHog.mockReturnValue({ capture: mockCapture, config: { disable_capture_url_hashes: true } })
         mockRouter = { asPath: '/initial', isReady: true }
     })
 
@@ -27,20 +28,22 @@ describe('Pages PostHogPageView', () => {
         })
     })
 
-    it('includes query params and strips hash fragments from asPath by default', () => {
-        mockRouter = { asPath: '/search?q=hello&page=2#section', isReady: true }
-        render(<PostHogPageView />)
-        expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: 'http://localhost/search?q=hello&page=2',
+    it.each([
+        ['strips hash fragments by default', true, 'http://localhost/search?q=hello&page=2'],
+        [
+            'keeps hash fragments when disable_capture_url_hashes is false',
+            false,
+            'http://localhost/search?q=hello&page=2#section',
+        ],
+    ])('%s', (_description, disableCaptureUrlHashes, expectedUrl) => {
+        mockUsePostHog.mockReturnValue({
+            capture: mockCapture,
+            config: { disable_capture_url_hashes: disableCaptureUrlHashes },
         })
-    })
-
-    it('keeps hash fragments from asPath when disable_capture_url_hashes is false', () => {
-        mockUsePostHog.mockReturnValue({ capture: mockCapture, config: { disable_capture_url_hashes: false } })
         mockRouter = { asPath: '/search?q=hello&page=2#section', isReady: true }
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: 'http://localhost/search?q=hello&page=2#section',
+            $current_url: expectedUrl,
         })
     })
 

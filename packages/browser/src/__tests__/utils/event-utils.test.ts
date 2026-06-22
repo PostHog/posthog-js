@@ -51,18 +51,14 @@ describe(`event-utils`, () => {
             expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=<masked>')
         })
 
-        it('should strip hash from current URL by default', () => {
+        it.each([
+            ['by default', undefined, 'https://www.example.com/path?gclid=12345'],
+            ['when disable_capture_url_hashes is false', false, 'https://www.example.com/path?gclid=12345#section'],
+        ])('should handle hash in current URL %s', (_description, disableCaptureUrlHashes, expectedUrl) => {
             // @ts-expect-error ok to set global in test
             globals.location = { href: 'https://www.example.com/path?gclid=12345#section' }
-            const properties = getEventProperties()
-            expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=12345')
-        })
-
-        it('should keep hash in current URL when disable_capture_url_hashes is false', () => {
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: 'https://www.example.com/path?gclid=12345#section' }
-            const properties = getEventProperties(false, undefined, undefined, false)
-            expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=12345#section')
+            const properties = getEventProperties(false, undefined, undefined, disableCaptureUrlHashes)
+            expect(properties['$current_url']).toEqual(expectedUrl)
         })
 
         it('should have timezone and timezone offset', () => {

@@ -294,7 +294,7 @@ export function getEventProperties(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
     detectGoogleSearchApp?: boolean,
-    disable_capture_url_hashes: boolean = true
+    disableCaptureUrlHashes: boolean = true
 ): Properties {
     if (!userAgent) {
         return {}
@@ -325,7 +325,7 @@ export function getEventProperties(
         }),
         {
             $current_url: maskQueryParams(
-                disable_capture_url_hashes ? stripUrlHash(location?.href) : location?.href,
+                disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href,
                 paramsToMask,
                 MASKED
             ),
