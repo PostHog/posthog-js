@@ -67,7 +67,6 @@ describe('config', () => {
             expect(posthog.config.session_recording).toStrictEqual({
                 strictMinimumDuration: true,
                 canvasCapture: { resolutionScale: 0.6 },
-                streamNetworkBody: true,
                 maskAllInputs: false,
             })
         })
@@ -75,7 +74,7 @@ describe('config', () => {
         it('lets a user-supplied session_recording sub-option override the date-gated default', () => {
             const posthog = new PostHog()
             posthog._init('test-token', {
-                defaults: '2026-05-30',
+                defaults: '2026-06-25',
                 session_recording: { canvasCapture: { resolutionScale: 0.8 } },
             })
             expect(posthog.config.session_recording).toStrictEqual({
@@ -91,6 +90,7 @@ describe('config', () => {
             ['2025-11-30', '2025-11-30' as const, 0],
             ['2026-01-30', '2026-01-30' as const, 0],
             ['2026-05-30', '2026-05-30' as const, 250],
+            ['2026-06-25', '2026-06-25' as const, 250],
         ])('persistence_save_debounce_ms with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -103,6 +103,7 @@ describe('config', () => {
             ['2025-11-30', '2025-11-30' as const, false],
             ['2026-01-30', '2026-01-30' as const, false],
             ['2026-05-30', '2026-05-30' as const, true],
+            ['2026-06-25', '2026-06-25' as const, true],
         ])('split_storage with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -115,6 +116,7 @@ describe('config', () => {
             ['2025-11-30', '2025-11-30' as const, false],
             ['2026-01-30', '2026-01-30' as const, false],
             ['2026-05-30', '2026-05-30' as const, true],
+            ['2026-06-25', '2026-06-25' as const, true],
         ])('detect_google_search_app with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -139,7 +141,8 @@ describe('config', () => {
             ['2025-05-24', '2025-05-24' as const, undefined],
             ['2025-11-30', '2025-11-30' as const, undefined],
             ['2026-01-30', '2026-01-30' as const, undefined],
-            ['2026-05-30', '2026-05-30' as const, true],
+            ['2026-05-30', '2026-05-30' as const, undefined],
+            ['2026-06-25', '2026-06-25' as const, true],
         ])('session_recording.streamNetworkBody with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)

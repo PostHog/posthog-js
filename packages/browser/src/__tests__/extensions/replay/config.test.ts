@@ -298,8 +298,8 @@ describe('config', () => {
                 expect(networkOptions.streamNetworkBody).toBe(true)
             })
 
-            it('is true when the 2026-05-30 defaults are applied', () => {
-                const networkOptions = buildNetworkRequestOptions(defaultConfig('2026-05-30'), {})
+            it('is true when the 2026-06-25 defaults are applied', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig('2026-06-25'), {})
                 expect(networkOptions.streamNetworkBody).toBe(true)
             })
         })
