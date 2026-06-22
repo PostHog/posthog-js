@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.391.8
+
+### Patch Changes
+
+- [#3908](https://github.com/PostHog/posthog-js/pull/3908) [`1fce04f`](https://github.com/PostHog/posthog-js/commit/1fce04f79240971dc2776e4d9381dadeb0aff1c3) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply CSP stylesheet preparation hook to Product Tours styles.
+  (2026-06-22)
+
 ## 1.391.7
 
 ### Patch Changes
