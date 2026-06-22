@@ -1,7 +1,7 @@
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '../../utils/logger'
-import { isBoolean, isNullish, isNumber, isUndefined, isObject } from '@posthog/core'
+import { isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window, location } from '../../utils/globals'
 import { maskQueryParams } from '../../utils/request-utils'
@@ -137,7 +137,11 @@ export class WebVitalsAutocapture {
     }
 
     private _currentURL(): string | undefined {
-        const href = window ? window.location.href : undefined
+        const href = window
+            ? this._instance.config.disable_capture_url_hashes
+                ? stripUrlHash(window.location.href)
+                : window.location.href
+            : undefined
         if (!href) {
             logger.error('Could not determine current URL')
             return undefined

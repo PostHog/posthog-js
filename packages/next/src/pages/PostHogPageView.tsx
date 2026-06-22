@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/router.js'
 import { usePostHog } from '@posthog/react'
+import { stripUrlHash } from '@posthog/core'
 import { getCurrentUrl } from '../shared/browser.js'
 
 /**
@@ -9,7 +10,7 @@ import { getCurrentUrl } from '../shared/browser.js'
  * Place this component inside your `PostHogProvider` in `pages/_app.tsx`.
  * It will automatically capture a `$pageview` event whenever the route changes.
  *
- * Uses `router.asPath` which includes query parameters and hash fragments.
+ * Uses `router.asPath` which includes query parameters and may include hash fragments.
  *
  * @example
  * ```tsx
@@ -32,11 +33,13 @@ export function PostHogPageView() {
 
     useEffect(() => {
         const currentUrl = getCurrentUrl(router.asPath)
-        if (!posthog || !router.isReady || !currentUrl) {
+        const currentUrlWithoutHash =
+            posthog?.config?.disable_capture_url_hashes !== false && currentUrl ? stripUrlHash(currentUrl) : currentUrl
+        if (!posthog || !router.isReady || !currentUrlWithoutHash) {
             return
         }
 
-        posthog.capture('$pageview', { $current_url: currentUrl })
+        posthog.capture('$pageview', { $current_url: currentUrlWithoutHash })
     }, [router.asPath, router.isReady, posthog])
 
     return null

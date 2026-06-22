@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
-import { isNumber, isNull } from '@posthog/core'
+import { isNumber, isNull, stripUrlHash } from '@posthog/core'
 import {
     ConversationsRemoteConfig,
     ConversationsWidgetState,
@@ -87,6 +87,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._initialize()
     }
 
+    private _currentUrl(): string | undefined {
+        const href = window?.location?.href
+        return this._posthog.config.disable_capture_url_hashes ? stripUrlHash(href) : href
+    }
+
     /**
      * Send a message programmatically via the API
      * Creates a new ticket if none exists or if newTicket is true
@@ -151,7 +156,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 })
 
                 // Capture current URL - only for new tickets to record where user started
-                const currentUrl = isNewTicket ? window?.location?.href : undefined
+                const currentUrl = isNewTicket ? this._currentUrl() : undefined
 
                 if (replayUrl || currentUrl) {
                     payload.session_context = {
@@ -443,7 +448,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             restore_token: restoreToken,
             widget_session_id: this._widgetSessionId,
             distinct_id: this._posthog.get_distinct_id(),
-            current_url: window?.location?.href,
+            current_url: this._currentUrl(),
         }
 
         // eslint-disable-next-line compat/compat
@@ -1188,7 +1193,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         const token = this._config.token
         const payload: RequestRestoreLinkPayload = {
             email: normalizedEmail,
-            request_url: window?.location?.href || '',
+            request_url: this._currentUrl() || '',
         }
 
         // eslint-disable-next-line compat/compat

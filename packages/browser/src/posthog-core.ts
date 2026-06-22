@@ -271,6 +271,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     mask_all_text: false,
     mask_personal_data_properties: false,
     custom_personal_data_properties: [],
+    disable_capture_url_hashes: true,
     advanced_disable_flags: false,
     advanced_disable_decide: false,
     advanced_disable_feature_flags: false,
@@ -1515,7 +1516,8 @@ export class PostHog implements PostHogInterface {
         const infoProperties = getEventProperties(
             this.config.mask_personal_data_properties,
             this.config.custom_personal_data_properties,
-            this.config.detect_google_search_app
+            this.config.detect_google_search_app,
+            this.config.disable_capture_url_hashes
         )
 
         if (this.sessionManager) {

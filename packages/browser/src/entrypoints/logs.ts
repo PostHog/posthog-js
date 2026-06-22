@@ -5,7 +5,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources'
 
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
+import { isArray, isBoolean, isFunction, isNull, isNumber, isObject, stripUrlHash } from '@posthog/core'
 
 const setupOpenTelemetry = (posthog: PostHog) => {
     const serviceName = posthog.config.logs?.serviceName || 'posthog-browser-logs'
@@ -373,7 +373,9 @@ const initializeLogs = (posthog: PostHog) => {
                     attributes: {
                         'log.source': `console.${level}`,
                         distinct_id: posthog.get_distinct_id(),
-                        'location.href': assignableWindow.location.href,
+                        'location.href': posthog.config.disable_capture_url_hashes
+                            ? stripUrlHash(assignableWindow.location.href)
+                            : assignableWindow.location.href,
                         ...logAttributes,
                         ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
                     },

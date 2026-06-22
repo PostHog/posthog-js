@@ -42,6 +42,12 @@ export type PostHogCoreOptions = {
    */
   defaultOptIn?: boolean
   /**
+   * Whether to strip URL fragments (`#...`) from automatically captured URL fields.
+   *
+   * @default true
+   */
+  disable_capture_url_hashes?: boolean
+  /**
    * Whether to track that `getFeatureFlag` was called (used by Experiments)
    *
    * @default true

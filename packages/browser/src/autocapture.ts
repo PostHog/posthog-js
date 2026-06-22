@@ -21,7 +21,7 @@ import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { isBoolean, isFunction, isNull, isObject } from '@posthog/core'
+import { isBoolean, isFunction, isNull, isObject, stripUrlHash } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
@@ -83,7 +83,8 @@ export function getPropertiesFromElement(
     elem: Element,
     maskAllAttributes: boolean,
     maskText: boolean,
-    elementAttributeIgnorelist: string[] | undefined
+    elementAttributeIgnorelist: string[] | undefined,
+    disableCaptureUrlHashes: boolean = true
 ): Properties {
     const tag_name = elem.tagName.toLowerCase()
     const props: Properties = {
@@ -118,7 +119,10 @@ export function getPropertiesFromElement(
                 // so we strip them.
                 value = splitClassString(value).join(' ')
             }
-            props['attr__' + attr.name] = limitText(1024, value)
+            props['attr__' + attr.name] = limitText(
+                1024,
+                attr.name === 'href' && disableCaptureUrlHashes ? stripUrlHash(value) : value
+            )
         }
     })
 
@@ -146,12 +150,14 @@ export function autocapturePropertiesForElement(
         maskAllText,
         elementAttributeIgnoreList,
         elementsChainAsString,
+        disableCaptureUrlHashes,
     }: {
         e: Event
         maskAllElementAttributes: boolean
         maskAllText: boolean
         elementAttributeIgnoreList?: string[] | undefined
         elementsChainAsString: boolean
+        disableCaptureUrlHashes: boolean
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
     if (!isElementNode(target)) {
@@ -185,7 +191,12 @@ export function autocapturePropertiesForElement(
         // include the href as a property
         if (isTag(el, 'a')) {
             const hrefAttr = el.getAttribute('href')
-            href = shouldCaptureEl && !!hrefAttr && shouldCaptureValue(hrefAttr) && hrefAttr
+            href =
+                shouldCaptureEl && !!hrefAttr && shouldCaptureValue(hrefAttr)
+                    ? disableCaptureUrlHashes
+                        ? stripUrlHash(hrefAttr)
+                        : hrefAttr
+                    : false
         }
 
         // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
@@ -195,7 +206,13 @@ export function autocapturePropertiesForElement(
         }
 
         elementsJson.push(
-            getPropertiesFromElement(el, maskAllElementAttributes, maskAllText, elementAttributeIgnoreList)
+            getPropertiesFromElement(
+                el,
+                maskAllElementAttributes,
+                maskAllText,
+                elementAttributeIgnoreList,
+                disableCaptureUrlHashes
+            )
         )
 
         const augmentProperties = getAugmentPropertiesFromElement(el)
@@ -410,6 +427,7 @@ export class Autocapture implements Extension {
                 maskAllText: this.instance.config.mask_all_text,
                 elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
+                disableCaptureUrlHashes: this.instance.config.disable_capture_url_hashes,
             })
 
             if (explicitNoCapture) {

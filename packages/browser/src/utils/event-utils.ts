@@ -1,5 +1,5 @@
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
-import { isNull, stripLeadingDollar } from '@posthog/core'
+import { isNull, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
@@ -209,11 +209,16 @@ export function getReferrerInfo(): Record<string, any> {
     }
 }
 
-export function getPersonInfo(maskPersonalDataProperties?: boolean, customPersonalDataProperties?: string[]) {
+export function getPersonInfo(
+    maskPersonalDataProperties?: boolean,
+    customPersonalDataProperties?: string[],
+    disableCaptureUrlHashes: boolean = true
+) {
     const paramsToMask = maskPersonalDataProperties
         ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
         : []
-    const url = location?.href.substring(0, 1000)
+    const href = disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href
+    const url = href?.substring(0, 1000)
     // we're being a bit more economical with bytes here because this is stored in the cookie
     return {
         r: getReferrer().substring(0, 1000),
@@ -221,8 +226,12 @@ export function getPersonInfo(maskPersonalDataProperties?: boolean, customPerson
     }
 }
 
-export function getPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
-    const { r: referrer, u: url } = info
+export function getPersonPropsFromInfo(
+    info: Record<string, any>,
+    disableCaptureUrlHashes: boolean = true
+): Record<string, any> {
+    const { r: referrer, u } = info
+    const url = disableCaptureUrlHashes ? stripUrlHash(u) : u
     const referring_domain = referrer == null ? undefined : referrer == DIRECT ? DIRECT : convertToURL(referrer)?.host
 
     const props: Record<string, string | undefined> = {
@@ -244,8 +253,11 @@ export function getPersonPropsFromInfo(info: Record<string, any>): Record<string
     return props
 }
 
-export function getInitialPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
-    const personProps = getPersonPropsFromInfo(info)
+export function getInitialPersonPropsFromInfo(
+    info: Record<string, any>,
+    disableCaptureUrlHashes: boolean = true
+): Record<string, any> {
+    const personProps = getPersonPropsFromInfo(info, disableCaptureUrlHashes)
     const props: Record<string, any> = {}
     each(personProps, function (val: any, key: string) {
         props[`$initial_${stripLeadingDollar(key)}`] = val
@@ -281,7 +293,8 @@ export function getBrowserDetectionHints(): BrowserDetectionHints {
 export function getEventProperties(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
-    detectGoogleSearchApp?: boolean
+    detectGoogleSearchApp?: boolean,
+    disable_capture_url_hashes: boolean = true
 ): Properties {
     if (!userAgent) {
         return {}
@@ -311,7 +324,11 @@ export function getEventProperties(
             $timezone_offset: getTimezoneOffset(),
         }),
         {
-            $current_url: maskQueryParams(location?.href, paramsToMask, MASKED),
+            $current_url: maskQueryParams(
+                disable_capture_url_hashes ? stripUrlHash(location?.href) : location?.href,
+                paramsToMask,
+                MASKED
+            ),
             $host: location?.host,
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,

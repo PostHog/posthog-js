@@ -45,6 +45,7 @@ import {
     isNumber,
     isObject,
     isUndefined,
+    stripUrlHash,
 } from '@posthog/core'
 import {
     SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP,
@@ -653,6 +654,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return plugins
     }
 
+    private _stripUrlHash(url: string): string {
+        return this._instance.config.disable_capture_url_hashes ? stripUrlHash(url) : url
+    }
+
     private _maskUrl(url: string): string | undefined {
         const userSessionRecordingOptions = this._instance.config.session_recording
 
@@ -704,13 +709,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (this._instance.config.capture_pageview || !window) {
                 return
             }
-            // Strip hash parameters from URL since they often aren't helpful
-            // Use URL constructor for proper parsing to handle edge cases
-            // recording doesn't run in IE11, so we don't need compat here
-            // eslint-disable-next-line compat/compat
-            const url = new URL(window.location.href)
-            const hrefWithoutHash = url.origin + url.pathname + url.search
-            const currentUrl = this._maskUrl(hrefWithoutHash)
+            const currentUrl = this._maskUrl(stripUrlHash(window.location.href))
             if (this._lastHref !== currentUrl) {
                 this._lastHref = currentUrl
                 this._tryAddCustomEvent('$url_changed', { href: currentUrl })
@@ -1035,7 +1034,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // so we catch all errors.
                 try {
                     if (event.event === '$pageview') {
-                        const href = event?.properties.$current_url ? this._maskUrl(event?.properties.$current_url) : ''
+                        const href = event?.properties.$current_url
+                            ? this._maskUrl(this._stripUrlHash(event.properties.$current_url))
+                            : ''
                         if (!href) {
                             return
                         }
@@ -1346,7 +1347,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (rawEvent.type === EventType.Meta) {
-            const href = this._maskUrl(rawEvent.data.href)
+            const href = this._maskUrl(this._stripUrlHash(rawEvent.data.href))
             this._lastHref = href
             if (!href) {
                 return

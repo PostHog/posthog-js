@@ -18,12 +18,15 @@ export class PostHog extends PostHogCore {
   private _storageCache: any
   private _storageKey: string
   private _lastPathname: string = ''
+  private _disableCaptureUrlHashes: boolean
 
   constructor(apiKey: string, options?: PostHogOptions) {
     super(apiKey, options)
 
     // posthog-js stores options in one object on
     this._storageKey = options?.persistence_name ? `ph_${options.persistence_name}` : `ph_${apiKey}_posthog`
+
+    this._disableCaptureUrlHashes = options?.disable_capture_url_hashes ?? true
 
     this._storage = getStorage(options?.persistence || 'localStorage', this.getWindow())
     this.setupBootstrap(options)
@@ -90,7 +93,7 @@ export class PostHog extends PostHogCore {
   getCommonEventProperties(): PostHogEventProperties {
     return {
       ...super.getCommonEventProperties(),
-      ...getContext(this.getWindow()),
+      ...getContext(this.getWindow(), this._disableCaptureUrlHashes),
     }
   }
 

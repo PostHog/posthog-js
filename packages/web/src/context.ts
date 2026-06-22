@@ -1,7 +1,7 @@
-import { currentTimestamp } from '@posthog/core'
+import { currentTimestamp, stripUrlHash } from '@posthog/core'
 import { version } from './version'
 
-export function getContext(window: Window | undefined): any {
+export function getContext(window: Window | undefined, disableCaptureUrlHashes: boolean = true): any {
   let context = {}
   if (window?.navigator) {
     const userAgent = window.navigator.userAgent
@@ -13,7 +13,7 @@ export function getContext(window: Window | undefined): any {
       $referrer: window.document.referrer,
       $referring_domain: referringDomain(window.document.referrer),
       $device: device(userAgent),
-      $current_url: window.location.href,
+      $current_url: disableCaptureUrlHashes ? stripUrlHash(window.location.href) : window.location.href,
       $host: window.location.host,
       $pathname: window.location.pathname,
       $browser_version: browserVersion(userAgent, window.navigator.vendor, !!(window as any).opera),

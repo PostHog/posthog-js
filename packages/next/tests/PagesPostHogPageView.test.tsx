@@ -3,7 +3,7 @@ import { render } from '@testing-library/react'
 import { PostHogPageView } from '../src/pages/PostHogPageView'
 
 const mockCapture = jest.fn()
-const mockUsePostHog = jest.fn(() => ({ capture: mockCapture }))
+const mockUsePostHog = jest.fn(() => ({ capture: mockCapture, config: { disable_capture_url_hashes: true } }))
 jest.mock('@posthog/react', () => ({
     usePostHog: () => mockUsePostHog(),
 }))
@@ -27,7 +27,16 @@ describe('Pages PostHogPageView', () => {
         })
     })
 
-    it('includes query params and hash fragments from asPath', () => {
+    it('includes query params and strips hash fragments from asPath by default', () => {
+        mockRouter = { asPath: '/search?q=hello&page=2#section', isReady: true }
+        render(<PostHogPageView />)
+        expect(mockCapture).toHaveBeenCalledWith('$pageview', {
+            $current_url: 'http://localhost/search?q=hello&page=2',
+        })
+    })
+
+    it('keeps hash fragments from asPath when disable_capture_url_hashes is false', () => {
+        mockUsePostHog.mockReturnValue({ capture: mockCapture, config: { disable_capture_url_hashes: false } })
         mockRouter = { asPath: '/search?q=hello&page=2#section', isReady: true }
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {

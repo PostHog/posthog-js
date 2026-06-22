@@ -876,6 +876,13 @@ export interface PostHogConfig {
     loaded: (posthog_instance: PostHog) => void
 
     /**
+     * Determines whether PostHog should strip URL fragments (`#...`) from automatically captured URL fields.
+     *
+     * @default true
+     */
+    disable_capture_url_hashes: boolean
+
+    /**
      * Determines whether PostHog should save referrer information.
      *
      * @default true
