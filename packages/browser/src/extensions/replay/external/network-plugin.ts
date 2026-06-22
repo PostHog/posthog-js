@@ -543,8 +543,35 @@ function effectivePayloadLimitBytes(options: NetworkRecordOptions): number {
     return Math.min(MAX_PAYLOAD_SIZE_BYTES, options.payloadSizeLimitBytes ?? MAX_PAYLOAD_SIZE_BYTES)
 }
 
-function _readBody(r: Request | Response, options: NetworkRecordOptions): Promise<string> {
-    return options.streamNetworkBody ? _tryReadBodyStreaming(r, effectivePayloadLimitBytes(options)) : _tryReadBody(r)
+function bodyTooLargeMessage(limitBytes: number): string {
+    return `[SessionReplay] Body too large to record (> ${limitBytes} bytes)`
+}
+
+// when the body declares a content-length over the limit we can skip reading it entirely.
+// this trusts content-length the same way config.ts enforcePayloadSizeLimit does.
+export function _contentLengthExceedsLimit(r: Request | Response, limitBytes: number): boolean {
+    try {
+        const headerValue = r.headers?.get?.('content-length')
+        if (!headerValue) {
+            return false
+        }
+        const contentLength = parseInt(headerValue, 10)
+        return Number.isFinite(contentLength) && contentLength > limitBytes
+    } catch {
+        return false
+    }
+}
+
+export function _readBody(r: Request | Response, options: NetworkRecordOptions): Promise<string> {
+    if (!options.streamNetworkBody) {
+        return _tryReadBody(r)
+    }
+    const limitBytes = effectivePayloadLimitBytes(options)
+    // skip the read for bodies the headers already tell us are over the limit
+    if (_contentLengthExceedsLimit(r, limitBytes)) {
+        return Promise.resolve(bodyTooLargeMessage(limitBytes))
+    }
+    return _tryReadBodyStreaming(r, limitBytes)
 }
 
 function _tryReadBody(r: Request | Response): Promise<string> {
@@ -639,7 +666,7 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
                     if (value) {
                         if (received + value.byteLength > limitBytes) {
                             cancel()
-                            done(`[SessionReplay] Body too large to record (> ${limitBytes} bytes)`)
+                            done(bodyTooLargeMessage(limitBytes))
                             return
                         }
                         received += value.byteLength

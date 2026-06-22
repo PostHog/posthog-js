@@ -2,7 +2,10 @@
 
 import { expect } from '@jest/globals'
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
+import { NetworkRecordOptions } from '../../../../types'
 import {
+    _contentLengthExceedsLimit,
+    _readBody,
     _tryReadBodyStreaming,
     NEVER_RECORD_BODY_CONTENT_TYPES,
     shouldRecordBody,
@@ -506,6 +509,56 @@ describe('network plugin', () => {
             await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe(
                 '[SessionReplay] Failed to read body: Error: boom'
             )
+        })
+    })
+
+    describe('content-length pre-check', () => {
+        function fakeRequestWith(contentLength: string | null): {
+            r: Request | Response
+            wasCloned: () => boolean
+        } {
+            let cloned = false
+            const r = {
+                headers: {
+                    get: (name: string) => (name.toLowerCase() === 'content-length' ? contentLength : null),
+                },
+                clone: () => {
+                    cloned = true
+                    return { body: null, text: () => Promise.resolve('') }
+                },
+            } as unknown as Response
+            return { r, wasCloned: () => cloned }
+        }
+
+        it.each([
+            ['over the limit', '2000', 1000, true],
+            ['equal to the limit', '1000', 1000, false],
+            ['under the limit', '500', 1000, false],
+            ['absent', null, 1000, false],
+            ['not a number', 'banana', 1000, false],
+        ])('_contentLengthExceedsLimit: content-length %s', (_label, header, limit, expected) => {
+            const { r } = fakeRequestWith(header as string | null)
+            expect(_contentLengthExceedsLimit(r, limit as number)).toBe(expected)
+        })
+
+        it('skips reading the body when content-length is over the limit (flag on)', async () => {
+            const { r, wasCloned } = fakeRequestWith('2000')
+            await expect(
+                _readBody(r, { streamNetworkBody: true, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            ).resolves.toBe('[SessionReplay] Body too large to record (> 1000 bytes)')
+            expect(wasCloned()).toBe(false)
+        })
+
+        it('still reads the body when content-length is under the limit (flag on)', async () => {
+            const { r, wasCloned } = fakeRequestWith('10')
+            await _readBody(r, { streamNetworkBody: true, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            expect(wasCloned()).toBe(true)
+        })
+
+        it('ignores the content-length pre-check when the flag is off', async () => {
+            const { r, wasCloned } = fakeRequestWith('2000')
+            await _readBody(r, { streamNetworkBody: false, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            expect(wasCloned()).toBe(true)
         })
     })
 })
