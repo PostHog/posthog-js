@@ -1,7 +1,6 @@
 import { waitForExpect } from './test-utils'
 
 jest.useRealTimers()
-jest.setTimeout(15000)
 
 const mockPlugin = {
   start: jest.fn(() => Promise.resolve()),
