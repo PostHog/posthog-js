@@ -198,6 +198,37 @@ describe('PostHog RN session replay event triggers', () => {
     expect(replay.start).toHaveBeenCalledTimes(1)
   })
 
+  it('clears trigger activation on reset() so a new user does not inherit it, then re-arms', async () => {
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+
+    // User A activates the trigger for their session.
+    posthog.capture('$pageview')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    const activatedSession = posthog.getPersistedProperty(
+      PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession
+    )
+    expect(activatedSession).toBeTruthy()
+
+    // Logout / identity change. The activation is user-session state, not project config, so it must
+    // be cleared — user B must not inherit user A's activation.
+    posthog.reset()
+    expect(posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession)).toBeFalsy()
+
+    // User B still re-arms normally: a fresh matching event activates for the new session.
+    replay.isEnabled.mockImplementation(async () => true)
+    posthog.capture('$pageview')
+    await waitForExpect(2000, () => {
+      const reArmed = posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession)
+      expect(reArmed).toBeTruthy()
+      expect(reArmed).not.toBe(activatedSession)
+    })
+  })
+
   it('activates on any of several configured triggers and ignores non-string entries', async () => {
     // Mixed-type array: only the string entries should arm. A malformed entry must not throw or match.
     currentSessionRecording = { eventTriggers: ['$pageview', 42, null, '$screen'], endpoint: '/s/' }

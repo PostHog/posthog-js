@@ -727,6 +727,8 @@ export class PostHog extends PostHogCore {
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
     // always preserve them so replay can re-arm against the new user's flags. The
     // user-specific survey state (SurveysSeen, SurveyLastSeenDate) is still cleared.
+    // Do NOT keep SessionReplayEventTriggerActivatedSession: it is user-session state, so the
+    // base reset() must clear it to stop one user's activation leaking into the next.
     super.reset([
       PostHogPersistedProperty.RemoteConfig,
       PostHogPersistedProperty.SessionReplay,
