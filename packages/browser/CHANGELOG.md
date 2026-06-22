@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.391.5
+
+### Patch Changes
+
+- [#3915](https://github.com/PostHog/posthog-js/pull/3915) [`beaccc3`](https://github.com/PostHog/posthog-js/commit/beaccc392d840a201412e28bebda157004f88adb) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay: apply the existing base64 image size cap (`maxBase64ImageLength`) to SVG `<image>` elements with `data:` URIs on both `href` and `xlink:href`. Previously the cap only covered `<img>` elements, so large inline data URIs inside SVGs were recorded in full - this also covers them in mutations, replacing oversized ones with the striped placeholder.
+  (2026-06-22)
+
 ## 1.391.4
 
 ### Patch Changes
