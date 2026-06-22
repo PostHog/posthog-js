@@ -1049,13 +1049,6 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
         })
 
-        it('sends the flags request with skipIPParam so the ip query param is omitted', () => {
-            featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
-
-            expect(instance._send_request.mock.calls[0][0].skipIPParam).toBe(true)
-        })
-
         it('should call /flags with flags disabled if advanced_disable_feature_flags is set', () => {
             instance.config.advanced_disable_feature_flags = true
             // Call _callFlagsEndpoint directly because reloadFeatureFlags() returns early
@@ -3200,12 +3193,6 @@ describe('getRemoteConfigPayload', () => {
         })
 
         featureFlags = new PostHogFeatureFlags(instance)
-    })
-
-    it('sends the request with skipIPParam so the ip query param is omitted', () => {
-        featureFlags.getRemoteConfigPayload('test-flag', jest.fn())
-
-        expect(instance._send_request).toHaveBeenCalledWith(expect.objectContaining({ skipIPParam: true }))
     })
 
     it('should include evaluation_contexts when configured', () => {

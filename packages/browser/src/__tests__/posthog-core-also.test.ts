@@ -1710,16 +1710,12 @@ describe('posthog core', () => {
     })
 })
 
-describe('_send_request skipIPParam', () => {
-    it('omits the ip query param when skipIPParam is set, and keeps it otherwise', async () => {
+describe('_send_request', () => {
+    it('does not add an ip query param', async () => {
         const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
-
-        const flagsRequest = { url: 'http://localhost/flags/?v=2', skipIPParam: true }
-        posthog._send_request(flagsRequest)
-        expect(flagsRequest.url).toBe('http://localhost/flags/?v=2')
 
         const eventRequest = { url: 'http://localhost/e/' }
         posthog._send_request(eventRequest)
-        expect(eventRequest.url).toMatch(/[?&]ip=/)
+        expect(eventRequest.url).toBe('http://localhost/e/')
     })
 })
