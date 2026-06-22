@@ -190,6 +190,18 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
     }
 }
 
+/**
+ * Builds the reason used when aborting a fetch because our own request timeout elapsed.
+ * It keeps `name === 'AbortError'` (so callers that detect timeouts by error name keep working)
+ * but carries a descriptive message, so it is never a reason-less
+ * `signal is aborted without reason` exception.
+ */
+const timeoutAbortReason = (timeout?: number): Error => {
+    const reason = new Error(`PostHog request timed out${timeout ? ` after ${timeout}ms` : ''}`)
+    reason.name = 'AbortError'
+    return reason
+}
+
 const xhr = (options: RequestWithOptions) => {
     const req = new XMLHttpRequest!()
     const { url, encodedBody } = encodePostDataSafely(options)
@@ -243,12 +255,21 @@ const _fetch = (options: RequestWithOptions) => {
     }
 
     let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
+    let timedOut = false
 
     if (AbortController) {
         const controller = new AbortController()
         aborter = {
             signal: controller.signal,
-            timeout: setTimeout(() => controller.abort(), options.timeout),
+            timeout: setTimeout(() => {
+                timedOut = true
+                // Abort with an explicit reason. Without one, the browser rejects the fetch with
+                // a reason-less `DOMException: AbortError: signal is aborted without reason`, which
+                // is indistinguishable from a host app's own aborted fetches and can show up as
+                // noise in error tracking. We keep `name === 'AbortError'` so existing timeout
+                // handling (e.g. feature flag timeout detection) keeps working.
+                controller.abort(timeoutAbortReason(options.timeout))
+            }, options.timeout),
         }
     }
 
@@ -286,7 +307,14 @@ const _fetch = (options: RequestWithOptions) => {
             })
         })
         .catch((error) => {
-            logger.error(error)
+            if (timedOut) {
+                // This is our own timeout abort, not a genuine failure. Log it at `warn` so it is
+                // never re-captured by console-error exception autocapture (which only wraps
+                // `console.error`).
+                logger.warn(error)
+            } else {
+                logger.error(error)
+            }
             options.callback?.({ statusCode: 0, error })
         })
         .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
