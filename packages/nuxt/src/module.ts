@@ -44,6 +44,7 @@ interface SourcemapsConfig {
 }
 
 export interface ModuleOptions {
+  enabled: boolean
   host: string
   publicKey: string
   debug?: boolean
@@ -71,6 +72,7 @@ export default defineNuxtModule<ModuleOptions>({
     },
   },
   defaults: () => ({
+    enabled: true,
     host: 'https://us.i.posthog.com',
     debug: false,
     clientConfig: {},
@@ -78,8 +80,16 @@ export default defineNuxtModule<ModuleOptions>({
   }),
 
   setup(options, nuxt) {
+    if (!enabled) return
+    
     const resolver = createResolver(import.meta.url)
     const normalizedPublicKey = normalizeApiKey(options.publicKey)
+
+    if (!normalizedPublicKey) {
+      console.error('No Posthog public key found. Add posthogConfig.publicKey in your nuxt.config.ts')
+      return
+    }
+    
     const normalizedHost = normalizeHost(options.host)
     addPlugin(resolver.resolve('./runtime/vue-plugin'))
     addServerPlugin(resolver.resolve('./runtime/nitro-plugin'))
