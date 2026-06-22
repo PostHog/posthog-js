@@ -31,7 +31,7 @@ import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions } from './config'
+import { defaultNetworkOptions, MAX_PAYLOAD_SIZE_BYTES } from './config'
 
 const logger = createLogger('[Recorder]')
 
@@ -536,19 +536,28 @@ function isReadableStreamBody(body: unknown): body is ReadableStream<Uint8Array>
     return isObject(body) && isFunction(body.getReader) && isFunction(body.tee)
 }
 
-// 1MB — matches the hard ceiling enforced in config.ts limitPayloadSize
-const MAX_PAYLOAD_SIZE_BYTES = 1000000
+// reading a body must never hold up the page's request for long, so we cap every read attempt
+const BODY_READ_TIMEOUT_MS = 500
+const BODY_READ_TIMEOUT_MESSAGE = '[SessionReplay] Timeout while trying to read body'
+const BODY_READ_FAILED_MESSAGE = '[SessionReplay] Failed to read body'
 
-function effectivePayloadLimitBytes(options: NetworkRecordOptions): number {
-    return Math.min(MAX_PAYLOAD_SIZE_BYTES, options.payloadSizeLimitBytes ?? MAX_PAYLOAD_SIZE_BYTES)
+function bodyReadFailedMessage(reason: unknown): string {
+    return `${BODY_READ_FAILED_MESSAGE}: ${reason}`
 }
 
 function bodyTooLargeMessage(limitBytes: number): string {
     return `[SessionReplay] Body too large to record (> ${limitBytes} bytes)`
 }
 
+function effectivePayloadLimitBytes(options: NetworkRecordOptions): number {
+    return Math.min(MAX_PAYLOAD_SIZE_BYTES, options.payloadSizeLimitBytes ?? MAX_PAYLOAD_SIZE_BYTES)
+}
+
 // when the body declares a content-length over the limit we can skip reading it entirely.
 // this trusts content-length the same way config.ts enforcePayloadSizeLimit does.
+// known accepted risk: for a compressed response content-length is the compressed size while the
+// streaming reader counts decoded bytes, so a body that is over the limit compressed but under it
+// decoded is dropped to the placeholder rather than recorded. it never breaks the page, so we accept it.
 export function _contentLengthExceedsLimit(r: Request | Response, limitBytes: number): boolean {
     try {
         const headerValue = r.headers?.get?.('content-length')
@@ -578,20 +587,30 @@ function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
     return new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read body'), 500)
+        const timeout = setTimeout(() => resolve(BODY_READ_TIMEOUT_MESSAGE), BODY_READ_TIMEOUT_MS)
         try {
             r.clone()
                 .text()
                 .then(
                     (txt) => resolve(txt),
-                    (reason) => resolve('[SessionReplay] Failed to read body: ' + reason)
+                    (reason) => resolve(bodyReadFailedMessage(reason))
                 )
                 .finally(() => clearTimeout(timeout))
         } catch {
             clearTimeout(timeout)
-            resolve('[SessionReplay] Failed to read body')
+            resolve(BODY_READ_FAILED_MESSAGE)
         }
     })
+}
+
+function concatChunks(chunks: Uint8Array[], totalBytes: number): Uint8Array {
+    const merged = new Uint8Array(totalBytes)
+    let offset = 0
+    for (const chunk of chunks) {
+        merged.set(chunk, offset)
+        offset += chunk.byteLength
+    }
+    return merged
 }
 
 // Reads a clone of the body chunk by chunk, stopping as soon as the running total exceeds the
@@ -623,22 +642,22 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
             resolve(value)
         }
 
-        const timeout = setTimeout(() => done('[SessionReplay] Timeout while trying to read body'), 500)
+        const timeout = setTimeout(() => done(BODY_READ_TIMEOUT_MESSAGE), BODY_READ_TIMEOUT_MS)
 
         let clone: Request | Response
         try {
             clone = r.clone()
         } catch {
-            done('[SessionReplay] Failed to read body')
+            done(BODY_READ_FAILED_MESSAGE)
             return
         }
 
         const body = clone.body
         // no readable stream (or no TextDecoder) available — fall back to the buffered read of the clone
-        if (!body || !isFunction(body.getReader) || typeof TextDecoder === 'undefined') {
+        if (!isReadableStreamBody(body) || typeof TextDecoder === 'undefined') {
             clone.text().then(
                 (txt) => done(txt),
-                (reason) => done('[SessionReplay] Failed to read body: ' + reason)
+                (reason) => done(bodyReadFailedMessage(reason))
             )
             return
         }
@@ -646,7 +665,7 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
         try {
             reader = body.getReader()
         } catch {
-            done('[SessionReplay] Failed to read body')
+            done(BODY_READ_FAILED_MESSAGE)
             return
         }
 
@@ -663,13 +682,7 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
                     }
 
                     if (streamDone) {
-                        const merged = new Uint8Array(received)
-                        let offset = 0
-                        for (const chunk of chunks) {
-                            merged.set(chunk, offset)
-                            offset += chunk.byteLength
-                        }
-                        done(new TextDecoder().decode(merged))
+                        done(new TextDecoder().decode(concatChunks(chunks, received)))
                         return
                     }
 

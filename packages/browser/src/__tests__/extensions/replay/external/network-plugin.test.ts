@@ -475,7 +475,7 @@ describe('network plugin', () => {
                 cancel: opts.cancel ?? (() => Promise.resolve()),
             }
             const clone = {
-                body: opts.noStream ? null : { getReader: () => reader },
+                body: opts.noStream ? null : { getReader: () => reader, tee: () => [] },
                 text: () => Promise.resolve(opts.textFallback ?? ''),
             }
             return {
