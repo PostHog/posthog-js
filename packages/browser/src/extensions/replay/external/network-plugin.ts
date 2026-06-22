@@ -536,7 +536,7 @@ function isReadableStreamBody(body: unknown): body is ReadableStream<Uint8Array>
     return isObject(body) && isFunction(body.getReader) && isFunction(body.tee)
 }
 
-// matches the hard ceiling enforced in config.ts limitPayloadSize
+// 1MB — matches the hard ceiling enforced in config.ts limitPayloadSize
 const MAX_PAYLOAD_SIZE_BYTES = 1000000
 
 function effectivePayloadLimitBytes(options: NetworkRecordOptions): number {
