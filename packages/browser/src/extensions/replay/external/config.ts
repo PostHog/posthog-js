@@ -105,16 +105,44 @@ const PAYLOAD_CONTENT_DENY_LIST = [
     'token',
 ]
 
-// we always remove headers on the deny list because we never want to capture this sensitive data
-const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
-    const headers = data.requestHeaders
+// substrings that mark a header as credential-bearing - catches custom names
+// (e.g. x-gist-encoded-user-token) that aren't in the exact deny list above
+const HEADER_DENY_SUBSTRINGS = [
+    'auth',
+    'token',
+    'secret',
+    'session',
+    'api-key',
+    'apikey',
+    'api_key',
+    'credential',
+    'password',
+    'passwd',
+    'cookie',
+    'csrf',
+    'xsrf',
+]
+
+const isDeniedHeader = (header: string): boolean => {
+    const lower = header.toLowerCase()
+    return HEADER_DENY_LIST.includes(lower) || HEADER_DENY_SUBSTRINGS.some((s) => lower.includes(s))
+}
+
+const redactDeniedHeaders = (headers: CapturedNetworkRequest['requestHeaders']): void => {
     if (!isNullish(headers)) {
-        each(Object.keys(headers ?? {}), (header) => {
-            if (HEADER_DENY_LIST.includes(header.toLowerCase())) {
+        each(Object.keys(headers), (header) => {
+            if (isDeniedHeader(header)) {
                 headers[header] = REDACTED
             }
         })
     }
+}
+
+// we always remove headers on the deny list because we never want to capture this sensitive data.
+// applies to both request and response headers (e.g. set-cookie is a response header)
+const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
+    redactDeniedHeaders(data.requestHeaders)
+    redactDeniedHeaders(data.responseHeaders)
     return data
 }
 
