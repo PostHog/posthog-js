@@ -299,10 +299,7 @@ const _sendBeacon = (options: RequestWithOptions) => {
     // beacons format the message and use the type property
 
     try {
-        const { url: safeUrl, encodedBody } = encodePostDataSafely(options)
-        const url = extendURLParams(safeUrl, {
-            beacon: '1',
-        })
+        const { url, encodedBody } = encodePostDataSafely(options)
         const { contentType, body } = encodedBody ?? {}
         if (!body) {
             return
