@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.391.7
+
+### Patch Changes
+
+- [#3914](https://github.com/PostHog/posthog-js/pull/3914) [`dac4edb`](https://github.com/PostHog/posthog-js/commit/dac4edb389d0c5b6d146206a37c3a2123c7a8710) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: redact credential-bearing headers on both request and response (previously only request), and match credential-shaped custom header names by substring (e.g. `x-gist-encoded-user-token`) in addition to the exact deny list - avoiding accidental capture of tokens/cookies in recordings.
+  (2026-06-22)
+
 ## 1.391.6
 
 ### Patch Changes
