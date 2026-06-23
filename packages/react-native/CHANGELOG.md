@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.51.0
+
+### Minor Changes
+
+- [#3879](https://github.com/PostHog/posthog-js/pull/3879) [`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0) Thanks [@ioannisj](https://github.com/ioannisj)! - Deprecate `disableRemoteConfig`. Remote config is now always loaded and the option is a no-op. It will be removed in a future version. Also promote the previously experimental `disableSurveys` and `maskAllSandboxedViews` options to GA.
+  (2026-06-23)
+
+### Patch Changes
+
+- Updated dependencies [[`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0)]:
+  - @posthog/core@1.37.0
+
 ## 4.50.0
 
 ### Minor Changes
