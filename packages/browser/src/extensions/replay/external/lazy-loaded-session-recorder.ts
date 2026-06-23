@@ -45,6 +45,7 @@ import {
     isNumber,
     isObject,
     isUndefined,
+    stripUrlHash,
 } from '@posthog/core'
 import {
     SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP,
@@ -72,7 +73,7 @@ import {
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
-import { isLocalhost } from '../../../utils/request-utils'
+import { isLocalhost, maskQueryParams } from '../../../utils/request-utils'
 import Config from '../../../config'
 import { FlushedSizeTracker } from './flushed-size-tracker'
 import {
@@ -82,6 +83,7 @@ import {
     RecordingStrategyContext,
     decodeSamplingDecision,
 } from './recording-strategies'
+import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '../../../utils/event-utils'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -653,6 +655,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return plugins
     }
 
+    private _stripUrlHash(url: string): string {
+        return this._instance.config.disable_capture_url_hashes ? stripUrlHash(url) : url
+    }
+
+    private _maskReplayUrl(url: string, forceStripHash: boolean = false): string | undefined {
+        const href = forceStripHash ? stripUrlHash(url) : this._stripUrlHash(url)
+        const paramsToMask = this._instance.config.mask_personal_data_properties
+            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(this._instance.config.custom_personal_data_properties || [])]
+            : []
+
+        return this._maskUrl(maskQueryParams(href, paramsToMask, MASKED))
+    }
+
     private _maskUrl(url: string): string | undefined {
         const userSessionRecordingOptions = this._instance.config.session_recording
 
@@ -704,13 +719,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (this._instance.config.capture_pageview || !window) {
                 return
             }
-            // Strip hash parameters from URL since they often aren't helpful
-            // Use URL constructor for proper parsing to handle edge cases
-            // recording doesn't run in IE11, so we don't need compat here
+            // Preserve the previous normalization behavior for this fallback (e.g. https://test.com -> https://test.com/)
+            // while still applying query masking. This path was already hashless before disable_capture_url_hashes.
             // eslint-disable-next-line compat/compat
             const url = new URL(window.location.href)
-            const hrefWithoutHash = url.origin + url.pathname + url.search
-            const currentUrl = this._maskUrl(hrefWithoutHash)
+            const currentUrl = this._maskReplayUrl(url.origin + url.pathname + url.search)
             if (this._lastHref !== currentUrl) {
                 this._lastHref = currentUrl
                 this._tryAddCustomEvent('$url_changed', { href: currentUrl })
@@ -1035,7 +1048,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // so we catch all errors.
                 try {
                     if (event.event === '$pageview') {
-                        const href = event?.properties.$current_url ? this._maskUrl(event?.properties.$current_url) : ''
+                        const href = event?.properties.$current_url
+                            ? this._maskReplayUrl(event.properties.$current_url)
+                            : ''
                         if (!href) {
                             return
                         }
@@ -1346,7 +1361,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (rawEvent.type === EventType.Meta) {
-            const href = this._maskUrl(rawEvent.data.href)
+            const href = this._maskReplayUrl(rawEvent.data.href)
             this._lastHref = href
             if (!href) {
                 return

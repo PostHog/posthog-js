@@ -8,6 +8,7 @@ import {
     buildResourceAttributes,
     isNullish,
     PostHogPersistedProperty,
+    stripUrlHash,
 } from '@posthog/core'
 import type { BufferedLogEntry, ResolvedPostHogLogsConfig, SendLogsBatchOutcome } from '@posthog/core'
 import { assignableWindow, window } from './utils/globals'
@@ -359,7 +360,9 @@ export class PostHogLogs implements Extension {
         }
 
         if (assignableWindow?.location?.href) {
-            context.currentUrl = assignableWindow.location.href
+            context.currentUrl = this._instance.config.disable_capture_url_hashes
+                ? stripUrlHash(assignableWindow.location.href)
+                : assignableWindow.location.href
         }
 
         if (this._instance.featureFlags) {
