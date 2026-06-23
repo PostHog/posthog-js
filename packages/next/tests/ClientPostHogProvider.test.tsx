@@ -56,36 +56,34 @@ describe('ClientPostHogProvider', () => {
         )
     })
 
-    it('defaults tracing headers to the current hostname', () => {
-        render(
-            <ClientPostHogProvider apiKey="phc_test123">
-                <div>Child</div>
-            </ClientPostHogProvider>
-        )
-        expect(mockPostHogJs.init).toHaveBeenCalledWith(
-            'phc_test123',
-            expect.objectContaining({ tracing_headers: [window.location.hostname] })
-        )
-    })
-
-    it('preserves explicit tracing headers opt-out', () => {
-        const options = { tracing_headers: [] }
-        render(
-            <ClientPostHogProvider apiKey="phc_test123" options={options}>
-                <div>Child</div>
-            </ClientPostHogProvider>
-        )
-        expect(mockPostHogJs.init).toHaveBeenCalledWith('phc_test123', options)
-    })
-
-    it('preserves deprecated tracing header aliases', () => {
-        const options = { addTracingHeaders: ['api.example.com'] } as any
+    it.each([
+        {
+            name: 'defaults tracing headers to the current hostname',
+            options: undefined,
+            expectedOptions: expect.objectContaining({ tracing_headers: [window.location.hostname] }),
+        },
+        {
+            name: 'preserves explicit tracing headers opt-out',
+            options: { tracing_headers: [] },
+            expectedOptions: { tracing_headers: [] },
+        },
+        {
+            name: 'preserves deprecated addTracingHeaders alias',
+            options: { addTracingHeaders: ['api.example.com'] } as any,
+            expectedOptions: { addTracingHeaders: ['api.example.com'] },
+        },
+        {
+            name: 'preserves deprecated __add_tracing_headers alias',
+            options: { __add_tracing_headers: ['api.example.com'] } as any,
+            expectedOptions: { __add_tracing_headers: ['api.example.com'] },
+        },
+    ])('$name', ({ options, expectedOptions }) => {
         render(
             <ClientPostHogProvider apiKey="phc_test123" options={options}>
                 <div>Child</div>
             </ClientPostHogProvider>
         )
-        expect(mockPostHogJs.init).toHaveBeenCalledWith('phc_test123', options)
+        expect(mockPostHogJs.init).toHaveBeenCalledWith('phc_test123', expectedOptions)
     })
 
     it('provides posthog client via context', () => {
