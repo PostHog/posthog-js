@@ -375,7 +375,7 @@ export interface HeatmapConfig {
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
  * Later dates include all earlier default changes.
  */
-export type ConfigDefaults = '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -877,7 +877,8 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should strip URL fragments (`#...`) from automatically captured URL fields.
-     * Disabled by default for backwards compatibility. Set to `true` to strip hashes from:
+     * Disabled by default for backwards compatibility, and enabled automatically when `config.defaults` is
+     * `'2026-06-25'` or later. Set to `true` to strip hashes from:
      *
      * - `$current_url` on automatically captured browser events, including `$pageview`
      * - `$initial_current_url`
@@ -891,10 +892,10 @@ export interface PostHogConfig {
      * - heatmap data URLs
      *
      * If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.
-     * If you want to capture hashes selectively, leave this as `false` and use `before_send` to remove
+     * If you want to capture hashes selectively, leave this disabled and use `before_send` to remove
      * sensitive hash values before events are sent.
      *
-     * @default false
+     * @default false when `config.defaults` is unset or earlier than `'2026-06-25'`, otherwise `true`
      */
     disable_capture_url_hashes: boolean
 
