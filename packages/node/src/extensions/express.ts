@@ -2,6 +2,7 @@ import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
+import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import type { Request, Response } from 'express'
 import type { ContextData } from './context/types'
 
@@ -32,13 +33,18 @@ function getClientIp(req: Request): string | undefined {
   return req.socket?.remoteAddress
 }
 
-function buildRequestContextData(req: Request): Partial<ContextData> {
+function buildRequestContextData(posthog: PostHogBackendClient, req: Request): Partial<ContextData> {
   const { sessionId, distinctId } = getPostHogTracingHeaderValues(req.headers)
   const properties: Record<string, any> = {}
+  const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
 
-  addProperty(properties, '$current_url', req.originalUrl || req.url)
+  addProperty(
+    properties,
+    '$current_url',
+    normalizeRequestCurrentUrl(req.originalUrl || req.url, disableCaptureUrlHashes)
+  )
   addProperty(properties, '$request_method', req.method)
-  addProperty(properties, '$request_path', req.path)
+  addProperty(properties, '$request_path', normalizeRequestPath(req.path, disableCaptureUrlHashes))
   addProperty(properties, '$user_agent', getFirstHeaderValue(req.headers['user-agent']))
   addProperty(properties, '$ip', getClientIp(req))
 
@@ -60,7 +66,7 @@ export function setupExpressRequestContext(
 
 function posthogRequestContext(posthog: PostHogBackendClient): ExpressMiddleware {
   return (req, _res, next): void => {
-    posthog.withContext(buildRequestContextData(req), () => next())
+    posthog.withContext(buildRequestContextData(posthog, req), () => next())
   }
 }
 
@@ -80,7 +86,7 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
       return
     }
 
-    const contextData = buildRequestContextData(req)
+    const contextData = buildRequestContextData(posthog, req)
     const syntheticException = new Error('Synthetic exception')
     const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false }, syntheticException }
     const additionalProperties: Record<string, any> = {
