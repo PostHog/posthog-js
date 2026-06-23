@@ -66,7 +66,7 @@ describe('Next.js onRequestError', () => {
             'user_123',
             expect.objectContaining({
                 $http_method: 'POST',
-                $pathname: '/checkout',
+                $pathname: '/checkout#payment',
                 $session_id: 'session_789',
                 $device_id: 'device_456',
                 nextjs_error_digest: 'digest-123',
@@ -101,8 +101,29 @@ describe('Next.js onRequestError', () => {
             error,
             'user_custom',
             expect.objectContaining({
-                $pathname: '/api/items',
+                $pathname: '/api/items#details',
                 custom_property: 'custom-value',
+            })
+        )
+    })
+
+    it('always strips search and strips hash from request paths when disable_capture_url_hashes is enabled', async () => {
+        const handler = createOnRequestError({
+            serverOptions: { disable_capture_url_hashes: true },
+        })
+        const error = new Error('route handler failed')
+
+        await handler(error, { method: 'GET', path: '/account?token=secret#billing', headers: {} }, {})
+
+        expect(mockGetOrCreateNodeClient).toHaveBeenCalledWith(
+            'phc_test123',
+            expect.objectContaining({ disable_capture_url_hashes: true })
+        )
+        expect(mockCaptureExceptionImmediate).toHaveBeenCalledWith(
+            error,
+            undefined,
+            expect.objectContaining({
+                $pathname: '/account',
             })
         )
     })

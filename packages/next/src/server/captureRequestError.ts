@@ -43,7 +43,14 @@ export async function captureNextRequestError(
 
     const cookieState = readPostHogCookie(cookieStore, apiKey)
     const distinctId = cookieState?.distinctId
-    let properties = buildExceptionProperties(error, request, context, cookieStateToProperties(cookieState))
+    const shouldStripUrlHash = options.serverOptions?.disable_capture_url_hashes === true
+    let properties = buildExceptionProperties(
+        error,
+        request,
+        context,
+        cookieStateToProperties(cookieState),
+        shouldStripUrlHash
+    )
 
     let beforeCaptureResult: Awaited<ReturnType<NonNullable<OnRequestErrorOptions['beforeCapture']>>> | undefined
     try {
@@ -78,7 +85,8 @@ function buildExceptionProperties(
     error: unknown,
     request: NextRequestErrorRequest,
     context: NextRequestErrorContext,
-    cookieProperties?: Record<string, string>
+    cookieProperties?: Record<string, string>,
+    shouldStripUrlHash: boolean = false
 ): Record<string, unknown> {
     const properties: Record<string, unknown> = {
         ...cookieProperties,
@@ -89,7 +97,7 @@ function buildExceptionProperties(
         properties.$http_method = method
     }
 
-    const path = normalizeRequestPath(request)
+    const path = normalizeRequestPath(request, shouldStripUrlHash)
     if (path) {
         properties.$pathname = path
     }
@@ -108,10 +116,10 @@ function buildExceptionProperties(
     return properties
 }
 
-function normalizeRequestPath(request: NextRequestErrorRequest): string | undefined {
+function normalizeRequestPath(request: NextRequestErrorRequest, shouldStripUrlHash: boolean): string | undefined {
     const explicitPath = normalizeString(request.path)
     if (explicitPath) {
-        return stripSearchAndHash(explicitPath)
+        return normalizePathValue(explicitPath, shouldStripUrlHash)
     }
 
     const url = normalizeString(request.url)
@@ -122,14 +130,28 @@ function normalizeRequestPath(request: NextRequestErrorRequest): string | undefi
     try {
         // eslint-disable-next-line compat/compat
         const parsed = new URL(url, 'http://localhost')
-        return parsed.pathname
+        return shouldStripUrlHash ? parsed.pathname : `${parsed.pathname}${parsed.hash}`
     } catch {
-        return stripSearchAndHash(url)
+        return normalizePathValue(url, shouldStripUrlHash)
     }
 }
 
-function stripSearchAndHash(value: string): string {
-    return value.split(/[?#]/, 1)[0]
+function normalizePathValue(value: string, shouldStripUrlHash: boolean): string {
+    const valueWithoutSearch = stripSearch(value)
+    return shouldStripUrlHash ? stripHash(valueWithoutSearch) : valueWithoutSearch
+}
+
+function stripSearch(value: string): string {
+    const searchIndex = value.indexOf('?')
+    const hashIndex = value.indexOf('#')
+    if (searchIndex === -1 || (hashIndex !== -1 && hashIndex < searchIndex)) {
+        return value
+    }
+    return `${value.slice(0, searchIndex)}${hashIndex === -1 ? '' : value.slice(hashIndex)}`
+}
+
+function stripHash(value: string): string {
+    return value.split('#', 1)[0]
 }
 
 function getHeader(headers: HeadersLike, name: string): string | undefined {

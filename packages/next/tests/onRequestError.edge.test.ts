@@ -64,7 +64,7 @@ describe('Next.js onRequestError edge runtime', () => {
             'edge_user',
             expect.objectContaining({
                 $http_method: 'GET',
-                $pathname: '/edge-route',
+                $pathname: '/edge-route#fragment',
                 $session_id: 'edge_session',
                 $device_id: 'edge_device',
                 nextjs_error_digest: 'edge-digest-123',
