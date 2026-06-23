@@ -1,7 +1,7 @@
 import { currentTimestamp, stripUrlHash } from '@posthog/core'
 import { version } from './version'
 
-export function getContext(window: Window | undefined, disableCaptureUrlHashes: boolean = true): any {
+export function getContext(window: Window | undefined, disableCaptureUrlHashes: boolean = false): any {
   let context = {}
   if (window?.navigator) {
     const userAgent = window.navigator.userAgent

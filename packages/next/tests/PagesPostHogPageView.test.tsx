@@ -3,7 +3,7 @@ import { render } from '@testing-library/react'
 import { PostHogPageView } from '../src/pages/PostHogPageView'
 
 const mockCapture = jest.fn()
-const mockUsePostHog = jest.fn(() => ({ capture: mockCapture, config: { disable_capture_url_hashes: true } }))
+const mockUsePostHog = jest.fn(() => ({ capture: mockCapture, config: { disable_capture_url_hashes: false } }))
 jest.mock('@posthog/react', () => ({
     usePostHog: () => mockUsePostHog(),
 }))
@@ -17,7 +17,7 @@ describe('Pages PostHogPageView', () => {
     beforeEach(() => {
         mockCapture.mockClear()
         mockUsePostHog.mockReset()
-        mockUsePostHog.mockReturnValue({ capture: mockCapture, config: { disable_capture_url_hashes: true } })
+        mockUsePostHog.mockReturnValue({ capture: mockCapture, config: { disable_capture_url_hashes: false } })
         mockRouter = { asPath: '/initial', isReady: true }
     })
 
@@ -29,12 +29,9 @@ describe('Pages PostHogPageView', () => {
     })
 
     it.each([
-        ['strips hash fragments by default', true, 'http://localhost/search?q=hello&page=2'],
-        [
-            'keeps hash fragments when disable_capture_url_hashes is false',
-            false,
-            'http://localhost/search?q=hello&page=2#section',
-        ],
+        ['keeps hash fragments by default', undefined, 'http://localhost/search?q=hello&page=2#section'],
+        ['keeps hash fragments when disable_capture_url_hashes is false', false, 'http://localhost/search?q=hello&page=2#section'],
+        ['strips hash fragments when disable_capture_url_hashes is true', true, 'http://localhost/search?q=hello&page=2'],
     ])('%s', (_description, disableCaptureUrlHashes, expectedUrl) => {
         mockUsePostHog.mockReturnValue({
             capture: mockCapture,

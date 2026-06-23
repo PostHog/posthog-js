@@ -84,7 +84,7 @@ export function getPropertiesFromElement(
     maskAllAttributes: boolean,
     maskText: boolean,
     elementAttributeIgnorelist: string[] | undefined,
-    disableCaptureUrlHashes: boolean = true
+    disableCaptureUrlHashes: boolean = false
 ): Properties {
     const tag_name = elem.tagName.toLowerCase()
     const props: Properties = {

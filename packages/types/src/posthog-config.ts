@@ -877,10 +877,24 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should strip URL fragments (`#...`) from automatically captured URL fields.
-     * If you want to capture hashes selectively, set this to `false` and use `before_send` to remove
+     * Disabled by default for backwards compatibility. Set to `true` to strip hashes from:
+     *
+     * - `$current_url` on automatically captured browser events, including `$pageview`
+     * - `$initial_current_url`
+     * - `$session_entry_url`
+     * - `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture
+     * - Next.js Pages Router `$pageview` `$current_url`
+     * - web vitals `$current_url`
+     * - logs `url.full`
+     * - conversations `current_url` and `request_url`
+     * - session replay rrweb meta/custom-event `href` URLs
+     * - heatmap data URLs
+     *
+     * If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.
+     * If you want to capture hashes selectively, leave this as `false` and use `before_send` to remove
      * sensitive hash values before events are sent.
      *
-     * @default true
+     * @default false
      */
     disable_capture_url_hashes: boolean
 

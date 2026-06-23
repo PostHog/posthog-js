@@ -212,7 +212,7 @@ export function getReferrerInfo(): Record<string, any> {
 export function getPersonInfo(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
-    disableCaptureUrlHashes: boolean = true
+    disableCaptureUrlHashes: boolean = false
 ) {
     const paramsToMask = maskPersonalDataProperties
         ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
@@ -228,7 +228,7 @@ export function getPersonInfo(
 
 export function getPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = true
+    disableCaptureUrlHashes: boolean = false
 ): Record<string, any> {
     const { r: referrer, u } = info
     const url = disableCaptureUrlHashes ? stripUrlHash(u) : u
@@ -255,7 +255,7 @@ export function getPersonPropsFromInfo(
 
 export function getInitialPersonPropsFromInfo(
     info: Record<string, any>,
-    disableCaptureUrlHashes: boolean = true
+    disableCaptureUrlHashes: boolean = false
 ): Record<string, any> {
     const personProps = getPersonPropsFromInfo(info, disableCaptureUrlHashes)
     const props: Record<string, any> = {}
@@ -294,7 +294,7 @@ export function getEventProperties(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
     detectGoogleSearchApp?: boolean,
-    disableCaptureUrlHashes: boolean = true
+    disableCaptureUrlHashes: boolean = false
 ): Properties {
     if (!userAgent) {
         return {}

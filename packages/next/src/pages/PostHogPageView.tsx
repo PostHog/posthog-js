@@ -34,7 +34,7 @@ export function PostHogPageView() {
     useEffect(() => {
         const currentUrl = getCurrentUrl(router.asPath)
         const currentUrlWithoutHash =
-            posthog?.config?.disable_capture_url_hashes !== false && currentUrl ? stripUrlHash(currentUrl) : currentUrl
+            posthog?.config?.disable_capture_url_hashes === true && currentUrl ? stripUrlHash(currentUrl) : currentUrl
         if (!posthog || !router.isReady || !currentUrlWithoutHash) {
             return
         }

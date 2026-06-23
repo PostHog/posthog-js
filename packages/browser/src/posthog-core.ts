@@ -271,7 +271,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     mask_all_text: false,
     mask_personal_data_properties: false,
     custom_personal_data_properties: [],
-    disable_capture_url_hashes: true,
+    disable_capture_url_hashes: false,
     advanced_disable_flags: false,
     advanced_disable_decide: false,
     advanced_disable_feature_flags: false,

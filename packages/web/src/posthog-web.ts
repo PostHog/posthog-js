@@ -26,7 +26,7 @@ export class PostHog extends PostHogCore {
     // posthog-js stores options in one object on
     this._storageKey = options?.persistence_name ? `ph_${options.persistence_name}` : `ph_${apiKey}_posthog`
 
-    this._disableCaptureUrlHashes = options?.disable_capture_url_hashes ?? true
+    this._disableCaptureUrlHashes = options?.disable_capture_url_hashes ?? false
 
     this._storage = getStorage(options?.persistence || 'localStorage', this.getWindow())
     this.setupBootstrap(options)
