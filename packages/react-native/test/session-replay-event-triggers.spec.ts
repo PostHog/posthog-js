@@ -342,4 +342,30 @@ describe('PostHog RN session replay event triggers', () => {
     expect(replay.startRecording).not.toHaveBeenCalled()
     expect(replay.stopRecording).not.toHaveBeenCalled()
   })
+
+  it('retries the native start on a later matching event when the first start failed', async () => {
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+
+    // First native start fails transiently (e.g. bridge hiccup), then succeeds on the next attempt.
+    replay.start.mockImplementationOnce(async () => {
+      throw new Error('native start failed')
+    })
+
+    // The matching event activates the session, but the native start fails -> not recording yet.
+    posthog.capture('$pageview')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    // Activation is persisted even though recording did not start.
+    expect(
+      posthog.getPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession)
+    ).toBeTruthy()
+
+    // A second matching event in the same session re-kicks the native start instead of staying stuck.
+    posthog.capture('$pageview')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(2))
+  })
 })

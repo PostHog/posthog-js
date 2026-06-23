@@ -2431,12 +2431,21 @@ export class PostHog extends PostHogCore {
     // overriding getSessionId() during enrichProperties, so rotation handling has fired and the id is
     // synced. Calling the override again here would re-enter rotation logic from inside capture.
     const sessionId = super.getSessionId()
-    if (!sessionId || this._isEventTriggerActivatedForSession(sessionId)) {
+    if (!sessionId) {
       return
     }
-    this.setPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession, sessionId)
-    this._logger.info(`Session replay event trigger '${eventName}' activated for session ${sessionId}.`)
+    // Already activated AND the native recorder is confirmed running — nothing to do. If activation
+    // was persisted but a prior start failed (recording still inactive), fall through to re-kick the
+    // evaluation so a later matching event retries the native start instead of staying stuck.
+    if (this._isEventTriggerActivatedForSession(sessionId) && this._sessionReplayRecordingActive === true) {
+      return
+    }
+    if (!this._isEventTriggerActivatedForSession(sessionId)) {
+      this.setPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession, sessionId)
+      this._logger.info(`Session replay event trigger '${eventName}' activated for session ${sessionId}.`)
+    }
     // Re-evaluate so the native recorder starts; fire-and-forget keeps the capture path synchronous.
+    // Serialized through _sessionReplayEvalChain, so this never races a concurrent evaluation.
     void this._evaluateAndStartSessionReplay()
   }
 
