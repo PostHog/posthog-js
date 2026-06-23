@@ -36,10 +36,11 @@ if (!fs.existsSync(referencesDir)) {
 }
 
 const output = generateApiSpecs(config);
+const latestOutput = { ...output, info: { ...output.info, version: '<version>' } };
 
 // Always update the rolling public API reference used by CI and docs previews.
 const latestPath = path.resolve(__dirname, '../references/posthog-js-references-latest.json');
-fs.writeFileSync(latestPath, JSON.stringify(output, null, 2));
+fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2));
 
 // Versioned references are release artifacts. Avoid writing them during normal generation
 // so PRs don't accidentally commit package-version-specific reference files.
