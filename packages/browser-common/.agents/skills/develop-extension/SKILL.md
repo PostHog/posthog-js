@@ -64,7 +64,7 @@ export class MyExtension implements Extension {
   accept it via the **constructor**. This keeps the configuration contract explicit and avoids the need for handling
   generic configuration types.
 - Once `setup()` runs, the extension will not be called again until `dispose()`. Use `setup()` to initialize listeners
-  to react to changes changes.
+  to react to changes.
 
 ## `Client` — what you get, and when to use it
 
