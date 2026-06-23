@@ -116,6 +116,27 @@ describe('logs entrypoint', () => {
                 })
             )
         })
+
+        it('does not throw and omits session timestamps when they are null (e.g. after a session reset)', () => {
+            // Session timestamps can legitimately be null right after a session reset; an
+            // unguarded toString() previously threw here and aborted console-log capture setup.
+            ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as jest.Mock).mockReturnValue({
+                sessionId: 'session-123',
+                windowId: 'window-456',
+                sessionStartTimestamp: null,
+                lastActivityTimestamp: null,
+            })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            expect(() => initializeLogs(mockPostHog)).not.toThrow()
+
+            assignableWindow.console.log('hello')
+
+            const attributes = mockEmit.mock.calls[0][0].attributes
+            expect(attributes['window.id']).toBe('window-456')
+            expect(attributes).not.toHaveProperty('sessionStartTimestamp')
+            expect(attributes).not.toHaveProperty('lastActivityTimestamp')
+        })
     })
 
     describe('log truncation features', () => {

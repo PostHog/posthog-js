@@ -307,11 +307,14 @@ const initializeLogs = (posthog: PostHog) => {
     if (posthog.sessionManager) {
         const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
             posthog.sessionManager.checkAndGetSessionAndWindowId(true)
+        // Session timestamps can be null (e.g. right after a session reset), so guard the
+        // toString() calls and only add each attribute when its value is present — otherwise
+        // an unguarded null.toString() throws and aborts console-log capture setup.
         attributes = {
             ...attributes,
             'window.id': windowId,
-            sessionStartTimestamp: sessionStartTimestamp.toString(),
-            lastActivityTimestamp: lastActivityTimestamp.toString(),
+            ...(sessionStartTimestamp ? { sessionStartTimestamp: sessionStartTimestamp.toString() } : {}),
+            ...(lastActivityTimestamp ? { lastActivityTimestamp: lastActivityTimestamp.toString() } : {}),
         }
     }
 
