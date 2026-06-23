@@ -19,4 +19,3 @@ export type {
     RemoteConfig,
 } from './client'
 export type { KeyValueStore } from './persistence'
-export type { Logger } from './logger'

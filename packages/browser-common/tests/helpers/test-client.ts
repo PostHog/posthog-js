@@ -1,4 +1,4 @@
-import { isNull, isUndefined } from '@posthog/core'
+import { isNull, isUndefined, type Logger } from '@posthog/core'
 
 import type {
     ApiRequestInit,
@@ -11,7 +11,6 @@ import type {
     SessionContext,
 } from '../../src/client'
 import type { Disposable } from '../../src/disposable'
-import type { Logger } from '../../src/logger'
 import type { KeyValueStore } from '../../src/persistence'
 import { Publisher } from '../../src/pubsub'
 import type { ExtensionToken } from '../../src/token'
@@ -63,6 +62,10 @@ const noopLogger: Logger = {
     warn() {},
     error() {},
     debug() {},
+    critical() {},
+    createLogger() {
+        return noopLogger
+    },
 }
 
 function createDefaultApiResponse(): ApiResponse {

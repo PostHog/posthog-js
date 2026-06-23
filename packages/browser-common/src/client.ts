@@ -1,6 +1,7 @@
+import type { Logger } from '@posthog/core'
+
 import type { Disposable } from './disposable'
 import type { KeyValueStore } from './persistence'
-import type { Logger } from './logger'
 import type { Listener } from './pubsub'
 import type { ExtensionToken } from './token'
 
