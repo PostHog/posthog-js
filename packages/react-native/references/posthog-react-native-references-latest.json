@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "4.49.2",
+    "version": "<version>",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -79,6 +79,41 @@
           "returnType": {
             "id": "any",
             "name": "any"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
+          "category": "",
+          "description": "Records a breadcrumb-style exception step. Steps accumulate in a rolling, byte-bounded buffer and are attached to every captured `$exception` as `$exception_steps`, giving the error tracking UI a timeline of recent activity before each error.\nThe `$timestamp` is captured at call time. The reserved keys `$message` and `$timestamp` are stripped from `properties` — the SDK sets the canonical values. This method never throws.",
+          "details": null,
+          "id": "addExceptionStep",
+          "showDocs": true,
+          "title": "addExceptionStep",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nposthog.addExceptionStep('User tapped Checkout', { screen: 'cart' })\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "A non-empty description of the step",
+              "isOptional": false,
+              "type": "string",
+              "name": "message"
+            },
+            {
+              "description": "Optional additional context to attach to the step",
+              "isOptional": true,
+              "type": "Properties",
+              "name": "properties"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
           },
           "path": "dist/posthog-rn.d.ts"
         },
@@ -412,7 +447,7 @@
             {
               "id": "get_feature_flag_payload",
               "name": "get feature flag payload",
-              "code": "\n\n// get feature flag payload\nconst payload = posthog.getFeatureFlagPayload('key-for-your-multivariate-flag')\n\n\n\n"
+              "code": "\n\n// get feature flag payload\nconst payload = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')?.payload\n\n\n\n"
             }
           ],
           "releaseTag": "deprecated",
@@ -2193,6 +2228,10 @@
         {
           "type": "AutocaptureOptions | boolean",
           "name": "autocapture"
+        },
+        {
+          "type": "ExceptionStepsOptions",
+          "name": "exceptionSteps"
         }
       ],
       "path": "dist/error-tracking/index.d.ts"
@@ -2303,6 +2342,23 @@
       "properties": [],
       "path": "../core/src/error-tracking/exception-steps.ts",
       "example": "{\n    enabled?: boolean;\n    max_bytes?: number;\n}"
+    },
+    {
+      "id": "ExceptionStepsOptions",
+      "name": "ExceptionStepsOptions",
+      "properties": [
+        {
+          "description": "Whether exception steps are recorded and attached.   true",
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "description": "Total UTF-8 byte budget (~32KB) for the in-memory buffer. Oldest steps are evicted first when exceeded.   32768",
+          "type": "number",
+          "name": "maxBytes"
+        }
+      ],
+      "path": "dist/error-tracking/index.d.ts"
     },
     {
       "id": "FeatureFlagDetail",
@@ -2554,7 +2610,7 @@
       "name": "PostHogCoreOptions",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    addTracingHeaders?: string[];\n}"
+      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    disable_capture_url_hashes?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    addTracingHeaders?: string[];\n}"
     },
     {
       "id": "PostHogCustomAppProperties",
@@ -3016,7 +3072,7 @@
       "name": "PostHogReactNativePluginExtended",
       "properties": [],
       "path": "dist/optional/OptionalPlugin.d.ts",
-      "example": "typeof PostHogReactNativePlugin & {\n    setup?: (sessionId: string, sdkOptions: {\n        [key: string]: any;\n    }, pluginConfig: {\n        [key: string]: any;\n    }) => Promise<void>;\n    startRecording?: (resumeCurrent: boolean) => Promise<void>;\n    stopRecording?: () => Promise<void>;\n}"
+      "example": "typeof PostHogReactNativePlugin & {\n    setup?: (sessionId: string, sdkOptions: {\n        [key: string]: any;\n    }, pluginConfig: {\n        [key: string]: any;\n    }) => Promise<void>;\n    startRecording?: (resumeCurrent: boolean) => Promise<void>;\n    stopRecording?: () => Promise<void>;\n    addExceptionStep?: (message: string, properties?: {\n        [key: string]: any;\n    }) => Promise<void>;\n}"
     },
     {
       "id": "PostHogRemoteConfig",

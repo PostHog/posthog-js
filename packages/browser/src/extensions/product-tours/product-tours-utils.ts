@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify'
 
+import { PostHog } from '../../posthog-core'
 import {
     JSONContent,
     ProductTourAppearance,
@@ -25,8 +26,12 @@ const logger = createLogger('[Product Tours]')
 const document = _document as Document
 const window = _window as Window & typeof globalThis
 
-export function getProductTourStylesheet(): HTMLStyleElement | null {
-    const stylesheet = prepareStylesheet(document, typeof productTourStyles === 'string' ? productTourStyles : '')
+export function getProductTourStylesheet(posthog?: PostHog): HTMLStyleElement | null {
+    const stylesheet = prepareStylesheet(
+        document,
+        typeof productTourStyles === 'string' ? productTourStyles : '',
+        posthog
+    )
     stylesheet?.setAttribute('data-ph-product-tour-style', 'true')
     return stylesheet
 }

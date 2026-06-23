@@ -4,7 +4,7 @@ import { uuidv7 } from '../uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { CaptureResult, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { knownUnsafeEditableEvent } from '@posthog/core'
+import { knownUnsafeEditableEvent, UUID_REGEX } from '@posthog/core'
 
 const rejectingEventFn = () => {
     return null
@@ -23,6 +23,14 @@ const editingEventFn = (captureResult: CaptureResult): CaptureResult => {
         },
     }
 }
+
+const invalidUuidCases = [
+    ['arbitrary string', 'not-a-uuid'],
+    ['empty string', ''],
+    ['32-character hex string', '0189dcd553117d408db09496a2eef37b'],
+    ['braced UUID', '{0189dcd5-5311-7d40-8db0-9496a2eef37b}'],
+    ['URN UUID', 'urn:uuid:0189dcd5-5311-7d40-8db0-9496a2eef37b'],
+] as const
 
 describe('posthog core - before send', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -74,6 +82,38 @@ describe('posthog core - before send', () => {
             method: 'POST',
             url: 'https://us.i.posthog.com/e/',
         })
+    })
+
+    it('uses a valid provided uuid', () => {
+        const posthog = posthogWith({})
+        ;(posthog._send_request as jest.Mock).mockClear()
+        const uuid = uuidv7()
+
+        const capturedData = posthog.capture(eventName, {}, { uuid })
+
+        expect(capturedData).toHaveProperty('uuid', uuid)
+    })
+
+    it.each(invalidUuidCases)('generates a new uuid when the provided uuid is an invalid %s', (_, invalidUuid) => {
+        const posthog = posthogWith({})
+        ;(posthog._send_request as jest.Mock).mockClear()
+
+        const capturedData = posthog.capture(eventName, {}, { uuid: invalidUuid })
+
+        expect(capturedData).toHaveProperty('uuid', expect.stringMatching(UUID_REGEX))
+        expect(capturedData?.uuid).not.toBe(invalidUuid)
+    })
+
+    it.each(invalidUuidCases)('generates a new uuid when before_send returns an invalid %s', (_, invalidUuid) => {
+        const posthog = posthogWith({
+            before_send: (cr) => cr && { ...cr, uuid: invalidUuid },
+        })
+        ;(posthog._send_request as jest.Mock).mockClear()
+
+        const capturedData = posthog.capture(eventName, {}, {})
+
+        expect(capturedData).toHaveProperty('uuid', expect.stringMatching(UUID_REGEX))
+        expect(capturedData?.uuid).not.toBe(invalidUuid)
     })
 
     it('can take an array of fns', () => {

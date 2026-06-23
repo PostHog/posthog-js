@@ -19,7 +19,7 @@ export const {
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_PERSONAL_API_KEY}` }
 
-export const captureLogger = RequestLogger(/ip=0/, {
+export const captureLogger = RequestLogger(/\/(e|batch|s)\//, {
     logRequestHeaders: true,
     logRequestBody: true,
     logResponseHeaders: true,

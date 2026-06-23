@@ -3950,7 +3950,32 @@ describe('Lazy SessionRecording', () => {
                         type: 'image/webp',
                         quality: 0.2,
                     },
+                    canvasResolutionScale: 1,
                 })
+            )
+        })
+
+        it.each([
+            ['unset', undefined, 1],
+            ['a fraction', { resolutionScale: 0.6 }, 0.6],
+            ['clamped up to 1', { resolutionScale: 2 }, 1],
+            ['clamped to the floor', { resolutionScale: 0.01 }, 0.1],
+            ['zero clamped to the floor', { resolutionScale: 0 }, 0.1],
+            ['negative clamped to the floor', { resolutionScale: -1 }, 0.1],
+            ['NaN ignored (full res)', { resolutionScale: NaN }, 1],
+            ['ignored when not a number', { resolutionScale: 'big' as any }, 1],
+        ])('passes canvasResolutionScale when canvasCapture is %s', (_label, canvasCapture, expected) => {
+            config.session_recording.canvasCapture = canvasCapture
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ canvasResolutionScale: expected })
             )
         })
 
@@ -4346,6 +4371,40 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('URL masking with maskCapturedNetworkRequestFn', () => {
+        it('masks personal data query params and hashes in rrweb meta URLs', () => {
+            posthog.config.mask_personal_data_properties = true
+            posthog.config.disable_capture_url_hashes = true
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?gclid=secret123&other=value#section' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?gclid=<masked>&other=value',
+                            },
+                        }),
+                    ],
+                }),
+                expect.anything()
+            )
+        })
+
         it('uses maskCapturedNetworkRequestFn to mask page URLs when configured', () => {
             const maskFn = jest.fn((data) => {
                 // CapturedNetworkRequest uses 'name' for the URL

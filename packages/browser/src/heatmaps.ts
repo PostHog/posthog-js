@@ -5,7 +5,7 @@ import { PostHog } from './posthog-core'
 import { document, window } from './utils/globals'
 import { getEventTarget, getParentElement, shouldCaptureRageclick } from './autocapture-utils'
 import { DOM_EVENT_BEFOREUNLOAD, DOM_EVENT_VISIBILITYCHANGE, HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
-import { isNumber, isNullish, isEmptyObject, isObject } from '@posthog/core'
+import { isNumber, isNullish, isEmptyObject, isObject, stripUrlHash } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
@@ -266,7 +266,7 @@ export class Heatmaps implements Extension {
             return
         }
 
-        const href = window.location.href
+        const href = this._config.disable_capture_url_hashes ? stripUrlHash(window.location.href) : window.location.href
 
         // mask url query params
         const maskPersonalDataProperties = this._config.mask_personal_data_properties

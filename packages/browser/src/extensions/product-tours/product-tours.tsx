@@ -124,7 +124,7 @@ interface TriggerListenerData {
     tour: ProductTour
 }
 
-function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCreated: boolean } {
+function retrieveTourShadow(tour: ProductTour, posthog: PostHog): { shadow: ShadowRoot; isNewlyCreated: boolean } {
     const containerClass = `${CONTAINER_CLASS}-${tour.id}`
     const existingDiv = document.querySelector(`.${containerClass}`)
 
@@ -142,7 +142,7 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
 
     const shadow = div.attachShadow({ mode: 'open' })
 
-    const stylesheet = getProductTourStylesheet()
+    const stylesheet = getProductTourStylesheet(posthog)
     if (stylesheet) {
         shadow.appendChild(stylesheet)
     }
@@ -157,6 +157,7 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
 
 function retrieveBannerShadow(
     tour: ProductTour,
+    posthog: PostHog,
     bannerConfig?: ProductTourBannerConfig
 ): { shadow: ShadowRoot; isNewlyCreated: boolean } | null {
     const containerClass = `${CONTAINER_CLASS}-${tour.id}`
@@ -180,7 +181,7 @@ function retrieveBannerShadow(
 
     const shadow = div.attachShadow({ mode: 'open' })
 
-    const stylesheet = getProductTourStylesheet()
+    const stylesheet = getProductTourStylesheet(posthog)
     if (stylesheet) {
         shadow.appendChild(stylesheet)
     }
@@ -841,7 +842,7 @@ export class ProductTourManager {
             return
         }
 
-        const { shadow } = retrieveTourShadow(this._activeTour)
+        const { shadow } = retrieveTourShadow(this._activeTour, this._instance)
 
         render(
             <ProductTourTooltip
@@ -870,7 +871,7 @@ export class ProductTourManager {
             return
         }
 
-        const result = retrieveBannerShadow(this._activeTour, step.bannerConfig)
+        const result = retrieveBannerShadow(this._activeTour, this._instance, step.bannerConfig)
 
         if (!result) {
             this._captureEvent(ProductTourEventName.BANNER_CONTAINER_SELECTOR_FAILED, {

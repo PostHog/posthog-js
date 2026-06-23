@@ -25,8 +25,14 @@ export interface PostHogReactNativePluginSessionReplayConfig {
   decideReplayConfig?: PostHogReactNativePluginMap
 }
 
+export interface PostHogReactNativePluginExceptionStepsConfig {
+  enabled?: boolean
+  maxBytes?: number
+}
+
 export interface PostHogReactNativePluginErrorTrackingConfig {
   nativeAutocapture?: boolean
+  exceptionSteps?: PostHogReactNativePluginExceptionStepsConfig
 }
 
 export interface PostHogReactNativePluginConfig {
@@ -75,6 +81,10 @@ export function stopRecording(): Promise<void> {
   return PosthogReactNativePlugin.stopRecording()
 }
 
+export function addExceptionStep(message: string, properties?: PostHogReactNativePluginMap): Promise<void> {
+  return PosthogReactNativePlugin.addExceptionStep(message, properties ?? {})
+}
+
 export interface PostHogReactNativePluginModule {
   setup: (
     sessionId: string,
@@ -103,6 +113,8 @@ export interface PostHogReactNativePluginModule {
   startRecording: (resumeCurrent: boolean) => Promise<void>
 
   stopRecording: () => Promise<void>
+
+  addExceptionStep: (message: string, properties?: PostHogReactNativePluginMap) => Promise<void>
 }
 
 const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
@@ -114,6 +126,7 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   identify,
   startRecording,
   stopRecording,
+  addExceptionStep,
 }
 
 export default PostHogReactNativePlugin

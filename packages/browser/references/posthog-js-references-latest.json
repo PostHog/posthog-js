@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.390.2",
+    "version": "<version>",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -802,7 +802,7 @@
             {
               "id": "",
               "name": "",
-              "code": "\n\nif(posthog.getFeatureFlag('beta-feature') === 'some-value') {\n     const someValue = posthog.getFeatureFlagPayload('beta-feature')\n     // do something\n}\n\n\n\n"
+              "code": "\n\nconst betaFeature = posthog.getFeatureFlagResult('beta-feature')\nif (betaFeature?.variant === 'some-value') {\n     const someValue = betaFeature?.payload\n     // do something\n}\n\n\n\n"
             }
           ],
           "releaseTag": "deprecated",
@@ -3563,10 +3563,6 @@
         {
           "type": "boolean",
           "name": "noRetries"
-        },
-        {
-          "type": "boolean",
-          "name": "skipIPParam"
         },
         {
           "type": "number",

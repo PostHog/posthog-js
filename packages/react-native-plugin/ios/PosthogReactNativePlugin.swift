@@ -46,6 +46,7 @@ class PosthogReactNativePlugin: NSObject {
     ) {
         let sessionReplayConfig = pluginConfig["sessionReplay"] as? [String: Any] ?? [:]
         let errorTrackingConfig = pluginConfig["errorTracking"] as? [String: Any] ?? [:]
+        let exceptionStepsConfig = errorTrackingConfig["exceptionSteps"] as? [String: Any] ?? [:]
 
         setupNativeSdk(
             method: "setup",
@@ -55,6 +56,7 @@ class PosthogReactNativePlugin: NSObject {
             sdkReplayConfig: sessionReplayConfig["sdkReplayConfig"] as? [String: Any] ?? [:],
             decideReplayConfig: sessionReplayConfig["decideReplayConfig"] as? [String: Any] ?? [:],
             nativeErrorTrackingAutocapture: errorTrackingConfig["nativeAutocapture"] as? Bool ?? false,
+            exceptionStepsConfig: exceptionStepsConfig,
             resolve: resolve
         )
     }
@@ -73,6 +75,7 @@ class PosthogReactNativePlugin: NSObject {
             sdkReplayConfig: sdkReplayConfig,
             decideReplayConfig: decideReplayConfig,
             nativeErrorTrackingAutocapture: false,
+            exceptionStepsConfig: [:],
             resolve: resolve
         )
     }
@@ -85,6 +88,7 @@ class PosthogReactNativePlugin: NSObject {
         sdkReplayConfig: [String: Any],
         decideReplayConfig: [String: Any],
         nativeErrorTrackingAutocapture: Bool,
+        exceptionStepsConfig: [String: Any],
         resolve: RCTPromiseResolveBlock
     ) {
         if sessionId.isEmpty {
@@ -107,6 +111,14 @@ class PosthogReactNativePlugin: NSObject {
         config.captureScreenViews = false
         config.debug = debug
         config.errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
+
+        // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
+        if let enabled = exceptionStepsConfig["enabled"] as? Bool {
+            config.errorTrackingConfig.exceptionSteps.enabled = enabled
+        }
+        if let maxBytes = exceptionStepsConfig["maxBytes"] as? Int {
+            config.errorTrackingConfig.exceptionSteps.maxBytes = maxBytes
+        }
 
         // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
         // The JS layer already captured them, so drop the native duplicate.
@@ -249,6 +261,15 @@ class PosthogReactNativePlugin: NSObject {
     @objc(stopRecording:withRejecter:)
     func stopRecording(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
         PostHogSDK.shared.stopSessionRecording()
+        resolve(nil)
+    }
+
+    @objc(addExceptionStep:withProperties:withResolver:withRejecter:)
+    func addExceptionStep(
+        message: String, properties: [String: Any]?, resolve: RCTPromiseResolveBlock,
+        reject _: RCTPromiseRejectBlock
+    ) {
+        PostHogSDK.shared.addExceptionStep(message, properties: properties)
         resolve(nil)
     }
 }

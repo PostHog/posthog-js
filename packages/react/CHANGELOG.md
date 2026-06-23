@@ -1,5 +1,14 @@
 # @posthog/react
 
+## 1.10.3
+
+### Patch Changes
+
+- [#3905](https://github.com/PostHog/posthog-js/pull/3905) [`870cfa4`](https://github.com/PostHog/posthog-js/commit/870cfa42229079e2154a4044e7485b0670425d41) Thanks [@marandaneto](https://github.com/marandaneto)! - Filter disabled bootstrap feature flags from useActiveFeatureFlags.
+  (2026-06-22)
+- Updated dependencies [[`1fce04f`](https://github.com/PostHog/posthog-js/commit/1fce04f79240971dc2776e4d9381dadeb0aff1c3)]:
+    - posthog-js@1.391.8
+
 ## 1.10.2
 
 ### Patch Changes

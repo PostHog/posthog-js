@@ -1,5 +1,32 @@
 # @posthog/types
 
+## 1.391.0
+
+### Minor Changes
+
+- [#3921](https://github.com/PostHog/posthog-js/pull/3921) [`c28b161`](https://github.com/PostHog/posthog-js/commit/c28b16143d04caade1d024819017b89cef3162ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `disable_capture_url_hashes` to strip URL fragments from automatically captured URLs. It is disabled by default for backwards compatibility, and enabled automatically when `config.defaults` is `'2026-06-25'` or later. Enabling it (either explicitly or via the `'2026-06-25'` defaults) is a breaking behavior change for SPAs that rely on URL hashes for routing or analytics, because hash-based routes will be collapsed to the same URL without the fragment in fields such as `$current_url`, `$initial_current_url`, `$session_entry_url`, autocapture `$elements[*].attr__href`, `$external_click_url`, replay `href` URLs, heatmaps, web vitals `$current_url`, logs `url.full`, conversations `current_url`/`request_url`, or Next.js Pages Router `$pageview` `$current_url`.
+
+    If you only want to capture some hashes, leave hash capture enabled and use `before_send` to remove or redact sensitive hash values before events are sent. (2026-06-23)
+
+## 1.390.2
+
+### Patch Changes
+
+- [#3903](https://github.com/PostHog/posthog-js/pull/3903) [`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate custom event UUID overrides and generate new UUIDs when invalid.
+  (2026-06-19)
+
+## 1.390.1
+
+### Patch Changes
+
+- [#3885](https://github.com/PostHog/posthog-js/pull/3885) [`5392a55`](https://github.com/PostHog/posthog-js/commit/5392a55f75ac94e98bb49a04db9453e62e188927) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(replay): capture canvas at reduced resolution
+
+    Adds `session_recording.canvasCapture.resolutionScale` - a `(0, 1]` fraction of the canvas display size to capture replay frames at. The captured bitmap is downscaled (pixel-area savings are quadratic) while the canvas's true display size is still recorded, so playback stretches the smaller frame back to the correct dimensions and aspect ratio - only sharpness drops, never layout. It defaults to `1` (full resolution, matching today's behaviour), and the latest `defaults` bundle (`2026-05-30`) opts new installs into `0.6`.
+
+    The canvas's true display size travels with each frame through the encode worker (as required message fields), so the encoded reply is always drawn back to the correct dimensions — no per-canvas state is retained on the main thread, and downscaling can never mislabel a canvas's dimensions. At full resolution the captured pixels are unchanged (the quality resampling hint is only applied when actually downscaling); the emitted `drawImage` now always uses the explicit destination-size form, which is pixel-equivalent on replay.
+
+    Mechanically, `@posthog/rrweb`'s canvas FPS-snapshot observer takes an optional `canvasResolutionScale` record option and downscales each captured frame accordingly. (2026-06-19)
+
 ## 1.390.0
 
 ### Minor Changes

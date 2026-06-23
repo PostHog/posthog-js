@@ -325,6 +325,47 @@ describe('record integration tests', function (this: ISuite) {
     await assertSnapshot(snapshots);
   });
 
+  it('does not trigger style-src-attr CSP violations while diffing style mutations', async () => {
+    const page: puppeteer.Page = await browser.newPage();
+    const client = await page.target().createCDPSession();
+    const cspViolations: string[] = [];
+    const collectCSPViolation = (text: string) => {
+      if (text.includes('style-src-attr')) {
+        cspViolations.push(text);
+      }
+    };
+
+    await client.send('Log.enable');
+    client.on('Log.entryAdded', ({ entry }) => collectCSPViolation(entry.text));
+    page.on('console', (message) => collectCSPViolation(message.text()));
+
+    await page.goto('about:blank');
+    await page.setContent(`
+      <!doctype html>
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'self'; style-src-attr 'none'">
+      <body>
+        <div id="target"></div>
+        <script>
+          ${code}
+          ${generateRecordSnippet({})}
+        </script>
+      </body>
+    `);
+
+    await page.evaluate(() => {
+      (document.getElementById('target') as HTMLElement).style.color = 'green';
+    });
+    await waitForRAF(page);
+    await page.evaluate(() => {
+      (document.getElementById('target') as HTMLElement).style.color = 'blue';
+    });
+    await waitForRAF(page);
+
+    expect(cspViolations).toEqual([]);
+    await client.detach();
+    await page.close();
+  });
+
   it('can freeze mutations', async () => {
     const page: puppeteer.Page = await browser.newPage();
     await page.goto('about:blank');

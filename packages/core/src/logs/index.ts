@@ -49,7 +49,11 @@ export class PostHogLogs {
     // reaches disk can't cause duplicate records on next startup. SDKs with
     // synchronous storage (or no async persist layer) can pass a no-op. RN
     // wires this to its dedicated `_logsStorage.waitForPersist()`.
-    private readonly _waitForStoragePersist: () => Promise<void> = () => Promise.resolve()
+    private readonly _waitForStoragePersist: () => Promise<void> = () => Promise.resolve(),
+    // OTLP instrumentation scope name. Overrides the `getLibraryId()` fallback
+    // so a host can label a specific capture stream (e.g. 'console' for browser
+    // console auto-capture). Defaults to `getLibraryId()` when omitted.
+    private readonly _scopeName?: string
   ) {
     this._maxBufferSize = _config.maxBufferSize
     // Never below the flush trigger: a smaller eviction cap would stop the
@@ -242,7 +246,7 @@ export class PostHogLogs {
       const payload = buildOtlpLogsPayload(
         records,
         this._buildResourceAttributes(),
-        this._instance.getLibraryId(),
+        this._scopeName ?? this._instance.getLibraryId(),
         this._instance.getLibraryVersion()
       )
 

@@ -174,6 +174,16 @@ function getHref(doc: Document, customHref?: string) {
   return a.href;
 }
 
+function capDataURLSize(
+  dataURL: string,
+  dataURLOptions?: DataURLOptions,
+): string {
+  if (dataURLOptions?.maxBase64ImageLength) {
+    return checkDataURLSize(dataURL, dataURLOptions.maxBase64ImageLength);
+  }
+  return dataURL;
+}
+
 export function transformAttribute(
   doc: Document,
   tagName: Lowercase<string>,
@@ -201,34 +211,35 @@ export function transformAttribute(
     // href starts with a # is an id pointer for svg
     const transformedValue = absoluteToDoc(doc, value);
 
-    if (tagName === 'img' && transformedValue.startsWith('data:') && element) {
-      const img = element as HTMLImageElement;
+    if (transformedValue.startsWith('data:')) {
+      if (tagName === 'img' && element) {
+        let processedDataURL = transformedValue;
 
-      let processedDataURL = transformedValue;
+        if (dataURLOptions?.type || dataURLOptions?.quality !== undefined) {
+          processedDataURL = recompressBase64Image(
+            element as HTMLImageElement,
+            transformedValue,
+            dataURLOptions.type,
+            dataURLOptions.quality,
+          );
+        }
 
-      if (dataURLOptions?.type || dataURLOptions?.quality !== undefined) {
-        processedDataURL = recompressBase64Image(
-          img,
-          transformedValue,
-          dataURLOptions.type,
-          dataURLOptions.quality,
-        );
+        return capDataURLSize(processedDataURL, dataURLOptions);
       }
 
-      if (dataURLOptions?.maxBase64ImageLength) {
-        processedDataURL = checkDataURLSize(
-          processedDataURL,
-          dataURLOptions.maxBase64ImageLength,
-        );
+      if (tagName === 'image') {
+        return capDataURLSize(transformedValue, dataURLOptions);
       }
-
-      return processedDataURL;
     }
 
     return transformedValue;
   } else if (name === 'xlink:href' && value[0] !== '#') {
     // xlink:href starts with # is an id pointer
-    return absoluteToDoc(doc, value);
+    const transformedValue = absoluteToDoc(doc, value);
+    if (tagName === 'image' && transformedValue.startsWith('data:')) {
+      return capDataURLSize(transformedValue, dataURLOptions);
+    }
+    return transformedValue;
   } else if (
     name === 'background' &&
     (tagName === 'table' || tagName === 'td' || tagName === 'th')

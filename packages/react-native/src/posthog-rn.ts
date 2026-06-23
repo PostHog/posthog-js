@@ -24,6 +24,7 @@ import {
   FeatureFlagValue,
   ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
+import { Properties } from '@posthog/types'
 import {
   PostHogRNStorage,
   createEventsStorage,
@@ -195,7 +196,6 @@ export class PostHog extends PostHogCore {
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
   private _sessionReplayOptions?: PostHogOptions
   private _disableSurveys: boolean
-  private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
   private _logs: PostHogLogs
   // Resolved logs config — kept around so lifecycle handlers (AppState
@@ -256,7 +256,6 @@ export class PostHog extends PostHogCore {
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
-    this._disableRemoteConfig = options?.disableRemoteConfig ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
@@ -427,45 +426,18 @@ export class PostHog extends PostHogCore {
         this._errorTracking.onRemoteConfig(cachedRemoteConfig.errorTracking)
       }
 
-      if (this._disableRemoteConfig === false) {
-        this.reloadRemoteConfigAsync()
-          .then((response) => {
-            if (response) {
-              this._handleSurveysFromRemoteConfig(response)
-            }
-          })
-          .catch((error) => {
-            this._logger.error('Error loading remote config:', error)
-          })
-          .finally(() => {
-            this._notifySurveysReady()
-          })
-      } else {
-        this._logger.info('Remote config is disabled.')
-
-        if (options?.preloadFeatureFlags !== false) {
-          this._logger.info('Feature flags will be preloaded from Flags API.')
-          // Preload flags (and parse surveys as well since we are calling with config=true already)
-          this._flagsAsyncWithSurveys()
-            .catch((error) => {
-              this._logger.error('Error loading flags with surveys:', error)
-            })
-            .finally(() => {
-              this._notifySurveysReady()
-            })
-        } else {
-          this._logger.info('preloadFeatureFlags is disabled, loading surveys from API.')
-          // Load surveys directly from API since both remote config and preloading feature flags are disabled
-          // Note: if flags are not loaded/cached then surveys will not be displayed until reloadFeatureFlags() is called, since surveys depend on internal flags
-          this._loadSurveysFromAPI()
-            .catch((error) => {
-              this._logger.error('Error loading surveys from API:', error)
-            })
-            .finally(() => {
-              this._notifySurveysReady()
-            })
-        }
-      }
+      this.reloadRemoteConfigAsync()
+        .then((response) => {
+          if (response) {
+            this._handleSurveysFromRemoteConfig(response)
+          }
+        })
+        .catch((error) => {
+          this._logger.error('Error loading remote config:', error)
+        })
+        .finally(() => {
+          this._notifySurveysReady()
+        })
 
       // captureAppLifecycleEvents defaults to true; only skip if explicitly set to false
       if (options?.captureAppLifecycleEvents !== false) {
@@ -569,6 +541,7 @@ export class PostHog extends PostHogCore {
    * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    this._errorTracking.clearExceptionSteps()
     const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
     try {
@@ -1724,6 +1697,10 @@ export class PostHog extends PostHogCore {
       mechanism: { handled: true, type: 'generic' },
       syntheticException: new Error('Synthetic Error'),
     }
+
+    // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
+    additionalProperties = this._errorTracking.attachExceptionSteps(additionalProperties)
+
     super.captureException(error, additionalProperties, resolvedHint)
 
     // On a fatal crash, persist the exception + recent logs before the app may die.
@@ -1731,6 +1708,27 @@ export class PostHog extends PostHogCore {
       void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
     }
+  }
+
+  /**
+   * Records a breadcrumb-style exception step. Steps accumulate in a rolling, byte-bounded buffer
+   * and are attached to every captured `$exception` as `$exception_steps`, giving the error tracking
+   * UI a timeline of recent activity before each error.
+   *
+   * The `$timestamp` is captured at call time. The reserved keys `$message` and `$timestamp` are
+   * stripped from `properties` — the SDK sets the canonical values. This method never throws.
+   *
+   * @example
+   * ```js
+   * posthog.addExceptionStep('User tapped Checkout', { screen: 'cart' })
+   * ```
+   *
+   * @param {string} message A non-empty description of the step
+   * @param {Object} [properties] Optional additional context to attach to the step
+   * @returns {void}
+   */
+  addExceptionStep(message: string, properties?: Properties): void {
+    this._errorTracking.addExceptionStep(message, properties)
   }
 
   protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
@@ -1931,64 +1929,6 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  /**
-   * Load flags AND handle surveys from the flags response (only when remote config is disabled)
-   */
-  private async _flagsAsyncWithSurveys(): Promise<void> {
-    try {
-      const flagsResponse = await this.flagsAsync({
-        sendAnonDistinctId: true,
-        fetchConfig: true,
-        triggerOnRemoteConfig: true,
-      })
-
-      // Only handle surveys from flags if remote config is disabled and surveys are enabled
-      // When remote config is enabled, surveys will come from there instead
-      if (this._disableRemoteConfig === true) {
-        if (this._disableSurveys === true) {
-          this._logger.info('Loading surveys skipped, disabled.')
-          this._cacheSurveys(null, 'flags (disabled)')
-          return
-        }
-
-        // Handle surveys from the response (surveys key is included when config=true)
-        const surveys = flagsResponse?.surveys
-
-        // If surveys is not an array, it means there are no surveys (its a boolean)
-        if (Array.isArray(surveys) && surveys.length > 0) {
-          this._cacheSurveys(surveys as Survey[], 'flags endpoint')
-        } else {
-          this._logger.info('No surveys in flags response')
-          this._cacheSurveys(null, 'flags endpoint')
-        }
-      }
-    } catch (error) {
-      this._logger.error('Error in _flagsAsyncWithSurveys:', error)
-    }
-  }
-
-  /**
-   * Internal method to load surveys from API (when remote config is disabled)
-   */
-  private async _loadSurveysFromAPI(): Promise<void> {
-    if (this._disableSurveys === true) {
-      this._logger.info('Loading surveys skipped, disabled.')
-      this._cacheSurveys(null, 'API (disabled)')
-      return
-    }
-
-    try {
-      const surveysFromApi = await super.getSurveysStateless()
-      if (surveysFromApi && surveysFromApi.length > 0) {
-        this._cacheSurveys(surveysFromApi, 'API')
-      } else {
-        this._cacheSurveys(null, 'API')
-      }
-    } catch (error) {
-      this._logger.error('Error loading surveys from API:', error)
-    }
-  }
-
   private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {
     const autocapture = options?.errorTracking?.autocapture
     const nativeCrashes = typeof autocapture === 'object' && autocapture.nativeCrashes === true
@@ -2177,6 +2117,7 @@ export class PostHog extends PostHogCore {
           },
           errorTracking: {
             nativeAutocapture: enableNativeErrorTracking,
+            exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
           },
         }
         await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
@@ -2214,6 +2155,7 @@ export class PostHog extends PostHogCore {
       }
       if (enableNativeErrorTracking) {
         this._nativeErrorTrackingInitialized = true
+        this._errorTracking.onNativeErrorTrackingReady()
         this._logger.info('Native error tracking started.')
       }
       return true

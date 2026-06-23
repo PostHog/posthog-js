@@ -1,5 +1,138 @@
 # posthog-js
 
+## 1.393.0
+
+### Minor Changes
+
+- [#3921](https://github.com/PostHog/posthog-js/pull/3921) [`c28b161`](https://github.com/PostHog/posthog-js/commit/c28b16143d04caade1d024819017b89cef3162ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `disable_capture_url_hashes` to strip URL fragments from automatically captured URLs. It is disabled by default for backwards compatibility, and enabled automatically when `config.defaults` is `'2026-06-25'` or later. Enabling it (either explicitly or via the `'2026-06-25'` defaults) is a breaking behavior change for SPAs that rely on URL hashes for routing or analytics, because hash-based routes will be collapsed to the same URL without the fragment in fields such as `$current_url`, `$initial_current_url`, `$session_entry_url`, autocapture `$elements[*].attr__href`, `$external_click_url`, replay `href` URLs, heatmaps, web vitals `$current_url`, logs `url.full`, conversations `current_url`/`request_url`, or Next.js Pages Router `$pageview` `$current_url`.
+
+    If you only want to capture some hashes, leave hash capture enabled and use `before_send` to remove or redact sensitive hash values before events are sent. (2026-06-23)
+
+### Patch Changes
+
+- Updated dependencies [[`c28b161`](https://github.com/PostHog/posthog-js/commit/c28b16143d04caade1d024819017b89cef3162ad)]:
+    - @posthog/core@1.36.0
+    - @posthog/types@1.391.0
+
+## 1.392.0
+
+### Minor Changes
+
+- [#3895](https://github.com/PostHog/posthog-js/pull/3895) [`ce528ed`](https://github.com/PostHog/posthog-js/commit/ce528ed73936bbefa47f52e90cce8e11bb4205cc) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Console log auto-capture (`logs: { captureConsoleLogs: true }`) now flows through the same pipeline as `posthog.captureLog()`, `posthog.logger.*`, and PostHog's other SDKs, instead of OpenTelemetry. As a result:
+    - the bundled OpenTelemetry dependencies are removed, shrinking the lazily-loaded logs chunk
+    - auto-captured console logs now run through `logs.beforeSend` (the same hook as `captureLog`/`logger.*`), so you can redact or drop sensitive console output before it's sent. To treat console logs differently from manual logs, branch on the record's `log.source` attribute: auto-captured console logs set it to `console.<method>` (e.g. `console.error`), while manual `captureLog`/`logger.*` logs leave it unset
+    - console logs now link to the person's profile: they carry the person id as `posthogDistinctId`, the attribute PostHog uses to associate logs with a person ([docs](https://posthog.com/docs/logs/link-person)). The old path used `distinct_id`, which isn't used for person linking by default, so console logs previously didn't appear on person profiles unless you'd configured a custom key.
+
+    Console logs keep their `posthog-browser-logs` `service.name`, their `console` instrumentation scope, and their `log.source: console.<level>` attribute.
+
+    As part of moving onto the shared pipeline, console records now use PostHog's standard log field names — the same ones programmatic web logs and other SDKs use, and the ones the Logs UI surfaces. For the fields below the **values are unchanged** — only the attribute names/locations differ:
+    - `distinct_id` → `posthogDistinctId` (record attribute)
+    - `location.href` → `url.full` (record attribute; same value — the page URL)
+    - `session.id` (resource attribute) → `sessionId` (record attribute) — renamed and moved
+    - `host` and `window.id` move from resource attributes to record attributes (names unchanged)
+    - records also now carry the standard SDK context shared by other logs, including `feature_flags`
+
+    For most projects this needs no action — these are already the canonical log fields. The only thing to update is a saved Logs query or dashboard built specifically on an **old** console attribute name, for example:
+    - `attributes.distinct_id` → `attributes.posthogDistinctId`
+    - `attributes.location.href` → `attributes.url.full`
+    - `resource.attributes.session.id` → `attributes.sessionId`
+    - `resource.attributes.host` / `resource.attributes.window.id` → `attributes.host` / `attributes.window.id` (2026-06-22)
+
+### Patch Changes
+
+- Updated dependencies [[`ce528ed`](https://github.com/PostHog/posthog-js/commit/ce528ed73936bbefa47f52e90cce8e11bb4205cc)]:
+    - @posthog/core@1.35.4
+
+## 1.391.9
+
+### Patch Changes
+
+- [#3922](https://github.com/PostHog/posthog-js/pull/3922) [`26aa9ba`](https://github.com/PostHog/posthog-js/commit/26aa9ba470313835ec81eebaa156b7620b287274) Thanks [@posthog](https://github.com/apps/posthog)! - Exception autocapture: posthog-js's own fetch timeout now aborts with an explicit, descriptive reason (`PostHog request timed out after <n>ms`) instead of a reason-less `DOMException: AbortError: signal is aborted without reason`. This keeps `name === 'AbortError'` so existing timeout handling (e.g. feature flag timeout detection) is unchanged, but makes our own timeouts identifiable and stops them being re-captured as noise by console-error exception autocapture.
+  (2026-06-22)
+
+## 1.391.8
+
+### Patch Changes
+
+- [#3908](https://github.com/PostHog/posthog-js/pull/3908) [`1fce04f`](https://github.com/PostHog/posthog-js/commit/1fce04f79240971dc2776e4d9381dadeb0aff1c3) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply CSP stylesheet preparation hook to Product Tours styles.
+  (2026-06-22)
+
+## 1.391.7
+
+### Patch Changes
+
+- [#3914](https://github.com/PostHog/posthog-js/pull/3914) [`dac4edb`](https://github.com/PostHog/posthog-js/commit/dac4edb389d0c5b6d146206a37c3a2123c7a8710) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: redact credential-bearing headers on both request and response (previously only request), and match credential-shaped custom header names by substring (e.g. `x-gist-encoded-user-token`) in addition to the exact deny list - avoiding accidental capture of tokens/cookies in recordings.
+  (2026-06-22)
+
+## 1.391.6
+
+### Patch Changes
+
+- [#3901](https://github.com/PostHog/posthog-js/pull/3901) [`049eeb6`](https://github.com/PostHog/posthog-js/commit/049eeb654138ba3e3345665b94046e29e8f8c899) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop adding the unused `beacon` query parameter to browser SDK sendBeacon requests.
+  (2026-06-22)
+
+- [#3900](https://github.com/PostHog/posthog-js/pull/3900) [`3ee8667`](https://github.com/PostHog/posthog-js/commit/3ee8667652fbd77b4e2b764bc4c19d748ef90c06) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop adding the unused `ip` query parameter to browser SDK requests.
+  (2026-06-22)
+
+## 1.391.5
+
+### Patch Changes
+
+- [#3915](https://github.com/PostHog/posthog-js/pull/3915) [`beaccc3`](https://github.com/PostHog/posthog-js/commit/beaccc392d840a201412e28bebda157004f88adb) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay: apply the existing base64 image size cap (`maxBase64ImageLength`) to SVG `<image>` elements with `data:` URIs on both `href` and `xlink:href`. Previously the cap only covered `<img>` elements, so large inline data URIs inside SVGs were recorded in full - this also covers them in mutations, replacing oversized ones with the striped placeholder.
+  (2026-06-22)
+
+## 1.391.4
+
+### Patch Changes
+
+- [#3913](https://github.com/PostHog/posthog-js/pull/3913) [`ee9f2a8`](https://github.com/PostHog/posthog-js/commit/ee9f2a839e0e05f27a612f2be29c0a4eda6bcdca) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: expand the default payload host deny list to skip third-party analytics, RUM, and session-replay telemetry whose payloads have no replay value - Datadog, Segment, RudderStack, Amplitude, Mixpanel, Hotjar (both `.com` and `.io`), and FullStory. Also covers both Google Analytics beacon hosts (`google-analytics.com`, plus `analytics.google.com` which gtag uses when Google Signals is enabled) and widens New Relic to `nr-data.net`.
+  (2026-06-22)
+
+## 1.391.3
+
+### Patch Changes
+
+- [#3909](https://github.com/PostHog/posthog-js/pull/3909) [`ab4a220`](https://github.com/PostHog/posthog-js/commit/ab4a2203392af6e63225fcfc93483bc8577c16ae) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid `style-src-attr` CSP violations when diffing rrweb style mutations.
+  (2026-06-22)
+
+- [#3912](https://github.com/PostHog/posthog-js/pull/3912) [`78ac40c`](https://github.com/PostHog/posthog-js/commit/78ac40c5e69a016455abe0fbb2ef94f6f4302e8a) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: never record binary/asset response or request bodies (image, video, audio, font, octet-stream, pdf, zip, wasm) even when `recordBody` is enabled - they bloat recordings, duplicate what the replay already shows, and the body is no longer read.
+  (2026-06-22)
+
+## 1.391.2
+
+### Patch Changes
+
+- [#3903](https://github.com/PostHog/posthog-js/pull/3903) [`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate custom event UUID overrides and generate new UUIDs when invalid.
+  (2026-06-19)
+- Updated dependencies [[`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce)]:
+    - @posthog/core@1.35.3
+    - @posthog/types@1.390.2
+
+## 1.391.1
+
+### Patch Changes
+
+- [#3899](https://github.com/PostHog/posthog-js/pull/3899) [`d090a7c`](https://github.com/PostHog/posthog-js/commit/d090a7c295b2a9990cd83c2be5f051a21e27fc2e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Surveys: re-check eligibility when a popover's display delay elapses, instead of only re-checking the URL.
+
+    A survey with a display delay could be queued while a visitor was still anonymous (the targeting flag passed for the anonymous profile), and then displayed after the delay even though `identify()` had reloaded feature flags and the survey's internal targeting flag was now false for the identified profile (e.g. a "show once per user" survey the person had already dismissed). The delayed display now re-runs the full display predicate (eligibility, URL/device/selector conditions, event/action trigger, and feature flags) before rendering, so a survey that became ineligible during the delay is no longer shown. Pending delayed surveys are also cancelled promptly when a later evaluation cycle finds them ineligible. (2026-06-19)
+
+## 1.391.0
+
+### Minor Changes
+
+- [#3885](https://github.com/PostHog/posthog-js/pull/3885) [`5392a55`](https://github.com/PostHog/posthog-js/commit/5392a55f75ac94e98bb49a04db9453e62e188927) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(replay): capture canvas at reduced resolution
+
+    Adds `session_recording.canvasCapture.resolutionScale` - a `(0, 1]` fraction of the canvas display size to capture replay frames at. The captured bitmap is downscaled (pixel-area savings are quadratic) while the canvas's true display size is still recorded, so playback stretches the smaller frame back to the correct dimensions and aspect ratio - only sharpness drops, never layout. It defaults to `1` (full resolution, matching today's behaviour), and the latest `defaults` bundle (`2026-05-30`) opts new installs into `0.6`.
+
+    The canvas's true display size travels with each frame through the encode worker (as required message fields), so the encoded reply is always drawn back to the correct dimensions — no per-canvas state is retained on the main thread, and downscaling can never mislabel a canvas's dimensions. At full resolution the captured pixels are unchanged (the quality resampling hint is only applied when actually downscaling); the emitted `drawImage` now always uses the explicit destination-size form, which is pixel-equivalent on replay.
+
+    Mechanically, `@posthog/rrweb`'s canvas FPS-snapshot observer takes an optional `canvasResolutionScale` record option and downscales each captured frame accordingly. (2026-06-19)
+
+### Patch Changes
+
+- Updated dependencies [[`5392a55`](https://github.com/PostHog/posthog-js/commit/5392a55f75ac94e98bb49a04db9453e62e188927)]:
+    - @posthog/types@1.390.1
+
 ## 1.390.2
 
 ### Patch Changes

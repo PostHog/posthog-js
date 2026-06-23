@@ -259,6 +259,37 @@ describe('request', () => {
             }
         )
 
+        it('aborts with an identifiable reason on timeout and reports it via the callback', async () => {
+            let capturedSignal: AbortSignal | undefined
+            mockedFetch.mockImplementation((_url: string, opts: any) => {
+                capturedSignal = opts.signal
+                return new Promise((_resolve, reject) => {
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    opts.signal?.addEventListener('abort', () => reject(opts.signal.reason))
+                })
+            })
+
+            const callback = jest.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            jest.advanceTimersByTime(8000)
+            await flushPromises()
+
+            expect(capturedSignal?.aborted).toBe(true)
+
+            const reason = capturedSignal?.reason
+            // keeps name AbortError so existing timeout handling (e.g. feature flag timeout detection) keeps working
+            expect(reason.name).toBe('AbortError')
+            // ...but with a descriptive message so it is never a reason-less "signal is aborted without reason"
+            expect(reason.message).toBe('PostHog request timed out after 8000ms')
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            const response = callback.mock.calls[0][0]
+            expect(response.statusCode).toBe(0)
+            expect(response.error.name).toBe('AbortError')
+            expect(response.error.message).toBe('PostHog request timed out after 8000ms')
+        })
+
         it('supports nextOptions parameter', async () => {
             request(
                 createRequest({
@@ -505,7 +536,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -531,7 +562,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64&beacon=1',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -557,7 +588,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
