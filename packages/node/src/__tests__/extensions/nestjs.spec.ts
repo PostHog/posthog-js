@@ -118,30 +118,22 @@ describe('PostHogInterceptor', () => {
       expect(capturedContext.properties.$ip).toBe('192.168.1.1')
     })
 
-    it('should strip request path search and preserve URL hash by default', async () => {
-      const interceptor = new PostHogInterceptor(posthog)
-      const context = createMockContext({
-        url: '/api/test?token=secret#details',
-        path: '/api/test?token=secret#details',
-      })
-
-      let capturedContext: any
-      const handler = {
-        handle: () => {
-          capturedContext = posthog.getContext()
-          return of({ success: true })
-        },
-      }
-
-      await lastValueFrom(interceptor.intercept(context, handler))
-
-      expect(capturedContext.properties.$current_url).toBe('/api/test?token=secret#details')
-      expect(capturedContext.properties.$request_path).toBe('/api/test#details')
-    })
-
-    it('should strip request URL hashes when disable_capture_url_hashes is enabled', async () => {
+    it.each([
+      {
+        name: 'strips request path search and preserves URL hash by default',
+        options: {},
+        expectedCurrentUrl: '/api/test?token=secret#details',
+        expectedRequestPath: '/api/test#details',
+      },
+      {
+        name: 'strips request URL hashes when disable_capture_url_hashes is enabled',
+        options: { disable_capture_url_hashes: true },
+        expectedCurrentUrl: '/api/test?token=secret',
+        expectedRequestPath: '/api/test',
+      },
+    ])('should $name', async ({ options, expectedCurrentUrl, expectedRequestPath }) => {
       await posthog.shutdown()
-      posthog = createPostHog({ disable_capture_url_hashes: true })
+      posthog = createPostHog(options)
       const interceptor = new PostHogInterceptor(posthog)
       const context = createMockContext({
         url: '/api/test?token=secret#details',
@@ -158,8 +150,8 @@ describe('PostHogInterceptor', () => {
 
       await lastValueFrom(interceptor.intercept(context, handler))
 
-      expect(capturedContext.properties.$current_url).toBe('/api/test?token=secret')
-      expect(capturedContext.properties.$request_path).toBe('/api/test')
+      expect(capturedContext.properties.$current_url).toBe(expectedCurrentUrl)
+      expect(capturedContext.properties.$request_path).toBe(expectedRequestPath)
     })
 
     it('should sanitize tracing headers and only include present values', async () => {
