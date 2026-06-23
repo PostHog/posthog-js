@@ -1,4 +1,3 @@
-
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
