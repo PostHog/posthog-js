@@ -272,6 +272,8 @@ export enum PostHogPersistedProperty {
   InstalledAppBuild = 'installed_app_build', // only used by posthog-react-native
   InstalledAppVersion = 'installed_app_version', // only used by posthog-react-native
   SessionReplay = 'session_replay', // only used by posthog-react-native
+  // Session id for which an event trigger has activated session replay. only used by posthog-react-native
+  SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native
   SurveysSeen = 'surveys_seen', // only used by posthog-react-native
   Surveys = 'surveys', // only used by posthog-react-native
