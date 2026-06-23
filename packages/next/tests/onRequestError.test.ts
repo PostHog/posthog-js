@@ -107,10 +107,33 @@ describe('Next.js onRequestError', () => {
         )
     })
 
-    it('skips capture when beforeCapture returns false', async () => {
-        const handler = createOnRequestError({ beforeCapture: () => false })
-
-        await handler(new Error('ignored'), { headers: {} }, {})
+    it.each([
+        {
+            name: 'beforeCapture returns false',
+            run: async () => {
+                const handler = createOnRequestError({ beforeCapture: () => false })
+                await handler(new Error('ignored'), { headers: {} }, {})
+            },
+        },
+        {
+            name: 'the user has opted out',
+            run: async () => {
+                await onRequestError(
+                    new Error('opted out'),
+                    { headers: { cookie: '__ph_opt_in_out_phc_test123=0' } },
+                    {}
+                )
+            },
+        },
+        {
+            name: 'outside the nodejs runtime',
+            run: async () => {
+                process.env.NEXT_RUNTIME = 'edge'
+                await onRequestError(new Error('edge error'), { headers: {} }, {})
+            },
+        },
+    ])('skips capture when $name', async ({ run }) => {
+        await run()
 
         expect(mockGetOrCreateNodeClient).not.toHaveBeenCalled()
         expect(mockCaptureExceptionImmediate).not.toHaveBeenCalled()
@@ -124,55 +147,53 @@ describe('Next.js onRequestError', () => {
             },
         })
 
-        await expect(handler(new Error('ignored'), { headers: {} }, {})).resolves.toBeUndefined()
+        try {
+            await expect(handler(new Error('ignored'), { headers: {} }, {})).resolves.toBeUndefined()
 
-        expect(warnSpy).toHaveBeenCalledWith(
-            '[PostHog Next.js] Failed to run beforeCapture for server-side exception:',
-            expect.any(Error)
-        )
-        expect(mockGetOrCreateNodeClient).not.toHaveBeenCalled()
-        expect(mockCaptureExceptionImmediate).not.toHaveBeenCalled()
-        warnSpy.mockRestore()
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[PostHog Next.js] Failed to run beforeCapture for server-side exception:',
+                expect.any(Error)
+            )
+            expect(mockGetOrCreateNodeClient).not.toHaveBeenCalled()
+            expect(mockCaptureExceptionImmediate).not.toHaveBeenCalled()
+        } finally {
+            warnSpy.mockRestore()
+        }
     })
 
-    it('does not throw when creating the PostHog client fails', async () => {
+    it.each([
+        {
+            name: 'creating the PostHog client fails',
+            captureError: new Error('client unavailable'),
+            setup: (captureError: Error) => mockGetOrCreateNodeClient.mockRejectedValueOnce(captureError),
+            run: async () => onRequestError(new Error('server exploded'), { headers: {} }, {}),
+            assertCapture: () => expect(mockCaptureExceptionImmediate).not.toHaveBeenCalled(),
+        },
+        {
+            name: 'immediate exception capture fails',
+            captureError: new Error('transport unavailable'),
+            setup: (captureError: Error) => mockCaptureExceptionImmediate.mockRejectedValueOnce(captureError),
+            run: async () => {
+                const error = new Error('server exploded')
+                await onRequestError(error, { headers: {} }, {})
+                expect(mockCaptureExceptionImmediate).toHaveBeenCalledWith(error, undefined, expect.any(Object))
+            },
+            assertCapture: () => undefined,
+        },
+    ])('does not throw when $name', async ({ captureError, setup, run, assertCapture }) => {
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-        const captureError = new Error('client unavailable')
-        mockGetOrCreateNodeClient.mockRejectedValueOnce(captureError)
+        setup(captureError)
 
-        await expect(onRequestError(new Error('server exploded'), { headers: {} }, {})).resolves.toBeUndefined()
+        try {
+            await expect(run()).resolves.toBeUndefined()
 
-        expect(mockCaptureExceptionImmediate).not.toHaveBeenCalled()
-        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] Failed to capture server-side exception:', captureError)
-        warnSpy.mockRestore()
-    })
-
-    it('does not throw when immediate exception capture fails', async () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-        const captureError = new Error('transport unavailable')
-        const error = new Error('server exploded')
-        mockCaptureExceptionImmediate.mockRejectedValueOnce(captureError)
-
-        await expect(onRequestError(error, { headers: {} }, {})).resolves.toBeUndefined()
-
-        expect(mockCaptureExceptionImmediate).toHaveBeenCalledWith(error, undefined, expect.any(Object))
-        expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] Failed to capture server-side exception:', captureError)
-        warnSpy.mockRestore()
-    })
-
-    it('skips capture when the user has opted out', async () => {
-        await onRequestError(new Error('opted out'), { headers: { cookie: '__ph_opt_in_out_phc_test123=0' } }, {})
-
-        expect(mockGetOrCreateNodeClient).not.toHaveBeenCalled()
-        expect(mockCaptureExceptionImmediate).not.toHaveBeenCalled()
-    })
-
-    it('skips capture outside the nodejs runtime', async () => {
-        process.env.NEXT_RUNTIME = 'edge'
-
-        await onRequestError(new Error('edge error'), { headers: {} }, {})
-
-        expect(mockGetOrCreateNodeClient).not.toHaveBeenCalled()
-        expect(mockCaptureExceptionImmediate).not.toHaveBeenCalled()
+            assertCapture()
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[PostHog Next.js] Failed to capture server-side exception:',
+                captureError
+            )
+        } finally {
+            warnSpy.mockRestore()
+        }
     })
 })
