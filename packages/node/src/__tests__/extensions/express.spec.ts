@@ -52,17 +52,21 @@ const createErrorHandlerMiddleware = (posthog: PostHog): any => {
   return app.use.mock.calls[0][0]
 }
 
+const createPostHog = (options: Record<string, any> = {}): PostHog =>
+  new PostHog('TEST_API_KEY', {
+    host: 'http://example.com',
+    fetchRetryCount: 0,
+    disableCompression: true,
+    flushAt: 1,
+    flushInterval: 0,
+    ...options,
+  })
+
 describe('Express extension', () => {
   let posthog: PostHog
 
   beforeEach(() => {
-    posthog = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      fetchRetryCount: 0,
-      disableCompression: true,
-      flushAt: 1,
-      flushInterval: 0,
-    })
+    posthog = createPostHog()
 
     mockedFetch.mockResolvedValue({
       status: 200,
@@ -117,6 +121,46 @@ describe('Express extension', () => {
       expect(event.properties.$request_path).toBe('/api/test')
       expect(event.properties.$user_agent).toBe('TestAgent/1.0')
       expect(event.properties.$ip).toBe('10.0.0.1')
+    })
+
+    it('should strip request path search and preserve URL hash by default', async () => {
+      const middleware = createRequestContextMiddleware(posthog)
+      const req = createMockRequest({
+        originalUrl: '/api/test?token=secret#details',
+        path: '/api/test?token=secret#details',
+      })
+      const res = createMockResponse()
+
+      middleware(req, res, () => {
+        posthog.capture({ event: 'handler_event' })
+      })
+      await waitForFlushTimer(posthog)
+
+      const batchEvents = getLastBatchEvents()
+      const event = batchEvents!.find((e: any) => e.event === 'handler_event')
+      expect(event.properties.$current_url).toBe('/api/test?token=secret#details')
+      expect(event.properties.$request_path).toBe('/api/test#details')
+    })
+
+    it('should strip request URL hashes when disable_capture_url_hashes is enabled', async () => {
+      await posthog.shutdown()
+      posthog = createPostHog({ disable_capture_url_hashes: true })
+      const middleware = createRequestContextMiddleware(posthog)
+      const req = createMockRequest({
+        originalUrl: '/api/test?token=secret#details',
+        path: '/api/test?token=secret#details',
+      })
+      const res = createMockResponse()
+
+      middleware(req, res, () => {
+        posthog.capture({ event: 'handler_event' })
+      })
+      await waitForFlushTimer(posthog)
+
+      const batchEvents = getLastBatchEvents()
+      const event = batchEvents!.find((e: any) => e.event === 'handler_event')
+      expect(event.properties.$current_url).toBe('/api/test?token=secret')
+      expect(event.properties.$request_path).toBe('/api/test')
     })
 
     it('should sanitize tracing header values and preserve explicit capture properties', async () => {

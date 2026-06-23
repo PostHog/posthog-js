@@ -4,6 +4,7 @@ import { catchError } from 'rxjs/operators'
 
 import ErrorTracking from './error-tracking'
 import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
+import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import { PostHogBackendClient } from '../client'
 
 // Local interfaces to avoid runtime dependency on @nestjs/common
@@ -77,9 +78,14 @@ export class PostHogInterceptor implements NestInterceptor {
     const { sessionId, distinctId } = getPostHogTracingHeaderValues(headers)
 
     const properties: Record<string, any> = {}
-    addProperty(properties, '$current_url', request?.url)
+    const disableCaptureUrlHashes = this.posthog.options.disable_capture_url_hashes === true
+    addProperty(properties, '$current_url', normalizeRequestCurrentUrl(request?.url, disableCaptureUrlHashes))
     addProperty(properties, '$request_method', request?.method)
-    addProperty(properties, '$request_path', request?.path ?? request?.url)
+    addProperty(
+      properties,
+      '$request_path',
+      normalizeRequestPath(request?.path ?? request?.url, disableCaptureUrlHashes)
+    )
     addProperty(properties, '$user_agent', getFirstHeaderValue(headers['user-agent']))
     addProperty(properties, '$ip', getClientIp(headers, request))
 
