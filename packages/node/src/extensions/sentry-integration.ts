@@ -4,6 +4,9 @@
 /**
  * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog.
  *
+ * @deprecated This integration is deprecated and will be removed in a future major version. Use PostHog Error Tracking for Node instead:
+ * https://posthog.com/docs/error-tracking/installation/node
+ *
  * ### Usage
  *
  *     Sentry.init({
@@ -76,6 +79,12 @@ export type SentryIntegrationOptions = {
 
 const NAME = 'posthog-node'
 
+/**
+ * Creates an event processor for the deprecated Sentry integration.
+ *
+ * @deprecated This integration is deprecated and will be removed in a future major version. Use PostHog Error Tracking for Node instead:
+ * https://posthog.com/docs/error-tracking/installation/node
+ */
 export function createEventProcessor(
   _posthog: PostHogBackendClient,
   {
@@ -162,6 +171,12 @@ export function createEventProcessor(
 }
 
 // V8 integration - function based
+/**
+ * Creates the function-based Sentry integration.
+ *
+ * @deprecated This integration is deprecated and will be removed in a future major version. Use PostHog Error Tracking for Node instead:
+ * https://posthog.com/docs/error-tracking/installation/node
+ */
 export function sentryIntegration(
   _posthog: PostHogBackendClient,
   options?: SentryIntegrationOptions
@@ -176,6 +191,12 @@ export function sentryIntegration(
 }
 
 // V7 integration - class based
+/**
+ * Class-based Sentry integration.
+ *
+ * @deprecated This integration is deprecated and will be removed in a future major version. Use PostHog Error Tracking for Node instead:
+ * https://posthog.com/docs/error-tracking/installation/node
+ */
 export class PostHogSentryIntegration implements _SentryIntegrationClass {
   public readonly name = NAME
 
