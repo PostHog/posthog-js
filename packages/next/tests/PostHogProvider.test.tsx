@@ -15,12 +15,12 @@ jest.mock('next/headers.js', () => ({
     cookies: jest.fn(),
 }))
 
-// Mock nodeClientCache — the mock fn must be declared with `var` so it's
+// Mock clientCache.node — the mock fn must be declared with `var` so it's
 // hoisted and available inside the jest.mock factory (which Jest hoists above
 // `const`/`let` declarations).
 var mockGetAllFlagsAndPayloads = jest.fn()
 
-jest.mock('../src/server/nodeClientCache', () => ({
+jest.mock('../src/server/clientCache.node', () => ({
     getOrCreateNodeClient: jest.fn().mockImplementation(() => ({
         getAllFlagsAndPayloads: (...args: any[]) => mockGetAllFlagsAndPayloads(...args),
     })),
@@ -105,6 +105,7 @@ describe('PostHogProvider', () => {
                 expect.objectContaining({
                     options: expect.objectContaining({
                         api_host: 'https://us.i.posthog.com',
+                        capture_exceptions: true,
                         persistence: 'localStorage+cookie',
                         opt_out_capturing_persistence_type: 'cookie',
                         opt_out_persistence_by_default: true,
@@ -117,6 +118,7 @@ describe('PostHogProvider', () => {
             const element = await PostHogProvider({
                 apiKey: 'phc_test123',
                 clientOptions: {
+                    capture_exceptions: false,
                     persistence: 'memory',
                     opt_out_persistence_by_default: false,
                 },
@@ -126,6 +128,7 @@ describe('PostHogProvider', () => {
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
                     options: expect.objectContaining({
+                        capture_exceptions: false,
                         persistence: 'memory',
                         opt_out_capturing_persistence_type: 'cookie',
                         opt_out_persistence_by_default: false,

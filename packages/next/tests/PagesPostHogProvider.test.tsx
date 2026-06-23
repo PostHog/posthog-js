@@ -76,6 +76,7 @@ describe('Pages PostHogProvider', () => {
             expect.objectContaining({
                 options: expect.objectContaining({
                     api_host: 'https://us.i.posthog.com',
+                    capture_exceptions: true,
                     persistence: 'localStorage+cookie',
                     opt_out_capturing_persistence_type: 'cookie',
                     opt_out_persistence_by_default: true,
@@ -86,13 +87,14 @@ describe('Pages PostHogProvider', () => {
 
     it('allows user clientOptions to override defaults', () => {
         render(
-            <PostHogProvider apiKey="phc_test123" clientOptions={{ persistence: 'memory' }}>
+            <PostHogProvider apiKey="phc_test123" clientOptions={{ capture_exceptions: false, persistence: 'memory' }}>
                 <div>Child</div>
             </PostHogProvider>
         )
         expect(mockClientPostHogProvider).toHaveBeenCalledWith(
             expect.objectContaining({
                 options: expect.objectContaining({
+                    capture_exceptions: false,
                     persistence: 'memory',
                     opt_out_capturing_persistence_type: 'cookie',
                 }),
