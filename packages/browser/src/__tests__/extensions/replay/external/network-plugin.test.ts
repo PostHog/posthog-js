@@ -505,6 +505,17 @@ describe('network plugin', () => {
             await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe('1234567890')
         })
 
+        it('decodes a multi-byte character split across chunk boundaries', async () => {
+            const bytes = encode('😀')
+            const r = fakeStreamingBody([bytes.slice(0, 2), bytes.slice(2)])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('😀')
+        })
+
+        it('decodes an empty body to an empty string', async () => {
+            const r = fakeStreamingBody([])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('')
+        })
+
         it('falls back to text() when there is no readable stream', async () => {
             const r = fakeStreamingBody([], { noStream: true, textFallback: 'plain text body' })
             await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('plain text body')

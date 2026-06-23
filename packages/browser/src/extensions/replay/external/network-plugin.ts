@@ -651,10 +651,14 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
         const body = clone.body
         // no readable stream (or no TextDecoder) available — fall back to the buffered read of the clone
         if (!isReadableStreamBody(body) || typeof TextDecoder === 'undefined') {
-            clone.text().then(
-                (txt) => done(txt),
-                (reason) => done(bodyReadFailedMessage(reason))
-            )
+            try {
+                clone.text().then(
+                    (txt) => done(txt),
+                    (reason) => done(bodyReadFailedMessage(reason))
+                )
+            } catch {
+                done(BODY_READ_FAILED_MESSAGE)
+            }
             return
         }
 
