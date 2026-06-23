@@ -38,6 +38,14 @@ export function removeTrailingSlash(url: string): string {
   return url?.replace(/\/+$/, '')
 }
 
+export function stripUrlHash<T extends string | undefined>(url: T): T extends string ? string : undefined {
+  if (!url) {
+    return url as any
+  }
+
+  return url.split('#')[0] as any
+}
+
 export interface RetriableOptions {
   retryCount: number
   retryDelay: number

@@ -1,0 +1,39 @@
+{
+    "name": "@posthog/browser-common",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Shared browser extension primitives for PostHog JavaScript SDKs",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/browser-common"
+    },
+    "type": "module",
+    "sideEffects": false,
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "import": "./src/index.ts"
+        }
+    },
+    "scripts": {
+        "lint": "eslint src tests",
+        "lint:fix": "eslint src tests --fix",
+        "build": "tsc -p tsconfig.json --noEmit",
+        "test:unit": "jest -c jest.config.cjs",
+        "check-types": "pnpm build"
+    },
+    "dependencies": {
+        "@posthog/core": "workspace:^"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@types/jest": "catalog:",
+        "jest": "catalog:",
+        "ts-jest": "catalog:",
+        "typescript": "^6.0.3"
+    }
+}

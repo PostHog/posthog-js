@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.1.1
+
+### Patch Changes
+
+- [#3931](https://github.com/PostHog/posthog-js/pull/3931) [`8b62007`](https://github.com/PostHog/posthog-js/commit/8b62007a4e41c77b26b6c5828b0f399972541856) Thanks [@ioannisj](https://github.com/ioannisj)! - Raise the native SDK floor to the releases that skip session-replay event-trigger gating for React Native: posthog-ios `~> 3.61.1` and `com.posthog:posthog-android:3.51.1`. Required for React Native event-triggered session replay to record.
+  (2026-06-23)
+
 ## 2.1.0
 
 ### Minor Changes

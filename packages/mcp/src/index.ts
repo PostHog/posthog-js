@@ -169,6 +169,10 @@ export {
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
 export { setLogger } from './extensions/logger'
+// Re-export the posthog-node client so a single import works:
+//   import { PostHog, instrument } from "@posthog/mcp"
+// posthog-node stays a peer dependency, so this resolves the host app's installed copy.
+export { PostHog, type PostHogOptions } from 'posthog-node'
 export type {
   BeforeSendFn,
   CaptureEventData,

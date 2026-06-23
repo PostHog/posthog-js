@@ -1,5 +1,29 @@
 # posthog-react-native
 
+## 4.52.0
+
+### Minor Changes
+
+- [#3932](https://github.com/PostHog/posthog-js/pull/3932) [`bf6947d`](https://github.com/PostHog/posthog-js/commit/bf6947d3e12ac512c99185be9b8b134c04eb563a) Thanks [@ioannisj](https://github.com/ioannisj)! - Support session replay event triggers in React Native. Recording stays paused until the client captures an event whose name matches a server-configured `sessionRecording.eventTriggers` entry, then records for the rest of that session; it re-arms on session rotation and AND-combines with the linked-flag gate. Requires `@posthog/react-native-plugin` >= 2.1.1 (which pins the native SDKs that defer event-trigger gating to the JS layer).
+  (2026-06-23)
+
+### Patch Changes
+
+- Updated dependencies [[`bf6947d`](https://github.com/PostHog/posthog-js/commit/bf6947d3e12ac512c99185be9b8b134c04eb563a)]:
+  - @posthog/core@1.37.1
+
+## 4.51.0
+
+### Minor Changes
+
+- [#3879](https://github.com/PostHog/posthog-js/pull/3879) [`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0) Thanks [@ioannisj](https://github.com/ioannisj)! - Deprecate `disableRemoteConfig`. Remote config is now always loaded and the option is a no-op. It will be removed in a future version. Also promote the previously experimental `disableSurveys` and `maskAllSandboxedViews` options to GA.
+  (2026-06-23)
+
+### Patch Changes
+
+- Updated dependencies [[`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0)]:
+  - @posthog/core@1.37.0
+
 ## 4.50.0
 
 ### Minor Changes

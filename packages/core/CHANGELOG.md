@@ -1,5 +1,32 @@
 # @posthog/core
 
+## 1.37.1
+
+### Patch Changes
+
+- [#3932](https://github.com/PostHog/posthog-js/pull/3932) [`bf6947d`](https://github.com/PostHog/posthog-js/commit/bf6947d3e12ac512c99185be9b8b134c04eb563a) Thanks [@ioannisj](https://github.com/ioannisj)! - Support session replay event triggers in React Native. Recording stays paused until the client captures an event whose name matches a server-configured `sessionRecording.eventTriggers` entry, then records for the rest of that session; it re-arms on session rotation and AND-combines with the linked-flag gate. Requires `@posthog/react-native-plugin` >= 2.1.1 (which pins the native SDKs that defer event-trigger gating to the JS layer).
+  (2026-06-23)
+
+## 1.37.0
+
+### Minor Changes
+
+- [#3879](https://github.com/PostHog/posthog-js/pull/3879) [`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0) Thanks [@ioannisj](https://github.com/ioannisj)! - Deprecate `disableRemoteConfig`. Remote config is now always loaded and the option is a no-op. It will be removed in a future version. Also promote the previously experimental `disableSurveys` and `maskAllSandboxedViews` options to GA.
+  (2026-06-23)
+
+## 1.36.0
+
+### Minor Changes
+
+- [#3921](https://github.com/PostHog/posthog-js/pull/3921) [`c28b161`](https://github.com/PostHog/posthog-js/commit/c28b16143d04caade1d024819017b89cef3162ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `disable_capture_url_hashes` to strip URL fragments from automatically captured URLs. It is disabled by default for backwards compatibility, and enabled automatically when `config.defaults` is `'2026-06-25'` or later. Enabling it (either explicitly or via the `'2026-06-25'` defaults) is a breaking behavior change for SPAs that rely on URL hashes for routing or analytics, because hash-based routes will be collapsed to the same URL without the fragment in fields such as `$current_url`, `$initial_current_url`, `$session_entry_url`, autocapture `$elements[*].attr__href`, `$external_click_url`, replay `href` URLs, heatmaps, web vitals `$current_url`, logs `url.full`, conversations `current_url`/`request_url`, or Next.js Pages Router `$pageview` `$current_url`.
+
+  If you only want to capture some hashes, leave hash capture enabled and use `before_send` to remove or redact sensitive hash values before events are sent. (2026-06-23)
+
+### Patch Changes
+
+- Updated dependencies [[`c28b161`](https://github.com/PostHog/posthog-js/commit/c28b16143d04caade1d024819017b89cef3162ad)]:
+  - @posthog/types@1.391.0
+
 ## 1.35.4
 
 ### Patch Changes

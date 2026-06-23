@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.38.3
+
+### Patch Changes
+
+- [#3937](https://github.com/PostHog/posthog-js/pull/3937) [`4d59d0e`](https://github.com/PostHog/posthog-js/commit/4d59d0e10f92ad3444e14dc171997c21aba57929) Thanks [@marandaneto](https://github.com/marandaneto)! - Deprecate the Node SDK Sentry integration and point users to PostHog Error Tracking for Node.
+  (2026-06-23)
+- Updated dependencies [[`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0)]:
+  - @posthog/core@1.37.0
+
 ## 5.38.2
 
 ### Patch Changes
