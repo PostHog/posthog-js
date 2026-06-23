@@ -3007,6 +3007,10 @@
           "name": "SessionReplay"
         },
         {
+          "type": "\"session_replay_event_trigger_activated_session\"",
+          "name": "SessionReplayEventTriggerActivatedSession"
+        },
+        {
           "type": "\"session_start_timestamp\"",
           "name": "SessionStartTimestamp"
         },
