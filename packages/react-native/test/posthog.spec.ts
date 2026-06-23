@@ -1231,7 +1231,6 @@ describe('PostHog React Native', () => {
           setDefaultPersonProperties: false,
           flushInterval: 0,
           preloadFeatureFlags: false,
-          disableRemoteConfig: true,
           disableSurveys: true,
           captureAppLifecycleEvents: false,
         })
@@ -2267,7 +2266,6 @@ describe('Feature flag error tracking', () => {
       preloadFeatureFlags: false,
       sendFeatureFlagEvent: true,
       captureAppLifecycleEvents: false,
-      disableRemoteConfig: true,
       disableSurveys: true,
       disableCompression: true,
     })

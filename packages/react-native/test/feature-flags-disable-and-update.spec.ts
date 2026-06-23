@@ -17,21 +17,28 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
       String(url).includes('/flags')
     )
 
+  // Remote config is served from the /array/<token>/config endpoint.
+  const configCalls = (): any[][] =>
+    ((globalThis as any).window.fetch as jest.Mock).mock.calls.filter(([url]: [string]) =>
+      String(url).includes('/array/')
+    )
+
   beforeEach(() => {
     ;(globalThis as any).window.fetch = jest.fn(async (url: string) => {
       let res: any = { status: 'ok' }
       if (url.includes('/flags')) {
-        // The mocked server still returns flag values, proving the SDK does not store them
+        // The mocked flags endpoint still returns values, proving the SDK never calls it
+        // (and therefore never stores its flags) when remote feature flags are disabled.
         res = {
           featureFlags: { 'server-flag': true },
-          surveys: [{ id: 'survey-1' }],
           sessionRecording: { endpoint: '/s/' },
         }
       } else if (url.includes('/config')) {
+        // Remote config now always loads and carries surveys.
         res = {
           hasFeatureFlags: true,
           sessionRecording: { endpoint: '/s/' },
-          surveys: false,
+          surveys: [{ id: 'survey-1' }],
           supportedCompression: ['gzip', 'gzip-js'],
         }
       }
@@ -51,7 +58,10 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
     await posthog.shutdown()
   })
 
-  describe('with remote config disabled (the flags endpoint also carries config/surveys)', () => {
+  // `disableRemoteConfig` is deprecated and a no-op: remote config always loads. Setting it
+  // here (alongside `disableRemoteFeatureFlags`) proves it no longer suppresses the config
+  // request and no longer routes config/surveys through the flags endpoint.
+  describe('with disableRemoteFeatureFlags and the deprecated disableRemoteConfig (now a no-op)', () => {
     const newPostHog = (): PostHog =>
       new PostHog('test-token', {
         customStorage: mockStorage,
@@ -60,23 +70,24 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
         disableRemoteFeatureFlags: true,
       })
 
-    it('makes a single config request with disable_flags and never refetches on identify/reset', async () => {
+    it('loads remote config once and never calls the flags endpoint on identify/reset', async () => {
       posthog = newPostHog()
       await posthog.ready()
       await wait(50)
 
-      expect(flagsCalls()).toHaveLength(1)
-      expect(JSON.parse(flagsCalls()[0][1].body)).toMatchObject({ disable_flags: true })
+      expect(configCalls()).toHaveLength(1)
+      expect(flagsCalls()).toHaveLength(0)
 
       posthog.identify('user-1')
       posthog.reset()
       posthog.identify('user-2')
       await wait(50)
 
-      expect(flagsCalls()).toHaveLength(1)
+      expect(configCalls()).toHaveLength(1)
+      expect(flagsCalls()).toHaveLength(0)
     })
 
-    it('caches surveys from the config request but does not store its flags', async () => {
+    it('caches surveys from the remote config request but does not store any server flags', async () => {
       posthog = newPostHog()
       await posthog.ready()
       await wait(50)
