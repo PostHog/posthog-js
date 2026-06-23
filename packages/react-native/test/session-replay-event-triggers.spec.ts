@@ -292,6 +292,14 @@ describe('PostHog RN session replay event triggers', () => {
     expect(replay.startRecording).not.toHaveBeenCalled()
   })
 
+  it('pins the persisted-property key (renaming it would orphan activation across app upgrades)', () => {
+    // This literal is the on-disk storage key for trigger activation. Changing it silently strands
+    // every existing user's persisted activation on upgrade, so the value is part of the contract.
+    expect(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession).toBe(
+      'session_replay_event_trigger_activated_session'
+    )
+  })
+
   it('disarms when a later flag reload drops eventTriggers from config and records normally', async () => {
     // Launch 1 arms a trigger so recording is gated off (no matching event fired).
     currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
