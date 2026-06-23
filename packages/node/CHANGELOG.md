@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.38.4
+
+### Patch Changes
+
+- [#3938](https://github.com/PostHog/posthog-js/pull/3938) [`6391106`](https://github.com/PostHog/posthog-js/commit/6391106fd4bcbddb9a63a13338929a4c1918a70a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Respect `disable_capture_url_hashes` when capturing Express and NestJS request URLs.
+  (2026-06-23)
+
 ## 5.38.3
 
 ### Patch Changes

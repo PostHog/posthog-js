@@ -1,5 +1,19 @@
 # @posthog/next
 
+## 0.6.0
+
+### Minor Changes
+
+- [#3925](https://github.com/PostHog/posthog-js/pull/3925) [`1b0191c`](https://github.com/PostHog/posthog-js/commit/1b0191cfa3b0d326358fe0fba1c3dfa014abad5d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Enable exception capture by default.
+    - Client-side PostHog initialization now sets `capture_exceptions: true` by default. Pass `clientOptions.capture_exceptions` to override this.
+    - Apps can export `onRequestError` from `@posthog/next` in `instrumentation.ts` to capture server-side request errors handled by Next.js, including in the Edge runtime.
+    - Alternatively, import `captureRequestError` and call it from `onRequestError`. (2026-06-23)
+
+### Patch Changes
+
+- Updated dependencies [[`6391106`](https://github.com/PostHog/posthog-js/commit/6391106fd4bcbddb9a63a13338929a4c1918a70a)]:
+    - posthog-node@5.38.4
+
 ## 0.5.0
 
 ### Minor Changes
