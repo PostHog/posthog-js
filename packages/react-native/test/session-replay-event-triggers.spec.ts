@@ -291,4 +291,47 @@ describe('PostHog RN session replay event triggers', () => {
     expect(replay.start).not.toHaveBeenCalled()
     expect(replay.startRecording).not.toHaveBeenCalled()
   })
+
+  it('disarms when a later flag reload drops eventTriggers from config and records normally', async () => {
+    // Launch 1 arms a trigger so recording is gated off (no matching event fired).
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+    expect(replay.start).not.toHaveBeenCalled()
+
+    // Server removes eventTriggers. The in-memory armed list must clear so the gate no longer
+    // blocks: replay should now record without waiting for a matching event.
+    currentSessionRecording = { endpoint: '/s/' }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+
+    // And a previously-configured trigger name is now inert (does not re-gate or re-activate).
+    posthog.capture('$pageview')
+    await wait(50)
+    expect(replay.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('is idempotent when the matching event is captured again while already recording', async () => {
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmup()
+
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+
+    posthog.capture('$pageview')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    replay.isEnabled.mockImplementation(async () => true)
+
+    // Re-firing the same trigger within the active session must not re-init or re-resume recording.
+    posthog.capture('$pageview')
+    posthog.capture('$pageview')
+    await wait(50)
+    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.startRecording).not.toHaveBeenCalled()
+    expect(replay.stopRecording).not.toHaveBeenCalled()
+  })
 })
