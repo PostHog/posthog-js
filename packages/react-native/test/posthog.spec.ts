@@ -1235,6 +1235,8 @@ describe('PostHog React Native', () => {
           captureAppLifecycleEvents: false,
         })
         await posthog.ready()
+        // Await the background remote config fetch so it completes before we clear mocks
+        await (posthog as any)._remoteConfigResponsePromise
         ;(globalThis as any).window.fetch.mockClear()
       })
 
