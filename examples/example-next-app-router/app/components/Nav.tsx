@@ -10,6 +10,7 @@ const links = [
     { href: '/client-hooks', label: 'Client Hooks' },
     { href: '/ssr-bootstrap', label: 'SSR Bootstrap' },
     { href: '/capture', label: 'Capture' },
+    { href: '/server-errors', label: 'Server Errors' },
 ]
 
 export function Nav() {

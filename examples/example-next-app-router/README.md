@@ -41,6 +41,17 @@ A Next.js 15 App Router example demonstrating all features of the `@posthog/next
 | `/client-hooks`  | React Hooks       | Use `useFeatureFlag` and friends                           |
 | `/ssr-bootstrap` | SSR Bootstrap     | Feature flags on first render with no flicker              |
 | `/capture`       | Event Capture     | Capture custom events from client components               |
+| `/server-errors` | Error Tracking    | Capture server-side exceptions via `onRequestError`        |
+
+## Server-side error tracking
+
+This example includes an [`instrumentation.ts`](./instrumentation.ts) file:
+
+```ts
+export { onRequestError } from '@posthog/next'
+```
+
+Next.js calls this hook when a request throws on the server. Visit `/server-errors` and click the button to throw from a route handler and capture a `$exception` event in PostHog.
 
 ## Feature Flags
 
