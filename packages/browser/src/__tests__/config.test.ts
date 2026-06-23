@@ -119,6 +119,19 @@ describe('config', () => {
             expect(posthog.config.detect_google_search_app).toBe(expected)
         })
 
+        it.each([
+            ['unset', undefined, false],
+            ['2025-05-24', '2025-05-24' as const, false],
+            ['2025-11-30', '2025-11-30' as const, false],
+            ['2026-01-30', '2026-01-30' as const, false],
+            ['2026-05-30', '2026-05-30' as const, false],
+            ['2026-06-25', '2026-06-25' as const, true],
+        ])('disable_capture_url_hashes with defaults %s', (_label, defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', defaults ? { defaults } : undefined)
+            expect(posthog.config.disable_capture_url_hashes).toBe(expected)
+        })
+
         it('should preserve other default config values when setting defaults', () => {
             const posthog1 = new PostHog()
             posthog1._init('test-token')

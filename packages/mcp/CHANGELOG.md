@@ -1,5 +1,17 @@
 # @posthog/mcp
 
+## 0.4.1
+
+### Patch Changes
+
+- [#3936](https://github.com/PostHog/posthog-js/pull/3936) [`06c23d8`](https://github.com/PostHog/posthog-js/commit/06c23d8959a6a5c1c322d7eb722ac4731121a50f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Re-export `PostHog` (and the `PostHogOptions` type) from `@posthog/mcp`, so you can import the client and `instrument` from a single package:
+
+  ```ts
+  import { PostHog, instrument } from '@posthog/mcp'
+  ```
+
+  `posthog-node` remains a peer dependency (resolved from the host app's installed copy); this only unifies the import. `PostHogMCP` is also already accepted by `instrument()` if you prefer a single client class. (2026-06-23)
+
 ## 0.4.0
 
 ### Minor Changes

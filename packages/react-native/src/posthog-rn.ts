@@ -199,7 +199,6 @@ export class PostHog extends PostHogCore {
   // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
   private _sessionReplayEventTriggers: string[] = []
   private _disableSurveys: boolean
-  private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
   private _logs: PostHogLogs
   // Resolved logs config — kept around so lifecycle handlers (AppState
@@ -260,7 +259,6 @@ export class PostHog extends PostHogCore {
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
-    this._disableRemoteConfig = options?.disableRemoteConfig ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
@@ -431,45 +429,18 @@ export class PostHog extends PostHogCore {
         this._errorTracking.onRemoteConfig(cachedRemoteConfig.errorTracking)
       }
 
-      if (this._disableRemoteConfig === false) {
-        this.reloadRemoteConfigAsync()
-          .then((response) => {
-            if (response) {
-              this._handleSurveysFromRemoteConfig(response)
-            }
-          })
-          .catch((error) => {
-            this._logger.error('Error loading remote config:', error)
-          })
-          .finally(() => {
-            this._notifySurveysReady()
-          })
-      } else {
-        this._logger.info('Remote config is disabled.')
-
-        if (options?.preloadFeatureFlags !== false) {
-          this._logger.info('Feature flags will be preloaded from Flags API.')
-          // Preload flags (and parse surveys as well since we are calling with config=true already)
-          this._flagsAsyncWithSurveys()
-            .catch((error) => {
-              this._logger.error('Error loading flags with surveys:', error)
-            })
-            .finally(() => {
-              this._notifySurveysReady()
-            })
-        } else {
-          this._logger.info('preloadFeatureFlags is disabled, loading surveys from API.')
-          // Load surveys directly from API since both remote config and preloading feature flags are disabled
-          // Note: if flags are not loaded/cached then surveys will not be displayed until reloadFeatureFlags() is called, since surveys depend on internal flags
-          this._loadSurveysFromAPI()
-            .catch((error) => {
-              this._logger.error('Error loading surveys from API:', error)
-            })
-            .finally(() => {
-              this._notifySurveysReady()
-            })
-        }
-      }
+      this.reloadRemoteConfigAsync()
+        .then((response) => {
+          if (response) {
+            this._handleSurveysFromRemoteConfig(response)
+          }
+        })
+        .catch((error) => {
+          this._logger.error('Error loading remote config:', error)
+        })
+        .finally(() => {
+          this._notifySurveysReady()
+        })
 
       // captureAppLifecycleEvents defaults to true; only skip if explicitly set to false
       if (options?.captureAppLifecycleEvents !== false) {
@@ -1966,64 +1937,6 @@ export class PostHog extends PostHogCore {
       this._cacheSurveys(surveys as Survey[], 'remote config')
     } else {
       this._cacheSurveys(null, 'remote config')
-    }
-  }
-
-  /**
-   * Load flags AND handle surveys from the flags response (only when remote config is disabled)
-   */
-  private async _flagsAsyncWithSurveys(): Promise<void> {
-    try {
-      const flagsResponse = await this.flagsAsync({
-        sendAnonDistinctId: true,
-        fetchConfig: true,
-        triggerOnRemoteConfig: true,
-      })
-
-      // Only handle surveys from flags if remote config is disabled and surveys are enabled
-      // When remote config is enabled, surveys will come from there instead
-      if (this._disableRemoteConfig === true) {
-        if (this._disableSurveys === true) {
-          this._logger.info('Loading surveys skipped, disabled.')
-          this._cacheSurveys(null, 'flags (disabled)')
-          return
-        }
-
-        // Handle surveys from the response (surveys key is included when config=true)
-        const surveys = flagsResponse?.surveys
-
-        // If surveys is not an array, it means there are no surveys (its a boolean)
-        if (Array.isArray(surveys) && surveys.length > 0) {
-          this._cacheSurveys(surveys as Survey[], 'flags endpoint')
-        } else {
-          this._logger.info('No surveys in flags response')
-          this._cacheSurveys(null, 'flags endpoint')
-        }
-      }
-    } catch (error) {
-      this._logger.error('Error in _flagsAsyncWithSurveys:', error)
-    }
-  }
-
-  /**
-   * Internal method to load surveys from API (when remote config is disabled)
-   */
-  private async _loadSurveysFromAPI(): Promise<void> {
-    if (this._disableSurveys === true) {
-      this._logger.info('Loading surveys skipped, disabled.')
-      this._cacheSurveys(null, 'API (disabled)')
-      return
-    }
-
-    try {
-      const surveysFromApi = await super.getSurveysStateless()
-      if (surveysFromApi && surveysFromApi.length > 0) {
-        this._cacheSurveys(surveysFromApi, 'API')
-      } else {
-        this._cacheSurveys(null, 'API')
-      }
-    } catch (error) {
-      this._logger.error('Error loading surveys from API:', error)
     }
   }
 

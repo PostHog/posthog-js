@@ -2,7 +2,7 @@
   "id": "posthog-node",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "5.38.3",
     "id": "posthog-node",
     "title": "PostHog Node.js SDK",
     "description": "PostHog Node.js SDK allows you to capture events and send them to PostHog from your Node.js applications.",
@@ -2379,10 +2379,6 @@
         {
           "type": "\"session_replay\"",
           "name": "SessionReplay"
-        },
-        {
-          "type": "\"session_replay_event_trigger_activated_session\"",
-          "name": "SessionReplayEventTriggerActivatedSession"
         },
         {
           "type": "\"session_start_timestamp\"",

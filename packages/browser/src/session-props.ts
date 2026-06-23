@@ -37,7 +37,11 @@ interface StoredSessionSourceProps {
 }
 
 const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProps | CurrentSessionSourceProps => {
-    return getPersonInfo(posthog?.config.mask_personal_data_properties, posthog?.config.custom_personal_data_properties)
+    return getPersonInfo(
+        posthog?.config.mask_personal_data_properties,
+        posthog?.config.custom_personal_data_properties,
+        posthog?.config.disable_capture_url_hashes
+    )
 }
 
 export class SessionPropsManager {
@@ -85,7 +89,7 @@ export class SessionPropsManager {
             return {}
         }
         if ('r' in p) {
-            return getPersonPropsFromInfo(p)
+            return getPersonPropsFromInfo(p, this._instance.config.disable_capture_url_hashes)
         } else {
             return {
                 $referring_domain: p.referringDomain,
