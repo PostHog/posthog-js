@@ -23,7 +23,7 @@
         "lint": "eslint src tests",
         "lint:fix": "eslint src tests --fix",
         "build": "tsc -p tsconfig.json --noEmit",
-        "test:unit": "pnpm --filter=@posthog/types build && pnpm --filter=@posthog/core build && jest -c jest.config.cjs",
+        "test:unit": "jest -c jest.config.cjs",
         "check-types": "pnpm build"
     },
     "dependencies": {
