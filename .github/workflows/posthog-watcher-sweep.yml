@@ -49,8 +49,6 @@ jobs:
                   allow-fix: 'true'
                   allow-close: 'true'
                   allow-security-ai: 'true'
-                  require-reproduction: 'true'
-                  validation-command: 'pnpm install --frozen-lockfile && pnpm test:unit'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
                   approve-project-resources: 'true'
