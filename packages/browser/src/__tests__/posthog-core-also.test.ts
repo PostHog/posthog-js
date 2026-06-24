@@ -1,7 +1,7 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import * as globals from '../utils/globals'
-import { document, window } from '../utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
+import { document, window } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'
 import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
