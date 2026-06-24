@@ -16,6 +16,19 @@
         "commentUrl": "https://github.com/PostHog/posthog-js/pull/3949#issuecomment-4790043843"
       },
       "attempts": 0
+    },
+    {
+      "id": "issue-3950-auto-none-no-comment-no-close-1782309732341",
+      "kind": "issue",
+      "number": 3950,
+      "mode": "auto",
+      "enqueuedAt": "2026-06-24T14:02:12.341Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 28104183002,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28104183002"
+      },
+      "attempts": 0
     }
   ]
 }
