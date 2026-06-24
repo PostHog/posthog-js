@@ -4,13 +4,13 @@
     "repo": "PostHog/posthog-js",
     "item": "issue 3950",
     "url": "https://github.com/PostHog/posthog-js/issues/3950",
-    "conclusion": "Valid bug: the no-external full module bundle has the toolbar extension class but lacks the toolbar loader/bundled toolbar implementation.",
+    "conclusion": "Valid bug: the full no-external module bundle exposes the toolbar extension but cannot load the toolbar implementation.",
     "labels": [
       "feature/toolbar",
       "web"
     ],
     "closed": false,
-    "updatedAt": "2026-06-24T14:23:03.451Z"
+    "updatedAt": "2026-06-24T15:12:33.106Z"
   },
   "PostHog/posthog-js/issue/2383": {
     "key": "PostHog/posthog-js/issue/2383",
