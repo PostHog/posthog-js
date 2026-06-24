@@ -2794,7 +2794,7 @@
       "name": "NetworkRecordOptions",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "{\n    initiatorTypes?: InitiatorType[];\n    maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined;\n    recordHeaders?: boolean | {\n        request: boolean;\n        response: boolean;\n    };\n    recordBody?: boolean | string[] | {\n        request: boolean | string[];\n        response: boolean | string[];\n    };\n    recordInitialRequests?: boolean;\n    recordPerformance?: boolean;\n    performanceEntryTypeToObserve: string[];\n    payloadSizeLimitBytes: number;\n    payloadHostDenyList?: string[];\n}"
+      "example": "{\n    initiatorTypes?: InitiatorType[];\n    maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined;\n    recordHeaders?: boolean | {\n        request: boolean;\n        response: boolean;\n    };\n    recordBody?: boolean | string[] | {\n        request: boolean | string[];\n        response: boolean | string[];\n    };\n    recordInitialRequests?: boolean;\n    recordPerformance?: boolean;\n    performanceEntryTypeToObserve: string[];\n    payloadSizeLimitBytes: number;\n    streamNetworkBody?: boolean;\n    payloadHostDenyList?: string[];\n}"
     },
     {
       "id": "OverrideConfig",

@@ -1,7 +1,12 @@
 /// <reference lib="dom" />
 
 import { expect } from '@jest/globals'
+import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
+import { NetworkRecordOptions } from '../../../../types'
 import {
+    _contentLengthExceedsLimit,
+    _readBody,
+    _tryReadBodyStreaming,
     NEVER_RECORD_BODY_CONTENT_TYPES,
     shouldRecordBody,
 } from '../../../../extensions/replay/external/network-plugin'
@@ -424,6 +429,172 @@ describe('network plugin', () => {
                     expect(testXhr.getListenerCount('timeout')).toBe(0)
                 })
             })
+        })
+    })
+
+    describe('_tryReadBodyStreaming', () => {
+        // jsdom omits TextEncoder/TextDecoder; every browser that supports fetch + streams has them,
+        // so shim them here to exercise the real streaming path (the function falls back to text()
+        // when TextDecoder is absent, which is covered by the no-stream case).
+        const originalTextEncoder = (global as any).TextEncoder
+        const originalTextDecoder = (global as any).TextDecoder
+        beforeAll(() => {
+            ;(global as any).TextEncoder = (global as any).TextEncoder ?? NodeTextEncoder
+            ;(global as any).TextDecoder = (global as any).TextDecoder ?? NodeTextDecoder
+        })
+        afterAll(() => {
+            ;(global as any).TextEncoder = originalTextEncoder
+            ;(global as any).TextDecoder = originalTextDecoder
+        })
+
+        const encode = (s: string): Uint8Array => new TextEncoder().encode(s)
+
+        function fakeStreamingBody(
+            chunks: Uint8Array[],
+            opts: {
+                readRejects?: boolean
+                cloneThrows?: boolean
+                noStream?: boolean
+                textFallback?: string
+                readNeverResolves?: boolean
+                cancel?: () => Promise<void>
+            } = {}
+        ): Request | Response {
+            let i = 0
+            const reader = {
+                read: () =>
+                    opts.readNeverResolves
+                        ? new Promise(() => {})
+                        : opts.readRejects
+                          ? Promise.reject(new Error('boom'))
+                          : Promise.resolve(
+                                i < chunks.length
+                                    ? { done: false, value: chunks[i++] }
+                                    : { done: true, value: undefined }
+                            ),
+                cancel: opts.cancel ?? (() => Promise.resolve()),
+            }
+            const clone = {
+                body: opts.noStream ? null : { getReader: () => reader, tee: () => [] },
+                text: () => Promise.resolve(opts.textFallback ?? ''),
+            }
+            return {
+                clone: () => {
+                    if (opts.cloneThrows) {
+                        throw new Error('cannot clone')
+                    }
+                    return clone
+                },
+            } as unknown as Response
+        }
+
+        it('returns the full body when under the limit', async () => {
+            const r = fakeStreamingBody([encode('hello '), encode('world')])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('hello world')
+        })
+
+        it('stops at the limit and returns a placeholder, without buffering past it', async () => {
+            const r = fakeStreamingBody([encode('a'.repeat(8)), encode('b'.repeat(8))])
+            await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe(
+                '[SessionReplay] Body too large to record (> 10 bytes)'
+            )
+        })
+
+        it('records a body that exactly fills the limit', async () => {
+            const r = fakeStreamingBody([encode('1234567890')])
+            await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe('1234567890')
+        })
+
+        it('decodes a multi-byte character split across chunk boundaries', async () => {
+            const bytes = encode('😀')
+            const r = fakeStreamingBody([bytes.slice(0, 2), bytes.slice(2)])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('😀')
+        })
+
+        it('decodes an empty body to an empty string', async () => {
+            const r = fakeStreamingBody([])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('')
+        })
+
+        it('falls back to text() when there is no readable stream', async () => {
+            const r = fakeStreamingBody([], { noStream: true, textFallback: 'plain text body' })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('plain text body')
+        })
+
+        it('resolves with a failure placeholder when the clone cannot be read', async () => {
+            const r = fakeStreamingBody([], { cloneThrows: true })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('[SessionReplay] Failed to read body')
+        })
+
+        it('resolves (never rejects) when the reader errors mid-stream', async () => {
+            const r = fakeStreamingBody([encode('partial')], { readRejects: true })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe(
+                '[SessionReplay] Failed to read body: Error: boom'
+            )
+        })
+
+        it('times out a hung stream and cancels the reader so it stops being read', async () => {
+            jest.useFakeTimers()
+            try {
+                const cancel = jest.fn(() => Promise.resolve())
+                const r = fakeStreamingBody([], { readNeverResolves: true, cancel })
+                const result = _tryReadBodyStreaming(r, 1000)
+                jest.advanceTimersByTime(500)
+                await expect(result).resolves.toBe('[SessionReplay] Timeout while trying to read body')
+                expect(cancel).toHaveBeenCalled()
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+    })
+
+    describe('content-length pre-check', () => {
+        function fakeRequestWith(contentLength: string | null): {
+            r: Request | Response
+            wasCloned: () => boolean
+        } {
+            let cloned = false
+            const r = {
+                headers: {
+                    get: (name: string) => (name.toLowerCase() === 'content-length' ? contentLength : null),
+                },
+                clone: () => {
+                    cloned = true
+                    return { body: null, text: () => Promise.resolve('') }
+                },
+            } as unknown as Response
+            return { r, wasCloned: () => cloned }
+        }
+
+        it.each([
+            ['over the limit', '2000', 1000, true],
+            ['equal to the limit', '1000', 1000, false],
+            ['under the limit', '500', 1000, false],
+            ['absent', null, 1000, false],
+            ['not a number', 'banana', 1000, false],
+        ])('_contentLengthExceedsLimit: content-length %s', (_label, header, limit, expected) => {
+            const { r } = fakeRequestWith(header as string | null)
+            expect(_contentLengthExceedsLimit(r, limit as number)).toBe(expected)
+        })
+
+        it('skips reading the body when content-length is over the limit (flag on)', async () => {
+            const { r, wasCloned } = fakeRequestWith('2000')
+            await expect(
+                _readBody(r, { streamNetworkBody: true, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            ).resolves.toBe('[SessionReplay] Body too large to record (> 1000 bytes)')
+            expect(wasCloned()).toBe(false)
+        })
+
+        it('still reads the body when content-length is under the limit (flag on)', async () => {
+            const { r, wasCloned } = fakeRequestWith('10')
+            await _readBody(r, { streamNetworkBody: true, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            expect(wasCloned()).toBe(true)
+        })
+
+        it('ignores the content-length pre-check when the flag is off', async () => {
+            const { r, wasCloned } = fakeRequestWith('2000')
+            await _readBody(r, { streamNetworkBody: false, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            expect(wasCloned()).toBe(true)
         })
     })
 })
