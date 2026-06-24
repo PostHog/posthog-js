@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/2383": {
+    "key": "PostHog/posthog-js/issue/2383",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2383",
+    "url": "https://github.com/PostHog/posthog-js/issues/2383",
+    "conclusion": "Likely already fixed in current @posthog/nextjs-config / webpack sourcemap handling",
+    "labels": [
+      "frameworks/next-js",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-24T12:44:00.574Z"
+  },
   "PostHog/posthog-js/issue/2036": {
     "key": "PostHog/posthog-js/issue/2036",
     "repo": "PostHog/posthog-js",
@@ -52,19 +66,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-24T11:55:57.399Z"
-  },
-  "PostHog/posthog-js/issue/2383": {
-    "key": "PostHog/posthog-js/issue/2383",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2383",
-    "url": "https://github.com/PostHog/posthog-js/issues/2383",
-    "conclusion": "Likely already fixed in current sourcemap processing; close as already-fixed unless reporter can reproduce on latest @posthog/nextjs-config.",
-    "labels": [
-      "feature/error-tracking",
-      "frameworks/next-js",
-      "team/error-tracking"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-24T11:53:25.765Z"
   }
 }
