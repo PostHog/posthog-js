@@ -34,7 +34,7 @@ jobs:
                   fetch-depth: 0
 
             - name: Sweep issues
-              uses: PostHog/posthog-watcher-action@a2e4e91bc854e7a46b36bc1eb42eb38d241ce252
+              uses: PostHog/posthog-watcher-action@2cedc564bac91668ac488bae3304ef196e7b9732
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: sweep
