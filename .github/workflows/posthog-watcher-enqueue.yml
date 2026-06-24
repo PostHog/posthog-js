@@ -21,6 +21,6 @@ jobs:
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Enqueue watcher event
-              uses: PostHog/posthog-watcher-action@59b8117ff8a05774febfb2c780b3a26c564ea749
+              uses: PostHog/posthog-watcher-action@c06f781acbecaa779eb4276e35aeac97dfbbc80f
               with:
                   mode: enqueue
