@@ -1,0 +1,26 @@
+name: PostHog Watcher enqueue
+
+on:
+    issues:
+        types: [opened, reopened, edited]
+    issue_comment:
+        types: [created]
+
+permissions:
+    contents: write # write queue.json to the state branch
+    issues: read
+
+concurrency:
+    group: posthog-watcher-enqueue-${{ github.repository }}-${{ github.event.issue.number }}
+    cancel-in-progress: false
+
+jobs:
+    enqueue:
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+            - name: Enqueue watcher event
+              uses: PostHog/posthog-watcher-action@59b8117ff8a05774febfb2c780b3a26c564ea749
+              with:
+                  mode: enqueue

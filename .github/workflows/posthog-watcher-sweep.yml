@@ -1,0 +1,52 @@
+name: PostHog Watcher issue sweep
+
+on:
+    workflow_dispatch:
+        inputs:
+            max-sweep-items:
+                description: Maximum open issues to process.
+                required: false
+                default: '5'
+            max-sweep-fix-items:
+                description: Maximum sweep issues that may attempt fixes.
+                required: false
+                default: '5'
+    schedule:
+        # Every day at 08:17 UTC.
+        - cron: '17 8 * * *'
+
+concurrency:
+    group: posthog-watcher-${{ github.repository }}-sweep
+    cancel-in-progress: false
+
+permissions:
+    contents: write
+    issues: write
+    pull-requests: write
+    actions: read
+
+jobs:
+    sweep:
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              with:
+                  fetch-depth: 0
+
+            - name: Sweep issues
+              uses: PostHog/posthog-watcher-action@59b8117ff8a05774febfb2c780b3a26c564ea749
+              with:
+                  openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
+                  mode: sweep
+                  max-sweep-items: ${{ inputs['max-sweep-items'] || '5' }}
+                  max-sweep-fix-items: ${{ inputs['max-sweep-fix-items'] || '5' }}
+                  labels: '*'
+                  allow-fix: 'true'
+                  allow-close: 'true'
+                  allow-security-ai: 'true'
+                  require-reproduction: 'true'
+                  validation-command: 'corepack enable && pnpm install --frozen-lockfile && pnpm test:unit'
+                  max-repair-attempts: '3'
+                  max-pi-calls: '16'
+                  approve-project-resources: 'true'
+                  state-enabled: 'true'
