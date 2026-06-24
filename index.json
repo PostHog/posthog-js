@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/3950": {
+    "key": "PostHog/posthog-js/issue/3950",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3950",
+    "url": "https://github.com/PostHog/posthog-js/issues/3950",
+    "conclusion": "Valid bug: the no-external full module bundle cannot load the toolbar because the toolbar still depends on an external toolbar.js loader.",
+    "labels": [
+      "feature/toolbar",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-24T15:24:14.075Z"
+  },
   "PostHog/posthog-js/issue/2383": {
     "key": "PostHog/posthog-js/issue/2383",
     "repo": "PostHog/posthog-js",
