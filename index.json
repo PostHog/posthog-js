@@ -10,8 +10,9 @@
       "feature/error-tracking",
       "team/error-tracking"
     ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/3949",
     "closed": false,
-    "updatedAt": "2026-06-24T12:52:03.998Z"
+    "updatedAt": "2026-06-24T13:09:44.107Z"
   },
   "PostHog/posthog-js/issue/2036": {
     "key": "PostHog/posthog-js/issue/2036",
