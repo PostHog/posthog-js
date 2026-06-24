@@ -304,15 +304,24 @@ const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
 const initializeLogs = (posthog: PostHog) => {
     // `host` is carried per record because the core SDK context has no equivalent.
     let attributes: Record<string, string> = { host: assignableWindow.location.host }
-    if (posthog.sessionManager) {
-        const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
-            posthog.sessionManager.checkAndGetSessionAndWindowId(true)
-        attributes = {
-            ...attributes,
-            'window.id': windowId,
-            sessionStartTimestamp: sessionStartTimestamp.toString(),
-            lastActivityTimestamp: lastActivityTimestamp.toString(),
+    // Defensive: the session manager is *typed* to return numbers, but older
+    // bundles / version skew can hand back null (or throw). `null.toString()`
+    // would throw out of initializeLogs (this runs outside the per-log
+    // try/catch), breaking log capture entirely — so wrap it, coerce safely,
+    // and only attach a timestamp attribute when we actually have a value.
+    try {
+        if (posthog.sessionManager) {
+            const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
+                posthog.sessionManager.checkAndGetSessionAndWindowId(true)
+            attributes = {
+                ...attributes,
+                'window.id': windowId,
+                ...(isNumber(sessionStartTimestamp) ? { sessionStartTimestamp: String(sessionStartTimestamp) } : {}),
+                ...(isNumber(lastActivityTimestamp) ? { lastActivityTimestamp: String(lastActivityTimestamp) } : {}),
+            }
         }
+    } catch {
+        // Fall back to the host-only attributes; log capture must still initialize.
     }
 
     for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {

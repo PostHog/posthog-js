@@ -116,6 +116,30 @@ describe('logs entrypoint', () => {
                 })
             )
         })
+
+        it('does not throw or break capture when the session manager returns null timestamps', () => {
+            // Older bundles / version skew can hand back null here even though the
+            // type says number. Calling .toString() on it used to throw out of
+            // initializeLogs and break log capture entirely.
+            ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as jest.Mock).mockReturnValue({
+                sessionId: 'session-123',
+                windowId: 'window-456',
+                sessionStartTimestamp: null,
+                lastActivityTimestamp: null,
+            })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            expect(() => initializeLogs(mockPostHog)).not.toThrow()
+
+            assignableWindow.console.log('hello')
+
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            const attributes = mockEmit.mock.calls[0][0].attributes
+            // Capture still works, and we omit the bad timestamps rather than emitting "null".
+            expect(attributes['window.id']).toBe('window-456')
+            expect(attributes).not.toHaveProperty('sessionStartTimestamp')
+            expect(attributes).not.toHaveProperty('lastActivityTimestamp')
+        })
     })
 
     describe('log truncation features', () => {
