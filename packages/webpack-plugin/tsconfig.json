@@ -9,5 +9,6 @@
         "declarationMap": true,
         "moduleResolution": "bundler",
         "module": "ES6"
-    }
+    },
+    "include": ["src/**/*.ts"]
 }

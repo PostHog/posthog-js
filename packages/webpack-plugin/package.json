@@ -34,7 +34,9 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
+        "@types/jest": "catalog:",
         "jest": "catalog:",
+        "ts-jest": "catalog:",
         "webpack": "^5"
     },
     "scripts": {
@@ -42,7 +44,7 @@
         "lint": "eslint src",
         "lint:fix": "eslint src --fix",
         "build": "rslib build",
-        "test:unit": "rslib build && jest --passWithNoTests",
+        "test:unit": "jest --passWithNoTests",
         "dev": "rslib build --watch",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },

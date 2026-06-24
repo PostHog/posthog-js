@@ -1,13 +1,16 @@
-const path = require('path')
-const { runSourcemapCli } = require('@posthog/plugin-utils')
+import path from 'path'
+import type webpack from 'webpack'
+import { runSourcemapCli } from '@posthog/plugin-utils'
+import { PosthogWebpackPlugin } from '../src/index'
+import type { ResolvedPluginConfig } from '../src/config'
 
 jest.mock('@posthog/plugin-utils', () => ({
     runSourcemapCli: jest.fn().mockResolvedValue(undefined),
 }))
 
-const { PosthogWebpackPlugin } = require('../dist/index.js')
+const runSourcemapCliMock = runSourcemapCli as jest.MockedFunction<typeof runSourcemapCli>
 
-const config = {
+const config: ResolvedPluginConfig = {
     personalApiKey: 'phx_test',
     projectId: '1',
     host: 'https://us.i.posthog.com',
@@ -19,18 +22,21 @@ const config = {
     },
 }
 
-function createCompilation(outputDirectory, chunks, assets) {
+type TestAsset = { name: string }
+type TestChunk = { files: Set<string> }
+
+function createCompilation(outputDirectory: string, chunks: TestChunk[], assets: TestAsset[]): webpack.Compilation {
     return {
         outputOptions: { path: outputDirectory },
         chunks: new Set(chunks),
         getAssets: () => assets,
-        getAsset: (name) => assets.find((asset) => asset.name === name),
-    }
+        getAsset: (name: string) => assets.find((asset) => asset.name === name),
+    } as unknown as webpack.Compilation
 }
 
 describe('PosthogWebpackPlugin', () => {
     beforeEach(() => {
-        runSourcemapCli.mockClear()
+        runSourcemapCliMock.mockClear()
     })
 
     it('passes emitted CSS assets with adjacent source maps to the sourcemap CLI', async () => {
@@ -52,7 +58,7 @@ describe('PosthogWebpackPlugin', () => {
 
         await plugin.processSourceMaps(compilation, config)
 
-        expect(runSourcemapCli).toHaveBeenCalledWith(config, {
+        expect(runSourcemapCliMock).toHaveBeenCalledWith(config, {
             filePaths: [
                 path.resolve(outputDirectory, 'static/chunks/app.js'),
                 path.resolve(outputDirectory, 'static/chunks/app.js.map'),
