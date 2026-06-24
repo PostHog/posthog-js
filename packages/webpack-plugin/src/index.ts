@@ -58,14 +58,20 @@ export class PosthogWebpackPlugin {
             return
         }
 
-        const filePaths: string[] = []
+        const filePaths = new Set<string>()
         chunkArray.forEach((chunk) =>
             chunk.files.forEach((file) => {
                 const chunkPath = path.resolve(outputDirectory, file)
-                filePaths.push(chunkPath)
+                filePaths.add(chunkPath)
             })
         )
 
-        await runSourcemapCli(config, { filePaths })
+        compilation.getAssets().forEach((asset) => {
+            if (asset.name.endsWith('.css') && compilation.getAsset(`${asset.name}.map`)) {
+                filePaths.add(path.resolve(outputDirectory, asset.name))
+            }
+        })
+
+        await runSourcemapCli(config, { filePaths: Array.from(filePaths) })
     }
 }
