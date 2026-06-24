@@ -3011,7 +3011,11 @@ describe('parseFlagsResponse', () => {
         // A modern v2 response carries `flags` and must not warn.
         { name: 'v2 response with flags', response: { flags: { f: { key: 'f', enabled: true } } }, shouldWarn: false },
         // Only a genuinely old server returns the v1 shape (`featureFlags`, no `flags`) — keep the warning there.
-        { name: 'v1-shaped response (featureFlags present)', response: { featureFlags: { f: true } }, shouldWarn: true },
+        {
+            name: 'v1-shaped response (featureFlags present)',
+            response: { featureFlags: { f: true } },
+            shouldWarn: true,
+        },
         // A project with no feature flags returns a valid v2 response that omits `flags` — must not warn.
         { name: 'valid v2 response with no flags', response: {}, shouldWarn: false },
     ])('older-endpoint warning — $name (warns: $shouldWarn)', ({ response, shouldWarn }) => {
