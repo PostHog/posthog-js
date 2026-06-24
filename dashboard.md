@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3954](https://github.com/PostHog/posthog-js/issues/3954) | Valid toolbar bug, likely originating in the external toolbar bundle rather than the SDK loader | feature/toolbar, web |  | no | 2026-06-24T16:48:12.399Z |
 | PostHog/posthog-js | [issue 3950](https://github.com/PostHog/posthog-js/issues/3950) | Valid bug: the no-external full module bundle cannot load the toolbar because the toolbar still depends on an external toolbar.js loader. | feature/toolbar, web |  | no | 2026-06-24T15:24:14.075Z |
 | PostHog/posthog-js | [issue 2383](https://github.com/PostHog/posthog-js/issues/2383) | Likely already fixed in current @posthog/nextjs-config via CSS sourcemap processing | frameworks/next-js, feature/error-tracking, team/error-tracking | https://github.com/PostHog/posthog-js/pull/3949 | no | 2026-06-24T13:09:44.107Z |
 | PostHog/posthog-js | [issue 2036](https://github.com/PostHog/posthog-js/issues/2036) | Valid selector-trigger survey lifecycle bug; keep open. | feature/surveys |  | no | 2026-06-24T12:28:14.000Z |
