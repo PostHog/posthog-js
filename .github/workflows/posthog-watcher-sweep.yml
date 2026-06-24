@@ -39,7 +39,7 @@ jobs:
                   build: 'false'
 
             - name: Sweep issues
-              uses: PostHog/posthog-watcher-action@c06f781acbecaa779eb4276e35aeac97dfbbc80f
+              uses: PostHog/posthog-watcher-action@81baedc77a94a4e307d7d711f68c7e59f59009c6
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: sweep
