@@ -805,6 +805,40 @@ describe('posthog core', () => {
             expect(flushLogs).toHaveBeenCalledWith('sendBeacon')
         })
 
+        it('calls surveys.handlePageUnload when present', () => {
+            const handlePageUnload = jest.fn()
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { surveys: { handlePageUnload } as unknown as PostHog['surveys'] }
+            )
+
+            posthog._handle_unload()
+
+            expect(handlePageUnload).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not throw when a stale surveys instance is missing handlePageUnload', () => {
+            // Version skew: a cached older lazy-loaded surveys chunk can yield a truthy
+            // surveys instance whose prototype lacks handlePageUnload. Optional chaining alone
+            // would still throw "handlePageUnload is not a function" here.
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { capture: jest.fn(), surveys: {} as unknown as PostHog['surveys'] }
+            )
+
+            expect(() => posthog._handle_unload()).not.toThrow()
+            // the rest of the unload path still runs
+            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+        })
+
         describe('without batching', () => {
             it('captures $pageleave', () => {
                 const posthog = posthogWith(

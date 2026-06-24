@@ -1,5 +1,37 @@
 # posthog-js
 
+## 1.393.4
+
+### Patch Changes
+
+- [#3942](https://github.com/PostHog/posthog-js/pull/3942) [`c9c8925`](https://github.com/PostHog/posthog-js/commit/c9c8925b1c63d2f02c3caeef5dc962ad31866459) Thanks [@hpouillot](https://github.com/hpouillot)! - Fix browser console log capture when session activity timestamps are missing and refresh session attributes for each log.
+  (2026-06-24)
+- Updated dependencies [[`c9c8925`](https://github.com/PostHog/posthog-js/commit/c9c8925b1c63d2f02c3caeef5dc962ad31866459)]:
+    - @posthog/core@1.37.2
+
+## 1.393.3
+
+### Patch Changes
+
+- [#3945](https://github.com/PostHog/posthog-js/pull/3945) [`f94deaf`](https://github.com/PostHog/posthog-js/commit/f94deaf3eee16e2ff96505d44f0fbcd055dff057) Thanks [@ioannisj](https://github.com/ioannisj)! - fix(surveys): guard handlePageUnload against version-skewed surveys instance missing the method
+  (2026-06-24)
+
+## 1.393.2
+
+### Patch Changes
+
+- [#3944](https://github.com/PostHog/posthog-js/pull/3944) [`1c9a811`](https://github.com/PostHog/posthog-js/commit/1c9a811d36e390562b6b2d30e0270696e6c05ffe) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop logging a misleading "upgrade your PostHog server" warning for valid v2 flags responses that have no flags.
+  (2026-06-24)
+
+## 1.393.1
+
+### Patch Changes
+
+- [#3919](https://github.com/PostHog/posthog-js/pull/3919) [`99bad9c`](https://github.com/PostHog/posthog-js/commit/99bad9c8332f5511b1b8caf33dd6f0fd9489c742) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: add an opt-in streaming reader for request/response bodies that stops at the payload size limit instead of buffering the whole body and then discarding it — bounding memory and pre-request latency when a body is very large. It reads only a clone of the body, so it never consumes the stream the page itself reads, and always resolves (never rejects) into the page's `fetch`. Off by default; enabled for `defaults: '2026-06-25'` and settable directly via `session_recording.streamNetworkBody`.
+  (2026-06-24)
+- Updated dependencies [[`99bad9c`](https://github.com/PostHog/posthog-js/commit/99bad9c8332f5511b1b8caf33dd6f0fd9489c742)]:
+    - @posthog/types@1.391.1
+
 ## 1.393.0
 
 ### Minor Changes

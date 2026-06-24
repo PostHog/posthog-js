@@ -54,7 +54,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
   private disableRemoteFeatureFlags: boolean
-  private flagCallReported: { [key: string]: boolean } = {}
+  private flagCallReported: { [key: string]: Set<FeatureFlagValue | undefined> } = {}
   private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
   // internal
@@ -192,6 +192,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         this.reloadFeatureFlags()
       }
     })
+  }
+
+  async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    try {
+      return await super._shutdown(shutdownTimeoutMs)
+    } finally {
+      this.flagCallReported = {}
+    }
   }
 
   protected getCommonEventProperties(): PostHogEventProperties {
@@ -808,11 +816,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             return res
           }
 
-          // clear flag call reported if we have new flags since they might have changed
-          if (this.sendFeatureFlagEvent) {
-            this.flagCallReported = {}
-          }
-
           let newFeatureFlagDetails = res
           if (res.errorsWhileComputingFlags) {
             // if not all flags were computed, we upsert flags instead of replacing them
@@ -970,8 +973,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const details = this.getFeatureFlagDetails()
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
     const featureFlag = details?.flags[key]
-    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
+    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]?.has(flagValue)
 
     if (sendEvent) {
       const errors: string[] = []
@@ -1003,7 +1006,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const bootstrappedPayload = this.getBootstrappedFeatureFlagPayloads()?.[key]
       const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
 
-      this.flagCallReported[key] = true
+      this.flagCallReported[key] = this.flagCallReported[key] ?? new Set()
+      this.flagCallReported[key].add(flagValue)
 
       const properties: Record<string, any> = {
         $feature_flag: key,
@@ -1245,9 +1249,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
       }
 
-      if (this.sendFeatureFlagEvent) {
-        this.flagCallReported = {}
-      }
       this.setKnownFeatureFlagDetails({ flags: flagDetails })
     })
   }

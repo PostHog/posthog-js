@@ -76,6 +76,8 @@ describe('posthog-logs', () => {
                     checkAndGetSessionAndWindowId: jest.fn(() => ({
                         sessionId: 'session-abc',
                         windowId: 'window-xyz',
+                        sessionStartTimestamp: 1672567200000,
+                        lastActivityTimestamp: 1672569000000,
                     })),
                 },
                 consent: {
@@ -586,10 +588,37 @@ describe('posthog-logs', () => {
 
                 expect(attrs['posthogDistinctId']).toEqual({ stringValue: 'distinct-id-123' })
                 expect(attrs['sessionId']).toEqual({ stringValue: 'session-abc' })
+                expect(attrs['window.id']).toEqual({ stringValue: 'window-xyz' })
+                expect(attrs['sessionStartTimestamp']).toEqual({ stringValue: '1672567200000' })
+                expect(attrs['lastActivityTimestamp']).toEqual({ stringValue: '1672569000000' })
                 expect(attrs['feature_flags']).toEqual({
                     arrayValue: { values: [{ stringValue: 'logs-capture-enabled' }] },
                 })
             })
+
+            it.each(['sessionStartTimestamp', 'lastActivityTimestamp'])(
+                'omits %s and does not throw when the session manager returns null for it',
+                (attribute) => {
+                    ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as jest.Mock).mockReturnValue({
+                        sessionId: 'session-abc',
+                        windowId: 'window-xyz',
+                        sessionStartTimestamp: null,
+                        lastActivityTimestamp: null,
+                    })
+
+                    expect(() => {
+                        logs.captureLog({ body: 'test' })
+                        jest.advanceTimersByTime(3000)
+                    }).not.toThrow()
+
+                    const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                    const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
+                    const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
+
+                    expect(attrs).not.toHaveProperty(attribute)
+                    expect(attrs['window.id']).toEqual({ stringValue: 'window-xyz' })
+                }
+            )
 
             it('should include named config fields in OTLP resource attributes', () => {
                 ;(mockPostHog.config as any).logs = {
@@ -927,6 +956,9 @@ describe('posthog-logs', () => {
 
                 expect(attrs['posthogDistinctId']).toEqual({ stringValue: 'distinct-id-123' })
                 expect(attrs['sessionId']).toEqual({ stringValue: 'session-abc' })
+                expect(attrs['window.id']).toEqual({ stringValue: 'window-xyz' })
+                expect(attrs['sessionStartTimestamp']).toEqual({ stringValue: '1672567200000' })
+                expect(attrs['lastActivityTimestamp']).toEqual({ stringValue: '1672569000000' })
                 expect(attrs['feature_flags']).toEqual({
                     arrayValue: { values: [{ stringValue: 'logs-capture-enabled' }] },
                 })

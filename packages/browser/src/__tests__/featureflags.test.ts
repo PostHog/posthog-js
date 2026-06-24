@@ -2997,6 +2997,39 @@ describe('parseFlagsResponse', () => {
         expect(persistence.unregister).not.toHaveBeenCalled()
     })
 
+    const OLD_ENDPOINT_WARNING =
+        'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
+
+    it.each([
+        // A modern v2 response carries `flags` and must not warn.
+        { name: 'v2 response with flags', response: { flags: { f: { key: 'f', enabled: true } } }, shouldWarn: false },
+        // Only a genuinely old server returns the v1 shape (`featureFlags`, no `flags`) — keep the warning there.
+        {
+            name: 'v1-shaped response (featureFlags present)',
+            response: { featureFlags: { f: true } },
+            shouldWarn: true,
+        },
+        // A project with no feature flags returns a valid v2 response that omits `flags` — must not warn.
+        { name: 'valid v2 response with no flags', response: {}, shouldWarn: false },
+    ])('older-endpoint warning — $name (warns: $shouldWarn)', ({ response, shouldWarn }) => {
+        // Ensure warnings would actually be emitted so the assertions below are meaningful, and
+        // restore the previous value so this test stays self-contained.
+        const previousDebug = (window as any).POSTHOG_DEBUG
+        ;(window as any).POSTHOG_DEBUG = true
+        jest.spyOn(window.console, 'warn').mockImplementation()
+
+        // @ts-expect-error testing partial/legacy response shapes
+        parseFlagsResponse(response, persistence)
+
+        const expectation = expect(window.console.warn)
+        if (shouldWarn) {
+            expectation.toHaveBeenCalledWith('[PostHog.js] [FeatureFlags]', OLD_ENDPOINT_WARNING)
+        } else {
+            expectation.not.toHaveBeenCalledWith('[PostHog.js] [FeatureFlags]', OLD_ENDPOINT_WARNING)
+        }
+        ;(window as any).POSTHOG_DEBUG = previousDebug
+    })
+
     it('parses the requestId from the /flags?v=1 response', () => {
         const flagsResponse = {
             featureFlags: { 'test-flag': true },
