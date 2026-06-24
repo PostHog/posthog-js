@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.393.2
+
+### Patch Changes
+
+- [#3944](https://github.com/PostHog/posthog-js/pull/3944) [`1c9a811`](https://github.com/PostHog/posthog-js/commit/1c9a811d36e390562b6b2d30e0270696e6c05ffe) Thanks [@ioannisj](https://github.com/ioannisj)! - Stop logging a misleading "upgrade your PostHog server" warning for valid v2 flags responses that have no flags.
+  (2026-06-24)
+
 ## 1.393.1
 
 ### Patch Changes
