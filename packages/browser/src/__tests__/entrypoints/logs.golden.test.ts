@@ -68,9 +68,6 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
             attributes: {
                 'log.source': 'console.log',
                 host: 'example.com',
-                'window.id': 'window-456',
-                sessionStartTimestamp: String(SESSION_START),
-                lastActivityTimestamp: String(LAST_ACTIVITY),
             },
         })
     })
@@ -101,9 +98,6 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
             attributes: {
                 'log.source': 'console.warn',
                 host: 'example.com',
-                'window.id': 'window-456',
-                sessionStartTimestamp: String(SESSION_START),
-                lastActivityTimestamp: String(LAST_ACTIVITY),
                 'user.id': 5,
                 msg: 'hi',
             },

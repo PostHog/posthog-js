@@ -355,8 +355,16 @@ export class PostHogLogs implements Extension {
         context.distinctId = this._instance.get_distinct_id()
 
         if (this._instance.sessionManager) {
-            const { sessionId } = this._instance.sessionManager.checkAndGetSessionAndWindowId(true)
+            const { sessionId, windowId, sessionStartTimestamp, lastActivityTimestamp } =
+                this._instance.sessionManager.checkAndGetSessionAndWindowId(true)
             context.sessionId = sessionId
+            context.windowId = windowId
+            if (!isNullish(sessionStartTimestamp)) {
+                context.sessionStartTimestamp = sessionStartTimestamp
+            }
+            if (!isNullish(lastActivityTimestamp)) {
+                context.lastActivityTimestamp = lastActivityTimestamp
+            }
         }
 
         if (assignableWindow?.location?.href) {

@@ -100,7 +100,7 @@ describe('logs entrypoint', () => {
             expect(attributes).not.toHaveProperty('location.href')
         })
 
-        it('includes window.id and session timestamps in attributes', () => {
+        it('sets host on the captured record', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
@@ -108,62 +108,22 @@ describe('logs entrypoint', () => {
 
             expect(mockEmit).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    attributes: expect.objectContaining({
-                        'window.id': 'window-456',
-                        sessionStartTimestamp: expect.any(String),
-                        lastActivityTimestamp: expect.any(String),
-                    }),
+                    attributes: expect.objectContaining({ host: 'example.com' }),
                 })
             )
         })
 
-        it('refreshes session attributes for each captured log', () => {
-            mockPostHog.sessionManager!.checkAndGetSessionAndWindowId = jest
-                .fn()
-                .mockReturnValueOnce({
-                    sessionId: 'session-123',
-                    windowId: 'window-456',
-                    sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
-                    lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
-                })
-                .mockReturnValueOnce({
-                    sessionId: 'session-789',
-                    windowId: 'window-999',
-                    sessionStartTimestamp: new Date('2023-01-01T11:00:00Z').getTime(),
-                    lastActivityTimestamp: new Date('2023-01-01T11:30:00Z').getTime(),
-                })
+        it.each(['window.id', 'sessionStartTimestamp', 'lastActivityTimestamp'])(
+            'does not set %s — core adds session attributes from the SDK context downstream',
+            (attribute) => {
+                const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+                initializeLogs(mockPostHog)
 
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(mockPostHog)
+                assignableWindow.console.log('hello')
 
-            assignableWindow.console.log('first')
-            assignableWindow.console.log('second')
-
-            expect(mockEmit.mock.calls[0][0].attributes).toEqual(expect.objectContaining({ 'window.id': 'window-456' }))
-            expect(mockEmit.mock.calls[1][0].attributes).toEqual(expect.objectContaining({ 'window.id': 'window-999' }))
-        })
-
-        it('should handle a missing last activity timestamp', () => {
-            mockPostHog.sessionManager!.checkAndGetSessionAndWindowId = jest.fn(() => ({
-                sessionId: 'session-123',
-                windowId: 'window-456',
-                sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
-                lastActivityTimestamp: null,
-            }))
-
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            expect(() => initializeLogs(mockPostHog)).not.toThrow()
-
-            assignableWindow.console.log('hello')
-
-            expect(mockEmit).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    attributes: expect.not.objectContaining({
-                        lastActivityTimestamp: expect.any(String),
-                    }),
-                })
-            )
-        })
+                expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty(attribute)
+            }
+        )
     })
 
     describe('log truncation features', () => {

@@ -302,23 +302,10 @@ const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
 }
 
 const initializeLogs = (posthog: PostHog) => {
-    const getLogAttributes = (): Record<string, string> => {
-        // `host` is carried per record because the core SDK context has no equivalent.
-        const attributes: Record<string, string> = { host: assignableWindow.location.host }
-        if (posthog.sessionManager) {
-            const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
-                posthog.sessionManager.checkAndGetSessionAndWindowId(true)
-            attributes['window.id'] = windowId
-            if (sessionStartTimestamp != null) {
-                attributes.sessionStartTimestamp = sessionStartTimestamp.toString()
-            }
-            if (lastActivityTimestamp != null) {
-                attributes.lastActivityTimestamp = lastActivityTimestamp.toString()
-            }
-        }
-
-        return attributes
-    }
+    // `host` is carried here because the core SDK context has no equivalent. Session
+    // attributes (window.id, sessionStartTimestamp, lastActivityTimestamp) are added
+    // downstream by the core pipeline from the SDK context, alongside sessionId.
+    const attributes: Record<string, string> = { host: assignableWindow.location.host }
 
     for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {
         const logWrapper =
@@ -328,7 +315,7 @@ const initializeLogs = (posthog: PostHog) => {
                     if (args.length > 0 && posthog.is_capturing()) {
                         const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
                         const logAttributes = {
-                            ...getLogAttributes(),
+                            ...attributes,
                             ...(truncated ? { body_truncated: 'true' } : {}),
                         }
                         // The core pipeline adds posthogDistinctId and url.full from the SDK context.

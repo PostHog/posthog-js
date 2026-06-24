@@ -124,6 +124,15 @@ export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSd
   if (sdkContext.sessionId) {
     autoAttributes.sessionId = sdkContext.sessionId
   }
+  if (sdkContext.windowId) {
+    autoAttributes['window.id'] = sdkContext.windowId
+  }
+  if (!isUndefined(sdkContext.sessionStartTimestamp)) {
+    autoAttributes.sessionStartTimestamp = String(sdkContext.sessionStartTimestamp)
+  }
+  if (!isUndefined(sdkContext.lastActivityTimestamp)) {
+    autoAttributes.lastActivityTimestamp = String(sdkContext.lastActivityTimestamp)
+  }
   if (sdkContext.currentUrl) {
     autoAttributes['url.full'] = sdkContext.currentUrl
   }
