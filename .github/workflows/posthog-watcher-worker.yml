@@ -40,11 +40,11 @@ jobs:
                   fetch-depth: 0
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@2cedc564bac91668ac488bae3304ef196e7b9732
+              uses: PostHog/posthog-watcher-action@59b8117ff8a05774febfb2c780b3a26c564ea749
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
-                  labels: 'bug,documentation,enhancement,question,needs-info,good first issue,good-first-issue,help wanted,dependencies,react-native,node,web,web-lite,nuxt,iOS,Android,feature,feature/apm,feature/replay,feature/dead-clicks,feature/autocapture,feature/heatmaps,feature/toolbar,feature/web-analytics,feature/flags,feature/surveys,feature/product-analytics,feature/error-tracking,feature/mobile,feature/experiments,feature/mcp-analytics,frameworks/next-js,team/feature-flags,team/llm-analytics,team/experiments,team/error-tracking,team/logs,team/web-analytics,team/analytics-platform,AdBlocker,sentry,Tree shaking'
+                  labels: '*'
                   allow-fix: 'true'
                   allow-close: 'true'
                   allow-security-ai: 'true'
@@ -64,12 +64,12 @@ jobs:
                   fetch-depth: 0
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@2cedc564bac91668ac488bae3304ef196e7b9732
+              uses: PostHog/posthog-watcher-action@59b8117ff8a05774febfb2c780b3a26c564ea749
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}
                   mode: ${{ inputs.mode }}
-                  labels: 'bug,documentation,enhancement,question,needs-info,good first issue,good-first-issue,help wanted,dependencies,react-native,node,web,web-lite,nuxt,iOS,Android,feature,feature/apm,feature/replay,feature/dead-clicks,feature/autocapture,feature/heatmaps,feature/toolbar,feature/web-analytics,feature/flags,feature/surveys,feature/product-analytics,feature/error-tracking,feature/mobile,feature/experiments,feature/mcp-analytics,frameworks/next-js,team/feature-flags,team/llm-analytics,team/experiments,team/error-tracking,team/logs,team/web-analytics,team/analytics-platform,AdBlocker,sentry,Tree shaking'
+                  labels: '*'
                   allow-fix: 'true'
                   allow-close: 'true'
                   allow-security-ai: 'true'
