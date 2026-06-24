@@ -1068,7 +1068,10 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
-        this.surveys?.handlePageUnload()
+        // Optional-call the method, not just the receiver: after a deploy a cached older
+        // lazy-loaded surveys chunk can yield an instance whose prototype lacks handlePageUnload,
+        // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
+        this.surveys?.handlePageUnload?.()
 
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
