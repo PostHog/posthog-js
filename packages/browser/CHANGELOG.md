@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.393.3
+
+### Patch Changes
+
+- [#3945](https://github.com/PostHog/posthog-js/pull/3945) [`f94deaf`](https://github.com/PostHog/posthog-js/commit/f94deaf3eee16e2ff96505d44f0fbcd055dff057) Thanks [@ioannisj](https://github.com/ioannisj)! - fix(surveys): guard handlePageUnload against version-skewed surveys instance missing the method
+  (2026-06-24)
+
 ## 1.393.2
 
 ### Patch Changes
