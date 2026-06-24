@@ -38,6 +38,9 @@ jobs:
                   install: 'false'
                   build: 'false'
 
+            - name: Install ripgrep for watcher search tools
+              run: sudo apt-get update && sudo apt-get install -y ripgrep
+
             - name: Sweep issues
               uses: PostHog/posthog-watcher-action@53752eea5b036f37e83da06879ca05e06cb377e9
               with:
