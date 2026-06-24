@@ -308,7 +308,7 @@ describe('logs entrypoint', () => {
             await import('../../entrypoints/logs')
         })
 
-        it('should include window.id and session timestamps in log attributes', () => {
+        it('sets host on the captured record', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
@@ -317,13 +317,21 @@ describe('logs entrypoint', () => {
             expect(mockEmit).toHaveBeenCalledWith({
                 level: 'info',
                 body: '"Test message"',
-                attributes: expect.objectContaining({
-                    'window.id': 'window-456',
-                    sessionStartTimestamp: expect.any(String),
-                    lastActivityTimestamp: expect.any(String),
-                }),
+                attributes: expect.objectContaining({ host: 'example.com' }),
             })
         })
+
+        it.each(['window.id', 'sessionStartTimestamp', 'lastActivityTimestamp'])(
+            'does not set %s — core adds session attributes from the SDK context downstream',
+            (attribute) => {
+                const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+                initializeLogs(mockPostHog)
+
+                assignableWindow.console.log('Test message')
+
+                expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty(attribute)
+            }
+        )
 
         it('should work without session manager', () => {
             const postHogWithoutSession = {
