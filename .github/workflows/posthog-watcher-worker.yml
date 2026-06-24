@@ -39,6 +39,11 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - uses: ./.github/actions/setup
+              with:
+                  install: 'false'
+                  build: 'false'
+
             - name: Drain watcher queue
               uses: PostHog/posthog-watcher-action@59b8117ff8a05774febfb2c780b3a26c564ea749
               with:
@@ -49,7 +54,7 @@ jobs:
                   allow-close: 'true'
                   allow-security-ai: 'true'
                   require-reproduction: 'true'
-                  validation-command: 'corepack enable && pnpm install --frozen-lockfile && pnpm test:unit'
+                  validation-command: 'pnpm install --frozen-lockfile && pnpm test:unit'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
                   approve-project-resources: 'true'
@@ -63,6 +68,11 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - uses: ./.github/actions/setup
+              with:
+                  install: 'false'
+                  build: 'false'
+
             - name: Process watcher issue
               uses: PostHog/posthog-watcher-action@59b8117ff8a05774febfb2c780b3a26c564ea749
               with:
@@ -74,7 +84,7 @@ jobs:
                   allow-close: 'true'
                   allow-security-ai: 'true'
                   require-reproduction: 'true'
-                  validation-command: 'corepack enable && pnpm install --frozen-lockfile && pnpm test:unit'
+                  validation-command: 'pnpm install --frozen-lockfile && pnpm test:unit'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
                   approve-project-resources: 'true'
