@@ -1,10 +1,16 @@
-import { each, find } from './utils'
+import { each, find } from '@posthog/browser-common/utils/general-utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
 import { formDataToQuery, getQueryParam } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } from './utils/globals'
+import {
+    AbortController,
+    CompressionStream,
+    fetch,
+    navigator,
+    XMLHttpRequest,
+} from '@posthog/browser-common/utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 import { _base64Encode } from './utils/encode-utils'

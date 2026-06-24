@@ -1,12 +1,11 @@
+import { assignableWindow, window, location } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
+import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
-import { createLogger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
-import { assignableWindow, window, location } from '../../utils/globals'
-import { maskQueryParams } from '../../utils/request-utils'
-import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '../../utils/event-utils'
-
 const logger = createLogger('[Web Vitals]')
 
 type WebVitalsMetricCallback = (metric: any) => void

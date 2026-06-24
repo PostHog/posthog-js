@@ -1,3 +1,7 @@
+import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
+import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
+import { prepareStylesheet } from '@posthog/browser-common/utils/stylesheet-loader'
+import { doesDeviceTypeMatch, hasPeriodPassed } from '@posthog/browser-common/utils/matcher-utils'
 import { VNode, cloneElement, createContext, type JSX } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
@@ -12,7 +16,6 @@ import {
     SurveyType,
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
-import { document as _document, window as _window } from '../../utils/globals'
 import {
     getSurveyInteractionProperty,
     getSurveySeenKey,
@@ -24,18 +27,14 @@ import {
 import { isNullish, type SurveyResponses } from '@posthog/core'
 import { buildSurveyResponseProperties, getSurveyResponseKey, surveyHasResponses } from '@posthog/core/surveys'
 
-import { propertyComparisons } from '../../utils/property-utils'
 import { localStore } from '../../storage'
 import { Properties, PropertyMatchType } from '../../types'
 import { Z_INDEX_SURVEYS } from '../../constants'
-import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
 import { useContext } from 'preact/hooks'
-import { doesDeviceTypeMatch, hasPeriodPassed } from '../utils/matcher-utils'
-
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
         return 'inherit'

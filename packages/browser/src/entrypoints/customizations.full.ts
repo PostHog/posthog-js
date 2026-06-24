@@ -3,5 +3,5 @@
 // without breaking backwards compatibility
 
 import * as customizations from '../customizations'
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 assignableWindow.posthogCustomizations = customizations

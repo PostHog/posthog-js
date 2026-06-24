@@ -1,8 +1,9 @@
+import { assignableWindow, document } from '@posthog/browser-common/utils/globals'
+import type { LazyLoadedDeadClicksAutocaptureInterface } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { PostHog } from '../posthog-core'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '@posthog/core'
-import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
-import { createLogger } from '../utils/logger'
 import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
 import type { Extension } from './types'
 

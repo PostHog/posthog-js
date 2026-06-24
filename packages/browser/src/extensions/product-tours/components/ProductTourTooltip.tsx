@@ -1,3 +1,5 @@
+import { window as _window } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { h } from 'preact'
 import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'preact/hooks'
 import {
@@ -17,8 +19,6 @@ import {
     hasElementTarget,
 } from '../product-tours-utils'
 import { getPopoverPosition } from '../../surveys/surveys-extension-utils'
-import { addEventListener } from '../../../utils'
-import { window as _window } from '../../../utils/globals'
 import { ProductTourTooltipInner } from './ProductTourTooltipInner'
 import { ProductTourSurveyStepInner } from './ProductTourSurveyStepInner'
 

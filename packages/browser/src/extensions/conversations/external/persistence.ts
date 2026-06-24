@@ -1,3 +1,6 @@
+import { window } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import {
     CONVERSATIONS_LEGACY_TICKET_ID,
     CONVERSATIONS_LEGACY_USER_TRAITS,
@@ -6,10 +9,6 @@ import {
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
 import { UserProvidedTraits } from '../../../posthog-conversations-types'
-import { createLogger } from '../../../utils/logger'
-import { window } from '../../../utils/globals'
-import { uuidv7 } from '../../../uuidv7'
-
 const logger = createLogger('[ConversationsPersistence]')
 
 interface ConversationsStorageData {

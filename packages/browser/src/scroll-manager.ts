@@ -1,6 +1,6 @@
-import { window } from './utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import { PostHog } from './posthog-core'
-import { addEventListener } from './utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { isArray } from '@posthog/core'
 
 export interface ScrollContext {

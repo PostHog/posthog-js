@@ -13,10 +13,23 @@
     "sideEffects": false,
     "main": "./src/index.ts",
     "types": "./src/index.ts",
+    "typesVersions": {
+        "*": {
+            "utils/*": [
+                "src/utils/*.ts"
+            ]
+        }
+    },
     "exports": {
         ".": {
             "types": "./src/index.ts",
-            "import": "./src/index.ts"
+            "import": "./src/index.ts",
+            "require": "./src/index.ts"
+        },
+        "./utils/*": {
+            "types": "./src/utils/*.ts",
+            "import": "./src/utils/*.ts",
+            "require": "./src/utils/*.ts"
         }
     },
     "scripts": {
@@ -27,7 +40,8 @@
         "check-types": "pnpm build"
     },
     "dependencies": {
-        "@posthog/core": "workspace:^"
+        "@posthog/core": "workspace:^",
+        "tslib": "catalog:"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",

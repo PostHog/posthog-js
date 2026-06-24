@@ -1,9 +1,8 @@
+import { logger } from '@posthog/browser-common/utils/logger'
 import type { eventWithTime, mutationCallbackParam } from '../types/rrweb-types'
 import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE } from './sessionrecording-utils'
 import type { rrwebRecord } from '../types/rrweb'
 import { BucketedRateLimiter } from '@posthog/core'
-import { logger } from '../../../utils/logger'
-
 export class MutationThrottler {
     private _loggedTracker: Record<string, boolean> = {}
     private _rateLimiter: BucketedRateLimiter<number>

@@ -3,8 +3,14 @@ import { isNull, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
-import { each, extend, stripEmptyProperties } from './index'
-import { document, location, userAgent, window } from './globals'
+import { each, extend, stripEmptyProperties } from '@posthog/browser-common/utils/general-utils'
+import { document, location, userAgent, window } from '@posthog/browser-common/utils/globals'
+import {
+    getBrowserLanguage,
+    getBrowserLanguagePrefix,
+    MASKED,
+    PERSONAL_DATA_CAMPAIGN_PARAMS,
+} from '@posthog/browser-common/utils/event-utils'
 import {
     BrowserDetectionHints,
     detectBrowser,
@@ -20,27 +26,7 @@ const URL_REGEX_PREFIX = 'https?://(.*)'
 // CAMPAIGN_PARAMS and EVENT_TO_PERSON_PROPERTIES should be kept in sync with
 // https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
 
-// The list of campaign parameters that could be considered personal data under e.g. GDPR.
-// These can be masked in URLs and properties before being sent to posthog.
-export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
-    'gclid', // google ads
-    'gclsrc', // google ads 360
-    'dclid', // google display ads
-    'gbraid', // google ads, web to app
-    'wbraid', // google ads, app to web
-    'fbclid', // facebook
-    'msclkid', // microsoft
-    'twclid', // twitter
-    'li_fat_id', // linkedin
-    'igshid', // instagram
-    'ttclid', // tiktok
-    'rdt_cid', // reddit
-    'epik', // pinterest
-    'qclid', // quora
-    'sccid', // snapchat
-    'irclid', // impact
-    '_kx', // klaviyo
-]
+export { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS, getBrowserLanguage, getBrowserLanguagePrefix }
 
 export const CAMPAIGN_PARAMS = [
     'utm_source',
@@ -76,8 +62,6 @@ export const EVENT_TO_PERSON_PROPERTIES = [
     '$viewport_width',
     '$raw_user_agent',
 ]
-
-export const MASKED = '<masked>'
 
 // Campaign params that can be read from the cookie store
 export const COOKIE_CAMPAIGN_PARAMS = [
@@ -175,18 +159,6 @@ export function getSearchInfo(): Record<string, any> {
         return {}
     }
     return _getSearchInfoFromReferrer(referrer)
-}
-
-export function getBrowserLanguage(): string | undefined {
-    return (
-        navigator.language || // Any modern browser
-        (navigator as Record<string, any>).userLanguage // IE11
-    )
-}
-
-export function getBrowserLanguagePrefix(): string | undefined {
-    const lang = getBrowserLanguage()
-    return typeof lang === 'string' ? lang.split('-')[0] : undefined
 }
 
 const DIRECT = '$direct'

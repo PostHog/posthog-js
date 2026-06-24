@@ -1,6 +1,5 @@
-import { createLogger } from '../../../utils/logger'
-import { window } from '../../../utils/globals'
-
+import { window } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 const logger = createLogger('[ConversationsManager]')
 
 export const RESTORE_QUERY_PARAM = 'ph_conv_restore'

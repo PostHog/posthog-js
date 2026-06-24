@@ -1,8 +1,8 @@
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import type { ExternalExtensionKind } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { PostHog } from '../posthog-core'
 import { ExternalIntegrationKind } from '../types'
-import { assignableWindow, ExternalExtensionKind } from '../utils/globals'
-import { createLogger } from '../utils/logger'
-
 const logger = createLogger('[PostHog ExternalIntegrations]')
 
 const MAPPED_INTEGRATIONS: Record<ExternalIntegrationKind, ExternalExtensionKind> = {

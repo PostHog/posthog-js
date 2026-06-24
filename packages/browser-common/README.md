@@ -99,6 +99,17 @@ into your bundle — each extension stays independently tree-shakable and lazily
 loadable. An extension that provides a capability declares its token(s) in
 `provides`.
 
+## Utilities
+
+Reusable browser utilities live under `src/utils`, but they are intentionally
+not re-exported from the package root or a utility barrel. Import the exact file
+you need so lazy extension bundles do not accidentally pull unrelated helpers:
+
+```ts
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
+```
+
 ## Authoring
 
 See the **`develop-extension`** skill
@@ -110,7 +121,7 @@ v1 → `Client` porting map.
 
 ## Status
 
-Early. The package currently defines the extension contract and the shared
-`Publisher` helper. Additional shared runtime helpers — key-value stores, the
-registry implementation, and a test `Client` — will land alongside the first
-ported extension.
+Early. The package currently defines the extension contract, shared `Publisher`
+helper, and directly-imported reusable browser utilities under `src/utils`.
+Additional shared runtime helpers — registry implementation and broader
+test-client coverage — will land alongside the first ported extension.

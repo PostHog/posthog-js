@@ -30,7 +30,7 @@ const plugins = (es5, noExternal) => [
         },
     },
     json(),
-    resolve({ browser: true }),
+    resolve({ browser: true, extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.tsx'] }),
     typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
     commonjs(),
     postcss({

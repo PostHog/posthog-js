@@ -3,8 +3,8 @@ import { uuidv7 } from '../uuidv7'
 import { createPosthogInstance } from './helpers/posthog-instance'
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
     const mockedCookieBox = { cookie: '' }
@@ -56,7 +56,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('../utils/globals')
+const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('@posthog/browser-common/utils/globals')
 
 const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))
 

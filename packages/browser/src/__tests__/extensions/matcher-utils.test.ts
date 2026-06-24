@@ -1,5 +1,5 @@
 import { doesDeviceTypeMatch } from '../../extensions/utils/matcher-utils'
-import * as globals from '../../utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
 
 const DESKTOP_UA =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36'

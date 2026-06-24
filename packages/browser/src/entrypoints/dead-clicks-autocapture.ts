@@ -1,4 +1,5 @@
-import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
+import { assignableWindow, document } from '@posthog/browser-common/utils/globals'
+import type { LazyLoadedDeadClicksAutocaptureInterface } from '@posthog/browser-common/utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
 import { getEventTarget, shouldCaptureDeadClick, shouldSkipDeadClick } from '../autocapture-utils'
@@ -6,7 +7,7 @@ import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
 import { getNativeMutationObserverImplementation } from '../utils/prototype-utils'
-import { addEventListener } from '../utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 
 function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)

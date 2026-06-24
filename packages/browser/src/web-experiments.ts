@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { navigator, window } from './utils/globals'
+import { navigator, window } from '@posthog/browser-common/utils/globals'
 import {
     WebExperiment,
     WebExperimentsCallback,

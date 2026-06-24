@@ -1,3 +1,6 @@
+import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { type JSX, type RefObject, render, Fragment } from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
@@ -18,8 +21,6 @@ import {
     SurveyWidgetType,
     SurveyWithTypeAndAppearance,
 } from '../posthog-surveys-types'
-import { addEventListener } from '../utils'
-import { document as _document, window as _window } from '../utils/globals'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
@@ -30,7 +31,6 @@ import {
 import { isArray, isNull, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
 import { SURVEYS } from '../constants'
-import { uuidv7 } from '../uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {

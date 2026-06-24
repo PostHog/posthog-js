@@ -1,3 +1,6 @@
+import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
+import type { LazyLoadedSessionRecordingInterface, PostHogExtensionKind } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import {
     COOKIELESS_ALWAYS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
@@ -15,13 +18,6 @@ import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStart
 import { type eventWithTime } from './types/rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
-import { createLogger } from '../../utils/logger'
-import {
-    assignableWindow,
-    LazyLoadedSessionRecordingInterface,
-    PostHogExtensionKind,
-    window,
-} from '../../utils/globals'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
 import {
     AWAITING_CONFIG,

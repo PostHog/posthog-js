@@ -1,4 +1,4 @@
-import { extend } from './utils'
+import { extend } from '@posthog/browser-common/utils/general-utils'
 import { PersistentStore, Properties } from './types'
 import {
     DEVICE_ID,
@@ -12,7 +12,7 @@ import {
 
 import { isNull, isUndefined } from '@posthog/core'
 import { logger } from './utils/logger'
-import { window, document } from './utils/globals'
+import { window, document } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from './uuidv7'
 
 // we store the discovered subdomain in memory because it might be read multiple times
