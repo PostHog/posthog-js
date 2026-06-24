@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.391.1
+
+### Patch Changes
+
+- [#3919](https://github.com/PostHog/posthog-js/pull/3919) [`99bad9c`](https://github.com/PostHog/posthog-js/commit/99bad9c8332f5511b1b8caf33dd6f0fd9489c742) Thanks [@pauldambra](https://github.com/pauldambra)! - Session replay network capture: add an opt-in streaming reader for request/response bodies that stops at the payload size limit instead of buffering the whole body and then discarding it — bounding memory and pre-request latency when a body is very large. It reads only a clone of the body, so it never consumes the stream the page itself reads, and always resolves (never rejects) into the page's `fetch`. Off by default; enabled for `defaults: '2026-06-25'` and settable directly via `session_recording.streamNetworkBody`.
+  (2026-06-24)
+
 ## 1.391.0
 
 ### Minor Changes
