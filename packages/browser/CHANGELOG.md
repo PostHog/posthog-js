@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.393.4
+
+### Patch Changes
+
+- [#3942](https://github.com/PostHog/posthog-js/pull/3942) [`c9c8925`](https://github.com/PostHog/posthog-js/commit/c9c8925b1c63d2f02c3caeef5dc962ad31866459) Thanks [@hpouillot](https://github.com/hpouillot)! - Fix browser console log capture when session activity timestamps are missing and refresh session attributes for each log.
+  (2026-06-24)
+- Updated dependencies [[`c9c8925`](https://github.com/PostHog/posthog-js/commit/c9c8925b1c63d2f02c3caeef5dc962ad31866459)]:
+    - @posthog/core@1.37.2
+
 ## 1.393.3
 
 ### Patch Changes
