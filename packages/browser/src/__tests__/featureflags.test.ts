@@ -3004,6 +3004,20 @@ describe('parseFlagsResponse', () => {
         expect(persistence.unregister).not.toHaveBeenCalled()
     })
 
+    it('does not warn about an older endpoint for a valid v2 response with no flags', () => {
+        // Ensure warnings would actually be emitted so the assertion below is meaningful.
+        ;(window as any).POSTHOG_DEBUG = true
+        jest.spyOn(window.console, 'warn').mockImplementation()
+
+        // A project with no feature flags returns a valid v2 response that omits the `flags` key.
+        parseFlagsResponse({}, persistence)
+
+        expect(window.console.warn).not.toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
+        )
+    })
+
     it('parses the requestId from the /flags?v=1 response', () => {
         const flagsResponse = {
             featureFlags: { 'test-flag': true },
