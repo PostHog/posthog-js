@@ -10,7 +10,7 @@ import type {
   OtlpSeverityText,
 } from '@posthog/types'
 import type { LogSdkContext, ResolvedPostHogLogsConfig } from './types'
-import { isArray, isBoolean, isNull, isUndefined } from '../utils'
+import { isArray, isBoolean, isNull, isNullish, isUndefined } from '../utils'
 
 // ============================================================================
 // Severity mapping
@@ -127,10 +127,10 @@ export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSd
   if (sdkContext.windowId) {
     autoAttributes['window.id'] = sdkContext.windowId
   }
-  if (!isUndefined(sdkContext.sessionStartTimestamp)) {
+  if (!isNullish(sdkContext.sessionStartTimestamp)) {
     autoAttributes.sessionStartTimestamp = String(sdkContext.sessionStartTimestamp)
   }
-  if (!isUndefined(sdkContext.lastActivityTimestamp)) {
+  if (!isNullish(sdkContext.lastActivityTimestamp)) {
     autoAttributes.lastActivityTimestamp = String(sdkContext.lastActivityTimestamp)
   }
   if (sdkContext.currentUrl) {
