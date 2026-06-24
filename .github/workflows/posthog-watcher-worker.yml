@@ -21,7 +21,7 @@ on:
         - cron: '*/15 * * * *'
 
 concurrency:
-    group: posthog-watcher-${{ github.repository }}
+    group: posthog-watcher-${{ github.repository }}-${{ inputs['issue-number'] || 'queue' }}
     cancel-in-progress: false
 
 permissions:

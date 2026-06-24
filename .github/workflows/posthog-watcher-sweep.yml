@@ -16,7 +16,7 @@ on:
         - cron: '17 8 * * *'
 
 concurrency:
-    group: posthog-watcher-${{ github.repository }}
+    group: posthog-watcher-${{ github.repository }}-sweep
     cancel-in-progress: false
 
 permissions:

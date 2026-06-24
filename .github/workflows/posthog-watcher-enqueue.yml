@@ -10,6 +10,10 @@ permissions:
     contents: write # write queue.json to the state branch
     issues: read
 
+concurrency:
+    group: posthog-watcher-enqueue-${{ github.repository }}-${{ github.event.issue.number }}
+    cancel-in-progress: false
+
 jobs:
     enqueue:
         runs-on: ubuntu-24.04
