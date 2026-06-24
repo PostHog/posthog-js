@@ -302,18 +302,22 @@ const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
 }
 
 const initializeLogs = (posthog: PostHog) => {
-    // `host` is carried per record because the core SDK context has no equivalent.
-    const attributes: Record<string, string> = { host: assignableWindow.location.host }
-    if (posthog.sessionManager) {
-        const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
-            posthog.sessionManager.checkAndGetSessionAndWindowId(true)
-        attributes['window.id'] = windowId
-        if (sessionStartTimestamp != null) {
-            attributes.sessionStartTimestamp = sessionStartTimestamp.toString()
+    const getLogAttributes = (): Record<string, string> => {
+        // `host` is carried per record because the core SDK context has no equivalent.
+        const attributes: Record<string, string> = { host: assignableWindow.location.host }
+        if (posthog.sessionManager) {
+            const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
+                posthog.sessionManager.checkAndGetSessionAndWindowId(true)
+            attributes['window.id'] = windowId
+            if (sessionStartTimestamp != null) {
+                attributes.sessionStartTimestamp = sessionStartTimestamp.toString()
+            }
+            if (lastActivityTimestamp != null) {
+                attributes.lastActivityTimestamp = lastActivityTimestamp.toString()
+            }
         }
-        if (lastActivityTimestamp != null) {
-            attributes.lastActivityTimestamp = lastActivityTimestamp.toString()
-        }
+
+        return attributes
     }
 
     for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {
@@ -324,7 +328,7 @@ const initializeLogs = (posthog: PostHog) => {
                     if (args.length > 0 && posthog.is_capturing()) {
                         const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
                         const logAttributes = {
-                            ...attributes,
+                            ...getLogAttributes(),
                             ...(truncated ? { body_truncated: 'true' } : {}),
                         }
                         // The core pipeline adds posthogDistinctId and url.full from the SDK context.

@@ -117,6 +117,32 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('refreshes session attributes for each captured log', () => {
+            mockPostHog.sessionManager!.checkAndGetSessionAndWindowId = jest
+                .fn()
+                .mockReturnValueOnce({
+                    sessionId: 'session-123',
+                    windowId: 'window-456',
+                    sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
+                    lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
+                })
+                .mockReturnValueOnce({
+                    sessionId: 'session-789',
+                    windowId: 'window-999',
+                    sessionStartTimestamp: new Date('2023-01-01T11:00:00Z').getTime(),
+                    lastActivityTimestamp: new Date('2023-01-01T11:30:00Z').getTime(),
+                })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('first')
+            assignableWindow.console.log('second')
+
+            expect(mockEmit.mock.calls[0][0].attributes).toEqual(expect.objectContaining({ 'window.id': 'window-456' }))
+            expect(mockEmit.mock.calls[1][0].attributes).toEqual(expect.objectContaining({ 'window.id': 'window-999' }))
+        })
+
         it('should handle a missing last activity timestamp', () => {
             mockPostHog.sessionManager!.checkAndGetSessionAndWindowId = jest.fn(() => ({
                 sessionId: 'session-123',
