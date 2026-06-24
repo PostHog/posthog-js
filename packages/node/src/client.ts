@@ -2200,6 +2200,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     try {
       return await super._shutdown(shutdownTimeoutMs)
     } finally {
+      this.distinctIdHasSentFlagCalls = {}
       resolve?.()
     }
   }

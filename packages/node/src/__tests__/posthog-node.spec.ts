@@ -730,6 +730,20 @@ describe('PostHog Node.js', () => {
       jest.useFakeTimers()
     })
 
+    it('clears feature flag call dedupe state on shutdown', async () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      ;(ph as any).distinctIdHasSentFlagCalls = { user: new Set(['flag_true']) }
+      await ph.shutdown()
+
+      expect((ph as any).distinctIdHasSentFlagCalls).toEqual({})
+    })
+
     it('should shutdown cleanly', async () => {
       const ph = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
