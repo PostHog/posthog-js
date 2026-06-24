@@ -1758,7 +1758,7 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.getFeatureFlag('other-flag')).toEqual(true)
     })
 
-    it('should capture $feature_flag_called again after updateFlags changes a value', async () => {
+    it('should capture $feature_flag_called after updateFlags changes to a new value', async () => {
       await posthog.reloadFeatureFlagsAsync()
       expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
       await waitForPromises()
@@ -1776,6 +1776,18 @@ describe('PostHog Feature Flags v4', () => {
       })
       // Locally supplied flags have no server id, so no $feature_flag_id is emitted
       expect(flagCalledProps).not.toHaveProperty('$feature_flag_id')
+    })
+
+    it('should not capture $feature_flag_called after updateFlags cycles back to a previously seen value', async () => {
+      await posthog.reloadFeatureFlagsAsync()
+      expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
+      await waitForPromises()
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
+
+      posthog.updateFlags({ 'feature-1': false })
+      expect(posthog.getFeatureFlag('feature-1')).toEqual(false)
+      await waitForPromises()
+      expect(mocks.fetch).toHaveBeenCalledTimes(3)
 
       posthog.updateFlags({ 'feature-1': true })
       expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
