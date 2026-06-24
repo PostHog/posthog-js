@@ -45,7 +45,7 @@ jobs:
                   build: 'false'
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@81baedc77a94a4e307d7d711f68c7e59f59009c6
+              uses: PostHog/posthog-watcher-action@53752eea5b036f37e83da06879ca05e06cb377e9
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
@@ -72,7 +72,7 @@ jobs:
                   build: 'false'
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@81baedc77a94a4e307d7d711f68c7e59f59009c6
+              uses: PostHog/posthog-watcher-action@53752eea5b036f37e83da06879ca05e06cb377e9
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}
