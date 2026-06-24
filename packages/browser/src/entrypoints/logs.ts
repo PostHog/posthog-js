@@ -303,15 +303,16 @@ const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
 
 const initializeLogs = (posthog: PostHog) => {
     // `host` is carried per record because the core SDK context has no equivalent.
-    let attributes: Record<string, string> = { host: assignableWindow.location.host }
+    const attributes: Record<string, string> = { host: assignableWindow.location.host }
     if (posthog.sessionManager) {
         const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
             posthog.sessionManager.checkAndGetSessionAndWindowId(true)
-        attributes = {
-            ...attributes,
-            'window.id': windowId,
-            sessionStartTimestamp: sessionStartTimestamp.toString(),
-            lastActivityTimestamp: lastActivityTimestamp.toString(),
+        attributes['window.id'] = windowId
+        if (sessionStartTimestamp != null) {
+            attributes.sessionStartTimestamp = sessionStartTimestamp.toString()
+        }
+        if (lastActivityTimestamp != null) {
+            attributes.lastActivityTimestamp = lastActivityTimestamp.toString()
         }
     }
 

@@ -116,6 +116,28 @@ describe('logs entrypoint', () => {
                 })
             )
         })
+
+        it('should handle a missing last activity timestamp', () => {
+            mockPostHog.sessionManager!.checkAndGetSessionAndWindowId = jest.fn(() => ({
+                sessionId: 'session-123',
+                windowId: 'window-456',
+                sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
+                lastActivityTimestamp: null,
+            }))
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            expect(() => initializeLogs(mockPostHog)).not.toThrow()
+
+            assignableWindow.console.log('hello')
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    attributes: expect.not.objectContaining({
+                        lastActivityTimestamp: expect.any(String),
+                    }),
+                })
+            )
+        })
     })
 
     describe('log truncation features', () => {
