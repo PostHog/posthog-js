@@ -12,6 +12,9 @@ import {
 const browserSdkContext: LogSdkContext = {
   distinctId: 'user-123',
   sessionId: 'session-456',
+  windowId: 'window-789',
+  sessionStartTimestamp: 1672567200000,
+  lastActivityTimestamp: 1672569000000,
   currentUrl: 'https://example.com/page',
   activeFeatureFlags: ['flag-a', 'flag-b'],
 }
@@ -176,6 +179,9 @@ describe('logs-utils', () => {
       const attrs = Object.fromEntries(record.attributes.map((a) => [a.key, a.value]))
       expect(attrs['posthogDistinctId']).toEqual({ stringValue: 'user-123' })
       expect(attrs['sessionId']).toEqual({ stringValue: 'session-456' })
+      expect(attrs['window.id']).toEqual({ stringValue: 'window-789' })
+      expect(attrs['sessionStartTimestamp']).toEqual({ stringValue: '1672567200000' })
+      expect(attrs['lastActivityTimestamp']).toEqual({ stringValue: '1672569000000' })
       expect(attrs['url.full']).toEqual({ stringValue: 'https://example.com/page' })
       expect(attrs['feature_flags']).toEqual({
         arrayValue: { values: [{ stringValue: 'flag-a' }, { stringValue: 'flag-b' }] },
@@ -183,6 +189,20 @@ describe('logs-utils', () => {
       // browser context shouldn't leak mobile-only attrs
       expect(attrs['screen.name']).toBeUndefined()
       expect(attrs['app.state']).toBeUndefined()
+    })
+
+    it.each(['window.id', 'sessionStartTimestamp', 'lastActivityTimestamp'])(
+      'omits %s when absent from the SDK context',
+      (attribute) => {
+        const record = buildOtlpLogRecord({ body: 'test' }, minimalSdkContext)
+        expect(record.attributes.map((a) => a.key)).not.toContain(attribute)
+      }
+    )
+
+    it('preserves a sessionStartTimestamp of 0 (epoch)', () => {
+      const record = buildOtlpLogRecord({ body: 'test' }, { ...minimalSdkContext, sessionStartTimestamp: 0 })
+      const attrs = Object.fromEntries(record.attributes.map((a) => [a.key, a.value]))
+      expect(attrs['sessionStartTimestamp']).toEqual({ stringValue: '0' })
     })
 
     it('auto-populates mobile SDK context (screenName + appState)', () => {

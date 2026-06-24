@@ -25,6 +25,12 @@ export type {
 export interface LogSdkContext {
   distinctId?: string
   sessionId?: string
+  /** Web-only — current window id */
+  windowId?: string
+  /** Web-only — ms epoch when the current session started */
+  sessionStartTimestamp?: number
+  /** Web-only — ms epoch of the most recent session activity */
+  lastActivityTimestamp?: number
   /** Web-only — current page URL */
   currentUrl?: string
   /** Mobile-only — current screen / view name */
