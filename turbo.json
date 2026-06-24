@@ -41,6 +41,11 @@
             "env": ["PACKAGE_DEST"],
             "cache": false
         },
+        "@posthog/browser-common#build": {
+            "dependsOn": ["^build"],
+            "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json", "jest.config.cjs"],
+            "outputs": []
+        },
         "lint": {
             "dependsOn": []
         },

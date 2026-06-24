@@ -37,7 +37,8 @@
         "lint:fix": "eslint src tests --fix",
         "build": "tsc -p tsconfig.json --noEmit",
         "test:unit": "jest -c jest.config.cjs",
-        "check-types": "pnpm build"
+        "check-types": "pnpm build",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {
         "@posthog/core": "workspace:^",
