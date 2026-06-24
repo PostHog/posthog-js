@@ -4,14 +4,14 @@
     "repo": "PostHog/posthog-js",
     "item": "issue 2383",
     "url": "https://github.com/PostHog/posthog-js/issues/2383",
-    "conclusion": "Likely already fixed in current @posthog/nextjs-config / webpack sourcemap handling",
+    "conclusion": "Likely already fixed in current @posthog/nextjs-config via CSS sourcemap processing",
     "labels": [
       "frameworks/next-js",
       "feature/error-tracking",
       "team/error-tracking"
     ],
     "closed": false,
-    "updatedAt": "2026-06-24T12:44:00.574Z"
+    "updatedAt": "2026-06-24T12:52:03.998Z"
   },
   "PostHog/posthog-js/issue/2036": {
     "key": "PostHog/posthog-js/issue/2036",
