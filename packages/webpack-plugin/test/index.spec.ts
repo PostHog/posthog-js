@@ -63,6 +63,7 @@ describe('PosthogWebpackPlugin', () => {
                 path.resolve(outputDirectory, 'static/chunks/app.js'),
                 path.resolve(outputDirectory, 'static/chunks/app.js.map'),
                 path.resolve(outputDirectory, 'static/css/app.css'),
+                path.resolve(outputDirectory, 'static/css/app.css.map'),
             ],
         })
     })

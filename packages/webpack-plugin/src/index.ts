@@ -67,8 +67,12 @@ export class PosthogWebpackPlugin {
         )
 
         compilation.getAssets().forEach((asset) => {
-            if (asset.name.endsWith('.css') && compilation.getAsset(`${asset.name}.map`)) {
-                filePaths.add(path.resolve(outputDirectory, asset.name))
+            if (asset.name.endsWith('.css')) {
+                const mapAssetName = `${asset.name}.map`
+                if (compilation.getAsset(mapAssetName)) {
+                    filePaths.add(path.resolve(outputDirectory, asset.name))
+                    filePaths.add(path.resolve(outputDirectory, mapAssetName))
+                }
             }
         })
 
