@@ -1661,6 +1661,56 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
+  it('honors not_in operator for flag-level cohort conditions locally', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Beta Feature',
+          key: 'beta-feature',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, operator: 'not_in', type: 'cohort' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '98': {
+          type: 'AND',
+          values: [{ key: 'email', operator: 'regex', value: '.*@example\\.com$', type: 'person' }],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags, decideFlags: {} }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('beta-feature', 'some-distinct-id', {
+        personProperties: { email: 'someone@example.com' },
+        onlyEvaluateLocally: true,
+      })
+    ).toEqual(false)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+
+    expect(
+      await posthog.getFeatureFlag('beta-feature', 'other-distinct-id', {
+        personProperties: { email: 'someone@external.com' },
+        onlyEvaluateLocally: true,
+      })
+    ).toEqual(true)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
   it('computes complex cohorts with negation locally', async () => {
     const flags = {
       flags: [

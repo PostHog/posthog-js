@@ -607,6 +607,9 @@ class FeatureFlagsPoller {
           matches = await matchCohort(prop, properties, this.cohorts, this.debugMode, (depProp) =>
             this.evaluateFlagDependency(depProp, properties, evaluationContext)
           )
+          if (prop.operator === 'not_in') {
+            matches = !matches
+          }
         } else if (propertyType === 'flag') {
           matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
         } else {
