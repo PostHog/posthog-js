@@ -2,4 +2,4 @@
 "@posthog/next": major
 ---
 
-Graduate `@posthog/next` to v1.
+Promote `@posthog/next` to v1.
