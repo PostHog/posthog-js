@@ -58,4 +58,19 @@ supportedArchitectures:
   cpu: [x64, arm64v8, arm64]
   os: [linux, darwin]
 
+trustPolicyExclude:
+  - undici-types
+  - ua-parser-js
+  - semver
+  - chokidar@4.0.3
+  - css-declaration-sorter@6.4.1
+  - eslint-config-prettier@8.10.2
+  - semver@5.7.2
+  - semver@6.3.1
+  - ua-parser-js@0.7.40
+  - ua-parser-js@1.0.40
+  - undici-types@6.19.8
+  - undici-types@6.21.0
+  - vite@5.4.21
+
 trustPolicy: no-downgrade
