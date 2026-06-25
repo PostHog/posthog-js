@@ -15,7 +15,7 @@
         "test:e2e": "turbo test:e2e",
         "build": "turbo build",
         "dev": "turbo dev",
-        "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
+        "package": "export PACKAGE_DEST=$(pwd)/target && turbo package ${VERCEL:+--concurrency=1}",
         "package:vercel": "export PACKAGE_DEST=$(pwd)/target && turbo package --force --concurrency=1",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
         "bump": "pnpm changeset version",
