@@ -85,6 +85,7 @@ import {
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
+import { getDeviceModel } from './utils/device-model-utils'
 import { getEventProperties } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { logger } from './utils/logger'
@@ -253,6 +254,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys_automatic_display: false,
     disable_conversations: false,
     disable_product_tours: false,
+    disable_device_model: false,
     disable_external_dependency_loading: false,
     strict_script_versioning: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
@@ -836,6 +838,17 @@ export class PostHog implements PostHogInterface {
             logger.warn(
                 'The `ip` config option has NO EFFECT AT ALL and has been deprecated. Use a custom transformation or "Discard IP data" project setting instead. See https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address for more information.'
             )
+        }
+
+        // Not awaited — the first event may miss $device_model, which is fine for a stable per-device dimension.
+        if (!this.config.disable_device_model) {
+            getDeviceModel()
+                .then((model) => {
+                    if (model) {
+                        this.register({ $device_model: model })
+                    }
+                })
+                .catch(__NOOP)
         }
 
         return this

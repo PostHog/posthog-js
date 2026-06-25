@@ -153,6 +153,19 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
     loaded: (posthog: PostHogInterface) => void
 
     /**
+     * Disables capturing the `$device_model` super-property.
+     *
+     * When enabled (the default), PostHog resolves the hardware model once during init via
+     * `navigator.userAgentData.getHighEntropyValues(['model'])` and registers it as the raw OEM
+     * code (e.g. `Pixel 7`). This is Chromium-only and only meaningful on Android — it resolves to
+     * `undefined` on Safari/Firefox and to an empty string on desktop, in which cases nothing is
+     * registered.
+     *
+     * @default false
+     */
+    disable_device_model?: boolean
+
+    /**
      * Internal: Extension class overrides for tree-shaking support.
      * When provided, these classes are used instead of the default imports.
      * This enables entrypoints to control which extensions are bundled.
