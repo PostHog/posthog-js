@@ -288,6 +288,9 @@ importers:
       query-selector-shadow-dom:
         specifier: ^1.0.1
         version: 1.0.1
+      react:
+        specifier: '>=16.8.0'
+        version: 19.2.1
       web-vitals:
         specifier: ^5.3.0
         version: 5.3.0

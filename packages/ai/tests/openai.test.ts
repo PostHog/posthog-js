@@ -745,6 +745,49 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
   })
 
+  test('responses create skips queued background responses without usage', async () => {
+    mockOpenAiParsedResponse = {
+      ...mockOpenAiParsedResponse,
+      id: 'resp_queued',
+      status: 'queued',
+      output: [],
+      usage: null,
+    } as unknown as ParsedResponse<any>
+
+    const response = await client.responses.create({
+      model: 'gpt-4o-2024-08-06',
+      input: [{ role: 'user', content: 'Hello' }],
+      background: true,
+      posthogDistinctId: 'test-id',
+    } as any)
+
+    expect(response).toEqual(mockOpenAiParsedResponse)
+    expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+    expect(mockPostHogClient.captureImmediate).not.toHaveBeenCalled()
+  })
+
+  test('responses parse skips queued background responses without usage', async () => {
+    mockOpenAiParsedResponse = {
+      ...mockOpenAiParsedResponse,
+      id: 'resp_queued_parse',
+      status: 'queued',
+      output: [],
+      usage: null,
+    } as unknown as ParsedResponse<any>
+
+    const response = await client.responses.parse({
+      model: 'gpt-4o-2024-08-06',
+      input: [{ role: 'user', content: 'Hello' }],
+      background: true,
+      text: { format: { type: 'text' } },
+      posthogDistinctId: 'test-id',
+    } as any)
+
+    expect(response).toEqual(mockOpenAiParsedResponse)
+    expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+    expect(mockPostHogClient.captureImmediate).not.toHaveBeenCalled()
+  })
+
   conditionalTest('responses parse with instructions parameter', async () => {
     const response = await client.responses.parse({
       model: 'gpt-4o-2024-08-06',
