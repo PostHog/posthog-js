@@ -103,10 +103,15 @@ export const evaluateFlags = spacetimedb.procedure(t.string(), (ctx) => {
         console.error(`[evaluateFlags] /flags returned ${res.status}`)
         return '{}'
     }
-    const data = res.json() as { flags?: Record<string, { enabled: boolean; variant: string | null }> }
-    const values: Record<string, boolean | string> = {}
-    for (const [key, detail] of Object.entries(data.flags ?? {})) {
-        values[key] = detail.variant ?? detail.enabled
+    try {
+        const data = res.json() as { flags?: Record<string, { enabled: boolean; variant: string | null }> }
+        const values: Record<string, boolean | string> = {}
+        for (const [key, detail] of Object.entries(data.flags ?? {})) {
+            values[key] = detail.variant ?? detail.enabled
+        }
+        return JSON.stringify(values)
+    } catch (error) {
+        console.error('[evaluateFlags] failed to parse /flags response:', error)
+        return '{}'
     }
-    return JSON.stringify(values)
 })
