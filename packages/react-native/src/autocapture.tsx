@@ -135,9 +135,10 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
         ? `${props[customLabelProp]}`
         : currentInst.elementType?.displayName || currentInst.elementType?.name
 
+    Object.assign(autocaptureProperties, elAutocaptureProperties)
+
     if (label && !ignoreLabels.includes(label)) {
       el.tag_name = sanitiseLabel(label)
-      Object.assign(autocaptureProperties, elAutocaptureProperties)
       elements.push(el)
     }
 
