@@ -99,7 +99,10 @@ export const evaluateFlags = spacetimedb.procedure(t.string(), (ctx) => {
             distinct_id: ctx.sender.toHexString(),
         }),
     })
-    if (!res.ok) return '{}'
+    if (!res.ok) {
+        console.error(`[evaluateFlags] /flags returned ${res.status}`)
+        return '{}'
+    }
     const data = res.json() as { flags?: Record<string, { enabled: boolean; variant: string | null }> }
     const values: Record<string, boolean | string> = {}
     for (const [key, detail] of Object.entries(data.flags ?? {})) {

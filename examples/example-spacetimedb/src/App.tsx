@@ -54,8 +54,8 @@ function App() {
 
     const handleProcedureFlags = async () => {
         if (!connected) return
-        const json = await evaluateFlags()
         try {
+            const json = await evaluateFlags()
             const parsed = JSON.parse(json)
             setProcFlags(parsed && typeof parsed === 'object' ? parsed : {})
         } catch {
