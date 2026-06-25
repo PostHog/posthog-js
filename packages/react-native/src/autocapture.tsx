@@ -59,6 +59,8 @@ const sanitiseLabel = (label: string): string => {
 
 export const defaultPostHogLabelProp = 'ph-label'
 
+const captureAttributePrefix = 'data-ph-capture-attribute-'
+
 export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: PostHogAutocaptureOptions = {}): void => {
   const {
     noCaptureProp = 'ph-no-capture',
@@ -72,6 +74,7 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
     return
   }
   const elements: PostHogAutocaptureElement[] = []
+  const autocaptureProperties: Record<string, JsonType> = {}
 
   let currentInst: Element | undefined = e._targetInst
 
@@ -83,6 +86,7 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
     const el: PostHogAutocaptureElement = {
       tag_name: '',
     }
+    const elAutocaptureProperties: Record<string, JsonType> = {}
 
     const props = currentInst.memoizedProps
 
@@ -92,12 +96,22 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
     }
 
     if (props) {
-      // Capture only props we have said to capture. By default this is only "safe" props
+      // Capture data-ph-capture-attribute props as event properties.
+      // Element props are only captured from propsToCapture.
       Object.keys(props).forEach((key) => {
+        const value = props[key]
+
+        if (key.indexOf(captureAttributePrefix) === 0) {
+          const propertyKey = key.slice(captureAttributePrefix.length)
+          if (propertyKey && ['string', 'number', 'boolean'].includes(typeof value) && value !== '') {
+            elAutocaptureProperties[propertyKey] = value as JsonType
+          }
+        }
+
         if (!propsToCapture.includes(key)) {
           return
         }
-        const value = props[key]
+
         if (key === 'style') {
           // Safely handle style prop, especially for animated styles
           try {
@@ -123,6 +137,7 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
 
     if (label && !ignoreLabels.includes(label)) {
       el.tag_name = sanitiseLabel(label)
+      Object.assign(autocaptureProperties, elAutocaptureProperties)
       elements.push(el)
     }
 
@@ -149,6 +164,7 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
       }
     }
     posthog.autocapture('touch', elements, {
+      ...autocaptureProperties,
       $touch_x: e.nativeEvent.pageX,
       $touch_y: e.nativeEvent.pageY,
     })

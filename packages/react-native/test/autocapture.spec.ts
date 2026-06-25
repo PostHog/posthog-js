@@ -54,6 +54,50 @@ describe('PostHog React Native', () => {
       expect(capturedElement.$el_text).toBe('Test Button')
     })
 
+    it('should capture data-ph-capture-attribute props as event properties', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+
+      const eventWithCaptureAttributes = {
+        _targetInst: {
+          elementType: { name: 'Text' },
+          memoizedProps: {
+            children: 'Tap me',
+            testID: 'target-id',
+            'data-ph-capture-attribute-target-augment': 'the target',
+            'data-ph-capture-attribute-empty-value': '',
+            'data-ph-capture-attribute-': 'empty suffix',
+            'data-ph-capture-attribute-object-value': { value: 'object' },
+          },
+          return: {
+            elementType: { name: 'View' },
+            memoizedProps: {
+              testID: 'parent-id',
+              'data-ph-capture-attribute-parent-augment': 'the parent',
+            },
+            return: null,
+          },
+        },
+        nativeEvent,
+      }
+
+      autocaptureFromTouchEvent(eventWithCaptureAttributes, mockPostHog)
+
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+      const capturedElements = mockPostHog.autocapture.mock.calls[0][1]
+      const capturedProperties = mockPostHog.autocapture.mock.calls[0][2]
+      expect(capturedElements[0].attr__testID).toBe('target-id')
+      expect(capturedElements[1].attr__testID).toBe('parent-id')
+      expect(capturedProperties).toMatchObject({
+        $touch_x: 1,
+        $touch_y: 2,
+        'target-augment': 'the target',
+        'parent-augment': 'the parent',
+      })
+      expect(capturedProperties).not.toHaveProperty('empty-value')
+      expect(Object.prototype.hasOwnProperty.call(capturedProperties, '')).toBe(false)
+      expect(capturedProperties).not.toHaveProperty('object-value')
+    })
+
     it('should handle mixed animated and regular styles', () => {
       const mockPostHog = { autocapture: jest.fn() } as any
 
