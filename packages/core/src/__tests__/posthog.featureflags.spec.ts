@@ -1151,6 +1151,81 @@ describe('PostHog Feature Flags v4', () => {
       })
     })
 
+    describe('getFlags retry behavior', () => {
+      it.each([408, 429, 500, 503])('should not retry HTTP %i responses', async (status) => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 3, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.resolve({
+                  status,
+                  text: () => Promise.resolve('error'),
+                  json: () => Promise.resolve({ error: 'error' }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        await expect(posthog.getFlags('distinct-id')).resolves.toEqual({
+          success: false,
+          error: { type: 'api_error', statusCode: status },
+        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('should retry network failures and return the successful flags response', async () => {
+        jest.useRealTimers()
+        try {
+          let flagsRequestCount = 0
+          ;[posthog, mocks] = createTestClient(
+            'TEST_API_KEY',
+            { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+            (_mocks) => {
+              _mocks.fetch.mockImplementation((url) => {
+                if (url.includes('/flags/')) {
+                  flagsRequestCount++
+                  if (flagsRequestCount < 3) {
+                    return Promise.reject(new TypeError('Failed to fetch'))
+                  }
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () =>
+                      Promise.resolve({
+                        flags: createMockFeatureFlags(),
+                        requestId: 'retry-success',
+                        evaluatedAt: 1640995200000,
+                      }),
+                  })
+                }
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () => Promise.resolve({ status: 'ok' }),
+                })
+              })
+            }
+          )
+
+          const result = await posthog.getFlags('distinct-id')
+
+          expect(result.success).toBe(true)
+          expect(mocks.fetch).toHaveBeenCalledTimes(3)
+        } finally {
+          jest.useFakeTimers()
+          jest.setSystemTime(new Date('2022-01-01'))
+        }
+      })
+    })
+
     describe('getFeatureFlagResult error scenarios', () => {
       it('should include ERRORS_WHILE_COMPUTING error', async () => {
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
@@ -1195,7 +1270,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include TIMEOUT error when request timed out', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, fetchRetryCount: 0 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               const abortError = new Error('The operation was aborted')
@@ -1265,7 +1340,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include CONNECTION_ERROR for network failures', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, fetchRetryCount: 0 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               return Promise.reject(new TypeError('Failed to fetch'))

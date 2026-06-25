@@ -573,8 +573,8 @@ export abstract class PostHogCoreStateless {
 
     this._logger.info('Flags URL', url)
 
-    // Don't retry /flags API calls
-    return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.featureFlagsRequestTimeoutMs)
+    // Retry only network/transport/timeout failures for /flags. HTTP/API status errors are surfaced immediately.
+    return this.fetchWithRetry(url, fetchOptions, { retryCheck: isPostHogFetchNetworkError }, this.featureFlagsRequestTimeoutMs)
       .then((response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>)
       .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
       .catch((error): GetFlagsResult => {
