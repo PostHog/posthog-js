@@ -7,7 +7,10 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
 import * as CaptureEventProcedure from "../capture_event_procedure";
+import * as EvaluateFlagsProcedure from "../evaluate_flags_procedure";
 
 export type CaptureEventArgs = __Infer<typeof CaptureEventProcedure.params>;
 export type CaptureEventResult = __Infer<typeof CaptureEventProcedure.returnType>;
+export type EvaluateFlagsArgs = __Infer<typeof EvaluateFlagsProcedure.params>;
+export type EvaluateFlagsResult = __Infer<typeof EvaluateFlagsProcedure.returnType>;
 

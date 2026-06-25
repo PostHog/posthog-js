@@ -1,6 +1,6 @@
 import { schema, table, t } from 'spacetimedb/server'
 
-// Project token (phc_) — publishable, safe to embed. Only used by the procedure below.
+// Project token (phc_) — publishable, safe to embed. Used by the procedures below.
 const POSTHOG_PROJECT_TOKEN = 'phc_REPLACE_WITH_YOUR_PROJECT_TOKEN'
 const POSTHOG_HOST = 'https://us.i.posthog.com'
 
@@ -87,3 +87,25 @@ export const captureEvent = spacetimedb.procedure(
         return res.ok
     }
 )
+
+// Remote flag eval inside the module. A procedure can reach the network, so it POSTs
+// to PostHog's /flags endpoint and returns the result straight to the caller — no
+// sidecar, no personal key, no write-back table. Contrast with the sidecar's local
+// evaluation. Keyed on ctx.sender so a caller only evaluates its own flags.
+export const evaluateFlags = spacetimedb.procedure(t.string(), (ctx) => {
+    const res = ctx.http.fetch(`${POSTHOG_HOST}/flags/?v=2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            token: POSTHOG_PROJECT_TOKEN,
+            distinct_id: ctx.sender.toHexString(),
+        }),
+    })
+    if (!res.ok) return '{}'
+    const data = res.json() as { flags?: Record<string, { enabled: boolean; variant: string | null }> }
+    const values: Record<string, boolean | string> = {}
+    for (const [key, detail] of Object.entries(data.flags ?? {})) {
+        values[key] = detail.variant ?? detail.enabled
+    }
+    return JSON.stringify(values)
+})
