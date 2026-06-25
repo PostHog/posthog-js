@@ -442,6 +442,8 @@ jobs:
             - name: Setup pnpm and Node.js
               uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
               with:
+                  # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
+                  # until https://github.com/jasongin/nvs/pull/315 lands.
                   runtime: node@24
                   cache: true
                   install: false
@@ -579,6 +581,8 @@ jobs:
             - name: Setup pnpm and Node.js
               uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
               with:
+                  # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
+                  # until https://github.com/jasongin/nvs/pull/315 lands.
                   runtime: node@24
                   cache: true
                   install: false
