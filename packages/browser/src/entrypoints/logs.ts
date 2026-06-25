@@ -97,7 +97,7 @@ const collectFlattenedAttributes = (value: any, key: string, collector: Attribut
         return
     }
 
-    if (typeof value === 'object' && !isNull(value) && !isArray(value)) {
+    if (isObject(value)) {
         if (collector.seen.has(value)) {
             collectAttributeValue(key || 'circular', '[Circular]', collector)
             return
