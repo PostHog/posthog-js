@@ -1,5 +1,12 @@
 # @posthog/webpack-plugin
 
+## 1.5.25
+
+### Patch Changes
+
+- [#3962](https://github.com/PostHog/posthog-js/pull/3962) [`5310a5e`](https://github.com/PostHog/posthog-js/commit/5310a5ea16b1fd463d6ecc14df007df5cad13c66) Thanks [@marandaneto](https://github.com/marandaneto)! - Delete emitted CSS source maps when `deleteAfterUpload` is enabled without uploading CSS assets to PostHog.
+  (2026-06-25)
+
 ## 1.5.24
 
 ### Patch Changes
