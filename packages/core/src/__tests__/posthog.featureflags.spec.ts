@@ -930,6 +930,76 @@ describe('PostHog Feature Flags v4', () => {
         })
       })
 
+      describe('getAllFeatureFlags', () => {
+        it('returns all loaded flags as results', () => {
+          const results = posthog.getAllFeatureFlags()
+          expect(results).toHaveLength(4)
+          expect(results).toEqual(
+            expect.arrayContaining([
+              { key: 'feature-1', enabled: true, variant: undefined, payload: { color: 'blue' } },
+              { key: 'feature-2', enabled: true, variant: undefined, payload: null },
+              { key: 'feature-variant', enabled: true, variant: 'variant', payload: [5] },
+              { key: 'json-payload', enabled: true, variant: undefined, payload: { a: 'payload' } },
+            ])
+          )
+        })
+
+        it('returns an empty array when flags are not loaded', () => {
+          const [freshPosthog] = createTestClient('TEST_API_KEY', { flushAt: 1 })
+          expect(freshPosthog.getAllFeatureFlags()).toEqual([])
+        })
+
+        it('does not send a $feature_flag_called event', async () => {
+          posthog.getAllFeatureFlags()
+          await waitForPromises()
+          const calledEvents = mocks.fetch.mock.calls.filter((call) =>
+            JSON.stringify(call).includes('$feature_flag_called')
+          )
+          expect(calledEvents).toHaveLength(0)
+        })
+
+        it('includes disabled flags loaded from the server as enabled: false', async () => {
+          const [client] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/?v=2')) {
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: {
+                        'feature-1': createMockFeatureFlags()['feature-1'],
+                        'off-flag': {
+                          key: 'off-flag',
+                          enabled: false,
+                          variant: undefined,
+                          reason: undefined,
+                          metadata: { id: 9, version: 1, description: undefined, payload: undefined },
+                        },
+                      },
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          })
+
+          client.reloadFeatureFlags()
+          await waitForPromises()
+
+          expect(client.getAllFeatureFlags()).toEqual(
+            expect.arrayContaining([
+              { key: 'feature-1', enabled: true, variant: undefined, payload: { color: 'blue' } },
+              { key: 'off-flag', enabled: false, variant: undefined, payload: null },
+            ])
+          )
+        })
+      })
+
       describe('getFeatureFlagResult', () => {
         it('should return correct result for a boolean flag', () => {
           const result = posthog.getFeatureFlagResult('feature-1')

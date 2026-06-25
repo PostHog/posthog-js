@@ -1923,6 +1923,17 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
+     * the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh.
+     * Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.
+     *
+     * @returns {FeatureFlagResult[]} All loaded flags, or an empty array if none are loaded.
+     */
+    getAllFeatureFlags(): FeatureFlagResult[] {
+        return this.featureFlags?.getAllFeatureFlags() ?? []
+    }
+
+    /**
      * Checks if a feature flag is enabled for the current user.
      *
      * @remarks

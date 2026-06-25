@@ -92,6 +92,21 @@ describe('featureflags', () => {
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
     })
 
+    it('getAllFeatureFlags returns all flags as results, including disabled ones', () => {
+        expect(featureFlags.getAllFeatureFlags()).toEqual([
+            { key: 'beta-feature', enabled: true, variant: undefined, payload: { some: 'payload' } },
+            { key: 'alpha-feature-2', enabled: true, variant: undefined, payload: 200 },
+            { key: 'multivariate-flag', enabled: true, variant: 'variant-1', payload: undefined },
+            { key: 'disabled-flag', enabled: false, variant: undefined, payload: undefined },
+        ])
+    })
+
+    it('getAllFeatureFlags does not send a $feature_flag_called event or report a flag call', () => {
+        featureFlags.getAllFeatureFlags()
+        expect(instance.capture).not.toHaveBeenCalledWith('$feature_flag_called', expect.anything())
+        expect(instance.get_property('$flag_call_reported')).toEqual(undefined)
+    })
+
     it('should return flag details from persistence even if /flags endpoint was not hit', () => {
         instance.persistence.register({
             $feature_flag_details: {

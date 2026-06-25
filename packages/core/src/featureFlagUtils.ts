@@ -1,5 +1,6 @@
 import {
   FeatureFlagDetail,
+  FeatureFlagResult,
   FeatureFlagValue,
   JsonType,
   PostHogFlagsResponse,
@@ -160,4 +161,21 @@ export function getEnabledFromValue(value: FeatureFlagValue): boolean {
 
 export function getVariantFromValue(value: FeatureFlagValue): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDetail>): FeatureFlagResult[] => {
+  return Object.values(flagDetails).reduce((results: FeatureFlagResult[], detail) => {
+    const value = getFeatureFlagValue(detail)
+    if (value === undefined) {
+      return results
+    }
+    const rawPayload = detail.metadata?.payload
+    results.push({
+      key: detail.key,
+      enabled: getEnabledFromValue(value),
+      variant: getVariantFromValue(value),
+      payload: rawPayload !== undefined ? parsePayload(rawPayload) : null,
+    })
+    return results
+  }, [])
 }

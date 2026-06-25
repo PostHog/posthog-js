@@ -23,6 +23,7 @@ import type {
 } from './types'
 import {
   createFlagsResponseFromFlagsAndPayloads,
+  flagDetailsToResults,
   getEnabledFromValue,
   getFeatureFlagValue,
   getFlagValuesFromFlags,
@@ -947,6 +948,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   getFeatureFlagResult(key: string, options?: FeatureFlagResultOptions): FeatureFlagResult | undefined {
     return this._getFeatureFlagResult(key, options)
+  }
+
+  /**
+   * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
+   * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+   */
+  getAllFeatureFlags(): FeatureFlagResult[] {
+    return flagDetailsToResults(this.getFeatureFlagDetails()?.flags ?? {})
   }
 
   protected _getFeatureFlagResult(

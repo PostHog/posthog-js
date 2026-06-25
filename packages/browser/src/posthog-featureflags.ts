@@ -446,6 +446,20 @@ export class PostHogFeatureFlags implements Extension {
         return finalDetails
     }
 
+    getAllFeatureFlags(): FeatureFlagResult[] {
+        const flagVariants = this.getFlagVariants()
+        const payloads = this.getFlagPayloads()
+        return Object.keys(flagVariants).map((key) => {
+            const flagValue = flagVariants[key]
+            return {
+                key,
+                enabled: !!flagValue,
+                variant: typeof flagValue === 'string' ? flagValue : undefined,
+                payload: parsePayload(payloads[key]),
+            }
+        })
+    }
+
     getFlagVariants(): Record<string, string | boolean> {
         const enabledFlags = this._prop(ENABLED_FEATURE_FLAGS)
         const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
