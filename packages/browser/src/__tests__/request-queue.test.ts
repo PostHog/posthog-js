@@ -147,6 +147,9 @@ describe('RequestQueue', () => {
             expect(() => jest.runOnlyPendingTimers()).not.toThrow()
 
             expect(sendRequest).toHaveBeenCalledTimes(2)
+
+            queue.unload()
+            expect(sendRequest).toHaveBeenCalledTimes(2)
         })
 
         it('keeps sending unload requests if one request throws', () => {
@@ -161,6 +164,9 @@ describe('RequestQueue', () => {
 
             expect(() => queue.unload()).not.toThrow()
 
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+
+            queue.unload()
             expect(sendRequest).toHaveBeenCalledTimes(2)
         })
 
