@@ -80,6 +80,19 @@ export class PosthogWebpackPlugin {
             .filter((asset) => asset.name.endsWith('.css.map'))
             .map((asset) => path.resolve(outputDirectory, asset.name))
 
-        await Promise.all(cssSourceMaps.map((filePath) => fs.rm(filePath, { force: true })))
+        const deletionResults = await Promise.allSettled(
+            cssSourceMaps.map((filePath) => fs.rm(filePath, { force: true }))
+        )
+
+        deletionResults.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                const errorMessage = result.reason instanceof Error ? result.reason.message : result.reason
+                this.logger.error(
+                    'PostHog sourcemaps uploaded, but failed to delete CSS source map:',
+                    cssSourceMaps[index],
+                    errorMessage
+                )
+            }
+        })
     }
 }

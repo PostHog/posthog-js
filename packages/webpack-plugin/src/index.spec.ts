@@ -6,10 +6,12 @@ import { runSourcemapCli } from '@posthog/plugin-utils'
 import { PosthogWebpackPlugin } from './index'
 import type { ResolvedPluginConfig } from './config'
 
+const mockLoggerError = jest.fn()
+
 jest.mock(
     '@posthog/core',
     () => ({
-        createLogger: () => ({ error: jest.fn() }),
+        createLogger: () => ({ error: mockLoggerError }),
     }),
     { virtual: true }
 )
@@ -57,10 +59,12 @@ describe('PosthogWebpackPlugin', () => {
 
     beforeEach(async () => {
         runSourcemapCliMock.mockClear()
+        mockLoggerError.mockClear()
         outputDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-webpack-plugin-'))
     })
 
     afterEach(async () => {
+        jest.restoreAllMocks()
         await fs.rm(outputDirectory, { force: true, recursive: true })
     })
 
@@ -97,5 +101,39 @@ describe('PosthogWebpackPlugin', () => {
         await plugin.processSourceMaps(compilation, testConfig)
 
         expect(await exists(cssSourceMap)).toBe(expectedExists)
+    })
+
+    it('continues deleting CSS source maps and logs each deletion failure', async () => {
+        const originalRm = fs.rm.bind(fs)
+        const failedCssSourceMap = path.join(outputDirectory, 'static/css/app.css.map')
+        const deletedCssSourceMap = path.join(outputDirectory, 'static/css/vendor.css.map')
+        await fs.mkdir(path.dirname(failedCssSourceMap), { recursive: true })
+        await fs.writeFile(failedCssSourceMap, '{}')
+        await fs.writeFile(deletedCssSourceMap, '{}')
+
+        jest.spyOn(fs, 'rm').mockImplementation(async (filePath, options) => {
+            if (filePath === failedCssSourceMap) {
+                throw new Error('permission denied')
+            }
+
+            return originalRm(filePath, options)
+        })
+
+        const plugin = new PosthogWebpackPlugin(config, true)
+        const compilation = createCompilation(
+            outputDirectory,
+            [{ files: new Set(['static/chunks/app.js']) }],
+            [{ name: 'static/css/app.css.map' }, { name: 'static/css/vendor.css.map' }]
+        )
+
+        await plugin.processSourceMaps(compilation, config)
+
+        expect(await exists(failedCssSourceMap)).toBe(true)
+        expect(await exists(deletedCssSourceMap)).toBe(false)
+        expect(mockLoggerError).toHaveBeenCalledWith(
+            'PostHog sourcemaps uploaded, but failed to delete CSS source map:',
+            failedCssSourceMap,
+            'permission denied'
+        )
     })
 })
