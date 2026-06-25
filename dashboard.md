@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2149](https://github.com/PostHog/posthog-js/issues/2149) | Valid feature request for React Native autocapture parity | enhancement, help wanted, react-native, feature/mobile, feature/autocapture | https://github.com/PostHog/posthog-js/pull/3971 | no | 2026-06-25T09:43:34.982Z |
 | PostHog/posthog-js | [issue 2132](https://github.com/PostHog/posthog-js/issues/2132) | Valid React Native feature request; custom Authorization/request headers are still not exposed. | enhancement, help wanted, react-native, feature/mobile | https://github.com/PostHog/posthog-js/pull/3970 | no | 2026-06-25T09:39:05.515Z |
 | PostHog/posthog-js | [issue 2673](https://github.com/PostHog/posthog-js/issues/2673) | Keep open as a broad browser SDK v2 planning feature, not a small fix. | enhancement, feature, web, feature/replay, feature/product-analytics |  | no | 2026-06-25T09:34:21.201Z |
 | PostHog/posthog-js | [issue 2659](https://github.com/PostHog/posthog-js/issues/2659) | Valid feature request for posthog-node flush semantics | enhancement, node, feature, feature/error-tracking, feature/flags |  | no | 2026-06-25T09:33:24.693Z |
