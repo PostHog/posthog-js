@@ -1,4 +1,18 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "issue-3954-auto-none-no-comment-no-close-1782399065892",
+      "kind": "issue",
+      "number": 3954,
+      "mode": "auto",
+      "enqueuedAt": "2026-06-25T14:51:05.892Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 28178902126,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28178902126"
+      },
+      "attempts": 0
+    }
+  ]
 }
