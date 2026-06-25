@@ -197,7 +197,7 @@ const stringifyValueWithLimit = (
         try {
             errorObject.stack = value.stack
         } catch {}
-        return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray)
+        return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray, attributeCollector)
     }
 
     if (isArray(value)) {

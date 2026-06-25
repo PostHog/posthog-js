@@ -451,6 +451,10 @@ describe('logs entrypoint', () => {
             expect(mockEmit.mock.calls[0][0].attributes).toEqual(
                 expect.objectContaining({
                     'log.source': 'console.error',
+                    code: 'E_BOOM',
+                    name: 'CustomError',
+                    message: 'boom',
+                    stack: 'CustomError: boom\n    at test',
                 })
             )
         })
