@@ -1661,7 +1661,10 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
-  it('honors not_in operator for flag-level cohort conditions locally', async () => {
+  it.each<[string, string, boolean]>([
+    ['matching cohort email', 'someone@example.com', false],
+    ['non-matching cohort email', 'someone@external.com', true],
+  ])('honors not_in operator for flag-level cohort conditions locally: %s', async (_, email, expected) => {
     const flags = {
       flags: [
         {
@@ -1696,18 +1699,10 @@ describe('local evaluation', () => {
 
     expect(
       await posthog.getFeatureFlag('beta-feature', 'some-distinct-id', {
-        personProperties: { email: 'someone@example.com' },
+        personProperties: { email },
         onlyEvaluateLocally: true,
       })
-    ).toEqual(false)
-    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
-
-    expect(
-      await posthog.getFeatureFlag('beta-feature', 'other-distinct-id', {
-        personProperties: { email: 'someone@external.com' },
-        onlyEvaluateLocally: true,
-      })
-    ).toEqual(true)
+    ).toEqual(expected)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
