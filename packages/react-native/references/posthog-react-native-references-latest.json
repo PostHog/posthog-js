@@ -1534,6 +1534,28 @@
           "path": "dist/posthog-rn.d.ts"
         },
         {
+          "category": "",
+          "description": "Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of the flags from the last load (no network request) and does not send a `$feature_flag_called` event.",
+          "details": null,
+          "id": "getAllFeatureFlags",
+          "showDocs": true,
+          "title": "getAllFeatureFlags",
+          "examples": [
+            {
+              "id": "getallfeatureflags",
+              "name": "Generated example for getAllFeatureFlags",
+              "code": "// Generated example for getAllFeatureFlags\nposthog.getAllFeatureFlags();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "FeatureFlagResult[]",
+            "name": "FeatureFlagResult[]"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
           "category": "Identification",
           "description": "Returns the current anonymous ID.\nThis is the ID assigned to users before they are identified. It's used to track anonymous users and link them to identified users when they sign up.",
           "details": null,

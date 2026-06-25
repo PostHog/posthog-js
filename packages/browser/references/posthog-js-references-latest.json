@@ -711,6 +711,28 @@
           "path": "lib/src/posthog-core.d.ts"
         },
         {
+          "category": "",
+          "description": "Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh. Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.",
+          "details": null,
+          "id": "getAllFeatureFlags",
+          "showDocs": true,
+          "title": "getAllFeatureFlags",
+          "examples": [
+            {
+              "id": "getallfeatureflags",
+              "name": "Generated example for getAllFeatureFlags",
+              "code": "// Generated example for getAllFeatureFlags\nposthog.getAllFeatureFlags();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "FeatureFlagResult[]",
+            "name": "FeatureFlagResult[]"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. [Learn more in the docs](/docs/feature-flags/early-access-feature-management#option-2-custom-implementation)",
           "details": null,
