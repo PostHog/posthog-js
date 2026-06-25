@@ -152,6 +152,28 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should preserve bounded attributes when the log body is truncated', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log({
+                code: 'E_TOO_LARGE',
+                userId: 'user-123',
+                payload: 'x'.repeat(10001),
+            })
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'),
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                        code: 'E_TOO_LARGE',
+                        userId: 'user-123',
+                    }),
+                })
+            )
+        })
+
         it('should not read object properties after the body size limit is reached', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -429,6 +451,10 @@ describe('logs entrypoint', () => {
             expect(mockEmit.mock.calls[0][0].attributes).toEqual(
                 expect.objectContaining({
                     'log.source': 'console.error',
+                    code: 'E_BOOM',
+                    name: 'CustomError',
+                    message: 'boom',
+                    stack: 'CustomError: boom\n    at test',
                 })
             )
         })
