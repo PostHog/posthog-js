@@ -60,6 +60,14 @@
         "rrweb-types/package.json",
         "rrweb-plugin-console-record/package.json"
     ],
+    "peerDependencies": {
+        "react": ">=16.8.0"
+    },
+    "peerDependenciesMeta": {
+        "react": {
+            "optional": true
+        }
+    },
     "dependencies": {
         "@posthog/core": "workspace:^",
         "@posthog/types": "workspace:^",
