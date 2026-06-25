@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3978](https://github.com/PostHog/posthog-js/issues/3978) | Valid browser SDK enhancement; current default event properties do not include network-quality data. | enhancement, web, feature/product-analytics |  | no | 2026-06-25T16:05:01.547Z |
 | PostHog/posthog-js | [issue 3954](https://github.com/PostHog/posthog-js/issues/3954) | Valid toolbar bug; the premature authenticated requests appear to come from the loaded toolbar bundle, not the SDK loader. | feature/toolbar, web |  | no | 2026-06-25T14:53:20.138Z |
 | PostHog/posthog-js | [issue 3972](https://github.com/PostHog/posthog-js/issues/3972) | Valid posthog-node local evaluation bug; flag-level cohort not_in is ignored. | node, feature/flags, team/feature-flags | https://github.com/PostHog/posthog-js/pull/3973 | no | 2026-06-25T10:29:44.811Z |
 | PostHog/posthog-js | [issue 2149](https://github.com/PostHog/posthog-js/issues/2149) | Valid feature request for React Native autocapture parity | enhancement, help wanted, react-native, feature/mobile, feature/autocapture | https://github.com/PostHog/posthog-js/pull/3971 | no | 2026-06-25T09:43:34.982Z |
