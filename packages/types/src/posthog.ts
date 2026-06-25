@@ -333,7 +333,7 @@ export interface PostHog {
      * @param options.fresh - If true, only return values loaded from the server, not cached localStorage values (default: false)
      * @returns Whether the feature flag is enabled
      */
-    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined
+    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean
 
     /**
      * Reload feature flags from the server.

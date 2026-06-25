@@ -1142,10 +1142,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
-  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
+  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean {
     const response = this.getFeatureFlag(key, options)
     if (response === undefined) {
-      return undefined
+      return false
     }
     return !!response
   }
