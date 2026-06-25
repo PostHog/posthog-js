@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.393.5
+
+### Patch Changes
+
+- [#3960](https://github.com/PostHog/posthog-js/pull/3960) [`619d318`](https://github.com/PostHog/posthog-js/commit/619d31827e780fecd4d644fb99063d878764fb8e) Thanks [@marandaneto](https://github.com/marandaneto)! - Improve console log capture performance for truncated large objects.
+  (2026-06-25)
+
 ## 1.393.4
 
 ### Patch Changes
