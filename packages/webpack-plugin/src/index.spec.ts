@@ -64,44 +64,38 @@ describe('PosthogWebpackPlugin', () => {
         await fs.rm(outputDirectory, { force: true, recursive: true })
     })
 
-    it('deletes emitted CSS source maps after upload when deleteAfterUpload is enabled', async () => {
+    it.each([
+        {
+            deleteAfterUpload: true,
+            expectedExists: false,
+            label: 'deletes emitted CSS source maps after upload when deleteAfterUpload is enabled',
+        },
+        {
+            deleteAfterUpload: false,
+            expectedExists: true,
+            label: 'keeps emitted CSS source maps after upload when deleteAfterUpload is disabled',
+        },
+    ])('$label', async ({ deleteAfterUpload, expectedExists }) => {
         const cssSourceMap = path.join(outputDirectory, 'static/css/app.css.map')
         await fs.mkdir(path.dirname(cssSourceMap), { recursive: true })
         await fs.writeFile(cssSourceMap, '{}')
 
-        const plugin = new PosthogWebpackPlugin(config, true)
-        const compilation = createCompilation(
-            outputDirectory,
-            [{ files: new Set(['static/chunks/app.js']) }],
-            [{ name: 'static/css/app.css.map' }]
-        )
-
-        await plugin.processSourceMaps(compilation, config)
-
-        expect(await exists(cssSourceMap)).toBe(false)
-    })
-
-    it('keeps emitted CSS source maps after upload when deleteAfterUpload is disabled', async () => {
-        const cssSourceMap = path.join(outputDirectory, 'static/css/app.css.map')
-        await fs.mkdir(path.dirname(cssSourceMap), { recursive: true })
-        await fs.writeFile(cssSourceMap, '{}')
-
-        const keepSourceMapsConfig = {
+        const testConfig = {
             ...config,
             sourcemaps: {
                 ...config.sourcemaps,
-                deleteAfterUpload: false,
+                deleteAfterUpload,
             },
         }
-        const plugin = new PosthogWebpackPlugin(keepSourceMapsConfig, true)
+        const plugin = new PosthogWebpackPlugin(testConfig, true)
         const compilation = createCompilation(
             outputDirectory,
             [{ files: new Set(['static/chunks/app.js']) }],
             [{ name: 'static/css/app.css.map' }]
         )
 
-        await plugin.processSourceMaps(compilation, keepSourceMapsConfig)
+        await plugin.processSourceMaps(compilation, testConfig)
 
-        expect(await exists(cssSourceMap)).toBe(true)
+        expect(await exists(cssSourceMap)).toBe(expectedExists)
     })
 })
