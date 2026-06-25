@@ -112,6 +112,16 @@ export function isPostHogFetchNetworkError(err: unknown): err is PostHogFetchNet
   return err instanceof PostHogFetchNetworkError
 }
 
+function isRetryableFlagsFetchError(err: unknown): err is PostHogFetchNetworkError {
+  if (!(err instanceof PostHogFetchNetworkError)) {
+    return false
+  }
+
+  const cause = err.error as { code?: string; cause?: { code?: string } } | undefined
+  const code = cause?.code ?? cause?.cause?.code
+  return code !== 'ECONNREFUSED'
+}
+
 function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
@@ -574,7 +584,7 @@ export abstract class PostHogCoreStateless {
     this._logger.info('Flags URL', url)
 
     // Retry only network/transport/timeout failures for /flags. HTTP/API status errors are surfaced immediately.
-    return this.fetchWithRetry(url, fetchOptions, { retryCheck: isPostHogFetchNetworkError }, this.featureFlagsRequestTimeoutMs)
+    return this.fetchWithRetry(url, fetchOptions, { retryCheck: isRetryableFlagsFetchError }, this.featureFlagsRequestTimeoutMs)
       .then((response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>)
       .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
       .catch((error): GetFlagsResult => {

@@ -1181,6 +1181,30 @@ describe('PostHog Feature Flags v4', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
       })
 
+      it('should not retry connection refused failures when the error code is available', async () => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(Object.assign(new TypeError('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const result = await posthog.getFlags('distinct-id')
+
+        expect(result.success).toBe(false)
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
       it('should retry network failures and return the successful flags response', async () => {
         jest.useRealTimers()
         try {
