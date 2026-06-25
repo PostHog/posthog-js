@@ -44,6 +44,17 @@ enableGlobalVirtualStore: true
 
 minimumReleaseAge: 10080
 
+allowBuilds:
+  '@parcel/watcher': true
+  '@posthog/cli': true
+  core-js: true
+  esbuild: true
+  msw: true
+  protobufjs: true
+  puppeteer: true
+  sharp: true
+  unrs-resolver: true
+
 onlyBuiltDependencies:
   - sharp
 
