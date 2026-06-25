@@ -164,18 +164,14 @@ export function getVariantFromValue(value: FeatureFlagValue): string | undefined
 }
 
 export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDetail>): FeatureFlagResult[] => {
-  return Object.values(flagDetails).reduce((results: FeatureFlagResult[], detail) => {
-    const value = getFeatureFlagValue(detail)
-    if (value === undefined) {
-      return results
-    }
+  return Object.values(flagDetails).map((detail) => {
+    const value = detail.variant ?? detail.enabled
     const rawPayload = detail.metadata?.payload
-    results.push({
+    return {
       key: detail.key,
       enabled: getEnabledFromValue(value),
       variant: getVariantFromValue(value),
       payload: rawPayload !== undefined ? parsePayload(rawPayload) : null,
-    })
-    return results
-  }, [])
+    }
+  })
 }

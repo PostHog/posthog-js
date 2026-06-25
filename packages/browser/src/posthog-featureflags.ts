@@ -453,8 +453,8 @@ export class PostHogFeatureFlags implements Extension {
             const flagValue = flagVariants[key]
             return {
                 key,
-                enabled: !!flagValue,
-                variant: typeof flagValue === 'string' ? flagValue : undefined,
+                enabled: getEnabledFromValue(flagValue),
+                variant: getVariantFromValue(flagValue),
                 payload: parsePayload(payloads[key]),
             }
         })
