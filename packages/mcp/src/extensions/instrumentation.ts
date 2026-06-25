@@ -2,11 +2,7 @@
 // Copyright (c) 2025 MCPcat
 // Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
 
-import {
-  InitializeRequestSchema,
-  ListToolsRequestSchema,
-  type ListToolsResult,
-} from '@modelcontextprotocol/sdk/types.js'
+import { InitializeRequestSchema, type ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, MCPServerLike, McpEvent } from '../types'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
@@ -24,6 +20,7 @@ import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from 
 import { getServerTrackingData, handleIdentify } from './internal'
 import { log } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
+import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
 import { getServerSessionId } from './session'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
@@ -244,6 +241,13 @@ const listToolsTracingSetup = new WeakMap<MCPServerLike, boolean>()
  * SDK-managed tools (context parameter, conversation id, `get_more_tools`) are
  * injected. Idempotent per server. Works for both low-level and high-level
  * servers — the high-level wrapper passes its underlying `server`.
+ *
+ * The handler can reach us two ways, and we cover both:
+ *  1. It already exists when instrument() runs (tools registered first) — wrap
+ *     the entry in `_requestHandlers` directly.
+ *  2. It's registered after instrument() (e.g. `@rekog/mcp-nest` registers it at
+ *     the low level once it gets the server) — intercept `setRequestHandler` and
+ *     wrap the handler as it lands, mirroring how `tools/call` already works.
  */
 export function instrumentToolsListHandler(server: MCPServerLike): void {
   if (!(server as MCPServerWithCapabilities)._capabilities?.tools) {
@@ -252,18 +256,29 @@ export function instrumentToolsListHandler(server: MCPServerLike): void {
   if (listToolsTracingSetup.get(server)) {
     return
   }
-
-  const originalListToolsHandler = server._requestHandlers.get('tools/list')
-  if (!originalListToolsHandler) {
-    return
-  }
+  listToolsTracingSetup.set(server, true)
 
   try {
-    server.setRequestHandler(
-      ListToolsRequestSchema,
-      async (request, extra) => await handleListToolsRequest(server, originalListToolsHandler, request, extra)
-    )
-    listToolsTracingSetup.set(server, true)
+    // A handler already registered before instrument() — wrap it in place.
+    const existingHandler = server._requestHandlers.get('tools/list')
+    if (existingHandler) {
+      server._requestHandlers.set('tools/list', (request, extra) =>
+        handleListToolsRequest(server, existingHandler, request, extra)
+      )
+    }
+
+    // A handler registered after instrument() — intercept the registration.
+    const originalSetRequestHandler = server.setRequestHandler.bind(server)
+    server.setRequestHandler = ((requestSchema: unknown, handler: MCPRequestHandler) => {
+      const shape = getObjectShape(requestSchema)
+      const method = shape?.method ? getLiteralValue(shape.method) : undefined
+      if (method === 'tools/list') {
+        return originalSetRequestHandler(requestSchema, (request, extra) =>
+          handleListToolsRequest(server, handler, request, extra)
+        )
+      }
+      return originalSetRequestHandler(requestSchema, handler)
+    }) as MCPServerLike['setRequestHandler']
   } catch (error) {
     log(`Warning: Failed to override list tools handler - ${error}`)
   }
