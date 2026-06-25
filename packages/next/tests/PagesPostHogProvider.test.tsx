@@ -148,4 +148,28 @@ describe('Pages PostHogProvider', () => {
         )
         expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap }))
     })
+
+    it('passes server-provided identity to the client bootstrap', () => {
+        render(
+            <PostHogProvider
+                apiKey="phc_test123"
+                identity={{
+                    distinctId: 'server_user_123',
+                    isIdentified: true,
+                    sessionId: '0192ce4f-0000-7000-8000-000000000000',
+                }}
+            >
+                <div>Child</div>
+            </PostHogProvider>
+        )
+        expect(mockClientPostHogProvider).toHaveBeenCalledWith(
+            expect.objectContaining({
+                bootstrap: {
+                    distinctID: 'server_user_123',
+                    isIdentifiedID: true,
+                    sessionID: '0192ce4f-0000-7000-8000-000000000000',
+                },
+            })
+        )
+    })
 })

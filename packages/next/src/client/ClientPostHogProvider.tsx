@@ -37,7 +37,7 @@ export interface ClientPostHogProviderProps {
     apiKey: string
     /** Optional posthog-js configuration overrides */
     options?: Partial<PostHogConfig>
-    /** Server-evaluated feature flag values to bootstrap the client SDK with */
+    /** Server-provided identity and/or feature flag values to bootstrap the client SDK with */
     bootstrap?: BootstrapConfig
     children: React.ReactNode
 }
@@ -46,8 +46,8 @@ export interface ClientPostHogProviderProps {
  * Client-side PostHog provider with SSR bootstrap support.
  *
  * This is an internal component rendered by PostHogProvider (server component).
- * It forwards bootstrap data to posthog-js so flag hooks return real values
- * immediately without a network round-trip.
+ * It forwards bootstrap data to posthog-js so identity and flag values are
+ * available immediately without a network round-trip.
  *
  * We initialize posthog-js eagerly during render (client-side only) rather than
  * deferring to a useEffect. React fires effects bottom-up, so child useEffects

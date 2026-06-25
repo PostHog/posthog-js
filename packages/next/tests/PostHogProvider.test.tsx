@@ -33,7 +33,7 @@ describe('PostHogProvider', () => {
     const originalEnv = process.env
 
     beforeEach(() => {
-        mockClientProvider.mockClear()
+        jest.clearAllMocks()
         process.env = { ...originalEnv }
     })
 
@@ -90,6 +90,28 @@ describe('PostHogProvider', () => {
         expect(mockClientProvider).toHaveBeenCalledWith(
             expect.objectContaining({
                 bootstrap: undefined,
+            })
+        )
+    })
+
+    it('passes server-provided identity to the client bootstrap without requiring cookies', async () => {
+        const { cookies } = require('next/headers.js')
+
+        const element = await PostHogProvider({
+            apiKey: 'phc_test123',
+            identity: { distinctId: 'user_abc', isIdentified: true, sessionId: '0192ce4f-0000-7000-8000-000000000000' },
+            children: <div>Child</div>,
+        })
+        render(element)
+
+        expect(cookies).not.toHaveBeenCalled()
+        expect(mockClientProvider).toHaveBeenCalledWith(
+            expect.objectContaining({
+                bootstrap: {
+                    distinctID: 'user_abc',
+                    isIdentifiedID: true,
+                    sessionID: '0192ce4f-0000-7000-8000-000000000000',
+                },
             })
         )
     })
@@ -261,11 +283,11 @@ describe('PostHogProvider', () => {
         })
         const anonymousCookieValue = JSON.stringify({ distinct_id: 'device_xyz', $device_id: 'device_xyz' })
 
-        function setupCookieMock(cookieValue: string) {
+        function setupCookieMock(cookieValue?: string) {
             const { cookies } = require('next/headers.js')
             cookies.mockResolvedValue({
                 get: jest.fn((name: string) => {
-                    if (name === 'ph_phc_test123_posthog') {
+                    if (name === 'ph_phc_test123_posthog' && cookieValue !== undefined) {
                         return { name, value: cookieValue }
                     }
                     // Consent cookie — opted in so flag evaluation proceeds
@@ -302,6 +324,29 @@ describe('PostHogProvider', () => {
                     bootstrap: expect.objectContaining({
                         featureFlags: { 'flag-1': true },
                         featureFlagPayloads: { 'flag-1': { color: 'blue' } },
+                    }),
+                })
+            )
+        })
+
+        it('evaluates flags against server-provided identity when no PostHog cookie exists', async () => {
+            setupCookieMock(undefined)
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                identity: { distinctId: 'server_user_123', isIdentified: true },
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith('server_user_123', {})
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    bootstrap: expect.objectContaining({
+                        distinctID: 'server_user_123',
+                        isIdentifiedID: true,
+                        featureFlags: { 'flag-1': true },
                     }),
                 })
             )
@@ -437,6 +482,27 @@ describe('PostHogProvider', () => {
 
             expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
             expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap: undefined }))
+        })
+
+        it('skips flag evaluation for server-provided identity when consent cookie is 0', async () => {
+            setupCookiesWithConsent({
+                __ph_opt_in_out_phc_test123: '0',
+            })
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                identity: { distinctId: 'server_user_123', isIdentified: true },
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    bootstrap: { distinctID: 'server_user_123', isIdentifiedID: true },
+                })
+            )
         })
 
         it('evaluates flags when consent cookie is 1', async () => {

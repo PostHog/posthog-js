@@ -7,6 +7,7 @@ import type { PostHogOptions } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/clientCache.node.js'
 import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
+import { identityToBootstrap, type PostHogProviderIdentity } from '../shared/identity.js'
 
 type AllFlagsOptions = {
     groups?: Record<string, string>
@@ -36,15 +37,17 @@ export interface PostHogProviderProps {
     apiKey?: string
     /** Optional posthog-js configuration overrides. */
     clientOptions?: Partial<PostHogConfig>
+    /** Server-known identity to bootstrap the client SDK with. */
+    identity?: PostHogProviderIdentity
     /** Options passed to the posthog-node client used for server-side flag evaluation. */
     serverOptions?: Partial<PostHogOptions>
     /**
      * Enable server-side feature flag evaluation for bootstrap.
      *
-     * When enabled, the provider calls `cookies()` to read the user's
-     * identity and evaluates flags via `posthog-node`. This opts the
-     * route into **dynamic rendering** (incompatible with static
-     * generation / ISR).
+     * When enabled, the provider calls `cookies()` to check opt-out state
+     * and, when `identity` is not provided, read the user's identity before
+     * evaluating flags via `posthog-node`. This opts the route into
+     * **dynamic rendering** (incompatible with static generation / ISR).
      *
      * When omitted or falsy (default), no dynamic APIs are called and
      * the provider is safe for static rendering and PPR.
@@ -70,6 +73,7 @@ export interface PostHogProviderProps {
 export async function PostHogProvider({
     apiKey: apiKeyProp,
     clientOptions,
+    identity,
     serverOptions,
     bootstrapFlags,
     children,
@@ -93,16 +97,18 @@ export async function PostHogProvider({
         ...(host ? { api_host: host } : {}),
     }
 
-    let bootstrap: BootstrapConfig | undefined
+    const identityBootstrap = identityToBootstrap(identity)
+    let bootstrap: BootstrapConfig | undefined = identityBootstrap
 
     if (bootstrapFlags) {
         try {
-            bootstrap = await evaluateFlags(apiKey, resolvedOptions, bootstrapFlags, serverOptions)
+            const flagsBootstrap = await evaluateFlags(apiKey, resolvedOptions, bootstrapFlags, serverOptions, identity)
 
-            // Only disable the first-load fetch when we actually have bootstrap data.
-            // If evaluateFlags returned undefined (no cookie, opted-out), the client
+            // Only disable the first-load fetch when we actually have flag bootstrap data.
+            // If evaluateFlags returned undefined (no cookie/identity, opted-out), the client
             // still needs to fetch flags on first load.
-            if (bootstrap) {
+            if (flagsBootstrap) {
+                bootstrap = { ...flagsBootstrap, ...(identityBootstrap ?? {}) }
                 resolvedOptions.advanced_disable_feature_flags_on_first_load = true
             }
         } catch (error) {
@@ -122,7 +128,8 @@ async function evaluateFlags(
     apiKey: string,
     options: Partial<PostHogConfig> | undefined,
     bootstrapFlags: boolean | BootstrapFlagsConfig,
-    serverOptions?: Partial<PostHogOptions>
+    serverOptions?: Partial<PostHogOptions>,
+    identity?: PostHogProviderIdentity
 ): Promise<BootstrapConfig | undefined> {
     const cookieStore = await cookies()
 
@@ -130,8 +137,9 @@ async function evaluateFlags(
         return undefined
     }
 
-    const cookieState = readPostHogCookie(cookieStore, apiKey)
-    if (!cookieState) {
+    const cookieState = identity?.distinctId ? null : readPostHogCookie(cookieStore, apiKey)
+    const distinctId = identity?.distinctId || cookieState?.distinctId
+    if (!distinctId) {
         return undefined
     }
 
@@ -141,5 +149,5 @@ async function evaluateFlags(
 
     const { flags: flagKeys, ...flagOptions } = typeof bootstrapFlags === 'object' ? bootstrapFlags : {}
     const allFlagsOptions: AllFlagsOptions = { ...flagOptions, ...(flagKeys ? { flagKeys } : {}) }
-    return client.getAllFlagsAndPayloads(cookieState.distinctId, allFlagsOptions)
+    return client.getAllFlagsAndPayloads(distinctId, allFlagsOptions)
 }

@@ -8,6 +8,7 @@ export { usePostHog, useFeatureFlag, useActiveFeatureFlags, PostHogFeature } fro
 
 // Re-export types (type-only, erased at build time)
 export type { PostHogProviderProps, BootstrapFlagsConfig } from './app/PostHogProvider.js'
+export type { PostHogProviderIdentity } from './shared/identity.js'
 export type { PostHogMiddlewareOptions, PostHogProxyOptions } from './middleware/postHogMiddleware.js'
 export type {
     NextOnRequestError,
