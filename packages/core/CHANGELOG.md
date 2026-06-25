@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.37.3
+
+### Patch Changes
+
+- [#3955](https://github.com/PostHog/posthog-js/pull/3955) [`8e9689a`](https://github.com/PostHog/posthog-js/commit/8e9689a9018d184b80f32fc4874686d7243970e2) Thanks [@marandaneto](https://github.com/marandaneto)! - Dedupe feature flag called events per returned flag value.
+  (2026-06-24)
+
+## 1.37.2
+
+### Patch Changes
+
+- [#3942](https://github.com/PostHog/posthog-js/pull/3942) [`c9c8925`](https://github.com/PostHog/posthog-js/commit/c9c8925b1c63d2f02c3caeef5dc962ad31866459) Thanks [@hpouillot](https://github.com/hpouillot)! - Fix browser console log capture when session activity timestamps are missing and refresh session attributes for each log.
+  (2026-06-24)
+
 ## 1.37.1
 
 ### Patch Changes

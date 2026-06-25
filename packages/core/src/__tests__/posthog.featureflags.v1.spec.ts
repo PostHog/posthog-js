@@ -453,7 +453,7 @@ describe('PostHog Feature Flags v1', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(2)
       })
 
-      it('should capture $feature_flag_called again if new flags', async () => {
+      it('should not capture $feature_flag_called again if reloaded flags keep the same value', async () => {
         expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
         await waitForPromises()
         expect(mocks.fetch).toHaveBeenCalledTimes(2)
@@ -477,22 +477,7 @@ describe('PostHog Feature Flags v1', () => {
         posthog.getFeatureFlag('feature-1')
 
         await waitForPromises()
-        expect(mocks.fetch).toHaveBeenCalledTimes(4)
-
-        expect(parseBody(mocks.fetch.mock.calls[3])).toMatchObject({
-          batch: [
-            {
-              event: '$feature_flag_called',
-              distinct_id: posthog.getDistinctId(),
-              properties: {
-                $feature_flag: 'feature-1',
-                $feature_flag_response: true,
-                '$feature/feature-1': true,
-                $used_bootstrap_value: false,
-              },
-            },
-          ],
-        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
       })
 
       it('should capture $feature_flag_called when called, but not add all cached flags', async () => {

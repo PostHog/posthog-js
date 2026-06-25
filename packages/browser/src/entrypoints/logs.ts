@@ -11,6 +11,14 @@ type StringifyBudget = {
     truncated: boolean
 }
 
+type AttributeCollector = {
+    result: Record<string, any>
+    keysRemaining: number
+    sizeRemaining: number
+    truncated: boolean
+    seen: WeakSet<object>
+}
+
 const appendWithLimit = (parts: string[], text: string, budget: StringifyBudget): boolean => {
     if (budget.remaining <= 0) {
         budget.truncated = true
@@ -68,12 +76,65 @@ const isNumberOrBoolean = (value: any): boolean => {
     }
 }
 
+const collectAttributeValue = (key: string, value: any, collector: AttributeCollector): void => {
+    if (collector.truncated) {
+        return
+    }
+
+    collector.keysRemaining -= 1
+    collector.sizeRemaining -= String(value).length + key.length
+    if (collector.keysRemaining <= 0 || collector.sizeRemaining <= 0) {
+        collector.truncated = true
+        collector.result['attributes_truncated'] = true
+        return
+    }
+
+    collector.result[key] = value
+}
+
+const collectFlattenedAttributes = (value: any, key: string, collector: AttributeCollector): void => {
+    if (collector.truncated) {
+        return
+    }
+
+    if (isObject(value)) {
+        if (collector.seen.has(value)) {
+            collectAttributeValue(key || 'circular', '[Circular]', collector)
+            return
+        }
+        collector.seen.add(value)
+
+        try {
+            for (const childKey in value) {
+                try {
+                    if (!Object.prototype.hasOwnProperty.call(value, childKey)) {
+                        continue
+                    }
+                    const childValue = value[childKey]
+                    collectFlattenedAttributes(childValue, key ? `${key}.${childKey}` : childKey, collector)
+                    if (collector.truncated) {
+                        return
+                    }
+                } catch {
+                    continue
+                }
+            }
+        } catch {
+            // we'll omit this object's properties considering we can't enumerate them
+        }
+        return
+    }
+
+    collectAttributeValue(key, value, collector)
+}
+
 const stringifyValueWithLimit = (
     value: any,
     parts: string[],
     budget: StringifyBudget,
     seen: WeakSet<object>,
-    inArray = false
+    inArray = false,
+    attributeCollector?: AttributeCollector
 ): boolean => {
     if (!isJSONSerializablePrimitive(value)) {
         return inArray ? appendWithLimit(parts, 'null', budget) : true
@@ -136,7 +197,7 @@ const stringifyValueWithLimit = (
         try {
             errorObject.stack = value.stack
         } catch {}
-        return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray)
+        return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray, attributeCollector)
     }
 
     if (isArray(value)) {
@@ -180,6 +241,14 @@ const stringifyValueWithLimit = (
             } catch {
                 continue
             }
+            if (attributeCollector) {
+                try {
+                    collectFlattenedAttributes(propertyValue, key, attributeCollector)
+                } catch {
+                    // we'll omit this object's attributes considering we can't read them safely
+                }
+            }
+
             if (!isJSONSerializablePrimitive(propertyValue)) {
                 continue
             }
@@ -221,14 +290,36 @@ const stringifyValueWithLimit = (
     return appendWithLimit(parts, '}', budget)
 }
 
-const stringifyArgsSafely = (args: any[], sizeLimit: number): { body: string; truncated: boolean } => {
+const stringifyArgsSafely = (
+    args: any[],
+    sizeLimit: number
+): { body: string; truncated: boolean; attributes: Record<string, any> } => {
     const parts: string[] = []
     const budget = { remaining: sizeLimit, truncated: false }
+    const attributeCollector = isObject(args[0])
+        ? {
+              result: {} as Record<string, any>,
+              keysRemaining: LOG_ATTRIBUTES_LIMIT,
+              sizeRemaining: LOG_BODY_SIZE_LIMIT,
+              truncated: false,
+              seen: new WeakSet<object>([args[0]]),
+          }
+        : undefined
+
     for (let i = 0; i < args.length; i++) {
         if (i > 0 && !appendWithLimit(parts, ' ', budget)) {
             break
         }
-        if (!stringifyValueWithLimit(args[i], parts, budget, new WeakSet<object>())) {
+        if (
+            !stringifyValueWithLimit(
+                args[i],
+                parts,
+                budget,
+                new WeakSet<object>(),
+                false,
+                i === 0 ? attributeCollector : undefined
+            )
+        ) {
             break
         }
     }
@@ -236,57 +327,8 @@ const stringifyArgsSafely = (args: any[], sizeLimit: number): { body: string; tr
     return {
         body: parts.join('') + (budget.truncated ? '...' : ''),
         truncated: budget.truncated,
+        attributes: attributeCollector?.result || {},
     }
-}
-
-/**
- * Flattens a nested object into a single level dot-notation object.
- * By default limit to 200kB or 50 keys.
- */
-const flattenObject = (
-    obj: any,
-    prefix = '',
-    result = {} as Record<string, any>,
-    keys_limit = LOG_ATTRIBUTES_LIMIT,
-    size_limit = LOG_BODY_SIZE_LIMIT,
-    seen = new WeakSet()
-) => {
-    if (seen.has(obj)) {
-        result[prefix || 'circular'] = '[Circular]'
-        return result
-    }
-    seen.add(obj)
-
-    try {
-        for (const key in obj) {
-            try {
-                if (!Object.prototype.hasOwnProperty.call(obj, key)) {
-                    continue
-                }
-                const value = obj[key]
-                const newKey = prefix ? `${prefix}.${key}` : key
-
-                if (isObject(value)) {
-                    flattenObject(value, newKey, result, keys_limit, size_limit, seen)
-                } else {
-                    keys_limit -= 1
-                    size_limit -= String(value).length
-                    size_limit -= newKey.length
-                    if (keys_limit <= 0 || size_limit <= 0) {
-                        result['attributes_truncated'] = true
-                        return
-                    } else {
-                        result[newKey] = value
-                    }
-                }
-            } catch {
-                continue
-            }
-        }
-    } catch {
-        // we'll omit this object's properties considering we can't enumerate them
-    }
-    return result
 }
 
 type ConsoleLevel = 'debug' | 'log' | 'warn' | 'error' | 'info'
@@ -302,18 +344,10 @@ const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
 }
 
 const initializeLogs = (posthog: PostHog) => {
-    // `host` is carried per record because the core SDK context has no equivalent.
-    let attributes: Record<string, string> = { host: assignableWindow.location.host }
-    if (posthog.sessionManager) {
-        const { windowId, sessionStartTimestamp, lastActivityTimestamp } =
-            posthog.sessionManager.checkAndGetSessionAndWindowId(true)
-        attributes = {
-            ...attributes,
-            'window.id': windowId,
-            sessionStartTimestamp: sessionStartTimestamp.toString(),
-            lastActivityTimestamp: lastActivityTimestamp.toString(),
-        }
-    }
+    // `host` is carried here because the core SDK context has no equivalent. Session
+    // attributes (window.id, sessionStartTimestamp, lastActivityTimestamp) are added
+    // downstream by the core pipeline from the SDK context, alongside sessionId.
+    const attributes: Record<string, string> = { host: assignableWindow.location.host }
 
     for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {
         const logWrapper =
@@ -321,7 +355,11 @@ const initializeLogs = (posthog: PostHog) => {
             (...args: any[]) => {
                 try {
                     if (args.length > 0 && posthog.is_capturing()) {
-                        const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
+                        const {
+                            body,
+                            truncated,
+                            attributes: flattenedAttributes,
+                        } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
                         const logAttributes = {
                             ...attributes,
                             ...(truncated ? { body_truncated: 'true' } : {}),
@@ -333,7 +371,7 @@ const initializeLogs = (posthog: PostHog) => {
                             attributes: {
                                 'log.source': `console.${level}`,
                                 ...logAttributes,
-                                ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
+                                ...flattenedAttributes,
                             },
                         })
                     }

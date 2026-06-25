@@ -1,0 +1,58 @@
+name: PostHog Watcher issue sweep
+
+on:
+    workflow_dispatch:
+        inputs:
+            max-sweep-items:
+                description: Maximum open issues to process.
+                required: false
+                default: '5'
+            max-sweep-fix-items:
+                description: Maximum sweep issues that may attempt fixes.
+                required: false
+                default: '5'
+    schedule:
+        # Every day at 08:17 UTC.
+        - cron: '17 8 * * *'
+
+concurrency:
+    group: posthog-watcher-${{ github.repository }}-sweep
+    cancel-in-progress: false
+
+permissions:
+    contents: write
+    issues: write
+    pull-requests: write
+    actions: read
+
+jobs:
+    sweep:
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              with:
+                  fetch-depth: 0
+
+            - uses: ./.github/actions/setup
+              with:
+                  install: 'false'
+                  build: 'false'
+
+            - name: Install ripgrep for watcher search tools
+              run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+            - name: Sweep issues
+              uses: PostHog/posthog-watcher-action@53752eea5b036f37e83da06879ca05e06cb377e9
+              with:
+                  openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
+                  mode: sweep
+                  max-sweep-items: ${{ inputs['max-sweep-items'] || '5' }}
+                  max-sweep-fix-items: ${{ inputs['max-sweep-fix-items'] || '5' }}
+                  labels: '*'
+                  allow-fix: 'true'
+                  allow-close: 'true'
+                  allow-security-ai: 'true'
+                  max-repair-attempts: '3'
+                  max-pi-calls: '16'
+                  approve-project-resources: 'true'
+                  state-enabled: 'true'

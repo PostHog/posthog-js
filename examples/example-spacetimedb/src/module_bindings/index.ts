@@ -41,6 +41,7 @@ import SetFeatureFlagsReducer from "./set_feature_flags_reducer";
 
 // Import all procedure arg schemas
 import * as CaptureEventProcedure from "./capture_event_procedure";
+import * as EvaluateFlagsProcedure from "./evaluate_flags_procedure";
 
 // Import all table schema definitions
 import FeatureFlagRow from "./feature_flag_table";
@@ -90,6 +91,7 @@ const reducersSchema = __reducers(
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
   __procedureSchema("capture_event", CaptureEventProcedure.params, CaptureEventProcedure.returnType),
+  __procedureSchema("evaluate_flags", EvaluateFlagsProcedure.params, EvaluateFlagsProcedure.returnType),
 );
 
 /** The remote SpacetimeDB module schema, both runtime and type information. */

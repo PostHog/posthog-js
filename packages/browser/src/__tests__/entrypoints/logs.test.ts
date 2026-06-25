@@ -100,7 +100,7 @@ describe('logs entrypoint', () => {
             expect(attributes).not.toHaveProperty('location.href')
         })
 
-        it('includes window.id and session timestamps in attributes', () => {
+        it('sets host on the captured record', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
@@ -108,14 +108,22 @@ describe('logs entrypoint', () => {
 
             expect(mockEmit).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    attributes: expect.objectContaining({
-                        'window.id': 'window-456',
-                        sessionStartTimestamp: expect.any(String),
-                        lastActivityTimestamp: expect.any(String),
-                    }),
+                    attributes: expect.objectContaining({ host: 'example.com' }),
                 })
             )
         })
+
+        it.each(['window.id', 'sessionStartTimestamp', 'lastActivityTimestamp'])(
+            'does not set %s — core adds session attributes from the SDK context downstream',
+            (attribute) => {
+                const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+                initializeLogs(mockPostHog)
+
+                assignableWindow.console.log('hello')
+
+                expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty(attribute)
+            }
+        )
     })
 
     describe('log truncation features', () => {
@@ -139,6 +147,28 @@ describe('logs entrypoint', () => {
                     body: expect.stringContaining('...'),
                     attributes: expect.objectContaining({
                         body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
+        it('should preserve bounded attributes when the log body is truncated', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log({
+                code: 'E_TOO_LARGE',
+                userId: 'user-123',
+                payload: 'x'.repeat(10001),
+            })
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'),
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                        code: 'E_TOO_LARGE',
+                        userId: 'user-123',
                     }),
                 })
             )
@@ -421,6 +451,10 @@ describe('logs entrypoint', () => {
             expect(mockEmit.mock.calls[0][0].attributes).toEqual(
                 expect.objectContaining({
                     'log.source': 'console.error',
+                    code: 'E_BOOM',
+                    name: 'CustomError',
+                    message: 'boom',
+                    stack: 'CustomError: boom\n    at test',
                 })
             )
         })

@@ -1,5 +1,12 @@
 # @posthog/next
 
+## 0.7.0
+
+### Minor Changes
+
+- [#3941](https://github.com/PostHog/posthog-js/pull/3941) [`e76e878`](https://github.com/PostHog/posthog-js/commit/e76e878fd9ef20bb08c6b8c66aa75cdf2516ab8d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Enable same-origin client-side tracing headers by default
+  (2026-06-24)
+
 ## 0.6.0
 
 ### Minor Changes

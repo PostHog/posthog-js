@@ -204,11 +204,13 @@ const defaultsThatVaryByConfig = (
               : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
     session_recording:
-        defaults && defaults >= '2026-05-30'
-            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 } }
-            : defaults && defaults >= '2025-11-30'
-              ? { strictMinimumDuration: true }
-              : {},
+        defaults && defaults >= '2026-06-25'
+            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 }, streamNetworkBody: true }
+            : defaults && defaults >= '2026-05-30'
+              ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 } }
+              : defaults && defaults >= '2025-11-30'
+                ? { strictMinimumDuration: true }
+                : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
@@ -1066,7 +1068,10 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
-        this.surveys?.handlePageUnload()
+        // Optional-call the method, not just the receiver: after a deploy a cached older
+        // lazy-loaded surveys chunk can yield an instance whose prototype lacks handlePageUnload,
+        // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
+        this.surveys?.handlePageUnload?.()
 
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
