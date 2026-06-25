@@ -19,6 +19,7 @@
         "build": "turbo build",
         "dev": "turbo dev",
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
+        "package:vercel": "export PACKAGE_DEST=$(pwd)/target && turbo package --force --concurrency=1",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
         "bump": "pnpm changeset version",
         "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
