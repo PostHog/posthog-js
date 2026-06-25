@@ -30,7 +30,7 @@ runs:
         # without changing this repo's project packageManager version.
         package-json-file: .github/pnpm-setup-package.json
         runtime: node@${{ inputs.node_version }}
-        cache: true
+        cache: false
         install: false
 
     # Ensure latest npm with OIDC support (npm 11.5.1+)

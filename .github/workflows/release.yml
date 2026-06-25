@@ -450,7 +450,7 @@ jobs:
                 # without changing this repo's project packageManager version.
                 package-json-file: .github/pnpm-setup-package.json
                 runtime: node@24
-                cache: true
+                cache: false
                 install: false
 
             - name: Install frontend dependencies
@@ -594,7 +594,7 @@ jobs:
                 # without changing this repo's project packageManager version.
                 package-json-file: .github/pnpm-setup-package.json
                 runtime: node@24
-                cache: true
+                cache: false
                 install: false
 
             - name: Install release tooling dependencies
