@@ -53,6 +53,16 @@ export interface ModuleOptions {
   sourcemaps: SourcemapsConfig | undefined
 }
 
+declare module '@nuxt/schema' {
+  interface NuxtConfig {
+    posthogConfig?: Partial<ModuleOptions>
+  }
+
+  interface NuxtOptions {
+    posthogConfig?: ModuleOptions
+  }
+}
+
 export interface PostHogCommon {
   publicKey: string
   host: string
