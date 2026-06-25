@@ -1,18 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "issue-3968-auto-none-no-comment-no-close-1782378836861",
-      "kind": "issue",
-      "number": 3968,
-      "mode": "auto",
-      "enqueuedAt": "2026-06-25T09:13:56.861Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 28159735031,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28159735031"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
