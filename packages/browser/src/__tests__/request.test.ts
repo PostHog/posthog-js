@@ -141,20 +141,22 @@ describe('request', () => {
                 throw error
             })
 
-            expect(() =>
-                request(
-                    createRequest({
-                        method: 'POST',
-                        data: { event: 'too-large' },
-                        callback,
-                    })
-                )
-            ).not.toThrow()
+            try {
+                expect(() =>
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: { event: 'too-large' },
+                            callback,
+                        })
+                    )
+                ).not.toThrow()
 
-            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error })
-            expect(mockedXMLHttpRequest).not.toHaveBeenCalled()
-
-            stringifySpy.mockRestore()
+                expect(callback).toHaveBeenCalledWith({ statusCode: 0, error })
+                expect(mockedXMLHttpRequest).not.toHaveBeenCalled()
+            } finally {
+                stringifySpy.mockRestore()
+            }
         })
     })
 
