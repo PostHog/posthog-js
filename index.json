@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3972": {
+    "key": "PostHog/posthog-js/issue/3972",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3972",
+    "url": "https://github.com/PostHog/posthog-js/issues/3972",
+    "conclusion": "Valid posthog-node local evaluation bug; flag-level cohort not_in is ignored.",
+    "labels": [
+      "node",
+      "feature/flags",
+      "team/feature-flags"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/3973",
+    "closed": false,
+    "updatedAt": "2026-06-25T10:29:44.811Z"
+  },
   "PostHog/posthog-js/issue/2149": {
     "key": "PostHog/posthog-js/issue/2149",
     "repo": "PostHog/posthog-js",
