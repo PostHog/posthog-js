@@ -1,0 +1,6 @@
+{
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "installCommand": "pnpm --dir=../.. install && VERCEL=1 pnpm --dir=../.. package --force && pnpm install --force --no-lockfile",
+    "buildCommand": "echo 'posthog-js package was built during install'",
+    "outputDirectory": "dist"
+}
