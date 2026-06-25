@@ -1,4 +1,19 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "pull_request-3969-fix-address-review-no-comment-no-close-1782384884586",
+      "kind": "pull_request",
+      "number": 3969,
+      "mode": "fix",
+      "command": "address-review",
+      "enqueuedAt": "2026-06-25T10:54:44.586Z",
+      "source": {
+        "eventName": "pull_request_review",
+        "runId": 28165119617,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28165119617"
+      },
+      "attempts": 0
+    }
+  ]
 }
