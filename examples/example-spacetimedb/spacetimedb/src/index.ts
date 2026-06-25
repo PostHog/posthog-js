@@ -88,10 +88,8 @@ export const captureEvent = spacetimedb.procedure(
     }
 )
 
-// Remote flag eval inside the module. A procedure can reach the network, so it POSTs
-// to PostHog's /flags endpoint and returns the result straight to the caller — no
-// sidecar, no personal key, no write-back table. Contrast with the sidecar's local
-// evaluation. Keyed on ctx.sender so a caller only evaluates its own flags.
+// Remote flag eval: a procedure can reach the network (reducers can't), so it POSTs
+// to PostHog's /flags and returns the values straight to the caller — no sidecar, key, or table.
 export const evaluateFlags = spacetimedb.procedure(t.string(), (ctx) => {
     const res = ctx.http.fetch(`${POSTHOG_HOST}/flags/?v=2`, {
         method: 'POST',
