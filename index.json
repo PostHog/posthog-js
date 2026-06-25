@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/3981": {
+    "key": "PostHog/posthog-js/issue/3981",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3981",
+    "url": "https://github.com/PostHog/posthog-js/issues/3981",
+    "conclusion": "Valid surveys feature request; SDK support is missing, but full implementation spans product/backend files outside this repo.",
+    "labels": [
+      "enhancement",
+      "feature/surveys",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-25T16:14:22.029Z"
+  },
   "PostHog/posthog-js/issue/3980": {
     "key": "PostHog/posthog-js/issue/3980",
     "repo": "PostHog/posthog-js",
