@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3968](https://github.com/PostHog/posthog-js/issues/3968) | Valid Nuxt typing bug: posthogConfig is not registered in Nuxt schema types. | nuxt | https://github.com/PostHog/posthog-js/pull/3969 | no | 2026-06-25T09:19:15.035Z |
 | PostHog/posthog-js | [issue 3957](https://github.com/PostHog/posthog-js/issues/3957) | Valid bug: the Convex polling interval env var is read too early to affect the registered cron schedule. | feature/flags, team/feature-flags |  | no | 2026-06-24T19:00:08.577Z |
 | PostHog/posthog-js | [issue 3956](https://github.com/PostHog/posthog-js/issues/3956) | Valid React Native mobile logs feature request; keep open for demand/design. | enhancement, feature, feature/mobile, react-native, iOS, Android, team/logs |  | no | 2026-06-24T17:34:12.357Z |
 | PostHog/posthog-js | [issue 3954](https://github.com/PostHog/posthog-js/issues/3954) | Valid toolbar bug, likely originating in the external toolbar bundle rather than the SDK loader | feature/toolbar, web |  | no | 2026-06-24T16:48:12.399Z |
