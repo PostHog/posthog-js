@@ -43,7 +43,7 @@
         },
         "@posthog/browser-common#build": {
             "dependsOn": ["^build"],
-            "inputs": ["src/**", "tests/**", "tsconfig.json", "tsconfig.build.json", "package.json", "jest.config.cjs"],
+            "inputs": ["src/**", "tests/**", "tsconfig.json", "tsconfig.build.json", "package.json", "jest.config.cjs", "rslib.config.ts"],
             "outputs": ["dist/**"]
         },
         "lint": {

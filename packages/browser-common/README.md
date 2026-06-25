@@ -1,8 +1,13 @@
 # @posthog/browser-common
 
-The shared contract for PostHog browser-SDK extensions: the interface an
-extension implements (`Extension`), the host capabilities it is handed
-(`Client`), and small shared runtime primitives such as `Publisher`.
+Internal shared browser utilities and extension primitives for PostHog JavaScript
+SDKs. This package is published so unbundled SDK outputs can resolve it at
+runtime, but it is not a public API surface and does not provide compatibility
+guarantees outside PostHog SDK packages.
+
+The shared extension contract includes the interface an extension implements
+(`Extension`), the host capabilities it is handed (`Client`), and small shared
+runtime primitives such as `Publisher`.
 
 An extension written against this contract runs unchanged across major versions of the web SDK:
 
@@ -11,9 +16,6 @@ An extension written against this contract runs unchanged across major versions 
 
 Each SDK provides a _client adapter_ that implements `Client` over its own
 internals, so extension code never depends on a specific SDK.
-
-This is a source-only package: it does not publish built output. Consumers are
-responsible for bundling/transpiling the TypeScript sources they import.
 
 ## Concepts
 
@@ -101,9 +103,10 @@ loadable. An extension that provides a capability declares its token(s) in
 
 ## Utilities
 
-Reusable browser utilities live under `src/utils`, but they are intentionally
-not re-exported from the package root or a utility barrel. Import the exact file
-you need so lazy extension bundles do not accidentally pull unrelated helpers:
+Reusable browser utilities are exposed through `utils/*` subpaths, but they are
+intentionally not re-exported from the package root or a utility barrel. Import
+the exact file you need so lazy extension bundles do not accidentally pull
+unrelated helpers:
 
 ```ts
 import { createLogger } from '@posthog/browser-common/utils/logger'
@@ -121,7 +124,8 @@ v1 → `Client` porting map.
 
 ## Status
 
-Early. The package currently defines the extension contract, shared `Publisher`
-helper, and directly-imported reusable browser utilities under `src/utils`.
-Additional shared runtime helpers — registry implementation and broader
-test-client coverage — will land alongside the first ported extension.
+Early and internal. The package currently defines the extension contract, shared
+`Publisher` helper, and directly-imported reusable browser utilities under
+`utils/*` subpaths. Additional shared runtime helpers — registry implementation
+and broader test-client coverage — will land alongside the first ported
+extension.
