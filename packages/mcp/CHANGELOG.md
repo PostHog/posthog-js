@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.4.2
+
+### Patch Changes
+
+- [#3976](https://github.com/PostHog/posthog-js/pull/3976) [`a29194f`](https://github.com/PostHog/posthog-js/commit/a29194f82b6603805a032b3864cad00d16dd4116) Thanks [@gesh](https://github.com/gesh)! - Capture tool listings (and the injected `context` parameter) on MCP servers that register their `tools/list` handler after `instrument()` runs — e.g. `@rekog/mcp-nest`, which hands a bare server to `instrument()` and only then registers its handlers.
+  (2026-06-25)
+
 ## 0.4.1
 
 ### Patch Changes
