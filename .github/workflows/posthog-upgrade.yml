@@ -41,6 +41,8 @@ jobs:
               with:
                   # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
                   # until https://github.com/jasongin/nvs/pull/315 lands.
+                  # pnpm/setup installs runtimes via pnpm runtime, which requires pnpm >=11.1.0.
+                  version: 11.7.0
                   runtime: node@24
                   cache: true
                   install: false
