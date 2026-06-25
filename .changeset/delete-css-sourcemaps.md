@@ -1,5 +1,4 @@
 ---
-"@posthog/nextjs-config": patch
 "@posthog/webpack-plugin": patch
 ---
 
