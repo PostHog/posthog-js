@@ -1,6 +1,9 @@
 {
     "private": true,
     "packageManager": "pnpm@11.7.0",
+    "engines": {
+        "node": "24.x"
+    },
     "scripts": {
         "build-rollup": "pnpm --filter=posthog-js build-rollup",
         "clean": "turbo clean",
