@@ -84,9 +84,9 @@ describe('PostHog Feature Flags v1', () => {
       expect(posthog.getFeatureFlagPayload('my-flag')).toEqual(undefined)
     })
 
-    it('isFeatureEnabled should return undefined if not loaded', () => {
-      expect(posthog.isFeatureEnabled('my-flag')).toEqual(undefined)
-      expect(posthog.isFeatureEnabled('feature-1')).toEqual(undefined)
+    it('isFeatureEnabled should return false if not loaded', () => {
+      expect(posthog.isFeatureEnabled('my-flag')).toEqual(false)
+      expect(posthog.isFeatureEnabled('feature-1')).toEqual(false)
     })
 
     it('should load legacy persisted feature flags', () => {
@@ -185,9 +185,9 @@ describe('PostHog Feature Flags v1', () => {
           expect(posthog.getFeatureFlag('feature-variant')).toEqual(undefined)
           expect(posthog.getFeatureFlag('feature-missing')).toEqual(undefined)
 
-          expect(posthog.isFeatureEnabled('feature-1')).toEqual(undefined)
-          expect(posthog.isFeatureEnabled('feature-variant')).toEqual(undefined)
-          expect(posthog.isFeatureEnabled('feature-missing')).toEqual(undefined)
+          expect(posthog.isFeatureEnabled('feature-1')).toEqual(false)
+          expect(posthog.isFeatureEnabled('feature-variant')).toEqual(false)
+          expect(posthog.isFeatureEnabled('feature-missing')).toEqual(false)
 
           // When errored out, we return cached values (which are empty in this case)
           expect(posthog.getFeatureFlagPayloads()).toEqual({})
