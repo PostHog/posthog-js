@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2673](https://github.com/PostHog/posthog-js/issues/2673) | Keep open as a broad browser SDK v2 planning feature, not a small fix. | enhancement, feature, web, feature/replay, feature/product-analytics |  | no | 2026-06-25T09:34:21.201Z |
 | PostHog/posthog-js | [issue 2659](https://github.com/PostHog/posthog-js/issues/2659) | Valid feature request for posthog-node flush semantics | enhancement, node, feature, feature/error-tracking, feature/flags |  | no | 2026-06-25T09:33:24.693Z |
 | PostHog/posthog-js | [issue 2501](https://github.com/PostHog/posthog-js/issues/2501) | Confirmed bug: canRenderSurveyAsync bypasses event/action display-condition checks for surveys. | feature/surveys, web |  | no | 2026-06-25T09:32:02.221Z |
 | PostHog/posthog-js | [issue 3968](https://github.com/PostHog/posthog-js/issues/3968) | Valid Nuxt typing bug: posthogConfig is not registered in Nuxt schema types. | nuxt | https://github.com/PostHog/posthog-js/pull/3969 | no | 2026-06-25T09:19:15.035Z |
