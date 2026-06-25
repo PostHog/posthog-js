@@ -164,6 +164,16 @@ const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest =
     }
 }
 
+const encodeRequest = (options: RequestWithEncodedBody): EncodedRequest | undefined => {
+    try {
+        return encodePostDataSafely(options)
+    } catch (error) {
+        logger.error(error)
+        options.callback?.({ statusCode: 0, error })
+        return undefined
+    }
+}
+
 /**
  * Pre-encode the request body using async native CompressionStream.
  * This avoids blocking the main thread with fflate's synchronous gzip,
@@ -203,8 +213,13 @@ const timeoutAbortReason = (timeout?: number): Error => {
 }
 
 const xhr = (options: RequestWithOptions) => {
+    const encodedRequest = encodeRequest(options)
+    if (!encodedRequest) {
+        return
+    }
+
     const req = new XMLHttpRequest!()
-    const { url, encodedBody } = encodePostDataSafely(options)
+    const { url, encodedBody } = encodedRequest
     req.open(options.method || 'GET', url, true)
     const { contentType, body } = encodedBody ?? {}
 
@@ -241,7 +256,12 @@ const xhr = (options: RequestWithOptions) => {
 }
 
 const _fetch = (options: RequestWithOptions) => {
-    const { url, encodedBody } = encodePostDataSafely(options)
+    const encodedRequest = encodeRequest(options)
+    if (!encodedRequest) {
+        return
+    }
+
+    const { url, encodedBody } = encodedRequest
     const { contentType, body, estimatedSize } = encodedBody ?? {}
 
     // eslint-disable-next-line compat/compat

@@ -133,6 +133,37 @@ describe('RequestQueue', () => {
             })
         })
 
+        it('keeps flushing queued requests if one request throws', () => {
+            sendRequest = jest.fn((req) => {
+                if (req.url === '/e') {
+                    throw new RangeError('Invalid string length')
+                }
+            })
+            queue = new RequestQueue(sendRequest, {})
+            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: EPOCH - 3000 } })
+            queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: EPOCH - 2000 } })
+
+            queue.enable()
+            expect(() => jest.runOnlyPendingTimers()).not.toThrow()
+
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+        })
+
+        it('keeps sending unload requests if one request throws', () => {
+            sendRequest = jest.fn((req) => {
+                if (req.url === '/e') {
+                    throw new RangeError('Invalid string length')
+                }
+            })
+            queue = new RequestQueue(sendRequest, {})
+            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: EPOCH } })
+            queue.enqueue({ url: '/s', data: { recording_payload: 'example' } })
+
+            expect(() => queue.unload()).not.toThrow()
+
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+        })
+
         it('handles unload with batchKeys', () => {
             queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 }, transport: 'XHR' })
             queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: 1_620_000_000 } })

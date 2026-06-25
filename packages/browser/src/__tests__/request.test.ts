@@ -133,6 +133,29 @@ describe('request', () => {
             request(createRequest())
             expect(mockedXHR.withCredentials).toBe(false)
         })
+
+        it('reports JSON serialization failures through the callback instead of throwing', () => {
+            const error = new RangeError('Invalid string length')
+            const callback = jest.fn()
+            const stringifySpy = jest.spyOn(JSON, 'stringify').mockImplementation(() => {
+                throw error
+            })
+
+            expect(() =>
+                request(
+                    createRequest({
+                        method: 'POST',
+                        data: { event: 'too-large' },
+                        callback,
+                    })
+                )
+            ).not.toThrow()
+
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error })
+            expect(mockedXMLHttpRequest).not.toHaveBeenCalled()
+
+            stringifySpy.mockRestore()
+        })
     })
 
     describe('fetch', () => {
