@@ -26,6 +26,9 @@ runs:
         # TODO: pnpm/setup does not read .nvmrc yet; use the input default above for now.
         # pnpm/setup installs runtimes via pnpm runtime, which requires pnpm >=11.1.0.
         version: 11.7.0
+        # Use a setup-only manifest so pnpm/setup can bootstrap pnpm runtime with pnpm >=11
+        # without changing this repo's project packageManager version.
+        package-json-file: .github/pnpm-setup-package.json
         runtime: node@${{ inputs.node_version }}
         cache: true
         install: false
