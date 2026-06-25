@@ -325,7 +325,9 @@ const initializeLogs = (posthog: PostHog) => {
                             attributes: {
                                 'log.source': `console.${level}`,
                                 ...logAttributes,
-                                ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
+                                // If the body already hit the size limit, avoid walking the same large object
+                                // again just to collect duplicate partial attributes.
+                                ...(!truncated && isObject(args[0]) ? flattenObject(args[0]) : {}),
                             },
                         })
                     }
