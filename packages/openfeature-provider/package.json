@@ -1,6 +1,7 @@
 {
   "name": "@posthog/openfeature-provider",
   "version": "0.0.0",
+  "private": true,
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },

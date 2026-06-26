@@ -1,5 +1,9 @@
 # @posthog/openfeature-provider
 
+> **Status: not yet published.** This package is marked `private` and is not released to npm. It lives
+> in the monorepo and builds in CI while the API is finalized. The install snippets below describe the
+> intended usage once it ships.
+
 Official [PostHog](https://posthog.com) providers for the [OpenFeature](https://openfeature.dev) SDK.
 
 OpenFeature ships two SDKs with deliberately different provider contracts, so this package ships one
