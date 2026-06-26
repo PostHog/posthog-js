@@ -331,7 +331,7 @@ jobs:
           NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
 
       - name: Install Next.js config example dependencies from local tarballs
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
         working-directory: examples/example-nextjs
 
       - name: Build Next.js config example
@@ -341,7 +341,7 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
           POSTHOG_PERSONAL_API_KEY: phx_ci
           POSTHOG_PROJECT_ID: '1'
-          POSTHOG_CLI_PATH: /bin/true
+          POSTHOG_CLI_PATH: /usr/bin/true
 
   write-mangled-property-names:
     name: Write mangled property names
