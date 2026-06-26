@@ -30,26 +30,19 @@ describe('device-model-utils', () => {
             expect(getHighEntropyValues).toHaveBeenCalledWith(['model'])
         })
 
-        it('returns undefined for an empty-string model (desktop Chromium)', async () => {
-            setUserAgentData({ getHighEntropyValues: jest.fn().mockResolvedValue({ model: '' }) })
-
-            await expect(getDeviceModel()).resolves.toBeUndefined()
-        })
-
-        it('returns undefined when userAgentData is unsupported (Safari/Firefox)', async () => {
-            setUserAgentData(undefined)
-
-            await expect(getDeviceModel()).resolves.toBeUndefined()
-        })
-
-        it('returns undefined when getHighEntropyValues is missing', async () => {
-            setUserAgentData({ brands: [], platform: 'Android' })
-
-            await expect(getDeviceModel()).resolves.toBeUndefined()
-        })
-
-        it('returns undefined when the resolved model is not a string', async () => {
-            setUserAgentData({ getHighEntropyValues: jest.fn().mockResolvedValue({ model: undefined }) })
+        it.each([
+            [
+                'the model is an empty string (desktop Chromium)',
+                { getHighEntropyValues: () => Promise.resolve({ model: '' }) },
+            ],
+            ['userAgentData is unsupported (Safari/Firefox)', undefined],
+            ['getHighEntropyValues is missing', { brands: [], platform: 'Android' }],
+            [
+                'the resolved model is not a string',
+                { getHighEntropyValues: () => Promise.resolve({ model: undefined }) },
+            ],
+        ])('returns undefined when %s', async (_case, userAgentData) => {
+            setUserAgentData(userAgentData)
 
             await expect(getDeviceModel()).resolves.toBeUndefined()
         })
