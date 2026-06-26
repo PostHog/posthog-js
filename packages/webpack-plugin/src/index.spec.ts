@@ -1,6 +1,8 @@
+import { spawnSync } from 'child_process'
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
+import { pathToFileURL } from 'url'
 import type webpack from 'webpack'
 import { runSourcemapCli } from '@posthog/plugin-utils'
 import { PosthogWebpackPlugin } from './index'
@@ -54,6 +56,76 @@ async function exists(filePath: string): Promise<boolean> {
     }
 }
 
+function runNodeScript(cwd: string, args: string[]): string {
+    const result = spawnSync(process.execPath, args, { cwd, encoding: 'utf8' })
+
+    if (result.error || result.status !== 0) {
+        throw new Error(`Node script failed:\n${result.error?.message ?? ''}\n${result.stderr}\n${result.stdout}`)
+    }
+
+    return result.stdout
+}
+
+async function getRuntimeSourceFiles(directory = __dirname, prefix = 'src'): Promise<string[]> {
+    const entries = await fs.readdir(directory, { withFileTypes: true })
+    const files = await Promise.all(
+        entries.map(async (entry) => {
+            const entryPath = path.join(directory, entry.name)
+            const relativePath = path.posix.join(prefix, entry.name)
+
+            if (entry.isDirectory()) {
+                return getRuntimeSourceFiles(entryPath, relativePath)
+            }
+
+            if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.spec.ts')) {
+                return [relativePath]
+            }
+
+            return []
+        })
+    )
+
+    return files.flat().sort()
+}
+
+function getRslibConfig(packageDirectory: string): { entryFiles: string[]; formats: string[] } {
+    const configPath = path.join(packageDirectory, 'rslib.config.mjs')
+    const script = [
+        `const config = (await import(${JSON.stringify(pathToFileURL(configPath).href)})).default`,
+        'const resolvedConfig = await Promise.resolve(config)',
+        'const payload = {',
+        '  entry: resolvedConfig.source.entry,',
+        '  formats: resolvedConfig.lib.map(({ format }) => format),',
+        '}',
+        'process.stdout.write(JSON.stringify(payload))',
+    ].join('\n')
+    const stdout = runNodeScript(packageDirectory, ['--input-type=module', '--eval', script])
+    const config = JSON.parse(stdout) as { entry: Record<string, string | string[]>; formats: string[] }
+
+    return {
+        entryFiles: Object.values(config.entry)
+            .flat()
+            .filter((entry): entry is string => typeof entry === 'string' && entry.endsWith('.ts'))
+            .sort(),
+        formats: config.formats.sort(),
+    }
+}
+
+async function createResolvablePackage(packageDirectory: string): Promise<{ exports: Record<string, unknown> }> {
+    const packageJson = JSON.parse(await fs.readFile(path.resolve(__dirname, '../package.json'), 'utf8')) as {
+        exports: Record<string, unknown>
+    }
+    const packageRoot = path.join(packageDirectory, 'node_modules/@posthog/webpack-plugin')
+
+    await fs.mkdir(path.join(packageRoot, 'dist'), { recursive: true })
+    await fs.writeFile(path.join(packageRoot, 'package.json'), JSON.stringify(packageJson, null, 4))
+    await fs.writeFile(path.join(packageRoot, 'dist/config.js'), "module.exports = { marker: 'cjs-config' }\n")
+    await fs.writeFile(path.join(packageRoot, 'dist/config.mjs'), "export const marker = 'esm-config'\n")
+    await fs.writeFile(path.join(packageRoot, 'dist/config.d.ts'), 'export declare const marker: string\n')
+
+    return packageJson
+}
+
 describe('PosthogWebpackPlugin', () => {
     let outputDirectory: string
 
@@ -66,6 +138,39 @@ describe('PosthogWebpackPlugin', () => {
     afterEach(async () => {
         jest.restoreAllMocks()
         await fs.rm(outputDirectory, { force: true, recursive: true })
+    })
+
+    it('builds every runtime source file as CJS and ESM package entrypoints', async () => {
+        const packageDirectory = path.resolve(__dirname, '..')
+        const rslibConfig = getRslibConfig(packageDirectory)
+
+        expect(rslibConfig.entryFiles).toEqual(await getRuntimeSourceFiles())
+        expect(rslibConfig.formats).toEqual(expect.arrayContaining(['cjs', 'esm']))
+    })
+
+    it('exposes the config subpath to package consumers', async () => {
+        const packageJson = await createResolvablePackage(outputDirectory)
+
+        expect(packageJson.exports['./config']).toEqual({
+            require: './dist/config.js',
+            import: './dist/config.mjs',
+            types: './dist/config.d.ts',
+        })
+        runNodeScript(outputDirectory, [
+            '--eval',
+            [
+                "const config = require('@posthog/webpack-plugin/config')",
+                "if (config.marker !== 'cjs-config') throw new Error('CJS config export did not resolve')",
+            ].join('; '),
+        ])
+        runNodeScript(outputDirectory, [
+            '--input-type=module',
+            '--eval',
+            [
+                "const config = await import('@posthog/webpack-plugin/config')",
+                "if (config.marker !== 'esm-config') throw new Error('ESM config export did not resolve')",
+            ].join('; '),
+        ])
     })
 
     it.each([
