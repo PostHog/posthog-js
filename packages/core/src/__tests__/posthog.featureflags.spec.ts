@@ -1181,6 +1181,30 @@ describe('PostHog Feature Flags v4', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
       })
 
+      it('should not retry when featureFlagsRequestMaxRetries is 0', async () => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(new TypeError('Failed to fetch'))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const result = await posthog.getFlags('distinct-id')
+
+        expect(result.success).toBe(false)
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
       it('should not retry connection refused failures when the error code is available', async () => {
         ;[posthog, mocks] = createTestClient(
           'TEST_API_KEY',
@@ -1216,7 +1240,7 @@ describe('PostHog Feature Flags v4', () => {
               _mocks.fetch.mockImplementation((url) => {
                 if (url.includes('/flags/')) {
                   flagsRequestCount++
-                  if (flagsRequestCount < 3) {
+                  if (flagsRequestCount < 2) {
                     return Promise.reject(new TypeError('Failed to fetch'))
                   }
                   return Promise.resolve({
@@ -1242,7 +1266,7 @@ describe('PostHog Feature Flags v4', () => {
           const result = await posthog.getFlags('distinct-id')
 
           expect(result.success).toBe(true)
-          expect(mocks.fetch).toHaveBeenCalledTimes(3)
+          expect(mocks.fetch).toHaveBeenCalledTimes(2)
         } finally {
           jest.useFakeTimers()
           jest.setSystemTime(new Date('2022-01-01'))
@@ -1294,7 +1318,10 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include TIMEOUT error when request timed out', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, fetchRetryCount: 0 }, (_mocks) => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 0, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               const abortError = new Error('The operation was aborted')
@@ -1364,7 +1391,10 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include CONNECTION_ERROR for network failures', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, fetchRetryCount: 0 }, (_mocks) => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 0, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
               return Promise.reject(new TypeError('Failed to fetch'))
