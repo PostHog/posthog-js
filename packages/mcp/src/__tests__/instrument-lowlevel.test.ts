@@ -193,3 +193,48 @@ describe('Low-level Server tracing (e2e)', () => {
     }
   })
 })
+
+/**
+ * The low-level path also instruments handlers registered *after* instrument()
+ * (via `patchRequestHandlers`' setRequestHandler interceptor) — the same
+ * late-registration support the high-level/mcp-nest path relies on.
+ */
+describe('Low-level Server — late handler registration', () => {
+  let eventCapture: EventCapture
+
+  beforeEach(async () => {
+    eventCapture = new EventCapture()
+    await eventCapture.start()
+  })
+
+  afterEach(async () => {
+    await eventCapture.stop()
+  })
+
+  it('instruments a tools/list handler registered after instrument()', async () => {
+    const server = new Server({ name: 'late low-level', version: '1.0.0' }, { capabilities: { tools: {} } })
+
+    // instrument() runs first; the tools/list handler is registered afterwards.
+    instrument(server, fakePostHog(), { context: true })
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
+
+    const client = new Client({ name: 'test client', version: '1.0' }, { capabilities: {} })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+
+    try {
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      // The injected `context` param proves the late-registered handler was wrapped.
+      expect(tools.find((t) => t.name === 'echo')?.inputSchema?.properties?.context).toBeDefined()
+
+      await new Promise((r) => setTimeout(r, 50))
+      const listings = eventCapture.findCapturesByEvent('$mcp_tools_list')
+      expect(listings).toHaveLength(1)
+      expect(listings[0].properties.$mcp_listed_tool_names).toEqual(expect.arrayContaining(['echo']))
+    } finally {
+      await clientTransport.close?.()
+      await serverTransport.close?.()
+    }
+  })
+})
