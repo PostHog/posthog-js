@@ -86,4 +86,7 @@ value), and asking for a type the flag can't provide (e.g. a string from a boole
 
 Both providers accept `sendFeatureFlagEvents` (default `true`) to control `$feature_flag_called`
 capture. The server provider additionally accepts `defaultDistinctId` — when set, evaluations without a
-`targetingKey` use it instead of raising `TARGETING_KEY_MISSING`.
+`targetingKey` use it instead of raising `TARGETING_KEY_MISSING`. The web provider additionally accepts
+`reloadTimeoutMs` (default `5000`) — the maximum time `initialize`/`onContextChange` waits for
+`posthog-js` to (re)load flags before becoming ready anyway, so the OpenFeature client can't get stuck
+NOT_READY if the SDK never delivers its flags callback.

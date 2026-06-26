@@ -1,4 +1,4 @@
-import { ErrorCode, OpenFeature, StandardResolutionReasons } from '@openfeature/server-sdk'
+import { ErrorCode, OpenFeature, StandardResolutionReasons, type ResolutionDetails } from '@openfeature/server-sdk'
 import type { PostHog } from 'posthog-node'
 
 import { PostHogServerProvider } from '../server-provider'
@@ -26,94 +26,82 @@ function makeClient(result: FlagResult | undefined): {
 
 const CTX = { targetingKey: 'user_1' }
 
+type Resolve = (provider: PostHogServerProvider) => Promise<ResolutionDetails<unknown>>
+
 describe('PostHogServerProvider', () => {
-  describe('metadata', () => {
-    it('identifies as a server provider', () => {
-      const { client } = makeClient(undefined)
-      const provider = new PostHogServerProvider(client)
-      expect(provider.metadata.name).toBe('PostHogServerProvider')
-      expect(provider.runsOn).toBe('server')
-    })
+  it('identifies as a server provider', () => {
+    const { client } = makeClient(undefined)
+    const provider = new PostHogServerProvider(client)
+    expect(provider.metadata.name).toBe('PostHogServerProvider')
+    expect(provider.runsOn).toBe('server')
   })
 
-  describe('boolean resolution', () => {
-    it('maps an enabled flag to true with TARGETING_MATCH', async () => {
-      const { client } = makeClient({ key: 'flag', enabled: true })
-      const provider = new PostHogServerProvider(client)
-      const details = await provider.resolveBooleanEvaluation('flag', false, CTX)
-      expect(details.value).toBe(true)
-      expect(details.reason).toBe(StandardResolutionReasons.TARGETING_MATCH)
+  describe('resolution', () => {
+    it.each<[string, FlagResult, Resolve, Partial<ResolutionDetails<unknown>>]>([
+      [
+        'boolean enabled → true / TARGETING_MATCH',
+        { key: 'flag', enabled: true },
+        (p) => p.resolveBooleanEvaluation('flag', false, CTX),
+        { value: true, reason: StandardResolutionReasons.TARGETING_MATCH },
+      ],
+      [
+        'boolean disabled → false / DEFAULT',
+        { key: 'flag', enabled: false },
+        (p) => p.resolveBooleanEvaluation('flag', true, CTX),
+        { value: false, reason: StandardResolutionReasons.DEFAULT },
+      ],
+      [
+        'string → multivariate variant',
+        { key: 'flag', enabled: true, variant: 'control' },
+        (p) => p.resolveStringEvaluation('flag', 'x', CTX),
+        { value: 'control', variant: 'control' },
+      ],
+      [
+        'number → parsed variant',
+        { key: 'flag', enabled: true, variant: '42' },
+        (p) => p.resolveNumberEvaluation('flag', 0, CTX),
+        { value: 42 },
+      ],
+      [
+        'object → JSON payload',
+        { key: 'flag', enabled: true, payload: { color: 'blue', count: 3 } },
+        (p) => p.resolveObjectEvaluation('flag', {}, CTX),
+        { value: { color: 'blue', count: 3 } },
+      ],
+    ])('resolves %s', async (_name, result, resolve, expected) => {
+      const { client } = makeClient(result)
+      const details = await resolve(new PostHogServerProvider(client))
+      expect(details).toMatchObject(expected)
     })
 
-    it('maps a disabled flag to false with DEFAULT', async () => {
-      const { client } = makeClient({ key: 'flag', enabled: false })
-      const provider = new PostHogServerProvider(client)
-      const details = await provider.resolveBooleanEvaluation('flag', true, CTX)
-      expect(details.value).toBe(false)
-      expect(details.reason).toBe(StandardResolutionReasons.DEFAULT)
-    })
-  })
-
-  describe('string resolution', () => {
-    it('returns the multivariate variant', async () => {
-      const { client } = makeClient({ key: 'flag', enabled: true, variant: 'control' })
-      const provider = new PostHogServerProvider(client)
-      const details = await provider.resolveStringEvaluation('flag', 'x', CTX)
-      expect(details.value).toBe('control')
-      expect(details.variant).toBe('control')
-    })
-
-    it('throws TypeMismatch for a boolean flag with no variant', async () => {
-      const { client } = makeClient({ key: 'flag', enabled: true })
-      const provider = new PostHogServerProvider(client)
-      await expect(provider.resolveStringEvaluation('flag', 'x', CTX)).rejects.toMatchObject({
-        code: ErrorCode.TYPE_MISMATCH,
-      })
-    })
-  })
-
-  describe('number resolution', () => {
-    it('parses a numeric variant', async () => {
-      const { client } = makeClient({ key: 'flag', enabled: true, variant: '42' })
-      const provider = new PostHogServerProvider(client)
-      const details = await provider.resolveNumberEvaluation('flag', 0, CTX)
-      expect(details.value).toBe(42)
-    })
-
-    it('throws TypeMismatch for a non-numeric variant', async () => {
-      const { client } = makeClient({ key: 'flag', enabled: true, variant: 'not-a-number' })
-      const provider = new PostHogServerProvider(client)
-      await expect(provider.resolveNumberEvaluation('flag', 0, CTX)).rejects.toMatchObject({
-        code: ErrorCode.TYPE_MISMATCH,
-      })
-    })
-  })
-
-  describe('object resolution', () => {
-    it('returns the JSON payload', async () => {
-      const payload = { color: 'blue', count: 3 }
-      const { client } = makeClient({ key: 'flag', enabled: true, payload })
-      const provider = new PostHogServerProvider(client)
-      const details = await provider.resolveObjectEvaluation('flag', {}, CTX)
-      expect(details.value).toEqual(payload)
-    })
-
-    it('throws TypeMismatch when there is no object payload', async () => {
-      const { client } = makeClient({ key: 'flag', enabled: true, payload: 'a string' })
-      const provider = new PostHogServerProvider(client)
-      await expect(provider.resolveObjectEvaluation('flag', {}, CTX)).rejects.toMatchObject({
-        code: ErrorCode.TYPE_MISMATCH,
-      })
-    })
-  })
-
-  describe('missing flags', () => {
-    it('throws FlagNotFound when the client returns undefined', async () => {
-      const { client } = makeClient(undefined)
-      const provider = new PostHogServerProvider(client)
-      await expect(provider.resolveBooleanEvaluation('missing', false, CTX)).rejects.toMatchObject({
-        code: ErrorCode.FLAG_NOT_FOUND,
-      })
+    it.each<[string, FlagResult | undefined, Resolve, ErrorCode]>([
+      [
+        'string from a boolean flag (no variant)',
+        { key: 'flag', enabled: true },
+        (p) => p.resolveStringEvaluation('flag', 'x', CTX),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'number from a non-numeric variant',
+        { key: 'flag', enabled: true, variant: 'not-a-number' },
+        (p) => p.resolveNumberEvaluation('flag', 0, CTX),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'object from a non-object payload',
+        { key: 'flag', enabled: true, payload: 'a string' },
+        (p) => p.resolveObjectEvaluation('flag', {}, CTX),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'missing flag (client returns undefined)',
+        undefined,
+        (p) => p.resolveBooleanEvaluation('missing', false, CTX),
+        ErrorCode.FLAG_NOT_FOUND,
+      ],
+    ])('throws on %s', async (_name, result, resolve, code) => {
+      const { client } = makeClient(result)
+      await expect(resolve(new PostHogServerProvider(client))).rejects.toMatchObject({ code })
     })
   })
 

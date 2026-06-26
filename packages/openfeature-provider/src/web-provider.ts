@@ -25,6 +25,16 @@ export interface PostHogWebProviderOptions {
    * keep working.
    */
   sendFeatureFlagEvents?: boolean
+  /**
+   * Maximum time in milliseconds that `initialize()` / `onContextChange()` will
+   * wait for `posthog-js` to (re)load flags before resolving anyway. This is a
+   * safety net: if the SDK never fires its flags callback after a reload (e.g.
+   * `posthog.init()` was never called, or a network request fails silently),
+   * the OpenFeature client would otherwise stay stuck in NOT_READY forever. On
+   * timeout the provider becomes ready and serves whatever flags are cached.
+   * Defaults to 5000.
+   */
+  reloadTimeoutMs?: number
 }
 
 /**
@@ -51,10 +61,12 @@ export class PostHogWebProvider implements Provider {
 
   private readonly _client: PostHog
   private readonly _sendFeatureFlagEvents: boolean
+  private readonly _reloadTimeoutMs: number
 
   constructor(client: PostHog, options: PostHogWebProviderOptions = {}) {
     this._client = client
     this._sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
+    this._reloadTimeoutMs = options.reloadTimeoutMs ?? 5000
   }
 
   async initialize(context?: EvaluationContext): Promise<void> {
@@ -107,18 +119,32 @@ export class PostHogWebProvider implements Provider {
 
   private _reloadFlags(): Promise<void> {
     return new Promise<void>((resolve) => {
+      let settled = false
+      let subscribed = false
+
+      const finish = (): void => {
+        if (settled) {
+          return
+        }
+        settled = true
+        clearTimeout(timer)
+        unsubscribe()
+        resolve()
+      }
+
       // `onFeatureFlags` fires synchronously on subscribe if flags are already
       // loaded; ignore that immediate call (it happens before `subscribed` is
       // set) and resolve only on the callback that follows our reload request.
-      let subscribed = false
       const unsubscribe = this._client.onFeatureFlags(() => {
-        if (!subscribed) {
-          return
+        if (subscribed) {
+          finish()
         }
-        unsubscribe()
-        resolve()
       })
       subscribed = true
+      // Safety net: resolve anyway if posthog-js never delivers the callback
+      // (uninitialised SDK, silent network failure, ...) so the OpenFeature
+      // client can't get stuck NOT_READY forever.
+      const timer = setTimeout(finish, this._reloadTimeoutMs)
       this._client.reloadFeatureFlags()
     })
   }

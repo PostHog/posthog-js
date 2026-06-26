@@ -1,4 +1,4 @@
-import { ErrorCode, OpenFeature, StandardResolutionReasons } from '@openfeature/web-sdk'
+import { ErrorCode, OpenFeature, StandardResolutionReasons, type ResolutionDetails } from '@openfeature/web-sdk'
 import type { PostHog } from 'posthog-js'
 
 import { PostHogWebProvider } from '../web-provider'
@@ -57,65 +57,69 @@ function makeClient(
   }
 }
 
+type Resolve = (provider: PostHogWebProvider) => ResolutionDetails<unknown>
+
 describe('PostHogWebProvider', () => {
-  describe('metadata', () => {
-    it('identifies as a client provider', () => {
-      const { client } = makeClient(undefined)
-      const provider = new PostHogWebProvider(client)
-      expect(provider.metadata.name).toBe('PostHogWebProvider')
-      expect(provider.runsOn).toBe('client')
-    })
+  it('identifies as a client provider', () => {
+    const { client } = makeClient(undefined)
+    const provider = new PostHogWebProvider(client)
+    expect(provider.metadata.name).toBe('PostHogWebProvider')
+    expect(provider.runsOn).toBe('client')
   })
 
   describe('synchronous resolution', () => {
-    it('maps an enabled flag to true with TARGETING_MATCH', () => {
-      const { client } = makeClient({ key: 'flag', enabled: true })
-      const provider = new PostHogWebProvider(client)
-      const details = provider.resolveBooleanEvaluation('flag', false)
-      expect(details.value).toBe(true)
-      expect(details.reason).toBe(StandardResolutionReasons.TARGETING_MATCH)
+    it.each<[string, FlagResult, Resolve, Partial<ResolutionDetails<unknown>>]>([
+      [
+        'boolean enabled → true / TARGETING_MATCH',
+        { key: 'flag', enabled: true },
+        (p) => p.resolveBooleanEvaluation('flag', false),
+        { value: true, reason: StandardResolutionReasons.TARGETING_MATCH },
+      ],
+      [
+        'boolean disabled → false / DEFAULT',
+        { key: 'flag', enabled: false },
+        (p) => p.resolveBooleanEvaluation('flag', true),
+        { value: false, reason: StandardResolutionReasons.DEFAULT },
+      ],
+      [
+        'string → multivariate variant',
+        { key: 'flag', enabled: true, variant: 'control' },
+        (p) => p.resolveStringEvaluation('flag', 'x'),
+        { value: 'control', variant: 'control' },
+      ],
+      [
+        'number → parsed variant',
+        { key: 'flag', enabled: true, variant: '7' },
+        (p) => p.resolveNumberEvaluation('flag', 0),
+        { value: 7 },
+      ],
+      [
+        'object → JSON payload',
+        { key: 'flag', enabled: true, payload: { a: 1 } },
+        (p) => p.resolveObjectEvaluation('flag', {}),
+        { value: { a: 1 } },
+      ],
+    ])('resolves %s', (_name, result, resolve, expected) => {
+      const { client } = makeClient(result)
+      expect(resolve(new PostHogWebProvider(client))).toMatchObject(expected)
     })
 
-    it('maps a disabled flag to false with DEFAULT', () => {
-      const { client } = makeClient({ key: 'flag', enabled: false })
-      const provider = new PostHogWebProvider(client)
-      const details = provider.resolveBooleanEvaluation('flag', true)
-      expect(details.value).toBe(false)
-      expect(details.reason).toBe(StandardResolutionReasons.DEFAULT)
-    })
-
-    it('returns the multivariate variant for strings', () => {
-      const { client } = makeClient({ key: 'flag', enabled: true, variant: 'control' })
-      const provider = new PostHogWebProvider(client)
-      expect(provider.resolveStringEvaluation('flag', 'x').value).toBe('control')
-    })
-
-    it('parses a numeric variant', () => {
-      const { client } = makeClient({ key: 'flag', enabled: true, variant: '7' })
-      const provider = new PostHogWebProvider(client)
-      expect(provider.resolveNumberEvaluation('flag', 0).value).toBe(7)
-    })
-
-    it('returns the JSON payload for objects', () => {
-      const { client } = makeClient({ key: 'flag', enabled: true, payload: { a: 1 } })
-      const provider = new PostHogWebProvider(client)
-      expect(provider.resolveObjectEvaluation('flag', {}).value).toEqual({ a: 1 })
-    })
-
-    it('throws TypeMismatch for a boolean flag asked for a string', () => {
-      const { client } = makeClient({ key: 'flag', enabled: true })
-      const provider = new PostHogWebProvider(client)
-      expect(() => provider.resolveStringEvaluation('flag', 'x')).toThrow(
-        expect.objectContaining({ code: ErrorCode.TYPE_MISMATCH })
-      )
-    })
-
-    it('throws FlagNotFound for a missing flag', () => {
-      const { client } = makeClient(undefined)
-      const provider = new PostHogWebProvider(client)
-      expect(() => provider.resolveBooleanEvaluation('missing', false)).toThrow(
-        expect.objectContaining({ code: ErrorCode.FLAG_NOT_FOUND })
-      )
+    it.each<[string, FlagResult | undefined, Resolve, ErrorCode]>([
+      [
+        'string from a boolean flag (no variant)',
+        { key: 'flag', enabled: true },
+        (p) => p.resolveStringEvaluation('flag', 'x'),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'missing flag (client returns undefined)',
+        undefined,
+        (p) => p.resolveBooleanEvaluation('missing', false),
+        ErrorCode.FLAG_NOT_FOUND,
+      ],
+    ])('throws on %s', (_name, result, resolve, code) => {
+      const { client } = makeClient(result)
+      expect(() => resolve(new PostHogWebProvider(client))).toThrow(expect.objectContaining({ code }))
     })
 
     it('passes send_event through to the client', () => {
@@ -138,6 +142,20 @@ describe('PostHogWebProvider', () => {
       const provider = new PostHogWebProvider(client)
       await expect(provider.initialize()).resolves.toBeUndefined()
       expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+    })
+
+    it('resolves on timeout when the flags callback never fires', async () => {
+      // onFeatureFlags never invokes its callback and reloadFeatureFlags is a no-op,
+      // so only the reloadTimeoutMs safety net can settle initialize().
+      const client = {
+        getFeatureFlagResult: jest.fn(),
+        reloadFeatureFlags: jest.fn(),
+        onFeatureFlags: jest.fn(() => () => {}),
+        setPersonPropertiesForFlags: jest.fn(),
+        group: jest.fn(),
+      } as unknown as PostHog
+      const provider = new PostHogWebProvider(client, { reloadTimeoutMs: 20 })
+      await expect(provider.initialize()).resolves.toBeUndefined()
     })
 
     it('reconciles person properties and groups from the context on change', async () => {

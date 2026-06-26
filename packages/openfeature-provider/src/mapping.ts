@@ -98,7 +98,7 @@ function reasonFor(result: PostHogFlagResult): ResolutionReason {
  */
 function ensureResolved(result: PostHogFlagResult | undefined, flagKey: string): PostHogFlagResult {
   if (result == null) {
-    throw new FlagNotFoundError(`Flag '${flagKey}' not found or disabled.`)
+    throw new FlagNotFoundError(`Flag '${flagKey}' not found.`)
   }
   return result
 }
