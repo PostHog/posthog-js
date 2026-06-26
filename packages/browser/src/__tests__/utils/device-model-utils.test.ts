@@ -65,7 +65,7 @@ describe('device-model-utils', () => {
     })
 
     describe('init wiring', () => {
-        it('registers $device_model under the default config (disable_device_model omitted)', async () => {
+        it('registers $device_model under the default config (disableDeviceModel omitted)', async () => {
             const getHighEntropyValues = jest.fn().mockResolvedValue({ model: 'Pixel 7' })
             setUserAgentData({ getHighEntropyValues })
 
@@ -76,11 +76,11 @@ describe('device-model-utils', () => {
             expect(posthog.get_property('$device_model')).toBe('Pixel 7')
         })
 
-        it('does not call the API or register anything when disable_device_model is true', async () => {
+        it('does not call the API or register anything when disableDeviceModel is true', async () => {
             const getHighEntropyValues = jest.fn().mockResolvedValue({ model: 'Pixel 7' })
             setUserAgentData({ getHighEntropyValues })
 
-            const posthog = await createPosthogInstance(undefined, { disable_device_model: true })
+            const posthog = await createPosthogInstance(undefined, { disableDeviceModel: true })
             await flushPromises()
 
             expect(getHighEntropyValues).not.toHaveBeenCalled()

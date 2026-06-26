@@ -166,7 +166,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
      *
      * @default false
      */
-    disable_device_model?: boolean
+    disableDeviceModel?: boolean
 
     /**
      * Internal: Extension class overrides for tree-shaking support.

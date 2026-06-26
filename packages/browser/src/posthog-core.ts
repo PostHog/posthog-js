@@ -255,7 +255,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys_automatic_display: false,
     disable_conversations: false,
     disable_product_tours: false,
-    disable_device_model: false,
+    disableDeviceModel: false,
     disable_external_dependency_loading: false,
     strict_script_versioning: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
@@ -842,7 +842,7 @@ export class PostHog implements PostHogInterface {
         }
 
         // Not awaited — the first event may miss $device_model, which is fine for a stable per-device dimension.
-        if (!this.config.disable_device_model) {
+        if (!this.config.disableDeviceModel) {
             getDeviceModel()
                 .then((model) => {
                     if (model) {
