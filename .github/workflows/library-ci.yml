@@ -317,6 +317,9 @@ jobs:
       - name: Build package tarballs
         run: pnpm package
 
+      - name: Smoke test package tarballs
+        run: pnpm check:package-tarballs
+
       # Replaces Vercel preview deploy validation for @posthog/next.
       - name: Install Next.js App Router example dependencies from local tarballs
         run: pnpm install --lockfile=false
