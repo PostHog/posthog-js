@@ -1626,7 +1626,7 @@ export interface PostHogConfig {
     /**
      * Overrides the URL used for client-side URL targeting: session replay URL triggers, the
      * session replay URL blocklist, survey URL display conditions, product tour URL conditions,
-     * and web experiment URL conditions.
+     * web experiment URL conditions, and autocapture URL allow/ignore lists.
      *
      * These features match against `window.location.href` directly, which does not reflect
      * any `$current_url` you rewrite in `before_send`. In environments where the browser URL
