@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.5.0
+
+### Minor Changes
+
+- [#3995](https://github.com/PostHog/posthog-js/pull/3995) [`e86f61a`](https://github.com/PostHog/posthog-js/commit/e86f61a30df9fec6f59ba2de4c4b2cb596fd0d7f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add `instrumentMutator(posthog, options?)` — a point-free `(server) => server` helper for framework server-mutation hooks like `@rekog/mcp-nest`'s `serverMutator`. It instruments the server and returns it, so `serverMutator: instrumentMutator(posthog)` just works (no need to remember that `instrument()` returns the analytics handle, not the server).
+  (2026-06-26)
+
 ## 0.4.4
 
 ### Patch Changes
