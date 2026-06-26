@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/2151": {
+    "key": "PostHog/posthog-js/issue/2151",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2151",
+    "url": "https://github.com/PostHog/posthog-js/issues/2151",
+    "conclusion": "Valid React Native Android session replay feature gap; not a small/surgical fix.",
+    "labels": [
+      "enhancement",
+      "feature/replay",
+      "feature/mobile",
+      "react-native",
+      "Android"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-26T09:32:59.138Z"
+  },
   "PostHog/posthog-js/issue/3982": {
     "key": "PostHog/posthog-js/issue/3982",
     "repo": "PostHog/posthog-js",
