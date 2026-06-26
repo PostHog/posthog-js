@@ -114,10 +114,19 @@ export class McpEventSink {
     const { event: fullEvent, captures } = result
     try {
       for (const captureEvent of captures) {
+        // `$groups` is written into `properties` by `buildPostHogCaptureEvents`,
+        // but posthog-node's `prepareEventMessage` overwrites the outgoing
+        // `$groups` property with the top-level `groups` field
+        // (`$groups: eventMessage.groups || groups`). Without passing `groups`
+        // here the group association would be silently dropped. See
+        // https://github.com/PostHog/posthog-js/issues/3888.
+        const groups = captureEvent.properties.$groups as Record<string, string> | undefined
+
         this.posthog.capture({
           distinctId: captureEvent.distinct_id,
           event: captureEvent.event,
           properties: captureEvent.properties,
+          ...(groups ? { groups } : {}),
           timestamp: new Date(captureEvent.timestamp),
           uuid: uuidv7(),
         })

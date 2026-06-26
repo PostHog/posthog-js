@@ -2823,7 +2823,6 @@ describe('getFeatureFlag', () => {
         '$feature/complex-flag': true,
         $feature_flag: 'complex-flag',
         $feature_flag_response: true,
-        $groups: undefined,
         $lib: posthog.getLibraryId(),
         $lib_version: posthog.getLibraryVersion(),
         locally_evaluated: true,
