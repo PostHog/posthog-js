@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/2165": {
+    "key": "PostHog/posthog-js/issue/2165",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2165",
+    "url": "https://github.com/PostHog/posthog-js/issues/2165",
+    "conclusion": "Valid feature/enhancement request for RN session replay New Architecture performance; not a straightforward small fix.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/mobile",
+      "feature/replay"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-26T09:37:23.112Z"
+  },
   "PostHog/posthog-js/issue/2161": {
     "key": "PostHog/posthog-js/issue/2161",
     "repo": "PostHog/posthog-js",
