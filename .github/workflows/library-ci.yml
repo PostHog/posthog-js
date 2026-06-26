@@ -319,7 +319,7 @@ jobs:
 
       # Replaces Vercel preview deploy validation for @posthog/next.
       - name: Install Next.js App Router example dependencies from local tarballs
-        run: pnpm install
+        run: pnpm install --lockfile=false
         working-directory: examples/example-next-app-router
 
       - name: Build Next.js App Router example
@@ -331,7 +331,7 @@ jobs:
           NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
 
       - name: Install Next.js config example dependencies from local tarballs
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --lockfile=false
         working-directory: examples/example-nextjs
 
       - name: Build Next.js config example
