@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/2167": {
+    "key": "PostHog/posthog-js/issue/2167",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2167",
+    "url": "https://github.com/PostHog/posthog-js/issues/2167",
+    "conclusion": "Keep open as an Expo Router touch-autocapture feature request",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/mobile",
+      "feature/autocapture",
+      "help wanted"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-26T09:39:13.324Z"
+  },
   "PostHog/posthog-js/issue/2165": {
     "key": "PostHog/posthog-js/issue/2165",
     "repo": "PostHog/posthog-js",
