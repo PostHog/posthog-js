@@ -19,6 +19,7 @@ export type PostHogAutocaptureOptions = {
    * @default false
    */
   captureTouches?: boolean
+
   /**
    * Custom prop name used to label elements for autocapture
    *
@@ -48,6 +49,15 @@ export type PostHogAutocaptureOptions = {
    *
    * @default ['style', 'testID', 'accessibilityLabel', 'ph-label', 'children']
    */
+
+  ignoreScreenNames?: string[]
+   /**
+   * List of screen names to ignore during autocapture
+   *
+   * @default []
+   */
+
+
   propsToCapture?: string[]
 
   /**

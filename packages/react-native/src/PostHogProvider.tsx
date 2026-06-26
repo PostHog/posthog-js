@@ -50,7 +50,7 @@ function PostHogNavigationHook({
   options?: PostHogAutocaptureOptions
   client?: PostHog
 }): JSX.Element | null {
-  useNavigationTracker(options?.navigation, options?.navigationRef, client)
+  useNavigationTracker(options?.navigation, options?.navigationRef, options?.ignoreScreenNames, client)
   return null
 }
 
@@ -123,7 +123,7 @@ export const PostHogProvider = ({
   style,
   debug = false,
 }: PostHogProviderProps): JSX.Element | null => {
-  const captureAll = autocapture === true
+  const captureAll = autocapture === true;
   const captureNone = autocapture === false
 
   const posthog = useMemo(() => {

@@ -27,6 +27,7 @@ export default function RootLayout() {
             autocapture={{
                 captureScreens: false, // expo-router requires this to be false and capture screens manually
                 captureTouches: true,
+                ignoreScreenNames: ['about'],
                 customLabelProp: 'ph-my-label',
             }}
             debug={true}
