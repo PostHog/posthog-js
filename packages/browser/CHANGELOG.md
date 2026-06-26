@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.393.6
+
+### Patch Changes
+
+- [#3965](https://github.com/PostHog/posthog-js/pull/3965) [`6ef9179`](https://github.com/PostHog/posthog-js/commit/6ef91798097d59950e3787cbb20fe95d5cde9401) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle request serialization errors without throwing or blocking queued requests.
+  (2026-06-26)
+
 ## 1.393.5
 
 ### Patch Changes
