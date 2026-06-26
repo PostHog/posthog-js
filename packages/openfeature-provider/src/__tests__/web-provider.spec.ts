@@ -127,6 +127,12 @@ describe('PostHogWebProvider', () => {
       new PostHogWebProvider(client, { sendFeatureFlagEvents: false }).resolveBooleanEvaluation('flag', false)
       expect(getFeatureFlagResult).toHaveBeenCalledWith('flag', { send_event: false })
     })
+
+    it('defaults send_event to true', () => {
+      const { client, getFeatureFlagResult } = makeClient({ key: 'flag', enabled: true })
+      new PostHogWebProvider(client).resolveBooleanEvaluation('flag', false)
+      expect(getFeatureFlagResult).toHaveBeenCalledWith('flag', { send_event: true })
+    })
   })
 
   describe('initialize / reconciliation', () => {
@@ -180,6 +186,13 @@ describe('PostHogWebProvider', () => {
       const provider = new PostHogWebProvider(client)
       await provider.onContextChange({}, { targetingKey: 'user_1' })
       expect(setPersonPropertiesForFlags).not.toHaveBeenCalled()
+    })
+
+    it('calls group without properties when groupProperties are absent', async () => {
+      const { client, group } = makeClient({ key: 'flag', enabled: true })
+      const provider = new PostHogWebProvider(client)
+      await provider.onContextChange({}, { groups: { organization: 'acme' } })
+      expect(group).toHaveBeenCalledWith('organization', 'acme', undefined)
     })
   })
 

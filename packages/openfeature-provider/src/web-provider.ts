@@ -108,10 +108,10 @@ export class PostHogWebProvider implements Provider {
     const { personProperties, groups, groupProperties } = splitContext(context)
 
     if (Object.keys(personProperties).length > 0) {
-      this._client.setPersonPropertiesForFlags(personProperties as Record<string, string>, false)
+      this._client.setPersonPropertiesForFlags(personProperties, false)
     }
     for (const [groupType, groupKey] of Object.entries(groups)) {
-      this._client.group(groupType, groupKey, groupProperties[groupType] as Record<string, string> | undefined)
+      this._client.group(groupType, groupKey, groupProperties[groupType])
     }
 
     await this._reloadFlags()
