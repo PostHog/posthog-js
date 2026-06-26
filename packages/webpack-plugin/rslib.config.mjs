@@ -6,4 +6,10 @@ export default defineConfig({
     shims: { esm: { __dirname: true } },
     syntax: 'es6',
     lib: [{ format: 'esm' }, { format: 'cjs' }],
+    source: {
+        entry: {
+            index: ['src/**/*', '!src/**/*.spec.ts'],
+        },
+        tsconfigPath: './tsconfig.build.json',
+    },
 })
