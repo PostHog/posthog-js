@@ -1,5 +1,12 @@
 # @posthog/webpack-plugin
 
+## 1.5.26
+
+### Patch Changes
+
+- [#3990](https://github.com/PostHog/posthog-js/pull/3990) [`dc702fd`](https://github.com/PostHog/posthog-js/commit/dc702fd00544d8aada8c259b3dd2d684a9c03326) Thanks [@ioannisj](https://github.com/ioannisj)! - Put `dist/config.js` and `dist/config.mjs` back in the published package. 1.5.25 shipped only `config.d.ts`, so `next build` (via `@posthog/nextjs-config`) failed with `Cannot find module './config.js'`. The build now emits config again.
+  (2026-06-26)
+
 ## 1.5.25
 
 ### Patch Changes
