@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "1.393.5",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -707,28 +707,6 @@
           "returnType": {
             "id": "void",
             "name": "void"
-          },
-          "path": "lib/src/posthog-core.d.ts"
-        },
-        {
-          "category": "",
-          "description": "Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh. Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.",
-          "details": null,
-          "id": "getAllFeatureFlags",
-          "showDocs": true,
-          "title": "getAllFeatureFlags",
-          "examples": [
-            {
-              "id": "getallfeatureflags",
-              "name": "Generated example for getAllFeatureFlags",
-              "code": "// Generated example for getAllFeatureFlags\nposthog.getAllFeatureFlags();"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [],
-          "returnType": {
-            "id": "FeatureFlagResult[]",
-            "name": "FeatureFlagResult[]"
           },
           "path": "lib/src/posthog-core.d.ts"
         },
@@ -2861,7 +2839,7 @@
       "name": "PostHogConfig",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n    disableDeviceModel?: boolean;\n    __extensionClasses?: {\n        exceptions?: ExtensionConstructor<PostHogExceptions>;\n        historyAutocapture?: ExtensionConstructor<HistoryAutocapture>;\n        tracingHeaders?: ExtensionConstructor<TracingHeaders>;\n        siteApps?: ExtensionConstructor<SiteApps>;\n        sessionRecording?: ExtensionConstructor<SessionRecording>;\n        autocapture?: ExtensionConstructor<Autocapture>;\n        productTours?: ExtensionConstructor<PostHogProductTours>;\n        heatmaps?: ExtensionConstructor<Heatmaps>;\n        webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>;\n        exceptionObserver?: ExtensionConstructor<ExceptionObserver>;\n        deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>;\n        surveys?: ExtensionConstructor<PostHogSurveys>;\n        toolbar?: ExtensionConstructor<Toolbar>;\n        experiments?: ExtensionConstructor<WebExperiments>;\n        conversations?: ExtensionConstructor<PostHogConversations>;\n        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>;\n        logs?: ExtensionConstructor<PostHogLogs>;\n    };\n}"
+      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n    __extensionClasses?: {\n        exceptions?: ExtensionConstructor<PostHogExceptions>;\n        historyAutocapture?: ExtensionConstructor<HistoryAutocapture>;\n        tracingHeaders?: ExtensionConstructor<TracingHeaders>;\n        siteApps?: ExtensionConstructor<SiteApps>;\n        sessionRecording?: ExtensionConstructor<SessionRecording>;\n        autocapture?: ExtensionConstructor<Autocapture>;\n        productTours?: ExtensionConstructor<PostHogProductTours>;\n        heatmaps?: ExtensionConstructor<Heatmaps>;\n        webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>;\n        exceptionObserver?: ExtensionConstructor<ExceptionObserver>;\n        deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>;\n        surveys?: ExtensionConstructor<PostHogSurveys>;\n        toolbar?: ExtensionConstructor<Toolbar>;\n        experiments?: ExtensionConstructor<WebExperiments>;\n        conversations?: ExtensionConstructor<PostHogConversations>;\n        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>;\n        logs?: ExtensionConstructor<PostHogLogs>;\n    };\n}"
     },
     {
       "id": "PostHogInterface",

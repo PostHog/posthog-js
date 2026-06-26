@@ -81,6 +81,20 @@ function preserveAPIPromiseHelpers<Input, Output>(
   return apiPromise
 }
 
+const TERMINAL_RESPONSE_STATUSES = new Set(['completed', 'failed', 'cancelled', 'incomplete'])
+
+function isPendingBackgroundResponse(
+  params: { background?: boolean | null },
+  response: { status?: string | null; usage?: unknown | null }
+): boolean {
+  return (
+    params.background === true &&
+    !response.usage &&
+    !!response.status &&
+    !TERMINAL_RESPONSE_STATUSES.has(response.status)
+  )
+}
+
 export class PostHogOpenAI extends OpenAIOrignal {
   private readonly phClient: PostHog
   public chat: WrappedChat
@@ -593,6 +607,10 @@ export class WrappedResponses extends Responses {
       const wrappedPromise = parentPromise.then(
         async (result) => {
           if ('output' in result) {
+            if (isPendingBackgroundResponse(openAIParams, result)) {
+              return result
+            }
+
             const latency = (Date.now() - startTime) / 1000
             const availableTools = extractAvailableToolCalls('openai', openAIParams)
             const formattedOutput = formatResponseOpenAI({ output: result.output })
@@ -669,6 +687,10 @@ export class WrappedResponses extends Responses {
 
       const wrappedPromise = parentPromise.then(
         async (result) => {
+          if (isPendingBackgroundResponse(openAIParams, result)) {
+            return result
+          }
+
           const latency = (Date.now() - startTime) / 1000
           await captureAiGeneration(this.phClient, {
             ...posthogParams,

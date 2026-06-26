@@ -1,5 +1,38 @@
 # posthog-js
 
+## 1.395.0
+
+### Minor Changes
+
+- [#3977](https://github.com/PostHog/posthog-js/pull/3977) [`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `getAllFeatureFlags()`, which returns all currently loaded feature flags as structured `FeatureFlagResult`s (`key`, `enabled`, `variant`, `payload`). It is a synchronous read of the cached flags and does not send a `$feature_flag_called` event.
+  (2026-06-26)
+
+### Patch Changes
+
+- Updated dependencies [[`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f)]:
+    - @posthog/core@1.38.0
+
+## 1.394.0
+
+### Minor Changes
+
+- [#3986](https://github.com/PostHog/posthog-js/pull/3986) [`919abca`](https://github.com/PostHog/posthog-js/commit/919abcaea82513bc0422d398bf26ff03810e69ad) Thanks [@ioannisj](https://github.com/ioannisj)! - Capture the `$device_model` super-property on Android Chromium via `navigator.userAgentData.getHighEntropyValues(['model'])`. Resolved once during init and sent on subsequent events; opt out with `disableDeviceModel: true`.
+  (2026-06-26)
+
+## 1.393.6
+
+### Patch Changes
+
+- [#3965](https://github.com/PostHog/posthog-js/pull/3965) [`6ef9179`](https://github.com/PostHog/posthog-js/commit/6ef91798097d59950e3787cbb20fe95d5cde9401) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle request serialization errors without throwing or blocking queued requests.
+  (2026-06-26)
+
+## 1.393.5
+
+### Patch Changes
+
+- [#3960](https://github.com/PostHog/posthog-js/pull/3960) [`619d318`](https://github.com/PostHog/posthog-js/commit/619d31827e780fecd4d644fb99063d878764fb8e) Thanks [@marandaneto](https://github.com/marandaneto)! - Improve console log capture performance for truncated large objects.
+  (2026-06-25)
+
 ## 1.393.4
 
 ### Patch Changes

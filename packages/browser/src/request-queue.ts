@@ -44,7 +44,7 @@ export class RequestQueue {
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
         sortedRequests.map((req) => {
-            this._sendRequest({ ...req, transport: 'sendBeacon' })
+            this._sendRequestSafely({ ...req, transport: 'sendBeacon' })
         })
     }
 
@@ -71,10 +71,18 @@ export class RequestQueue {
                             delete data['timestamp']
                         })
                     }
-                    this._sendRequest(req)
+                    this._sendRequestSafely(req)
                 }
             }
         }, this._flushTimeoutMs)
+    }
+
+    private _sendRequestSafely(req: QueuedRequestWithOptions): void {
+        try {
+            this._sendRequest(req)
+        } catch (error) {
+            logger.error(error)
+        }
     }
 
     private _clearFlushTimeout(): void {

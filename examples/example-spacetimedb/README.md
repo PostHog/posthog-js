@@ -9,8 +9,9 @@ can see the same activity from the client and the backend:
    backend instrumentation with SpacetimeDB.**
 3. **In-module** — an _unstable_ SpacetimeDB procedure posts `server_side_ping` to PostHog directly
    over `ctx.http`, from inside the database.
-4. **Local feature-flag evaluation** — the same sidecar evaluates flags _locally_ with a personal API
-   key and writes the results back into a table the client subscribes to (see below).
+4. **Feature-flag evaluation, two ways** — the sidecar evaluates _locally_ (personal key) and writes
+   results back through a table, or a procedure evaluates _remotely_ over `ctx.http` and returns them
+   to the caller (see below).
 
 ## Why a sidecar?
 
@@ -41,6 +42,25 @@ clients the SpacetimeDB way — through a subscribed table:
 `flag_request` is an _event table_ (rows are never stored — they only fire `onInsert`), making it a
 clean request channel. The personal key lives only in the sidecar's environment. Change a flag in
 PostHog and click again to see the new value flow through.
+
+A procedure can do the same job remotely, no sidecar required. `evaluateFlags` POSTs to PostHog's
+`/flags` endpoint over `ctx.http` and returns the values straight to the caller:
+
+```
+"Evaluate my flags"
+  → evaluateFlags() — procedure POSTs ctx.sender to /flags, returns the flag map to the caller
+```
+
+Two ways to evaluate, pick per use case:
+
+|          | Sidecar (local)                                  | Procedure (remote)                         |
+| -------- | ------------------------------------------------ | ------------------------------------------ |
+| Eval     | in-process, polls flag definitions               | PostHog's `/flags` endpoint, per call      |
+| Result   | written to `feature_flag`, read via subscription | returned directly to the caller            |
+| Needs    | a running sidecar + personal key                 | nothing extra (project token only)         |
+| Best for | fan-out, many distinct ids, no per-call latency  | on-demand, single caller, no extra process |
+
+Both are keyed on `ctx.sender`, so a caller only ever evaluates its own flags.
 
 Three capture paths, all keyed on the same SpacetimeDB identity so they stitch to one person:
 
@@ -101,7 +121,8 @@ Open <http://localhost:5173>.
 
 - **Add a person** → `add_person_clicked` (posthog-js) and `person_added` (sidecar) land in PostHog.
 - **Send server-side event** → `server_side_ping` (in-module procedure) lands in PostHog.
-- **Evaluate my flags** → the sidecar evaluates flags locally and the values render in the page.
+- **Evaluate my flags (sidecar)** → local eval, written back through the `feature_flag` table.
+- **Evaluate my flags (procedure)** → remote eval over `ctx.http`, returned straight to the caller.
 
 Verify them in your project's Activity feed. You can also drive the module from the CLI:
 
@@ -113,9 +134,9 @@ spacetime logs posthog-spacetimedb
 
 ## Layout
 
-| Path                       | What it is                                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------------------------- |
-| `spacetimedb/src/index.ts` | The module: tables (`person`, `feature_flag`, `flag_request`), reducers, `captureEvent` procedure |
-| `instrumentation/index.ts` | Backend sidecar — captures events and evaluates flags locally with `posthog-node`                 |
-| `src/`                     | React client — `posthog-js` instrumentation + UI to trigger reducers/procedures                   |
-| `src/module_bindings/`     | Generated client bindings (`pnpm module:generate`)                                                |
+| Path                       | What it is                                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `spacetimedb/src/index.ts` | The module: tables (`person`, `feature_flag`, `flag_request`), reducers, and the `captureEvent` / `evaluateFlags` procedures |
+| `instrumentation/index.ts` | Backend sidecar — captures events and evaluates flags locally with `posthog-node`                                            |
+| `src/`                     | React client — `posthog-js` instrumentation + UI to trigger reducers/procedures                                              |
+| `src/module_bindings/`     | Generated client bindings (`pnpm module:generate`)                                                                           |
