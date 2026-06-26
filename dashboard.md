@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2151](https://github.com/PostHog/posthog-js/issues/2151) | Valid React Native Android session replay feature gap; not a small/surgical fix. | enhancement, feature/replay, feature/mobile, react-native, Android |  | no | 2026-06-26T09:32:59.138Z |
 | PostHog/posthog-js | [issue 3982](https://github.com/PostHog/posthog-js/issues/3982) | Valid feature request: PostHog replay does not currently expose rrweb mouse sampling controls. | enhancement, feature/replay |  | no | 2026-06-25T16:15:48.269Z |
 | PostHog/posthog-js | [issue 3981](https://github.com/PostHog/posthog-js/issues/3981) | Valid surveys feature request; SDK support is missing, but full implementation spans product/backend files outside this repo. | enhancement, feature/surveys, web |  | no | 2026-06-25T16:14:22.029Z |
 | PostHog/posthog-js | [issue 3980](https://github.com/PostHog/posthog-js/issues/3980) | Valid feature request; current code has bootstrap/update primitives but lacks automatic Next.js navigation/middleware-to-client flag refresh. | enhancement, frameworks/next-js, feature/flags, team/feature-flags |  | no | 2026-06-25T16:06:24.677Z |
