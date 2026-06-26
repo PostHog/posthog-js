@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/2159": {
+    "key": "PostHog/posthog-js/issue/2159",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2159",
+    "url": "https://github.com/PostHog/posthog-js/issues/2159",
+    "conclusion": "Valid feature request; partially supported in browser SDK but still missing in core-derived SDKs/RN and no element denylist exists.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/mobile",
+      "feature/autocapture",
+      "web-lite"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-26T09:34:08.550Z"
+  },
   "PostHog/posthog-js/issue/2151": {
     "key": "PostHog/posthog-js/issue/2151",
     "repo": "PostHog/posthog-js",
