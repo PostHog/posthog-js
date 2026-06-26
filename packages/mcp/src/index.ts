@@ -79,6 +79,31 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
   }
 }
 
+/**
+ * A point-free `(server) => server` helper for framework server-mutation hooks (e.g.
+ * `@rekog/mcp-nest`'s `serverMutator`). It instruments the server and returns it, so you
+ * don't trip over {@link instrument} returning the analytics handle rather than the server —
+ * the bare `(s) => instrument(s, posthog)` would replace the server with the handle.
+ *
+ * @example
+ * ```ts
+ * McpModule.forRoot({ serverMutator: instrumentMutator(posthog) })
+ * ```
+ *
+ * Need the handle for custom events? Call {@link instrument} directly inside your own mutator
+ * and return the server. See https://posthog.com/docs/mcp-analytics/installation.
+ *
+ * @param posthog - A `posthog-node` client you construct and own.
+ * @param options - Optional configuration. See `MCPAnalyticsOptions`.
+ * @returns A `(server) => server` mutator that instruments the server and returns it.
+ */
+function instrumentMutator<TServer>(posthog: PostHog, options?: MCPAnalyticsOptions): (server: TServer) => TServer {
+  return (server: TServer): TServer => {
+    instrument(server, posthog, options)
+    return server
+  }
+}
+
 function createAnalyticsHandle(lowLevelServer: MCPServerLike): McpAnalytics {
   return {
     capture: (eventData) => captureCustomEvent(lowLevelServer, eventData),
@@ -190,4 +215,4 @@ export type {
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']
-export { instrument }
+export { instrument, instrumentMutator }
