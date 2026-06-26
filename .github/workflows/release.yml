@@ -236,6 +236,8 @@ jobs:
                     - name: '@posthog/next'
                     - name: '@posthog/nextjs-config'
                     - name: '@posthog/nuxt'
+                    - name: '@posthog/openfeature-node'
+                    - name: '@posthog/openfeature-web'
                     - name: '@posthog/plugin-utils'
                     - name: '@posthog/rollup-plugin'
                     - name: '@posthog/types'

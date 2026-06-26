@@ -1,9 +1,5 @@
 # @posthog/openfeature-node
 
-> **Status: not yet published.** This package is marked `private` and is not released to npm. It lives
-> in the monorepo and builds in CI while the API is finalized. The install snippet below describes the
-> intended usage once it ships.
-
 Official [PostHog](https://posthog.com) provider for the [OpenFeature](https://openfeature.dev) **server**
 SDK ([`@openfeature/server-sdk`](https://openfeature.dev/docs/reference/technologies/server/javascript)),
 backed by [`posthog-node`](https://posthog.com/docs/libraries/node). For the browser, use
