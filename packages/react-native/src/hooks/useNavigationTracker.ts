@@ -9,6 +9,8 @@ function _useNavigationTrackerDisabled(): void {
   return
 }
 
+const normalizeRegex = /[^a-z0-9]/gi;
+
 function _useNavigationTracker(
   options?: PostHogAutocaptureNavigationTrackerOptions,
   navigationRef?: PostHogNavigationRef,
@@ -96,7 +98,6 @@ function _useNavigationTracker(
     const currentRouteName = options?.routeToName?.(name, params) || name || 'Unknown'
 
     if (currentRouteName) {
-       const normalizeRegex = /[^a-z0-9]/gi
        const normalizedRouteName = currentRouteName.toLowerCase()?.replace(normalizeRegex, '')
        const normalizedScreenNames = ignoreScreenNames.map((screenName) => screenName.toLowerCase()?.replace(
           normalizeRegex, '')

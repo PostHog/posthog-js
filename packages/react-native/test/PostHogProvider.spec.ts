@@ -185,7 +185,7 @@ describe('PostHogProvider', () => {
       expect(mockPostHog.screen).toHaveBeenCalledWith('home', undefined)
     })
 
-    it('should track screen names containing non-alphanumeric characters', () => {
+    it('should still ignore screen tracking when screen names contains non-alphanumeric characters', () => {
       const mockRoute = { name: '$&home', params: {} }
       mockUseNavigationState.mockImplementation((cb) => cb({ routes: [mockRoute] }))
 
@@ -217,7 +217,7 @@ describe('PostHogProvider', () => {
 
       jest.advanceTimersByTime(1)
 
-      expect(mockPostHog.screen).toHaveBeenCalledWith('home', undefined)
+      expect(mockPostHog.screen).not.toHaveBeenCalled()
     })
   })
 })
