@@ -79,6 +79,50 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
   }
 }
 
+/**
+ * Builds a server *mutator* — a `(server) => server` function — that instruments the
+ * server and hands it back. Use it with frameworks that create the server for you and
+ * expose a mutation hook, where there's no `new McpServer` for you to wrap.
+ *
+ * Most notably `@rekog/mcp-nest`, whose `McpModule.forRoot({ serverMutator })` expects a
+ * function that takes the `McpServer` and returns one:
+ *
+ * @example
+ * ```ts
+ * import { McpModule } from "@rekog/mcp-nest"
+ * import { instrumentMutator } from "@posthog/mcp"
+ * import { PostHog } from "posthog-node"
+ *
+ * const posthog = new PostHog(process.env.POSTHOG_PROJECT_TOKEN, { host: "https://us.i.posthog.com" })
+ *
+ * McpModule.forRoot({
+ *   name: "my-mcp",
+ *   version: "1.0.0",
+ *   serverMutator: instrumentMutator(posthog),
+ * })
+ * ```
+ *
+ * This exists because {@link instrument} returns the analytics *handle*, not the server, so
+ * the bare `serverMutator: (s) => instrument(s, posthog)` would replace the server with the
+ * handle and break the module. `instrumentMutator` returns the server for you, so the
+ * mutator is point-free and there's nothing to get wrong. Handlers the framework registers
+ * after the mutator runs are still instrumented (single `setRequestHandler` interceptor).
+ *
+ * **Custom events.** The point-free form discards the analytics handle. If you need
+ * `analytics.capture(...)` for custom events, call {@link instrument} directly instead and
+ * return the server yourself: `serverMutator: (s) => { const a = instrument(s, posthog); ...; return s }`.
+ *
+ * @param posthog - A `posthog-node` client you construct and own.
+ * @param options - Optional configuration. See `MCPAnalyticsOptions`.
+ * @returns A `(server) => server` mutator that instruments the server and returns it.
+ */
+function instrumentMutator<TServer>(posthog: PostHog, options?: MCPAnalyticsOptions): (server: TServer) => TServer {
+  return (server: TServer): TServer => {
+    instrument(server, posthog, options)
+    return server
+  }
+}
+
 function createAnalyticsHandle(lowLevelServer: MCPServerLike): McpAnalytics {
   return {
     capture: (eventData) => captureCustomEvent(lowLevelServer, eventData),
@@ -190,4 +234,4 @@ export type {
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']
-export { instrument }
+export { instrument, instrumentMutator }
