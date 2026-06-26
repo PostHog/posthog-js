@@ -1,5 +1,14 @@
 # @posthog/mcp
 
+## 0.4.3
+
+### Patch Changes
+
+- [#3993](https://github.com/PostHog/posthog-js/pull/3993) [`fb43a92`](https://github.com/PostHog/posthog-js/commit/fb43a92a293f8a47d9be93925557ef6efb4cda96) Thanks [@gesh](https://github.com/gesh)! - Instrument MCP request handlers through a single `setRequestHandler` patch instead of one per method. Internal refactor — no change to the analytics captured.
+  (2026-06-26)
+- Updated dependencies [[`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f)]:
+  - @posthog/core@1.38.0
+
 ## 0.4.2
 
 ### Patch Changes
