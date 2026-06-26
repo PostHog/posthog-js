@@ -8,7 +8,7 @@ export default defineConfig({
     lib: [{ format: 'esm' }, { format: 'cjs' }],
     source: {
         entry: {
-            index: 'src/index.ts',
+            index: ['src/**/*', '!src/**/*.spec.ts'],
         },
         tsconfigPath: './tsconfig.build.json',
     },
