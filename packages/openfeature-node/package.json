@@ -1,15 +1,15 @@
 {
-  "name": "@posthog/openfeature-provider",
+  "name": "@posthog/openfeature-node",
   "version": "0.0.0",
   "private": true,
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
-  "description": "Official PostHog providers for the OpenFeature SDK (server + web)",
+  "description": "Official PostHog provider for the OpenFeature server SDK (Node), backed by posthog-node",
   "repository": {
     "type": "git",
     "url": "https://github.com/PostHog/posthog-js.git",
-    "directory": "packages/openfeature-provider"
+    "directory": "packages/openfeature-node"
   },
   "author": {
     "name": "PostHog",
@@ -29,26 +29,6 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
-      }
-    },
-    "./server": {
-      "import": {
-        "types": "./dist/server.d.ts",
-        "default": "./dist/server.mjs"
-      },
-      "require": {
-        "types": "./dist/server.d.ts",
-        "default": "./dist/server.js"
-      }
-    },
-    "./web": {
-      "import": {
-        "types": "./dist/web.d.ts",
-        "default": "./dist/web.mjs"
-      },
-      "require": {
-        "types": "./dist/web.d.ts",
-        "default": "./dist/web.js"
       }
     }
   },
@@ -71,39 +51,23 @@
   "keywords": [
     "posthog",
     "openfeature",
-    "feature-flags"
+    "feature-flags",
+    "node",
+    "server"
   ],
   "peerDependencies": {
     "@openfeature/core": "^1.11.0",
     "@openfeature/server-sdk": "^1.7.0",
-    "@openfeature/web-sdk": "^1.7.0",
-    "posthog-js": ">=1.336.0",
     "posthog-node": ">=5.21.2"
-  },
-  "peerDependenciesMeta": {
-    "@openfeature/server-sdk": {
-      "optional": true
-    },
-    "@openfeature/web-sdk": {
-      "optional": true
-    },
-    "posthog-js": {
-      "optional": true
-    },
-    "posthog-node": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@openfeature/core": "^1.11.0",
     "@openfeature/server-sdk": "^1.22.0",
-    "@openfeature/web-sdk": "^1.9.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/jest": "catalog:",
     "@types/node": "^22.15.23",
     "jest": "catalog:",
-    "posthog-js": "workspace:*",
     "posthog-node": "workspace:*",
     "ts-jest": "catalog:"
   }

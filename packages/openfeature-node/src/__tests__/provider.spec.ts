@@ -1,7 +1,7 @@
 import { ErrorCode, OpenFeature, StandardResolutionReasons, type ResolutionDetails } from '@openfeature/server-sdk'
 import type { PostHog } from 'posthog-node'
 
-import { PostHogServerProvider } from '../server-provider'
+import { PostHogServerProvider } from '../provider'
 
 type FlagResult = {
   key: string

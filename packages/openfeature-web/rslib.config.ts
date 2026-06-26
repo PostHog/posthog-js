@@ -5,6 +5,10 @@ export default defineConfig({
     { format: 'esm', syntax: 'es2023', dts: true, bundle: false },
     { format: 'cjs', syntax: 'es2023', dts: true, bundle: false },
   ],
+  output: {
+    // Web provider: targets the browser runtime.
+    target: 'web',
+  },
   source: {
     entry: {
       index: ['src/**/*', '!src/__tests__/**/*', '!src/**/*.spec.ts'],

@@ -1,16 +1,14 @@
 /**
- * Runtime-agnostic mapping between PostHog feature flag results and OpenFeature
- * resolution details.
+ * Mapping between PostHog feature flag results and OpenFeature resolution
+ * details for the **web** provider.
  *
- * Both `posthog-node` and `posthog-js` expose the same `getFeatureFlagResult`
- * shape (`{ key, enabled, variant?, payload? }`), and the OpenFeature type
- * mapping is identical on the server and in the browser — only the surrounding
- * fetch (async, per-call distinctId vs. synchronous, current user) differs. So
- * the value mapping lives here and is shared by both providers.
+ * `posthog-js`'s `getFeatureFlagResult` returns `{ key, enabled, variant?,
+ * payload? }`, and this module turns that into the OpenFeature
+ * `ResolutionDetails` shape (and the reserved-attribute context split).
  *
  * Everything is imported from `@openfeature/core` (a peer dependency shared by
- * both the server and web SDKs) so the error classes thrown here are the same
- * identities the active SDK catches.
+ * the web SDK) so the error classes thrown here are the same identities the
+ * active SDK catches.
  */
 import {
   FlagNotFoundError,
@@ -23,9 +21,9 @@ import {
 } from '@openfeature/core'
 
 /**
- * The minimal flag-result shape returned by both `posthog-node`'s and
- * `posthog-js`'s `getFeatureFlagResult`. Both clients' results structurally
- * satisfy this, so neither SDK needs to be imported here.
+ * The minimal flag-result shape returned by `posthog-js`'s
+ * `getFeatureFlagResult`. The client's result structurally satisfies this, so
+ * the SDK does not need to be imported here.
  */
 export interface PostHogFlagResult {
   readonly key: string
@@ -58,8 +56,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  *   - reserved `groupProperties`   -> PostHog `groupProperties`
  *   - every other attribute        -> PostHog `personProperties`
  *
- * `targetingKey` is consumed separately (as the distinct id) and never becomes
- * a person property.
+ * `targetingKey` is consumed separately and never becomes a person property.
  */
 export function splitContext(context?: EvaluationContext): SplitContext {
   if (!context) {

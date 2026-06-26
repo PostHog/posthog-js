@@ -37,7 +37,8 @@ The repository contains the following SDK packages in `./packages/`:
 | `nuxt/`          | `@posthog/nuxt`          | Nuxt framework module                           |
 | `next/`          | `@posthog/next`          | Next.js framework module                        |
 | `nextjs-config/` | `@posthog/nextjs-config` | Next.js configuration helper                    |
-| `openfeature-provider/` | `@posthog/openfeature-provider` | OpenFeature providers (server + web)     |
+| `openfeature-node/` | `@posthog/openfeature-node` | OpenFeature server provider (posthog-node)   |
+| `openfeature-web/`  | `@posthog/openfeature-web`  | OpenFeature web provider (posthog-js)        |
 | `plugin-utils/`  | `@posthog/plugin-utils`  | Shared CLI and sourcemap utilities for plugins  |
 | `types/`         | `@posthog/types`         | TypeScript type definitions for the SDK         |
 
