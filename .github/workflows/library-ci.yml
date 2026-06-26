@@ -317,6 +317,32 @@ jobs:
       - name: Build package tarballs
         run: pnpm package
 
+      # Replaces Vercel preview deploy validation for @posthog/next.
+      - name: Install Next.js App Router example dependencies from local tarballs
+        run: pnpm install --lockfile=false
+        working-directory: examples/example-next-app-router
+
+      - name: Build Next.js App Router example
+        run: pnpm build
+        working-directory: examples/example-next-app-router
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NEXT_PUBLIC_POSTHOG_KEY: phc_ci_next_app_router
+          NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
+
+      - name: Install Next.js config example dependencies from local tarballs
+        run: pnpm install --lockfile=false
+        working-directory: examples/example-nextjs
+
+      - name: Build Next.js config example
+        run: pnpm build
+        working-directory: examples/example-nextjs
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          POSTHOG_PERSONAL_API_KEY: phx_ci
+          POSTHOG_PROJECT_ID: '1'
+          POSTHOG_CLI_PATH: /usr/bin/true
+
   write-mangled-property-names:
     name: Write mangled property names
     runs-on: ubuntu-22.04
