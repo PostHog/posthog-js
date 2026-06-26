@@ -10,8 +10,8 @@ import {
 import { PostHog } from '../../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject, isUndefined } from '@posthog/core'
-import { window } from '../../../utils/globals'
 import { logger } from '../../../utils/logger'
+import { getTargetingUrl } from '../../../utils/url-targeting-utils'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
@@ -298,11 +298,10 @@ export class URLTriggerMatching implements TriggerStatusMatching {
      * Performance optimization: Only checks when URL changes to avoid redundant regex matching
      */
     checkUrlBlocklist(onPause: () => void, onResume: () => void): void {
-        if (typeof window === 'undefined' || !window.location.href) {
+        const url = getTargetingUrl(this._instance)
+        if (!url) {
             return
         }
-
-        const url = window.location.href
 
         // Performance optimization: Skip if URL hasn't changed since last check
         if (url === this._lastCheckedUrl) {
@@ -332,11 +331,10 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         onActivate: (triggerType: TriggerType, matchDetail?: string) => void,
         sessionId: string
     ) {
-        if (typeof window === 'undefined' || !window.location.href) {
+        const url = getTargetingUrl(this._instance)
+        if (!url) {
             return
         }
-
-        const url = window.location.href
 
         // Performance optimization: Skip if URL hasn't changed since last check
         // This prevents redundant checks on every rrweb event

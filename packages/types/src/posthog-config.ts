@@ -1623,6 +1623,23 @@ export interface PostHogConfig {
      */
     before_send?: BeforeSendFn | BeforeSendFn[]
 
+    /**
+     * Overrides the URL used for client-side URL targeting: session replay URL triggers, the
+     * session replay URL blocklist, survey URL display conditions, product tour URL conditions,
+     * and web experiment URL conditions.
+     *
+     * These features match against `window.location.href` directly, which does not reflect
+     * any `$current_url` you rewrite in `before_send`. In environments where the browser URL
+     * is not meaningful for targeting — e.g. Electron/desktop apps served from a generated
+     * host — return the logical URL you want these features to match against. This does not
+     * change the `$current_url` property captured on events (use `before_send` for that).
+     *
+     * @param defaultUrl - the URL PostHog would otherwise use (`window.location.href`)
+     * @returns the URL to use for client-side URL matching
+     * @default undefined (uses `window.location.href`)
+     */
+    get_current_url?: (defaultUrl: string) => string
+
     /** @deprecated - use `before_send` instead */
     sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
 

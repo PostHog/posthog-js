@@ -33,6 +33,7 @@ import { localStore, sessionStore } from '../../storage'
 import { addEventListener } from '../../utils'
 import { isNull, isUndefined, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
+import { getTargetingUrl } from '../../utils/url-targeting-utils'
 import {
     TOUR_SHOWN_KEY_PREFIX,
     TOUR_COMPLETED_KEY_PREFIX,
@@ -55,13 +56,13 @@ const window = _window as Window & typeof globalThis
 let _lastUrlMatchHref: string | undefined
 const _urlMatchCache = new Map<string, boolean>() // tour ID : match result
 
-function doesTourUrlMatch(tour: ProductTour): boolean {
+export function doesTourUrlMatch(tour: ProductTour, instance: PostHog): boolean {
     const conditions = tour.conditions
     if (!conditions?.url) {
         return true
     }
 
-    const href = window?.location?.href
+    const href = getTargetingUrl(instance)
     if (!href) {
         return false
     }
@@ -110,8 +111,10 @@ function isTourInDateRange(tour: ProductTour): boolean {
     return true
 }
 
-function checkTourConditions(tour: ProductTour): boolean {
-    return isTourInDateRange(tour) && doesTourUrlMatch(tour) && doesDeviceTypeMatch(tour.conditions?.deviceTypes)
+function checkTourConditions(tour: ProductTour, instance: PostHog): boolean {
+    return (
+        isTourInDateRange(tour) && doesTourUrlMatch(tour, instance) && doesDeviceTypeMatch(tour.conditions?.deviceTypes)
+    )
 }
 
 const CONTAINER_CLASS = 'ph-product-tour-container'
@@ -446,7 +449,7 @@ export class ProductTourManager {
     }
 
     private _isTourEligible(tour: ProductTour): boolean {
-        if (!checkTourConditions(tour)) {
+        if (!checkTourConditions(tour, this._instance)) {
             logger.info(`Tour ${tour.id} failed conditions check`)
             return false
         }
