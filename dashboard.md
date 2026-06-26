@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2161](https://github.com/PostHog/posthog-js/issues/2161) | Valid React Native session replay feature request; not already fixed in JS layer. | enhancement, help wanted, feature/replay, react-native, feature/mobile |  | no | 2026-06-26T09:35:48.612Z |
 | PostHog/posthog-js | [issue 2159](https://github.com/PostHog/posthog-js/issues/2159) | Valid feature request; partially supported in browser SDK but still missing in core-derived SDKs/RN and no element denylist exists. | enhancement, react-native, feature/mobile, feature/autocapture, web-lite |  | no | 2026-06-26T09:34:08.550Z |
 | PostHog/posthog-js | [issue 2151](https://github.com/PostHog/posthog-js/issues/2151) | Valid React Native Android session replay feature gap; not a small/surgical fix. | enhancement, feature/replay, feature/mobile, react-native, Android |  | no | 2026-06-26T09:32:59.138Z |
 | PostHog/posthog-js | [issue 3982](https://github.com/PostHog/posthog-js/issues/3982) | Valid feature request: PostHog replay does not currently expose rrweb mouse sampling controls. | enhancement, feature/replay |  | no | 2026-06-25T16:15:48.269Z |
