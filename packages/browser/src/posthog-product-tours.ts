@@ -4,7 +4,7 @@ import { PRODUCT_TOURS, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from './constants'
 import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { isArray, isNullish } from '@posthog/core'
-import { assignableWindow } from './utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { Extension } from './extensions/types'
 
 const logger = createLogger('[Product Tours]')

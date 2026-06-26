@@ -1,4 +1,5 @@
-import { addEventListener, each, extend } from './utils'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { addEventListener, each, extend } from '@posthog/browser-common/utils/general-utils'
 import {
     autocaptureCompatibleElements,
     getClassNames,
@@ -14,18 +15,16 @@ import {
     shouldCaptureRageclick,
     shouldCaptureValue,
     splitClassString,
-} from './autocapture-utils'
-
+} from '@posthog/browser-common/utils/autocapture-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from '@posthog/browser-common/utils/element-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { isBoolean, isFunction, isNull, isObject, stripUrlHash } from '@posthog/core'
-import { createLogger } from './utils/logger'
-import { document, window } from './utils/globals'
-import { convertToURL } from './utils/request-utils'
-import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
 import { includes } from '@posthog/core'
 import type { Extension } from './extensions/types'
 

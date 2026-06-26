@@ -1,5 +1,5 @@
 import { QueuedRequestWithOptions, RequestQueueConfig } from './types'
-import { each } from './utils'
+import { each } from '@posthog/browser-common/utils/general-utils'
 
 import { isArray, isUndefined, clampToRange } from '@posthog/core'
 import { logger } from './utils/logger'

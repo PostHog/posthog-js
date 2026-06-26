@@ -6,34 +6,24 @@ import { Survey, SurveyType, SurveyQuestionType } from '../../posthog-surveys-ty
 import { PostHog } from '../../posthog-core'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
 import Config from '../../config'
+import * as commonGlobals from '@posthog/browser-common/utils/globals'
 
 describe('Survey Translations', () => {
     let mockPostHog: PostHog
-    const originalNavigator = global.navigator
+    const originalNavigator = commonGlobals.navigator
+    const mutableCommonGlobals = commonGlobals as unknown as { navigator: typeof commonGlobals.navigator }
 
     beforeEach(() => {
         mockPostHog = {
             get_property: jest.fn(),
             config: {},
         } as unknown as PostHog
-
-        // Reset navigator mock
-        Object.defineProperty(global, 'navigator', {
-            value: { language: undefined },
-            writable: true,
-            configurable: true,
-        })
+        mutableCommonGlobals.navigator = { language: undefined } as any
     })
 
     afterEach(() => {
         Config.DEBUG = false
-
-        // Restore original navigator
-        Object.defineProperty(global, 'navigator', {
-            value: originalNavigator,
-            writable: true,
-            configurable: true,
-        })
+        mutableCommonGlobals.navigator = originalNavigator
     })
 
     describe('detectUserLanguage', () => {
@@ -114,7 +104,7 @@ describe('Survey Translations', () => {
                 hasGetProperty = true,
             }) => {
                 mockPostHog.config.override_display_language = configLanguage
-                ;(global.navigator as any).language = browserLanguage
+                ;(commonGlobals.navigator as any).language = browserLanguage
 
                 if (hasGetProperty) {
                     ;(mockPostHog.get_property as jest.Mock).mockReturnValue(storedPersonProperties)
@@ -150,7 +140,7 @@ describe('Survey Translations', () => {
 
         it('only logs language detection when browser debug logging is enabled', () => {
             const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
-            ;(global.navigator as any).language = 'en-US'
+            ;(commonGlobals.navigator as any).language = 'en-US'
             ;(mockPostHog.get_property as jest.Mock).mockReturnValue({})
 
             try {

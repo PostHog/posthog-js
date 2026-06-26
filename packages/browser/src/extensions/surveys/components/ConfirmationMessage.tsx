@@ -1,3 +1,5 @@
+import { window as _window } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { h } from 'preact'
 import { SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
 import { renderChildrenAsTextOrHtml } from '../surveys-extension-utils'
@@ -6,9 +8,6 @@ import { Cancel } from './QuestionHeader'
 
 import { useContext, useEffect } from 'preact/hooks'
 import { SurveyContext } from '../surveys-extension-utils'
-import { addEventListener } from '../../../utils'
-import { window as _window } from '../../../utils/globals'
-
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window
 

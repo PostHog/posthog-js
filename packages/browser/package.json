@@ -61,6 +61,7 @@
         "rrweb-plugin-console-record/package.json"
     ],
     "dependencies": {
+        "@posthog/browser-common": "workspace:^",
         "@posthog/core": "workspace:^",
         "@posthog/types": "workspace:^",
         "core-js": "^3.38.1",

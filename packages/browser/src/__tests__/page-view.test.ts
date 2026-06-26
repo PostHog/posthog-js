@@ -4,8 +4,8 @@ import { ScrollManager } from '../scroll-manager'
 import { SessionIdChangedCallback } from '../types'
 
 const mockWindowGetter = jest.fn()
-jest.mock('../utils/globals', () => ({
-    ...jest.requireActual('../utils/globals'),
+jest.mock('@posthog/browser-common/utils/globals', () => ({
+    ...jest.requireActual('@posthog/browser-common/utils/globals'),
     get window() {
         return mockWindowGetter()
     },

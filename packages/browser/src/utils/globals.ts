@@ -1,6 +1,19 @@
-import type { PostHog } from '../posthog-core'
-import { SessionIdManager } from '../sessionid'
 import {
+    AbortController as commonAbortController,
+    CompressionStream as commonCompressionStream,
+    document as commonDocument,
+    fetch as commonFetch,
+    location as commonLocation,
+    navigator as commonNavigator,
+    userAgent as commonUserAgent,
+    window as commonWindow,
+    XMLHttpRequest as commonXMLHttpRequest,
+    assignableWindow as commonAssignableWindow,
+} from '@posthog/browser-common/utils/globals'
+
+import type { PostHog } from '../posthog-core'
+import type { SessionIdManager } from '../sessionid'
+import type {
     DeadClicksAutoCaptureConfig,
     ExternalIntegrationKind,
     Properties,
@@ -23,8 +36,8 @@ import type {
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
 import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
-import { eventWithTime } from '../extensions/replay/types/rrweb-types'
-import { ErrorTracking } from '@posthog/core'
+import type { eventWithTime } from '../extensions/replay/types/rrweb-types'
+import type { ErrorTracking } from '@posthog/core'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -35,9 +48,6 @@ import { ErrorTracking } from '@posthog/core'
  * If in doubt - export the global you need from this file and use that as an optional value. This way the code path is forced
  * to handle the case where the global is not available.
  */
-
-// eslint-disable-next-line no-restricted-globals
-const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
 
 export type AssignableWindow = Window &
     typeof globalThis & {
@@ -281,25 +291,13 @@ interface PostHogExtensions {
     initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
 }
 
-const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
-
-// React Native polyfills for posthog-js compatibility
-if (typeof self === 'undefined') {
-    ;(global as any).self = global
-}
-if (typeof File === 'undefined') {
-    ;(global as any).File = function () {}
-}
-
-export const navigator = global?.navigator
-export const document = global?.document
-export const location = global?.location
-export const fetch = global?.fetch
-export const XMLHttpRequest =
-    global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
-export const AbortController = global?.AbortController
-export const CompressionStream = global?.CompressionStream
-export const userAgent = navigator?.userAgent
-export const assignableWindow: AssignableWindow = win ?? ({} as any)
-
-export { win as window }
+export const navigator = commonNavigator
+export const document = commonDocument
+export const location = commonLocation
+export const fetch = commonFetch
+export const XMLHttpRequest = commonXMLHttpRequest
+export const AbortController = commonAbortController
+export const CompressionStream = commonCompressionStream
+export const userAgent = commonUserAgent
+export const assignableWindow: AssignableWindow = commonAssignableWindow as AssignableWindow
+export const window = commonWindow

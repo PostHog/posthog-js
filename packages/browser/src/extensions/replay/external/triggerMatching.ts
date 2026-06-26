@@ -1,3 +1,5 @@
+import { window } from '@posthog/browser-common/utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
 import {
     SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
     SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
@@ -10,9 +12,6 @@ import {
 import { PostHog } from '../../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject, isUndefined } from '@posthog/core'
-import { window } from '../../../utils/globals'
-import { logger } from '../../../utils/logger'
-
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
 export const ACTIVE = 'active'

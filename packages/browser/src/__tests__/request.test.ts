@@ -5,8 +5,8 @@ import { TextDecoder } from 'util'
 import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 
-jest.mock('../utils/globals', () => ({
-    ...jest.requireActual('../utils/globals'),
+jest.mock('@posthog/browser-common/utils/globals', () => ({
+    ...jest.requireActual('@posthog/browser-common/utils/globals'),
     fetch: jest.fn(),
     XMLHttpRequest: jest.fn(),
     navigator: {
@@ -14,7 +14,7 @@ jest.mock('../utils/globals', () => ({
     },
 }))
 
-import { fetch, XMLHttpRequest, navigator } from '../utils/globals'
+import { fetch, XMLHttpRequest, navigator } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '../uuidv7'
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45', LIB_NAME: 'web', JS_SDK_VERSION: '1.23.45' }))
@@ -666,8 +666,8 @@ describe('request', () => {
             )
             mockedIsolatedGzipCompress = jest.fn()
 
-            jest.doMock('../utils/globals', () => ({
-                ...jest.requireActual('../utils/globals'),
+            jest.doMock('@posthog/browser-common/utils/globals', () => ({
+                ...jest.requireActual('@posthog/browser-common/utils/globals'),
                 fetch: mockedIsolatedFetch,
                 XMLHttpRequest: jest.fn(),
                 navigator: {

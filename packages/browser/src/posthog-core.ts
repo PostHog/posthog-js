@@ -74,19 +74,25 @@ import {
     PostHogInterface,
 } from './types'
 import type { TreeShakeable } from '@posthog/types'
+import { _copyAndTruncateStrings, isCrossDomainCookie } from './utils'
 import {
-    _copyAndTruncateStrings,
     addEventListener,
     each,
     eachArray,
     extend,
-    isCrossDomainCookie,
     migrateConfigField,
     safewrapClass,
-} from './utils'
+} from '@posthog/browser-common/utils/general-utils'
 import { isLikelyBot } from './utils/blocked-uas'
 import { getEventProperties } from './utils/event-utils'
-import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
+import {
+    assignableWindow,
+    document,
+    location,
+    navigator,
+    userAgent,
+    window,
+} from '@posthog/browser-common/utils/globals'
 import { logger } from './utils/logger'
 import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'

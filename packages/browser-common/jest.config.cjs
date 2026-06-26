@@ -1,5 +1,6 @@
 module.exports = {
     testEnvironment: 'node',
+    maxWorkers: 1,
     testMatch: ['<rootDir>/tests/**/*.spec.ts'],
     transform: {
         '^.+\\.ts$': [

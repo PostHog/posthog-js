@@ -1,3 +1,7 @@
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import type { LazyLoadedConversationsInterface } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { isToolbarInstance } from '@posthog/browser-common/utils/general-utils'
 import { LOAD_EXT_NOT_FOUND } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import {
@@ -12,10 +16,7 @@ import {
     UserProvidedTraits,
 } from '../../posthog-conversations-types'
 import { RemoteConfig } from '../../types'
-import { assignableWindow, LazyLoadedConversationsInterface } from '../../utils/globals'
-import { createLogger } from '../../utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
-import { isToolbarInstance } from '../../utils'
 import { Extension } from '../types'
 
 const logger = createLogger('[Conversations]')

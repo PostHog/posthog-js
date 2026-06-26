@@ -2,7 +2,7 @@ import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
 import { createLogger } from './utils/logger'
-import { assignableWindow, document } from './utils/globals'
+import { assignableWindow, document } from '@posthog/browser-common/utils/globals'
 
 const logger = createLogger('[RemoteConfig]')
 

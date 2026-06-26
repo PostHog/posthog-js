@@ -21,8 +21,8 @@ jest.useFakeTimers()
 // eslint-disable-next-line no-var
 var mockLocation: jest.Mock
 
-jest.mock('../../utils/globals', () => {
-    const original = jest.requireActual('../../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const original = jest.requireActual('@posthog/browser-common/utils/globals')
     mockLocation = jest.fn().mockReturnValue({
         protocol: 'http:',
         host: 'localhost',
@@ -40,6 +40,13 @@ jest.mock('../../utils/globals', () => {
 
     return {
         ...original,
+        document: {
+            ...original.document,
+            createElement: (...args: any[]) => original.document.createElement(...args),
+            get URL() {
+                return mockLocation().href
+            },
+        },
         assignableWindow: {
             ...original.assignableWindow,
             __PosthogExtensions__: {},

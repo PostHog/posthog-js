@@ -8,6 +8,7 @@ COPY tooling ./tooling
 COPY packages/types ./packages/types
 COPY packages/core ./packages/core
 COPY packages/rrweb ./packages/rrweb
+COPY packages/browser-common ./packages/browser-common
 COPY packages/browser ./packages/browser
 
 # Install pnpm

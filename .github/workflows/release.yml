@@ -228,6 +228,7 @@ jobs:
                     - name: posthog-node
                     - name: posthog-js-lite
                     - name: posthog-js
+                    - name: '@posthog/browser-common'
                     - name: '@posthog/core'
                     - name: '@posthog/react'
                     - name: '@posthog/ai'

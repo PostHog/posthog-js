@@ -1,7 +1,10 @@
 import { detectDeviceType } from '@posthog/core'
-import { navigator, userAgent, window } from '../../utils/globals'
-import { propertyComparisons } from '../../utils/property-utils'
-import { PropertyMatchType } from '../../types'
+
+import { navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
+import { propertyComparisons, type PropertyMatchType } from '@posthog/browser-common/utils/property-utils'
+import { hasPeriodPassed } from '@posthog/browser-common/utils/matcher-utils'
+
+export { hasPeriodPassed }
 
 export function doesDeviceTypeMatch(deviceTypes?: string[], matchType?: PropertyMatchType): boolean {
     if (!deviceTypes || deviceTypes.length === 0) {
@@ -19,17 +22,4 @@ export function doesDeviceTypeMatch(deviceTypes?: string[], matchType?: Property
         devicePixelRatio: window?.devicePixelRatio,
     })
     return propertyComparisons[matchType ?? 'icontains'](deviceTypes, [deviceType])
-}
-
-export function hasPeriodPassed(periodDays?: number, lastSeenDate?: string | Date | null): boolean {
-    if (!periodDays || !lastSeenDate) {
-        return true
-    }
-
-    const date = typeof lastSeenDate === 'string' ? new Date(lastSeenDate) : lastSeenDate
-
-    const now = new Date()
-    const diffMs = Math.abs(now.getTime() - date.getTime())
-    const diffDays = Math.ceil(diffMs / (1000 * 3600 * 24))
-    return diffDays > periodDays
 }

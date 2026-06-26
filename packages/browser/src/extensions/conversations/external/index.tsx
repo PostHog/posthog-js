@@ -1,3 +1,6 @@
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
 import { isNumber, isNull, stripUrlHash } from '@posthog/core'
@@ -23,9 +26,6 @@ import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget, WidgetView } from './components/ConversationsWidget'
-import { createLogger } from '../../../utils/logger'
-import { document, window } from '../../../utils/globals'
-import { formDataToQuery } from '../../../utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
 
 const logger = createLogger('[ConversationsManager]')

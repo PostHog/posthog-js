@@ -16,7 +16,7 @@
  *
  * @see web-vitals.ts for the lighter, default bundle
  */
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 
 import {
     onINP as onINPWithAttribution,

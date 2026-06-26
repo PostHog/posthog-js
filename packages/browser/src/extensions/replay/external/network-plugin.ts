@@ -13,6 +13,9 @@
 // and assumes it is running in a browser with the Request API (i.e. not IE11)
 // copying here so that we can use it before rrweb adopt it
 
+import { isDocument } from '@posthog/browser-common/utils/type-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
 import type { IWindow, listenerHandler, RecordPlugin } from '../types/rrweb-types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
 import {
@@ -26,9 +29,6 @@ import {
     isUndefined,
     isObject,
 } from '@posthog/core'
-import { isDocument } from '../../../utils/type-utils'
-import { createLogger } from '../../../utils/logger'
-import { formDataToQuery } from '../../../utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
 import { defaultNetworkOptions, effectivePayloadLimitBytes } from './config'

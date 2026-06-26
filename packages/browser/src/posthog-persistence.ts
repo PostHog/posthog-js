@@ -1,9 +1,9 @@
 /* eslint camelcase: "off" */
 
-import { each, extend, stripEmptyProperties, addEventListener } from './utils'
+import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
-import { window } from './utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import {
     ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
