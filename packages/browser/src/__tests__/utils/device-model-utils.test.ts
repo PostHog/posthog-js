@@ -96,4 +96,30 @@ describe('device-model-utils', () => {
             expect(posthog.get_property('$device_model')).toBeUndefined()
         })
     })
+
+    describe('reset', () => {
+        const initWithModel = async () => {
+            setUserAgentData({ getHighEntropyValues: jest.fn().mockResolvedValue({ model: 'Pixel 7' }) })
+            const posthog = await createPosthogInstance(undefined, {})
+            await flushPromises()
+            expect(posthog.get_property('$device_model')).toBe('Pixel 7')
+            return posthog
+        }
+
+        it('preserves $device_model across reset() (device-stable, like $device_id)', async () => {
+            const posthog = await initWithModel()
+
+            posthog.reset()
+
+            expect(posthog.get_property('$device_model')).toBe('Pixel 7')
+        })
+
+        it('drops $device_model on reset(true) (full device reset)', async () => {
+            const posthog = await initWithModel()
+
+            posthog.reset(true)
+
+            expect(posthog.get_property('$device_model')).toBeUndefined()
+        })
+    })
 })

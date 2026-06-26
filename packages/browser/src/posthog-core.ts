@@ -6,6 +6,7 @@ import {
     COOKIELESS_SENTINEL_VALUE,
     COOKIELESS_ON_REJECT,
     DEVICE_ID,
+    DEVICE_MODEL,
     PERSON_PROFILES_IDENTIFIED_ONLY,
     USER_STATE_ANONYMOUS,
     USER_STATE_IDENTIFIED,
@@ -845,7 +846,7 @@ export class PostHog implements PostHogInterface {
             getDeviceModel()
                 .then((model) => {
                     if (model) {
-                        this.register({ $device_model: model })
+                        this.register({ [DEVICE_MODEL]: model })
                     }
                 })
                 .catch(__NOOP)
@@ -2928,6 +2929,9 @@ export class PostHog implements PostHogInterface {
             return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property(DEVICE_ID)
+        // $device_model describes the physical device, not the user, so preserve it across reset()
+        // the same way $device_id is — it is only ever re-resolved at init.
+        const device_model = this.get_property(DEVICE_MODEL)
         // Snapshot the session-recording remote config before clearing persistence.
         // It's server-defined config (sample rate, masking, canvas, triggers, …),
         // not user state, and must survive reset(). Otherwise start('session_id_changed')
@@ -2970,6 +2974,9 @@ export class PostHog implements PostHogInterface {
                 },
                 ''
             )
+            if (!reset_device_id && !isUndefined(device_model)) {
+                this.register({ [DEVICE_MODEL]: device_model })
+            }
         }
 
         this.register(
