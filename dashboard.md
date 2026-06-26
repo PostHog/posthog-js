@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3988](https://github.com/PostHog/posthog-js/issues/3988) | Valid packaging bug in @posthog/webpack-plugin 1.5.25; published JS entrypoints require config files that are reportedly absent from the tarball. | frameworks/next-js, web, release | https://github.com/PostHog/posthog-js/pull/3989 | no | 2026-06-26T12:21:56.044Z |
 | PostHog/posthog-js | [issue 2167](https://github.com/PostHog/posthog-js/issues/2167) | Keep open as an Expo Router touch-autocapture feature request | enhancement, react-native, feature/mobile, feature/autocapture, help wanted |  | no | 2026-06-26T09:39:13.324Z |
 | PostHog/posthog-js | [issue 2165](https://github.com/PostHog/posthog-js/issues/2165) | Valid feature/enhancement request for RN session replay New Architecture performance; not a straightforward small fix. | enhancement, react-native, feature/mobile, feature/replay |  | no | 2026-06-26T09:37:23.112Z |
 | PostHog/posthog-js | [issue 2161](https://github.com/PostHog/posthog-js/issues/2161) | Valid React Native session replay feature request; not already fixed in JS layer. | enhancement, help wanted, feature/replay, react-native, feature/mobile |  | no | 2026-06-26T09:35:48.612Z |
