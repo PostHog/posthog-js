@@ -155,11 +155,14 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
     /**
      * Disables capturing the `$device_model` super-property.
      *
-     * When enabled (the default), PostHog resolves the hardware model once during init via
-     * `navigator.userAgentData.getHighEntropyValues(['model'])` and registers it as the raw OEM
+     * When capturing is enabled (the default), PostHog resolves the hardware model once during init
+     * via `navigator.userAgentData.getHighEntropyValues(['model'])` and registers it as the raw OEM
      * code (e.g. `Pixel 7`). This is Chromium-only and only meaningful on Android — it resolves to
      * `undefined` on Safari/Firefox and to an empty string on desktop, in which cases nothing is
      * registered.
+     *
+     * This opt-out is offered because `getHighEntropyValues` is still experimental and Chromium-only
+     * (not yet a cross-browser standard); set it to `true` to skip the call entirely.
      *
      * @default false
      */
