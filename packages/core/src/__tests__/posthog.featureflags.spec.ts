@@ -1230,47 +1230,44 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should retry network failures and return the successful flags response', async () => {
-        jest.useRealTimers()
-        try {
-          let flagsRequestCount = 0
-          ;[posthog, mocks] = createTestClient(
-            'TEST_API_KEY',
-            { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
-            (_mocks) => {
-              _mocks.fetch.mockImplementation((url) => {
-                if (url.includes('/flags/')) {
-                  flagsRequestCount++
-                  if (flagsRequestCount < 2) {
-                    return Promise.reject(new TypeError('Failed to fetch'))
-                  }
-                  return Promise.resolve({
-                    status: 200,
-                    text: () => Promise.resolve('ok'),
-                    json: () =>
-                      Promise.resolve({
-                        flags: createMockFeatureFlags(),
-                        requestId: 'retry-success',
-                        evaluatedAt: 1640995200000,
-                      }),
-                  })
+        let flagsRequestCount = 0
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                flagsRequestCount++
+                if (flagsRequestCount < 2) {
+                  return Promise.reject(new TypeError('Failed to fetch'))
                 }
                 return Promise.resolve({
                   status: 200,
                   text: () => Promise.resolve('ok'),
-                  json: () => Promise.resolve({ status: 'ok' }),
+                  json: () =>
+                    Promise.resolve({
+                      flags: createMockFeatureFlags(),
+                      requestId: 'retry-success',
+                      evaluatedAt: 1640995200000,
+                    }),
                 })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
               })
-            }
-          )
+            })
+          }
+        )
 
-          const result = await posthog.getFlags('distinct-id')
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await jest.advanceTimersByTimeAsync(1)
+        const result = await resultPromise
 
-          expect(result.success).toBe(true)
-          expect(mocks.fetch).toHaveBeenCalledTimes(2)
-        } finally {
-          jest.useFakeTimers()
-          jest.setSystemTime(new Date('2022-01-01'))
-        }
+        expect(result.success).toBe(true)
+        expect(mocks.fetch).toHaveBeenCalledTimes(2)
       })
     })
 
@@ -1322,19 +1319,20 @@ describe('PostHog Feature Flags v4', () => {
           'TEST_API_KEY',
           { flushAt: 1, fetchRetryCount: 0, featureFlagsRequestMaxRetries: 0 },
           (_mocks) => {
-          _mocks.fetch.mockImplementation((url) => {
-            if (url.includes('/flags/')) {
-              const abortError = new Error('The operation was aborted')
-              abortError.name = 'AbortError'
-              return Promise.reject(abortError)
-            }
-            return Promise.resolve({
-              status: 200,
-              text: () => Promise.resolve('ok'),
-              json: () => Promise.resolve({ status: 'ok' }),
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                const abortError = new Error('The operation was aborted')
+                abortError.name = 'AbortError'
+                return Promise.reject(abortError)
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
             })
-          })
-        })
+          }
+        )
         posthog.reloadFeatureFlags()
         await waitForPromises()
 
@@ -1395,17 +1393,18 @@ describe('PostHog Feature Flags v4', () => {
           'TEST_API_KEY',
           { flushAt: 1, fetchRetryCount: 0, featureFlagsRequestMaxRetries: 0 },
           (_mocks) => {
-          _mocks.fetch.mockImplementation((url) => {
-            if (url.includes('/flags/')) {
-              return Promise.reject(new TypeError('Failed to fetch'))
-            }
-            return Promise.resolve({
-              status: 200,
-              text: () => Promise.resolve('ok'),
-              json: () => Promise.resolve({ status: 'ok' }),
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(new TypeError('Failed to fetch'))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
             })
-          })
-        })
+          }
+        )
         posthog.reloadFeatureFlags()
         await waitForPromises()
 

@@ -9,6 +9,7 @@ const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
+  featureFlagsRequestMaxRetries: 0,
 }
 
 describe('flags v2', () => {
