@@ -71,6 +71,7 @@ module.exports = {
                 'packages/mcp/**',
                 'packages/nextjs-config/**',
                 'packages/nuxt/**',
+                'packages/openfeature-provider/**',
                 'packages/react-native/**',
                 'packages/node/**',
                 'packages/web/**',

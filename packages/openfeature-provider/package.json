@@ -1,0 +1,109 @@
+{
+  "name": "@posthog/openfeature-provider",
+  "version": "0.0.0",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
+  "description": "Official PostHog providers for the OpenFeature SDK (server + web)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/openfeature-provider"
+  },
+  "author": {
+    "name": "PostHog",
+    "email": "engineering@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./server": {
+      "import": {
+        "types": "./dist/server.d.ts",
+        "default": "./dist/server.mjs"
+      },
+      "require": {
+        "types": "./dist/server.d.ts",
+        "default": "./dist/server.js"
+      }
+    },
+    "./web": {
+      "import": {
+        "types": "./dist/web.d.ts",
+        "default": "./dist/web.mjs"
+      },
+      "require": {
+        "types": "./dist/web.d.ts",
+        "default": "./dist/web.js"
+      }
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "build": "rslib build",
+    "dev": "rslib build --watch",
+    "test:unit": "jest",
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "engines": {
+    "node": "^20.20.0 || >=22.22.0"
+  },
+  "files": [
+    "dist/"
+  ],
+  "keywords": [
+    "posthog",
+    "openfeature",
+    "feature-flags"
+  ],
+  "peerDependencies": {
+    "@openfeature/core": "^1.11.0",
+    "@openfeature/server-sdk": "^1.7.0",
+    "@openfeature/web-sdk": "^1.7.0",
+    "posthog-js": ">=1.336.0",
+    "posthog-node": ">=5.21.2"
+  },
+  "peerDependenciesMeta": {
+    "@openfeature/server-sdk": {
+      "optional": true
+    },
+    "@openfeature/web-sdk": {
+      "optional": true
+    },
+    "posthog-js": {
+      "optional": true
+    },
+    "posthog-node": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@openfeature/core": "^1.11.0",
+    "@openfeature/server-sdk": "^1.22.0",
+    "@openfeature/web-sdk": "^1.9.0",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@rslib/core": "catalog:",
+    "@types/jest": "catalog:",
+    "@types/node": "^22.15.23",
+    "jest": "catalog:",
+    "posthog-js": "workspace:*",
+    "posthog-node": "workspace:*",
+    "ts-jest": "catalog:"
+  }
+}
