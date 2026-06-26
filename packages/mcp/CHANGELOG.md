@@ -1,5 +1,14 @@
 # @posthog/mcp
 
+## 0.4.4
+
+### Patch Changes
+
+- [#3896](https://github.com/PostHog/posthog-js/pull/3896) [`606ef43`](https://github.com/PostHog/posthog-js/commit/606ef43d69fd09a00a67df2a404d8739cc50c654) Thanks [@GauthierPLM](https://github.com/GauthierPLM)! - Forward $groups as a first-class groups field from the MCP analytics sink so the group association is no longer dropped on $mcp\_\* events (fixes #3888).
+  (2026-06-26)
+- Updated dependencies [[`606ef43`](https://github.com/PostHog/posthog-js/commit/606ef43d69fd09a00a67df2a404d8739cc50c654)]:
+  - posthog-node@5.38.6
+
 ## 0.4.3
 
 ### Patch Changes

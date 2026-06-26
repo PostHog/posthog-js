@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.38.6
+
+### Patch Changes
+
+- [#3896](https://github.com/PostHog/posthog-js/pull/3896) [`606ef43`](https://github.com/PostHog/posthog-js/commit/606ef43d69fd09a00a67df2a404d8739cc50c654) Thanks [@GauthierPLM](https://github.com/GauthierPLM)! - Only stamp $groups from the top-level `groups` when present
+  (2026-06-26)
+
 ## 5.38.5
 
 ### Patch Changes
