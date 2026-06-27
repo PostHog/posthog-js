@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3338](https://github.com/PostHog/posthog-js/issues/3338) | Valid feature gap for bare React Native Hermes sourcemap support; current serializer code is consistent with the reported failure. | enhancement, help wanted, react-native, feature/error-tracking, team/error-tracking |  | no | 2026-06-27T09:24:20.940Z |
 | PostHog/posthog-js | [issue 2627](https://github.com/PostHog/posthog-js/issues/2627) | Valid request; posthog-js still uses a non-SPDX license field. | enhancement, web |  | no | 2026-06-27T09:22:05.424Z |
 | PostHog/posthog-js | [issue 2156](https://github.com/PostHog/posthog-js/issues/2156) | Valid feature request; current React Native session replay is mobile-only and desktop support would be a large cross-platform project. | enhancement, feature/replay, react-native, feature/mobile |  | no | 2026-06-27T09:21:29.014Z |
 | PostHog/posthog-js | [issue 3214](https://github.com/PostHog/posthog-js/issues/3214) | Valid release/versioning issue; keep open for release tooling investigation. | release |  | no | 2026-06-27T09:20:06.668Z |
