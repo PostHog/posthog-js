@@ -142,7 +142,30 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 }
 
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
-    const encodedBody = encodePostData(options)
+    const fallbackToUncompressed = (): EncodedRequest => {
+        nativeAsyncGzipDisabled = true
+
+        return {
+            url: removeURLParam(options.url, 'compression'),
+            encodedBody: encodePostData({
+                ...options,
+                compression: undefined,
+                _encodedBody: undefined,
+            }),
+        }
+    }
+
+    let encodedBody: EncodedBody | undefined
+    try {
+        encodedBody = encodePostData(options)
+    } catch (error) {
+        if (isGzipRequest(options.compression, getQueryParam(options.url, 'compression'))) {
+            logger.error('Failed to gzip request body, sending uncompressed payload', error)
+            return fallbackToUncompressed()
+        }
+
+        throw error
+    }
 
     if (
         !encodedBody ||
@@ -152,16 +175,7 @@ const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest =
         return { url: options.url, encodedBody }
     }
 
-    nativeAsyncGzipDisabled = true
-
-    return {
-        url: removeURLParam(options.url, 'compression'),
-        encodedBody: encodePostData({
-            ...options,
-            compression: undefined,
-            _encodedBody: undefined,
-        }),
-    }
+    return fallbackToUncompressed()
 }
 
 const encodeRequest = (options: RequestWithEncodedBody): EncodedRequest | undefined => {
