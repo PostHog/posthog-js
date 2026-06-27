@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2627](https://github.com/PostHog/posthog-js/issues/2627) | Valid request; posthog-js still uses a non-SPDX license field. | enhancement, web |  | no | 2026-06-27T09:22:05.424Z |
 | PostHog/posthog-js | [issue 2156](https://github.com/PostHog/posthog-js/issues/2156) | Valid feature request; current React Native session replay is mobile-only and desktop support would be a large cross-platform project. | enhancement, feature/replay, react-native, feature/mobile |  | no | 2026-06-27T09:21:29.014Z |
 | PostHog/posthog-js | [issue 3214](https://github.com/PostHog/posthog-js/issues/3214) | Valid release/versioning issue; keep open for release tooling investigation. | release |  | no | 2026-06-27T09:20:06.668Z |
 | PostHog/posthog-js | [issue 3005](https://github.com/PostHog/posthog-js/issues/3005) | Valid Nuxt sourcemap upload bug in client-only builds | nuxt, feature/error-tracking, team/error-tracking | https://github.com/PostHog/posthog-js/pull/3997 | no | 2026-06-27T09:18:59.792Z |
