@@ -57,7 +57,6 @@ export type PostHogAutocaptureOptions = {
    * @default []
    */
 
-
   propsToCapture?: string[]
 
   /**
