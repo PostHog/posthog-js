@@ -1,4 +1,16 @@
 {
+  "PostHog/posthog-js/issue/3214": {
+    "key": "PostHog/posthog-js/issue/3214",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3214",
+    "url": "https://github.com/PostHog/posthog-js/issues/3214",
+    "conclusion": "Valid release/versioning issue; keep open for release tooling investigation.",
+    "labels": [
+      "release"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-27T09:20:06.668Z"
+  },
   "PostHog/posthog-js/issue/3005": {
     "key": "PostHog/posthog-js/issue/3005",
     "repo": "PostHog/posthog-js",
