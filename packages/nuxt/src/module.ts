@@ -173,10 +173,12 @@ export default defineNuxtModule<ModuleOptions>({
 
     nuxt.hook('close', async () => {
       // We don't want to run this process during prepare and friends
-      if (!isBuildProcess || !serverDir || !outputDir) return
+      if (!isBuildProcess || !outputDir) return
       try {
-        // Inject server sourcemaps
-        await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
+        if (nuxt.options.ssr !== false && serverDir) {
+          // Inject server sourcemaps
+          await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
+        }
         // Upload all assets
         await cliRunner(getUploadArgs(outputDir, sourcemapsConfig))
       } catch (error) {
