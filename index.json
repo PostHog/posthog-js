@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3005": {
+    "key": "PostHog/posthog-js/issue/3005",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3005",
+    "url": "https://github.com/PostHog/posthog-js/issues/3005",
+    "conclusion": "Valid Nuxt sourcemap upload bug in client-only builds",
+    "labels": [
+      "nuxt",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/3997",
+    "closed": false,
+    "updatedAt": "2026-06-27T09:18:59.792Z"
+  },
   "PostHog/posthog-js/issue/3988": {
     "key": "PostHog/posthog-js/issue/3988",
     "repo": "PostHog/posthog-js",
