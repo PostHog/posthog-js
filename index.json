@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/2156": {
+    "key": "PostHog/posthog-js/issue/2156",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2156",
+    "url": "https://github.com/PostHog/posthog-js/issues/2156",
+    "conclusion": "Valid feature request; current React Native session replay is mobile-only and desktop support would be a large cross-platform project.",
+    "labels": [
+      "enhancement",
+      "feature/replay",
+      "react-native",
+      "feature/mobile"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-27T09:21:29.014Z"
+  },
   "PostHog/posthog-js/issue/3214": {
     "key": "PostHog/posthog-js/issue/3214",
     "repo": "PostHog/posthog-js",
