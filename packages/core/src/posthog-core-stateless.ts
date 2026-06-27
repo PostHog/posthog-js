@@ -116,6 +116,13 @@ function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHt
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
 
+function isPostHogFetchRetryableError(err: unknown): err is PostHogFetchHttpError | PostHogFetchNetworkError {
+  if (err instanceof PostHogFetchHttpError) {
+    return err.status === 408 || err.status === 429 || err.status >= 500
+  }
+  return isPostHogFetchNetworkError(err)
+}
+
 function isPostHogEventProperties(value: JsonType | undefined): value is PostHogEventProperties {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -239,7 +246,7 @@ export abstract class PostHogCoreStateless {
     this._retryOptions = {
       retryCount: options.fetchRetryCount ?? 3,
       retryDelay: options.fetchRetryDelay ?? 3000, // 3 seconds
-      retryCheck: isPostHogFetchError,
+      retryCheck: isPostHogFetchRetryableError,
     }
     this.requestTimeout = options.requestTimeout ?? 10000 // 10 seconds
     this.featureFlagsRequestTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 3000 // 3 seconds
@@ -814,9 +821,8 @@ export abstract class PostHogCoreStateless {
   ): Promise<PostHogFeatureFlagDetails | undefined> {
     await this._initPromise
 
-    const extraPayload: Record<string, any> = {}
-    if (disableGeoip ?? this.disableGeoip) {
-      extraPayload['geoip_disable'] = true
+    const extraPayload: Record<string, any> = {
+      geoip_disable: disableGeoip ?? this.disableGeoip,
     }
     if (flagKeysToEvaluate) {
       extraPayload['flag_keys_to_evaluate'] = flagKeysToEvaluate
@@ -1254,8 +1260,8 @@ export abstract class PostHogCoreStateless {
           if (isPostHogFetchContentTooLargeError(err)) {
             return false
           }
-          // otherwise, retry on network errors
-          return isPostHogFetchError(err)
+          // otherwise, retry on transient HTTP and network errors
+          return isPostHogFetchRetryableError(err)
         },
       }
 
@@ -1328,7 +1334,7 @@ export abstract class PostHogCoreStateless {
           if (isPostHogFetchContentTooLargeError(err)) {
             return false
           }
-          return isPostHogFetchError(err)
+          return isPostHogFetchRetryableError(err)
         },
       })
       return { kind: 'ok' }
