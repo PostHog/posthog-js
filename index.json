@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4000": {
+    "key": "PostHog/posthog-js/issue/4000",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4000",
+    "url": "https://github.com/PostHog/posthog-js/issues/4000",
+    "conclusion": "Valid bot-filtering bug, but a safe fix likely needs server-side IP/Googlebot verification rather than an SDK-only UA blocklist change.",
+    "labels": [
+      "web",
+      "feature/web-analytics",
+      "team/web-analytics"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-28T08:17:17.283Z"
+  },
   "PostHog/posthog-js/issue/3338": {
     "key": "PostHog/posthog-js/issue/3338",
     "repo": "PostHog/posthog-js",
