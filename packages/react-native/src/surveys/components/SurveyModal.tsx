@@ -18,6 +18,8 @@ export type SurveyModalProps = {
   androidKeyboardBehavior?: 'padding' | 'height'
   /**
    * If true, survey question content is rendered in a non-scrollable View instead of a ScrollView.
+   * Content that exceeds the modal height may be clipped.
+   * @default false
    */
   disableSurveyScroll?: boolean
 }
