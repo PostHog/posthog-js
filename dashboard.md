@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3530](https://github.com/PostHog/posthog-js/issues/3530) | Valid React Native surveys feature request; current code always uses a ScrollView for question content. | enhancement, feature, feature/surveys, react-native | https://github.com/PostHog/posthog-js/pull/4001 | no | 2026-06-28T09:37:17.665Z |
 | PostHog/posthog-js | [issue 3522](https://github.com/PostHog/posthog-js/issues/3522) | Valid feature request; current survey appearance supports single light/default palette but no first-class dark-mode palette. | enhancement, feature, feature/surveys, web, react-native |  | no | 2026-06-28T09:32:47.688Z |
 | PostHog/posthog-js | [issue 3130](https://github.com/PostHog/posthog-js/issues/3130) | Valid feature request, but part of the requested API already exists and same-instance persistence switching should already preserve the current session in this codebase. | enhancement, feature, feature/web-analytics, web |  | no | 2026-06-28T09:32:06.821Z |
 | PostHog/posthog-js | [issue 3359](https://github.com/PostHog/posthog-js/issues/3359) | Valid React Native multi-client session replay/session-id race. | bug, feature/replay, react-native, Android, iOS |  | no | 2026-06-28T09:30:06.556Z |
