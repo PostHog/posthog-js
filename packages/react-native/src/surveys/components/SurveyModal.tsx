@@ -16,6 +16,10 @@ export type SurveyModalProps = {
   onShow: () => void
   onClose: (submitted: boolean, responses: SurveyResponses) => void
   androidKeyboardBehavior?: 'padding' | 'height'
+  /**
+   * If true, survey question content is rendered in a non-scrollable View instead of a ScrollView.
+   */
+  disableSurveyScroll?: boolean
 }
 
 // No extra buffer — let the modal extend right up to the safe-area / keyboard
@@ -26,7 +30,15 @@ const VIEWPORT_BUFFER = 0
 const MODAL_FADE_DURATION_MS = 250
 
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
-  const { survey, surveyLanguage, appearance, onShow, onClose: onCloseProp, androidKeyboardBehavior = 'height' } = props
+  const {
+    survey,
+    surveyLanguage,
+    appearance,
+    onShow,
+    onClose: onCloseProp,
+    androidKeyboardBehavior = 'height',
+    disableSurveyScroll,
+  } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
   const [responses, setResponses] = useState<SurveyResponses>({})
   const [isVisible, setIsVisible] = useState(true)
@@ -132,6 +144,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                       survey={survey}
                       surveyLanguage={surveyLanguage}
                       appearance={appearance}
+                      disableSurveyScroll={disableSurveyScroll}
                       responses={responses}
                       onResponsesChange={setResponses}
                       onSubmit={() => setIsSurveySent(true)}

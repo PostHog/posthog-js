@@ -82,6 +82,13 @@ export type PostHogSurveyProviderProps = {
    */
   androidKeyboardBehavior?: 'padding' | 'height'
 
+  /**
+   * If true, survey question content is rendered in a non-scrollable View instead of a ScrollView.
+   * Content that exceeds the modal height may be clipped.
+   * @default false
+   */
+  disableSurveyScroll?: boolean
+
   client?: PostHog
 
   children: React.ReactNode
@@ -190,6 +197,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
           <SurveyModal
             appearance={surveyAppearance}
             androidKeyboardBehavior={props.androidKeyboardBehavior}
+            disableSurveyScroll={props.disableSurveyScroll}
             {...activeContext}
           />
         )}

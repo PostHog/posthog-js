@@ -34,22 +34,35 @@ import { QuestionHeader } from './QuestionHeader'
 interface QuestionCommonProps {
   question: SurveyQuestion
   appearance: SurveyAppearanceTheme
+  disableSurveyScroll?: boolean
 }
 
-// Wraps question content in a scrollable region with a sticky BottomSection
-// (Submit button) at the bottom. The ScrollView has flexShrink: 1 so it
+// Wraps question content with a sticky BottomSection (Submit button) at the bottom.
+// By default the content is scrollable. The ScrollView has flexShrink: 1 so it
 // shrinks to fit when the parent modal is capped at its keyboard-aware
 // maxHeight, keeping Submit visible regardless of survey length.
-function QuestionLayout({ children, footer }: { children: ReactNode; footer: ReactNode }): JSX.Element {
+function QuestionLayout({
+  children,
+  footer,
+  disableSurveyScroll,
+}: {
+  children: ReactNode
+  footer: ReactNode
+  disableSurveyScroll?: boolean
+}): JSX.Element {
   return (
     <View style={questionLayoutStyles.container}>
-      <ScrollView
-        style={questionLayoutStyles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {children}
-      </ScrollView>
+      {disableSurveyScroll ? (
+        <View style={questionLayoutStyles.scroll}>{children}</View>
+      ) : (
+        <ScrollView
+          style={questionLayoutStyles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      )}
       {footer}
     </View>
   )
@@ -67,6 +80,7 @@ const questionLayoutStyles = createSafeStyleSheet({
 export function OpenTextQuestion({
   question,
   appearance,
+  disableSurveyScroll,
   onSubmit,
 }: QuestionCommonProps & {
   onSubmit: (text: string) => void
@@ -93,6 +107,7 @@ export function OpenTextQuestion({
 
   return (
     <QuestionLayout
+      disableSurveyScroll={disableSurveyScroll}
       footer={
         <BottomSection
           text={question.buttonText ?? appearance.submitButtonText}
@@ -149,6 +164,7 @@ export function OpenTextQuestion({
 export function LinkQuestion({
   question,
   appearance,
+  disableSurveyScroll,
   onSubmit,
 }: QuestionCommonProps & {
   onSubmit: (clicked: string) => void
@@ -157,6 +173,7 @@ export function LinkQuestion({
 
   return (
     <QuestionLayout
+      disableSurveyScroll={disableSurveyScroll}
       footer={
         <BottomSection
           text={question.buttonText ?? appearance.submitButtonText ?? 'Submit'}
@@ -180,6 +197,7 @@ export function LinkQuestion({
 export function RatingQuestion({
   question,
   appearance,
+  disableSurveyScroll,
   onSubmit,
 }: QuestionCommonProps & {
   onSubmit: (rating: number | null) => void
@@ -190,6 +208,7 @@ export function RatingQuestion({
 
   return (
     <QuestionLayout
+      disableSurveyScroll={disableSurveyScroll}
       footer={
         <BottomSection
           text={question.buttonText ?? appearance.submitButtonText}
@@ -312,6 +331,7 @@ export function RatingButton({
 export function MultipleChoiceQuestion({
   question,
   appearance,
+  disableSurveyScroll,
   onSubmit,
 }: QuestionCommonProps & {
   onSubmit: (choices: string | string[] | null) => void
@@ -329,6 +349,7 @@ export function MultipleChoiceQuestion({
 
   return (
     <QuestionLayout
+      disableSurveyScroll={disableSurveyScroll}
       footer={
         <BottomSection
           text={question.buttonText ?? appearance.submitButtonText}

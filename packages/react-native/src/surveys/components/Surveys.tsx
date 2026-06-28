@@ -75,6 +75,7 @@ export function Questions({
   surveyLanguage,
   appearance,
   styleOverrides,
+  disableSurveyScroll,
   responses = {},
   onResponsesChange = () => {},
   onSubmit,
@@ -83,6 +84,7 @@ export function Questions({
   surveyLanguage?: string | null
   appearance: SurveyAppearanceTheme
   styleOverrides?: StyleProp<ViewStyle>
+  disableSurveyScroll?: boolean
   responses?: SurveyResponses
   onResponsesChange?: (responses: SurveyResponses) => void
   onSubmit: () => void
@@ -129,6 +131,7 @@ export function Questions({
     question,
     appearance,
     styleOverrides,
+    disableSurveyScroll,
     onSubmit: (res) =>
       onNextButtonClick({
         res,
@@ -142,6 +145,7 @@ type GetQuestionComponentProps = {
   question: SurveyQuestion
   appearance: SurveyAppearance
   styleOverrides?: StyleProp<ViewStyle>
+  disableSurveyScroll?: boolean
   onSubmit: (res: string | string[] | number | null) => void
 }
 
