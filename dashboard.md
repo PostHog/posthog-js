@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4000](https://github.com/PostHog/posthog-js/issues/4000) | Valid bot-filtering bug, but a safe fix likely needs server-side IP/Googlebot verification rather than an SDK-only UA blocklist change. | web, feature/web-analytics, team/web-analytics |  | no | 2026-06-28T08:17:17.283Z |
 | PostHog/posthog-js | [issue 3338](https://github.com/PostHog/posthog-js/issues/3338) | Valid feature gap for bare React Native Hermes sourcemap support; current serializer code is consistent with the reported failure. | enhancement, help wanted, react-native, feature/error-tracking, team/error-tracking |  | no | 2026-06-27T09:24:20.940Z |
 | PostHog/posthog-js | [issue 2627](https://github.com/PostHog/posthog-js/issues/2627) | Valid request; posthog-js still uses a non-SPDX license field. | enhancement, web |  | no | 2026-06-27T09:22:05.424Z |
 | PostHog/posthog-js | [issue 2156](https://github.com/PostHog/posthog-js/issues/2156) | Valid feature request; current React Native session replay is mobile-only and desktop support would be a large cross-platform project. | enhancement, feature/replay, react-native, feature/mobile |  | no | 2026-06-27T09:21:29.014Z |
