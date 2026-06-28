@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/3530": {
+    "key": "PostHog/posthog-js/issue/3530",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3530",
+    "url": "https://github.com/PostHog/posthog-js/issues/3530",
+    "conclusion": "Valid React Native surveys feature request; current code always uses a ScrollView for question content.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "feature/surveys",
+      "react-native"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4001",
+    "closed": false,
+    "updatedAt": "2026-06-28T09:37:17.665Z"
+  },
   "PostHog/posthog-js/issue/3522": {
     "key": "PostHog/posthog-js/issue/3522",
     "repo": "PostHog/posthog-js",
