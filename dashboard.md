@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3130](https://github.com/PostHog/posthog-js/issues/3130) | Valid feature request, but part of the requested API already exists and same-instance persistence switching should already preserve the current session in this codebase. | enhancement, feature, feature/web-analytics, web |  | no | 2026-06-28T09:32:06.821Z |
 | PostHog/posthog-js | [issue 3359](https://github.com/PostHog/posthog-js/issues/3359) | Valid React Native multi-client session replay/session-id race. | bug, feature/replay, react-native, Android, iOS |  | no | 2026-06-28T09:30:06.556Z |
 | PostHog/posthog-js | [issue 4000](https://github.com/PostHog/posthog-js/issues/4000) | Valid bot-filtering bug, but a safe fix likely needs server-side IP/Googlebot verification rather than an SDK-only UA blocklist change. | web, feature/web-analytics, team/web-analytics |  | no | 2026-06-28T08:17:17.283Z |
 | PostHog/posthog-js | [issue 3338](https://github.com/PostHog/posthog-js/issues/3338) | Valid feature gap for bare React Native Hermes sourcemap support; current serializer code is consistent with the reported failure. | enhancement, help wanted, react-native, feature/error-tracking, team/error-tracking |  | no | 2026-06-27T09:24:20.940Z |
