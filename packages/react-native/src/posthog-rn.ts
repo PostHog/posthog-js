@@ -2126,7 +2126,9 @@ export class PostHog extends PostHogCore {
       requestHeaders: this._requestHeaders,
     }
 
-    this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(sdkOptions)}`)
+    // Log header names only: requestHeaders values can carry secrets (e.g. an Authorization token).
+    const loggableSdkOptions = { ...sdkOptions, requestHeaders: Object.keys(this._requestHeaders) }
+    this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(loggableSdkOptions)}`)
 
     try {
       const wasSessionReplayEnabled = enableSessionReplay

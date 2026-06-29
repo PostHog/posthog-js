@@ -21,6 +21,7 @@ jest.mock('../src/optional/OptionalPlugin', () => ({
 const replay = OptionalReactNativePlugin as unknown as {
   start: jest.Mock
   isEnabled: jest.Mock
+  setup?: jest.Mock
 }
 
 Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
@@ -52,10 +53,12 @@ describe('PostHog RN session replay request headers', () => {
   })
 
   afterEach(async () => {
-    await posthog.shutdown()
+    if (posthog) {
+      await posthog.shutdown()
+    }
   })
 
-  it('forwards requestHeaders to the native plugin sdkOptions', async () => {
+  it('forwards requestHeaders to the native plugin sdkOptions via the legacy start() path', async () => {
     posthog = new PostHog('test-token', {
       customStorage: mockStorage,
       enableSessionReplay: true,
@@ -68,5 +71,26 @@ describe('PostHog RN session replay request headers', () => {
 
     const sdkOptions = replay.start.mock.calls[0][1]
     expect(sdkOptions).toEqual(expect.objectContaining({ requestHeaders: { Authorization: 'Bearer test-jwt' } }))
+  })
+
+  it('forwards requestHeaders to the native plugin sdkOptions via the setup() path', async () => {
+    // Adding a `setup` mock switches the SDK to the modern setup() dispatch path.
+    replay.setup = jest.fn(async () => {})
+
+    posthog = new PostHog('test-token', {
+      customStorage: mockStorage,
+      enableSessionReplay: true,
+      flushInterval: 0,
+      requestHeaders: { Authorization: 'Bearer test-jwt' },
+    })
+    await posthog.ready()
+
+    await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
+    expect(replay.start).not.toHaveBeenCalled()
+
+    const sdkOptions = replay.setup.mock.calls[0][1]
+    expect(sdkOptions).toEqual(expect.objectContaining({ requestHeaders: { Authorization: 'Bearer test-jwt' } }))
+
+    delete replay.setup
   })
 })
