@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Avoid Promise-dependent async compression paths in browsers without Promise support.
+Include a Promise polyfill in the IE11 bundle and avoid Promise-dependent async compression paths when Promise support is unavailable.
