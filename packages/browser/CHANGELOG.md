@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.396.1
+
+### Patch Changes
+
+- [#3999](https://github.com/PostHog/posthog-js/pull/3999) [`cdeae17`](https://github.com/PostHog/posthog-js/commit/cdeae17236f08f1950a04a2478fbd3ef550ca292) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back to uncompressed browser requests when gzip encoding fails.
+  (2026-06-29)
+
 ## 1.396.0
 
 ### Minor Changes
