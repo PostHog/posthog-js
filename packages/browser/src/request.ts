@@ -442,6 +442,7 @@ export const request = (_options: RequestWithOptions) => {
         options.data &&
         options.compression === Compression.GZipJS &&
         !!CompressionStream &&
+        typeof Promise !== 'undefined' &&
         !nativeAsyncGzipDisabled
     ) {
         preEncodeAsync(options)

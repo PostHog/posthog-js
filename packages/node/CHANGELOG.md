@@ -1,5 +1,13 @@
 # posthog-node
 
+## 5.38.8
+
+### Patch Changes
+
+- [#3974](https://github.com/PostHog/posthog-js/pull/3974) [`08b404b`](https://github.com/PostHog/posthog-js/commit/08b404b5cd5506041df0ecc512ea9d950a3387e7) Thanks [@mjfaga](https://github.com/mjfaga)! - Fix local evaluation ignoring the `in`/`not_in` operator on cohort-based flag conditions. "Not in
+  cohort" was evaluated as "in cohort", inverting cohort-exclusion flags. Now applies the operator to
+  the cohort membership result. (2026-06-29)
+
 ## 5.38.7
 
 ### Patch Changes
