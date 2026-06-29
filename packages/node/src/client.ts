@@ -1971,6 +1971,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Create or update a group and its properties immediately (synchronously).
    *
+   * @example
+   * ```ts
+   * // Immediately create or update a company group
+   * await client.groupIdentifyImmediate({
+   *   groupType: 'company',
+   *   groupKey: 'acme-corp',
+   *   properties: {
+   *     name: 'Acme Corporation',
+   *     industry: 'Technology',
+   *     employee_count: 500
+   *   }
+   * })
+   * ```
+   *
    * {@label Identification}
    *
    * @param data - The group identify data

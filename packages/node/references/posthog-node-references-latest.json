@@ -887,9 +887,9 @@
           "title": "groupIdentifyImmediate",
           "examples": [
             {
-              "id": "groupidentifyimmediate",
-              "name": "Generated example for groupIdentifyImmediate",
-              "code": "// Generated example for groupIdentifyImmediate\nposthog.groupIdentifyImmediate();"
+              "id": "immediately_create_or_update_a_company_group",
+              "name": "Immediately create or update a company group",
+              "code": "\n\n// Immediately create or update a company group\nawait client.groupIdentifyImmediate({\n  groupType: 'company',\n  groupKey: 'acme-corp',\n  properties: {\n    name: 'Acme Corporation',\n    industry: 'Technology',\n    employee_count: 500\n  }\n})\n\n\n\n"
             }
           ],
           "releaseTag": "public",
