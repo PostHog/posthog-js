@@ -184,7 +184,7 @@ export default defineNuxtModule<ModuleOptions>({
         // Upload all assets (public + any server output that exists)
         await cliRunner(getUploadArgs(outputDir, sourcemapsConfig))
       } catch (error) {
-        console.error('Failed to process server sourcemaps:', error)
+        console.error('Failed to process or upload sourcemaps:', error)
       }
     })
   },

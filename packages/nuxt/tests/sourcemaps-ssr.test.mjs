@@ -89,7 +89,7 @@ async function runLifecycle({ ssr }) {
         projectId: '123',
       },
     },
-    nuxt,
+    nuxt
   )
 
   // With `ssr: false` (client-only / SPA mode) Nitro still reports output
@@ -114,9 +114,7 @@ async function runLifecycle({ ssr }) {
 }
 
 function findCall(calls, op, directory) {
-  return calls.find(
-    (c) => c.args.includes(op) && c.args.includes('--directory') && c.args.includes(directory),
-  )
+  return calls.find((c) => c.args.includes(op) && c.args.includes('--directory') && c.args.includes(directory))
 }
 
 // Both branches share the same assertion skeleton: did the server inject happen
@@ -141,7 +139,7 @@ for (const { ssr, expectInject } of cases) {
   // Upload of the outputDir must always happen so public sourcemaps reach PostHog.
   assert.ok(
     findCall(calls, 'upload', '/build/.output'),
-    `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`,
+    `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`
   )
 }
 
