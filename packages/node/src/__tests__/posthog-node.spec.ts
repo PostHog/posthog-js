@@ -928,6 +928,7 @@ describe('PostHog Node.js', () => {
         })
 
         const batchEvents = getLastBatchEvents()
+        expect(batchEvents?.[0]?.distinct_id).toBe(expectedDistinctId)
         expect(batchEvents).toMatchObject([
           {
             distinct_id: expectedDistinctId,
