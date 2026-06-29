@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.396.0
+
+### Minor Changes
+
+- [#3987](https://github.com/PostHog/posthog-js/pull/3987) [`74cc6bb`](https://github.com/PostHog/posthog-js/commit/74cc6bb6f255b944846567406dfac449be17095c) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Add a `get_current_url` config option that overrides the URL used for client-side URL targeting — session replay URL triggers, the session replay URL blocklist, survey URL display conditions, product tour URL conditions, web experiment URL conditions, and autocapture URL allow/ignore lists. These match against `window.location.href` directly, which does not reflect a `$current_url` rewritten in `before_send`. Apps where the browser URL is not meaningful for targeting (e.g. Electron/desktop builds served from a generated host) can now return the logical URL to match against. Defaults to `window.location.href` when not set.
+  (2026-06-29)
+
+### Patch Changes
+
+- Updated dependencies [[`74cc6bb`](https://github.com/PostHog/posthog-js/commit/74cc6bb6f255b944846567406dfac449be17095c)]:
+    - @posthog/types@1.392.0
+
 ## 1.395.0
 
 ### Minor Changes
