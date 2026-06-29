@@ -112,6 +112,16 @@ export function isPostHogFetchNetworkError(err: unknown): err is PostHogFetchNet
   return err instanceof PostHogFetchNetworkError
 }
 
+function isRetryableFlagsFetchError(err: unknown): err is PostHogFetchNetworkError {
+  if (!(err instanceof PostHogFetchNetworkError)) {
+    return false
+  }
+
+  const cause = err.error as { code?: string; cause?: { code?: string } } | undefined
+  const code = cause?.code ?? cause?.cause?.code
+  return code !== 'ECONNREFUSED'
+}
+
 function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
@@ -163,6 +173,7 @@ export abstract class PostHogCoreStateless {
   private shutdownPromise: Promise<void> | null = null
   private requestTimeout: number
   private featureFlagsRequestTimeoutMs: number
+  private featureFlagsRequestMaxRetries: number
   private remoteConfigRequestTimeoutMs: number
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
@@ -250,6 +261,7 @@ export abstract class PostHogCoreStateless {
     }
     this.requestTimeout = options.requestTimeout ?? 10000 // 10 seconds
     this.featureFlagsRequestTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 3000 // 3 seconds
+    this.featureFlagsRequestMaxRetries = options.featureFlagsRequestMaxRetries ?? 1
     this.remoteConfigRequestTimeoutMs = options.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
     this.disableGeoip = options.disableGeoip ?? true
     this.disabled = (options.disabled ?? false) || missingApiKey
@@ -580,8 +592,13 @@ export abstract class PostHogCoreStateless {
 
     this._logger.info('Flags URL', url)
 
-    // Don't retry /flags API calls
-    return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.featureFlagsRequestTimeoutMs)
+    // Retry only network/transport/timeout failures for /flags. HTTP/API status errors are surfaced immediately.
+    return this.fetchWithRetry(
+      url,
+      fetchOptions,
+      { retryCount: this.featureFlagsRequestMaxRetries, retryCheck: isRetryableFlagsFetchError },
+      this.featureFlagsRequestTimeoutMs
+    )
       .then((response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>)
       .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
       .catch((error): GetFlagsResult => {

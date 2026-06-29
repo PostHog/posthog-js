@@ -140,6 +140,13 @@ export type PostHogCoreOptions = {
    */
   featureFlagsRequestTimeoutMs?: number
   /**
+   * How many times feature flag requests retry after a transient network error.
+   * Set to 0 to disable feature flag request retries.
+   *
+   * @default 1
+   */
+  featureFlagsRequestMaxRetries?: number
+  /**
    * Timeout in milliseconds for remote config calls
    *
    * @default 3000
