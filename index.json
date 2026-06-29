@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/3578": {
+    "key": "PostHog/posthog-js/issue/3578",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3578",
+    "url": "https://github.com/PostHog/posthog-js/issues/3578",
+    "conclusion": "Valid bug: reset cannot clear localStorage on other subdomains, and current default merge behavior can let stale subdomain localStorage override the cross-subdomain cookie.",
+    "labels": [
+      "feature/product-analytics",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-29T10:01:55.780Z"
+  },
   "PostHog/posthog-js/issue/3577": {
     "key": "PostHog/posthog-js/issue/3577",
     "repo": "PostHog/posthog-js",
