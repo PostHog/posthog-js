@@ -912,30 +912,37 @@ describe('PostHog Node.js', () => {
       ])
     })
 
-    it('should await the network request when groupIdentifyImmediate is awaited', async () => {
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
+    it.each([
+      ['generated distinct_id', undefined, '$posthog_team-1'],
+      ['custom distinctId', '123', '123'],
+    ] as Array<[string, string | undefined, string]>)(
+      'should await the network request when groupIdentifyImmediate is awaited with %s',
+      async (_, distinctId, expectedDistinctId) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
 
-      await posthog.groupIdentifyImmediate({
-        groupType: 'posthog',
-        groupKey: 'team-1',
-        properties: { analytics: true },
-      })
+        await posthog.groupIdentifyImmediate({
+          groupType: 'posthog',
+          groupKey: 'team-1',
+          properties: { analytics: true },
+          ...(distinctId ? { distinctId } : {}),
+        })
 
-      const batchEvents = getLastBatchEvents()
-      expect(batchEvents).toMatchObject([
-        {
-          distinct_id: '$posthog_team-1',
-          event: '$groupidentify',
-          properties: {
-            $group_type: 'posthog',
-            $group_key: 'team-1',
-            $group_set: { analytics: true },
-            $lib: 'posthog-node',
-            $geoip_disable: true,
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents).toMatchObject([
+          {
+            distinct_id: expectedDistinctId,
+            event: '$groupidentify',
+            properties: {
+              $group_type: 'posthog',
+              $group_key: 'team-1',
+              $group_set: { analytics: true },
+              $lib: 'posthog-node',
+              $geoip_disable: true,
+            },
           },
-        },
-      ])
-    })
+        ])
+      }
+    )
   })
 
   describe('feature flags', () => {
