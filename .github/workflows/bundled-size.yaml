@@ -18,7 +18,21 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: ./.github/actions/setup
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
+        with:
+          # TODO: pnpm/setup does not read .nvmrc yet; use this explicit version for now.
+          # https://github.com/jasongin/nvs/pull/315
+          version: 11.7.0
+          runtime: node@24
+          cache: false
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm build
 
       - name: Upload bundle size visualization
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
