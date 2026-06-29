@@ -44,26 +44,22 @@ jobs:
         with:
           build: false
 
-      # Temporarily bypass the is-affected gate so PR #4003 can validate the IE11 retry path.
-      # - uses: ./.github/actions/is-affected
-      #   if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-      #   id: is-affected
-      #   with:
-      #     package-name: posthog-js
+      - uses: ./.github/actions/is-affected
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        id: is-affected
+        with:
+          package-name: posthog-js
 
       - name: Build packages
-        # if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm build
 
       - name: Serve static files
-        # if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
         run: python -m http.server 8080 &
 
       - name: Run ${{ matrix.name }} test
-        # if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 10
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -102,8 +98,7 @@ jobs:
         working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
-        # if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 30
         run: pnpm check-testcafe-results
         working-directory: packages/browser
