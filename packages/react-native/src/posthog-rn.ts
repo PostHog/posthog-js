@@ -2121,6 +2121,10 @@ export class PostHog extends PostHogCore {
       anonymousId: this.getAnonymousId(),
       sdkVersion: this.getLibraryVersion(),
       flushAt: this.flushAt,
+      // Forwarded so the native SDK applies the same custom headers (e.g. Authorization
+      // for a reverse proxy) to session replay and native error/crash uploads, which are
+      // sent directly by the native SDK and never pass through the JS request path.
+      requestHeaders: this._requestHeaders,
     }
 
     this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(sdkOptions)}`)
