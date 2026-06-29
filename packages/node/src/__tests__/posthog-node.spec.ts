@@ -911,6 +911,31 @@ describe('PostHog Node.js', () => {
         },
       ])
     })
+
+    it('should await the network request when groupIdentifyImmediate is awaited', async () => {
+      expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+      await posthog.groupIdentifyImmediate({
+        groupType: 'posthog',
+        groupKey: 'team-1',
+        properties: { analytics: true },
+      })
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toMatchObject([
+        {
+          distinct_id: '$posthog_team-1',
+          event: '$groupidentify',
+          properties: {
+            $group_type: 'posthog',
+            $group_key: 'team-1',
+            $group_set: { analytics: true },
+            $lib: 'posthog-node',
+            $geoip_disable: true,
+          },
+        },
+      ])
+    })
   })
 
   describe('feature flags', () => {
