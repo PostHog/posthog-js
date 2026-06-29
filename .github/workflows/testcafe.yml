@@ -70,6 +70,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.browser }}
           BROWSERSLIST: "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
+          NODE_OPTIONS: --require ./testcafe/browserstack-node-fetch-patch.cjs
         run: |
           set -o pipefail
 
