@@ -25,6 +25,7 @@ import { isNullish, type SurveyResponses } from '@posthog/core'
 import { buildSurveyResponseProperties, getSurveyResponseKey, surveyHasResponses } from '@posthog/core/surveys'
 
 import { propertyComparisons } from '../../utils/property-utils'
+import { getTargetingUrl } from '../../utils/url-targeting-utils'
 import { localStore } from '../../storage'
 import { Properties, PropertyMatchType } from '../../types'
 import { Z_INDEX_SURVEYS } from '../../constants'
@@ -663,13 +664,14 @@ function defaultMatchType(matchType?: PropertyMatchType): PropertyMatchType {
 }
 
 // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
-export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean {
+export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>, posthog?: PostHog): boolean {
     if (!survey.conditions?.url) {
         return true
     }
-    // if we dont know the url, assume it is not a match
-    const href = window?.location?.href
+    // honors the `get_current_url` config hook so apps that rewrite their URL can target surveys correctly
+    const href = getTargetingUrl(posthog)
     if (!href) {
+        // if we dont know the url, assume it is not a match
         return false
     }
     const targets = [survey.conditions.url]

@@ -1,5 +1,22 @@
 # @posthog/webpack-plugin
 
+## 1.5.26
+
+### Patch Changes
+
+- [#3990](https://github.com/PostHog/posthog-js/pull/3990) [`dc702fd`](https://github.com/PostHog/posthog-js/commit/dc702fd00544d8aada8c259b3dd2d684a9c03326) Thanks [@ioannisj](https://github.com/ioannisj)! - Put `dist/config.js` and `dist/config.mjs` back in the published package. 1.5.25 shipped only `config.d.ts`, so `next build` (via `@posthog/nextjs-config`) failed with `Cannot find module './config.js'`. The build now emits config again.
+  (2026-06-26)
+
+## 1.5.25
+
+> [!WARNING]
+> Broken release, do not use. The published package is missing `dist/config.js` and `dist/config.mjs`, so builds fail with `Cannot find module './config.js'`. Upgrade to 1.5.26 or later, or pin 1.5.24. See [#3988](https://github.com/PostHog/posthog-js/issues/3988).
+
+### Patch Changes
+
+- [#3962](https://github.com/PostHog/posthog-js/pull/3962) [`5310a5e`](https://github.com/PostHog/posthog-js/commit/5310a5ea16b1fd463d6ecc14df007df5cad13c66) Thanks [@marandaneto](https://github.com/marandaneto)! - Delete emitted CSS source maps when `deleteAfterUpload` is enabled without uploading CSS assets to PostHog.
+  (2026-06-25)
+
 ## 1.5.24
 
 ### Patch Changes

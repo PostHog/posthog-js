@@ -536,6 +536,7 @@
         "_secure",
         "_sendLogsBatch",
         "_sendRequest",
+        "_sendRequestSafely",
         "_send_retriable_request",
         "_sessionDuration",
         "_sessionHasBeenIdleTooLong",

@@ -1,5 +1,37 @@
 # @posthog/mcp
 
+## 0.5.0
+
+### Minor Changes
+
+- [#3995](https://github.com/PostHog/posthog-js/pull/3995) [`e86f61a`](https://github.com/PostHog/posthog-js/commit/e86f61a30df9fec6f59ba2de4c4b2cb596fd0d7f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add `instrumentMutator(posthog, options?)` — a point-free `(server) => server` helper for framework server-mutation hooks like `@rekog/mcp-nest`'s `serverMutator`. It instruments the server and returns it, so `serverMutator: instrumentMutator(posthog)` just works (no need to remember that `instrument()` returns the analytics handle, not the server).
+  (2026-06-26)
+
+## 0.4.4
+
+### Patch Changes
+
+- [#3896](https://github.com/PostHog/posthog-js/pull/3896) [`606ef43`](https://github.com/PostHog/posthog-js/commit/606ef43d69fd09a00a67df2a404d8739cc50c654) Thanks [@GauthierPLM](https://github.com/GauthierPLM)! - Forward $groups as a first-class groups field from the MCP analytics sink so the group association is no longer dropped on $mcp\_\* events (fixes #3888).
+  (2026-06-26)
+- Updated dependencies [[`606ef43`](https://github.com/PostHog/posthog-js/commit/606ef43d69fd09a00a67df2a404d8739cc50c654)]:
+  - posthog-node@5.38.6
+
+## 0.4.3
+
+### Patch Changes
+
+- [#3993](https://github.com/PostHog/posthog-js/pull/3993) [`fb43a92`](https://github.com/PostHog/posthog-js/commit/fb43a92a293f8a47d9be93925557ef6efb4cda96) Thanks [@gesh](https://github.com/gesh)! - Instrument MCP request handlers through a single `setRequestHandler` patch instead of one per method. Internal refactor — no change to the analytics captured.
+  (2026-06-26)
+- Updated dependencies [[`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f)]:
+  - @posthog/core@1.38.0
+
+## 0.4.2
+
+### Patch Changes
+
+- [#3976](https://github.com/PostHog/posthog-js/pull/3976) [`a29194f`](https://github.com/PostHog/posthog-js/commit/a29194f82b6603805a032b3864cad00d16dd4116) Thanks [@gesh](https://github.com/gesh)! - Capture tool listings (and the injected `context` parameter) on MCP servers that register their `tools/list` handler after `instrument()` runs — e.g. `@rekog/mcp-nest`, which hands a bare server to `instrument()` and only then registers its handlers.
+  (2026-06-25)
+
 ## 0.4.1
 
 ### Patch Changes
