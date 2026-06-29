@@ -92,8 +92,8 @@ async function runLifecycle({ ssr }) {
     nuxt,
   )
 
-  // Mimic `nuxt generate` with ssr:false: nitro still reports output dirs,
-  // but no server bundle is produced and serverDir is never created on disk.
+  // With `ssr: false` (client-only / SPA mode) Nitro still reports output
+  // dirs, but no server bundle is produced and serverDir is never created on disk.
   for (const cb of hooks['nitro:init'] || []) {
     await cb({
       options: {
@@ -119,36 +119,30 @@ function findCall(calls, op, directory) {
   )
 }
 
-async function testNoServerInjectWhenSsrFalse() {
-  const calls = await runLifecycle({ ssr: false })
-  assert.equal(
-    findCall(calls, 'inject', '/build/.output/server'),
-    undefined,
-    `Expected no sourcemap inject against serverDir when ssr:false. ` +
-      `Got calls: ${JSON.stringify(calls.map((c) => c.args))}`,
-  )
-  // Upload of the outputDir must still happen so public sourcemaps reach PostHog.
+// Both branches share the same assertion skeleton: did the server inject happen
+// (or not), and was the outputDir upload always emitted? Table-drive it so the
+// shape stays obvious and a future `ssr: 'hybrid'` row is one line away.
+const cases = [
+  { ssr: false, expectInject: false },
+  { ssr: true, expectInject: true },
+]
+
+for (const { ssr, expectInject } of cases) {
+  const calls = await runLifecycle({ ssr })
+  const dump = JSON.stringify(calls.map((c) => c.args))
+  const injectCall = findCall(calls, 'inject', '/build/.output/server')
+
+  if (expectInject) {
+    assert.ok(injectCall, `ssr:${ssr}: expected server inject. Got: ${dump}`)
+  } else {
+    assert.equal(injectCall, undefined, `ssr:${ssr}: expected no server inject. Got: ${dump}`)
+  }
+
+  // Upload of the outputDir must always happen so public sourcemaps reach PostHog.
   assert.ok(
     findCall(calls, 'upload', '/build/.output'),
-    `Expected sourcemap upload against outputDir when ssr:false. ` +
-      `Got calls: ${JSON.stringify(calls.map((c) => c.args))}`,
+    `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`,
   )
 }
 
-async function testServerInjectWhenSsrTrue() {
-  const calls = await runLifecycle({ ssr: true })
-  assert.ok(
-    findCall(calls, 'inject', '/build/.output/server'),
-    `Expected sourcemap inject against serverDir when ssr:true. ` +
-      `Got calls: ${JSON.stringify(calls.map((c) => c.args))}`,
-  )
-  assert.ok(
-    findCall(calls, 'upload', '/build/.output'),
-    `Expected sourcemap upload against outputDir when ssr:true. ` +
-      `Got calls: ${JSON.stringify(calls.map((c) => c.args))}`,
-  )
-}
-
-await testNoServerInjectWhenSsrFalse()
-await testServerInjectWhenSsrTrue()
 console.log('ok sourcemaps-ssr.test.mjs')

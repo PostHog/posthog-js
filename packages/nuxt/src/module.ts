@@ -176,8 +176,8 @@ export default defineNuxtModule<ModuleOptions>({
       if (!isBuildProcess || !serverDir || !outputDir) return
       try {
         // Inject server sourcemaps only when an SSR server bundle is produced.
-        // With `ssr:false` (e.g. `nuxt generate`) nitro still reports serverDir,
-        // but no server output is written, so the inject would fail (#3005).
+        // With `ssr: false` (client-only / SPA mode) Nitro still reports
+        // serverDir, but no server output is written, so the inject would fail (#3005).
         if (nuxt.options.ssr !== false) {
           await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
         }
