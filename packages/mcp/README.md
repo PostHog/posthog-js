@@ -15,6 +15,7 @@ To test local changes in a consumer app (e.g. a dummy MCP server), symlink **bot
 app's directory:
 
 ```bash
+mkdir -p node_modules/@posthog   # in case the app has no other @posthog/-scoped deps yet
 ln -s /absolute/path/to/posthog-js/packages/mcp  node_modules/@posthog/mcp
 ln -s /absolute/path/to/posthog-js/packages/node node_modules/posthog-node
 ```
