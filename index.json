@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3586": {
+    "key": "PostHog/posthog-js/issue/3586",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3586",
+    "url": "https://github.com/PostHog/posthog-js/issues/3586",
+    "conclusion": "Valid feature request; the Node SDK still lacks groupIdentifyImmediate().",
+    "labels": [
+      "enhancement",
+      "feature/product-analytics",
+      "node"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4006",
+    "closed": false,
+    "updatedAt": "2026-06-29T10:08:46.834Z"
+  },
   "PostHog/posthog-js/issue/3583": {
     "key": "PostHog/posthog-js/issue/3583",
     "repo": "PostHog/posthog-js",
