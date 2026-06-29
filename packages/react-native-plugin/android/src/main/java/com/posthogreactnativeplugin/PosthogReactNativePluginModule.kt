@@ -93,6 +93,13 @@ class PosthogReactNativePluginModule(
           val theSdkVersion = getString(sdkOptions, "sdkVersion", "")
           val theFlushAt = getInt(sdkOptions, "flushAt", DEFAULT_FLUSH_AT)
 
+          // Forward custom headers (e.g. Authorization for a reverse proxy) so the native SDK
+          // attaches them to the requests it sends directly (session replay, crash uploads).
+          val theRequestHeaders =
+            getMap(sdkOptions, "requestHeaders")?.toHashMap().orEmpty()
+              .filterValues { it is String }
+              .mapValues { it.value as String }
+
           val config =
             PostHogAndroidConfig(apiKey, host).apply {
               debug = debugValue
@@ -100,6 +107,7 @@ class PosthogReactNativePluginModule(
               captureApplicationLifecycleEvents = false
               captureScreenViews = false
               flushAt = theFlushAt
+              requestHeaders = theRequestHeaders
               errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
 
               // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).

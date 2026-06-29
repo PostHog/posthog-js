@@ -178,6 +178,12 @@ class PosthogReactNativePlugin: NSObject {
         let flushAt = sdkOptions["flushAt"] as? Int ?? 20
         config.flushAt = flushAt
 
+        // Forward custom headers (e.g. Authorization for a reverse proxy) so the native SDK
+        // attaches them to the requests it sends directly (session replay, crash uploads).
+        if let requestHeaders = sdkOptions["requestHeaders"] as? [String: String] {
+            config.requestHeaders = requestHeaders
+        }
+
         if !sdkVersion.isEmpty {
             postHogSdkName = "posthog-react-native"
             postHogVersion = sdkVersion
