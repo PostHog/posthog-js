@@ -87,7 +87,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
   /**
    * A list of headers that should be sent with requests to the PostHog API.
    */
-  request_headers?: { [header_name: string]: string }
+  requestHeaders?: { [header_name: string]: string }
 
   /**
    * Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
@@ -268,7 +268,7 @@ export class PostHog extends PostHogCore {
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
-    this._requestHeaders = options?.request_headers ?? {}
+    this._requestHeaders = options?.requestHeaders ?? {}
 
     // Either build the app properties from the existing ones
     this._appProperties =

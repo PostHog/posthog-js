@@ -145,7 +145,7 @@ describe('PostHog React Native', () => {
 
   it('should send custom request headers with SDK requests', async () => {
     posthog = new PostHog('test-token', {
-      request_headers: { Authorization: 'Bearer test-jwt' },
+      requestHeaders: { Authorization: 'Bearer test-jwt' },
       persistence: 'memory',
       flushInterval: 0,
       preloadFeatureFlags: false,
