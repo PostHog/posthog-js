@@ -192,4 +192,32 @@ describe('Low-level Server tracing (e2e)', () => {
       await cleanup()
     }
   })
+
+  it('stamps $mcp_client_name on every tool call, not just the first', async () => {
+    // Regression: getSessionInfo() cached the client name but then overwrote the
+    // cache with `undefined` on the next event, so consecutive tool calls
+    // alternated between having and lacking $mcp_client_name.
+    const { server, client, connect, cleanup } = await setupLowLevelServer()
+    try {
+      instrument(server, fakePostHog())
+      await connect()
+
+      for (let i = 0; i < 4; i++) {
+        await client.request(
+          { method: 'tools/call', params: { name: 'echo', arguments: { text: `hi ${i}` } } },
+          CallToolResultSchema
+        )
+      }
+      await new Promise((r) => setTimeout(r, 50))
+
+      const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+      expect(toolCalls).toHaveLength(4)
+      // The InMemory client identifies itself as 'test client' (see setupLowLevelServer).
+      for (const call of toolCalls) {
+        expect(call.properties.$mcp_client_name).toBe('test client')
+      }
+    } finally {
+      await cleanup()
+    }
+  })
 })
