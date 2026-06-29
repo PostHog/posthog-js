@@ -64,9 +64,10 @@ app.post('/init', async (req, res) => {
     // Create new client
     state.client = new PostHog(api_key, {
         host,
-        // Keep single-event captures queued until the harness calls /flush;
-        // this avoids racing the SDK's automatic flush with explicit test flushes.
-        flushAt: Math.max(flush_at ?? 1, 2),
+        // Respect the harness batch-size configuration, including flush_at: 1
+        // for auto-flush compliance tests. Default to 2 only when omitted so
+        // ad-hoc single-event captures wait for an explicit /flush call.
+        flushAt: flush_at ?? 2,
         flushInterval: flush_interval_ms ?? 100,
         fetchRetryCount: max_retries ?? 3,
         disableCompression: enable_compression === undefined ? undefined : !enable_compression,
@@ -146,12 +147,18 @@ app.post('/flush', async (req, res) => {
         return res.status(400).json({ error: 'SDK not initialized' })
     }
 
+    const sentBeforeFlush = state.totalEventsSent
+
     try {
         await state.client.flush()
         res.json({ success: true, events_flushed: state.totalEventsSent })
     } catch (error) {
         state.lastError = error.message
-        res.json({ success: true, events_flushed: state.totalEventsSent, error: error.message })
+        res.status(500).json({
+            success: false,
+            events_flushed: Math.max(0, state.totalEventsSent - sentBeforeFlush),
+            error: error.message,
+        })
     }
 })
 
