@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/3577": {
+    "key": "PostHog/posthog-js/issue/3577",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3577",
+    "url": "https://github.com/PostHog/posthog-js/issues/3577",
+    "conclusion": "Valid feature request for configurable web survey option/list height; existing labels are appropriate.",
+    "labels": [
+      "enhancement",
+      "feature/surveys",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-29T10:00:51.259Z"
+  },
   "PostHog/posthog-js/issue/3573": {
     "key": "PostHog/posthog-js/issue/3573",
     "repo": "PostHog/posthog-js",
