@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3583](https://github.com/PostHog/posthog-js/issues/3583) | Valid bug: OpenAI Responses API streaming helper is not wrapped for PostHog params. | bug, team/llm-analytics |  | no | 2026-06-29T10:04:38.826Z |
 | PostHog/posthog-js | [issue 3578](https://github.com/PostHog/posthog-js/issues/3578) | Valid bug: reset cannot clear localStorage on other subdomains, and current default merge behavior can let stale subdomain localStorage override the cross-subdomain cookie. | feature/product-analytics, web |  | no | 2026-06-29T10:01:55.780Z |
 | PostHog/posthog-js | [issue 3577](https://github.com/PostHog/posthog-js/issues/3577) | Valid feature request for configurable web survey option/list height; existing labels are appropriate. | enhancement, feature/surveys, web |  | no | 2026-06-29T10:00:51.259Z |
 | PostHog/posthog-js | [issue 3573](https://github.com/PostHog/posthog-js/issues/3573) | Valid bug: `register_for_session` is currently scoped to browser `sessionStorage`, not to PostHog `$session_id` rotation. | feature/product-analytics, web |  | no | 2026-06-29T09:59:28.987Z |
