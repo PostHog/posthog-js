@@ -31,7 +31,7 @@ export type { SegmentUser, SegmentAnalytics, SegmentContext, SegmentPlugin }
 const logger = createLogger('[SegmentIntegration]')
 
 const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
-    if (!Promise || !Promise.resolve) {
+    if (typeof Promise === 'undefined' || !Promise.resolve) {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }
 

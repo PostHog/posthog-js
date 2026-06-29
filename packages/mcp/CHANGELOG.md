@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.5.1
+
+### Patch Changes
+
+- [#4009](https://github.com/PostHog/posthog-js/pull/4009) [`ae68de1`](https://github.com/PostHog/posthog-js/commit/ae68de1fd602cfdacbe6d0501583479862e4e252) Thanks [@gesh](https://github.com/gesh)! - Fix `$mcp_client_name` being dropped from every other captured event. `getSessionInfo` cached the client identity but then overwrote the cache with `undefined` on the next event, so consecutive tool calls alternated between carrying and lacking the client name (showing up as a large "other" slice in MCP analytics). The cached client name/version are now reused instead of refetched.
+  (2026-06-29)
+
 ## 0.5.0
 
 ### Minor Changes

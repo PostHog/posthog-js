@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.396.2
+
+### Patch Changes
+
+- [#4003](https://github.com/PostHog/posthog-js/pull/4003) [`b6261e7`](https://github.com/PostHog/posthog-js/commit/b6261e7ede71a2d92215eab365b43f33cb5c4863) Thanks [@marandaneto](https://github.com/marandaneto)! - Include a Promise polyfill in the IE11 bundle and avoid Promise-dependent async compression paths when Promise support is unavailable.
+  (2026-06-29)
+
 ## 1.396.1
 
 ### Patch Changes
