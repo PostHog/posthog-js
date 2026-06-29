@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/3573": {
+    "key": "PostHog/posthog-js/issue/3573",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3573",
+    "url": "https://github.com/PostHog/posthog-js/issues/3573",
+    "conclusion": "Valid bug: `register_for_session` is currently scoped to browser `sessionStorage`, not to PostHog `$session_id` rotation.",
+    "labels": [
+      "feature/product-analytics",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-29T09:59:28.987Z"
+  },
   "PostHog/posthog-js/issue/3435": {
     "key": "PostHog/posthog-js/issue/3435",
     "repo": "PostHog/posthog-js",
