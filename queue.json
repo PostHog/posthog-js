@@ -1,4 +1,18 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "pull_request-4006-auto-none-no-comment-no-close-1782755776165",
+      "kind": "pull_request",
+      "number": 4006,
+      "mode": "auto",
+      "enqueuedAt": "2026-06-29T17:56:16.165Z",
+      "source": {
+        "eventName": "pull_request",
+        "runId": 28364827653,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28364827653"
+      },
+      "attempts": 0
+    }
+  ]
 }
