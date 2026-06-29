@@ -219,7 +219,7 @@ export class PostHog extends PostHogCore {
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
   private _overrideDisplayLanguage: string | null
-  private _requestHeaders: { [header_name: string]: string }
+  private _requestHeaders: { [header_name: string]: string } = {}
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
