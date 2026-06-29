@@ -300,6 +300,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: PERSON_PROFILES_IDENTIFIED_ONLY,
     before_send: undefined,
+    get_current_url: undefined,
     request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
     error_tracking: {},
 
