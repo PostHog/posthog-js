@@ -166,7 +166,7 @@ describe('PostHog React Native', () => {
       expect.objectContaining({ headers: expectedHeaders })
     )
     expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/batch'),
+      expect.stringContaining('/batch/'),
       expect.objectContaining({ headers: expectedHeaders })
     )
   })
