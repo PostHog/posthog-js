@@ -74,9 +74,9 @@ jobs:
         run: |
           set -o pipefail
 
-          # The BrowserStack TestCafe provider fetches this during startup without retries.
-          # BrowserStack occasionally closes the response early before any tests run.
-          retryable_browserstack_browser_list_url='https://api.browserstack.com/automate/browsers.json'
+          # The BrowserStack TestCafe provider makes BrowserStack API calls without retries.
+          # BrowserStack occasionally closes compressed API responses early before tests run.
+          retryable_browserstack_api_url='https://api.browserstack.com/'
 
           for attempt in 1 2 3; do
             output_file="$(mktemp)"
@@ -89,8 +89,8 @@ jobs:
 
             exit_code="${PIPESTATUS[0]}"
 
-            if grep -Fq "${retryable_browserstack_browser_list_url}" "${output_file}" && [ "${attempt}" -lt 3 ]; then
-              echo "::warning::BrowserStack browser list fetch failed; retrying TestCafe."
+            if grep -Fq "${retryable_browserstack_api_url}" "${output_file}" && [ "${attempt}" -lt 3 ]; then
+              echo "::warning::BrowserStack API fetch failed; retrying TestCafe."
               rm -f "${output_file}"
               sleep $((attempt * 10))
               continue

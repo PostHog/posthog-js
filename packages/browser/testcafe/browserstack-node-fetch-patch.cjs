@@ -2,13 +2,21 @@
 
 const Module = require('module')
 
-const BROWSERSTACK_BROWSER_LIST_URL = 'https://api.browserstack.com/automate/browsers.json'
+const BROWSERSTACK_HOSTS = new Set(['api.browserstack.com', 'hub-cloud.browserstack.com'])
 const originalLoad = Module._load
 
-function isBrowserStackBrowserListRequest(url) {
+function isBrowserStackRequest(url) {
     const target = typeof url === 'string' ? url : url && url.url
 
-    return target === BROWSERSTACK_BROWSER_LIST_URL || target?.startsWith(`${BROWSERSTACK_BROWSER_LIST_URL}?`)
+    if (!target) {
+        return false
+    }
+
+    try {
+        return BROWSERSTACK_HOSTS.has(new URL(target).hostname)
+    } catch (_) {
+        return false
+    }
 }
 
 function withIdentityEncoding(fetch, headers) {
@@ -30,9 +38,10 @@ function patchNodeFetch(fetch) {
     }
 
     const patchedFetch = (url, options = {}) => {
-        if (isBrowserStackBrowserListRequest(url)) {
+        if (isBrowserStackRequest(url)) {
             options = {
                 ...options,
+                compress: false,
                 headers: withIdentityEncoding(fetch, options.headers),
             }
         }
