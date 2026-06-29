@@ -1,5 +1,36 @@
 # posthog-js
 
+## 1.396.0
+
+### Minor Changes
+
+- [#3987](https://github.com/PostHog/posthog-js/pull/3987) [`74cc6bb`](https://github.com/PostHog/posthog-js/commit/74cc6bb6f255b944846567406dfac449be17095c) Thanks [@TueHaulund](https://github.com/TueHaulund)! - Add a `get_current_url` config option that overrides the URL used for client-side URL targeting — session replay URL triggers, the session replay URL blocklist, survey URL display conditions, product tour URL conditions, web experiment URL conditions, and autocapture URL allow/ignore lists. These match against `window.location.href` directly, which does not reflect a `$current_url` rewritten in `before_send`. Apps where the browser URL is not meaningful for targeting (e.g. Electron/desktop builds served from a generated host) can now return the logical URL to match against. Defaults to `window.location.href` when not set.
+  (2026-06-29)
+
+### Patch Changes
+
+- Updated dependencies [[`74cc6bb`](https://github.com/PostHog/posthog-js/commit/74cc6bb6f255b944846567406dfac449be17095c)]:
+    - @posthog/types@1.392.0
+
+## 1.395.0
+
+### Minor Changes
+
+- [#3977](https://github.com/PostHog/posthog-js/pull/3977) [`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `getAllFeatureFlags()`, which returns all currently loaded feature flags as structured `FeatureFlagResult`s (`key`, `enabled`, `variant`, `payload`). It is a synchronous read of the cached flags and does not send a `$feature_flag_called` event.
+  (2026-06-26)
+
+### Patch Changes
+
+- Updated dependencies [[`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f)]:
+    - @posthog/core@1.38.0
+
+## 1.394.0
+
+### Minor Changes
+
+- [#3986](https://github.com/PostHog/posthog-js/pull/3986) [`919abca`](https://github.com/PostHog/posthog-js/commit/919abcaea82513bc0422d398bf26ff03810e69ad) Thanks [@ioannisj](https://github.com/ioannisj)! - Capture the `$device_model` super-property on Android Chromium via `navigator.userAgentData.getHighEntropyValues(['model'])`. Resolved once during init and sent on subsequent events; opt out with `disableDeviceModel: true`.
+  (2026-06-26)
+
 ## 1.393.6
 
 ### Patch Changes

@@ -1,5 +1,26 @@
 # posthog-react-native
 
+## 4.53.1
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+- Updated dependencies [[`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b)]:
+  - @posthog/core@1.38.1
+
+## 4.53.0
+
+### Minor Changes
+
+- [#3977](https://github.com/PostHog/posthog-js/pull/3977) [`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `getAllFeatureFlags()`, which returns all currently loaded feature flags as structured `FeatureFlagResult`s (`key`, `enabled`, `variant`, `payload`). It is a synchronous read of the cached flags and does not send a `$feature_flag_called` event.
+  (2026-06-26)
+
+### Patch Changes
+
+- Updated dependencies [[`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f)]:
+  - @posthog/core@1.38.0
+
 ## 4.52.0
 
 ### Minor Changes

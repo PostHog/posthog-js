@@ -1,4 +1,10 @@
-export { getFeatureFlagValue, getEnabledFromValue, getVariantFromValue, parsePayload } from './featureFlagUtils'
+export {
+  getFeatureFlagValue,
+  getEnabledFromValue,
+  getVariantFromValue,
+  parsePayload,
+  flagDetailsToResults,
+} from './featureFlagUtils'
 export {
   gzipCompress,
   isGzipData,
