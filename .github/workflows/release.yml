@@ -439,14 +439,14 @@ jobs:
                   ref: master
                   fetch-depth: 1
 
-            - name: Setup pnpm and Node.js
+            - name: Setup Node.js
+              uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+              with:
+                node-version: 24
+
+            - name: Setup pnpm
               uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
               with:
-                # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
-                # until https://github.com/jasongin/nvs/pull/315 lands.
-                # pnpm/setup installs runtimes via pnpm runtime, which requires pnpm >=11.1.0.
-                version: 11.7.0
-                runtime: node@24
                 cache: false
                 install: false
 
@@ -585,8 +585,6 @@ jobs:
               with:
                 # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
                 # until https://github.com/jasongin/nvs/pull/315 lands.
-                # pnpm/setup installs runtimes via pnpm runtime, which requires pnpm >=11.1.0.
-                version: 11.7.0
                 runtime: node@24
                 cache: false
                 install: false
