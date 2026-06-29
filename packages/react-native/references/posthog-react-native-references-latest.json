@@ -2890,6 +2890,11 @@
           "name": "persistence"
         },
         {
+          "description": "A list of headers that should be sent with requests to the PostHog API.",
+          "type": "{\n        [header_name: string]: string;\n    }",
+          "name": "requestHeaders"
+        },
+        {
           "description": "Configuration for Session Replay",
           "type": "PostHogSessionReplayConfig",
           "name": "sessionReplayConfig"
