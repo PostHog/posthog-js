@@ -66,7 +66,34 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.browser }}
           BROWSERSLIST: "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
-        run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
+        run: |
+          set -o pipefail
+
+          # The BrowserStack TestCafe provider fetches this during startup without retries.
+          # BrowserStack occasionally closes the response early before any tests run.
+          retryable_browserstack_browser_list_url='https://api.browserstack.com/automate/browsers.json'
+
+          for attempt in 1 2 3; do
+            output_file="$(mktemp)"
+            echo "TestCafe attempt ${attempt}/3"
+
+            if pnpm testcafe "${BROWSER}" --stop-on-first-fail 2>&1 | tee "${output_file}"; then
+              rm -f "${output_file}"
+              exit 0
+            fi
+
+            exit_code="${PIPESTATUS[0]}"
+
+            if grep -Fq "${retryable_browserstack_browser_list_url}" "${output_file}" && [ "${attempt}" -lt 3 ]; then
+              echo "::warning::BrowserStack browser list fetch failed; retrying TestCafe."
+              rm -f "${output_file}"
+              sleep $((attempt * 10))
+              continue
+            fi
+
+            rm -f "${output_file}"
+            exit "${exit_code}"
+          done
         working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
