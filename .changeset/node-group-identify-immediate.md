@@ -1,4 +1,5 @@
 ---
+'@posthog/core': minor
 'posthog-node': minor
 '@posthog/convex': patch
 ---
