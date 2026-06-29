@@ -58,11 +58,23 @@ jobs:
               id: generate-branch-name
               shell: bash
               env:
+                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
-                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
                   PACKAGE_NAME_SANITIZED=$(echo "$PACKAGE_NAME" | sed 's/@//g' | sed 's/\//-/g')
-                  echo "branch_name=${PACKAGE_NAME_SANITIZED}-$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+                  TITLE_PREFIX="chore(deps): Update ${PACKAGE_NAME} to "
+                  EXISTING_BRANCH=$(gh pr list \
+                      --repo PostHog/posthog \
+                      --state open \
+                      --limit 100 \
+                      --json title,headRefName,headRepositoryOwner \
+                      --jq ".[] | select(.title | startswith(\"${TITLE_PREFIX}\")) | select(.headRepositoryOwner.login == \"PostHog\") | .headRefName" | head -n 1)
+
+                  if [ -n "$EXISTING_BRANCH" ]; then
+                      echo "branch_name=$EXISTING_BRANCH" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "branch_name=${PACKAGE_NAME_SANITIZED}-upgrade" >> "$GITHUB_OUTPUT"
+                  fi
 
             - name: Create main repo pull request
               id: main-repo-pr
@@ -91,12 +103,30 @@ jobs:
               run: |
                   echo "PostHog pull request for $PACKAGE_NAME version $PACKAGE_VERSION ready: $PR_URL"
 
+            - name: Update pull request metadata
+              env:
+                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
+                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+                  PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
+              run: |
+                  gh pr edit "$PR_NUMBER" \
+                      --repo PostHog/posthog \
+                      --title "chore(deps): Update $PACKAGE_NAME to $PACKAGE_VERSION" \
+                      --body "## Changes
+
+                  $PACKAGE_NAME version $PACKAGE_VERSION has been released. This updates PostHog to use it.
+
+                  [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${PACKAGE_NAME}?activeTab=version)"
+
             - name: Enable automerge
               env:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
               run: |
-                  gh pr merge "$PR_NUMBER" --auto --squash
+                  if [ "$(gh pr view "$PR_NUMBER" --repo PostHog/posthog --json autoMergeRequest --jq '.autoMergeRequest != null')" = "false" ]; then
+                      gh pr merge "$PR_NUMBER" --repo PostHog/posthog --auto --squash
+                  fi
 
             - name: Assign reviewers
               env:
