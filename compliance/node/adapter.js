@@ -153,8 +153,11 @@ app.post('/flush', async (req, res) => {
         await state.client.flush()
         res.json({ success: true, events_flushed: state.totalEventsSent })
     } catch (error) {
+        // The harness deliberately configures mock-server failures for retry
+        // assertions. Treat SDK flush rejections as a completed adapter action
+        // so the harness can inspect the outbound requests it caused.
         state.lastError = error.message
-        res.status(500).json({
+        res.json({
             success: false,
             events_flushed: Math.max(0, state.totalEventsSent - sentBeforeFlush),
             error: error.message,
