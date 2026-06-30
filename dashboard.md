@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3590](https://github.com/PostHog/posthog-js/issues/3590) | Valid replay canvas bug; not a safe small sweep fix. | feature/replay, web |  | no | 2026-06-30T09:35:25.160Z |
 | PostHog/posthog-js | [issue 3575](https://github.com/PostHog/posthog-js/issues/3575) | Valid surveys/web bug report; the rendering result can plausibly diverge from canRenderSurveyAsync after completion. | feature/surveys, web |  | no | 2026-06-30T09:33:38.426Z |
 | PostHog/posthog-js | [issue 3586](https://github.com/PostHog/posthog-js/issues/3586) | Valid feature request; the Node SDK still lacks groupIdentifyImmediate(). | enhancement, feature/product-analytics, node | https://github.com/PostHog/posthog-js/pull/4006 | no | 2026-06-29T10:08:46.834Z |
 | PostHog/posthog-js | [issue 3583](https://github.com/PostHog/posthog-js/issues/3583) | Valid bug: OpenAI Responses API streaming helper is not wrapped for PostHog params. | bug, team/llm-analytics |  | no | 2026-06-29T10:04:38.826Z |
