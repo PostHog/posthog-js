@@ -311,6 +311,7 @@
         "_isSampled",
         "_isSessionIdleAfterCrossTabRefresh",
         "_isStoppingAfterCompression",
+        "_isSurveyCacheStale",
         "_isSurveyConditionMatched",
         "_isSurveyFeatureFlagEnabled",
         "_isSurveysEnabled",
