@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.6.0
+
+### Minor Changes
+
+- [#4022](https://github.com/PostHog/posthog-js/pull/4022) [`d9e19e0`](https://github.com/PostHog/posthog-js/commit/d9e19e020b5e5306887793b80ce861e9ea5097d8) Thanks [@gesh](https://github.com/gesh)! - Emit `$mcp_lib` (`@posthog/mcp`) and `$mcp_lib_version` on every `$mcp_*` event (and the `$exception` sibling) so you can tell which analytics SDK release produced the data. The version was already resolved at runtime but never mapped to a property. Namespaced like `@posthog/ai`'s `$ai_lib` rather than overriding `$lib`, which stays the transport SDK (`posthog-node`).
+  (2026-06-30)
+
 ## 0.5.1
 
 ### Patch Changes
