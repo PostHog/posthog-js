@@ -11,6 +11,11 @@ export const DEFAULT_CONVERSATION_ID_DESCRIPTION =
 
 export const POSTHOG_MCP_ANALYTICS_SOURCE = 'posthog_mcp_analytics'
 
+// Identifies the SDK that produced an `$mcp_*` event. Distinct from `$lib`
+// (posthog-node, the transport that actually sends the event) — this names the
+// higher-level analytics layer, mirroring `@posthog/ai`'s `$ai_lib`.
+export const POSTHOG_MCP_LIB_NAME = '@posthog/mcp'
+
 // All PostHog-owned event names start with `$` per the PostHog convention.
 // Non-`$` names would be treated as customer-defined events and confuse the schema.
 export const PostHogMCPAnalyticsEvent = {
@@ -38,6 +43,8 @@ export const PostHogMCPAnalyticsProperty = {
   Intent: '$mcp_intent',
   IntentSource: '$mcp_intent_source',
   ListedToolNames: '$mcp_listed_tool_names',
+  McpLib: '$mcp_lib',
+  McpLibVersion: '$mcp_lib_version',
   Parameters: '$mcp_parameters',
   ResourceName: '$mcp_resource_name',
   Response: '$mcp_response',

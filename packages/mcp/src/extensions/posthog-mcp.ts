@@ -1,5 +1,6 @@
 import { PostHog, type PostHogOptions } from 'posthog-node'
 
+import { version } from '../version'
 import type {
   InitializeCaptureData,
   JsonRecord,
@@ -241,6 +242,7 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     timestamp: common.timestamp ?? new Date(),
     properties: common.properties,
     groups: common.groups,
+    sdkVersion: version,
   }
   if (common.distinctId) {
     event.identifyActorGivenId = common.distinctId
