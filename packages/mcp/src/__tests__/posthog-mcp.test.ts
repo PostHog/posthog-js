@@ -2,7 +2,6 @@ import { getMoreToolsResult, PostHogMCP } from '../index'
 import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extensions/constants'
 import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
-import { version } from '../version'
 import { EventCapture } from './test-utils'
 
 // The capture methods are fire-and-forget (mirroring posthog-node's `capture()`),
@@ -42,12 +41,7 @@ describe('PostHogMCP', () => {
     expect(typeof posthog.shutdown).toBe('function')
   })
 
-  it('reports itself as $lib=posthog-node-mcp instead of the inherited posthog-node', () => {
-    // posthog-node stamps `$lib` / `$lib_version` from these getters, so this is
-    // what every captured event carries on the wire.
-    expect(posthog.getLibraryId()).toBe('posthog-node-mcp')
-    expect(posthog.getLibraryVersion()).toBe(version)
-  })
+  // `$lib` / `$lib_version` identity is covered for both emit paths in lib-identity.test.ts.
 
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
