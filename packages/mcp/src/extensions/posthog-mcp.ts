@@ -96,6 +96,7 @@ export class PostHogMCP extends PostHog {
     event.response = data.response
     event.duration = data.durationMs
     event.isError = data.isError
+    event.errorType = data.errorType
     applyIntent(event, data.intent, data.intentSource)
     if (data.isError) {
       event.error = captureException(data.error ?? `Tool ${data.toolName} returned an error`)
@@ -127,6 +128,7 @@ export class PostHogMCP extends PostHog {
     event.response = data.response
     event.duration = data.durationMs
     event.isError = data.isError
+    event.errorType = data.errorType
     if (data.isError) {
       event.error = captureException(data.error ?? 'tools/list failed')
     }

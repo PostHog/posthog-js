@@ -62,6 +62,7 @@ export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promi
     userIntentSource: eventInput.userIntentSource,
     isError: eventInput.isError,
     error: eventInput.error,
+    errorType: eventInput.errorType,
     conversationId: eventInput.conversationId,
     properties: eventInput.properties,
   }

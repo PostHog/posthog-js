@@ -175,6 +175,40 @@ describe('buildPostHogCaptureEvents', () => {
     expect(findEvent(events, PostHogMCPAnalyticsEvent.Exception)).toBeDefined()
   })
 
+  it('stamps $mcp_error_type and $mcp_error_message on the tool-call event from the thrown error', () => {
+    const [event] = buildPostHogCaptureEvents(
+      makeEvent({ isError: true, error: makeError('Connection timeout', 'TimeoutError') })
+    )
+
+    expect(event.event).toBe(PostHogMCPAnalyticsEvent.ToolCall)
+    expect(event.properties[PostHogMCPAnalyticsProperty.ErrorType]).toBe('TimeoutError')
+    expect(event.properties[PostHogMCPAnalyticsProperty.ErrorMessage]).toBe('Connection timeout')
+  })
+
+  it('prefers an explicit errorType over the thrown error type', () => {
+    const [event] = buildPostHogCaptureEvents(
+      makeEvent({ isError: true, errorType: 'rate_limited', error: makeError('429 Too Many Requests', 'Error') })
+    )
+
+    expect(event.properties[PostHogMCPAnalyticsProperty.ErrorType]).toBe('rate_limited')
+    // The generic message still comes through for context.
+    expect(event.properties[PostHogMCPAnalyticsProperty.ErrorMessage]).toBe('429 Too Many Requests')
+  })
+
+  it('stamps $mcp_error_type from an explicit errorType even without a thrown error value', () => {
+    const [event] = buildPostHogCaptureEvents(makeEvent({ isError: true, errorType: 'validation' }))
+
+    expect(event.properties[PostHogMCPAnalyticsProperty.ErrorType]).toBe('validation')
+    expect(event.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ErrorMessage)
+  })
+
+  it('omits error type/message properties on successful calls', () => {
+    const [event] = buildPostHogCaptureEvents(makeEvent({ isError: false }))
+
+    expect(event.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ErrorType)
+    expect(event.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ErrorMessage)
+  })
+
   it('includes $set person properties from identity data', () => {
     const [event] = buildPostHogCaptureEvents(
       makeEvent({
