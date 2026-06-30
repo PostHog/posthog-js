@@ -42,6 +42,13 @@ describe('PostHogMCP', () => {
     expect(typeof posthog.shutdown).toBe('function')
   })
 
+  it('reports itself as $lib=posthog-node-mcp instead of the inherited posthog-node', () => {
+    // posthog-node stamps `$lib` / `$lib_version` from these getters, so this is
+    // what every captured event carries on the wire.
+    expect(posthog.getLibraryId()).toBe('posthog-node-mcp')
+    expect(posthog.getLibraryVersion()).toBe(version)
+  })
+
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
       posthog.captureToolCall({
@@ -66,8 +73,6 @@ describe('PostHogMCP', () => {
       expect(p[PostHogMCPAnalyticsProperty.IsError]).toBe(false)
       expect(p[PostHogMCPAnalyticsProperty.SessionId]).toBe('session-abc')
       expect(p[PostHogMCPAnalyticsProperty.Source]).toBe('posthog_mcp_analytics')
-      expect(p[PostHogMCPAnalyticsProperty.McpLib]).toBe('@posthog/mcp')
-      expect(p[PostHogMCPAnalyticsProperty.McpLibVersion]).toBe(version)
       expect(p.$groups).toEqual({ organization: 'org-1', project: 'proj-1' })
       expect(p.$mcp_client_name).toBe('claude-code')
       expect(p.custom_flag).toBe(true)
