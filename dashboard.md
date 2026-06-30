@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2342](https://github.com/PostHog/posthog-js/issues/2342) | Needs maintainer guidance/repro; current SDK has no awaitable init and will log repeated request failures for invalid tokens/config. | feature/flags, team/feature-flags, web |  | no | 2026-06-30T09:40:57.877Z |
 | PostHog/posthog-js | [issue 859](https://github.com/PostHog/posthog-js/issues/859) | Valid bug; bootstrapped false feature flag values are currently filtered out before they can be read. | feature/flags, team/feature-flags |  | no | 2026-06-30T09:38:39.365Z |
 | PostHog/posthog-js | [issue 3594](https://github.com/PostHog/posthog-js/issues/3594) | Valid toolbar/proxy routing issue; current code only uses ui_host for toolbar API params, not for loading toolbar.js. | feature/toolbar, frameworks/next-js, web |  | no | 2026-06-30T09:36:47.102Z |
 | PostHog/posthog-js | [issue 3590](https://github.com/PostHog/posthog-js/issues/3590) | Valid replay canvas bug; not a safe small sweep fix. | feature/replay, web |  | no | 2026-06-30T09:35:25.160Z |
