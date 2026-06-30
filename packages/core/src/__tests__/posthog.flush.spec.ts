@@ -72,7 +72,7 @@ describe('PostHog Core', () => {
         })
       )
 
-      const flushPromise = posthog.flush()
+      const flushPromise = posthog.flushWithPendingPromises()
       await waitForPromises()
       expect(mocks.fetch).not.toHaveBeenCalled()
 
@@ -98,7 +98,7 @@ describe('PostHog Core', () => {
       posthog.capture('queued-event')
       posthog.addPendingPromise(Promise.reject(new Error('pending failure')))
 
-      await expect(posthog.flush()).resolves.not.toThrow()
+      await expect(posthog.flushWithPendingPromises()).resolves.not.toThrow()
       expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
     })
 
@@ -119,7 +119,7 @@ describe('PostHog Core', () => {
       posthog.capture('queued-event')
       posthog.addPendingPromise(new Promise<void>(() => {}))
 
-      const flushPromise = posthog.flush(25)
+      const flushPromise = posthog.flushWithPendingPromises(25)
       expect(mocks.fetch).not.toHaveBeenCalled()
 
       await Promise.resolve()

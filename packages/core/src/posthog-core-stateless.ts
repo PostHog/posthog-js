@@ -1233,10 +1233,6 @@ export abstract class PostHogCoreStateless {
    * This function will return a promise that will resolve when the flush is complete,
    * or reject if there was an error (for example if the server or network is down).
    *
-   * Before flushing, this waits up to 2 seconds for pending SDK work that may enqueue events
-   * (for example async exception capture). Rejected pending work is ignored so already queued
-   * events are still flushed.
-   *
    * If there is already a flush in progress, this function will wait for that flush to complete.
    *
    * It's recommended to do error handling in the callback of the promise.
@@ -1255,13 +1251,21 @@ export abstract class PostHogCoreStateless {
    *
    * @public
    *
-   * @param flushPendingPromisesTimeoutMs Maximum time to wait for pending SDK work before flushing, in milliseconds. Defaults to 2000 (2s).
-   *
    * @throws PostHogFetchHttpError
    * @throws PostHogFetchNetworkError
    * @throws Error
    */
-  flush(flushPendingPromisesTimeoutMs: number = DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS): Promise<void> {
+  protected flushWithPendingPromises(
+    flushPendingPromisesTimeoutMs: number = DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS
+  ): Promise<void> {
+    return this.flushInternal(flushPendingPromisesTimeoutMs)
+  }
+
+  flush(): Promise<void> {
+    return this.flushInternal()
+  }
+
+  private flushInternal(flushPendingPromisesTimeoutMs?: number): Promise<void> {
     if (this.disabled) {
       return Promise.resolve()
     }
@@ -1271,7 +1275,11 @@ export abstract class PostHogCoreStateless {
     // Register this flush in the promise queue synchronously so shutdown() can't miss it,
     // but exclude it from the pending-work wait to avoid self-waiting.
     const nextFlushPromise: Promise<void> = Promise.resolve()
-      .then(() => this.waitForPendingPromises(flushPendingPromisesTimeoutMs, [previousFlushPromise, nextFlushPromise]))
+      .then(() => {
+        if (flushPendingPromisesTimeoutMs !== undefined) {
+          return this.waitForPendingPromises(flushPendingPromisesTimeoutMs, [previousFlushPromise, nextFlushPromise])
+        }
+      })
       // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
       // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
       // Use a custom allSettled implementation to avoid issues with patching Promise on RN

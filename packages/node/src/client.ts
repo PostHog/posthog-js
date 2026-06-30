@@ -239,8 +239,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.scheduleDebouncedFlush()
   }
 
-  override async flush(flushPendingPromisesTimeoutMs?: number): Promise<void> {
-    const flushPromise = super.flush(flushPendingPromisesTimeoutMs)
+  override async flush(): Promise<void> {
+    const flushPromise = this.flushWithPendingPromises()
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
@@ -313,7 +313,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private async resolveWaitUntilFlush(): Promise<void> {
     const resolve = this._consumeWaitUntilCycle()
     try {
-      await super.flush()
+      await this.flushWithPendingPromises()
     } catch {
       // Flush errors are already logged by flush() internals
     } finally {
