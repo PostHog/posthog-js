@@ -1,5 +1,26 @@
 # @posthog/mcp
 
+## 0.7.0
+
+### Minor Changes
+
+- [#4025](https://github.com/PostHog/posthog-js/pull/4025) [`5590094`](https://github.com/PostHog/posthog-js/commit/5590094403a1f9484f3e08a5e21311f6adb0cc60) Thanks [@gesh](https://github.com/gesh)! - Stamp the standard PostHog `$lib` / `$lib_version` (value `posthog-node-mcp`) on every event, so MCP events self-identify the same way every other PostHog SDK does. Both emit paths are covered: `PostHogMCP` overrides its library id, and `instrument()` applies it to the client you pass in. Note that posthog-node sets `$lib` at the client level, so for `instrument()` this relabels every event that client sends as `posthog-node-mcp` — pass a client dedicated to your MCP server's analytics.
+  (2026-06-30)
+
+## 0.6.0
+
+### Minor Changes
+
+- [#4022](https://github.com/PostHog/posthog-js/pull/4022) [`d9e19e0`](https://github.com/PostHog/posthog-js/commit/d9e19e020b5e5306887793b80ce861e9ea5097d8) Thanks [@gesh](https://github.com/gesh)! - Emit `$mcp_lib` (`@posthog/mcp`) and `$mcp_lib_version` on every `$mcp_*` event (and the `$exception` sibling) so you can tell which analytics SDK release produced the data. The version was already resolved at runtime but never mapped to a property. Namespaced like `@posthog/ai`'s `$ai_lib` rather than overriding `$lib`, which stays the transport SDK (`posthog-node`).
+  (2026-06-30)
+
+## 0.5.1
+
+### Patch Changes
+
+- [#4009](https://github.com/PostHog/posthog-js/pull/4009) [`ae68de1`](https://github.com/PostHog/posthog-js/commit/ae68de1fd602cfdacbe6d0501583479862e4e252) Thanks [@gesh](https://github.com/gesh)! - Fix `$mcp_client_name` being dropped from every other captured event. `getSessionInfo` cached the client identity but then overwrote the cache with `undefined` on the next event, so consecutive tool calls alternated between carrying and lacking the client name (showing up as a large "other" slice in MCP analytics). The cached client name/version are now reused instead of refetched.
+  (2026-06-29)
+
 ## 0.5.0
 
 ### Minor Changes

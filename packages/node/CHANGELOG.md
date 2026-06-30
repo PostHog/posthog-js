@@ -1,5 +1,46 @@
 # posthog-node
 
+## 5.39.1
+
+### Patch Changes
+
+- [#4029](https://github.com/PostHog/posthog-js/pull/4029) [`b36b1cc`](https://github.com/PostHog/posthog-js/commit/b36b1cc2bf771bc944a304c9523d0991a31a5fbd) Thanks [@marandaneto](https://github.com/marandaneto)! - Call `before_send` for identify, group identify, and alias events.
+  (2026-06-30)
+
+- [#4027](https://github.com/PostHog/posthog-js/pull/4027) [`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely serialize event batches with circular property references instead of crashing during flush.
+  (2026-06-30)
+- Updated dependencies [[`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a)]:
+  - @posthog/core@1.39.2
+
+## 5.39.0
+
+### Minor Changes
+
+- [#4006](https://github.com/PostHog/posthog-js/pull/4006) [`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `groupIdentifyImmediate()` to await the network request when identifying a group, mirroring `captureImmediate`/`identifyImmediate`/`aliasImmediate`. Useful in edge/serverless environments where the background queue may not flush. The Convex integration now uses it directly instead of routing `$groupidentify` through `captureImmediate`.
+  (2026-06-30)
+
+### Patch Changes
+
+- Updated dependencies [[`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c)]:
+  - @posthog/core@1.39.0
+
+## 5.38.8
+
+### Patch Changes
+
+- [#3974](https://github.com/PostHog/posthog-js/pull/3974) [`08b404b`](https://github.com/PostHog/posthog-js/commit/08b404b5cd5506041df0ecc512ea9d950a3387e7) Thanks [@mjfaga](https://github.com/mjfaga)! - Fix local evaluation ignoring the `in`/`not_in` operator on cohort-based flag conditions. "Not in
+  cohort" was evaluated as "in cohort", inverting cohort-exclusion flags. Now applies the operator to
+  the cohort membership result. (2026-06-29)
+
+## 5.38.7
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+- Updated dependencies [[`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b)]:
+  - @posthog/core@1.38.1
+
 ## 5.38.6
 
 ### Patch Changes

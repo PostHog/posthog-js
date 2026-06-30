@@ -2,6 +2,7 @@
 /// <reference lib="dom" />
 
 import { TextDecoder } from 'util'
+import * as fflate from 'fflate'
 import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 
@@ -239,6 +240,34 @@ describe('request', () => {
                 },
                 ...overrides,
             } as any)
+
+        it('falls back to JSON if gzip encoding throws before fetch send', async () => {
+            const error = new Error('gzip failed')
+            const gzipSpy = jest.spyOn(fflate, 'gzipSync').mockImplementation(() => {
+                throw error
+            })
+
+            try {
+                request(
+                    createRequest({
+                        method: 'POST',
+                        compression: Compression.GZipJS,
+                        data: { foo: 'bar' },
+                    })
+                )
+
+                expect(mockedFetch).toHaveBeenCalledWith(
+                    expect.not.stringContaining('compression=gzip-js'),
+                    expect.objectContaining({
+                        body: '{"foo":"bar"}',
+                    })
+                )
+                expect((mockedFetch.mock.calls[0][1].headers as Headers).get('Content-Type')).toBe('application/json')
+                expect(mockCallback).not.toHaveBeenCalledWith({ statusCode: 0, error })
+            } finally {
+                gzipSpy.mockRestore()
+            }
+        })
 
         it.each([
             [

@@ -1,5 +1,28 @@
 # posthog-react-native
 
+## 4.53.3
+
+### Patch Changes
+
+- [#4019](https://github.com/PostHog/posthog-js/pull/4019) [`6b80631`](https://github.com/PostHog/posthog-js/commit/6b80631fd259345afd25195fdd9cba09e32a51be) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Survey question content now scrolls only when it overflows the modal. Short surveys that fit no longer scroll or bounce, while longer surveys remain fully scrollable.
+  (2026-06-30)
+
+## 4.53.2
+
+### Patch Changes
+
+- [#3971](https://github.com/PostHog/posthog-js/pull/3971) [`b660af2`](https://github.com/PostHog/posthog-js/commit/b660af2d737f6f1b5d256cb3a9f3be685f5938ed) Thanks [@github-actions](https://github.com/apps/github-actions)! - Support capturing additional event properties from `data-ph-capture-attribute-*` props in autocapture, matching the browser SDK.
+  (2026-06-29)
+
+## 4.53.1
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+- Updated dependencies [[`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b)]:
+  - @posthog/core@1.38.1
+
 ## 4.53.0
 
 ### Minor Changes

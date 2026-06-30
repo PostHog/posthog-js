@@ -221,6 +221,41 @@ describe('Web Experimentation', () => {
             const expectedInnerHTML = 'Sign up'
             testUrlMatch(testLocation, expectedInnerHTML)
         })
+
+        describe('get_current_url override', () => {
+            const originalGetWindowLocation = WebExperiments.getWindowLocation
+            afterEach(() => {
+                WebExperiments.getWindowLocation = originalGetWindowLocation
+                posthog.config.get_current_url = undefined
+            })
+
+            it('matches against the overridden URL, not the raw browser URL', () => {
+                experimentsResponse = { experiments: [buttonWebExperimentWithUrlConditions] }
+                const webExperiment = new WebExperiments(posthog)
+                const elParent = createTestDocument()
+
+                // raw browser URL would not match the exact condition
+                // eslint-disable-next-line compat/compat
+                WebExperiments.getWindowLocation = () => new URL('https://generated-host.skin/x') as unknown as Location
+                posthog.config.get_current_url = () => 'https://example.com/Signup'
+
+                webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
+                expect(elParent.innerHTML).toEqual('Sign me up')
+            })
+
+            it('does not match when the override rewrites away from the matching URL', () => {
+                experimentsResponse = { experiments: [buttonWebExperimentWithUrlConditions] }
+                const webExperiment = new WebExperiments(posthog)
+                const elParent = createTestDocument()
+
+                // eslint-disable-next-line compat/compat
+                WebExperiments.getWindowLocation = () => new URL('https://example.com/Signup') as unknown as Location
+                posthog.config.get_current_url = () => 'https://generated-host.skin/x'
+
+                webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
+                expect(elParent.innerHTML).toEqual('original')
+            })
+        })
     })
 
     describe('utm match conditions', () => {

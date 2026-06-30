@@ -575,7 +575,11 @@ export class SurveyManager {
         if (!survey.conditions) {
             return true
         }
-        return doesSurveyUrlMatch(survey) && doesSurveyDeviceTypesMatch(survey) && doesSurveyMatchSelector(survey)
+        return (
+            doesSurveyUrlMatch(survey, this._posthog) &&
+            doesSurveyDeviceTypesMatch(survey) &&
+            doesSurveyMatchSelector(survey)
+        )
     }
 
     private _internalFlagCheckSatisfied(survey: Survey): boolean {
@@ -923,6 +927,7 @@ type UseHideSurveyOnURLChangeProps = {
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     setSurveyVisible: (visible: boolean) => void
     isPreviewMode?: boolean
+    posthog?: PostHog
 }
 
 /**
@@ -940,6 +945,7 @@ export function useHideSurveyOnURLChange({
     removeSurveyFromFocus = () => {},
     setSurveyVisible,
     isPreviewMode = false,
+    posthog,
 }: UseHideSurveyOnURLChangeProps) {
     useEffect(() => {
         if (isPreviewMode || !survey.conditions?.url) {
@@ -948,7 +954,7 @@ export function useHideSurveyOnURLChange({
 
         const checkUrlMatch = () => {
             const isSurveyTypeWidget = survey.type === SurveyType.Widget
-            const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey)
+            const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey, posthog)
             const isSurveyWidgetTypeTab = survey.appearance?.widgetType === SurveyWidgetType.Tab && isSurveyTypeWidget
 
             if (doesSurveyMatchUrlCondition) {
@@ -990,7 +996,7 @@ export function useHideSurveyOnURLChange({
             window.history.pushState = originalPushState
             window.history.replaceState = originalReplaceState
         }
-    }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible])
+    }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible, posthog])
 }
 
 export function usePopupVisibility(
@@ -1066,7 +1072,7 @@ export function usePopupVisibility(
 
         const showSurvey = () => {
             // check if the url is still matching, necessary for delayed surveys, as the URL may have changed
-            if (!doesSurveyUrlMatch(survey)) {
+            if (!doesSurveyUrlMatch(survey, posthog)) {
                 return
             }
             setIsPopupVisible(true)
@@ -1115,6 +1121,7 @@ export function usePopupVisibility(
         removeSurveyFromFocus,
         setSurveyVisible: setIsPopupVisible,
         isPreviewMode,
+        posthog,
     })
 
     return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithViewTransition }
@@ -1516,6 +1523,7 @@ export function FeedbackWidget({
     useHideSurveyOnURLChange({
         survey,
         setSurveyVisible: setIsFeedbackButtonVisible,
+        posthog,
     })
 
     if (!isFeedbackButtonVisible) {

@@ -1,5 +1,33 @@
 # @posthog/core
 
+## 1.39.2
+
+### Patch Changes
+
+- [#4027](https://github.com/PostHog/posthog-js/pull/4027) [`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely serialize event batches with circular property references instead of crashing during flush.
+  (2026-06-30)
+
+## 1.39.1
+
+### Patch Changes
+
+- [#3998](https://github.com/PostHog/posthog-js/pull/3998) [`0c95bce`](https://github.com/PostHog/posthog-js/commit/0c95bce7a2b01707691783a41730ec89699cb429) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry capture and logs requests on transient HTTP errors such as 408, 429, and 5xx while continuing to avoid retries for non-retryable 4xx responses.
+  (2026-06-30)
+
+## 1.39.0
+
+### Minor Changes
+
+- [#4006](https://github.com/PostHog/posthog-js/pull/4006) [`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `groupIdentifyImmediate()` to await the network request when identifying a group, mirroring `captureImmediate`/`identifyImmediate`/`aliasImmediate`. Useful in edge/serverless environments where the background queue may not flush. The Convex integration now uses it directly instead of routing `$groupidentify` through `captureImmediate`.
+  (2026-06-30)
+
+## 1.38.1
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+
 ## 1.38.0
 
 ### Minor Changes

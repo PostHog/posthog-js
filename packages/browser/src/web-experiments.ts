@@ -11,6 +11,7 @@ import { WEB_EXPERIMENTS } from './constants'
 import { isNullish, isString } from '@posthog/core'
 import { getQueryParam } from './utils/request-utils'
 import { isMatchingRegex } from './utils/regex-utils'
+import { applyUrlTargetingOverride } from './utils/url-targeting-utils'
 import { logger } from './utils/logger'
 import { isLikelyBot } from './utils/blocked-uas'
 import { getCampaignParams } from './utils/event-utils'
@@ -20,16 +21,14 @@ const BOT_REFUSE_MSG = 'Refusing to render web experiment since the viewer is a 
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
-    (conditionsUrl: string, location: Location) => boolean
+    (conditionsUrl: string, href: string) => boolean
 > = {
-    icontains: (conditionsUrl, location) =>
-        !!window && location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
-    not_icontains: (conditionsUrl, location) =>
-        !!window && location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) === -1,
-    regex: (conditionsUrl, location) => !!window && isMatchingRegex(location.href, conditionsUrl),
-    not_regex: (conditionsUrl, location) => !!window && !isMatchingRegex(location.href, conditionsUrl),
-    exact: (conditionsUrl, location) => location.href === conditionsUrl,
-    is_not: (conditionsUrl, location) => location.href !== conditionsUrl,
+    icontains: (conditionsUrl, href) => href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
+    not_icontains: (conditionsUrl, href) => href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) === -1,
+    regex: (conditionsUrl, href) => isMatchingRegex(href, conditionsUrl),
+    not_regex: (conditionsUrl, href) => !isMatchingRegex(href, conditionsUrl),
+    exact: (conditionsUrl, href) => href === conditionsUrl,
+    is_not: (conditionsUrl, href) => href !== conditionsUrl,
 }
 
 export class WebExperiments implements Extension {
@@ -136,7 +135,7 @@ export class WebExperiments implements Extension {
                 } else if (webExperiment.variants) {
                     for (const variant in webExperiment.variants) {
                         const testVariant = webExperiment.variants[variant]
-                        const matchTest = WebExperiments._matchesTestVariant(testVariant)
+                        const matchTest = WebExperiments._matchesTestVariant(testVariant, this._instance)
                         if (matchTest) {
                             this._applyTransforms(webExperiment.name, variant, testVariant.transforms)
                         }
@@ -182,24 +181,28 @@ export class WebExperiments implements Extension {
             )
         }
     }
-    private static _matchesTestVariant(testVariant: WebExperimentVariant) {
+    private static _matchesTestVariant(testVariant: WebExperimentVariant, instance: PostHog) {
         if (isNullish(testVariant.conditions)) {
             return false
         }
-        return WebExperiments._matchUrlConditions(testVariant) && WebExperiments._matchUTMConditions(testVariant)
+        return (
+            WebExperiments._matchUrlConditions(testVariant, instance) && WebExperiments._matchUTMConditions(testVariant)
+        )
     }
 
-    private static _matchUrlConditions(testVariant: WebExperimentVariant): boolean {
+    private static _matchUrlConditions(testVariant: WebExperimentVariant, instance: PostHog): boolean {
         if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.url)) {
             return true
         }
 
         const location = WebExperiments.getWindowLocation()
         if (location) {
+            // honors the `get_current_url` config hook so apps that rewrite their URL can target experiments correctly
+            const href = applyUrlTargetingOverride(instance, location.href)
             const urlCheck = testVariant.conditions?.url
                 ? webExperimentUrlValidationMap[testVariant.conditions?.urlMatchType ?? 'icontains'](
                       testVariant.conditions.url,
-                      location
+                      href
                   )
                 : true
             return urlCheck

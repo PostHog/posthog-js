@@ -15,6 +15,10 @@
  *
  * @see web-vitals-with-attribution.ts
  */
+// Must be first: installs an Array.prototype.at polyfill before web-vitals (which uses it
+// internally) is evaluated, so the bundle doesn't throw on browsers that predate `.at()`.
+import '../utils/array-at-polyfill'
+
 import { assignableWindow } from '../utils/globals'
 
 import { onINP, onLCP, onCLS, onFCP } from 'web-vitals'

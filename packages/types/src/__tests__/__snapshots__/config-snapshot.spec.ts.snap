@@ -608,6 +608,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "BeforeSendFn",
     "BeforeSendFn[]"
   ],
+  "get_current_url": [
+    "undefined",
+    "(defaultUrl: string) => string"
+  ],
   "sanitize_properties": [
     "null",
     "(properties: Properties, event_name: string) => Properties"
