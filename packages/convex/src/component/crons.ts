@@ -1,36 +1,19 @@
 import { cronJobs } from 'convex/server'
-import { api } from './_generated/api.js'
-import { env } from './_generated/server.js'
+import { internal } from './_generated/api.js'
 
 const crons = cronJobs()
 
-// Override via `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS`.
-export const DEFAULT_INTERVAL_SECONDS = 60
-
-// Convex component env vars are string-typed. Invalid values warn and fall back rather than
-// failing the deploy. Exported for unit testing.
-export function readPollingIntervalSeconds(): number {
-  const raw = (env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS ?? '').trim()
-  if (!raw) return DEFAULT_INTERVAL_SECONDS
-  const parsed = Number(raw)
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
-    console.warn(
-      `[PostHog] POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS="${raw}" is not a positive integer; ` +
-        `falling back to ${DEFAULT_INTERVAL_SECONDS}s.`
-    )
-    return DEFAULT_INTERVAL_SECONDS
-  }
-  return parsed
-}
-
-// Registered unconditionally — Convex forwards component env vars only at runtime, so a
-// load-time gate on `POSTHOG_PERSONAL_API_KEY` sees an empty value at deploy-time module
-// analysis and silently drops the cron. The handler in `lib.ts` gates at runtime instead.
-crons.interval(
-  'Refresh PostHog feature flag definitions',
-  { seconds: readPollingIntervalSeconds() },
-  api.lib.refreshFlagDefinitions,
-  {}
-)
+// The flag-refresh cadence is configurable at runtime via `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS`,
+// but a cron's interval is fixed when it's registered — and Convex forwards component env vars only
+// at runtime, so the var is empty during the deploy-time module analysis that registers crons (see
+// #3957, and #3683 for the same constraint biting the `POSTHOG_PERSONAL_API_KEY` gate). A fixed cron
+// therefore can't honour the configured interval. Instead the refresh runs as a self-rescheduling
+// chain (`lib.ts:refreshLoop`) that reads the interval at runtime and queues its own next run.
+//
+// This cron is only a supervisor: `ensureRefreshLoop` starts the chain unless it's already running,
+// which bootstraps a fresh deploy and self-heals if the chain ever stops. It runs often enough to
+// keep bootstrap/heal latency low, but the actual refresh work happens on the configured interval —
+// so raising the interval still cuts function-call usage, which is the point of the knob.
+crons.interval('Ensure PostHog flag refresh loop is running', { minutes: 5 }, internal.lib.ensureRefreshLoop, {})
 
 export default crons

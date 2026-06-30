@@ -1,37 +1,18 @@
 import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globals'
 import type { Crons } from 'convex/server'
-import { DEFAULT_INTERVAL_SECONDS, readPollingIntervalSeconds } from './crons.js'
+import { DEFAULT_INTERVAL_SECONDS, readPollingIntervalSeconds } from './lib.js'
 
 describe('cron registration', () => {
-  let originalPak: string | undefined
-
   beforeEach(() => {
-    originalPak = process.env.POSTHOG_PERSONAL_API_KEY
     jest.resetModules()
   })
 
-  afterEach(() => {
-    if (originalPak === undefined) {
-      delete process.env.POSTHOG_PERSONAL_API_KEY
-    } else {
-      process.env.POSTHOG_PERSONAL_API_KEY = originalPak
-    }
-  })
-
-  // Convex forwards component env vars only at runtime, so deploy-time module analysis sees
-  // `process.env.POSTHOG_PERSONAL_API_KEY` empty even when the installing app has set it.
-  // A load-time gate would silently drop the cron — see #3683.
-  test.each<[string, string | undefined]>([
-    ['unset', undefined],
-    ['set', 'phx_test'],
-  ])('registers the refresh cron when POSTHOG_PERSONAL_API_KEY is %s at module load', async (_label, pakValue) => {
-    if (pakValue === undefined) {
-      delete process.env.POSTHOG_PERSONAL_API_KEY
-    } else {
-      process.env.POSTHOG_PERSONAL_API_KEY = pakValue
-    }
+  // The cron is only a supervisor for the self-rescheduling refresh loop — it registers
+  // unconditionally and reads no env vars at module load (which would be empty at deploy-time
+  // analysis anyway; see #3957). The configured interval governs the loop, not this cron.
+  test('registers the refresh-loop supervisor cron', async () => {
     const mod = (await import('./crons.js')) as { default: Crons }
-    expect(Object.keys(mod.default.crons)).toContain('Refresh PostHog feature flag definitions')
+    expect(Object.keys(mod.default.crons)).toContain('Ensure PostHog flag refresh loop is running')
   })
 })
 

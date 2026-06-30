@@ -1,7 +1,7 @@
 import { PostHog as PostHogEdge } from 'posthog-node/edge'
-import { action, env, internalMutation, internalQuery, query } from './_generated/server.js'
+import { action, env, internalMutation, internalQuery, query, type MutationCtx } from './_generated/server.js'
 import { api, internal } from './_generated/api.js'
-import { v } from 'convex/values'
+import { v, type GenericId } from 'convex/values'
 import { version } from './version.js'
 
 /**
@@ -336,9 +336,80 @@ export const _getCurrentEtag = internalQuery({
   },
 })
 
+// --- Local-evaluation refresh loop ---
+//
+// The refresh runs as a self-rescheduling chain rather than a fixed-interval cron, so the
+// runtime-only `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` can actually govern the cadence (see the
+// comment in `crons.ts` for why a cron can't). The supervisor cron calls `ensureRefreshLoop`;
+// each `refreshLoop` tick fires a refresh and queues the next tick at the configured interval.
+
+export const DEFAULT_INTERVAL_SECONDS = 60
+
+// Convex component env vars are string-typed. Invalid values warn and fall back rather than
+// failing, and are read at runtime where the forwarded value is actually visible. Exported for tests.
+export function readPollingIntervalSeconds(): number {
+  const raw = (env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS ?? '').trim()
+  if (!raw) return DEFAULT_INTERVAL_SECONDS
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+    console.warn(
+      `[PostHog] POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS="${raw}" is not a positive integer; ` +
+        `falling back to ${DEFAULT_INTERVAL_SECONDS}s.`
+    )
+    return DEFAULT_INTERVAL_SECONDS
+  }
+  return parsed
+}
+
+// Track the latest queued tick in the `cronState` singleton so `ensureRefreshLoop` can tell a
+// live chain from a dead one before scheduling.
+async function recordLoopJob(ctx: MutationCtx, jobId: GenericId<'_scheduled_functions'>): Promise<void> {
+  const existing = await ctx.db.query('cronState').first()
+  if (existing) {
+    await ctx.db.patch(existing._id, { loopJobId: jobId })
+  } else {
+    await ctx.db.insert('cronState', { loopJobId: jobId })
+  }
+}
+
+/**
+ * One tick of the self-rescheduling refresh chain: kick off a refresh now, then queue the next
+ * tick at the configured interval. An `internalMutation` so the chain is durable — Convex runs
+ * scheduled mutations exactly once and retries them on transient errors, and queuing the next tick
+ * commits atomically with this one, so the chain can't silently break. The fetch itself is a
+ * separate at-most-once action; if it fails, the next tick just refetches.
+ */
+export const refreshLoop = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    await ctx.scheduler.runAfter(0, api.lib.refreshFlagDefinitions, {})
+    const nextId = await ctx.scheduler.runAfter(readPollingIntervalSeconds() * 1000, internal.lib.refreshLoop, {})
+    await recordLoopJob(ctx, nextId)
+  },
+})
+
+/**
+ * Supervisor for the refresh chain, called by the cron in `crons.ts`. Starts the chain unless a
+ * tick is already pending or running, recording the new tick's id so a follow-up call sees it as
+ * alive. Idempotent — overlapping calls can't spawn duplicate chains.
+ */
+export const ensureRefreshLoop = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const state = await ctx.db.query('cronState').first()
+    if (state) {
+      const job = await ctx.db.system.get(state.loopJobId as GenericId<'_scheduled_functions'>)
+      if (job && (job.state.kind === 'pending' || job.state.kind === 'inProgress')) {
+        return
+      }
+    }
+    await recordLoopJob(ctx, await ctx.scheduler.runAfter(0, internal.lib.refreshLoop, {}))
+  },
+})
+
 /**
  * Fetches flag definitions from PostHog's local-evaluation endpoint and stores them in the
- * `flagDefinitions` table. Called automatically by the cron registered in `crons.ts` when
+ * `flagDefinitions` table. Called automatically by the refresh loop (see above) when
  * `POSTHOG_PERSONAL_API_KEY` is set, and also exposed publicly so the client's
  * `reloadFeatureFlags(ctx)` method (parity with `posthog-node`) can trigger an on-demand refresh.
  */
