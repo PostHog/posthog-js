@@ -24,6 +24,48 @@ export function isDistinctIdStringLike(value: string): boolean {
   return ['distinct_id', 'distinctid'].includes(value.toLowerCase())
 }
 
+export function safeJsonStringify(value: unknown): string {
+  // Browser replay has `circularReferenceReplacer`, which uses this same
+  // ancestor-chain approach to replace only true cycles. Keep this core helper
+  // separate so Node/RN/core payload serialization does not depend on browser
+  // replay internals, and so we can also handle BigInt and Error values here.
+  const ancestors: object[] = []
+
+  return (
+    JSON.stringify(value, function (this: unknown, _key: string, replacementValue: unknown) {
+      if (typeof replacementValue === 'bigint') {
+        return replacementValue.toString()
+      }
+
+      if (typeof replacementValue === 'function' || typeof replacementValue === 'symbol') {
+        return undefined
+      }
+
+      if (replacementValue instanceof Error) {
+        return {
+          name: replacementValue.name,
+          message: replacementValue.message,
+          stack: replacementValue.stack,
+        }
+      }
+
+      if (replacementValue && typeof replacementValue === 'object') {
+        while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+          ancestors.pop()
+        }
+
+        if (ancestors.includes(replacementValue)) {
+          return '[Circular]'
+        }
+
+        ancestors.push(replacementValue)
+      }
+
+      return replacementValue
+    }) ?? 'null'
+  )
+}
+
 /**
  * Recursively sorts all keys in an object and its nested objects/arrays.
  * Used to ensure deterministic JSON serialization regardless of object construction order.

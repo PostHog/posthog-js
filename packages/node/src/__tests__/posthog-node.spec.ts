@@ -115,6 +115,25 @@ describe('PostHog Node.js', () => {
       ])
     })
 
+    it('safely flushes circular event properties', async () => {
+      const circularProperties: Record<string, any> = { foo: 'bar' }
+      circularProperties.message = circularProperties
+
+      posthog.capture({ distinctId: '123', event: 'test-event', properties: circularProperties })
+      await (posthog as any).promiseQueue.join()
+
+      await expect(posthog.flush()).resolves.toBeUndefined()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0].properties).toMatchObject({
+        foo: 'bar',
+        message: {
+          foo: 'bar',
+          message: '[Circular]',
+        },
+      })
+    })
+
     it('should not include $is_server when isServer is false (client/CLI usage)', async () => {
       const cliClient = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
