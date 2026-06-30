@@ -138,8 +138,6 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-const DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS = 2000
-
 /**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core
  * (single source of truth — same policy events already use in `_flush()`) so
@@ -1177,14 +1175,7 @@ export abstract class PostHogCoreStateless {
     })
   }
 
-  private async waitForPendingPromises(
-    timeoutMs: number,
-    ignoredPromises: (Promise<any> | null | undefined)[] = []
-  ): Promise<void> {
-    const normalizedTimeoutMs = Number.isFinite(timeoutMs)
-      ? Math.max(0, timeoutMs)
-      : DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS
-    const deadline = Date.now() + normalizedTimeoutMs
+  private async waitForPendingPromises(ignoredPromises: (Promise<any> | null | undefined)[] = []): Promise<void> {
     const ignoredPendingPromises = ignoredPromises.filter((promise): promise is Promise<any> => !!promise)
     let iteration = 0
 
@@ -1194,35 +1185,11 @@ export abstract class PostHogCoreStateless {
         return
       }
 
-      const remainingMs = deadline - Date.now()
-      if (remainingMs <= 0) {
-        this._logger.debug(
-          `flush() timed out waiting for ${promises.length} pending promise(s) after ${iteration} re-check(s)`
-        )
-        return
-      }
-
       if (iteration > 0) {
         this._logger.debug(`flush() re-checking ${promises.length} pending promise(s) before flushing`)
       }
 
-      let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
-      const timedOut = await Promise.race([
-        Promise.all(promises.map((promise) => promise.catch(() => {}))).then(() => false),
-        new Promise<true>((resolve) => {
-          timeoutHandle = safeSetTimeout(() => resolve(true), remainingMs)
-        }),
-      ]).finally(() => {
-        clearTimeout(timeoutHandle)
-      })
-
-      if (timedOut) {
-        this._logger.debug(
-          `flush() timed out waiting for ${promises.length} pending promise(s) after ${iteration} re-check(s)`
-        )
-        return
-      }
-
+      await Promise.all(promises.map((promise) => promise.catch(() => {})))
       iteration++
     }
   }
@@ -1255,17 +1222,15 @@ export abstract class PostHogCoreStateless {
    * @throws PostHogFetchNetworkError
    * @throws Error
    */
-  protected flushWithPendingPromises(
-    flushPendingPromisesTimeoutMs: number = DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS
-  ): Promise<void> {
-    return this.flushInternal(flushPendingPromisesTimeoutMs)
+  protected flushWithPendingPromises(): Promise<void> {
+    return this.flushInternal(true)
   }
 
   flush(): Promise<void> {
-    return this.flushInternal()
+    return this.flushInternal(false)
   }
 
-  private flushInternal(flushPendingPromisesTimeoutMs?: number): Promise<void> {
+  private flushInternal(waitForPendingPromises: boolean): Promise<void> {
     if (this.disabled) {
       return Promise.resolve()
     }
@@ -1276,8 +1241,8 @@ export abstract class PostHogCoreStateless {
     // but exclude it from the pending-work wait to avoid self-waiting.
     const nextFlushPromise: Promise<void> = Promise.resolve()
       .then(() => {
-        if (flushPendingPromisesTimeoutMs !== undefined) {
-          return this.waitForPendingPromises(flushPendingPromisesTimeoutMs, [previousFlushPromise, nextFlushPromise])
+        if (waitForPendingPromises) {
+          return this.waitForPendingPromises([previousFlushPromise, nextFlushPromise])
         }
       })
       // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.

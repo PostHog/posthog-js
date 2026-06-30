@@ -35,8 +35,8 @@ export class PostHogCoreTestClient extends PostHogCore {
     return super.getFlags(distinctId, groups, personProperties, groupProperties, extraPayload)
   }
 
-  public flushWithPendingPromises(flushPendingPromisesTimeoutMs?: number): Promise<void> {
-    return super.flushWithPendingPromises(flushPendingPromisesTimeoutMs)
+  public flushWithPendingPromises(): Promise<void> {
+    return super.flushWithPendingPromises()
   }
 
   getPersistedProperty<T>(key: string): T {

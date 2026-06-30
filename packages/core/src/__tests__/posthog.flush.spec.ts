@@ -102,7 +102,7 @@ describe('PostHog Core', () => {
       expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
     })
 
-    it('stops waiting for pending promises after the flush pending timeout', async () => {
+    it('regular flush does not wait for pending promises', async () => {
       const successfulMessages: any[] = []
 
       mocks.fetch.mockImplementation(async (_, options) => {
@@ -119,12 +119,7 @@ describe('PostHog Core', () => {
       posthog.capture('queued-event')
       posthog.addPendingPromise(new Promise<void>(() => {}))
 
-      const flushPromise = posthog.flushWithPendingPromises(25)
-      expect(mocks.fetch).not.toHaveBeenCalled()
-
-      await Promise.resolve()
-      jest.advanceTimersByTime(25)
-      await expect(flushPromise).resolves.not.toThrow()
+      await expect(posthog.flush()).resolves.not.toThrow()
       expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
     })
 
