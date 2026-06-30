@@ -49,6 +49,84 @@ describe('PostHog Core', () => {
       ])
     })
 
+    it('waits for pending promises that enqueue events before flushing', async () => {
+      const successfulMessages: any[] = []
+      let resolvePending!: () => void
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.addPendingPromise(
+        new Promise<void>((resolve) => {
+          resolvePending = resolve
+        }).then(() => {
+          posthog.capture('pending-event')
+        })
+      )
+
+      const flushPromise = posthog.flush()
+      await waitForPromises()
+      expect(mocks.fetch).not.toHaveBeenCalled()
+
+      resolvePending()
+      await expect(flushPromise).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'pending-event' }])
+    })
+
+    it('flushes queued events even if a pending promise rejects', async () => {
+      const successfulMessages: any[] = []
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(Promise.reject(new Error('pending failure')))
+
+      await expect(posthog.flush()).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
+    it('stops waiting for pending promises after the flush pending timeout', async () => {
+      const successfulMessages: any[] = []
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(new Promise<void>(() => {}))
+
+      const flushPromise = posthog.flush(25)
+      expect(mocks.fetch).not.toHaveBeenCalled()
+
+      jest.advanceTimersByTime(25)
+      await expect(flushPromise).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
     it.each([
       ['with ReadableStream body', { cancel: jest.fn().mockResolvedValue(undefined) }, true],
       ['with null body', null, false],

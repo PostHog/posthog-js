@@ -777,10 +777,11 @@ export class PostHog extends PostHogCore {
    * @see flushLogs
    * @public
    *
+   * @param flushPendingPromisesTimeoutMs Maximum time to wait for pending SDK work before flushing, in milliseconds. Defaults to 10000 (10s).
    * @returns Promise that resolves when the flush is complete
    */
-  flush(): Promise<void> {
-    return super.flush()
+  flush(flushPendingPromisesTimeoutMs?: number): Promise<void> {
+    return super.flush(flushPendingPromisesTimeoutMs)
   }
 
   /**

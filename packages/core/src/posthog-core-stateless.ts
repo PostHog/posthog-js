@@ -137,6 +137,8 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+const DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS = 10000
+
 /**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core
  * (single source of truth — same policy events already use in `_flush()`) so
@@ -1173,11 +1175,33 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  private async waitForPendingPromises(timeoutMs: number): Promise<void> {
+    const normalizedTimeoutMs = Number.isFinite(timeoutMs)
+      ? Math.max(0, timeoutMs)
+      : DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS
+    let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+
+    try {
+      await Promise.race([
+        this.promiseQueue.joinAllSettled(this.flushPromise ? [this.flushPromise] : []),
+        new Promise<void>((resolve) => {
+          timeoutHandle = safeSetTimeout(resolve, normalizedTimeoutMs)
+        }),
+      ])
+    } finally {
+      clearTimeout(timeoutHandle)
+    }
+  }
+
   /**
    * Flushes the queue of pending events.
    *
    * This function will return a promise that will resolve when the flush is complete,
    * or reject if there was an error (for example if the server or network is down).
+   *
+   * Before flushing, this waits up to 10 seconds for pending SDK work that may enqueue events
+   * (for example async exception capture). Rejected pending work is ignored so already queued
+   * events are still flushed.
    *
    * If there is already a flush in progress, this function will wait for that flush to complete.
    *
@@ -1197,14 +1221,18 @@ export abstract class PostHogCoreStateless {
    *
    * @public
    *
+   * @param flushPendingPromisesTimeoutMs Maximum time to wait for pending SDK work before flushing, in milliseconds. Defaults to 10000 (10s).
+   *
    * @throws PostHogFetchHttpError
    * @throws PostHogFetchNetworkError
    * @throws Error
    */
-  async flush(): Promise<void> {
+  async flush(flushPendingPromisesTimeoutMs: number = DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS): Promise<void> {
     if (this.disabled) {
       return
     }
+
+    await this.waitForPendingPromises(flushPendingPromisesTimeoutMs)
 
     // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
     // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.

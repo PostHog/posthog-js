@@ -239,8 +239,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.scheduleDebouncedFlush()
   }
 
-  override async flush(): Promise<void> {
-    const flushPromise = super.flush()
+  override async flush(flushPendingPromisesTimeoutMs?: number): Promise<void> {
+    const flushPromise = super.flush(flushPendingPromisesTimeoutMs)
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
