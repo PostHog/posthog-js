@@ -233,8 +233,7 @@ describe('PostHog Node.js', () => {
     it('should capture identify events on shared queue', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.identify({ distinctId: '123', properties: { foo: 'bar' } })
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
@@ -254,8 +253,7 @@ describe('PostHog Node.js', () => {
     it('should handle identify using $set and $set_once', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, $set_once: { vip: true } } })
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
@@ -277,8 +275,7 @@ describe('PostHog Node.js', () => {
     it('should handle identify using $set_once', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.identify({ distinctId: '123', properties: { foo: 'bar', $set_once: { vip: true } } })
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
@@ -300,8 +297,7 @@ describe('PostHog Node.js', () => {
     it('should capture alias events on shared queue', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.alias({ distinctId: '123', alias: '1234' })
-      jest.runOnlyPendingTimers()
-      await waitForPromises()
+      await waitForFlushTimer()
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
@@ -738,6 +734,197 @@ describe('PostHog Node.js', () => {
       })
     })
 
+    it.each([
+      [
+        'identify',
+        async (ph: PostHog) => {
+          ph.identify({ distinctId: '123', properties: { foo: 'bar' } })
+          await waitForFlushTimer()
+        },
+        '$identify',
+        '123',
+        { $set: { foo: 'bar' }, beforeSend: true },
+      ],
+      [
+        'identifyImmediate',
+        (ph: PostHog) => ph.identifyImmediate({ distinctId: '123', properties: { foo: 'bar' } }),
+        '$identify',
+        '123',
+        { $set: { foo: 'bar' }, beforeSend: true },
+      ],
+      [
+        'groupIdentify',
+        async (ph: PostHog) => {
+          ph.groupIdentify({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } })
+          await waitForFlushTimer()
+        },
+        '$groupidentify',
+        '$posthog_team-1',
+        {
+          $group_type: 'posthog',
+          $group_key: 'team-1',
+          $group_set: { analytics: true },
+          beforeSend: true,
+        },
+      ],
+      [
+        'groupIdentifyImmediate',
+        (ph: PostHog) =>
+          ph.groupIdentifyImmediate({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } }),
+        '$groupidentify',
+        '$posthog_team-1',
+        {
+          $group_type: 'posthog',
+          $group_key: 'team-1',
+          $group_set: { analytics: true },
+          beforeSend: true,
+        },
+      ],
+      [
+        'alias',
+        async (ph: PostHog) => {
+          ph.alias({ distinctId: '123', alias: '1234' })
+          await waitForFlushTimer()
+        },
+        '$create_alias',
+        '123',
+        { distinct_id: '123', alias: '1234', beforeSend: true },
+      ],
+      [
+        'aliasImmediate',
+        (ph: PostHog) => ph.aliasImmediate({ distinctId: '123', alias: '1234' }),
+        '$create_alias',
+        '123',
+        { distinct_id: '123', alias: '1234', beforeSend: true },
+      ],
+    ] as Array<[string, (ph: PostHog) => Promise<void>, string, string, Record<string, any>]>)(
+      'should run before_send for %s',
+      async (_, send, expectedEvent, expectedDistinctId, expectedProperties) => {
+        const beforeSendFn = jest.fn((event) => ({
+          ...event,
+          properties: { ...event?.properties, beforeSend: true },
+        }))
+        const ph = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          fetchRetryCount: 0,
+          disableCompression: true,
+          before_send: beforeSendFn,
+        })
+
+        await send(ph)
+
+        expect(beforeSendFn).toHaveBeenCalledTimes(1)
+        expect(beforeSendFn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            distinctId: expectedDistinctId,
+            event: expectedEvent,
+          })
+        )
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents).toHaveLength(1)
+        expect(batchEvents![0]).toMatchObject({
+          distinct_id: expectedDistinctId,
+          event: expectedEvent,
+          properties: expect.objectContaining(expectedProperties),
+        })
+      }
+    )
+
+    it.each([
+      [
+        'identify',
+        async (ph: PostHog) => {
+          ph.identify({ distinctId: '123', properties: { foo: 'bar' } })
+          await waitForFlushTimer()
+        },
+      ],
+      ['identifyImmediate', (ph: PostHog) => ph.identifyImmediate({ distinctId: '123', properties: { foo: 'bar' } })],
+      [
+        'groupIdentify',
+        async (ph: PostHog) => {
+          ph.groupIdentify({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } })
+          await waitForFlushTimer()
+        },
+      ],
+      [
+        'groupIdentifyImmediate',
+        (ph: PostHog) =>
+          ph.groupIdentifyImmediate({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } }),
+      ],
+      [
+        'alias',
+        async (ph: PostHog) => {
+          ph.alias({ distinctId: '123', alias: '1234' })
+          await waitForFlushTimer()
+        },
+      ],
+      ['aliasImmediate', (ph: PostHog) => ph.aliasImmediate({ distinctId: '123', alias: '1234' })],
+    ] as Array<[string, (ph: PostHog) => Promise<void>]>)(
+      'should drop %s when before_send returns null',
+      async (_, send) => {
+        const beforeSendFn = jest.fn(() => null)
+        const ph = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          fetchRetryCount: 0,
+          disableCompression: true,
+          before_send: beforeSendFn,
+        })
+
+        await send(ph)
+
+        expect(beforeSendFn).toHaveBeenCalledTimes(1)
+        expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+      }
+    )
+
+    it.each([
+      [
+        'identify',
+        async (ph: PostHog) => {
+          ph.identify({ distinctId: '123', properties: { foo: 'bar' } })
+          await waitForFlushTimer()
+        },
+        '$identify',
+      ],
+      [
+        'groupIdentify',
+        async (ph: PostHog) => {
+          ph.groupIdentify({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } })
+          await waitForFlushTimer()
+        },
+        '$groupidentify',
+      ],
+      [
+        'alias',
+        async (ph: PostHog) => {
+          ph.alias({ distinctId: '123', alias: '1234' })
+          await waitForFlushTimer()
+        },
+        '$create_alias',
+      ],
+    ] as Array<[string, (ph: PostHog) => Promise<void>, string]>)(
+      'should not add registered or context properties to %s',
+      async (_, send, expectedEvent) => {
+        const ph = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          fetchRetryCount: 0,
+          disableCompression: true,
+          before_send: (event) => event,
+        })
+        ph.register({ registered_prop: 'registered_value' })
+
+        await ph.withContext({ properties: { context_prop: 'context_value' }, sessionId: 'session-123' }, () =>
+          send(ph)
+        )
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents![0]).toMatchObject({ event: expectedEvent })
+        expect(batchEvents![0].properties).not.toHaveProperty('registered_prop')
+        expect(batchEvents![0].properties).not.toHaveProperty('context_prop')
+        expect(batchEvents![0].properties).not.toHaveProperty('$session_id')
+      }
+    )
+
     it('should log when event is dropped in debug mode', async () => {
       const beforeSendFn = jest.fn(() => null)
       const ph = new PostHog('TEST_API_KEY', {
@@ -918,8 +1105,7 @@ describe('PostHog Node.js', () => {
   describe('groupIdentify', () => {
     it('should identify group with unique id', async () => {
       posthog.groupIdentify({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } })
-      jest.runOnlyPendingTimers()
-      await posthog.flush()
+      await waitForFlushTimer()
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
@@ -943,8 +1129,7 @@ describe('PostHog Node.js', () => {
         properties: { analytics: true },
         distinctId: '123',
       })
-      jest.runOnlyPendingTimers()
-      await posthog.flush()
+      await waitForFlushTimer()
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
