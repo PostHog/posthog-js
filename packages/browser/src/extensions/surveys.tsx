@@ -245,7 +245,12 @@ export class SurveyManager {
             // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
             this._surveyTimeouts.delete(survey.id)
 
-            if (!doesSurveyUrlMatch(survey)) {
+            // Re-check the full display predicate, not just the URL: eligibility can change
+            // during the delay (e.g. identify() reloads flags and the internal targeting flag
+            // flips to false), and we must not show a survey that is no longer eligible by the
+            // time the delay elapses.
+            if (!this._shouldDisplaySurvey(survey)) {
+                logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
                 return this._removeSurveyFromFocus(survey)
             }
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
@@ -570,7 +575,11 @@ export class SurveyManager {
         if (!survey.conditions) {
             return true
         }
-        return doesSurveyUrlMatch(survey) && doesSurveyDeviceTypesMatch(survey) && doesSurveyMatchSelector(survey)
+        return (
+            doesSurveyUrlMatch(survey, this._posthog) &&
+            doesSurveyDeviceTypesMatch(survey) &&
+            doesSurveyMatchSelector(survey)
+        )
     }
 
     private _internalFlagCheckSatisfied(survey: Survey): boolean {
@@ -663,18 +672,28 @@ export class SurveyManager {
         })
     }
 
+    /**
+     * The full predicate for "should this survey display right now": eligibility (running,
+     * type, linked/targeting/internal flags, wait period, already-seen) plus the URL/device/
+     * selector conditions, the event/action trigger, and any feature-flag dependencies.
+     *
+     * Shared by the display loop and re-checked when a popover's delay timer fires, so a
+     * survey that became ineligible *during* the delay (e.g. an identify() reloaded flags and
+     * the internal targeting flag is now false) is not shown. Note this is purely an AND gate:
+     * adding it can only ever suppress a display, never cause an extra one.
+     */
+    private _shouldDisplaySurvey(survey: Survey): boolean {
+        return (
+            this.checkSurveyEligibility(survey).eligible &&
+            this._isSurveyConditionMatched(survey) &&
+            this._hasActionOrEventTriggeredSurvey(survey) &&
+            this._checkFlags(survey)
+        )
+    }
+
     public getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false): void => {
         this._posthog?.surveys?.getSurveys((surveys) => {
-            const targetingMatchedSurveys = surveys.filter((survey) => {
-                const eligibility = this.checkSurveyEligibility(survey)
-                return (
-                    eligibility.eligible &&
-                    this._isSurveyConditionMatched(survey) &&
-                    this._hasActionOrEventTriggeredSurvey(survey) &&
-                    this._checkFlags(survey)
-                )
-            })
-
+            const targetingMatchedSurveys = surveys.filter((survey) => this._shouldDisplaySurvey(survey))
             callback(targetingMatchedSurveys)
         }, forceReload)
     }
@@ -684,6 +703,17 @@ export class SurveyManager {
             const inAppSurveysWithDisplayLogic = surveys.filter(
                 (survey) => survey.type === SurveyType.Popover || survey.type === SurveyType.Widget
             )
+
+            // Cancel any pending (delayed, not-yet-shown) survey whose eligibility changed since
+            // it was queued — e.g. an identify() during the delay flipped its targeting flag.
+            // This frees the popover focus promptly instead of waiting for a now-stale timer to
+            // fire. Safe for already-shown surveys: their timer is gone, so cancelSurvey no-ops.
+            const matchingIds = new Set(inAppSurveysWithDisplayLogic.map((survey) => survey.id))
+            for (const pendingSurveyId of Array.from(this._surveyTimeouts.keys())) {
+                if (!matchingIds.has(pendingSurveyId)) {
+                    this.cancelSurvey(pendingSurveyId)
+                }
+            }
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.
@@ -897,6 +927,7 @@ type UseHideSurveyOnURLChangeProps = {
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     setSurveyVisible: (visible: boolean) => void
     isPreviewMode?: boolean
+    posthog?: PostHog
 }
 
 /**
@@ -914,6 +945,7 @@ export function useHideSurveyOnURLChange({
     removeSurveyFromFocus = () => {},
     setSurveyVisible,
     isPreviewMode = false,
+    posthog,
 }: UseHideSurveyOnURLChangeProps) {
     useEffect(() => {
         if (isPreviewMode || !survey.conditions?.url) {
@@ -922,7 +954,7 @@ export function useHideSurveyOnURLChange({
 
         const checkUrlMatch = () => {
             const isSurveyTypeWidget = survey.type === SurveyType.Widget
-            const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey)
+            const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey, posthog)
             const isSurveyWidgetTypeTab = survey.appearance?.widgetType === SurveyWidgetType.Tab && isSurveyTypeWidget
 
             if (doesSurveyMatchUrlCondition) {
@@ -964,7 +996,7 @@ export function useHideSurveyOnURLChange({
             window.history.pushState = originalPushState
             window.history.replaceState = originalReplaceState
         }
-    }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible])
+    }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible, posthog])
 }
 
 export function usePopupVisibility(
@@ -1040,7 +1072,7 @@ export function usePopupVisibility(
 
         const showSurvey = () => {
             // check if the url is still matching, necessary for delayed surveys, as the URL may have changed
-            if (!doesSurveyUrlMatch(survey)) {
+            if (!doesSurveyUrlMatch(survey, posthog)) {
                 return
             }
             setIsPopupVisible(true)
@@ -1089,6 +1121,7 @@ export function usePopupVisibility(
         removeSurveyFromFocus,
         setSurveyVisible: setIsPopupVisible,
         isPreviewMode,
+        posthog,
     })
 
     return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithViewTransition }
@@ -1490,6 +1523,7 @@ export function FeedbackWidget({
     useHideSurveyOnURLChange({
         survey,
         setSurveyVisible: setIsFeedbackButtonVisible,
+        posthog,
     })
 
     if (!isFeedbackButtonVisible) {

@@ -12,14 +12,14 @@ jest.mock('posthog-node', () => ({
     PostHog: mockPostHogConstructor,
 }))
 
-describe('nodeClientCache waitUntil auto-detection', () => {
+describe('clientCache.node waitUntil auto-detection', () => {
     beforeEach(() => {
         jest.clearAllMocks()
         jest.resetModules()
     })
 
     it('auto-detects @vercel/functions waitUntil and applies to new clients', async () => {
-        const { getOrCreateNodeClient } = require('../src/server/nodeClientCache')
+        const { getOrCreateNodeClient } = require('../src/server/clientCache.node')
 
         await getOrCreateNodeClient('phc_test', { host: 'https://test.com' })
 
@@ -30,7 +30,7 @@ describe('nodeClientCache waitUntil auto-detection', () => {
     })
 
     it('explicit options.waitUntil takes priority over auto-detected', async () => {
-        const { getOrCreateNodeClient } = require('../src/server/nodeClientCache')
+        const { getOrCreateNodeClient } = require('../src/server/clientCache.node')
 
         const explicitWaitUntil = jest.fn()
         await getOrCreateNodeClient('phc_test3', { host: 'https://test3.com', waitUntil: explicitWaitUntil })

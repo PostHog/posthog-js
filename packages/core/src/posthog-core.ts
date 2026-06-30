@@ -23,6 +23,7 @@ import type {
 } from './types'
 import {
   createFlagsResponseFromFlagsAndPayloads,
+  flagDetailsToResults,
   getEnabledFromValue,
   getFeatureFlagValue,
   getFlagValuesFromFlags,
@@ -35,7 +36,7 @@ import {
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
 import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString } from './utils'
+import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString, getEventUuid } from './utils'
 import { EventHint } from './error-tracking'
 
 // Stores the parameters for a pending feature flags reload request
@@ -54,7 +55,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
   private disableRemoteFeatureFlags: boolean
-  private flagCallReported: { [key: string]: boolean } = {}
+  private flagCallReported: { [key: string]: Set<FeatureFlagValue | undefined> } = {}
   private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
   // internal
@@ -192,6 +193,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         this.reloadFeatureFlags()
       }
     })
+  }
+
+  async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    try {
+      return await super._shutdown(shutdownTimeoutMs)
+    } finally {
+      this.flagCallReported = {}
+    }
   }
 
   protected getCommonEventProperties(): PostHogEventProperties {
@@ -808,11 +817,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             return res
           }
 
-          // clear flag call reported if we have new flags since they might have changed
-          if (this.sendFeatureFlagEvent) {
-            this.flagCallReported = {}
-          }
-
           let newFeatureFlagDetails = res
           if (res.errorsWhileComputingFlags) {
             // if not all flags were computed, we upsert flags instead of replacing them
@@ -949,6 +953,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._getFeatureFlagResult(key, options)
   }
 
+  /**
+   * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
+   * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+   */
+  getAllFeatureFlags(): FeatureFlagResult[] {
+    return flagDetailsToResults(this.getFeatureFlagDetails()?.flags ?? {})
+  }
+
   protected _getFeatureFlagResult(
     key: string,
     options: {
@@ -970,8 +982,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const details = this.getFeatureFlagDetails()
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
     const featureFlag = details?.flags[key]
-    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
+    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]?.has(flagValue)
 
     if (sendEvent) {
       const errors: string[] = []
@@ -1003,7 +1015,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const bootstrappedPayload = this.getBootstrappedFeatureFlagPayloads()?.[key]
       const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
 
-      this.flagCallReported[key] = true
+      this.flagCallReported[key] = this.flagCallReported[key] ?? new Set()
+      this.flagCallReported[key].add(flagValue)
 
       const properties: Record<string, any> = {
         $feature_flag: key,
@@ -1245,9 +1258,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
       }
 
-      if (this.sendFeatureFlagEvent) {
-        this.flagCallReported = {}
-      }
       this.setKnownFeatureFlagDetails({ flags: flagDetails })
     })
   }
@@ -1594,8 +1604,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * Override processBeforeEnqueue to run before_send hooks.
    * This runs after prepareMessage, giving users full control over the final event.
    *
-   * The internal message contains many fields (event, distinct_id, properties, type, library,
-   * library_version, timestamp, uuid). CaptureEvent exposes a subset matching the web SDK's
+   * The internal message contains many fields (event, distinct_id, properties, timestamp, uuid).
+   * Deprecated top-level type, library, and library_version values may still be present on legacy
+   * queued messages; type is a no-op, while library and library_version are only used as fallbacks
+   * for the official properties.$lib and properties.$lib_version fields.
+   * CaptureEvent exposes a subset matching the web SDK's
    * CaptureResult: uuid, event, properties, $set, $set_once, timestamp.
    * Note: $set/$set_once are extracted from properties.$set and properties.$set_once.
    */
@@ -1639,7 +1652,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     return {
       ...message,
-      uuid: result.uuid ?? message.uuid,
+      uuid: getEventUuid(result.uuid ?? message.uuid, uuidv7),
       event: result.event,
       properties: resultProps,
       timestamp: result.timestamp as unknown as JsonType,

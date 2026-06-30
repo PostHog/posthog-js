@@ -52,6 +52,7 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
    */
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
   timestamp?: Date
+  /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
   /**
    * Internal flag set by captureException() to indicate this $exception
@@ -628,6 +629,16 @@ export interface IPostHog {
    * @param properties OPTIONAL | which can be a object with any information you'd like to add
    */
   groupIdentify({ groupType, groupKey, properties }: GroupIdentifyMessage): void
+
+  /**
+   * @description Sets a group's properties immediately. Useful for edge environments where the usual queue-based
+   * sending is not preferable. Do not mix immediate and non-immediate calls.
+   *
+   * @param groupType Type of group (ex: 'company'). Limited to 5 per project
+   * @param groupKey Unique identifier for that type of group (ex: 'id:5')
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   */
+  groupIdentifyImmediate({ groupType, groupKey, properties }: GroupIdentifyMessage): Promise<void>
 
   /**
    * @description Force an immediate reload of the polled feature flags. Please note that they are

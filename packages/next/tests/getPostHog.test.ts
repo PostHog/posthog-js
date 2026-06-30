@@ -54,7 +54,7 @@ jest.mock('next/headers.js', () => ({
     headers: jest.fn(() => Promise.resolve(mockHeaderStore)),
 }))
 
-// Mock nodeClientCache to avoid cross-test cache pollution
+// Mock clientCache.node to avoid cross-test cache pollution
 const mockGetOrCreateNodeClient = jest.fn().mockImplementation(() => ({
     capture: mockCapture,
     identify: mockIdentify,
@@ -68,7 +68,7 @@ const mockGetOrCreateNodeClient = jest.fn().mockImplementation(() => ({
     withContext: mockWithContext,
 }))
 
-jest.mock('../src/server/nodeClientCache', () => ({
+jest.mock('../src/server/clientCache.node', () => ({
     getOrCreateNodeClient: (...args: unknown[]) => mockGetOrCreateNodeClient(...args),
 }))
 

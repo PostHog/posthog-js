@@ -1,6 +1,6 @@
 {
     "name": "@posthog/next",
-    "version": "0.4.96",
+    "version": "0.7.0",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -83,7 +83,7 @@
         "next": "^15.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-        "ts-jest": "^29.2.5",
+        "ts-jest": "^29.4.11",
         "typescript": "catalog:"
     },
     "peerDependencies": {

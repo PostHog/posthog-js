@@ -42,6 +42,28 @@ export type PostHogCoreOptions = {
    */
   defaultOptIn?: boolean
   /**
+   * Whether to strip URL fragments (`#...`) from automatically captured URL fields.
+   * Disabled by default for backwards compatibility. Set to `true` to strip hashes from:
+   *
+   * - `$current_url` on automatically captured browser events, including `$pageview`
+   * - `$initial_current_url`
+   * - `$session_entry_url`
+   * - `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture
+   * - Next.js Pages Router `$pageview` `$current_url`
+   * - web vitals `$current_url`
+   * - logs `url.full`
+   * - conversations `current_url` and `request_url`
+   * - session replay rrweb meta/custom-event `href` URLs
+   * - heatmap data URLs
+   *
+   * If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.
+   * If you want to capture hashes selectively, leave this as `false` and use `before_send` to remove
+   * sensitive hash values before events are sent.
+   *
+   * @default false
+   */
+  disable_capture_url_hashes?: boolean
+  /**
    * Whether to track that `getFeatureFlag` was called (used by Experiments)
    *
    * @default true
@@ -74,14 +96,13 @@ export type PostHogCoreOptions = {
   disableRemoteFeatureFlags?: boolean
   /**
    * Whether to load remote config when initialized or not
-   * Experimental support
    *
+   * @deprecated Remote config is now always loaded and this option is a no-op. It will be removed in a future version.
    * @default false
    */
   disableRemoteConfig?: boolean
   /**
    * Whether to load surveys when initialized or not
-   * Experimental support
    * Requires the `PostHogSurveyProvider` to be used
    *
    * @default false
@@ -118,6 +139,13 @@ export type PostHogCoreOptions = {
    * @default 10000 for stateful clients, 3000 for stateless
    */
   featureFlagsRequestTimeoutMs?: number
+  /**
+   * How many times feature flag requests retry after a transient network error.
+   * Set to 0 to disable feature flag request retries.
+   *
+   * @default 1
+   */
+  featureFlagsRequestMaxRetries?: number
   /**
    * Timeout in milliseconds for remote config calls
    *
@@ -251,6 +279,8 @@ export enum PostHogPersistedProperty {
   InstalledAppBuild = 'installed_app_build', // only used by posthog-react-native
   InstalledAppVersion = 'installed_app_version', // only used by posthog-react-native
   SessionReplay = 'session_replay', // only used by posthog-react-native
+  // Session id for which an event trigger has activated session replay. only used by posthog-react-native
+  SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native
   SurveysSeen = 'surveys_seen', // only used by posthog-react-native
   Surveys = 'surveys', // only used by posthog-react-native
@@ -270,7 +300,7 @@ export type PostHogFetchOptions = {
 
 // Check out posthog-js for these additional options and try to keep them in sync
 export type PostHogCaptureOptions = {
-  /** If provided overrides the auto-generated event ID */
+  /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
   /** If provided overrides the auto-generated timestamp */
   timestamp?: Date
@@ -294,8 +324,8 @@ export type PostHogFetchResponse = {
 }
 
 export type PostHogQueueItem = {
-  message: any
-  callback?: (err: any) => void
+  message?: PostHogEventProperties
+  callback?: (err: unknown) => void
 }
 
 export type PostHogEventProperties = {
@@ -900,7 +930,7 @@ export type KnownUnsafeEditableEventProperty = (typeof knownUnsafeEditableEventP
  * This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
  */
 export type CaptureEvent = {
-  /** UUID for the event (optional to allow compatibility with Node SDK's EventMessage) */
+  /** UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. */
   uuid?: string
   /** The name of the event */
   event: string

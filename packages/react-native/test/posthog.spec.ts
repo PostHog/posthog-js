@@ -1231,11 +1231,12 @@ describe('PostHog React Native', () => {
           setDefaultPersonProperties: false,
           flushInterval: 0,
           preloadFeatureFlags: false,
-          disableRemoteConfig: true,
           disableSurveys: true,
           captureAppLifecycleEvents: false,
         })
         await posthog.ready()
+        // Await the background remote config fetch so it completes before we clear mocks
+        await (posthog as any)._remoteConfigResponsePromise
         ;(globalThis as any).window.fetch.mockClear()
       })
 
@@ -2267,7 +2268,6 @@ describe('Feature flag error tracking', () => {
       preloadFeatureFlags: false,
       sendFeatureFlagEvent: true,
       captureAppLifecycleEvents: false,
-      disableRemoteConfig: true,
       disableSurveys: true,
       disableCompression: true,
     })

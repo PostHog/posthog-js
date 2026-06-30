@@ -47,6 +47,23 @@ export default function HomeScreen() {
         }
     }
 
+    // Fires the event configured as a session-replay event trigger for this project.
+    // With the trigger configured, replay stays paused until this event is captured,
+    // then records for the rest of the session. Check Status to confirm it flips to true.
+    const handleFireTrigger = async () => {
+        posthog.capture('open_replay_screen_tapped')
+        setReplayStatus('Captured open_replay_screen_tapped — checking...')
+        await handleCheckStatus()
+    }
+
+    // Rotates the session id so the event trigger re-arms: replay pauses until a fresh
+    // open_replay_screen_tapped is captured in the new session.
+    const handleRotateSession = async () => {
+        posthog.resetSessionId()
+        setReplayStatus('Session rotated — trigger re-armed')
+        await handleCheckStatus()
+    }
+
     return (
         <ParallaxScrollView
             headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -98,6 +115,14 @@ export default function HomeScreen() {
                     <Button title="Start (New)" onPress={() => handleStartRecording(false)} />
                     <Button title="Stop" onPress={handleStopRecording} />
                     <Button title="Check Status" onPress={handleCheckStatus} />
+                </View>
+            </ThemedView>
+            <ThemedView style={styles.stepContainer}>
+                <ThemedText type="subtitle">Session Replay Event Trigger</ThemedText>
+                <ThemedText>Status: {replayStatus}</ThemedText>
+                <View style={styles.buttonContainer}>
+                    <Button title="Fire 'open_replay_screen_tapped'" onPress={handleFireTrigger} />
+                    <Button title="Rotate Session (re-arm)" onPress={handleRotateSession} />
                 </View>
             </ThemedView>
         </ParallaxScrollView>

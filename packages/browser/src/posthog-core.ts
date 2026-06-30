@@ -6,6 +6,7 @@ import {
     COOKIELESS_SENTINEL_VALUE,
     COOKIELESS_ON_REJECT,
     DEVICE_ID,
+    DEVICE_MODEL,
     PERSON_PROFILES_IDENTIFIED_ONLY,
     USER_STATE_ANONYMOUS,
     USER_STATE_IDENTIFIED,
@@ -40,7 +41,7 @@ import {
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
-import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { request, SUPPORTS_REQUEST } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
@@ -85,6 +86,7 @@ import {
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
+import { getDeviceModel } from './utils/device-model-utils'
 import { getEventProperties } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { logger } from './utils/logger'
@@ -111,6 +113,7 @@ import {
     isEmptyObject,
     isObject,
     isBoolean,
+    getEventUuid,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -193,6 +196,7 @@ const defaultsThatVaryByConfig = (
     | 'persistence_save_debounce_ms'
     | 'split_storage'
     | 'detect_google_search_app'
+    | 'disable_capture_url_hashes'
 > => ({
     rageclick:
         defaults && defaults >= '2026-05-30'
@@ -201,12 +205,20 @@ const defaultsThatVaryByConfig = (
               ? { content_ignorelist: true }
               : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    session_recording: defaults && defaults >= '2025-11-30' ? { strictMinimumDuration: true } : {},
+    session_recording:
+        defaults && defaults >= '2026-06-25'
+            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 }, streamNetworkBody: true }
+            : defaults && defaults >= '2026-05-30'
+              ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 } }
+              : defaults && defaults >= '2025-11-30'
+                ? { strictMinimumDuration: true }
+                : {},
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
     split_storage: !!(defaults && defaults >= '2026-05-30'),
     detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
+    disable_capture_url_hashes: !!(defaults && defaults >= '2026-06-25'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -243,6 +255,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_surveys_automatic_display: false,
     disable_conversations: false,
     disable_product_tours: false,
+    disableDeviceModel: false,
     disable_external_dependency_loading: false,
     strict_script_versioning: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
@@ -287,6 +300,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: PERSON_PROFILES_IDENTIFIED_ONLY,
     before_send: undefined,
+    get_current_url: undefined,
     request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
     error_tracking: {},
 
@@ -645,6 +659,13 @@ export class PostHog implements PostHogInterface {
         if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
             mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
         }
+        // likewise a partial user-supplied session_recording keeps the date-gated top-level
+        // defaults (e.g. strictMinimumDuration, canvasCapture) it doesn't set. this is a shallow
+        // one-level merge: a user-supplied nested object (e.g. their own canvasCapture) still
+        // replaces the default one wholesale rather than merging into it.
+        if (isObject(baseConfig.session_recording) && isObject(userConfig.session_recording)) {
+            mergedConfig.session_recording = extend({}, baseConfig.session_recording, userConfig.session_recording)
+        }
         this.set_config(mergedConfig)
 
         if (this.config.on_xhr_error) {
@@ -832,6 +853,17 @@ export class PostHog implements PostHogInterface {
             logger.warn(
                 'The `ip` config option has NO EFFECT AT ALL and has been deprecated. Use a custom transformation or "Discard IP data" project setting instead. See https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address for more information.'
             )
+        }
+
+        // Not awaited — the first event may miss $device_model, which is fine for a stable per-device dimension.
+        if (!this.config.disableDeviceModel) {
+            getDeviceModel()
+                .then((model) => {
+                    if (model) {
+                        this.register({ [DEVICE_MODEL]: model })
+                    }
+                })
+                .catch(__NOOP)
         }
 
         return this
@@ -1064,7 +1096,10 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
-        this.surveys?.handlePageUnload()
+        // Optional-call the method, not just the receiver: after a deploy a cached older
+        // lazy-loaded surveys chunk can yield an instance whose prototype lacks handlePageUnload,
+        // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
+        this.surveys?.handlePageUnload?.()
 
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
@@ -1103,12 +1138,6 @@ export class PostHog implements PostHogInterface {
         }
 
         options.transport = options.transport || this.config.api_transport
-        if (!options.skipIPParam) {
-            options.url = extendURLParams(options.url, {
-                // Whether to detect ip info or not
-                ip: this.config.ip ? 1 : 0,
-            })
-        }
         options.headers = {
             ...this.config.request_headers,
             ...options.headers,
@@ -1346,7 +1375,8 @@ export class PostHog implements PostHogInterface {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
-        const uuid = options?.uuid || uuidv7()
+        // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
+        const uuid = getEventUuid(options?.uuid, uuidv7)
         let data: CaptureResult = {
             uuid,
             event: event_name,
@@ -1439,6 +1469,8 @@ export class PostHog implements PostHogInterface {
                 return
             } else {
                 data = beforeSendResult
+                // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
+                data.uuid = getEventUuid(data.uuid, uuidv7)
             }
         }
 
@@ -1518,7 +1550,8 @@ export class PostHog implements PostHogInterface {
         const infoProperties = getEventProperties(
             this.config.mask_personal_data_properties,
             this.config.custom_personal_data_properties,
-            this.config.detect_google_search_app
+            this.config.detect_google_search_app,
+            this.config.disable_capture_url_hashes
         )
 
         if (this.sessionManager) {
@@ -1868,8 +1901,9 @@ export class PostHog implements PostHogInterface {
      *
      * @example
      * ```js
-     * if(posthog.getFeatureFlag('beta-feature') === 'some-value') {
-     *      const someValue = posthog.getFeatureFlagPayload('beta-feature')
+     * const betaFeature = posthog.getFeatureFlagResult('beta-feature')
+     * if (betaFeature?.variant === 'some-value') {
+     *      const someValue = betaFeature?.payload
      *      // do something
      * }
      * ```
@@ -1919,6 +1953,17 @@ export class PostHog implements PostHogInterface {
      */
     getFeatureFlagResult(key: string, options?: FeatureFlagOptions): FeatureFlagResult | undefined {
         return this.featureFlags?.getFeatureFlagResult(key, options)
+    }
+
+    /**
+     * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
+     * the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh.
+     * Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.
+     *
+     * @returns {FeatureFlagResult[]} All loaded flags, or an empty array if none are loaded.
+     */
+    getAllFeatureFlags(): FeatureFlagResult[] {
+        return this.featureFlags?.getAllFeatureFlags() ?? []
     }
 
     /**
@@ -2909,6 +2954,9 @@ export class PostHog implements PostHogInterface {
             return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property(DEVICE_ID)
+        // $device_model describes the physical device, not the user, so preserve it across reset()
+        // the same way $device_id is — it is only ever re-resolved at init.
+        const device_model = this.get_property(DEVICE_MODEL)
         // Snapshot the session-recording remote config before clearing persistence.
         // It's server-defined config (sample rate, masking, canvas, triggers, …),
         // not user state, and must survive reset(). Otherwise start('session_id_changed')
@@ -2951,6 +2999,9 @@ export class PostHog implements PostHogInterface {
                 },
                 ''
             )
+            if (!reset_device_id && !isUndefined(device_model)) {
+                this.register({ [DEVICE_MODEL]: device_model })
+            }
         }
 
         this.register(

@@ -31,7 +31,7 @@ import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions } from './config'
+import { defaultNetworkOptions, effectivePayloadLimitBytes } from './config'
 
 const logger = createLogger('[Recorder]')
 
@@ -136,6 +136,19 @@ function isRequest(value: unknown): value is Request {
     }
 }
 
+// binary/asset bodies are large and useless for replay debugging (and capturing an image body
+// duplicates what the recording already shows), so we never record them even when recordBody is on
+export const NEVER_RECORD_BODY_CONTENT_TYPES = [
+    'image/',
+    'video/',
+    'audio/',
+    'font/',
+    'application/octet-stream',
+    'application/pdf',
+    'application/zip',
+    'application/wasm',
+]
+
 export function shouldRecordBody({
     type,
     recordBody,
@@ -150,7 +163,7 @@ export function shouldRecordBody({
     function matchesContentType(contentTypes: string[]) {
         const contentTypeHeader = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type')
         const contentType = contentTypeHeader && headers[contentTypeHeader]
-        return contentTypes.some((ct) => contentType?.includes(ct))
+        return contentTypes.some((ct) => contentType?.toLowerCase().includes(ct))
     }
 
     /**
@@ -177,6 +190,8 @@ export function shouldRecordBody({
     }
     if (!recordBody) return false
     if (isBlobURL(url)) return false
+    // never record binary/asset bodies, regardless of the recordBody setting
+    if (matchesContentType(NEVER_RECORD_BODY_CONTENT_TYPES)) return false
     if (isBoolean(recordBody)) return true
     if (isArray(recordBody)) return matchesContentType(recordBody)
     const recordBodyType = recordBody[type]
@@ -521,23 +536,172 @@ function isReadableStreamBody(body: unknown): body is ReadableStream<Uint8Array>
     return isObject(body) && isFunction(body.getReader) && isFunction(body.tee)
 }
 
+// reading a body must never hold up the page's request for long, so we cap every read attempt
+const BODY_READ_TIMEOUT_MS = 500
+const BODY_READ_TIMEOUT_MESSAGE = '[SessionReplay] Timeout while trying to read body'
+const BODY_READ_FAILED_MESSAGE = '[SessionReplay] Failed to read body'
+
+function bodyReadFailedMessage(reason: unknown): string {
+    return `${BODY_READ_FAILED_MESSAGE}: ${reason}`
+}
+
+function bodyTooLargeMessage(limitBytes: number): string {
+    return `[SessionReplay] Body too large to record (> ${limitBytes} bytes)`
+}
+
+// when the body declares a content-length over the limit we can skip reading it entirely.
+// this trusts content-length the same way config.ts enforcePayloadSizeLimit does.
+// known accepted risk: for a compressed response content-length is the compressed size while the
+// streaming reader counts decoded bytes, so a body that is over the limit compressed but under it
+// decoded is dropped to the placeholder rather than recorded. it never breaks the page, so we accept it.
+export function _contentLengthExceedsLimit(r: Request | Response, limitBytes: number): boolean {
+    try {
+        const headerValue = r.headers?.get?.('content-length')
+        if (!headerValue) {
+            return false
+        }
+        const contentLength = parseInt(headerValue, 10)
+        return Number.isFinite(contentLength) && contentLength > limitBytes
+    } catch {
+        return false
+    }
+}
+
+export function _readBody(r: Request | Response, options: NetworkRecordOptions): Promise<string> {
+    if (!options.streamNetworkBody) {
+        return _tryReadBody(r)
+    }
+    const limitBytes = effectivePayloadLimitBytes(options)
+    // skip the read for bodies the headers already tell us are over the limit
+    if (_contentLengthExceedsLimit(r, limitBytes)) {
+        return Promise.resolve(bodyTooLargeMessage(limitBytes))
+    }
+    return _tryReadBodyStreaming(r, limitBytes)
+}
+
 function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
     return new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read body'), 500)
+        const timeout = setTimeout(() => resolve(BODY_READ_TIMEOUT_MESSAGE), BODY_READ_TIMEOUT_MS)
         try {
             r.clone()
                 .text()
                 .then(
                     (txt) => resolve(txt),
-                    (reason) => resolve('[SessionReplay] Failed to read body: ' + reason)
+                    (reason) => resolve(bodyReadFailedMessage(reason))
                 )
                 .finally(() => clearTimeout(timeout))
         } catch {
             clearTimeout(timeout)
-            resolve('[SessionReplay] Failed to read body')
+            resolve(BODY_READ_FAILED_MESSAGE)
         }
+    })
+}
+
+function concatChunks(chunks: Uint8Array[], totalBytes: number): Uint8Array {
+    const merged = new Uint8Array(totalBytes)
+    let offset = 0
+    for (const chunk of chunks) {
+        merged.set(chunk, offset)
+        offset += chunk.byteLength
+    }
+    return merged
+}
+
+// Reads a clone of the body chunk by chunk, stopping as soon as the running total exceeds the
+// limit, so a very large body is never fully buffered. Like _tryReadBody it only ever reads a
+// clone (never the stream the page consumes) and is guaranteed to resolve, never reject.
+export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number): Promise<string> {
+    // eslint-disable-next-line compat/compat
+    return new Promise((resolve) => {
+        let settled = false
+        let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+
+        function cancel(): void {
+            try {
+                void reader?.cancel()
+            } catch {
+                // the reader may already be released; nothing to clean up
+            }
+        }
+
+        // resolving always releases the reader, so a slow/hung stream stops being pulled (and stops
+        // buffering the clone) the moment we settle — whether via success, the cap, an error, or the timeout
+        function done(value: string): void {
+            if (settled) {
+                return
+            }
+            settled = true
+            clearTimeout(timeout)
+            cancel()
+            resolve(value)
+        }
+
+        const timeout = setTimeout(() => done(BODY_READ_TIMEOUT_MESSAGE), BODY_READ_TIMEOUT_MS)
+
+        let clone: Request | Response
+        try {
+            clone = r.clone()
+        } catch {
+            done(BODY_READ_FAILED_MESSAGE)
+            return
+        }
+
+        const body = clone.body
+        // no readable stream (or no TextDecoder) available — fall back to the buffered read of the clone
+        if (!isReadableStreamBody(body) || typeof TextDecoder === 'undefined') {
+            try {
+                clone.text().then(
+                    (txt) => done(txt),
+                    (reason) => done(bodyReadFailedMessage(reason))
+                )
+            } catch {
+                done(BODY_READ_FAILED_MESSAGE)
+            }
+            return
+        }
+
+        try {
+            reader = body.getReader()
+        } catch {
+            done(BODY_READ_FAILED_MESSAGE)
+            return
+        }
+
+        const chunks: Uint8Array[] = []
+        let received = 0
+
+        function pump(): void {
+            reader!.read().then(
+                ({ done: streamDone, value }) => {
+                    // already resolved (e.g. the timeout fired) — stop reading and release the stream
+                    if (settled) {
+                        cancel()
+                        return
+                    }
+
+                    if (streamDone) {
+                        done(new TextDecoder().decode(concatChunks(chunks, received)))
+                        return
+                    }
+
+                    if (value) {
+                        if (received + value.byteLength > limitBytes) {
+                            done(bodyTooLargeMessage(limitBytes))
+                            return
+                        }
+                        received += value.byteLength
+                        chunks.push(value)
+                    }
+
+                    pump()
+                },
+                (reason) => done(bodyReadFailedMessage(reason))
+            )
+        }
+
+        pump()
     })
 }
 
@@ -555,7 +719,7 @@ async function _tryReadRequestBody({
         return Promise.resolve(hostname + ' is in deny list')
     }
 
-    return _tryReadBody(r)
+    return _readBody(r, options)
 }
 
 async function _tryReadResponseBody({
@@ -572,7 +736,7 @@ async function _tryReadResponseBody({
         return Promise.resolve(cannotReadBodyReason)
     }
 
-    return _tryReadBody(r)
+    return _readBody(r, options)
 }
 
 function initFetchObserver(

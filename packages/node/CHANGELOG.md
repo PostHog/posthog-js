@@ -1,5 +1,84 @@
 # posthog-node
 
+## 5.39.0
+
+### Minor Changes
+
+- [#4006](https://github.com/PostHog/posthog-js/pull/4006) [`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `groupIdentifyImmediate()` to await the network request when identifying a group, mirroring `captureImmediate`/`identifyImmediate`/`aliasImmediate`. Useful in edge/serverless environments where the background queue may not flush. The Convex integration now uses it directly instead of routing `$groupidentify` through `captureImmediate`.
+  (2026-06-30)
+
+### Patch Changes
+
+- Updated dependencies [[`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c)]:
+  - @posthog/core@1.39.0
+
+## 5.38.8
+
+### Patch Changes
+
+- [#3974](https://github.com/PostHog/posthog-js/pull/3974) [`08b404b`](https://github.com/PostHog/posthog-js/commit/08b404b5cd5506041df0ecc512ea9d950a3387e7) Thanks [@mjfaga](https://github.com/mjfaga)! - Fix local evaluation ignoring the `in`/`not_in` operator on cohort-based flag conditions. "Not in
+  cohort" was evaluated as "in cohort", inverting cohort-exclusion flags. Now applies the operator to
+  the cohort membership result. (2026-06-29)
+
+## 5.38.7
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+- Updated dependencies [[`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b)]:
+  - @posthog/core@1.38.1
+
+## 5.38.6
+
+### Patch Changes
+
+- [#3896](https://github.com/PostHog/posthog-js/pull/3896) [`606ef43`](https://github.com/PostHog/posthog-js/commit/606ef43d69fd09a00a67df2a404d8739cc50c654) Thanks [@GauthierPLM](https://github.com/GauthierPLM)! - Only stamp $groups from the top-level `groups` when present
+  (2026-06-26)
+
+## 5.38.5
+
+### Patch Changes
+
+- [#3955](https://github.com/PostHog/posthog-js/pull/3955) [`8e9689a`](https://github.com/PostHog/posthog-js/commit/8e9689a9018d184b80f32fc4874686d7243970e2) Thanks [@marandaneto](https://github.com/marandaneto)! - Dedupe feature flag called events per returned flag value.
+  (2026-06-24)
+- Updated dependencies [[`8e9689a`](https://github.com/PostHog/posthog-js/commit/8e9689a9018d184b80f32fc4874686d7243970e2)]:
+  - @posthog/core@1.37.3
+
+## 5.38.4
+
+### Patch Changes
+
+- [#3938](https://github.com/PostHog/posthog-js/pull/3938) [`6391106`](https://github.com/PostHog/posthog-js/commit/6391106fd4bcbddb9a63a13338929a4c1918a70a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Respect `disable_capture_url_hashes` when capturing Express and NestJS request URLs.
+  (2026-06-23)
+
+## 5.38.3
+
+### Patch Changes
+
+- [#3937](https://github.com/PostHog/posthog-js/pull/3937) [`4d59d0e`](https://github.com/PostHog/posthog-js/commit/4d59d0e10f92ad3444e14dc171997c21aba57929) Thanks [@marandaneto](https://github.com/marandaneto)! - Deprecate the Node SDK Sentry integration and point users to PostHog Error Tracking for Node.
+  (2026-06-23)
+- Updated dependencies [[`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0)]:
+  - @posthog/core@1.37.0
+
+## 5.38.2
+
+### Patch Changes
+
+- [#3903](https://github.com/PostHog/posthog-js/pull/3903) [`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce) Thanks [@marandaneto](https://github.com/marandaneto)! - Validate custom event UUID overrides and generate new UUIDs when invalid.
+  (2026-06-19)
+- Updated dependencies [[`6b21f77`](https://github.com/PostHog/posthog-js/commit/6b21f77291aeea64ce8229eb28196d1acacc20ce)]:
+  - @posthog/core@1.35.3
+
+## 5.38.1
+
+### Patch Changes
+
+- [#3886](https://github.com/PostHog/posthog-js/pull/3886) [`e6d7fe2`](https://github.com/PostHog/posthog-js/commit/e6d7fe2a5f10d29b3df69392f584970e7a7a4561) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop sending deprecated no-op top-level `type`, `library`, and `library_version` fields in event batch payloads. Use `properties.$lib` and `properties.$lib_version` for SDK metadata; legacy queued `library` and `library_version` values are used as fallbacks when the official `$` properties are missing.
+  (2026-06-18)
+- Updated dependencies [[`e6d7fe2`](https://github.com/PostHog/posthog-js/commit/e6d7fe2a5f10d29b3df69392f584970e7a7a4561)]:
+  - @posthog/core@1.35.2
+
 ## 5.38.0
 
 ### Minor Changes

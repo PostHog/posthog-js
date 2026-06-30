@@ -1,5 +1,25 @@
 # @posthog/convex
 
+## 2.0.30
+
+### Patch Changes
+
+- [#4006](https://github.com/PostHog/posthog-js/pull/4006) [`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `groupIdentifyImmediate()` to await the network request when identifying a group, mirroring `captureImmediate`/`identifyImmediate`/`aliasImmediate`. Useful in edge/serverless environments where the background queue may not flush. The Convex integration now uses it directly instead of routing `$groupidentify` through `captureImmediate`.
+  (2026-06-30)
+- Updated dependencies [[`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c)]:
+  - @posthog/core@1.39.0
+  - posthog-node@5.39.0
+
+## 2.0.29
+
+### Patch Changes
+
+- [#3886](https://github.com/PostHog/posthog-js/pull/3886) [`e6d7fe2`](https://github.com/PostHog/posthog-js/commit/e6d7fe2a5f10d29b3df69392f584970e7a7a4561) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop sending deprecated no-op top-level `type`, `library`, and `library_version` fields in event batch payloads. Use `properties.$lib` and `properties.$lib_version` for SDK metadata; legacy queued `library` and `library_version` values are used as fallbacks when the official `$` properties are missing.
+  (2026-06-18)
+- Updated dependencies [[`e6d7fe2`](https://github.com/PostHog/posthog-js/commit/e6d7fe2a5f10d29b3df69392f584970e7a7a4561)]:
+  - @posthog/core@1.35.2
+  - posthog-node@5.38.1
+
 ## 2.0.28
 
 ### Patch Changes

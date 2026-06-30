@@ -33,6 +33,7 @@ import { localStore, sessionStore } from '../../storage'
 import { addEventListener } from '../../utils'
 import { isNull, isUndefined, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
+import { getTargetingUrl } from '../../utils/url-targeting-utils'
 import {
     TOUR_SHOWN_KEY_PREFIX,
     TOUR_COMPLETED_KEY_PREFIX,
@@ -55,13 +56,13 @@ const window = _window as Window & typeof globalThis
 let _lastUrlMatchHref: string | undefined
 const _urlMatchCache = new Map<string, boolean>() // tour ID : match result
 
-function doesTourUrlMatch(tour: ProductTour): boolean {
+export function doesTourUrlMatch(tour: ProductTour, instance: PostHog): boolean {
     const conditions = tour.conditions
     if (!conditions?.url) {
         return true
     }
 
-    const href = window?.location?.href
+    const href = getTargetingUrl(instance)
     if (!href) {
         return false
     }
@@ -110,8 +111,10 @@ function isTourInDateRange(tour: ProductTour): boolean {
     return true
 }
 
-function checkTourConditions(tour: ProductTour): boolean {
-    return isTourInDateRange(tour) && doesTourUrlMatch(tour) && doesDeviceTypeMatch(tour.conditions?.deviceTypes)
+function checkTourConditions(tour: ProductTour, instance: PostHog): boolean {
+    return (
+        isTourInDateRange(tour) && doesTourUrlMatch(tour, instance) && doesDeviceTypeMatch(tour.conditions?.deviceTypes)
+    )
 }
 
 const CONTAINER_CLASS = 'ph-product-tour-container'
@@ -124,7 +127,7 @@ interface TriggerListenerData {
     tour: ProductTour
 }
 
-function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCreated: boolean } {
+function retrieveTourShadow(tour: ProductTour, posthog: PostHog): { shadow: ShadowRoot; isNewlyCreated: boolean } {
     const containerClass = `${CONTAINER_CLASS}-${tour.id}`
     const existingDiv = document.querySelector(`.${containerClass}`)
 
@@ -142,7 +145,7 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
 
     const shadow = div.attachShadow({ mode: 'open' })
 
-    const stylesheet = getProductTourStylesheet()
+    const stylesheet = getProductTourStylesheet(posthog)
     if (stylesheet) {
         shadow.appendChild(stylesheet)
     }
@@ -157,6 +160,7 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
 
 function retrieveBannerShadow(
     tour: ProductTour,
+    posthog: PostHog,
     bannerConfig?: ProductTourBannerConfig
 ): { shadow: ShadowRoot; isNewlyCreated: boolean } | null {
     const containerClass = `${CONTAINER_CLASS}-${tour.id}`
@@ -180,7 +184,7 @@ function retrieveBannerShadow(
 
     const shadow = div.attachShadow({ mode: 'open' })
 
-    const stylesheet = getProductTourStylesheet()
+    const stylesheet = getProductTourStylesheet(posthog)
     if (stylesheet) {
         shadow.appendChild(stylesheet)
     }
@@ -445,7 +449,7 @@ export class ProductTourManager {
     }
 
     private _isTourEligible(tour: ProductTour): boolean {
-        if (!checkTourConditions(tour)) {
+        if (!checkTourConditions(tour, this._instance)) {
             logger.info(`Tour ${tour.id} failed conditions check`)
             return false
         }
@@ -841,7 +845,7 @@ export class ProductTourManager {
             return
         }
 
-        const { shadow } = retrieveTourShadow(this._activeTour)
+        const { shadow } = retrieveTourShadow(this._activeTour, this._instance)
 
         render(
             <ProductTourTooltip
@@ -870,7 +874,7 @@ export class ProductTourManager {
             return
         }
 
-        const result = retrieveBannerShadow(this._activeTour, step.bannerConfig)
+        const result = retrieveBannerShadow(this._activeTour, this._instance, step.bannerConfig)
 
         if (!result) {
             this._captureEvent(ProductTourEventName.BANNER_CONTAINER_SELECTOR_FAILED, {

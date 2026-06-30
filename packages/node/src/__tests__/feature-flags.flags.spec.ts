@@ -9,6 +9,7 @@ const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
+  featureFlagsRequestMaxRetries: 0,
 }
 
 describe('flags v2', () => {
@@ -40,15 +41,12 @@ describe('flags v2', () => {
       expect(capturedMessage).toMatchObject({
         distinct_id: 'some-distinct-id',
         event: '$feature_flag_called',
-        library: posthog.getLibraryId(),
-        library_version: posthog.getLibraryVersion(),
         properties: {
           '$feature/non-existent-flag': undefined,
           $feature_flag: 'non-existent-flag',
           $feature_flag_response: undefined,
           $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
           $feature_flag_evaluated_at: expect.any(Number),
-          $groups: undefined,
           $lib: posthog.getLibraryId(),
           $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: false,
@@ -156,8 +154,6 @@ describe('flags v2', () => {
         expect(capturedMessage).toMatchObject({
           distinct_id: 'some-distinct-id',
           event: '$feature_flag_called',
-          library: posthog.getLibraryId(),
-          library_version: posthog.getLibraryVersion(),
           properties: {
             [`$feature/${key}`]: expectedResponse,
             $feature_flag: key,
@@ -167,7 +163,6 @@ describe('flags v2', () => {
             $feature_flag_reason: expectedReason,
             $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
             $feature_flag_evaluated_at: expect.any(Number),
-            $groups: undefined,
             $lib: posthog.getLibraryId(),
             $lib_version: posthog.getLibraryVersion(),
             locally_evaluated: false,
@@ -335,13 +330,10 @@ describe('flags v1', () => {
       expect(capturedMessage).toMatchObject({
         distinct_id: 'some-distinct-id',
         event: '$feature_flag_called',
-        library: posthog.getLibraryId(),
-        library_version: posthog.getLibraryVersion(),
         properties: {
           '$feature/non-existent-flag': undefined,
           $feature_flag: 'non-existent-flag',
           $feature_flag_response: undefined,
-          $groups: undefined,
           $lib: posthog.getLibraryId(),
           $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: false,

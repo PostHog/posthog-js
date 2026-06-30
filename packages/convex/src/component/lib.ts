@@ -151,17 +151,11 @@ export const groupIdentify = action({
     const { projectToken, host } = readConfig()
     if (!projectToken) return
     const client = getClient(projectToken, host)
-    // posthog-node doesn't expose a `groupIdentifyImmediate`, so we send the same `$groupidentify`
-    // event via `captureImmediate` to keep parity with capture/identify/alias/captureException —
-    // resolve when the network call completes, without resorting to shutdown().
-    await client.captureImmediate({
-      distinctId: args.distinctId || `$${args.groupType}_${args.groupKey}`,
-      event: '$groupidentify',
-      properties: {
-        $group_type: args.groupType,
-        $group_key: args.groupKey,
-        $group_set: parseProperties(args.properties) ?? {},
-      },
+    await client.groupIdentifyImmediate({
+      groupType: args.groupType,
+      groupKey: args.groupKey,
+      properties: parseProperties(args.properties) ?? {},
+      distinctId: args.distinctId,
       disableGeoip: args.disableGeoip,
     })
   },

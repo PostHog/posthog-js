@@ -1,45 +1,7 @@
-import { logs } from '@opentelemetry/api-logs'
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
-import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
-import { resourceFromAttributes } from '@opentelemetry/resources'
-
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
-
-const setupOpenTelemetry = (posthog: PostHog) => {
-    const serviceName = posthog.config.logs?.serviceName || 'posthog-browser-logs'
-    let attributes: Record<string, string> = {
-        'service.name': serviceName,
-        host: assignableWindow.location.host,
-    }
-
-    if (posthog.sessionManager) {
-        const { sessionId, windowId } = posthog.sessionManager.checkAndGetSessionAndWindowId(true)
-        attributes = {
-            ...attributes,
-            'session.id': sessionId,
-            'window.id': windowId,
-        }
-    }
-
-    logs.setGlobalLoggerProvider(
-        new LoggerProvider({
-            resource: resourceFromAttributes(attributes),
-            processors: [
-                new BatchLogRecordProcessor(
-                    new OTLPLogExporter({
-                        url: `${posthog.config.api_host}/i/v1/logs?token=${posthog.config.token}`,
-                        // 1. Force the content type to text/plain to avoid OPTIONS preflight
-                        headers: {
-                            'Content-Type': 'text/plain',
-                        },
-                    })
-                ),
-            ],
-        })
-    )
-}
+import type { LogSeverityLevel } from '@posthog/types'
 
 const LOG_BODY_SIZE_LIMIT = 10000
 const LOG_ATTRIBUTES_LIMIT = 50
@@ -47,6 +9,14 @@ const LOG_ATTRIBUTES_LIMIT = 50
 type StringifyBudget = {
     remaining: number
     truncated: boolean
+}
+
+type AttributeCollector = {
+    result: Record<string, any>
+    keysRemaining: number
+    sizeRemaining: number
+    truncated: boolean
+    seen: WeakSet<object>
 }
 
 const appendWithLimit = (parts: string[], text: string, budget: StringifyBudget): boolean => {
@@ -106,12 +76,65 @@ const isNumberOrBoolean = (value: any): boolean => {
     }
 }
 
+const collectAttributeValue = (key: string, value: any, collector: AttributeCollector): void => {
+    if (collector.truncated) {
+        return
+    }
+
+    collector.keysRemaining -= 1
+    collector.sizeRemaining -= String(value).length + key.length
+    if (collector.keysRemaining <= 0 || collector.sizeRemaining <= 0) {
+        collector.truncated = true
+        collector.result['attributes_truncated'] = true
+        return
+    }
+
+    collector.result[key] = value
+}
+
+const collectFlattenedAttributes = (value: any, key: string, collector: AttributeCollector): void => {
+    if (collector.truncated) {
+        return
+    }
+
+    if (isObject(value)) {
+        if (collector.seen.has(value)) {
+            collectAttributeValue(key || 'circular', '[Circular]', collector)
+            return
+        }
+        collector.seen.add(value)
+
+        try {
+            for (const childKey in value) {
+                try {
+                    if (!Object.prototype.hasOwnProperty.call(value, childKey)) {
+                        continue
+                    }
+                    const childValue = value[childKey]
+                    collectFlattenedAttributes(childValue, key ? `${key}.${childKey}` : childKey, collector)
+                    if (collector.truncated) {
+                        return
+                    }
+                } catch {
+                    continue
+                }
+            }
+        } catch {
+            // we'll omit this object's properties considering we can't enumerate them
+        }
+        return
+    }
+
+    collectAttributeValue(key, value, collector)
+}
+
 const stringifyValueWithLimit = (
     value: any,
     parts: string[],
     budget: StringifyBudget,
     seen: WeakSet<object>,
-    inArray = false
+    inArray = false,
+    attributeCollector?: AttributeCollector
 ): boolean => {
     if (!isJSONSerializablePrimitive(value)) {
         return inArray ? appendWithLimit(parts, 'null', budget) : true
@@ -174,7 +197,7 @@ const stringifyValueWithLimit = (
         try {
             errorObject.stack = value.stack
         } catch {}
-        return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray)
+        return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray, attributeCollector)
     }
 
     if (isArray(value)) {
@@ -218,6 +241,14 @@ const stringifyValueWithLimit = (
             } catch {
                 continue
             }
+            if (attributeCollector) {
+                try {
+                    collectFlattenedAttributes(propertyValue, key, attributeCollector)
+                } catch {
+                    // we'll omit this object's attributes considering we can't read them safely
+                }
+            }
+
             if (!isJSONSerializablePrimitive(propertyValue)) {
                 continue
             }
@@ -259,14 +290,36 @@ const stringifyValueWithLimit = (
     return appendWithLimit(parts, '}', budget)
 }
 
-const stringifyArgsSafely = (args: any[], sizeLimit: number): { body: string; truncated: boolean } => {
+const stringifyArgsSafely = (
+    args: any[],
+    sizeLimit: number
+): { body: string; truncated: boolean; attributes: Record<string, any> } => {
     const parts: string[] = []
     const budget = { remaining: sizeLimit, truncated: false }
+    const attributeCollector = isObject(args[0])
+        ? {
+              result: {} as Record<string, any>,
+              keysRemaining: LOG_ATTRIBUTES_LIMIT,
+              sizeRemaining: LOG_BODY_SIZE_LIMIT,
+              truncated: false,
+              seen: new WeakSet<object>([args[0]]),
+          }
+        : undefined
+
     for (let i = 0; i < args.length; i++) {
         if (i > 0 && !appendWithLimit(parts, ' ', budget)) {
             break
         }
-        if (!stringifyValueWithLimit(args[i], parts, budget, new WeakSet<object>())) {
+        if (
+            !stringifyValueWithLimit(
+                args[i],
+                parts,
+                budget,
+                new WeakSet<object>(),
+                false,
+                i === 0 ? attributeCollector : undefined
+            )
+        ) {
             break
         }
     }
@@ -274,111 +327,60 @@ const stringifyArgsSafely = (args: any[], sizeLimit: number): { body: string; tr
     return {
         body: parts.join('') + (budget.truncated ? '...' : ''),
         truncated: budget.truncated,
+        attributes: attributeCollector?.result || {},
     }
 }
 
-/**
- * Flattens a nested object into a single level dot-notation object.
- * By default limit to 200kB or 50 keys.
- */
-const flattenObject = (
-    obj: any,
-    prefix = '',
-    result = {} as Record<string, any>,
-    keys_limit = LOG_ATTRIBUTES_LIMIT,
-    size_limit = LOG_BODY_SIZE_LIMIT,
-    seen = new WeakSet()
-) => {
-    if (seen.has(obj)) {
-        result[prefix || 'circular'] = '[Circular]'
-        return result
-    }
-    seen.add(obj)
+type ConsoleLevel = 'debug' | 'log' | 'warn' | 'error' | 'info'
 
-    try {
-        for (const key in obj) {
-            try {
-                if (!Object.prototype.hasOwnProperty.call(obj, key)) {
-                    continue
-                }
-                const value = obj[key]
-                const newKey = prefix ? `${prefix}.${key}` : key
-
-                if (isObject(value)) {
-                    flattenObject(value, newKey, result, keys_limit, size_limit, seen)
-                } else {
-                    keys_limit -= 1
-                    size_limit -= String(value).length
-                    size_limit -= newKey.length
-                    if (keys_limit <= 0 || size_limit <= 0) {
-                        result['attributes_truncated'] = true
-                        return
-                    } else {
-                        result[newKey] = value
-                    }
-                }
-            } catch {
-                continue
-            }
-        }
-    } catch {
-        // we'll omit this object's properties considering we can't enumerate them
-    }
-    return result
-}
-
-const SEVERITY_MAP = {
-    log: 'INFO',
-    warn: 'WARNING',
-    error: 'ERROR',
-    debug: 'DEBUG',
-    info: 'INFO',
+// Console method → OTLP severity level. `log` and `info` both map to `info`;
+// the originating method is preserved separately via the `log.source` attribute.
+const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
+    debug: 'debug',
+    log: 'info',
+    warn: 'warn',
+    error: 'error',
+    info: 'info',
 }
 
 const initializeLogs = (posthog: PostHog) => {
-    setupOpenTelemetry(posthog)
+    // `host` is carried here because the core SDK context has no equivalent. Session
+    // attributes (window.id, sessionStartTimestamp, lastActivityTimestamp) are added
+    // downstream by the core pipeline from the SDK context, alongside sessionId.
+    const attributes: Record<string, string> = { host: assignableWindow.location.host }
 
-    const logger = logs.getLogger('console')
-    let attributes: Record<string, string> = {}
-    if (posthog.sessionManager) {
-        const { sessionStartTimestamp, lastActivityTimestamp } =
-            posthog.sessionManager.checkAndGetSessionAndWindowId(true)
-        attributes = {
-            sessionStartTimestamp: sessionStartTimestamp.toString(),
-            lastActivityTimestamp: lastActivityTimestamp.toString(),
-        }
-    }
-
-    for (const level of ['debug', 'log', 'warn', 'error', 'info'] as ('debug' | 'log' | 'warn' | 'error' | 'info')[]) {
+    for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {
         const logWrapper =
             (originalConsoleLog: any) =>
             (...args: any[]) => {
-                if (args.length === 0) {
-                    return
-                }
-
-                if (!posthog.is_capturing()) {
+                try {
+                    if (args.length > 0 && posthog.is_capturing()) {
+                        const {
+                            body,
+                            truncated,
+                            attributes: flattenedAttributes,
+                        } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
+                        const logAttributes = {
+                            ...attributes,
+                            ...(truncated ? { body_truncated: 'true' } : {}),
+                        }
+                        // The core pipeline adds posthogDistinctId and url.full from the SDK context.
+                        posthog.logs?._captureConsoleLog({
+                            level: LEVEL_MAP[level],
+                            body,
+                            attributes: {
+                                'log.source': `console.${level}`,
+                                ...logAttributes,
+                                ...flattenedAttributes,
+                            },
+                        })
+                    }
+                } catch {
+                    // Capture must never break the page's own console output, so the
+                    // real console call below always runs even if capture throws.
+                } finally {
                     originalConsoleLog.apply(assignableWindow.console, args)
-                    return
                 }
-
-                const { body, truncated } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
-                const logAttributes = {
-                    ...attributes,
-                    ...(truncated ? { body_truncated: 'true' } : {}),
-                }
-                logger.emit({
-                    severityText: SEVERITY_MAP[level],
-                    body: body,
-                    attributes: {
-                        'log.source': `console.${level}`,
-                        distinct_id: posthog.get_distinct_id(),
-                        'location.href': assignableWindow.location.href,
-                        ...logAttributes,
-                        ...(isObject(args[0]) ? flattenObject(args[0]) : {}),
-                    },
-                })
-                originalConsoleLog.apply(assignableWindow.console, args)
             }
 
         const originalConsoleLog = assignableWindow.console[level]

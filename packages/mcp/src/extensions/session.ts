@@ -89,11 +89,13 @@ export function getSessionInfo(
   data: MCPAnalyticsData | undefined,
   sessionId?: string
 ): SessionInfo {
-  let clientInfo: ServerClientInfoLike | undefined = {
-    name: undefined,
-    version: undefined,
-  }
-  if (!data?.sessionInfo.clientName) {
+  let clientInfo: ServerClientInfoLike | undefined
+  if (data?.sessionInfo.clientName) {
+    clientInfo = {
+      name: data.sessionInfo.clientName,
+      version: data.sessionInfo.clientVersion,
+    }
+  } else {
     clientInfo = server.getClientVersion()
   }
   const actorInfo = data?.identifiedSessions.get(sessionId ?? data.sessionId)

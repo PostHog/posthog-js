@@ -4,7 +4,7 @@ import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
 import type { BootstrapConfig } from '../client/ClientPostHogProvider.js'
 import { cookies } from 'next/headers.js'
 import type { PostHogOptions } from 'posthog-node'
-import { getOrCreateNodeClient } from '../server/nodeClientCache.js'
+import { getOrCreateNodeClient } from '../server/clientCache.node.js'
 import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
 

@@ -745,7 +745,8 @@ export class PostHogPersistence {
             {
                 [INITIAL_PERSON_INFO]: getPersonInfo(
                     this._config.mask_personal_data_properties,
-                    this._config.custom_personal_data_properties
+                    this._config.custom_personal_data_properties,
+                    this._config.disable_capture_url_hashes
                 ),
             },
             undefined
@@ -767,7 +768,10 @@ export class PostHogPersistence {
         })
         const initialPersonInfo = this.props[INITIAL_PERSON_INFO]
         if (initialPersonInfo) {
-            const initialPersonProps = getInitialPersonPropsFromInfo(initialPersonInfo)
+            const initialPersonProps = getInitialPersonPropsFromInfo(
+                initialPersonInfo,
+                this._config.disable_capture_url_hashes
+            )
             extend(p, initialPersonProps)
         }
 

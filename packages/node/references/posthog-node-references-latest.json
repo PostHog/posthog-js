@@ -2,7 +2,7 @@
   "id": "posthog-node",
   "hogRef": "0.3",
   "info": {
-    "version": "5.38.0",
+    "version": "<version>",
     "id": "posthog-node",
     "title": "PostHog Node.js SDK",
     "description": "PostHog Node.js SDK allows you to capture events and send them to PostHog from your Node.js applications.",
@@ -875,6 +875,35 @@
           "returnType": {
             "id": "void",
             "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Create or update a group and its properties immediately (synchronously).",
+          "details": null,
+          "id": "groupIdentifyImmediate",
+          "showDocs": true,
+          "title": "groupIdentifyImmediate",
+          "examples": [
+            {
+              "id": "immediately_create_or_update_a_company_group",
+              "name": "Immediately create or update a company group",
+              "code": "\n\n// Immediately create or update a company group\nawait client.groupIdentifyImmediate({\n  groupType: 'company',\n  groupKey: 'acme-corp',\n  properties: {\n    name: 'Acme Corporation',\n    industry: 'Technology',\n    employee_count: 500\n  }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "GroupIdentifyMessage",
+              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, }"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -2211,7 +2240,7 @@
       "name": "PostHogCoreOptions",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    addTracingHeaders?: string[];\n}"
+      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    disable_capture_url_hashes?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    featureFlagsRequestMaxRetries?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    addTracingHeaders?: string[];\n}"
     },
     {
       "id": "PostHogEventProperties",
@@ -2379,6 +2408,10 @@
         {
           "type": "\"session_replay\"",
           "name": "SessionReplay"
+        },
+        {
+          "type": "\"session_replay_event_trigger_activated_session\"",
+          "name": "SessionReplayEventTriggerActivatedSession"
         },
         {
           "type": "\"session_start_timestamp\"",

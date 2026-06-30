@@ -20,6 +20,14 @@ export interface EventTriggerable {
 }
 
 /**
+ * What a captured lifecycle event (shown / dismissed / sent) does to an already-activated item:
+ * - `consume`: it's done — drop it from both the in-memory and persisted sets.
+ * - `persist`: it was shown and should survive a reload — move it from memory into persistence.
+ * - `ignore`: no transition for this item on this event.
+ */
+export type ActivationOutcome = 'consume' | 'persist' | 'ignore'
+
+/**
  * Abstract base class for receiving events and matching them to triggerable items.
  * Subclasses implement type-specific behavior for surveys and product tours.
  */
@@ -33,6 +41,14 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     // actionMatcher can look at CaptureResult payloads and match an event to its corresponding action.
     protected _actionMatcher?: ActionMatcher | null
     protected readonly _instance?: PostHog
+    /**
+     * Items armed by an event or action but not yet shown live here, in memory only.
+     * They are intentionally NOT persisted, so they do not survive a page reload: an
+     * event trigger only displays an item in the session the event fired in. Once an
+     * item is shown, surviving items are promoted into persistence (see `onEvent`), so
+     * a reload re-reads and re-displays them until the user interacts.
+     */
+    private _pendingActivatedItems: string[] = []
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -50,6 +66,14 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     protected abstract _setActivatedItems(eligibleItems: string[]): void
     /** Check if item is permanently ineligible (e.g. completed/dismissed). Skip adding to activated list. */
     protected abstract _isItemPermanentlyIneligible(itemId?: string): boolean
+
+    /**
+     * Decide what a captured lifecycle `event` does to an already-activated `itemId`. Most items are
+     * consumed when shown (so they only reappear when their trigger fires again). Surveys keep
+     * non-repeatable ones activated — promoting them to persistence on shown — until the user dismisses
+     * or answers them, so an event-triggered survey survives a reload until it's actually interacted with.
+     */
+    protected abstract _activationOutcome(event: string, itemId: string): ActivationOutcome
 
     private _doesEventMatchFilter(
         eventConfig: SurveyEventWithFilters | undefined,
@@ -180,27 +204,22 @@ export abstract class EventReceiver<T extends EventTriggerable> {
 
     onEvent(event: string, eventPayload?: CaptureResult): void {
         const logger = this._getLogger()
-        const activatedKey = this._getActivatedKey()
-        const shownEventName = this._getShownEventName()
 
-        const existingActivatedItems: string[] = this._instance?.persistence?.props[activatedKey] || []
-        if (shownEventName === event && eventPayload && existingActivatedItems.length > 0) {
-            // remove item from activatedItems here.
-            logger.info('event matched, removing item from activated items', {
-                event,
-                eventPayload,
-                existingActivatedItems,
-            })
-            const itemId = eventPayload?.properties?.$survey_id || eventPayload?.properties?.$product_tour_id
-            if (itemId) {
-                const index = existingActivatedItems.indexOf(itemId)
-                if (index >= 0) {
-                    existingActivatedItems.splice(index, 1)
-                    this._updateActivatedItems(existingActivatedItems)
-                }
+        // An item reacting to one of its own lifecycle events (shown / dismissed / sent).
+        const itemId = eventPayload?.properties?.$survey_id || eventPayload?.properties?.$product_tour_id
+        if (itemId && this.getActivatedIds().includes(itemId)) {
+            const outcome = this._activationOutcome(event, itemId)
+            if (outcome === 'consume') {
+                logger.info('event consumed activated item, removing it', { event, itemId })
+                this._deactivateItems([itemId])
+                return
             }
-
-            return
+            if (outcome === 'persist') {
+                logger.info('shown item promoted to persisted activation', { event, itemId })
+                this._persistActivation(itemId)
+                return
+            }
+            // 'ignore': no activation transition for this item on this event — fall through.
         }
 
         // check if this event should cancel any pending items
@@ -213,17 +232,9 @@ export abstract class EventReceiver<T extends EventTriggerable> {
                     itemsToCancel: itemsToCancel.map((s) => s.id),
                 })
 
-                itemsToCancel.forEach((item) => {
-                    // remove from activated items
-                    const index = existingActivatedItems.indexOf(item.id)
-                    if (index >= 0) {
-                        existingActivatedItems.splice(index, 1)
-                    }
-                    // cancel any pending timeout for this item
-                    this._cancelPendingItem(item.id)
-                })
-
-                this._updateActivatedItems(existingActivatedItems)
+                this._deactivateItems(itemsToCancel.map((item) => item.id))
+                // cancel any pending timeout for these items
+                itemsToCancel.forEach((item) => this._cancelPendingItem(item.id))
             }
         }
 
@@ -239,35 +250,67 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         })
 
         const matchedItems = this._getMatchingItems(event, eventPayload, SurveyEventType.Activation)
-
-        this._updateActivatedItems(existingActivatedItems.concat(matchedItems.map((item) => item.id) || []))
+        this._activateItems(matchedItems.map((item) => item.id))
     }
 
     onAction(actionName: string): void {
-        const activatedKey = this._getActivatedKey()
-        const existingActivatedItems: string[] = this._instance?.persistence?.props[activatedKey] || []
         if (this._actionToItems.has(actionName)) {
-            this._updateActivatedItems(existingActivatedItems.concat(this._actionToItems.get(actionName) || []))
+            this._activateItems(this._actionToItems.get(actionName) || [])
         }
     }
 
-    private _updateActivatedItems(activatedItems: string[]) {
-        const logger = this._getLogger()
-        // Filter out permanently ineligible items and remove duplicates
-        const eligibleItems = [...new Set(activatedItems)].filter(
-            (itemId) => !this._isItemPermanentlyIneligible(itemId)
-        )
-        logger.info('updating activated items', {
-            activatedItems: eligibleItems,
-        })
-
-        this._setActivatedItems(eligibleItems)
+    /** Arm items in memory only (not persisted) until they are shown. */
+    private _activateItems(itemIds: string[]): void {
+        if (itemIds.length === 0) {
+            return
+        }
+        this._pendingActivatedItems = [...new Set([...this._pendingActivatedItems, ...itemIds])]
+        this._getLogger().info('updating activated items', { activatedItems: this.getActivatedIds() })
     }
 
-    getActivatedIds(): string[] {
+    /** Move an in-memory activation into persistence so it survives a page reload. */
+    private _persistActivation(itemId: string): void {
+        this._pendingActivatedItems = this._pendingActivatedItems.filter((id) => id !== itemId)
+        const persisted = this._getPersistedActivatedIds()
+        if (!persisted.includes(itemId)) {
+            this._setActivatedItems([...persisted, itemId])
+        }
+    }
+
+    /** Drop items from both the in-memory and persisted activation sets. */
+    private _deactivateItems(itemIds: string[]): void {
+        const remove = new Set(itemIds)
+        this._pendingActivatedItems = this._pendingActivatedItems.filter((id) => !remove.has(id))
+        const persisted = this._getPersistedActivatedIds()
+        const nextPersisted = persisted.filter((id) => !remove.has(id))
+        if (nextPersisted.length !== persisted.length) {
+            this._setActivatedItems(nextPersisted)
+        }
+    }
+
+    private _getPersistedActivatedIds(): string[] {
         const activatedKey = this._getActivatedKey()
         const existingActivatedItems = this._instance?.persistence?.props[activatedKey]
         return existingActivatedItems ? existingActivatedItems : []
+    }
+
+    getActivatedIds(): string[] {
+        // The activated set is the union of in-memory (armed, not yet shown) and persisted
+        // (shown and surviving) items. In-memory ones do not survive a reload by design.
+        const all = [...new Set([...this._getPersistedActivatedIds(), ...this._pendingActivatedItems])]
+        return all.filter((itemId) => !this._isItemPermanentlyIneligible(itemId))
+    }
+
+    /**
+     * Clear all activations. Called on `posthog.reset()` so a logout or account switch
+     * (without a full page reload) does not leave an event-armed item live for the next
+     * user — the in-memory set would otherwise survive `persistence.clear()`.
+     */
+    reset(): void {
+        this._pendingActivatedItems = []
+        if (this._getPersistedActivatedIds().length > 0) {
+            this._setActivatedItems([])
+        }
     }
 
     getEventToItemsMap(): Map<string, string[]> {

@@ -188,7 +188,11 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<Flags
                 .filter((flag) => flagDetails[flag].metadata?.payload)
                 .map((flag) => [flag, flagDetails[flag].metadata?.payload])
         )
-    } else {
+    } else if (response['featureFlags']) {
+        // The response has no `flags` key but does carry top-level `featureFlags`, which is the
+        // shape returned by older servers that don't understand `?v=2`. A valid v2 response with no
+        // flags (e.g. a project without any feature flags) legitimately omits `flags`, so we must
+        // not warn in that case.
         logger.warn(
             'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
         )
@@ -446,6 +450,20 @@ export class PostHogFeatureFlags implements Extension {
         return finalDetails
     }
 
+    getAllFeatureFlags(): FeatureFlagResult[] {
+        const flagVariants = this.getFlagVariants()
+        const payloads = this.getFlagPayloads()
+        return Object.keys(flagVariants).map((key) => {
+            const flagValue = flagVariants[key]
+            return {
+                key,
+                enabled: getEnabledFromValue(flagValue),
+                variant: getVariantFromValue(flagValue),
+                payload: parsePayload(payloads[key]),
+            }
+        })
+    }
+
     getFlagVariants(): Record<string, string | boolean> {
         const enabledFlags = this._prop(ENABLED_FEATURE_FLAGS)
         const overriddenFlags = this._prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
@@ -603,8 +621,6 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url,
             data,
-            // Some ad blockers block /flags requests that carry the `ip` query param; it's unused server-side here.
-            skipIPParam: true,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
@@ -913,8 +929,6 @@ export class PostHogFeatureFlags implements Extension {
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
-            // Some ad blockers block /flags requests that carry the `ip` query param; it's unused server-side here.
-            skipIPParam: true,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {

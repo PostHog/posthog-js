@@ -7,28 +7,31 @@ import {
   JsonType,
   PostHogCaptureOptions,
   PostHogCoreStateless,
+  PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
   PostHogPersistedProperty,
+  safeSetTimeout,
+  uuidv7,
 } from '@posthog/core'
 import {
+  AllFlagsOptions,
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
   FeatureFlagOverrideOptions,
   FeatureFlagResult,
+  FlagEvaluationOptions,
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
   OverrideFeatureFlagsOptions,
-  SetPersonPropertiesMessage,
-  UnsetPersonPropertiesMessage,
   PostHogOptions,
   SendFeatureFlagsOptions,
-  FlagEvaluationOptions,
-  AllFlagsOptions,
+  SetPersonPropertiesMessage,
+  UnsetPersonPropertiesMessage,
 } from './types'
 import {
   EvaluatedFlagRecord,
@@ -37,15 +40,13 @@ import {
   FlagCalledEventParams,
 } from './feature-flag-evaluations'
 import {
-  FeatureFlagsPoller,
   type FeatureFlagEvaluationContext,
-  RequiresServerEvaluation,
+  FeatureFlagsPoller,
   InconclusiveMatchError,
+  RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
-import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
-import { uuidv7 } from '@posthog/core'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -1968,6 +1969,38 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Create or update a group and its properties immediately (synchronously).
+   *
+   * @example
+   * ```ts
+   * // Immediately create or update a company group
+   * await client.groupIdentifyImmediate({
+   *   groupType: 'company',
+   *   groupKey: 'acme-corp',
+   *   properties: {
+   *     name: 'Acme Corporation',
+   *     industry: 'Technology',
+   *     employee_count: 500
+   *   }
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The group identify data
+   * @returns Promise that resolves when the group identify is processed
+   */
+  async groupIdentifyImmediate({
+    groupType,
+    groupKey,
+    properties,
+    distinctId,
+    disableGeoip,
+  }: GroupIdentifyMessage): Promise<void> {
+    await super.groupIdentifyStatelessImmediate(groupType, groupKey, properties, { disableGeoip }, distinctId)
+  }
+
+  /**
    * Reload feature flag definitions from the server for local evaluation.
    *
    * @example
@@ -2200,6 +2233,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     try {
       return await super._shutdown(shutdownTimeoutMs)
     } finally {
+      this.distinctIdHasSentFlagCalls = {}
       resolve?.()
     }
   }
@@ -2591,12 +2625,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
       .then((additionalProperties) => {
         // No matter what - capture the event
-        const props = {
+        const resolvedGroups = eventMessage.groups || groups
+
+        return {
           ...additionalProperties,
           ...(eventMessage.properties || {}),
-          $groups: eventMessage.groups || groups,
+          // Only stamp $groups from the top-level `groups` when present — otherwise a
+          // caller-provided properties.$groups would be clobbered with undefined (#3888).
+          ...(resolvedGroups !== undefined && Object.keys(resolvedGroups).length > 0
+            ? { $groups: resolvedGroups }
+            : {}),
         } as PostHogEventProperties
-        return props
       })
 
     // Handle bot pageview collection based on preview flag

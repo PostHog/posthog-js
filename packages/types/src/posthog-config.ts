@@ -375,7 +375,7 @@ export interface HeatmapConfig {
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
  * Later dates include all earlier default changes.
  */
-export type ConfigDefaults = '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -559,9 +559,33 @@ export interface SessionRecordingOptions {
     recordBody?: boolean
 
     /**
+     * When recording network bodies, read them through a streaming reader that stops at the
+     * payload size limit instead of buffering the whole body and then discarding it. Bounds the
+     * memory and pre-request latency of capturing a very large body. Reads only a clone of the
+     * body, never the stream the page consumes.
+     * @default false
+     */
+    streamNetworkBody?: boolean
+
+    /**
      * Allows local config to override remote canvas recording settings from the flags response
      */
     captureCanvas?: SessionRecordingCanvasOptions
+
+    /**
+     * Tune how canvas frames are captured for replay. Only has any effect when canvas recording
+     * is enabled.
+     *
+     * - `resolutionScale`: capture canvas frames at a fraction of their display resolution. A
+     *   number in `(0, 1]`; `1` is full-resolution capture (the default) and, e.g., `0.6` captures
+     *   at 60%. Out-of-range or non-finite values are clamped into `(0, 1]`. Aspect ratio is
+     *   preserved and replay upscales the frame back to the original display size, so playback
+     *   dimensions are unchanged, just softer. Resolution is the highest-leverage lever for canvas
+     *   byte size, since bytes scale with pixel area.
+     */
+    canvasCapture?: {
+        resolutionScale?: number
+    }
 
     /**
      * Modify the network request before it is captured. Returning null or undefined stops it being captured
@@ -859,6 +883,30 @@ export interface PostHogConfig {
      * @param posthog_instance - The PostHog instance that has been loaded.
      */
     loaded: (posthog_instance: PostHog) => void
+
+    /**
+     * Determines whether PostHog should strip URL fragments (`#...`) from automatically captured URL fields.
+     * Disabled by default for backwards compatibility, and enabled automatically when `config.defaults` is
+     * `'2026-06-25'` or later. Set to `true` to strip hashes from:
+     *
+     * - `$current_url` on automatically captured browser events, including `$pageview`
+     * - `$initial_current_url`
+     * - `$session_entry_url`
+     * - `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture
+     * - Next.js Pages Router `$pageview` `$current_url`
+     * - web vitals `$current_url`
+     * - logs `url.full`
+     * - conversations `current_url` and `request_url`
+     * - session replay rrweb meta/custom-event `href` URLs
+     * - heatmap data URLs
+     *
+     * If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.
+     * If you want to capture hashes selectively, leave this disabled and use `before_send` to remove
+     * sensitive hash values before events are sent.
+     *
+     * @default false when `config.defaults` is unset or earlier than `'2026-06-25'`, otherwise `true`
+     */
+    disable_capture_url_hashes: boolean
 
     /**
      * Determines whether PostHog should save referrer information.
@@ -1278,6 +1326,7 @@ export interface PostHogConfig {
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
      * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
+     * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
      *
      * @default 'unset'
      */
@@ -1573,6 +1622,23 @@ export interface PostHogConfig {
      * any one function returning null means the event will not be sent
      */
     before_send?: BeforeSendFn | BeforeSendFn[]
+
+    /**
+     * Overrides the URL used for client-side URL targeting: session replay URL triggers, the
+     * session replay URL blocklist, survey URL display conditions, product tour URL conditions,
+     * web experiment URL conditions, and autocapture URL allow/ignore lists.
+     *
+     * These features match against `window.location.href` directly, which does not reflect
+     * any `$current_url` you rewrite in `before_send`. In environments where the browser URL
+     * is not meaningful for targeting — e.g. Electron/desktop apps served from a generated
+     * host — return the logical URL you want these features to match against. This does not
+     * change the `$current_url` property captured on events (use `before_send` for that).
+     *
+     * @param defaultUrl - the URL PostHog would otherwise use (`window.location.href`)
+     * @returns the URL to use for client-side URL matching
+     * @default undefined (uses `window.location.href`)
+     */
+    get_current_url?: (defaultUrl: string) => string
 
     /** @deprecated - use `before_send` instead */
     sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null

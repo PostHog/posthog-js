@@ -27,6 +27,11 @@ const demos = [
         href: '/capture',
         description: 'Capture custom events from client components with posthog.capture().',
     },
+    {
+        title: 'Server-Side Errors',
+        href: '/server-errors',
+        description: 'Capture server-side request exceptions with the Next.js onRequestError instrumentation hook.',
+    },
 ]
 
 export default function Home() {

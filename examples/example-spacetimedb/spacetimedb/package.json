@@ -1,0 +1,16 @@
+{
+  "name": "example-spacetimedb-module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SpacetimeDB module for the PostHog example app",
+  "scripts": {
+    "build": "spacetime build",
+    "publish": "spacetime publish"
+  },
+  "dependencies": {
+    "spacetimedb": "2.6.*"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2"
+  }
+}

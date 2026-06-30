@@ -56,17 +56,21 @@ const createMockCallHandler = (error?: Error) => ({
   handle: () => (error ? throwError(() => error) : of(undefined)),
 })
 
+const createPostHog = (options: Record<string, any> = {}): PostHog =>
+  new PostHog('TEST_API_KEY', {
+    host: 'http://example.com',
+    fetchRetryCount: 0,
+    disableCompression: true,
+    flushAt: 1,
+    flushInterval: 0,
+    ...options,
+  })
+
 describe('PostHogInterceptor', () => {
   let posthog: PostHog
 
   beforeEach(() => {
-    posthog = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      fetchRetryCount: 0,
-      disableCompression: true,
-      flushAt: 1,
-      flushInterval: 0,
-    })
+    posthog = createPostHog()
 
     mockedFetch.mockResolvedValue({
       status: 200,
@@ -112,6 +116,42 @@ describe('PostHogInterceptor', () => {
       expect(capturedContext.properties.$request_path).toBe('/api/test')
       expect(capturedContext.properties.$user_agent).toBe('TestAgent/1.0')
       expect(capturedContext.properties.$ip).toBe('192.168.1.1')
+    })
+
+    it.each([
+      {
+        name: 'strips request path search and preserves URL hash by default',
+        options: {},
+        expectedCurrentUrl: '/api/test?token=secret#details',
+        expectedRequestPath: '/api/test#details',
+      },
+      {
+        name: 'strips request URL hashes when disable_capture_url_hashes is enabled',
+        options: { disable_capture_url_hashes: true },
+        expectedCurrentUrl: '/api/test?token=secret',
+        expectedRequestPath: '/api/test',
+      },
+    ])('should $name', async ({ options, expectedCurrentUrl, expectedRequestPath }) => {
+      await posthog.shutdown()
+      posthog = createPostHog(options)
+      const interceptor = new PostHogInterceptor(posthog)
+      const context = createMockContext({
+        url: '/api/test?token=secret#details',
+        path: '/api/test?token=secret#details',
+      })
+
+      let capturedContext: any
+      const handler = {
+        handle: () => {
+          capturedContext = posthog.getContext()
+          return of({ success: true })
+        },
+      }
+
+      await lastValueFrom(interceptor.intercept(context, handler))
+
+      expect(capturedContext.properties.$current_url).toBe(expectedCurrentUrl)
+      expect(capturedContext.properties.$request_path).toBe(expectedRequestPath)
     })
 
     it('should sanitize tracing headers and only include present values', async () => {

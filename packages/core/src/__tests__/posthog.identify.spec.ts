@@ -32,8 +32,6 @@ describe('PostHog Core', () => {
           {
             event: '$identify',
             distinct_id: posthog.getDistinctId(),
-            library: 'posthog-core-tests',
-            library_version: '2.0.0-alpha',
             properties: {
               $lib: 'posthog-core-tests',
               $lib_version: '2.0.0-alpha',
@@ -45,7 +43,6 @@ describe('PostHog Core', () => {
             },
             timestamp: expect.any(String),
             uuid: expect.any(String),
-            type: 'identify',
           },
         ],
         sent_at: expect.any(String),
@@ -71,8 +68,6 @@ describe('PostHog Core', () => {
           {
             event: '$identify',
             distinct_id: posthog.getDistinctId(),
-            library: 'posthog-core-tests',
-            library_version: '2.0.0-alpha',
             properties: {
               $lib: 'posthog-core-tests',
               $lib_version: '2.0.0-alpha',
@@ -87,7 +82,6 @@ describe('PostHog Core', () => {
             },
             timestamp: expect.any(String),
             uuid: expect.any(String),
-            type: 'identify',
           },
         ],
         sent_at: expect.any(String),
@@ -111,8 +105,6 @@ describe('PostHog Core', () => {
           {
             event: '$identify',
             distinct_id: posthog.getDistinctId(),
-            library: 'posthog-core-tests',
-            library_version: '2.0.0-alpha',
             properties: {
               $lib: 'posthog-core-tests',
               $lib_version: '2.0.0-alpha',
@@ -127,7 +119,6 @@ describe('PostHog Core', () => {
             },
             timestamp: expect.any(String),
             uuid: expect.any(String),
-            type: 'identify',
           },
         ],
         sent_at: expect.any(String),

@@ -7,8 +7,13 @@ import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } fro
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
-import { GET_MORE_TOOLS_NAME, handleReportMissing } from './tools'
-import { instrumentInitializeHandler, instrumentToolsListHandler, captureToolCall } from './instrumentation'
+import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
+import {
+  handleInitializeRequest,
+  handleListToolsRequest,
+  patchRequestHandlers,
+  captureToolCall,
+} from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
 type MCPRequestHandler = NonNullable<
@@ -24,8 +29,12 @@ type MCPRequestExtra = Parameters<MCPRequestHandler>[1]
  */
 export function instrumentLowLevelServer(server: MCPServerLike): void {
   try {
-    instrumentInitializeHandler(server)
-    instrumentToolsListHandler(server)
+    // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
+    const handlers = {
+      initialize: handleInitializeRequest,
+      'tools/list': handleListToolsRequest,
+    }
+    patchRequestHandlers(server, handlers)
 
     const originalCallToolHandler = server._requestHandlers.get('tools/call')
     server.setRequestHandler(
@@ -52,7 +61,7 @@ async function handleToolCallRequest(
     return await originalCallToolHandler?.(request, extra)
   }
 
-  if (request.params?.name === GET_MORE_TOOLS_NAME) {
+  if (request.params?.name === resolveMissingCapabilityToolName(data.options)) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,

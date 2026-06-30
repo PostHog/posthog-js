@@ -58,7 +58,14 @@ describe('client barrels (browser exports condition)', () => {
             expect(typeof asRecord(indexClient)[name]).toBe(expectedType)
         })
 
-        it.each(['PostHogProvider', 'getPostHog', 'postHogMiddleware'])('omits %s', (name) => {
+        it.each([
+            'PostHogProvider',
+            'getPostHog',
+            'postHogMiddleware',
+            'captureRequestError',
+            'onRequestError',
+            'createOnRequestError',
+        ])('omits %s', (name) => {
             expect(asRecord(indexClient)[name]).toBeUndefined()
         })
     })

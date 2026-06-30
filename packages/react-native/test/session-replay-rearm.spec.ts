@@ -250,7 +250,6 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
       customStorage: mockStorage,
       enableSessionReplay: true,
       flushInterval: 0,
-      disableRemoteConfig: true,
       disableRemoteFeatureFlags: true,
     })
     await posthog.ready()
@@ -261,12 +260,11 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     posthog.updateFlags({ 'replay-flag': true })
     await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
 
-    // Only the single init config request hit the flags endpoint, with evaluation disabled.
+    // The SDK never hits the flags endpoint when remote feature flags are disabled.
     const flagsCalls = ((globalThis as any).window.fetch as jest.Mock).mock.calls.filter(([url]: [string]) =>
-      String(url).includes('flags')
+      String(url).includes('/flags')
     )
-    expect(flagsCalls).toHaveLength(1)
-    expect(JSON.parse(flagsCalls[0][1].body)).toMatchObject({ disable_flags: true })
+    expect(flagsCalls).toHaveLength(0)
   })
 
   it('retries native init on the next flags reload when the first attempt fails', async () => {

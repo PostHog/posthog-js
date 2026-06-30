@@ -153,6 +153,22 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
     loaded: (posthog: PostHogInterface) => void
 
     /**
+     * Disables capturing the `$device_model` super-property.
+     *
+     * When capturing is enabled (the default), PostHog resolves the hardware model once during init
+     * via `navigator.userAgentData.getHighEntropyValues(['model'])` and registers it as the raw OEM
+     * code (e.g. `Pixel 7`). This is Chromium-only and only meaningful on Android — it resolves to
+     * `undefined` on Safari/Firefox and to an empty string on desktop, in which cases nothing is
+     * registered.
+     *
+     * This opt-out is offered because `getHighEntropyValues` is still experimental and Chromium-only
+     * (not yet a cross-browser standard); set it to `true` to skip the call entirely.
+     *
+     * @default false
+     */
+    disableDeviceModel?: boolean
+
+    /**
      * Internal: Extension class overrides for tree-shaking support.
      * When provided, these classes are used instead of the default imports.
      * This enables entrypoints to control which extensions are bundled.
@@ -193,10 +209,6 @@ export interface RequestWithOptions {
     callback?: (response: RequestResponse) => void
     timeout?: number
     noRetries?: boolean
-    // Omit the `ip` query param from the request URL. The param is meaningful for event ingestion
-    // and session recording, but not for flags requests. Flags requests set this so the URL doesn't
-    // match ad-blocker filters that key on `/flags…ip=`.
-    skipIPParam?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
     fetchOptions?: {
@@ -507,6 +519,13 @@ export type NetworkRecordOptions = {
      * NB this will be at most 1MB even if set larger
      */
     payloadSizeLimitBytes: number
+    /**
+     * when true, read bodies through a streaming reader that stops at payloadSizeLimitBytes
+     * instead of buffering the whole body and then enforcing the limit. Reads only a clone of
+     * the body, so it never consumes the stream the page itself reads.
+     * @default false
+     */
+    streamNetworkBody?: boolean
     /**
      * some domains we should never record the payload
      * for example other companies session replay ingestion payloads aren't super useful but are gigantic

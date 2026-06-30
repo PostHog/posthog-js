@@ -1,5 +1,85 @@
 # posthog-react-native
 
+## 4.53.3
+
+### Patch Changes
+
+- [#4019](https://github.com/PostHog/posthog-js/pull/4019) [`6b80631`](https://github.com/PostHog/posthog-js/commit/6b80631fd259345afd25195fdd9cba09e32a51be) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Survey question content now scrolls only when it overflows the modal. Short surveys that fit no longer scroll or bounce, while longer surveys remain fully scrollable.
+  (2026-06-30)
+
+## 4.53.2
+
+### Patch Changes
+
+- [#3971](https://github.com/PostHog/posthog-js/pull/3971) [`b660af2`](https://github.com/PostHog/posthog-js/commit/b660af2d737f6f1b5d256cb3a9f3be685f5938ed) Thanks [@github-actions](https://github.com/apps/github-actions)! - Support capturing additional event properties from `data-ph-capture-attribute-*` props in autocapture, matching the browser SDK.
+  (2026-06-29)
+
+## 4.53.1
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+- Updated dependencies [[`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b)]:
+  - @posthog/core@1.38.1
+
+## 4.53.0
+
+### Minor Changes
+
+- [#3977](https://github.com/PostHog/posthog-js/pull/3977) [`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `getAllFeatureFlags()`, which returns all currently loaded feature flags as structured `FeatureFlagResult`s (`key`, `enabled`, `variant`, `payload`). It is a synchronous read of the cached flags and does not send a `$feature_flag_called` event.
+  (2026-06-26)
+
+### Patch Changes
+
+- Updated dependencies [[`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f)]:
+  - @posthog/core@1.38.0
+
+## 4.52.0
+
+### Minor Changes
+
+- [#3932](https://github.com/PostHog/posthog-js/pull/3932) [`bf6947d`](https://github.com/PostHog/posthog-js/commit/bf6947d3e12ac512c99185be9b8b134c04eb563a) Thanks [@ioannisj](https://github.com/ioannisj)! - Support session replay event triggers in React Native. Recording stays paused until the client captures an event whose name matches a server-configured `sessionRecording.eventTriggers` entry, then records for the rest of that session; it re-arms on session rotation and AND-combines with the linked-flag gate. Requires `@posthog/react-native-plugin` >= 2.1.1 (which pins the native SDKs that defer event-trigger gating to the JS layer).
+  (2026-06-23)
+
+### Patch Changes
+
+- Updated dependencies [[`bf6947d`](https://github.com/PostHog/posthog-js/commit/bf6947d3e12ac512c99185be9b8b134c04eb563a)]:
+  - @posthog/core@1.37.1
+
+## 4.51.0
+
+### Minor Changes
+
+- [#3879](https://github.com/PostHog/posthog-js/pull/3879) [`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0) Thanks [@ioannisj](https://github.com/ioannisj)! - Deprecate `disableRemoteConfig`. Remote config is now always loaded and the option is a no-op. It will be removed in a future version. Also promote the previously experimental `disableSurveys` and `maskAllSandboxedViews` options to GA.
+  (2026-06-23)
+
+### Patch Changes
+
+- Updated dependencies [[`440e370`](https://github.com/PostHog/posthog-js/commit/440e370fda48d629352f3280471a228ee973dcb0)]:
+  - @posthog/core@1.37.0
+
+## 4.50.0
+
+### Minor Changes
+
+- [#3861](https://github.com/PostHog/posthog-js/pull/3861) [`c3a38fd`](https://github.com/PostHog/posthog-js/commit/c3a38fd9680c80f5115fababd610be7c17557b96) Thanks [@ioannisj](https://github.com/ioannisj)! - Add `addExceptionStep(message, properties?)` for breadcrumb-style exception steps. Steps accumulate in a rolling, byte-bounded buffer (configurable via `errorTracking.exceptionSteps`) and are attached to every captured `$exception` as `$exception_steps`, giving the error tracking UI a timeline of recent activity before each error. When native crash capture is enabled, steps are forwarded to the embedded native SDK so native crashes carry the same timeline.
+  (2026-06-19)
+
+### Patch Changes
+
+- Updated dependencies [[`c3a38fd`](https://github.com/PostHog/posthog-js/commit/c3a38fd9680c80f5115fababd610be7c17557b96)]:
+  - @posthog/react-native-plugin@2.1.0
+
+## 4.49.3
+
+### Patch Changes
+
+- [#3886](https://github.com/PostHog/posthog-js/pull/3886) [`e6d7fe2`](https://github.com/PostHog/posthog-js/commit/e6d7fe2a5f10d29b3df69392f584970e7a7a4561) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop sending deprecated no-op top-level `type`, `library`, and `library_version` fields in event batch payloads. Use `properties.$lib` and `properties.$lib_version` for SDK metadata; legacy queued `library` and `library_version` values are used as fallbacks when the official `$` properties are missing.
+  (2026-06-18)
+- Updated dependencies [[`e6d7fe2`](https://github.com/PostHog/posthog-js/commit/e6d7fe2a5f10d29b3df69392f584970e7a7a4561)]:
+  - @posthog/core@1.35.2
+
 ## 4.49.2
 
 ### Patch Changes

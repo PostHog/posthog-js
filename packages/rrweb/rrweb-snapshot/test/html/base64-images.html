@@ -78,5 +78,69 @@
       hugeImg.height = 300;
       document.body.appendChild(hugeImg);
     </script>
+
+    <!-- Small static SVG <image> with a data: href (under any reasonable cap) -->
+    <svg
+      id="svg-with-small-image"
+      xmlns="http://www.w3.org/2000/svg"
+      width="100"
+      height="100"
+    >
+      <image
+        id="svg-small-image"
+        href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+        width="100"
+        height="100"
+      />
+    </svg>
+
+    <!-- Scripts to create large SVG <image> data URIs for both href and xlink:href -->
+    <script>
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const XLINK_NS = 'http://www.w3.org/1999/xlink';
+
+      function makeLargeDataURL() {
+        const c = document.createElement('canvas');
+        c.width = 2000;
+        c.height = 2000;
+        const cctx = c.getContext('2d');
+        const grad = cctx.createLinearGradient(0, 0, 2000, 2000);
+        grad.addColorStop(0, 'red');
+        grad.addColorStop(0.5, 'blue');
+        grad.addColorStop(1, 'green');
+        cctx.fillStyle = grad;
+        cctx.fillRect(0, 0, 2000, 2000);
+        cctx.fillStyle = 'white';
+        cctx.font = '48px serif';
+        cctx.fillText('Large SVG Image', 100, 100);
+        return c.toDataURL('image/png');
+      }
+
+      // Large SVG <image> using the modern `href` attribute
+      const svgHref = document.createElementNS(SVG_NS, 'svg');
+      svgHref.setAttribute('id', 'svg-with-large-href-image');
+      svgHref.setAttribute('width', '200');
+      svgHref.setAttribute('height', '200');
+      const largeHrefImage = document.createElementNS(SVG_NS, 'image');
+      largeHrefImage.setAttribute('id', 'svg-large-href-image');
+      largeHrefImage.setAttribute('width', '200');
+      largeHrefImage.setAttribute('height', '200');
+      largeHrefImage.setAttribute('href', makeLargeDataURL());
+      svgHref.appendChild(largeHrefImage);
+      document.body.appendChild(svgHref);
+
+      // Large SVG <image> using the legacy `xlink:href` attribute
+      const svgXlink = document.createElementNS(SVG_NS, 'svg');
+      svgXlink.setAttribute('id', 'svg-with-large-xlink-image');
+      svgXlink.setAttribute('width', '200');
+      svgXlink.setAttribute('height', '200');
+      const largeXlinkImage = document.createElementNS(SVG_NS, 'image');
+      largeXlinkImage.setAttribute('id', 'svg-large-xlink-image');
+      largeXlinkImage.setAttribute('width', '200');
+      largeXlinkImage.setAttribute('height', '200');
+      largeXlinkImage.setAttributeNS(XLINK_NS, 'xlink:href', makeLargeDataURL());
+      svgXlink.appendChild(largeXlinkImage);
+      document.body.appendChild(svgXlink);
+    </script>
   </body>
 </html>

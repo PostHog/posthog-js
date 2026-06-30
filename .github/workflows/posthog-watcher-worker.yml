@@ -1,0 +1,93 @@
+name: PostHog Watcher worker
+
+on:
+    workflow_dispatch:
+        inputs:
+            issue-number:
+                description: Issue or PR number to process immediately. Leave empty to drain the queue.
+                required: false
+                default: ''
+            mode:
+                description: Processing mode for issue-number.
+                required: false
+                default: auto
+                type: choice
+                options:
+                    - auto
+                    - triage
+                    - investigate
+                    - fix
+    schedule:
+        - cron: '*/15 * * * *'
+
+concurrency:
+    group: posthog-watcher-${{ github.repository }}-${{ inputs['issue-number'] || 'queue' }}
+    cancel-in-progress: false
+
+permissions:
+    contents: write
+    issues: write
+    pull-requests: write
+    actions: read
+
+jobs:
+    drain-queue:
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs['issue-number'] == '' }}
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              with:
+                  fetch-depth: 0
+
+            - uses: ./.github/actions/setup
+              with:
+                  install: 'false'
+                  build: 'false'
+
+            - name: Install ripgrep for watcher search tools
+              run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+            - name: Drain watcher queue
+              uses: PostHog/posthog-watcher-action@321404b6b373c2efffce607996f7f501c65ed182
+              with:
+                  openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
+                  mode: drain-queue
+                  labels: '*'
+                  allow-fix: 'true'
+                  allow-close: 'true'
+                  allow-security-ai: 'true'
+                  max-repair-attempts: '3'
+                  max-pi-calls: '16'
+                  approve-project-resources: 'true'
+                  state-enabled: 'true'
+
+    process-issue:
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs['issue-number'] != '' }}
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              with:
+                  fetch-depth: 0
+
+            - uses: ./.github/actions/setup
+              with:
+                  install: 'false'
+                  build: 'false'
+
+            - name: Install ripgrep for watcher search tools
+              run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+            - name: Process watcher issue
+              uses: PostHog/posthog-watcher-action@321404b6b373c2efffce607996f7f501c65ed182
+              with:
+                  openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
+                  issue-number: ${{ inputs['issue-number'] }}
+                  mode: ${{ inputs.mode }}
+                  labels: '*'
+                  allow-fix: 'true'
+                  allow-close: 'true'
+                  allow-security-ai: 'true'
+                  max-repair-attempts: '3'
+                  max-pi-calls: '16'
+                  approve-project-resources: 'true'
+                  state-enabled: 'true'

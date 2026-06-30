@@ -2,11 +2,7 @@
 // Copyright (c) 2025 MCPcat
 // Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
 
-import {
-  InitializeRequestSchema,
-  ListToolsRequestSchema,
-  type ListToolsResult,
-} from '@modelcontextprotocol/sdk/types.js'
+import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, MCPServerLike, McpEvent } from '../types'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
@@ -24,8 +20,9 @@ import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from 
 import { getServerTrackingData, handleIdentify } from './internal'
 import { log } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
+import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
 import { getServerSessionId } from './session'
-import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
+import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
 /**
@@ -86,7 +83,8 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   const conversation = resolveConversationId(
     data.options.enableConversationId ?? false,
     request.params?.arguments,
-    request.params?.name
+    request.params?.name,
+    resolveMissingCapabilityToolName(data.options)
   )
   const downstreamRequest = conversation.conversationId ? cloneRequestWithoutConversationId(request) : request
 
@@ -230,45 +228,53 @@ function publishFailedToolEvent(
 
 // --- tools/list -----------------------------------------------------------
 
-type MCPServerWithCapabilities = MCPServerLike & {
-  _capabilities?: {
-    tools?: unknown
-  }
-}
-
-const listToolsTracingSetup = new WeakMap<MCPServerLike, boolean>()
+/**
+ * A method's patch: runs the original handler and captures analytics. `server`
+ * and `originalHandler` are bound by {@link patchRequestHandlers}; the SDK
+ * supplies `request` and `extra` per call.
+ */
+export type HandlerPatch = (
+  server: MCPServerLike,
+  originalHandler: MCPRequestHandler,
+  request: MCPRequestLike,
+  extra: CompatibleRequestHandlerExtra | undefined
+) => Promise<unknown>
 
 /**
- * Wraps the server's `tools/list` handler so each listing is captured and the
- * SDK-managed tools (context parameter, conversation id, `get_more_tools`) are
- * injected. Idempotent per server. Works for both low-level and high-level
- * servers — the high-level wrapper passes its underlying `server`.
+ * Applies the `patches` (keyed by method, e.g. `initialize`, `tools/list`) to the
+ * handlers already registered, and patches `setRequestHandler` so matching
+ * handlers registered later are patched too. The latter is what makes adapters
+ * that register handlers post-construction work — e.g. `@rekog/mcp-nest` hands a
+ * bare server to instrument() and only then registers its handlers.
  */
-export function instrumentToolsListHandler(server: MCPServerLike): void {
-  if (!(server as MCPServerWithCapabilities)._capabilities?.tools) {
-    return
-  }
-  if (listToolsTracingSetup.get(server)) {
-    return
-  }
-
-  const originalListToolsHandler = server._requestHandlers.get('tools/list')
-  if (!originalListToolsHandler) {
-    return
+export function patchRequestHandlers(server: MCPServerLike, patches: Record<string, HandlerPatch>): void {
+  // Monkey patch existing handlers.
+  for (const [handlerName, patch] of Object.entries(patches)) {
+    const originalHandler = server._requestHandlers.get(handlerName)
+    if (originalHandler) {
+      server._requestHandlers.set(handlerName, (request, extra) => patch(server, originalHandler, request, extra))
+    }
   }
 
-  try {
-    server.setRequestHandler(
-      ListToolsRequestSchema,
-      async (request, extra) => await handleListToolsRequest(server, originalListToolsHandler, request, extra)
-    )
-    listToolsTracingSetup.set(server, true)
-  } catch (error) {
-    log(`Warning: Failed to override list tools handler - ${error}`)
-  }
+  // Monkey patch dynamically added handlers (registered after instrument()).
+  const originalSetRequestHandler = server.setRequestHandler.bind(server)
+  server.setRequestHandler = ((requestSchema: unknown, originalHandler: MCPRequestHandler) => {
+    const shape = getObjectShape(requestSchema)
+    const handlerName = shape?.method ? getLiteralValue(shape.method) : undefined
+    const patch = typeof handlerName === 'string' ? patches[handlerName] : undefined
+    if (!patch) {
+      return originalSetRequestHandler(requestSchema, originalHandler)
+    }
+
+    return originalSetRequestHandler(requestSchema, (request, extra) => patch(server, originalHandler, request, extra))
+  }) as MCPServerLike['setRequestHandler']
 }
 
-async function handleListToolsRequest(
+/**
+ * Captures each `tools/list` and injects the SDK-managed tools (context
+ * parameter, conversation id, `get_more_tools`) into the returned list.
+ */
+export async function handleListToolsRequest(
   server: MCPServerLike,
   originalListToolsHandler: MCPRequestHandler,
   request: MCPRequestLike,
@@ -340,13 +346,14 @@ async function getTracedToolsList(
     }
 
     if (data?.options.enableConversationId) {
-      tools = addConversationIdToTools(tools)
+      tools = addConversationIdToTools(tools, resolveMissingCapabilityToolName(data.options))
     }
 
     if (data?.options.reportMissing) {
-      const alreadyPresent = tools.some((tool) => tool?.name === GET_MORE_TOOLS_NAME)
+      const missingToolName = resolveMissingCapabilityToolName(data.options)
+      const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
       if (!alreadyPresent) {
-        tools.push(getReportMissingToolDescriptor())
+        tools.push(getReportMissingToolDescriptor(missingToolName))
       }
     }
 
@@ -404,40 +411,38 @@ export function cacheToolCategories(cache: Map<string, string>, tools: ListTools
 // --- initialize -----------------------------------------------------------
 
 /**
- * Wraps the server's `initialize` handler so the connection handshake is
- * captured (and identity resolved) before the original handler runs.
+ * Captures the connection handshake (and resolves identity) on `initialize`
+ * before the original handler runs.
  */
-export function instrumentInitializeHandler(server: MCPServerLike): void {
-  const originalInitializeHandler = server._requestHandlers.get('initialize')
-  if (!originalInitializeHandler) {
-    return
+export async function handleInitializeRequest(
+  server: MCPServerLike,
+  originalInitializeHandler: MCPRequestHandler,
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra
+): Promise<unknown> {
+  const data = getServerTrackingData(server)
+  if (!data) {
+    log(
+      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
+    )
+    return await originalInitializeHandler(request, extra)
   }
 
-  server.setRequestHandler(InitializeRequestSchema, async (request, extra) => {
-    const data = getServerTrackingData(server)
-    if (!data) {
-      log(
-        'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
-      )
-      return await originalInitializeHandler(request, extra)
-    }
+  const sessionId = getServerSessionId(server, extra)
+  await handleIdentify(server, data, sessionId, request, extra)
 
-    const sessionId = getServerSessionId(server, extra)
-    await handleIdentify(server, data, sessionId, request, extra)
+  const event: McpEvent = {
+    sessionId,
+    resourceName: request.params?.name || 'Unknown Tool Name',
+    eventType: MCPAnalyticsEventType.mcpInitialize,
+    parameters: buildCapturedMcpParameters(request),
+    timestamp: new Date(),
+  }
 
-    const event: McpEvent = {
-      sessionId,
-      resourceName: request.params?.name || 'Unknown Tool Name',
-      eventType: MCPAnalyticsEventType.mcpInitialize,
-      parameters: buildCapturedMcpParameters(request),
-      timestamp: new Date(),
-    }
+  await applyResolvedMetadata(event, data, request, extra)
 
-    await applyResolvedMetadata(event, data, request, extra)
-
-    const result = await originalInitializeHandler(request, extra)
-    event.response = result
-    captureEvent(server, event)
-    return result
-  })
+  const result = await originalInitializeHandler(request, extra)
+  event.response = result
+  captureEvent(server, event)
+  return result
 }

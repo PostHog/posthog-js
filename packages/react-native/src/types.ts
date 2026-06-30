@@ -138,7 +138,6 @@ export type PostHogSessionReplayConfig = {
    * Enable masking of all sandboxed system views
    * These may include UIImagePickerController, PHPickerViewController and CNContactPickerViewController
    * iOS only
-   * Experimental support
    *
    * @default true
    */

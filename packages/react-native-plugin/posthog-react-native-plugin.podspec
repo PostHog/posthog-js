@@ -6,7 +6,7 @@ folly_compiler_flags = '-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1 
 # Single source of truth for the posthog-ios native dependency version.
 # Used by both the SPM and CocoaPods resolution paths below; bump this
 # line when picking up a new posthog-ios release.
-posthog_ios_version = '3.58.1'
+posthog_ios_version = '3.61.1'
 
 Pod::Spec.new do |s|
   s.name         = "posthog-react-native-plugin"

@@ -48,6 +48,8 @@ export function resolveHostOrDefault(host?: unknown): string {
  * These ensure the server can read both identity and consent state from cookies:
  * - `capture_pageview: false` — disables posthog-js automatic pageviews so the
  *   `PostHogPageView` component can handle them without duplicates
+ * - `capture_exceptions: true` — enables browser-side unhandled error and
+ *   rejection capture by default for Next.js apps
  * - `persistence: 'localStorage+cookie'` — already the posthog-js default, made explicit
  * - `opt_out_capturing_persistence_type: 'cookie'` — writes consent state to a cookie
  *   so middleware/server components can read it (posthog-js default is 'localStorage')
@@ -59,6 +61,7 @@ export function resolveHostOrDefault(host?: unknown): string {
  */
 export const NEXTJS_CLIENT_DEFAULTS: Partial<PostHogConfig> = {
     capture_pageview: false,
+    capture_exceptions: true,
     persistence: 'localStorage+cookie',
     opt_out_capturing_persistence_type: 'cookie',
     opt_out_persistence_by_default: true,

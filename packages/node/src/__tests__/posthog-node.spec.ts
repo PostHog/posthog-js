@@ -1,10 +1,19 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
+import { UUID_REGEX } from '@posthog/core'
 
 jest.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+
+const invalidUuidCases = [
+  ['arbitrary string', 'not-a-uuid'],
+  ['empty string', ''],
+  ['32-character hex string', '0189dcd553117d408db09496a2eef37b'],
+  ['braced UUID', '{0189dcd5-5311-7d40-8db0-9496a2eef37b}'],
+  ['URN UUID', 'urn:uuid:0189dcd5-5311-7d40-8db0-9496a2eef37b'],
+] as const
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
@@ -102,11 +111,27 @@ describe('PostHog Node.js', () => {
           },
           uuid: expect.any(String),
           timestamp: expect.any(String),
-          type: 'capture',
-          library: 'posthog-node',
-          library_version: '1.2.3',
         },
       ])
+    })
+
+    it('safely flushes circular event properties', async () => {
+      const circularProperties: Record<string, any> = { foo: 'bar' }
+      circularProperties.message = circularProperties
+
+      posthog.capture({ distinctId: '123', event: 'test-event', properties: circularProperties })
+      await (posthog as any).promiseQueue.join()
+
+      await expect(posthog.flush()).resolves.toBeUndefined()
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents?.[0].properties).toMatchObject({
+        foo: 'bar',
+        message: {
+          foo: 'bar',
+          message: '[Circular]',
+        },
+      })
     })
 
     it('should not include $is_server when isServer is false (client/CLI usage)', async () => {
@@ -150,8 +175,6 @@ describe('PostHog Node.js', () => {
             $groups: { org: 123 },
             foo: 'bar',
           }),
-          library: 'posthog-node',
-          library_version: '1.2.3',
         })
       )
       mockedFetch.mockClear()
@@ -173,8 +196,6 @@ describe('PostHog Node.js', () => {
             foo: 'bar',
             $geoip_disable: true,
           }),
-          library: 'posthog-node',
-          library_version: '1.2.3',
         })
       )
     })
@@ -405,6 +426,18 @@ describe('PostHog Node.js', () => {
         },
       ])
     })
+
+    it.each(invalidUuidCases)(
+      'should generate a new uuid when provided uuid is an invalid %s',
+      async (_, invalidUuid) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
+        posthog.capture({ event: 'custom-time', distinctId: '123', uuid: invalidUuid })
+        await waitForFlushTimer()
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents?.[0].uuid).toMatch(UUID_REGEX)
+        expect(batchEvents?.[0].uuid).not.toBe(invalidUuid)
+      }
+    )
 
     it('should respect disableGeoip setting if passed in', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
@@ -716,6 +749,20 @@ describe('PostHog Node.js', () => {
       jest.useFakeTimers()
     })
 
+    it('clears feature flag call dedupe state on shutdown', async () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      ;(ph as any).distinctIdHasSentFlagCalls = { user: new Set(['flag_true']) }
+      await ph.shutdown()
+
+      expect((ph as any).distinctIdHasSentFlagCalls).toEqual({})
+    })
+
     it('should shutdown cleanly', async () => {
       const ph = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
@@ -772,15 +819,12 @@ describe('PostHog Node.js', () => {
         // last event in batch
         distinct_id: '9',
         event: 'test-event',
-        library: 'posthog-node',
-        library_version: '1.2.3',
         properties: {
           $lib: 'posthog-node',
           $lib_version: '1.2.3',
           $geoip_disable: true,
         },
         timestamp: expect.any(String),
-        type: 'capture',
       })
       expect(10).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('capture')).length)
       // 1 for the captured events, 1 for the final flush of feature flag called events
@@ -886,6 +930,39 @@ describe('PostHog Node.js', () => {
         },
       ])
     })
+
+    it.each([
+      ['generated distinct_id', undefined, '$posthog_team-1'],
+      ['custom distinctId', '123', '123'],
+    ] as Array<[string, string | undefined, string]>)(
+      'should await the network request when groupIdentifyImmediate is awaited with %s',
+      async (_, distinctId, expectedDistinctId) => {
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
+
+        await posthog.groupIdentifyImmediate({
+          groupType: 'posthog',
+          groupKey: 'team-1',
+          properties: { analytics: true },
+          ...(distinctId ? { distinctId } : {}),
+        })
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents?.[0]?.distinct_id).toBe(expectedDistinctId)
+        expect(batchEvents).toMatchObject([
+          {
+            distinct_id: expectedDistinctId,
+            event: '$groupidentify',
+            properties: {
+              $group_type: 'posthog',
+              $group_key: 'team-1',
+              $group_set: { analytics: true },
+              $lib: 'posthog-node',
+              $geoip_disable: true,
+            },
+          },
+        ])
+      }
+    )
   })
 
   describe('feature flags', () => {
@@ -1287,7 +1364,7 @@ describe('PostHog Node.js', () => {
 
       expect(mockedFetch).toHaveBeenCalledWith(
         'http://example.com/flags/?v=2',
-        expect.objectContaining({ method: 'POST', body: expect.not.stringContaining('geoip_disable') })
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":false') })
       )
 
       expect(getLastBatchEvents()?.[0].properties).toEqual({
@@ -2594,7 +2671,7 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
         'http://example.com/flags/?v=2',
-        expect.objectContaining({ method: 'POST', body: expect.not.stringContaining('geoip_disable') })
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":false') })
       )
     })
 

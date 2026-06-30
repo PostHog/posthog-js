@@ -7,11 +7,11 @@
  *   1. `package.json#exports` declares the right file for each runtime
  *      condition (`browser`, `edge-light`/`edge`/`worker`, `react-server`,
  *      `default`).
- *   2. The transitive import closure of each built barrel never reaches
- *      `'server-only'` or `posthog-node` from a runtime that can't handle
- *      them — Next.js rejects `'server-only'` in client bundles, and
- *      `posthog-node` uses Node-only APIs that don't exist in the Edge
- *      runtime or the browser.
+ *   2. The transitive import closure of each built barrel only reaches
+ *      runtime-safe dependencies — Next.js rejects `'server-only'` in client
+ *      bundles, browser bundles must not include `posthog-node`, and edge
+ *      request-error capture can import `posthog-node` through its conditional
+ *      `edge`/`edge-light` package export.
  */
 
 import { existsSync, promises as fs, readFileSync } from 'node:fs'
@@ -85,6 +85,8 @@ describeIfBuilt('Built dist artifacts (skipped when dist/ missing)', () => {
         'pages.edge.d.ts',
         'pages.js',
         'pages.d.ts',
+        'server.edge.js',
+        'server.edge.d.ts',
     ]
     it.each(expectedArtifacts)('emits dist/%s', async (artifact) => {
         const stat = await fs.stat(path.join(DIST_DIR, artifact))
@@ -129,6 +131,7 @@ describeIfBuilt('Transitive import closure of each built barrel', () => {
         const imports = bareImportsReachableFrom(path.join(DIST_DIR, file))
         expect(imports.has('server-only')).toBe(false)
         expect(imports.has('posthog-node')).toBe(false)
+        expect(imports.has('posthog-node/edge')).toBe(false)
     })
 
     it('index.react-server.js never reaches server-only (posthog-node is allowed)', () => {
@@ -140,9 +143,10 @@ describeIfBuilt('Transitive import closure of each built barrel', () => {
     // in. If they stop doing so, the server-side API has likely lost the
     // intended functionality (e.g. a re-export was accidentally dropped).
     it.each([
-        ['pages.js', { 'server-only': true, 'posthog-node': true }],
-        ['index.js', { 'server-only': true, 'posthog-node': true }],
-        ['pages.edge.js', { 'server-only': true, 'posthog-node': false }],
+        ['pages.js', { 'server-only': true, 'posthog-node': true, 'posthog-node/edge': false }],
+        ['index.js', { 'server-only': true, 'posthog-node': true, 'posthog-node/edge': false }],
+        ['pages.edge.js', { 'server-only': true, 'posthog-node': false, 'posthog-node/edge': false }],
+        ['server.edge.js', { 'server-only': false, 'posthog-node': true, 'posthog-node/edge': false }],
     ])('server/edge barrel %s keeps the expected bare imports', (file, expected) => {
         const imports = bareImportsReachableFrom(path.join(DIST_DIR, file))
         for (const [specifier, shouldBeReachable] of Object.entries(expected)) {

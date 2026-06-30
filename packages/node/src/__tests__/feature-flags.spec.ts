@@ -1751,6 +1751,89 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
+  it("computes 'not in' cohort conditions locally (negated cohort membership)", async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exclude Team',
+          key: 'exclude-team',
+          active: true,
+          rollout_percentage: 100,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, type: 'cohort', operator: 'not_in' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+        {
+          id: 2,
+          name: 'Include Team',
+          key: 'include-team',
+          active: true,
+          rollout_percentage: 100,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, type: 'cohort', operator: 'in' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '98': {
+          type: 'OR',
+          values: [{ key: 'email', operator: 'regex', value: '.*@example\\.com$', type: 'person' }],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: {},
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // In the cohort + `not_in` => excluded => OFF. (Pre-fix this incorrectly returned `true`.)
+    expect(
+      await posthog.getFeatureFlag('exclude-team', 'some-distinct-id', {
+        personProperties: { email: 'team@example.com' },
+      })
+    ).toEqual(false)
+    // Not in the cohort + `not_in` => ON.
+    expect(
+      await posthog.getFeatureFlag('exclude-team', 'some-distinct-id', {
+        personProperties: { email: 'outsider@example.org' },
+      })
+    ).toEqual(true)
+
+    // `in` keeps working: in the cohort => ON, not in the cohort => OFF.
+    expect(
+      await posthog.getFeatureFlag('include-team', 'some-distinct-id', {
+        personProperties: { email: 'team@example.com' },
+      })
+    ).toEqual(true)
+    expect(
+      await posthog.getFeatureFlag('include-team', 'some-distinct-id', {
+        personProperties: { email: 'outsider@example.org' },
+      })
+    ).toEqual(false)
+
+    // All evaluated locally; the /flags (decide) API must not be consulted.
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
   it('gets feature flag with variant overrides', async () => {
     const flags = {
       flags: [
@@ -2819,13 +2902,10 @@ describe('getFeatureFlag', () => {
     expect(capturedMessage).toMatchObject({
       distinct_id: 'some-distinct-id',
       event: '$feature_flag_called',
-      library: posthog.getLibraryId(),
-      library_version: posthog.getLibraryVersion(),
       properties: {
         '$feature/complex-flag': true,
         $feature_flag: 'complex-flag',
         $feature_flag_response: true,
-        $groups: undefined,
         $lib: posthog.getLibraryId(),
         $lib_version: posthog.getLibraryVersion(),
         locally_evaluated: true,

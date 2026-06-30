@@ -92,6 +92,21 @@ describe('featureflags', () => {
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
     })
 
+    it('getAllFeatureFlags returns all flags as results, including disabled ones', () => {
+        expect(featureFlags.getAllFeatureFlags()).toEqual([
+            { key: 'beta-feature', enabled: true, variant: undefined, payload: { some: 'payload' } },
+            { key: 'alpha-feature-2', enabled: true, variant: undefined, payload: 200 },
+            { key: 'multivariate-flag', enabled: true, variant: 'variant-1', payload: undefined },
+            { key: 'disabled-flag', enabled: false, variant: undefined, payload: undefined },
+        ])
+    })
+
+    it('getAllFeatureFlags does not send a $feature_flag_called event or report a flag call', () => {
+        featureFlags.getAllFeatureFlags()
+        expect(instance.capture).not.toHaveBeenCalledWith('$feature_flag_called', expect.anything())
+        expect(instance.get_property('$flag_call_reported')).toEqual(undefined)
+    })
+
     it('should return flag details from persistence even if /flags endpoint was not hit', () => {
         instance.persistence.register({
             $feature_flag_details: {
@@ -1047,13 +1062,6 @@ describe('featureflags', () => {
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
-        })
-
-        it('sends the flags request with skipIPParam so the ip query param is omitted', () => {
-            featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
-
-            expect(instance._send_request.mock.calls[0][0].skipIPParam).toBe(true)
         })
 
         it('should call /flags with flags disabled if advanced_disable_feature_flags is set', () => {
@@ -3004,6 +3012,39 @@ describe('parseFlagsResponse', () => {
         expect(persistence.unregister).not.toHaveBeenCalled()
     })
 
+    const OLD_ENDPOINT_WARNING =
+        'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
+
+    it.each([
+        // A modern v2 response carries `flags` and must not warn.
+        { name: 'v2 response with flags', response: { flags: { f: { key: 'f', enabled: true } } }, shouldWarn: false },
+        // Only a genuinely old server returns the v1 shape (`featureFlags`, no `flags`) — keep the warning there.
+        {
+            name: 'v1-shaped response (featureFlags present)',
+            response: { featureFlags: { f: true } },
+            shouldWarn: true,
+        },
+        // A project with no feature flags returns a valid v2 response that omits `flags` — must not warn.
+        { name: 'valid v2 response with no flags', response: {}, shouldWarn: false },
+    ])('older-endpoint warning — $name (warns: $shouldWarn)', ({ response, shouldWarn }) => {
+        // Ensure warnings would actually be emitted so the assertions below are meaningful, and
+        // restore the previous value so this test stays self-contained.
+        const previousDebug = (window as any).POSTHOG_DEBUG
+        ;(window as any).POSTHOG_DEBUG = true
+        jest.spyOn(window.console, 'warn').mockImplementation()
+
+        // @ts-expect-error testing partial/legacy response shapes
+        parseFlagsResponse(response, persistence)
+
+        const expectation = expect(window.console.warn)
+        if (shouldWarn) {
+            expectation.toHaveBeenCalledWith('[PostHog.js] [FeatureFlags]', OLD_ENDPOINT_WARNING)
+        } else {
+            expectation.not.toHaveBeenCalledWith('[PostHog.js] [FeatureFlags]', OLD_ENDPOINT_WARNING)
+        }
+        ;(window as any).POSTHOG_DEBUG = previousDebug
+    })
+
     it('parses the requestId from the /flags?v=1 response', () => {
         const flagsResponse = {
             featureFlags: { 'test-flag': true },
@@ -3200,12 +3241,6 @@ describe('getRemoteConfigPayload', () => {
         })
 
         featureFlags = new PostHogFeatureFlags(instance)
-    })
-
-    it('sends the request with skipIPParam so the ip query param is omitted', () => {
-        featureFlags.getRemoteConfigPayload('test-flag', jest.fn())
-
-        expect(instance._send_request).toHaveBeenCalledWith(expect.objectContaining({ skipIPParam: true }))
     })
 
     it('should include evaluation_contexts when configured', () => {

@@ -9,6 +9,7 @@ import { MCPAnalyticsEventType } from './extensions/event-types'
 import { IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { log, setLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
+import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
@@ -65,6 +66,11 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
       return createAnalyticsHandle(lowLevelServer)
     }
 
+    if (posthog) {
+      // Report `$lib: 'posthog-node-mcp'` on this client's events instead of the
+      // inherited `posthog-node`. Relabels every event the client sends.
+      applyMcpLibIdentity(posthog)
+    }
     const sink = posthog ? new McpEventSink(posthog) : undefined
     const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, sink)
 
@@ -76,6 +82,31 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
     log(`Warning: Failed to instrument server - ${error}`)
     // Degrade gracefully: a no-op handle so the host app keeps working.
     return { capture: async () => undefined }
+  }
+}
+
+/**
+ * A point-free `(server) => server` helper for framework server-mutation hooks (e.g.
+ * `@rekog/mcp-nest`'s `serverMutator`). It instruments the server and returns it, so you
+ * don't trip over {@link instrument} returning the analytics handle rather than the server —
+ * the bare `(s) => instrument(s, posthog)` would replace the server with the handle.
+ *
+ * @example
+ * ```ts
+ * McpModule.forRoot({ serverMutator: instrumentMutator(posthog) })
+ * ```
+ *
+ * Need the handle for custom events? Call {@link instrument} directly inside your own mutator
+ * and return the server. See https://posthog.com/docs/mcp-analytics/installation.
+ *
+ * @param posthog - A `posthog-node` client you construct and own.
+ * @param options - Optional configuration. See `MCPAnalyticsOptions`.
+ * @returns A `(server) => server` mutator that instruments the server and returns it.
+ */
+function instrumentMutator<TServer>(posthog: PostHog, options?: MCPAnalyticsOptions): (server: TServer) => TServer {
+  return (server: TServer): TServer => {
+    instrument(server, posthog, options)
+    return server
   }
 }
 
@@ -166,7 +197,13 @@ export {
   PostHogMCPAnalyticsEvent,
   PostHogMCPAnalyticsProperty,
 } from './extensions/constants'
-export { PostHogMCP } from './extensions/posthog-mcp'
+export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
+export { getMoreToolsResult } from './extensions/tools'
+export { setLogger } from './extensions/logger'
+// Re-export the posthog-node client so a single import works:
+//   import { PostHog, instrument } from "@posthog/mcp"
+// posthog-node stays a peer dependency, so this resolves the host app's installed copy.
+export { PostHog, type PostHogOptions } from 'posthog-node'
 export type {
   BeforeSendFn,
   CaptureEventData,
@@ -176,8 +213,12 @@ export type {
   MCPAnalyticsContextOptions,
   MCPAnalyticsIntentSource,
   MCPAnalyticsOptions,
+  MissingCapabilityCaptureData,
+  PreparedToolCall,
+  PrepareToolListOptions,
   ToolCallCaptureData,
+  ToolsListCaptureData,
   UserIdentity,
 } from './types'
 export type IdentifyFunction = MCPAnalyticsOptions['identify']
-export { instrument }
+export { instrument, instrumentMutator }

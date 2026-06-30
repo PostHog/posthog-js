@@ -1,0 +1,36 @@
+name: PostHog Watcher enqueue
+
+on:
+    issues:
+        types: [opened, reopened, edited]
+    issue_comment:
+        types: [created]
+    pull_request:
+        types: [opened, synchronize, reopened]
+    pull_request_review:
+        types: [submitted]
+    pull_request_review_comment:
+        types: [created]
+
+permissions:
+    contents: write # write queue.json to the state branch
+    issues: read
+    pull-requests: read
+    actions: write # dispatch the drain workflow immediately after enqueueing
+
+concurrency:
+    group: posthog-watcher-enqueue-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+    cancel-in-progress: false
+
+jobs:
+    enqueue:
+        if: ${{ github.event_name == 'issues' || github.event_name == 'issue_comment' || github.event.pull_request.head.repo.full_name == github.repository }}
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+            - name: Enqueue watcher event
+              uses: PostHog/posthog-watcher-action@321404b6b373c2efffce607996f7f501c65ed182
+              with:
+                  mode: enqueue
+                  trigger-drain-workflow: 'true'

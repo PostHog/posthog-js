@@ -142,7 +142,28 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 }
 
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
-    const encodedBody = encodePostData(options)
+    const fallbackToUncompressed = (): EncodedRequest => {
+        return {
+            url: removeURLParam(options.url, 'compression'),
+            encodedBody: encodePostData({
+                ...options,
+                compression: undefined,
+                _encodedBody: undefined,
+            }),
+        }
+    }
+
+    let encodedBody: EncodedBody | undefined
+    try {
+        encodedBody = encodePostData(options)
+    } catch (error) {
+        if (isGzipRequest(options.compression, getQueryParam(options.url, 'compression'))) {
+            logger.error('Failed to gzip request body, sending uncompressed payload', error)
+            return fallbackToUncompressed()
+        }
+
+        throw error
+    }
 
     if (
         !encodedBody ||
@@ -153,14 +174,16 @@ const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest =
     }
 
     nativeAsyncGzipDisabled = true
+    return fallbackToUncompressed()
+}
 
-    return {
-        url: removeURLParam(options.url, 'compression'),
-        encodedBody: encodePostData({
-            ...options,
-            compression: undefined,
-            _encodedBody: undefined,
-        }),
+const encodeRequest = (options: RequestWithEncodedBody): EncodedRequest | undefined => {
+    try {
+        return encodePostDataSafely(options)
+    } catch (error) {
+        logger.error(error)
+        options.callback?.({ statusCode: 0, error })
+        return undefined
     }
 }
 
@@ -190,9 +213,26 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
     }
 }
 
+/**
+ * Builds the reason used when aborting a fetch because our own request timeout elapsed.
+ * It keeps `name === 'AbortError'` (so callers that detect timeouts by error name keep working)
+ * but carries a descriptive message, so it is never a reason-less
+ * `signal is aborted without reason` exception.
+ */
+const timeoutAbortReason = (timeout?: number): Error => {
+    const reason = new Error(`PostHog request timed out${timeout ? ` after ${timeout}ms` : ''}`)
+    reason.name = 'AbortError'
+    return reason
+}
+
 const xhr = (options: RequestWithOptions) => {
+    const encodedRequest = encodeRequest(options)
+    if (!encodedRequest) {
+        return
+    }
+
     const req = new XMLHttpRequest!()
-    const { url, encodedBody } = encodePostDataSafely(options)
+    const { url, encodedBody } = encodedRequest
     req.open(options.method || 'GET', url, true)
     const { contentType, body } = encodedBody ?? {}
 
@@ -229,7 +269,12 @@ const xhr = (options: RequestWithOptions) => {
 }
 
 const _fetch = (options: RequestWithOptions) => {
-    const { url, encodedBody } = encodePostDataSafely(options)
+    const encodedRequest = encodeRequest(options)
+    if (!encodedRequest) {
+        return
+    }
+
+    const { url, encodedBody } = encodedRequest
     const { contentType, body, estimatedSize } = encodedBody ?? {}
 
     // eslint-disable-next-line compat/compat
@@ -243,12 +288,22 @@ const _fetch = (options: RequestWithOptions) => {
     }
 
     let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
+    let timeoutReason: Error | null = null
 
     if (AbortController) {
         const controller = new AbortController()
         aborter = {
             signal: controller.signal,
-            timeout: setTimeout(() => controller.abort(), options.timeout),
+            timeout: setTimeout(() => {
+                // Abort with an explicit reason. Without one, the browser rejects the fetch with a
+                // reason-less `DOMException: AbortError: signal is aborted without reason`, which is
+                // indistinguishable from a host app's own aborted fetches wherever it surfaces (the
+                // `{ statusCode: 0, error }` callback, logs, stack traces). An explicit reason makes
+                // our own request timeouts identifiable. We keep `name === 'AbortError'` so existing
+                // timeout handling (e.g. feature flag timeout detection) keeps working.
+                timeoutReason = timeoutAbortReason(options.timeout)
+                controller.abort(timeoutReason)
+            }, options.timeout),
         }
     }
 
@@ -286,7 +341,15 @@ const _fetch = (options: RequestWithOptions) => {
             })
         })
         .catch((error) => {
-            logger.error(error)
+            // Identity comparison against the exact reason we created, so a genuine network error
+            // that happens to settle in the same turn as the timeout is never misclassified.
+            if (error === timeoutReason) {
+                // Our own request timeout is an expected, intentional abort (the request queue
+                // retries), not a genuine failure - so log it at `warn` rather than `error`.
+                logger.warn(error)
+            } else {
+                logger.error(error)
+            }
             options.callback?.({ statusCode: 0, error })
         })
         .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
@@ -299,10 +362,7 @@ const _sendBeacon = (options: RequestWithOptions) => {
     // beacons format the message and use the type property
 
     try {
-        const { url: safeUrl, encodedBody } = encodePostDataSafely(options)
-        const url = extendURLParams(safeUrl, {
-            beacon: '1',
-        })
+        const { url, encodedBody } = encodePostDataSafely(options)
         const { contentType, body } = encodedBody ?? {}
         if (!body) {
             return
@@ -382,6 +442,7 @@ export const request = (_options: RequestWithOptions) => {
         options.data &&
         options.compression === Compression.GZipJS &&
         !!CompressionStream &&
+        typeof Promise !== 'undefined' &&
         !nativeAsyncGzipDisabled
     ) {
         preEncodeAsync(options)

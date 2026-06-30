@@ -75,6 +75,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$product_tours_enabled_server_side',
     '$session_recording_remote_config',
     '$override_feature_flag_payloads',
+    '$sess_rec_flush_size',
 ])
 
 const LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS = [...LEGACY_RESERVED_PERSISTENCE_KEYS].filter(
