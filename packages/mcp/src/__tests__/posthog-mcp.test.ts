@@ -2,6 +2,7 @@ import { getMoreToolsResult, PostHogMCP } from '../index'
 import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extensions/constants'
 import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
+import { version } from '../version'
 import { EventCapture } from './test-utils'
 
 // The capture methods are fire-and-forget (mirroring posthog-node's `capture()`),
@@ -65,6 +66,8 @@ describe('PostHogMCP', () => {
       expect(p[PostHogMCPAnalyticsProperty.IsError]).toBe(false)
       expect(p[PostHogMCPAnalyticsProperty.SessionId]).toBe('session-abc')
       expect(p[PostHogMCPAnalyticsProperty.Source]).toBe('posthog_mcp_analytics')
+      expect(p[PostHogMCPAnalyticsProperty.McpLib]).toBe('@posthog/mcp')
+      expect(p[PostHogMCPAnalyticsProperty.McpLibVersion]).toBe(version)
       expect(p.$groups).toEqual({ organization: 'org-1', project: 'proj-1' })
       expect(p.$mcp_client_name).toBe('claude-code')
       expect(p.custom_flag).toBe(true)

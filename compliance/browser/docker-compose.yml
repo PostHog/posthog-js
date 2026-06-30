@@ -10,7 +10,7 @@ services:
       - test-network
 
   test-harness:
-    image: posthog-sdk-test-harness:debug
+    image: ghcr.io/posthog/sdk-test-harness:0.9.0
     command: ["run", "--adapter-url", "http://sdk-adapter:8080", "--mock-url", "http://test-harness:8081", "--sdk-type", "client", "--debug"]
     networks:
       - test-network

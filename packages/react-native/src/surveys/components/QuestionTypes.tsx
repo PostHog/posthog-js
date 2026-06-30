@@ -1,5 +1,5 @@
 import React, { ReactNode, useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { LayoutChangeEvent, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
@@ -39,14 +39,25 @@ interface QuestionCommonProps {
 // Wraps question content in a scrollable region with a sticky BottomSection
 // (Submit button) at the bottom. The ScrollView has flexShrink: 1 so it
 // shrinks to fit when the parent modal is capped at its keyboard-aware
-// maxHeight, keeping Submit visible regardless of survey length.
+// maxHeight, keeping Submit visible regardless of survey length. Scrolling is
+// enabled only while the content overflows the viewport, so short surveys don't
+// scroll or bounce.
 function QuestionLayout({ children, footer }: { children: ReactNode; footer: ReactNode }): JSX.Element {
+  const [viewportHeight, setViewportHeight] = useState(0)
+  const [contentHeight, setContentHeight] = useState(0)
+  // 1px threshold absorbs sub-pixel layout rounding.
+  const isOverflowing = contentHeight > viewportHeight + 1
+
   return (
     <View style={questionLayoutStyles.container}>
       <ScrollView
         style={questionLayoutStyles.scroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        scrollEnabled={isOverflowing}
+        bounces={isOverflowing}
+        onLayout={(e: LayoutChangeEvent) => setViewportHeight(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_width, height) => setContentHeight(height)}
       >
         {children}
       </ScrollView>
