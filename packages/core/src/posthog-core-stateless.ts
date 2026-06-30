@@ -172,6 +172,7 @@ export abstract class PostHogCoreStateless {
   private maxQueueSize: number
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
+  private flushPromises: Set<Promise<any>> = new Set()
   private shutdownPromise: Promise<void> | null = null
   private requestTimeout: number
   private featureFlagsRequestTimeoutMs: number
@@ -1175,21 +1176,53 @@ export abstract class PostHogCoreStateless {
     })
   }
 
-  private async waitForPendingPromises(timeoutMs: number): Promise<void> {
+  private async waitForPendingPromises(
+    timeoutMs: number,
+    ignoredPromises: (Promise<any> | null | undefined)[] = []
+  ): Promise<void> {
     const normalizedTimeoutMs = Number.isFinite(timeoutMs)
       ? Math.max(0, timeoutMs)
       : DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS
-    let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+    const deadline = Date.now() + normalizedTimeoutMs
+    const ignoredPendingPromises = ignoredPromises.filter((promise): promise is Promise<any> => !!promise)
+    let iteration = 0
 
-    try {
-      await Promise.race([
-        this.promiseQueue.joinAllSettled(this.flushPromise ? [this.flushPromise] : []),
-        new Promise<void>((resolve) => {
-          timeoutHandle = safeSetTimeout(resolve, normalizedTimeoutMs)
+    while (true) {
+      const promises = this.promiseQueue.getPromises([...ignoredPendingPromises, ...this.flushPromises])
+      if (promises.length === 0) {
+        return
+      }
+
+      const remainingMs = deadline - Date.now()
+      if (remainingMs <= 0) {
+        this._logger.debug(
+          `flush() timed out waiting for ${promises.length} pending promise(s) after ${iteration} re-check(s)`
+        )
+        return
+      }
+
+      if (iteration > 0) {
+        this._logger.debug(`flush() re-checking ${promises.length} pending promise(s) before flushing`)
+      }
+
+      let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+      const timedOut = await Promise.race([
+        Promise.all(promises.map((promise) => promise.catch(() => {}))).then(() => false),
+        new Promise<true>((resolve) => {
+          timeoutHandle = safeSetTimeout(() => resolve(true), remainingMs)
         }),
-      ])
-    } finally {
-      clearTimeout(timeoutHandle)
+      ]).finally(() => {
+        clearTimeout(timeoutHandle)
+      })
+
+      if (timedOut) {
+        this._logger.debug(
+          `flush() timed out waiting for ${promises.length} pending promise(s) after ${iteration} re-check(s)`
+        )
+        return
+      }
+
+      iteration++
     }
   }
 
@@ -1227,24 +1260,31 @@ export abstract class PostHogCoreStateless {
    * @throws PostHogFetchNetworkError
    * @throws Error
    */
-  async flush(flushPendingPromisesTimeoutMs: number = DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS): Promise<void> {
+  flush(flushPendingPromisesTimeoutMs: number = DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS): Promise<void> {
     if (this.disabled) {
-      return
+      return Promise.resolve()
     }
 
-    await this.waitForPendingPromises(flushPendingPromisesTimeoutMs)
+    const previousFlushPromise = this.flushPromise
 
-    // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
-    // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
-    // Use a custom allSettled implementation to avoid issues with patching Promise on RN
-    const nextFlushPromise = allSettled([this.flushPromise]).then(() => {
-      return this._flush()
-    })
+    // Register this flush in the promise queue synchronously so shutdown() can't miss it,
+    // but exclude it from the pending-work wait to avoid self-waiting.
+    const nextFlushPromise: Promise<void> = Promise.resolve()
+      .then(() => this.waitForPendingPromises(flushPendingPromisesTimeoutMs, [previousFlushPromise, nextFlushPromise]))
+      // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
+      // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
+      // Use a custom allSettled implementation to avoid issues with patching Promise on RN
+      .then(() => allSettled([previousFlushPromise]))
+      .then(() => {
+        return this._flush()
+      })
 
     this.flushPromise = nextFlushPromise
+    this.flushPromises.add(nextFlushPromise)
     void this.addPendingPromise(nextFlushPromise)
 
     allSettled([nextFlushPromise]).then(() => {
+      this.flushPromises.delete(nextFlushPromise)
       // If there are no others waiting to flush, clear the promise.
       // We don't strictly need to do this, but it could make debugging easier
       if (this.flushPromise === nextFlushPromise) {

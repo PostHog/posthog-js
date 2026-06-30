@@ -24,15 +24,9 @@ export class PromiseQueue {
     }
   }
 
-  public async joinAllSettled(ignoredPromises: Promise<any>[] = []): Promise<void> {
+  public getPromises(ignoredPromises: Promise<any>[] = []): Promise<any>[] {
     const ignoredPromiseSet = new Set(ignoredPromises)
-    let promises = Object.values(this.promiseByIds).filter((promise) => !ignoredPromiseSet.has(promise))
-    let length = promises.length
-    while (length > 0) {
-      await Promise.all(promises.map((promise) => promise.catch(() => {})))
-      promises = Object.values(this.promiseByIds).filter((promise) => !ignoredPromiseSet.has(promise))
-      length = promises.length
-    }
+    return Object.values(this.promiseByIds).filter((promise) => !ignoredPromiseSet.has(promise))
   }
 
   public get length(): number {

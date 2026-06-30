@@ -122,6 +122,7 @@ describe('PostHog Core', () => {
       const flushPromise = posthog.flush(25)
       expect(mocks.fetch).not.toHaveBeenCalled()
 
+      await Promise.resolve()
       jest.advanceTimersByTime(25)
       await expect(flushPromise).resolves.not.toThrow()
       expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
