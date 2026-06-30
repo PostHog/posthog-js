@@ -1175,12 +1175,15 @@ export abstract class PostHogCoreStateless {
     })
   }
 
-  private async waitForPendingPromises(ignoredPromises: (Promise<any> | null | undefined)[] = []): Promise<void> {
+  private async waitForPendingPromises(
+    maxPromiseId: number,
+    ignoredPromises: (Promise<any> | null | undefined)[] = []
+  ): Promise<void> {
     const ignoredPendingPromises = ignoredPromises.filter((promise): promise is Promise<any> => !!promise)
     let iteration = 0
 
     while (true) {
-      const promises = this.promiseQueue.getPromises([...ignoredPendingPromises, ...this.flushPromises])
+      const promises = this.promiseQueue.getPromises([...ignoredPendingPromises, ...this.flushPromises], maxPromiseId)
       if (promises.length === 0) {
         return
       }
@@ -1236,13 +1239,14 @@ export abstract class PostHogCoreStateless {
     }
 
     const previousFlushPromise = this.flushPromise
+    const maxPromiseId = this.promiseQueue.maxId
 
     // Register this flush in the promise queue synchronously so shutdown() can't miss it,
     // but exclude it from the pending-work wait to avoid self-waiting.
     const nextFlushPromise: Promise<void> = Promise.resolve()
       .then(() => {
         if (waitForPendingPromises) {
-          return this.waitForPendingPromises([previousFlushPromise, nextFlushPromise])
+          return this.waitForPendingPromises(maxPromiseId, [previousFlushPromise, nextFlushPromise])
         }
       })
       // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.

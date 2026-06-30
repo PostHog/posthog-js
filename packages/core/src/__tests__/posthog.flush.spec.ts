@@ -81,6 +81,36 @@ describe('PostHog Core', () => {
       expect(successfulMessages).toMatchObject([{ event: 'pending-event' }])
     })
 
+    it('does not wait for unrelated pending promises added after flush starts', async () => {
+      const successfulMessages: any[] = []
+      let resolvePending!: () => void
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(
+        new Promise<void>((resolve) => {
+          resolvePending = resolve
+        })
+      )
+
+      const flushPromise = posthog.flushWithPendingPromises()
+      posthog.addPendingPromise(new Promise<void>(() => {}))
+      resolvePending()
+
+      await expect(flushPromise).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
     it('flushes queued events even if a pending promise rejects', async () => {
       const successfulMessages: any[] = []
 

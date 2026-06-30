@@ -532,7 +532,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  private _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+  _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
     return this.addPendingPromise(
       this.prepareEventMessage(props)
         .then(({ distinctId, event, properties, options }) => {
@@ -2465,7 +2465,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           { syntheticException },
           distinctId,
           additionalProperties
-        ).then((msg) => this.capture({ ...msg, uuid, flags }))
+        ).then((msg) => this._capturePreparedEvent({ ...msg, uuid, flags }, false))
       )
     }
   }
