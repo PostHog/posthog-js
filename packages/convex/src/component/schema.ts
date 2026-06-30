@@ -22,7 +22,7 @@ export default defineSchema({
    * supervisor cron reads it to decide whether the chain is still alive before starting a new
    * one, so overlapping supervisor runs can't spawn duplicate chains.
    */
-  cronState: defineTable({
+  refreshLoopState: defineTable({
     loopJobId: v.string(),
   }),
 })

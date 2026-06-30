@@ -361,14 +361,14 @@ export function readPollingIntervalSeconds(): number {
   return parsed
 }
 
-// Track the latest queued tick in the `cronState` singleton so `ensureRefreshLoop` can tell a
-// live chain from a dead one before scheduling.
+// Record the latest queued tick in the `refreshLoopState` singleton so `ensureRefreshLoop` can
+// tell a live chain from a dead one before scheduling.
 async function recordLoopJob(ctx: MutationCtx, jobId: GenericId<'_scheduled_functions'>): Promise<void> {
-  const existing = await ctx.db.query('cronState').first()
+  const existing = await ctx.db.query('refreshLoopState').first()
   if (existing) {
     await ctx.db.patch(existing._id, { loopJobId: jobId })
   } else {
-    await ctx.db.insert('cronState', { loopJobId: jobId })
+    await ctx.db.insert('refreshLoopState', { loopJobId: jobId })
   }
 }
 
@@ -378,6 +378,11 @@ async function recordLoopJob(ctx: MutationCtx, jobId: GenericId<'_scheduled_func
  * scheduled mutations exactly once and retries them on transient errors, and queuing the next tick
  * commits atomically with this one, so the chain can't silently break. The fetch itself is a
  * separate at-most-once action; if it fails, the next tick just refetches.
+ *
+ * Never invoke this directly (e.g. the dashboard "Run function"): it unconditionally queues its
+ * successor, so a manual call forks the chain into two independent loops that both run forever,
+ * permanently doubling the refresh cadence — and the supervisor can't detect the fork. The chain
+ * owns its own scheduling; use `ensureRefreshLoop` to (re)start it.
  */
 export const refreshLoop = internalMutation({
   args: {},
@@ -396,14 +401,15 @@ export const refreshLoop = internalMutation({
 export const ensureRefreshLoop = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const state = await ctx.db.query('cronState').first()
+    const state = await ctx.db.query('refreshLoopState').first()
     if (state) {
       const job = await ctx.db.system.get(state.loopJobId as GenericId<'_scheduled_functions'>)
       if (job && (job.state.kind === 'pending' || job.state.kind === 'inProgress')) {
         return
       }
     }
-    await recordLoopJob(ctx, await ctx.scheduler.runAfter(0, internal.lib.refreshLoop, {}))
+    const jobId = await ctx.scheduler.runAfter(0, internal.lib.refreshLoop, {})
+    await recordLoopJob(ctx, jobId)
   },
 })
 

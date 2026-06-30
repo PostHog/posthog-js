@@ -11,9 +11,11 @@ const crons = cronJobs()
 // chain (`lib.ts:refreshLoop`) that reads the interval at runtime and queues its own next run.
 //
 // This cron is only a supervisor: `ensureRefreshLoop` starts the chain unless it's already running,
-// which bootstraps a fresh deploy and self-heals if the chain ever stops. It runs often enough to
-// keep bootstrap/heal latency low, but the actual refresh work happens on the configured interval —
-// so raising the interval still cuts function-call usage, which is the point of the knob.
+// which bootstraps a fresh deploy and self-heals if the chain ever stops. The actual refresh work
+// happens on the configured interval, so raising the interval still cuts function-call usage, which
+// is the point of the knob. The supervisor's own cadence is a fixed floor — it can't read the
+// runtime interval (the same reason the cron can't), so at very long intervals the supervisor
+// itself becomes the dominant cost. 5 minutes trades that floor against bootstrap/heal latency.
 crons.interval('Ensure PostHog flag refresh loop is running', { minutes: 5 }, internal.lib.ensureRefreshLoop, {})
 
 export default crons

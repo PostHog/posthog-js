@@ -65,8 +65,9 @@ describe('self-rescheduling flag refresh loop', () => {
     const jobs = await scheduledJobs(t)
     // The tick kicks a refresh now…
     expect(byName(jobs, 'refreshFlagDefinitions')).toHaveLength(1)
-    // …and queues exactly one successor an interval out. With the old fixed cron the period was
-    // pinned to the 60s default because the env var is invisible at registration (#3957).
+    // …and queues exactly one successor at the runtime interval. This guards the architecture: a
+    // reverted fixed `crons.interval` would queue no successor here at all. (The harness reads the
+    // env var live, so it can't reproduce the deploy-time invisibility that was the root of #3957.)
     const next = byName(jobs, 'refreshLoop')
     expect(next).toHaveLength(1)
     const delayMs = next[0].scheduledTime - Date.now()
@@ -93,7 +94,7 @@ describe('self-rescheduling flag refresh loop', () => {
     await t.mutation(internal.lib.refreshLoop, {})
 
     const next = byName(await scheduledJobs(t), 'refreshLoop')
-    const state = await t.run(async (ctx) => ctx.db.query('cronState').first())
+    const state = await t.run(async (ctx) => ctx.db.query('refreshLoopState').first())
     expect(state?.loopJobId).toBe(next[0]._id)
   })
 
@@ -112,6 +113,30 @@ describe('self-rescheduling flag refresh loop', () => {
     await t.mutation(internal.lib.ensureRefreshLoop, {})
 
     expect(pending(byName(await scheduledJobs(t), 'refreshLoop'))).toHaveLength(1)
+  })
+
+  test('supervisor restarts a dead chain (self-heal)', async () => {
+    const t = convexTest(schema, modules)
+
+    await t.mutation(internal.lib.ensureRefreshLoop, {})
+    const tracked = pending(byName(await scheduledJobs(t), 'refreshLoop'))
+    expect(tracked).toHaveLength(1)
+    const deadId = tracked[0]._id
+
+    // Drive the tracked tick to a terminal state, simulating a chain that stopped.
+    await t.run(async (ctx) => {
+      await ctx.scheduler.cancel(deadId as Parameters<typeof ctx.scheduler.cancel>[0])
+    })
+
+    // The supervisor must notice the recorded job is no longer live and queue a fresh tick —
+    // a regression that treated any recorded job as alive would leave the chain dead forever.
+    await t.mutation(internal.lib.ensureRefreshLoop, {})
+
+    const revived = pending(byName(await scheduledJobs(t), 'refreshLoop'))
+    expect(revived).toHaveLength(1)
+    expect(revived[0]._id).not.toBe(deadId)
+    const state = await t.run(async (ctx) => ctx.db.query('refreshLoopState').first())
+    expect(state?.loopJobId).toBe(revived[0]._id)
   })
 
   test('the refresh the loop kicks actually fetches definitions and caches them', async () => {
