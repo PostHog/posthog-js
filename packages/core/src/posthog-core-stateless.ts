@@ -34,6 +34,7 @@ import {
   STRING_FORMAT,
   createLogger,
   getEventUuid,
+  safeJsonStringify,
 } from './utils'
 import { uuidv7 } from './vendor/uuidv7'
 import {
@@ -1085,7 +1086,7 @@ export abstract class PostHogCoreStateless {
       data.historical_migration = true
     }
 
-    const payload = JSON.stringify(data)
+    const payload = safeJsonStringify(data)
 
     const url = `${this.host}/batch/`
 
@@ -1346,7 +1347,7 @@ export abstract class PostHogCoreStateless {
         data.historical_migration = true
       }
 
-      const payload = JSON.stringify(data)
+      const payload = safeJsonStringify(data)
 
       const url = `${this.host}/batch/`
 

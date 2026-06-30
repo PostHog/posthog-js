@@ -1,4 +1,4 @@
-import { isArray, isNumber, isObject, isString } from '@/utils'
+import { isArray, isNumber, isObject, isString, safeJsonStringify } from '@/utils'
 
 export const EXCEPTION_STEP_INTERNAL_FIELDS = {
   MESSAGE: '$message',
@@ -134,8 +134,10 @@ function normalizePositiveInteger(input: number | undefined, fallback: number): 
 }
 
 function normalizeAndSerializeStep(step: ExceptionStep): { step: ExceptionStep; json: string } | undefined {
-  const json = safeStringify(step)
-  if (!json) {
+  let json: string
+  try {
+    json = safeJsonStringify(step)
+  } catch {
     return undefined
   }
 
@@ -161,45 +163,6 @@ function normalizeAndSerializeStep(step: ExceptionStep): { step: ExceptionStep; 
       step: parsedStep as ExceptionStep,
       json,
     }
-  } catch {
-    return undefined
-  }
-}
-
-function safeStringify(value: unknown): string | undefined {
-  const seen = new WeakSet<object>()
-
-  try {
-    return JSON.stringify(value, (_key, replacementValue: unknown) => {
-      if (typeof replacementValue === 'bigint') {
-        return replacementValue.toString()
-      }
-
-      if (typeof replacementValue === 'function' || typeof replacementValue === 'symbol') {
-        return undefined
-      }
-
-      if (replacementValue instanceof Date) {
-        return replacementValue.toISOString()
-      }
-
-      if (replacementValue instanceof Error) {
-        return {
-          name: replacementValue.name,
-          message: replacementValue.message,
-          stack: replacementValue.stack,
-        }
-      }
-
-      if (replacementValue && typeof replacementValue === 'object') {
-        if (seen.has(replacementValue)) {
-          return '[Circular]'
-        }
-        seen.add(replacementValue)
-      }
-
-      return replacementValue
-    })
   } catch {
     return undefined
   }

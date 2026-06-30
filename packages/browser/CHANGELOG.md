@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.396.3
+
+### Patch Changes
+
+- [#4020](https://github.com/PostHog/posthog-js/pull/4020) [`e0ad8ef`](https://github.com/PostHog/posthog-js/commit/e0ad8ef9f53f2113122681b74c7436a8df060699) Thanks [@posthog](https://github.com/apps/posthog)! - Fix `TypeError: ....at is not a function` thrown by the bundled `web-vitals` dependency on browsers that predate `Array.prototype.at()` (Chrome <92, iOS Safari <15.4). The web-vitals entrypoints now install a tiny `Array.prototype.at` polyfill before web-vitals runs, so web vitals capture works again on older browsers instead of crashing with an unhandled error.
+  (2026-06-30)
+
 ## 1.396.2
 
 ### Patch Changes
