@@ -6,6 +6,7 @@ import {
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { buildPostHogCaptureEvents, type PostHogCaptureEvent } from '../extensions/posthog-events'
 import type { Event } from '../types'
+import { version } from '../version'
 
 function makeEvent(overrides: Partial<Event> = {}): Event {
   return {
@@ -19,6 +20,7 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
     serverVersion: '1.0.0',
     clientName: 'claude-desktop',
     clientVersion: '2.0.0',
+    sdkVersion: version,
     duration: 150,
     isError: false,
     ...overrides,
@@ -55,8 +57,17 @@ describe('buildPostHogCaptureEvents', () => {
     expect(event.properties[PostHogMCPAnalyticsProperty.ServerVersion]).toBe('1.0.0')
     expect(event.properties[PostHogMCPAnalyticsProperty.ClientName]).toBe('claude-desktop')
     expect(event.properties[PostHogMCPAnalyticsProperty.ClientVersion]).toBe('2.0.0')
+    expect(event.properties[PostHogMCPAnalyticsProperty.McpLib]).toBe('@posthog/mcp')
+    expect(event.properties[PostHogMCPAnalyticsProperty.McpLibVersion]).toBe(version)
     expect(event.properties[PostHogMCPAnalyticsProperty.IsError]).toBe(false)
     expect(event.properties).not.toHaveProperty('project_id')
+  })
+
+  it('omits the MCP lib properties when sdkVersion is not set', () => {
+    const [event] = buildPostHogCaptureEvents(makeEvent({ sdkVersion: undefined }))
+
+    expect(event.properties[PostHogMCPAnalyticsProperty.McpLib]).toBeUndefined()
+    expect(event.properties[PostHogMCPAnalyticsProperty.McpLibVersion]).toBeUndefined()
   })
 
   it('keeps the canonical MCP analytics event contract stable', () => {
@@ -127,6 +138,8 @@ describe('buildPostHogCaptureEvents', () => {
     expect(exceptionEvent.properties.$mcp_resource_name).toBe('get_weather')
     expect(exceptionEvent.properties.$mcp_tool_name).toBe('get_weather')
     expect(exceptionEvent.properties.$mcp_server_name).toBe('weather-server')
+    expect(exceptionEvent.properties.$mcp_lib).toBe('@posthog/mcp')
+    expect(exceptionEvent.properties.$mcp_lib_version).toBe(version)
   })
 
   it('spreads customer eventProperties onto the $exception event', () => {
