@@ -1,4 +1,4 @@
-import { LOAD_EXT_NOT_FOUND, SURVEYS, SURVEYS_LOADED_AT } from './constants'
+import { LOAD_EXT_NOT_FOUND, SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT } from './constants'
 
 const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
 const SURVEY_DISABLED = 'Disabled. Not loading surveys.'
@@ -20,11 +20,12 @@ import {
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
     isSurveyRunning,
+    setSurveySeenOnLocalStorage,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
-import { isNullish, isUndefined, isArray } from '@posthog/core'
+import { isNullish, isUndefined, isArray, isNumber } from '@posthog/core'
 
 export class PostHogSurveys implements Extension {
     // this is set to undefined until the remote config is loaded
@@ -222,9 +223,18 @@ export class PostHogSurveys implements Extension {
 
         const existingSurveys = this._instance.get_property(SURVEYS)
         if (existingSurveys && !forceReload) {
-            return callback(existingSurveys, {
+            // Serve the cached definitions synchronously so callers that rely on a synchronous
+            // callback (e.g. _getSurveyById) keep working.
+            callback(existingSurveys, {
                 isLoaded: true,
             })
+            // If the cache has aged past its TTL, kick off a background refresh so server-side
+            // changes (e.g. a survey switched from popover to API) reach a long-lived tab. The
+            // next poll then evaluates the refreshed definitions.
+            if (this._isSurveyCacheStale() && !this._getSurveysInFlightPromise) {
+                this.getSurveys(() => {}, true)
+            }
+            return
         }
 
         // If a fetch is already in progress and Promise is available, reuse that promise
@@ -281,6 +291,39 @@ export class PostHogSurveys implements Extension {
                 resolvePromise?.({ surveys, context })
             },
         })
+    }
+
+    /**
+     * Whether the cached `$surveys` definitions have aged past their TTL. Returns false when no
+     * timestamp is recorded (e.g. surveys injected directly in tests) so the cache stays valid.
+     */
+    private _isSurveyCacheStale(): boolean {
+        const surveysLoadedAt = this._instance.get_property(SURVEYS_LOADED_AT)
+        return isNumber(surveysLoadedAt) && Date.now() - surveysLoadedAt > SURVEYS_CACHE_TTL_MS
+    }
+
+    /**
+     * Marks a survey as seen for the current device, mirroring the local state the SDK records
+     * when it shows or sends a survey itself.
+     *
+     * Use this when you display surveys through your own backend/integration (so the SDK never
+     * captures the `survey shown`/`sent`/`dismissed` events) and still want PostHog's display
+     * logic to honour the "already seen" and wait-period checks on subsequent page loads.
+     *
+     * Note: surveys configured to repeat (`schedule: 'always'` or event `repeatedActivation`)
+     * intentionally bypass the seen check, so marking them as seen will not stop them showing.
+     *
+     * @param surveyId The ID of the survey to mark as seen.
+     * @param options Optional settings. `iteration` is the survey's current iteration number, if any.
+     */
+    markSurveyAsSeen(surveyId: string, options?: { iteration?: number | null }): void {
+        const survey = { id: surveyId, current_iteration: options?.iteration ?? null }
+        setSurveySeenOnLocalStorage(survey)
+        try {
+            localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+        } catch {
+            // localStorage is not always available (e.g. in cross-origin iframes); best-effort only.
+        }
     }
 
     /** Helper method to notify all registered callbacks */

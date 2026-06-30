@@ -227,6 +227,30 @@ describe('SurveyModal close behavior', () => {
     expect(queryByTestId('parent-unmounted')).not.toBeNull()
   })
 
+  it('notifies the parent on iOS via the fallback timer even when onDismiss never fires', () => {
+    // Regression: iOS used to notify the parent only through Modal.onDismiss. When Fabric
+    // failed to fire onDismiss, the parent never cleared the active survey and this transparent
+    // full-screen Modal stayed mounted swallowing every touch — the app appeared frozen. The
+    // fallback timer guarantees the parent is still notified. The mocked Modal cannot fire
+    // onDismiss, so this exercises exactly that failure mode.
+    const rn = jest.requireMock('react-native')
+    const originalOS = rn.Platform.OS
+    rn.Platform.OS = 'ios'
+    try {
+      const { getByTestId, onClose } = renderSurveyModal()
+
+      clickCancel(getByTestId)
+      expect(onClose).not.toHaveBeenCalled()
+
+      act(() => {
+        jest.runAllTimers()
+      })
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      rn.Platform.OS = originalOS
+    }
+  })
+
   it('notifies the parent only once even if close is pressed multiple times', () => {
     const { getByTestId, onClose } = renderSurveyModal()
 

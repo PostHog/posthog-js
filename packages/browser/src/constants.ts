@@ -114,6 +114,11 @@ export const SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED = '$sdk_debug_rrweb_start_at
 export const SESSION_RECORDING_START_REASON = '$session_recording_start_reason'
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
+// How long the cached `$surveys` definitions are considered fresh. After this, the next
+// `getSurveys` call serves the cache immediately but kicks off a background refresh so
+// server-side changes (e.g. a survey switched from popover to API) propagate to a
+// long-lived tab without needing a page reload.
+export const SURVEYS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 export const LOAD_EXT_NOT_FOUND = 'PostHog loadExternalDependency extension not found.'
 
 /* EVENT NAMES - interned to reduce bundle size */
