@@ -338,15 +338,13 @@ export const _getCurrentEtag = internalQuery({
 
 // --- Local-evaluation refresh loop ---
 //
-// The refresh runs as a self-rescheduling chain rather than a fixed-interval cron, so the
-// runtime-only `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` can actually govern the cadence (see the
-// comment in `crons.ts` for why a cron can't). The supervisor cron calls `ensureRefreshLoop`;
-// each `refreshLoop` tick fires a refresh and queues the next tick at the configured interval.
+// A self-rescheduling chain rather than a fixed-interval cron, so the runtime-only
+// `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` governs the cadence (see `crons.ts` for why a cron can't).
 
 export const DEFAULT_INTERVAL_SECONDS = 60
 
-// Convex component env vars are string-typed. Invalid values warn and fall back rather than
-// failing, and are read at runtime where the forwarded value is actually visible. Exported for tests.
+// Read at runtime, where the forwarded value is visible. String-typed on the wire, so an invalid
+// value warns and falls back rather than failing. Exported for tests.
 export function readPollingIntervalSeconds(): number {
   const raw = (env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS ?? '').trim()
   if (!raw) return DEFAULT_INTERVAL_SECONDS
@@ -373,16 +371,14 @@ async function recordLoopJob(ctx: MutationCtx, jobId: GenericId<'_scheduled_func
 }
 
 /**
- * One tick of the self-rescheduling refresh chain: kick off a refresh now, then queue the next
- * tick at the configured interval. An `internalMutation` so the chain is durable — Convex runs
- * scheduled mutations exactly once and retries them on transient errors, and queuing the next tick
- * commits atomically with this one, so the chain can't silently break. The fetch itself is a
- * separate at-most-once action; if it fails, the next tick just refetches.
+ * One tick: kick off a refresh now, then queue the next tick at the configured interval. A mutation
+ * so the chain is durable — scheduled mutations run exactly-once with retries, and queuing the next
+ * tick commits atomically with this one, so the chain can't silently break. The fetch is a separate
+ * at-most-once action; if it fails, the next tick refetches.
  *
- * Never invoke this directly (e.g. the dashboard "Run function"): it unconditionally queues its
- * successor, so a manual call forks the chain into two independent loops that both run forever,
- * permanently doubling the refresh cadence — and the supervisor can't detect the fork. The chain
- * owns its own scheduling; use `ensureRefreshLoop` to (re)start it.
+ * Never invoke directly (e.g. dashboard "Run function"): it unconditionally queues a successor, so a
+ * manual call forks the chain into two loops that run forever and double the cadence — the
+ * supervisor can't detect the fork. Use `ensureRefreshLoop` to (re)start it.
  */
 export const refreshLoop = internalMutation({
   args: {},
@@ -394,9 +390,9 @@ export const refreshLoop = internalMutation({
 })
 
 /**
- * Supervisor for the refresh chain, called by the cron in `crons.ts`. Starts the chain unless a
- * tick is already pending or running, recording the new tick's id so a follow-up call sees it as
- * alive. Idempotent — overlapping calls can't spawn duplicate chains.
+ * Supervisor, called by the cron in `crons.ts`: starts the chain unless a tick is already pending
+ * or running, recording the new tick's id so the next call sees it as alive. Idempotent —
+ * overlapping runs can't spawn duplicate chains.
  */
 export const ensureRefreshLoop = internalMutation({
   args: {},

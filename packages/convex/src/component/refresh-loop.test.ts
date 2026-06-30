@@ -34,11 +34,10 @@ function scheduledJobs(t: ReturnType<typeof convexTest>): Promise<ScheduledJob[]
 const byName = (jobs: ScheduledJob[], needle: string) => jobs.filter((j) => j.name.includes(needle))
 const pending = (jobs: ScheduledJob[]) => jobs.filter((j) => j.state.kind === 'pending')
 
-// The chain self-reschedules forever, so the usual `finishAllScheduledFunctions` driver would
-// never terminate, and stepping fake timers by hand trips convex-test's transaction tracking.
-// Instead we invoke a single tick directly and inspect what it queued — `scheduler.runAfter`
-// records the job synchronously in `_scheduled_functions`, so the queued cadence is observable
-// without ever firing a timer.
+// The chain self-reschedules forever, so `finishAllScheduledFunctions` never terminates and hand-
+// stepping fake timers trips convex-test's transaction tracking. Instead we invoke one tick and
+// inspect what it queued — `runAfter` records the job synchronously, so the cadence is observable
+// without firing a timer.
 
 describe('self-rescheduling flag refresh loop', () => {
   beforeEach(() => {
