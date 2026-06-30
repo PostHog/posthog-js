@@ -1,4 +1,18 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "pull_request-3970-auto-none-no-comment-no-close-1782834111195",
+      "kind": "pull_request",
+      "number": 3970,
+      "mode": "auto",
+      "enqueuedAt": "2026-06-30T15:41:51.194Z",
+      "source": {
+        "eventName": "pull_request",
+        "runId": 28444062227,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28444062227"
+      },
+      "attempts": 0
+    }
+  ]
 }
