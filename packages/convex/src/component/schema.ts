@@ -23,6 +23,6 @@ export default defineSchema({
    * one, so overlapping supervisor runs can't spawn duplicate chains.
    */
   refreshLoopState: defineTable({
-    loopJobId: v.string(),
+    loopJobId: v.id('_scheduled_functions'),
   }),
 })

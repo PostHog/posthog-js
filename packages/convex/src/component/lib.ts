@@ -403,7 +403,7 @@ export const ensureRefreshLoop = internalMutation({
   handler: async (ctx) => {
     const state = await ctx.db.query('refreshLoopState').first()
     if (state) {
-      const job = await ctx.db.system.get(state.loopJobId as GenericId<'_scheduled_functions'>)
+      const job = await ctx.db.system.get(state.loopJobId)
       if (job && (job.state.kind === 'pending' || job.state.kind === 'inProgress')) {
         return
       }
