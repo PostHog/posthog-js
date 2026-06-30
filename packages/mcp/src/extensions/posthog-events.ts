@@ -155,10 +155,7 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
   if (event.clientVersion) {
     properties[PostHogMCPAnalyticsProperty.ClientVersion] = event.clientVersion
   }
-  if (event.sdkVersion) {
-    properties[PostHogMCPAnalyticsProperty.McpLib] = POSTHOG_MCP_LIB_NAME
-    properties[PostHogMCPAnalyticsProperty.McpLibVersion] = event.sdkVersion
-  }
+  addMcpLibProperties(event, properties)
   if (event.userIntent) {
     properties[PostHogMCPAnalyticsProperty.Intent] = event.userIntent
   }
@@ -187,6 +184,18 @@ function addCustomEventProperties(event: Event, properties: Record<string, unkno
     for (const [key, value] of Object.entries(event.properties)) {
       properties[key] = value
     }
+  }
+}
+
+/**
+ * Stamps the `@posthog/mcp` SDK identity (`$mcp_lib` / `$mcp_lib_version`) onto
+ * the event. Shared by the regular and `$exception` builders so both report
+ * which analytics SDK release produced the event.
+ */
+function addMcpLibProperties(event: Event, properties: Record<string, unknown>): void {
+  if (event.sdkVersion) {
+    properties[PostHogMCPAnalyticsProperty.McpLib] = POSTHOG_MCP_LIB_NAME
+    properties[PostHogMCPAnalyticsProperty.McpLibVersion] = event.sdkVersion
   }
 }
 
@@ -230,10 +239,7 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   if (event.clientVersion) {
     properties[PostHogMCPAnalyticsProperty.ClientVersion] = event.clientVersion
   }
-  if (event.sdkVersion) {
-    properties[PostHogMCPAnalyticsProperty.McpLib] = POSTHOG_MCP_LIB_NAME
-    properties[PostHogMCPAnalyticsProperty.McpLibVersion] = event.sdkVersion
-  }
+  addMcpLibProperties(event, properties)
 
   addCustomEventProperties(event, properties)
 

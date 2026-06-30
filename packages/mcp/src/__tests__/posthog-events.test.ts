@@ -63,11 +63,19 @@ describe('buildPostHogCaptureEvents', () => {
     expect(event.properties).not.toHaveProperty('project_id')
   })
 
-  it('omits the MCP lib properties when sdkVersion is not set', () => {
-    const [event] = buildPostHogCaptureEvents(makeEvent({ sdkVersion: undefined }))
+  it.each([
+    { path: 'tool-call event', overrides: {}, eventName: PostHogMCPAnalyticsEvent.ToolCall },
+    {
+      path: '$exception event',
+      overrides: { isError: true, error: makeError('boom') },
+      eventName: PostHogMCPAnalyticsEvent.Exception,
+    },
+  ])('omits the MCP lib properties when sdkVersion is not set ($path)', ({ overrides, eventName }) => {
+    const events = buildPostHogCaptureEvents(makeEvent({ sdkVersion: undefined, ...overrides }))
+    const event = findEvent(events, eventName)
 
-    expect(event.properties[PostHogMCPAnalyticsProperty.McpLib]).toBeUndefined()
-    expect(event.properties[PostHogMCPAnalyticsProperty.McpLibVersion]).toBeUndefined()
+    expect(event?.properties[PostHogMCPAnalyticsProperty.McpLib]).toBeUndefined()
+    expect(event?.properties[PostHogMCPAnalyticsProperty.McpLibVersion]).toBeUndefined()
   })
 
   it('keeps the canonical MCP analytics event contract stable', () => {
