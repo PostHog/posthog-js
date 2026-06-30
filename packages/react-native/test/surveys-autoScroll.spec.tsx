@@ -88,22 +88,16 @@ describe('QuestionLayout auto-scroll', () => {
     expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe('false')
   })
 
-  it('disables scrolling when content fits within the viewport', () => {
+  it.each([
+    ['content fits the viewport', 500, 400, 'false'],
+    ['content overflows the viewport', 500, 800, 'true'],
+    ['content is sub-pixel taller than the viewport', 500, 500.4, 'false'],
+    ['content sits exactly at the 1px threshold', 500, 501, 'false'],
+    ['content is just past the 1px threshold', 500, 502, 'true'],
+  ] as const)('%s (viewport=%s, content=%s) -> scrollEnabled=%s', (_label, viewport, content, expected) => {
     const { getByTestId } = renderQuestion()
-    layout(500, 400)
-    expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe('false')
-  })
-
-  it('enables scrolling when content overflows the viewport', () => {
-    const { getByTestId } = renderQuestion()
-    layout(500, 800)
-    expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe('true')
-  })
-
-  it('treats sub-pixel content taller than the viewport as fitting', () => {
-    const { getByTestId } = renderQuestion()
-    layout(500, 500.4)
-    expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe('false')
+    layout(viewport, content)
+    expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe(expected)
   })
 
   it('re-disables scrolling when content shrinks back to fit', () => {
@@ -120,14 +114,6 @@ describe('QuestionLayout auto-scroll', () => {
     expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe('false')
     // Keyboard shrinks the modal: same content, smaller viewport -> overflow.
     layout(500, 600)
-    expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe('true')
-  })
-
-  it('treats content exactly at the 1px threshold as fitting', () => {
-    const { getByTestId } = renderQuestion()
-    layout(500, 501)
-    expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe('false')
-    layout(500, 502)
     expect(getByTestId('survey-scrollview').getAttribute('data-scroll-enabled')).toBe('true')
   })
 })
