@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.39.1
+
+### Patch Changes
+
+- [#3998](https://github.com/PostHog/posthog-js/pull/3998) [`0c95bce`](https://github.com/PostHog/posthog-js/commit/0c95bce7a2b01707691783a41730ec89699cb429) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry capture and logs requests on transient HTTP errors such as 408, 429, and 5xx while continuing to avoid retries for non-retryable 4xx responses.
+  (2026-06-30)
+
 ## 1.39.0
 
 ### Minor Changes
