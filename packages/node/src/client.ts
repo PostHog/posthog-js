@@ -532,9 +532,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  private _sendPreparedEvent(type: string, props: EventMessage, immediate: boolean): Promise<void> {
+  private _sendPreparedEvent(
+    type: string,
+    props: EventMessage,
+    immediate: boolean,
+    prepareOptions?: { includeContextProperties?: boolean }
+  ): Promise<void> {
     return this.addPendingPromise(
-      this.prepareEventMessage(props)
+      this.prepareEventMessage(props, prepareOptions)
         .then(({ distinctId, event, properties, options }) => {
           const captureOptions: PostHogCaptureOptions = {
             timestamp: options.timestamp,
@@ -691,7 +696,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this._sendPreparedEvent(
       'identify',
       { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
-      false
+      false,
+      { includeContextProperties: false }
     )
   }
 
@@ -729,7 +735,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     await this._sendPreparedEvent(
       'identify',
       { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
-      true
+      true,
+      { includeContextProperties: false }
     )
   }
 
@@ -818,7 +825,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         properties: { distinct_id: data.distinctId, alias: data.alias },
         disableGeoip: data.disableGeoip,
       },
-      false
+      false,
+      { includeContextProperties: false }
     )
   }
 
@@ -848,7 +856,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         properties: { distinct_id: data.distinctId, alias: data.alias },
         disableGeoip: data.disableGeoip,
       },
-      true
+      true,
+      { includeContextProperties: false }
     )
   }
 
@@ -2015,7 +2024,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         },
         disableGeoip,
       },
-      false
+      false,
+      { includeContextProperties: false }
     )
   }
 
@@ -2060,7 +2070,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         },
         disableGeoip,
       },
-      true
+      true,
+      { includeContextProperties: false }
     )
   }
 
@@ -2590,7 +2601,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  public async prepareEventMessage(props: EventMessage): Promise<{
+  public async prepareEventMessage(
+    props: EventMessage,
+    options: { includeContextProperties?: boolean } = {}
+  ): Promise<{
     distinctId: string
     event: string
     properties: PostHogEventProperties
@@ -2609,21 +2623,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }: EventMessage = props
 
     const contextData = this.context?.get()
+    const includeContextProperties = options.includeContextProperties ?? true
 
     let mergedDistinctId = distinctId || contextData?.distinctId
 
-    const mergedProperties = {
-      ...this.props,
-      ...(contextData?.properties || {}),
-      ...(properties || {}),
-    }
+    const mergedProperties = includeContextProperties
+      ? {
+          ...this.props,
+          ...(contextData?.properties || {}),
+          ...(properties || {}),
+        }
+      : { ...(properties || {}) }
 
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()
       mergedProperties.$process_person_profile = false
     }
 
-    if (contextData?.sessionId && !mergedProperties.$session_id) {
+    if (includeContextProperties && contextData?.sessionId && !mergedProperties.$session_id) {
       mergedProperties.$session_id = contextData.sessionId
     }
 

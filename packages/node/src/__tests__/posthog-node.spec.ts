@@ -789,6 +789,7 @@ describe('PostHog Node.js', () => {
           await waitForFlushTimer()
         },
       ],
+      ['identifyImmediate', (ph: PostHog) => ph.identifyImmediate({ distinctId: '123', properties: { foo: 'bar' } })],
       [
         'groupIdentify',
         async (ph: PostHog) => {
@@ -797,12 +798,18 @@ describe('PostHog Node.js', () => {
         },
       ],
       [
+        'groupIdentifyImmediate',
+        (ph: PostHog) =>
+          ph.groupIdentifyImmediate({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } }),
+      ],
+      [
         'alias',
         async (ph: PostHog) => {
           ph.alias({ distinctId: '123', alias: '1234' })
           await waitForFlushTimer()
         },
       ],
+      ['aliasImmediate', (ph: PostHog) => ph.aliasImmediate({ distinctId: '123', alias: '1234' })],
     ] as Array<[string, (ph: PostHog) => Promise<void>]>)(
       'should drop %s when before_send returns null',
       async (_, send) => {
@@ -818,6 +825,54 @@ describe('PostHog Node.js', () => {
 
         expect(beforeSendFn).toHaveBeenCalledTimes(1)
         expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+      }
+    )
+
+    it.each([
+      [
+        'identify',
+        async (ph: PostHog) => {
+          ph.identify({ distinctId: '123', properties: { foo: 'bar' } })
+          await waitForFlushTimer()
+        },
+        '$identify',
+      ],
+      [
+        'groupIdentify',
+        async (ph: PostHog) => {
+          ph.groupIdentify({ groupType: 'posthog', groupKey: 'team-1', properties: { analytics: true } })
+          await waitForFlushTimer()
+        },
+        '$groupidentify',
+      ],
+      [
+        'alias',
+        async (ph: PostHog) => {
+          ph.alias({ distinctId: '123', alias: '1234' })
+          await waitForFlushTimer()
+        },
+        '$create_alias',
+      ],
+    ] as Array<[string, (ph: PostHog) => Promise<void>, string]>)(
+      'should not add registered or context properties to %s',
+      async (_, send, expectedEvent) => {
+        const ph = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          fetchRetryCount: 0,
+          disableCompression: true,
+          before_send: (event) => event,
+        })
+        ph.register({ registered_prop: 'registered_value' })
+
+        await ph.withContext({ properties: { context_prop: 'context_value' }, sessionId: 'session-123' }, () =>
+          send(ph)
+        )
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents![0]).toMatchObject({ event: expectedEvent })
+        expect(batchEvents![0].properties).not.toHaveProperty('registered_prop')
+        expect(batchEvents![0].properties).not.toHaveProperty('context_prop')
+        expect(batchEvents![0].properties).not.toHaveProperty('$session_id')
       }
     )
 
