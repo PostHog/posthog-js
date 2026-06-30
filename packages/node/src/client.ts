@@ -532,7 +532,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  private _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+  private _sendPreparedEvent(type: string, props: EventMessage, immediate: boolean): Promise<void> {
     return this.addPendingPromise(
       this.prepareEventMessage(props)
         .then(({ distinctId, event, properties, options }) => {
@@ -541,9 +541,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             disableGeoip: options.disableGeoip,
             uuid: options.uuid,
           }
+          const message = {
+            distinctId,
+            event,
+            properties: {
+              ...properties,
+              ...this.getCommonEventProperties(),
+            },
+          }
           return immediate
-            ? super.captureStatelessImmediate(distinctId, event, properties, captureOptions)
-            : super.captureStateless(distinctId, event, properties, captureOptions)
+            ? this.sendImmediate(type, message, captureOptions)
+            : this.enqueue(type, message, captureOptions)
         })
         .catch((err) => {
           if (err) {
@@ -551,6 +559,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           }
         })
     )
+  }
+
+  private _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+    return this._sendPreparedEvent('capture', props, immediate)
   }
 
   /**
@@ -676,7 +688,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    super.identifyStateless(distinctId, eventProperties, { disableGeoip })
+    this._sendPreparedEvent(
+      'identify',
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
+      false
+    )
   }
 
   /**
@@ -710,7 +726,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+    await this._sendPreparedEvent(
+      'identify',
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
+      true
+    )
   }
 
   /**
@@ -790,7 +810,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The alias data containing distinctId and alias
    */
   alias(data: { distinctId: string; alias: string; disableGeoip?: boolean }): void {
-    super.aliasStateless(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip })
+    this._sendPreparedEvent(
+      'alias',
+      {
+        distinctId: data.distinctId,
+        event: '$create_alias',
+        properties: { distinct_id: data.distinctId, alias: data.alias },
+        disableGeoip: data.disableGeoip,
+      },
+      false
+    )
   }
 
   /**
@@ -811,7 +840,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the alias is processed
    */
   async aliasImmediate(data: { distinctId: string; alias: string; disableGeoip?: boolean }): Promise<void> {
-    await super.aliasStatelessImmediate(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip })
+    await this._sendPreparedEvent(
+      'alias',
+      {
+        distinctId: data.distinctId,
+        event: '$create_alias',
+        properties: { distinct_id: data.distinctId, alias: data.alias },
+        disableGeoip: data.disableGeoip,
+      },
+      true
+    )
   }
 
   /**
@@ -1965,7 +2003,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The group identify data
    */
   groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip }: GroupIdentifyMessage): void {
-    super.groupIdentifyStateless(groupType, groupKey, properties, { disableGeoip }, distinctId)
+    this._sendPreparedEvent(
+      'capture',
+      {
+        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        event: '$groupidentify',
+        properties: {
+          $group_type: groupType,
+          $group_key: groupKey,
+          $group_set: properties || {},
+        },
+        disableGeoip,
+      },
+      false
+    )
   }
 
   /**
@@ -1997,7 +2048,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId,
     disableGeoip,
   }: GroupIdentifyMessage): Promise<void> {
-    await super.groupIdentifyStatelessImmediate(groupType, groupKey, properties, { disableGeoip }, distinctId)
+    await this._sendPreparedEvent(
+      'capture',
+      {
+        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        event: '$groupidentify',
+        properties: {
+          $group_type: groupType,
+          $group_key: groupKey,
+          $group_set: properties || {},
+        },
+        disableGeoip,
+      },
+      true
+    )
   }
 
   /**
