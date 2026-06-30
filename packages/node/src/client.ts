@@ -539,7 +539,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     prepareOptions?: { includeContextProperties?: boolean }
   ): Promise<void> {
     return this.addPendingPromise(
-      this.prepareEventMessage(props, prepareOptions)
+      this._prepareEventMessage(props, prepareOptions)
         .then(({ distinctId, event, properties, options }) => {
           const captureOptions: PostHogCaptureOptions = {
             timestamp: options.timestamp,
@@ -2601,7 +2601,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  public async prepareEventMessage(
+  public async prepareEventMessage(props: EventMessage): Promise<{
+    distinctId: string
+    event: string
+    properties: PostHogEventProperties
+    options: PostHogCaptureOptions
+  }> {
+    return this._prepareEventMessage(props)
+  }
+
+  private async _prepareEventMessage(
     props: EventMessage,
     options: { includeContextProperties?: boolean } = {}
   ): Promise<{
