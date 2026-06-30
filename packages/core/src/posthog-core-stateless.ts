@@ -138,7 +138,7 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-const DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS = 10000
+const DEFAULT_FLUSH_PENDING_PROMISES_TIMEOUT_MS = 2000
 
 /**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core
@@ -1233,7 +1233,7 @@ export abstract class PostHogCoreStateless {
    * This function will return a promise that will resolve when the flush is complete,
    * or reject if there was an error (for example if the server or network is down).
    *
-   * Before flushing, this waits up to 10 seconds for pending SDK work that may enqueue events
+   * Before flushing, this waits up to 2 seconds for pending SDK work that may enqueue events
    * (for example async exception capture). Rejected pending work is ignored so already queued
    * events are still flushed.
    *
@@ -1255,7 +1255,7 @@ export abstract class PostHogCoreStateless {
    *
    * @public
    *
-   * @param flushPendingPromisesTimeoutMs Maximum time to wait for pending SDK work before flushing, in milliseconds. Defaults to 10000 (10s).
+   * @param flushPendingPromisesTimeoutMs Maximum time to wait for pending SDK work before flushing, in milliseconds. Defaults to 2000 (2s).
    *
    * @throws PostHogFetchHttpError
    * @throws PostHogFetchNetworkError
