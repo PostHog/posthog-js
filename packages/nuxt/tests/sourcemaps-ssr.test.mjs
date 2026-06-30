@@ -19,6 +19,8 @@ const source = readFileSync(new URL('../src/module.ts', import.meta.url), 'utf8'
 const executableSource = source
   // Strip every static import — all type-only or replaced by injected stubs below.
   .replace(/^import .*$/gm, '')
+  // Strip `declare module '...' { ... }` augmentation blocks (type-only).
+  .replace(/^declare module [^{]*\{[\s\S]+?^\}\n/gm, '')
   // Strip `interface Foo { ... }` and `export interface Foo { ... }` blocks.
   .replace(/^(?:export )?interface \w+ \{[\s\S]+?^\}\n/gm, '')
   // Strip `type X = ...` and `export type X = ...` single-line aliases.
