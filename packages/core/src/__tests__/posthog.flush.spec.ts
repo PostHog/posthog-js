@@ -73,7 +73,22 @@ describe('PostHog Core', () => {
       }
     })
 
-    it.each([400, 500])('responds with an error after retries with %s error', async (status) => {
+    it.each([400, 401, 403])('responds with an error without retries with %s error', async (status) => {
+      mocks.fetch.mockImplementation(() => {
+        return Promise.resolve({
+          status: status,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+      })
+      posthog.capture('test-event-1')
+
+      jest.useRealTimers()
+      await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([408, 429, 500])('responds with an error after retries with %s error', async (status) => {
       mocks.fetch.mockImplementation(() => {
         return Promise.resolve({
           status: status,

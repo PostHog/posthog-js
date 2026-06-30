@@ -1345,7 +1345,7 @@ describe('PostHog Node.js', () => {
 
       expect(mockedFetch).toHaveBeenCalledWith(
         'http://example.com/flags/?v=2',
-        expect.objectContaining({ method: 'POST', body: expect.not.stringContaining('geoip_disable') })
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":false') })
       )
 
       expect(getLastBatchEvents()?.[0].properties).toEqual({
@@ -2652,7 +2652,7 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch).toHaveBeenCalledWith(
         'http://example.com/flags/?v=2',
-        expect.objectContaining({ method: 'POST', body: expect.not.stringContaining('geoip_disable') })
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('"geoip_disable":false') })
       )
     })
 
