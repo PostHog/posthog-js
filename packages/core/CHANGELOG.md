@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.39.2
+
+### Patch Changes
+
+- [#4027](https://github.com/PostHog/posthog-js/pull/4027) [`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely serialize event batches with circular property references instead of crashing during flush.
+  (2026-06-30)
+
 ## 1.39.1
 
 ### Patch Changes

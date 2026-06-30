@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.39.1
+
+### Patch Changes
+
+- [#4029](https://github.com/PostHog/posthog-js/pull/4029) [`b36b1cc`](https://github.com/PostHog/posthog-js/commit/b36b1cc2bf771bc944a304c9523d0991a31a5fbd) Thanks [@marandaneto](https://github.com/marandaneto)! - Call `before_send` for identify, group identify, and alias events.
+  (2026-06-30)
+
+- [#4027](https://github.com/PostHog/posthog-js/pull/4027) [`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely serialize event batches with circular property references instead of crashing during flush.
+  (2026-06-30)
+- Updated dependencies [[`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a)]:
+  - @posthog/core@1.39.2
+
 ## 5.39.0
 
 ### Minor Changes
