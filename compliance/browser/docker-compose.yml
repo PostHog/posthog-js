@@ -11,7 +11,7 @@ services:
 
   test-harness:
     image: ghcr.io/posthog/sdk-test-harness:0.8.0
-    command: ["run", "--adapter-url", "http://sdk-adapter:8080", "--mock-url", "http://test-harness:8081", "--sdk-type", "client", "--debug"]
+    command: ["run", "--adapter-url", "http://sdk-adapter:8080", "--mock-url", "http://test-harness:8081", "--sdk-type", "client", "--suite", "capture", "--debug"]
     networks:
       - test-network
     depends_on:
