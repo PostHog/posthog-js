@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/859": {
+    "key": "PostHog/posthog-js/issue/859",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 859",
+    "url": "https://github.com/PostHog/posthog-js/issues/859",
+    "conclusion": "Valid bug; bootstrapped false feature flag values are currently filtered out before they can be read.",
+    "labels": [
+      "feature/flags",
+      "team/feature-flags"
+    ],
+    "closed": false,
+    "updatedAt": "2026-06-30T09:38:39.365Z"
+  },
   "PostHog/posthog-js/issue/3594": {
     "key": "PostHog/posthog-js/issue/3594",
     "repo": "PostHog/posthog-js",
