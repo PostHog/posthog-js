@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.7.0
+
+### Minor Changes
+
+- [#4025](https://github.com/PostHog/posthog-js/pull/4025) [`5590094`](https://github.com/PostHog/posthog-js/commit/5590094403a1f9484f3e08a5e21311f6adb0cc60) Thanks [@gesh](https://github.com/gesh)! - Stamp the standard PostHog `$lib` / `$lib_version` (value `posthog-node-mcp`) on every event, so MCP events self-identify the same way every other PostHog SDK does. Both emit paths are covered: `PostHogMCP` overrides its library id, and `instrument()` applies it to the client you pass in. Note that posthog-node sets `$lib` at the client level, so for `instrument()` this relabels every event that client sends as `posthog-node-mcp` — pass a client dedicated to your MCP server's analytics.
+  (2026-06-30)
+
 ## 0.6.0
 
 ### Minor Changes
