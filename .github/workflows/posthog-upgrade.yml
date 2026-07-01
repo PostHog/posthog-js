@@ -146,21 +146,23 @@ jobs:
             # This job runs after posthog-js is already published; it only opens the
             # dependency-bump PR in the PostHog/posthog monorepo. A failure here means
             # the upgrade PR could not be opened, not that the release failed, so it
-            # emits its own event rather than the release-failure one.
-            # CDP function: https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
-            - name: Send failure event to PostHog
+            # posts an accurate alert rather than a "Failed to release" one.
+            - name: Notify Slack that the upgrade PR failed
               if: ${{ failure() }}
-              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
-              with:
-                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
-                  event: 'posthog-js-github-upgrade-pr-failure'
-                  properties: >-
-                      {
-                        "commitSha": "${{ github.sha }}",
-                        "jobStatus": "${{ job.status }}",
-                        "ref": "${{ github.ref }}",
-                        "repository": "PostHog/posthog",
-                        "packageName": "${{ github.event.inputs.package_name }}",
-                        "packageVersion": "${{ github.event.inputs.package_version }}",
-                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                      }
+              env:
+                  SLACK_BOT_TOKEN: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  # #alerts-posthog-js; override with a repo var when one exists.
+                  SLACK_CHANNEL_ID: ${{ vars.SLACK_ALERTS_POSTHOG_JS_CHANNEL_ID || 'C07HTMN9X47' }}
+                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+                  RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  text=":warning: Could not open the PostHog upgrade PR for \`${PACKAGE_NAME}@${PACKAGE_VERSION}\` — the release itself succeeded. <${RUN_URL}|View workflow run>"
+                  response=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+                    -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+                    -H 'Content-type: application/json; charset=utf-8' \
+                    -d "$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$text" '{channel: $channel, text: $text}')")
+                  if [ "$(echo "$response" | jq -r '.ok')" != "true" ]; then
+                      echo "Slack notification failed: $response"
+                      exit 1
+                  fi
