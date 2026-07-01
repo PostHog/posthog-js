@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/2623": {
+    "key": "PostHog/posthog-js/issue/2623",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2623",
+    "url": "https://github.com/PostHog/posthog-js/issues/2623",
+    "conclusion": "Valid feature flag persistence bug with a plausible SDK-side race around identify-triggered flag reloads.",
+    "labels": [
+      "feature/flags",
+      "team/feature-flags",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-01T09:35:43.950Z"
+  },
   "PostHog/posthog-js/issue/2335": {
     "key": "PostHog/posthog-js/issue/2335",
     "repo": "PostHog/posthog-js",
