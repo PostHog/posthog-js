@@ -143,19 +143,23 @@ jobs:
               run: |
                   gh pr edit "$PR_NUMBER" --repo PostHog/posthog --add-reviewer PostHog/client-libraries-approvers --add-reviewer PostHog/team-client-libraries
 
-            # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
+            # This job runs after posthog-js is already published; it only opens the
+            # dependency-bump PR in the PostHog/posthog monorepo. A failure here means
+            # the upgrade PR could not be opened, not that the release failed, so it
+            # emits its own event rather than the release-failure one.
+            # CDP function: https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Send failure event to PostHog
               if: ${{ failure() }}
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
-                  event: 'posthog-js-github-release-workflow-failure'
+                  event: 'posthog-js-github-upgrade-pr-failure'
                   properties: >-
                       {
                         "commitSha": "${{ github.sha }}",
                         "jobStatus": "${{ job.status }}",
                         "ref": "${{ github.ref }}",
-                        "repository": "Posthog/posthog",
+                        "repository": "PostHog/posthog",
                         "packageName": "${{ github.event.inputs.package_name }}",
                         "packageVersion": "${{ github.event.inputs.package_version }}",
                         "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
