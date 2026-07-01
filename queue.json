@@ -13,6 +13,20 @@
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28529353784"
       },
       "attempts": 0
+    },
+    {
+      "id": "pull_request-4039-fix-address-review-no-comment-no-close-1782920260295",
+      "kind": "pull_request",
+      "number": 4039,
+      "mode": "fix",
+      "command": "address-review",
+      "enqueuedAt": "2026-07-01T15:37:40.295Z",
+      "source": {
+        "eventName": "pull_request_review",
+        "runId": 28529361769,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28529361769"
+      },
+      "attempts": 0
     }
   ]
 }
