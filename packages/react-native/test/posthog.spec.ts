@@ -143,6 +143,34 @@ describe('PostHog React Native', () => {
     expect(posthog.getDistinctId()).toEqual('bar')
   })
 
+  it('should send custom request headers with SDK requests', async () => {
+    posthog = new PostHog('test-token', {
+      requestHeaders: { Authorization: 'Bearer test-jwt' },
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+    })
+    await posthog.ready()
+
+    await posthog.reloadFeatureFlagsAsync()
+    posthog.capture('test-event')
+    await posthog.flush()
+
+    const expectedHeaders = expect.objectContaining({
+      Authorization: 'Bearer test-jwt',
+      'Content-Type': 'application/json',
+    })
+
+    expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/flags/'),
+      expect.objectContaining({ headers: expectedHeaders })
+    )
+    expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/batch/'),
+      expect.objectContaining({ headers: expectedHeaders })
+    )
+  })
+
   it.each([
     ['missing', undefined as unknown as string],
     ['empty', ''],

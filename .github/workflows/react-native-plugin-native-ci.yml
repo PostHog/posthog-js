@@ -76,11 +76,12 @@ jobs:
         if: steps.is-affected.outputs.is-affected == 'true'
         # --ignore-workspace: the example is excluded from the pnpm workspace,
         # so install it as a standalone project (resolves the link: dep to the
-        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Build example for Android
@@ -119,11 +120,12 @@ jobs:
         if: steps.is-affected.outputs.is-affected == 'true'
         # --ignore-workspace: the example is excluded from the pnpm workspace,
         # so install it as a standalone project (resolves the link: dep to the
-        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods
@@ -171,11 +173,12 @@ jobs:
         if: steps.is-affected.outputs.is-affected == 'true'
         # --ignore-workspace: the example is excluded from the pnpm workspace,
         # so install it as a standalone project (resolves the link: dep to the
-        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Opt example into SPM resolution
