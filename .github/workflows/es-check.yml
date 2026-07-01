@@ -10,6 +10,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   ssr:
     name: Build and check ES5/ES6 support
@@ -17,12 +21,24 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping ES5/ES6 support checks because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - uses: ./.github/actions/setup
+        if: steps.changes.outputs.run_heavy == 'true'
         with:
           build: true
 
       - name: Run es-check to check if our ie11 bundle is ES5 compatible
+        if: steps.changes.outputs.run_heavy == 'true'
         run: npx es-check@7.2.1 es5 packages/browser/dist/array.full.es5.js
 
       - name: Run es-check to check if our main bundle is ES6 compatible
+        if: steps.changes.outputs.run_heavy == 'true'
         run: npx es-check@7.2.1 es6 packages/browser/dist/array.full.js

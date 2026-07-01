@@ -6,6 +6,7 @@ env:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -50,28 +51,38 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/changed-files-classifier
         if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' }}
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.changes.outputs.skip_heavy == 'true' }}
+        run: echo "Skipping ${{ matrix.tests.name }} integration tests because all changed filenames and previous filenames are safe for heavy CI skip."
+
+      - uses: ./.github/actions/setup
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.changes.outputs.run_heavy == 'true' }}
         with:
           build: false
 
       - uses: ./.github/actions/is-affected
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' }}
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.changes.outputs.run_heavy == 'true' }}
         id: is-affected
         with:
           package-name: posthog-js
 
       - name: Build packages
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm build
 
       - name: Install Playwright Browsers
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm exec playwright install ${{ matrix.tests.install }} --with-deps --only-shell
         working-directory: packages/browser
 
       - name: Run ${{ matrix.tests.name }} test
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 30
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}

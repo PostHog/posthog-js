@@ -12,6 +12,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   browsers:
     name: Test on ${{ matrix.name }}
@@ -40,27 +44,37 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/changed-files-classifier
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.changes.outputs.skip_heavy == 'true' }}
+        run: echo "Skipping ${{ matrix.name }} TestCafe tests because all changed filenames and previous filenames are safe for heavy CI skip."
+
+      - uses: ./.github/actions/setup
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.changes.outputs.run_heavy == 'true' }}
         with:
           build: false
 
       - uses: ./.github/actions/is-affected
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.changes.outputs.run_heavy == 'true' }}
         id: is-affected
         with:
           package-name: posthog-js
 
       - name: Build packages
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm build
 
       - name: Serve static files
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         run: python -m http.server 8080 &
 
       - name: Run ${{ matrix.name }} test
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 10
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -98,7 +112,7 @@ jobs:
         working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 30
         run: pnpm check-testcafe-results
         working-directory: packages/browser

@@ -18,7 +18,17 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping bundled-size checks because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - name: Setup pnpm and Node.js
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
         with:
           # TODO: pnpm/setup does not read .nvmrc yet; keep this in sync with .nvmrc.
@@ -28,12 +38,15 @@ jobs:
           install: false
 
       - name: Install dependencies
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build project
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm build
 
       - name: Upload bundle size visualization
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: viz-upload
         with:
@@ -41,11 +54,11 @@ jobs:
           path: packages/browser/bundle-stats-array.html
 
       - name: Skip PR comments for fork PR
-        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        if: ${{ steps.changes.outputs.run_heavy == 'true' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: echo "Skipping bundled-size PR comments for fork PRs because GitHub tokens are read-only."
 
       - name: Find artifact link comment if it exists
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.changes.outputs.run_heavy == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # pin v4.0.0
         id: fc
         with:
@@ -54,7 +67,7 @@ jobs:
           body-includes: Download bundle size visualization
 
       - name: Create or update artifact link comment
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.changes.outputs.run_heavy == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # pin v5.0.0
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
@@ -64,7 +77,7 @@ jobs:
           edit-mode: replace
 
       - uses: preactjs/compressed-size-action@946a292cd35bd1088e0d7eb92b69d1a8d5b5d76a # pin v2.8.0
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.changes.outputs.run_heavy == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         with:
           compression: "none"
           strip-hash: '-(\w{8})\.'

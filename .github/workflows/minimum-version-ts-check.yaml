@@ -10,6 +10,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   unit:
     name: Check minimum TS version
@@ -30,18 +34,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping minimum TypeScript version check because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - uses: ./.github/actions/setup
+        if: steps.changes.outputs.run_heavy == 'true'
         with:
           node_version: ${{ matrix.node-version }}
           build: true
 
       # once its built we can see if we can use it on the forced version
       - name: Override TypeScript version
+        if: steps.changes.outputs.run_heavy == 'true'
         env:
           TS_VERSION: ${{ matrix.typescript-version.version }}
         run: yq -i '.catalog.typescript = strenv(TS_VERSION)' pnpm-workspace.yaml && pnpm install --no-frozen-lockfile
 
       - name: Test TypeScript Import
+        if: steps.changes.outputs.run_heavy == 'true'
         run: |
           rm ci-ts-file.js || true
           pnpm exec tsc --version

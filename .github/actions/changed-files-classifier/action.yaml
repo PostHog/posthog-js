@@ -1,0 +1,170 @@
+name: Changed files classifier
+
+description: Classifies PR changed files so required CI jobs can skip heavyweight setup safely.
+
+inputs:
+  github-token:
+    description: Token used to read pull request files.
+    required: true
+
+outputs:
+  changed_files:
+    description: Newline-delimited changed filenames and previous filenames considered by the classifier.
+    value: ${{ steps.classify.outputs.changed_files }}
+  reason:
+    description: Classification or fail-open reason.
+    value: ${{ steps.classify.outputs.reason }}
+  skip_heavy:
+    description: true when every changed filename and previous filename is globally safe for skipping heavy CI.
+    value: ${{ steps.classify.outputs.skip_heavy }}
+  run_heavy:
+    description: true when heavy CI must run.
+    value: ${{ steps.classify.outputs.run_heavy }}
+
+runs:
+  using: composite
+  steps:
+    - name: Classify changed files
+      id: classify
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          if [[ "$value" == *$'\n'* ]]; then
+            {
+              echo "$key<<EOF"
+              printf '%s\n' "$value"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          fi
+        }
+
+        emit() {
+          local reason="$1"
+          local changed_files="${2:-}"
+          local skip_heavy="$3"
+          local run_heavy="true"
+          if [[ "$skip_heavy" == "true" ]]; then
+            run_heavy="false"
+          fi
+
+          set_output changed_files "$changed_files"
+          set_output reason "$reason"
+          set_output skip_heavy "$skip_heavy"
+          set_output run_heavy "$run_heavy"
+
+          echo "Changed-file classifier: $reason"
+          if [[ -n "$changed_files" ]]; then
+            echo "Changed filenames and previous filenames considered:"
+            printf '%s\n' "$changed_files"
+          fi
+          echo "skip_heavy=$skip_heavy"
+          echo "run_heavy=$run_heavy"
+        }
+
+        fail_open() {
+          emit "$1" "${2:-}" false
+        }
+
+        is_safe_file() {
+          local file="$1"
+
+          case "$file" in
+            *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE/*|.github/pull_request_template.md|.github/CODEOWNERS|CODEOWNERS|.github/dependabot.yml)
+              return 0
+              ;;
+            .github/workflows/release.yml|.github/workflows/release.yaml|.github/workflows/publish.yml|.github/workflows/publish.yaml|.github/workflows/stale.yml|.github/workflows/stale.yaml|.github/workflows/lint-pr.yml|.github/workflows/lint-pr.yaml|.github/workflows/call-flags-project-board.yml|.github/workflows/call-flags-project-board.yaml|.github/workflows/changeset-hygiene.yml|.github/workflows/changeset-hygiene.yaml|.github/workflows/dependabot-changeset.yml|.github/workflows/dependabot-changeset.yaml|.github/workflows/validate-versioning.yml|.github/workflows/validate-versioning.yaml|.github/workflows/new-pr.yml|.github/workflows/new-pr.yaml|.github/workflows/generated-files-notice.yml|.github/workflows/generated-files-notice.yaml|.github/workflows/posthog-upgrade.yml|.github/workflows/posthog-upgrade.yaml|.github/workflows/posthog-watcher-*.yml|.github/workflows/posthog-watcher-*.yaml)
+              return 0
+              ;;
+            *)
+              return 1
+              ;;
+          esac
+        }
+
+        if [[ "${GITHUB_EVENT_NAME:-}" != "pull_request" ]]; then
+          fail_open "fail-open: ${GITHUB_EVENT_NAME:-unknown} event runs full CI"
+          exit 0
+        fi
+
+        if [[ -z "${GH_TOKEN:-}" ]]; then
+          fail_open "fail-open: missing GitHub token"
+          exit 0
+        fi
+
+        if [[ -z "${GITHUB_EVENT_PATH:-}" || ! -f "${GITHUB_EVENT_PATH}" ]]; then
+          fail_open "fail-open: missing GitHub event payload"
+          exit 0
+        fi
+
+        pr_number="$(jq -r '.pull_request.number // empty' "${GITHUB_EVENT_PATH}" 2>/dev/null || true)"
+        if [[ -z "$pr_number" ]]; then
+          fail_open "fail-open: missing pull request number"
+          exit 0
+        fi
+
+        files_tmp="$(mktemp)"
+        for page in $(seq 1 30); do
+          response_tmp="$(mktemp)"
+          status="$({ curl --silent --show-error --location \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --output "$response_tmp" \
+            --write-out "%{http_code}" \
+            "${GITHUB_API_URL:-https://api.github.com}/repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files?per_page=100&page=${page}"; } || true)"
+
+          if [[ "$status" != "200" ]]; then
+            fail_open "fail-open: pull request files API returned HTTP ${status}" "$(cat "$files_tmp" 2>/dev/null || true)"
+            exit 0
+          fi
+
+          if ! jq -e 'type == "array" and all(.[]; (.filename | type == "string") and ((has("previous_filename") | not) or .previous_filename == null or (.previous_filename | type == "string")))' "$response_tmp" >/dev/null 2>&1; then
+            fail_open "fail-open: could not parse pull request files API response" "$(cat "$files_tmp" 2>/dev/null || true)"
+            exit 0
+          fi
+
+          count="$(jq 'length' "$response_tmp")"
+          if [[ ! "$count" =~ ^[0-9]+$ ]]; then
+            fail_open "fail-open: could not parse pull request files API response" "$(cat "$files_tmp" 2>/dev/null || true)"
+            exit 0
+          fi
+
+          if ! jq -r '.[] | .filename, (.previous_filename // empty)' "$response_tmp" | sed '/^$/d' >> "$files_tmp"; then
+            fail_open "fail-open: could not parse pull request files API response" "$(cat "$files_tmp" 2>/dev/null || true)"
+            exit 0
+          fi
+
+          if [[ "$count" -lt 100 ]]; then
+            break
+          fi
+
+          if [[ "$page" -eq 30 ]]; then
+            fail_open "fail-open: pull request has too many changed files to classify safely" "$(cat "$files_tmp" 2>/dev/null || true)"
+            exit 0
+          fi
+        done
+
+        changed_files="$(sort -u "$files_tmp")"
+        if [[ -z "$changed_files" ]]; then
+          fail_open "fail-open: no changed files returned by pull request files API"
+          exit 0
+        fi
+
+        while IFS= read -r file; do
+          [[ -z "$file" ]] && continue
+
+          if ! is_safe_file "$file"; then
+            emit "classified: heavy CI required because ${file} is not in the global safe set" "$changed_files" false
+            exit 0
+          fi
+        done <<< "$changed_files"
+
+        emit "classified: all changed filenames and previous filenames are in the global safe set" "$changed_files" true

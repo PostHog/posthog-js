@@ -12,6 +12,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   unit:
@@ -20,10 +21,21 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping unit tests because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
 
       - run: pnpm test:unit
+        if: steps.changes.outputs.run_heavy == 'true'
 
   edge-runtime:
     name: Node edge runtime tests
@@ -31,10 +43,21 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping Node edge runtime tests because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
 
       - name: Node edge runtime tests
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm --filter=posthog-node test:edge-compat
 
   integration:
@@ -45,32 +68,43 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping Playwright E2E tests because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
       - uses: ./.github/actions/is-affected
+        if: steps.changes.outputs.run_heavy == 'true'
         id: is-affected
         with:
           package-name: posthog-js
 
       - name: Build package
         run: pnpm build
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true'
 
       - name: Install Playwright Browsers
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true'
         run: pnpm exec playwright install --with-deps
         working-directory: packages/browser
 
       - name: Run Playwright tests
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true'
         run: pnpm exec playwright test --workers=5
         working-directory: packages/browser
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ !cancelled() && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         with:
           name: playwright-report
           path: packages/browser/playwright-report/
@@ -88,28 +122,39 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping backward compatibility tests because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
       - uses: ./.github/actions/is-affected
+        if: steps.changes.outputs.run_heavy == 'true'
         id: is-affected
         with:
           package-name: posthog-js
 
       - name: Build package
         run: pnpm build
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true'
 
       - name: Install Playwright Browsers
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true'
         run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/browser
 
       - name: Run backward compatibility tests
         id: compat-tests
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true'
         continue-on-error: true
         run: |
           pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json > compat-results.json 2>&1 || true
@@ -117,7 +162,7 @@ jobs:
         working-directory: packages/browser
 
       - name: Process compat test results
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true'
         id: process-results
         working-directory: packages/browser
         run: |
@@ -201,7 +246,7 @@ jobs:
             </details>
 
       - name: Delete compat comment if tests pass
-        if: ${{ steps.process-results.outputs.has_failures == 'false' && steps.is-affected.outputs.is-affected == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.process-results.outputs.has_failures == 'false' && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-passing-comment
         with:
@@ -223,7 +268,7 @@ jobs:
             })
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ !cancelled() && steps.changes.outputs.run_heavy == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
         with:
           name: playwright-compat-report
           path: packages/browser/playwright-report/
@@ -234,46 +279,60 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping functional tests because all changed filenames and previous filenames are safe for heavy CI skip."
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
       - run: pnpm test:functional
+        if: steps.changes.outputs.run_heavy == 'true'
 
   rrweb:
     name: rrweb tests
     runs-on: ubuntu-22.04
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping rrweb tests because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
-      - name: Check if rrweb packages changed
-        id: changed
-        run: |
-          CHANGED=$(git diff --name-only origin/main...HEAD | grep -c '^packages/rrweb/' || true)
-          echo "rrweb-changed=$([[ $CHANGED -gt 0 ]] && echo true || echo false)" >> $GITHUB_OUTPUT
-
       - name: Build rrweb packages
-        if: steps.changed.outputs.rrweb-changed == 'true'
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm turbo run build --filter='./packages/rrweb/**' --concurrency=1
 
       - name: Install Chrome for Puppeteer
-        if: steps.changed.outputs.rrweb-changed == 'true'
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm --filter @posthog/rrweb exec puppeteer browsers install chrome
 
       - name: Run rrweb tests
-        if: steps.changed.outputs.rrweb-changed == 'true'
+        if: steps.changes.outputs.run_heavy == 'true'
         run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run test --filter='./packages/rrweb/**'
 
       - name: Upload diff images on failure
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        if: failure() && steps.changed.outputs.rrweb-changed == 'true'
+        if: failure() && steps.changes.outputs.run_heavy == 'true'
         with:
           name: rrweb-image-diff
           path: packages/rrweb/**/__image_snapshots__/__diff_output__/*.png
@@ -284,11 +343,20 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping package lint because all changed filenames and previous filenames are safe for heavy CI skip."
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
       - name: Lint all packages
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm lint
 
   lint-playground:
@@ -296,11 +364,20 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping playground lint because all changed filenames and previous filenames are safe for heavy CI skip."
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
       - name: Lint playground files
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm lint:playground
 
   package:
@@ -309,23 +386,37 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping package tarball checks because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
       - name: Build package tarballs
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm package
 
       - name: Smoke test package tarballs
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm check:package-tarballs
 
       # Replaces Vercel preview deploy validation for @posthog/next.
       - name: Install Next.js App Router example dependencies from local tarballs
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm install --lockfile=false
         working-directory: examples/example-next-app-router
 
       - name: Build Next.js App Router example
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm build
         working-directory: examples/example-next-app-router
         env:
@@ -334,10 +425,12 @@ jobs:
           NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
 
       - name: Install Next.js config example dependencies from local tarballs
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm install --lockfile=false
         working-directory: examples/example-nextjs
 
       - name: Build Next.js config example
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm build
         working-directory: examples/example-nextjs
         env:
@@ -352,17 +445,29 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping mangled property check because all changed filenames and previous filenames are safe for heavy CI skip."
+
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
       - name: Build posthog-js
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm exec turbo --filter=posthog-js build
         env:
           WRITE_MANGLED_PROPERTIES: 1
 
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
+        if: steps.changes.outputs.run_heavy == 'true'
 
   generate-references:
     # Runs the same api-extractor pipeline the release workflow uses to bump
@@ -373,14 +478,25 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/changed-files-classifier
+        id: changes
+        with:
+          github-token: ${{ github.token }}
+      - name: Skip heavy CI
+        if: steps.changes.outputs.skip_heavy == 'true'
+        run: echo "Skipping public API reference checks because all changed filenames and previous filenames are safe for heavy CI skip."
       - name: Setup environment
+        if: steps.changes.outputs.run_heavy == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
       - name: Generate public API references
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm generate-references
 
       - name: Check public API references
+        if: steps.changes.outputs.run_heavy == 'true'
         run: pnpm check:public-api
