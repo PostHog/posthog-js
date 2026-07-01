@@ -83,9 +83,7 @@ class PostHogFetchNetworkError extends Error {
 export const maybeAdd = (key: string, value: JsonType | undefined): Record<string, JsonType> =>
   value !== undefined ? { [key]: value } : {}
 
-// Caller-supplied feature-flag properties (`$feature/*` and `$active_feature_flags`) take
-// precedence over the cached values the SDK injects, so an explicit value passed to `capture()`
-// is honoured (e.g. server-evaluated flags on exposure events).
+// Caller-supplied `$feature/*` and `$active_feature_flags` win over the SDK's cached flag values.
 export const applyCallerFeatureFlagOverrides = (
   target: PostHogEventProperties,
   callerProperties: PostHogEventProperties
