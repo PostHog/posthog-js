@@ -59,12 +59,19 @@ export type PostHogAutocaptureOptions = {
 
   propsToCapture?: string[]
 
+  ignoreScreens?: string[]
+  /**
+   * List of screens to ignore during autocapture
+   *
+   * @default []
+   */
+
   /**
    * Capture the screen name (or route name) and properties
    *
    * Only used for expo-router, @react-navigation/native and react-native-navigation
    *
-   * For react-native-navigation, you need to call initReactNativeNavigation before using this option
+   * For react-native-navigation, you need to call   before using this option
    *  See example: https://posthog.com/docs/libraries/react-native#with-react-native-navigation-and-autocapture
    *
    * For @react-navigation/native v6 and below, you need to wrap the PostHogProvider within the NavigationContainer
