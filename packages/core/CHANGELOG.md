@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.39.3
+
+### Patch Changes
+
+- [#4028](https://github.com/PostHog/posthog-js/pull/4028) [`a664b81`](https://github.com/PostHog/posthog-js/commit/a664b815dd074c8eed87830904fa182306d07e6b) Thanks [@marandaneto](https://github.com/marandaneto)! - Make Node `flush()` wait for pending asynchronous SDK work before draining the event queue, so events produced by helpers like `captureException()` are not missed. Pending work rejections no longer prevent queued events from flushing.
+  (2026-07-01)
+
 ## 1.39.2
 
 ### Patch Changes

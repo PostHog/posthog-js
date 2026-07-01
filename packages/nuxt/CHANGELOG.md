@@ -1,5 +1,12 @@
 # @posthog/nuxt
 
+## 1.7.79
+
+### Patch Changes
+
+- [#4002](https://github.com/PostHog/posthog-js/pull/4002) [`1f16027`](https://github.com/PostHog/posthog-js/commit/1f160272aa45fc0a6a3dca5247ab634f49613558) Thanks [@jojosenthusiast](https://github.com/jojosenthusiast)! - Skip server sourcemap injection when `ssr: false` so client-only builds still upload their sourcemaps instead of failing on the missing server output (#3005).
+  (2026-07-01)
+
 ## 1.7.78
 
 ### Patch Changes
