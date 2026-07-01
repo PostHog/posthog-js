@@ -1,6 +1,7 @@
 import { PostHog, type PostHogOptions } from 'posthog-node'
 
 import type {
+  FeedbackCaptureData,
   InitializeCaptureData,
   JsonRecord,
   McpCaptureCommon,
@@ -23,6 +24,7 @@ import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
 import { McpEventSink } from './sink'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
+import { SUBMIT_FEEDBACK_NAME, buildFeedbackEventProperties, getSubmitFeedbackDescriptor } from './feedback'
 
 /**
  * Options for {@link PostHogMCP}. A superset of `posthog-node`'s options, plus
@@ -36,6 +38,13 @@ export interface PostHogMCPOptions extends PostHogOptions {
    * can't drift. Defaults to `get_more_tools`.
    */
   missingCapabilityToolName?: string
+  /**
+   * Name of the virtual "submit feedback" tool injected by
+   * {@link PostHogMCP.prepareToolList} and detected by
+   * {@link PostHogMCP.prepareToolCall}. Set once here so injection and detection
+   * can't drift. Defaults to `submit_feedback`.
+   */
+  feedbackToolName?: string
 }
 
 /**
@@ -82,9 +91,14 @@ export class PostHogMCP extends PostHog {
   // prepareToolList (inject) and prepareToolCall (detect) always agree.
   readonly #missingCapabilityToolName: string
 
+  // Same rationale as #missingCapabilityToolName: keep inject (prepareToolList)
+  // and detect (prepareToolCall) in agreement.
+  readonly #feedbackToolName: string
+
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
+    this.#feedbackToolName = options.feedbackToolName ?? SUBMIT_FEEDBACK_NAME
     // Report `$lib: 'posthog-node-mcp'` instead of the inherited `posthog-node`.
     applyMcpLibIdentity(this)
   }
@@ -167,6 +181,9 @@ export class PostHogMCP extends PostHog {
     if (options.reportMissing && !prepared.some((tool) => tool?.name === this.#missingCapabilityToolName)) {
       prepared = [...prepared, getReportMissingToolDescriptor(this.#missingCapabilityToolName) as TTool]
     }
+    if (options.collectFeedback && !prepared.some((tool) => tool?.name === this.#feedbackToolName)) {
+      prepared = [...prepared, getSubmitFeedbackDescriptor(this.#feedbackToolName) as TTool]
+    }
     return prepared
   }
 
@@ -204,6 +221,7 @@ export class PostHogMCP extends PostHog {
       intentSource: intent ? 'context_parameter' : undefined,
       args: stripContext(args),
       isMissingCapability: name === this.#missingCapabilityToolName,
+      isFeedback: name === this.#feedbackToolName,
     }
   }
 
@@ -217,6 +235,32 @@ export class PostHogMCP extends PostHog {
     event.resourceName = this.#missingCapabilityToolName
     event.parameters = data.parameters
     applyIntent(event, data.context, 'context_parameter')
+    this.#emit(event)
+  }
+
+  /**
+   * Capture a `submit_feedback` call. Emits `$mcp_feedback` with the structured
+   * fields spread as `$mcp_`-prefixed properties. Reply to the agent with
+   * `getFeedbackResult()`.
+   */
+  captureFeedback(data: FeedbackCaptureData): void {
+    const event = baseEvent(MCPAnalyticsEventType.mcpFeedback, data)
+    event.resourceName = this.#feedbackToolName
+    event.parameters = data.parameters
+    // Map the camelCase payload back to the `submit_feedback` argument keys so
+    // both this path and the `instrument()` path build identical properties.
+    const feedbackProperties = buildFeedbackEventProperties({
+      feedback_type: data.feedbackType,
+      sentiment: data.sentiment,
+      summary: data.summary,
+      category: data.category,
+      product_area: data.productArea,
+      friction_points: data.frictionPoints,
+      suggested_improvement: data.suggestedImprovement,
+      task_completed: data.taskCompleted,
+      details: data.details,
+    })
+    event.properties = { ...event.properties, ...feedbackProperties }
     this.#emit(event)
   }
 

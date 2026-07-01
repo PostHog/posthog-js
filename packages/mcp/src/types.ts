@@ -56,6 +56,19 @@ export interface MCPAnalyticsOptions {
    * detected under the same name.
    */
   missingCapabilityToolName?: string
+  /**
+   * Enable the `submit_feedback` virtual tool so agents (and, through them,
+   * users) can send structured feedback about this server or the product it
+   * exposes. Calls are captured as `$mcp_feedback` and never dispatched to a real
+   * tool handler.
+   */
+  collectFeedback?: boolean
+  /**
+   * Rename the `submit_feedback` virtual tool (the `collectFeedback` feature).
+   * Defaults to `submit_feedback`. Set once here so the tool is advertised and
+   * detected under the same name.
+   */
+  feedbackToolName?: string
   /** Enables the `conversation_id` tool parameter + prompt-back loop. */
   enableConversationId?: boolean
   /**
@@ -366,6 +379,12 @@ export interface PrepareToolListOptions {
    * {@link PostHogMCP.captureMissingCapability} and reply with `getMoreToolsResult()`.
    */
   reportMissing?: boolean
+  /**
+   * Append the `submit_feedback` virtual tool so agents can send structured
+   * feedback. Defaults to `false`. When the agent calls it, route the call to
+   * {@link PostHogMCP.captureFeedback} and reply with `getFeedbackResult()`.
+   */
+  collectFeedback?: boolean
 }
 
 /**
@@ -383,6 +402,8 @@ export interface PreparedToolCall {
   args?: Record<string, unknown>
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
+  /** True when `name` is the `submit_feedback` virtual tool. */
+  isFeedback: boolean
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */
@@ -392,6 +413,34 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
    * on the `get_more_tools` call) → `$mcp_intent`.
    */
   context?: string
+  /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
+  parameters?: unknown
+}
+
+/**
+ * Payload for {@link PostHogMCP.captureFeedback}. Emits `$mcp_feedback`. The
+ * structured `submit_feedback` fields are spread onto the event as
+ * `$mcp_`-prefixed properties.
+ */
+export interface FeedbackCaptureData extends McpCaptureCommon {
+  /** What the feedback is about → `$mcp_feedback_type`. */
+  feedbackType?: 'product' | 'mcp' | 'docs' | 'other'
+  /** Overall sentiment → `$mcp_sentiment`. */
+  sentiment?: 'positive' | 'neutral' | 'negative' | 'mixed'
+  /** One-sentence summary → `$mcp_summary`. */
+  summary?: string
+  /** Dominant MCP feedback category → `$mcp_category`. */
+  category?: string
+  /** Product or area the feedback is about → `$mcp_product_area`. */
+  productArea?: string
+  /** What went wrong / slowed things down → `$mcp_friction_points`. */
+  frictionPoints?: string
+  /** A concrete suggested improvement → `$mcp_suggested_improvement`. */
+  suggestedImprovement?: string
+  /** Whether the user's task was completed → `$mcp_task_completed`. */
+  taskCompleted?: boolean
+  /** Any additional detail → `$mcp_details`. */
+  details?: string
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
 }

@@ -9,6 +9,7 @@ import { MCPAnalyticsEventType } from './event-types'
 const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.custom]: PostHogMCPAnalyticsEvent.Custom,
   [MCPAnalyticsEventType.identify]: PostHogMCPAnalyticsEvent.Identify,
+  [MCPAnalyticsEventType.mcpFeedback]: PostHogMCPAnalyticsEvent.Feedback,
   [MCPAnalyticsEventType.mcpMissingCapability]: PostHogMCPAnalyticsEvent.MissingCapability,
   [MCPAnalyticsEventType.mcpInitialize]: PostHogMCPAnalyticsEvent.Initialize,
   [MCPAnalyticsEventType.mcpPromptsGet]: PostHogMCPAnalyticsEvent.PromptGet,

@@ -3,7 +3,14 @@
 // Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
 
 import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
-import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, MCPServerLike, McpEvent } from '../types'
+import type {
+  CompatibleRequestHandlerExtra,
+  JsonRecord,
+  MCPAnalyticsData,
+  MCPRequestLike,
+  MCPServerLike,
+  McpEvent,
+} from '../types'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addConversationIdToTools,
@@ -23,6 +30,7 @@ import { buildCapturedMcpParameters } from './mcp-payloads'
 import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
 import { getServerSessionId } from './session'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
+import { getSubmitFeedbackDescriptor, resolveFeedbackToolName } from './feedback'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
 /**
@@ -61,6 +69,12 @@ interface TraceToolCallParams {
    */
   explicitContextIntent?: string
   /**
+   * Extra event properties merged onto the captured event (spread verbatim into
+   * the PostHog properties). Used by the `submit_feedback` virtual tool to carry
+   * its structured fields as `$mcp_`-prefixed properties.
+   */
+  eventProperties?: JsonRecord
+  /**
    * Optional accessor for an error the executor captured out-of-band. The
    * high-level SDK turns thrown tool errors into `isError: true` results before
    * they reach us, so the wrapped callback stashes the original error and we
@@ -78,7 +92,17 @@ interface TraceToolCallParams {
  * throws, and the tool's own errors are always re-thrown to the caller.
  */
 export async function captureToolCall(params: TraceToolCallParams): Promise<unknown> {
-  const { server, data, request, extra, execute, eventType, explicitContextIntent, takeCapturedError } = params
+  const {
+    server,
+    data,
+    request,
+    extra,
+    execute,
+    eventType,
+    explicitContextIntent,
+    eventProperties,
+    takeCapturedError,
+  } = params
 
   const conversation = resolveConversationId(
     data.options.enableConversationId ?? false,
@@ -103,6 +127,9 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   )
   if (event && explicitContextIntent) {
     setExplicitContextIntent(event, explicitContextIntent)
+  }
+  if (event && eventProperties) {
+    event.properties = { ...event.properties, ...eventProperties }
   }
 
   let result: unknown
@@ -354,6 +381,14 @@ async function getTracedToolsList(
       const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
       if (!alreadyPresent) {
         tools.push(getReportMissingToolDescriptor(missingToolName))
+      }
+    }
+
+    if (data?.options.collectFeedback) {
+      const feedbackToolName = resolveFeedbackToolName(data.options)
+      const alreadyPresent = tools.some((tool) => tool?.name === feedbackToolName)
+      if (!alreadyPresent) {
+        tools.push(getSubmitFeedbackDescriptor(feedbackToolName))
       }
     }
 
