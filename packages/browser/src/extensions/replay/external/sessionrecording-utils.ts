@@ -24,8 +24,13 @@ export function circularReferenceReplacer() {
     }
 }
 
+function estimateStringBytes(data: string): number {
+    return new Blob([data]).size
+}
+
 export function estimateSize(sizeable: unknown): number {
-    return JSON.stringify(sizeable, circularReferenceReplacer())?.length || 0
+    const stringifiedData = JSON.stringify(sizeable, circularReferenceReplacer())
+    return stringifiedData ? estimateStringBytes(stringifiedData) : 0
 }
 
 // Lightweight size estimate for compressed events without allocating a JSON string.
@@ -99,7 +104,7 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
     // but we're assuming most of the size is from a data uri which
     // is unlikely to be compressed further
 
-    if (stringifiedData.length > MAX_MESSAGE_SIZE) {
+    if (estimateStringBytes(stringifiedData) > MAX_MESSAGE_SIZE) {
         // Regex that matches the pattern for a dataURI with the shape 'data:{mime type};{encoding},{data}'. It:
         // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
         // 2) Extracts the mime type of the data uri in the first group
@@ -114,7 +119,7 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
             }
         }
     }
-    return { event: JSON.parse(stringifiedData), size: stringifiedData.length }
+    return { event: JSON.parse(stringifiedData), size: estimateStringBytes(stringifiedData) }
 }
 
 export const CONSOLE_LOG_PLUGIN_NAME = 'rrweb/console@1' // The name of the rr-web plugin that emits console logs
