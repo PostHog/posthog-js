@@ -2121,9 +2121,14 @@ export class PostHog extends PostHogCore {
       anonymousId: this.getAnonymousId(),
       sdkVersion: this.getLibraryVersion(),
       flushAt: this.flushAt,
+      // Native-sent requests (session replay, crash uploads) bypass the JS request path,
+      // so the configured headers are passed through to the native plugin as well.
+      requestHeaders: this._requestHeaders,
     }
 
-    this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(sdkOptions)}`)
+    // Log header names only: requestHeaders values can carry secrets (e.g. an Authorization token).
+    const loggableSdkOptions = { ...sdkOptions, requestHeaders: Object.keys(this._requestHeaders) }
+    this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(loggableSdkOptions)}`)
 
     try {
       const wasSessionReplayEnabled = enableSessionReplay
