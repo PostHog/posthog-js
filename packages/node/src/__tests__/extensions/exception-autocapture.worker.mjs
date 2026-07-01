@@ -18,10 +18,11 @@ parentPort.on('message', (msg) => {
 })
 
 await new Promise((res) => {
-  posthog.capture = (event) => {
+  posthog._capturePreparedEvent = (event) => {
     event.distinctId = 'stable_id'
     parentPort.postMessage({ method: 'capture', event })
     res()
+    return Promise.resolve()
   }
 })
 

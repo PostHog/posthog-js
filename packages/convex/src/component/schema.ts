@@ -14,4 +14,15 @@ export default defineSchema({
     fetchedAt: v.number(),
     etag: v.optional(v.string()),
   }),
+
+  /**
+   * Singleton table tracking the self-rescheduling flag-refresh chain (see `lib.ts`).
+   *
+   * `loopJobId` is the `_scheduled_functions` id of the next pending `refreshLoop` tick. The
+   * supervisor cron reads it to decide whether the chain is still alive before starting a new
+   * one, so overlapping supervisor runs can't spawn duplicate chains.
+   */
+  refreshLoopState: defineTable({
+    loopJobId: v.id('_scheduled_functions'),
+  }),
 })

@@ -240,7 +240,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   override async flush(): Promise<void> {
-    const flushPromise = super.flush()
+    const flushPromise = this.flushWithPendingPromises()
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
@@ -313,7 +313,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private async resolveWaitUntilFlush(): Promise<void> {
     const resolve = this._consumeWaitUntilCycle()
     try {
-      await super.flush()
+      await this.flushWithPendingPromises()
     } catch {
       // Flush errors are already logged by flush() internals
     } finally {
@@ -566,7 +566,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     )
   }
 
-  private _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+  _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
     return this._sendPreparedEvent('capture', props, immediate)
   }
 
@@ -2540,7 +2540,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           { syntheticException },
           distinctId,
           additionalProperties
-        ).then((msg) => this.capture({ ...msg, uuid, flags }))
+        ).then((msg) => this._capturePreparedEvent({ ...msg, uuid, flags }, false))
       )
     }
   }

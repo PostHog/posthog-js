@@ -6149,7 +6149,9 @@ describe('ETag support for local evaluation polling', () => {
   jest.useFakeTimers()
 
   afterEach(async () => {
+    jest.useRealTimers()
     await posthog.shutdown()
+    jest.useFakeTimers()
   })
 
   it('stores ETag from response and sends it on subsequent requests', async () => {
@@ -6253,7 +6255,7 @@ describe('ETag support for local evaluation polling', () => {
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Verify flags were loaded
-    const flag1 = await posthog.getFeatureFlag('test-flag', 'user-1')
+    const flag1 = await posthog.getFeatureFlag('test-flag', 'user-1', { sendFeatureFlagEvents: false })
     expect(flag1).toBe(true)
 
     // Trigger a reload (should get 304)
@@ -6264,7 +6266,7 @@ describe('ETag support for local evaluation polling', () => {
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"test-etag"')
 
     // Verify flags are still available after 304
-    const flag2 = await posthog.getFeatureFlag('test-flag', 'user-1')
+    const flag2 = await posthog.getFeatureFlag('test-flag', 'user-1', { sendFeatureFlagEvents: false })
     expect(flag2).toBe(true)
 
     // Verify fetch was called twice

@@ -171,6 +171,7 @@ export abstract class PostHogCoreStateless {
   private maxQueueSize: number
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
+  private flushPromises: Set<Promise<any>> = new Set()
   private shutdownPromise: Promise<void> | null = null
   private requestTimeout: number
   private featureFlagsRequestTimeoutMs: number
@@ -1174,6 +1175,28 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  private async waitForPendingPromises(
+    maxPromiseId: number,
+    ignoredPromises: (Promise<any> | null | undefined)[] = []
+  ): Promise<void> {
+    const ignoredPendingPromises = ignoredPromises.filter((promise): promise is Promise<any> => !!promise)
+    let iteration = 0
+
+    while (true) {
+      const promises = this.promiseQueue.getPromises([...ignoredPendingPromises, ...this.flushPromises], maxPromiseId)
+      if (promises.length === 0) {
+        return
+      }
+
+      if (iteration > 0) {
+        this._logger.debug(`flush() re-checking ${promises.length} pending promise(s) before flushing`)
+      }
+
+      await Promise.all(promises.map((promise) => promise.catch(() => {})))
+      iteration++
+    }
+  }
+
   /**
    * Flushes the queue of pending events.
    *
@@ -1202,22 +1225,44 @@ export abstract class PostHogCoreStateless {
    * @throws PostHogFetchNetworkError
    * @throws Error
    */
-  async flush(): Promise<void> {
+  protected flushWithPendingPromises(): Promise<void> {
+    return this.flushInternal(true)
+  }
+
+  flush(): Promise<void> {
+    return this.flushInternal(false)
+  }
+
+  private flushInternal(waitForPendingPromises: boolean): Promise<void> {
     if (this.disabled) {
-      return
+      return Promise.resolve()
     }
 
-    // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
-    // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
-    // Use a custom allSettled implementation to avoid issues with patching Promise on RN
-    const nextFlushPromise = allSettled([this.flushPromise]).then(() => {
-      return this._flush()
-    })
+    const previousFlushPromise = this.flushPromise
+    const maxPromiseId = this.promiseQueue.maxId
+
+    // Register this flush in the promise queue synchronously so shutdown() can't miss it,
+    // but exclude it from the pending-work wait to avoid self-waiting.
+    const nextFlushPromise: Promise<void> = Promise.resolve()
+      .then(() => {
+        if (waitForPendingPromises) {
+          return this.waitForPendingPromises(maxPromiseId, [previousFlushPromise, nextFlushPromise])
+        }
+      })
+      // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
+      // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
+      // Use a custom allSettled implementation to avoid issues with patching Promise on RN
+      .then(() => allSettled([previousFlushPromise]))
+      .then(() => {
+        return this._flush()
+      })
 
     this.flushPromise = nextFlushPromise
+    this.flushPromises.add(nextFlushPromise)
     void this.addPendingPromise(nextFlushPromise)
 
     allSettled([nextFlushPromise]).then(() => {
+      this.flushPromises.delete(nextFlushPromise)
       // If there are no others waiting to flush, clear the promise.
       // We don't strictly need to do this, but it could make debugging easier
       if (this.flushPromise === nextFlushPromise) {
