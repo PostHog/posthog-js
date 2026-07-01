@@ -5,6 +5,7 @@ const Module = require('module')
 const BROWSERSTACK_HOSTS = new Set(['api.browserstack.com', 'hub-cloud.browserstack.com'])
 const DEFAULT_MAX_ATTEMPTS = 4
 const DEFAULT_BACKOFF_MS = [1000, 3000, 7000]
+const RETRYABLE_BROWSERSTACK_PAYLOAD_STATUSES = new Set([13])
 const SESSION_URL_PATH = /^\/wd\/hub\/session\/[^/]+\/url$/
 const originalLoad = Module._load
 
@@ -15,12 +16,13 @@ function getMaxAttempts() {
 
 function getBackoffMs(attempt) {
     const configured = process.env.BROWSERSTACK_API_BACKOFF_MS
-    const values = configured
+    const parsed = configured
         ? configured
               .split(',')
               .map((value) => Number(value.trim()))
               .filter((value) => Number.isFinite(value) && value >= 0)
-        : DEFAULT_BACKOFF_MS
+        : []
+    const values = parsed.length > 0 ? parsed : DEFAULT_BACKOFF_MS
 
     return values[Math.min(attempt - 1, values.length - 1)] || 0
 }
@@ -113,7 +115,6 @@ function isRetryableError(error) {
         message.includes('socket hang up') ||
         message.includes('invalid response body') ||
         message.includes('response aborted') ||
-        message.includes('aborted') ||
         message.includes('timeout')
     )
 }
@@ -143,7 +144,12 @@ function logRetry(url, options, attempt, maxAttempts, reason) {
 }
 
 function getBrowserStackPayloadError(payload) {
-    if (!payload || typeof payload !== 'object' || !payload.status) {
+    if (
+        !payload ||
+        typeof payload !== 'object' ||
+        !payload.status ||
+        !RETRYABLE_BROWSERSTACK_PAYLOAD_STATUSES.has(Number(payload.status))
+    ) {
         return null
     }
 

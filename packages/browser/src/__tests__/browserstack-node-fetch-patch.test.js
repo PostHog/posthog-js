@@ -78,7 +78,7 @@ describe('browserstack-node-fetch-patch', () => {
         expect(fetch).toHaveBeenCalledTimes(2)
     })
 
-    it('retries BrowserStack setup payload errors', async () => {
+    it('retries BrowserStack setup payload errors for transient server statuses', async () => {
         const fetch = jest
             .fn()
             .mockResolvedValueOnce(response(200, { status: 13, value: { message: 'session not created' } }))
@@ -88,6 +88,28 @@ describe('browserstack-node-fetch-patch', () => {
 
         await expect(patchedResponse.json()).resolves.toEqual({ status: 0, sessionId: 'session-id' })
         expect(fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not retry deterministic BrowserStack setup payload errors', async () => {
+        const payload = { status: 7, value: { message: 'no such element' } }
+        const fetch = jest.fn().mockResolvedValueOnce(response(200, payload))
+
+        const patchedResponse = await patchNodeFetch(fetch)(setupUrl, { method: 'POST' })
+
+        await expect(patchedResponse.json()).resolves.toEqual(payload)
+        expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to default backoff when the backoff override is invalid', async () => {
+        process.env.BROWSERSTACK_API_BACKOFF_MS = 'abc,def'
+        const fetch = jest
+            .fn()
+            .mockResolvedValueOnce(response(500, { status: 13 }))
+            .mockResolvedValueOnce(response(200, { ok: true }))
+
+        await patchNodeFetch(fetch)(browserListUrl)
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Retrying in 1000ms.'))
     })
 
     it('classifies setup requests separately from later BrowserStack API requests', async () => {
@@ -131,6 +153,8 @@ describe('browserstack-node-fetch-patch', () => {
         expect(isRetryableStatus(500)).toBe(true)
         expect(isRetryableStatus(401)).toBe(false)
         expect(isRetryableError(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }))).toBe(true)
+        expect(isRetryableError(new Error('response aborted'))).toBe(true)
+        expect(isRetryableError(Object.assign(new Error('operation aborted'), { name: 'AbortError' }))).toBe(false)
         expect(isRetryableError(new Error('certificate failed'))).toBe(false)
     })
 })
