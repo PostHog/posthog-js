@@ -1,0 +1,297 @@
+name: Changed files classifier
+
+description: Classifies PR changed files so required CI jobs can skip heavyweight setup safely.
+
+inputs:
+  github-token:
+    description: Token used to read pull request files.
+    required: true
+
+outputs:
+  changed_files:
+    description: Newline-delimited changed files considered by the classifier.
+    value: ${{ steps.classify.outputs.changed_files }}
+  reason:
+    description: Classification or fail-open reason.
+    value: ${{ steps.classify.outputs.reason }}
+  skip_heavy:
+    description: true when no heavyweight SDK CI category is affected.
+    value: ${{ steps.classify.outputs.skip_heavy }}
+  run_sdk_ci:
+    description: Run broad SDK unit/functional checks.
+    value: ${{ steps.classify.outputs.run_sdk_ci }}
+  run_browser_ci:
+    description: Run browser build/test checks.
+    value: ${{ steps.classify.outputs.run_browser_ci }}
+  run_node_ci:
+    description: Run Node-specific checks.
+    value: ${{ steps.classify.outputs.run_node_ci }}
+  run_rrweb_ci:
+    description: Run rrweb checks.
+    value: ${{ steps.classify.outputs.run_rrweb_ci }}
+  run_lint_ci:
+    description: Run package lint checks.
+    value: ${{ steps.classify.outputs.run_lint_ci }}
+  run_playground_lint:
+    description: Run playground lint checks.
+    value: ${{ steps.classify.outputs.run_playground_lint }}
+  run_package_ci:
+    description: Run package tarball checks.
+    value: ${{ steps.classify.outputs.run_package_ci }}
+  run_references_ci:
+    description: Run public API reference checks.
+    value: ${{ steps.classify.outputs.run_references_ci }}
+  run_typescript_ci:
+    description: Run TypeScript compatibility checks.
+    value: ${{ steps.classify.outputs.run_typescript_ci }}
+
+runs:
+  using: composite
+  steps:
+    - name: Classify changed files
+      id: classify
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          if [[ "$value" == *$'\n'* ]]; then
+            {
+              echo "$key<<EOF"
+              printf '%s\n' "$value"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          fi
+        }
+
+        emit() {
+          local reason="$1"
+          local changed_files="$2"
+          local run_sdk_ci="$3"
+          local run_browser_ci="$4"
+          local run_node_ci="$5"
+          local run_rrweb_ci="$6"
+          local run_lint_ci="$7"
+          local run_playground_lint="$8"
+          local run_package_ci="$9"
+          local run_references_ci="${10}"
+          local run_typescript_ci="${11}"
+
+          local skip_heavy="false"
+          if [[ "$run_sdk_ci" == "false" && "$run_browser_ci" == "false" && "$run_node_ci" == "false" && "$run_rrweb_ci" == "false" && "$run_lint_ci" == "false" && "$run_playground_lint" == "false" && "$run_package_ci" == "false" && "$run_references_ci" == "false" && "$run_typescript_ci" == "false" ]]; then
+            skip_heavy="true"
+          fi
+
+          set_output changed_files "$changed_files"
+          set_output reason "$reason"
+          set_output skip_heavy "$skip_heavy"
+          set_output run_sdk_ci "$run_sdk_ci"
+          set_output run_browser_ci "$run_browser_ci"
+          set_output run_node_ci "$run_node_ci"
+          set_output run_rrweb_ci "$run_rrweb_ci"
+          set_output run_lint_ci "$run_lint_ci"
+          set_output run_playground_lint "$run_playground_lint"
+          set_output run_package_ci "$run_package_ci"
+          set_output run_references_ci "$run_references_ci"
+          set_output run_typescript_ci "$run_typescript_ci"
+
+          echo "Changed-file classifier: $reason"
+          if [[ -n "$changed_files" ]]; then
+            echo "Changed files:"
+            printf '%s\n' "$changed_files"
+          fi
+          echo "run_sdk_ci=$run_sdk_ci"
+          echo "run_browser_ci=$run_browser_ci"
+          echo "run_node_ci=$run_node_ci"
+          echo "run_rrweb_ci=$run_rrweb_ci"
+          echo "run_lint_ci=$run_lint_ci"
+          echo "run_playground_lint=$run_playground_lint"
+          echo "run_package_ci=$run_package_ci"
+          echo "run_references_ci=$run_references_ci"
+          echo "run_typescript_ci=$run_typescript_ci"
+          echo "skip_heavy=$skip_heavy"
+        }
+
+        fail_open() {
+          emit "$1" "${2:-}" true true true true true true true true true
+        }
+
+        mark_all() {
+          run_sdk_ci=true
+          run_browser_ci=true
+          run_node_ci=true
+          run_rrweb_ci=true
+          run_lint_ci=true
+          run_playground_lint=true
+          run_package_ci=true
+          run_references_ci=true
+          run_typescript_ci=true
+        }
+
+        mark_browser() {
+          run_sdk_ci=true
+          run_browser_ci=true
+          run_lint_ci=true
+          run_package_ci=true
+          run_references_ci=true
+          run_typescript_ci=true
+        }
+
+        mark_node() {
+          run_sdk_ci=true
+          run_node_ci=true
+          run_lint_ci=true
+          run_package_ci=true
+          run_references_ci=true
+          run_typescript_ci=true
+        }
+
+        mark_package() {
+          run_sdk_ci=true
+          run_lint_ci=true
+          run_package_ci=true
+          run_references_ci=true
+          run_typescript_ci=true
+        }
+
+        if [[ "${GITHUB_EVENT_NAME:-}" != "pull_request" && "${GITHUB_EVENT_NAME:-}" != "pull_request_target" ]]; then
+          fail_open "fail-open: ${GITHUB_EVENT_NAME:-unknown} event runs full CI"
+          exit 0
+        fi
+
+        if [[ -z "${GH_TOKEN:-}" ]]; then
+          fail_open "fail-open: missing GitHub token"
+          exit 0
+        fi
+
+        if [[ -z "${GITHUB_EVENT_PATH:-}" || ! -f "${GITHUB_EVENT_PATH}" ]]; then
+          fail_open "fail-open: missing GitHub event payload"
+          exit 0
+        fi
+
+        pr_number="$(jq -r '.pull_request.number // empty' "${GITHUB_EVENT_PATH}" 2>/dev/null || true)"
+        if [[ -z "$pr_number" ]]; then
+          fail_open "fail-open: missing pull request number"
+          exit 0
+        fi
+
+        files_tmp="$(mktemp)"
+        for page in $(seq 1 30); do
+          response_tmp="$(mktemp)"
+          status="$({ curl --silent --show-error --location \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --output "$response_tmp" \
+            --write-out "%{http_code}" \
+            "${GITHUB_API_URL:-https://api.github.com}/repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files?per_page=100&page=${page}"; } || true)"
+
+          if [[ "$status" != "200" ]]; then
+            fail_open "fail-open: pull request files API returned HTTP ${status}" "$(cat "$files_tmp" 2>/dev/null || true)"
+            exit 0
+          fi
+
+          count="$(jq 'length' "$response_tmp" 2>/dev/null || echo "")"
+          if [[ ! "$count" =~ ^[0-9]+$ ]]; then
+            fail_open "fail-open: could not parse pull request files API response" "$(cat "$files_tmp" 2>/dev/null || true)"
+            exit 0
+          fi
+
+          jq -r '.[].filename' "$response_tmp" >> "$files_tmp"
+
+          if [[ "$count" -lt 100 ]]; then
+            break
+          fi
+
+          if [[ "$page" -eq 30 ]]; then
+            fail_open "fail-open: pull request has too many changed files to classify safely" "$(cat "$files_tmp" 2>/dev/null || true)"
+            exit 0
+          fi
+        done
+
+        changed_files="$(sort -u "$files_tmp")"
+        if [[ -z "$changed_files" ]]; then
+          fail_open "fail-open: no changed files returned by pull request files API"
+          exit 0
+        fi
+
+        run_sdk_ci=false
+        run_browser_ci=false
+        run_node_ci=false
+        run_rrweb_ci=false
+        run_lint_ci=false
+        run_playground_lint=false
+        run_package_ci=false
+        run_references_ci=false
+        run_typescript_ci=false
+        reason="classified"
+
+        while IFS= read -r file; do
+          [[ -z "$file" ]] && continue
+
+          case "$file" in
+            .github/actions/*|.github/workflows/library-ci.yml|.github/workflows/integration.yml|.github/workflows/es-check.yml|.github/workflows/minimum-version-ts-check.yaml|.github/workflows/testcafe.yml|.github/workflows/bundled-size.yaml)
+              mark_all
+              reason="fail-open: main CI workflow/action changed"
+              break
+              ;;
+            .github/workflows/release.yml|.github/workflows/posthog-upgrade.yml|.changeset/*.md|docs/*|docs/**/*|*.md|**/*.md|packages/*/CHANGELOG.md|packages/*/references/*|packages/*/references/**/*)
+              ;;
+            package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|.npmrc|.nvmrc|tsconfig*.json|.eslintrc*|eslint.config.*|.prettierrc*|jest*|jest.*|babel*|babel.*|rollup*|rollup.*|vite*|vite.*|rslib*|rslib.*|playwright*|playwright.*|testcafe*|testcafe.*)
+              mark_all
+              ;;
+            packages/core/*|packages/core/**/*)
+              mark_browser
+              mark_node
+              ;;
+            packages/browser/*|packages/browser/**/*)
+              mark_browser
+              ;;
+            packages/node/*|packages/node/**/*)
+              mark_node
+              ;;
+            packages/rrweb/*|packages/rrweb/**/*)
+              run_sdk_ci=true
+              run_rrweb_ci=true
+              run_lint_ci=true
+              run_package_ci=true
+              run_typescript_ci=true
+              ;;
+            packages/types/*|packages/types/**/*)
+              mark_package
+              run_browser_ci=true
+              run_node_ci=true
+              ;;
+            packages/*|packages/**/*)
+              mark_package
+              ;;
+            tooling/*|tooling/**/*|scripts/*|scripts/**/*|compliance/*|compliance/**/*)
+              mark_all
+              ;;
+            examples/*|examples/**/*)
+              run_lint_ci=true
+              run_package_ci=true
+              ;;
+            playground/*|playground/**/*)
+              run_playground_lint=true
+              ;;
+            .github/workflows/*)
+              mark_all
+              reason="fail-open: unclassified workflow changed"
+              break
+              ;;
+            *)
+              mark_all
+              reason="fail-open: unclassified path changed (${file})"
+              break
+              ;;
+          esac
+        done <<< "$changed_files"
+
+        emit "$reason" "$changed_files" "$run_sdk_ci" "$run_browser_ci" "$run_node_ci" "$run_rrweb_ci" "$run_lint_ci" "$run_playground_lint" "$run_package_ci" "$run_references_ci" "$run_typescript_ci"
