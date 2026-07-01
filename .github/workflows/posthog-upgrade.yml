@@ -178,5 +178,5 @@ jobs:
                   payload: |
                       {
                         "channel": "${{ vars.SLACK_ALERTS_POSTHOG_JS_CHANNEL_ID || 'C07HTMN9X47' }}",
-                        "text": ":warning: Could not open the PostHog upgrade PR for `${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}` — the release itself succeeded. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>"
+                        "text": ":warning: The PostHog/posthog upgrade for `${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}` failed — the release itself succeeded. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>"
                       }
