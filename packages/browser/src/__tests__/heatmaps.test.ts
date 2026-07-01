@@ -113,6 +113,22 @@ describe('heatmaps', () => {
         expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
     })
 
+    it('does not crash when getComputedStyle throws for a cross-realm element', async () => {
+        jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+            throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
+        })
+
+        const el = document.createElement('div')
+        document.body.appendChild(el)
+
+        expect(() => posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: el }))).not.toThrow()
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/'][0].target_fixed).toBe(false)
+    })
+
     it('should handle empty mouse moves', async () => {
         posthog.heatmaps?.['_onMouseMove']?.(new Event('mousemove'))
 

@@ -324,10 +324,12 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
         if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
         } else {
-            const compStyles = window.getComputedStyle(parentNode)
-            if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
-                parentIsUsefulElement = true
-            }
+            try {
+                const compStyles = window.getComputedStyle(parentNode)
+                if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
+                    parentIsUsefulElement = true
+                }
+            } catch {}
         }
 
         targetElementList.push(parentNode)
@@ -409,10 +411,12 @@ export function shouldCaptureDomEvent(
         return false
     }
 
-    const compStyles = window.getComputedStyle(el)
-    if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer' && event.type === 'click') {
-        return true
-    }
+    try {
+        const compStyles = window.getComputedStyle(el)
+        if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer' && event.type === 'click') {
+            return true
+        }
+    } catch {}
 
     const tag = el.tagName.toLowerCase()
     switch (tag) {
