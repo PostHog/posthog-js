@@ -170,20 +170,13 @@ jobs:
 
             - name: Notify Slack that the upgrade PR failed
               if: ${{ failure() }}
-              env:
-                  SLACK_BOT_TOKEN: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  # #alerts-posthog-js; override with a repo var when one exists.
-                  SLACK_CHANNEL_ID: ${{ vars.SLACK_ALERTS_POSTHOG_JS_CHANNEL_ID || 'C07HTMN9X47' }}
-                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
-                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
-                  RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-              run: |
-                  text=":warning: Could not open the PostHog upgrade PR for \`${PACKAGE_NAME}@${PACKAGE_VERSION}\` — the release itself succeeded. <${RUN_URL}|View workflow run>"
-                  response=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
-                    -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
-                    -H 'Content-type: application/json; charset=utf-8' \
-                    -d "$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$text" '{channel: $channel, text: $text}')")
-                  if [ "$(echo "$response" | jq -r '.ok')" != "true" ]; then
-                      echo "Slack notification failed: $response"
-                      exit 1
-                  fi
+              # #alerts-posthog-js; override with a repo var when one exists.
+              uses: slackapi/slack-github-action@af78098f536edbc4de71162a307590698245be95 # v3.0.1
+              with:
+                  method: chat.postMessage
+                  token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  payload: |
+                      {
+                        "channel": "${{ vars.SLACK_ALERTS_POSTHOG_JS_CHANNEL_ID || 'C07HTMN9X47' }}",
+                        "text": ":warning: Could not open the PostHog upgrade PR for `${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}` — the release itself succeeded. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>"
+                      }
