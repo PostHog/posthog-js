@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4051](https://github.com/PostHog/posthog-js/issues/4051) | Valid feature tracking issue; keep open and labeled for feature flags. | enhancement, feature/flags, team/feature-flags |  | no | 2026-07-01T20:57:56.770Z |
 | PostHog/posthog-js | [issue 4046](https://github.com/PostHog/posthog-js/issues/4046) | Valid feature request; current code confirms the Convex flag refresh loop is not gated before scheduling. | enhancement, feature, feature/flags, team/feature-flags |  | no | 2026-07-01T13:38:03.572Z |
 | PostHog/posthog-js | [issue 3595](https://github.com/PostHog/posthog-js/issues/3595) | Valid feature request; current SDK typings do not provide project-specific feature flag key/variant safety. | enhancement, feature/flags, team/feature-flags, node, web |  | no | 2026-07-01T09:36:48.807Z |
 | PostHog/posthog-js | [issue 2623](https://github.com/PostHog/posthog-js/issues/2623) | Valid feature flag persistence bug with a plausible SDK-side race around identify-triggered flag reloads. | feature/flags, team/feature-flags, web |  | no | 2026-07-01T09:35:43.950Z |
