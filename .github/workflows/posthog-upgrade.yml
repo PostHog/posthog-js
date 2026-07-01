@@ -16,7 +16,6 @@ on:
 
 permissions:
     contents: read
-    actions: read
 
 jobs:
     posthog-upgrade:
@@ -144,27 +143,6 @@ jobs:
               run: |
                   gh pr edit "$PR_NUMBER" --repo PostHog/posthog --add-reviewer PostHog/client-libraries-approvers --add-reviewer PostHog/team-client-libraries
 
-            - name: Resolve release failure metadata
-              id: release-failure-metadata
-              if: ${{ failure() }}
-              env:
-                  GH_TOKEN: ${{ github.token }}
-                  JOB_NAME: Upgrade PostHog Package
-              run: |
-                  set -euo pipefail
-
-                  job_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                  if jobs_json=$(gh api "/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs?per_page=100" 2>/dev/null); then
-                      resolved_job_url=$(jq -r --arg name "$JOB_NAME" '.jobs[] | select(.name == $name) | .html_url' <<< "$jobs_json" | head -n 1)
-                      if [ -n "$resolved_job_url" ]; then
-                          job_url="$resolved_job_url"
-                      fi
-                  fi
-
-                  {
-                      echo "job_url=$job_url"
-                  } >> "$GITHUB_OUTPUT"
-
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Send failure event to PostHog
               if: ${{ failure() }}
@@ -180,5 +158,5 @@ jobs:
                         "repository": "Posthog/posthog",
                         "packageName": "${{ github.event.inputs.package_name }}",
                         "packageVersion": "${{ github.event.inputs.package_version }}",
-                        "actionUrl": "${{ steps.release-failure-metadata.outputs.job_url }}"
+                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                       }
