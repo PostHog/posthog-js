@@ -810,6 +810,42 @@ describe('posthog-surveys', () => {
                     [SURVEYS_LOADED_AT]: expect.any(Number),
                 })
             })
+
+            it('does not start a second background refresh while one is already in flight', () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                mockPostHog.get_property.mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                // Leave the refresh in flight: never invoke the request callback.
+                mockPostHog._send_request.mockImplementation(() => {})
+
+                surveys.getSurveys(mockCallback)
+                surveys.getSurveys(mockCallback)
+
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+            })
+
+            it('backs off further background refreshes after a failed refresh', () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                mockPostHog.get_property.mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    callback({ statusCode: 500, json: undefined })
+                })
+
+                surveys.getSurveys(mockCallback)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+
+                // A later stale poll within the back-off window must not re-hit the endpoint,
+                // otherwise a surveys-API outage becomes a per-poll request storm.
+                surveys.getSurveys(mockCallback)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+            })
         })
 
         describe('markSurveyAsSeen', () => {

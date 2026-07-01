@@ -251,6 +251,27 @@ describe('SurveyModal close behavior', () => {
     }
   })
 
+  it('does not notify the parent when unmounted before the close timer fires', () => {
+    // Once the close timer is scheduled, clearing it on unmount stops it from calling onClose
+    // against an already-torn-down parent (which would trigger a React update-on-unmounted warning).
+    const { getByTestId, onClose, unmount } = renderSurveyModal()
+
+    clickCancel(getByTestId)
+    // Let the requestAnimationFrame run so the fallback timer is scheduled, but keep the fade
+    // duration (250ms) from elapsing so the timer is still pending at unmount.
+    act(() => {
+      jest.advanceTimersByTime(50)
+    })
+    expect(onClose).not.toHaveBeenCalled()
+
+    unmount()
+    act(() => {
+      jest.runAllTimers()
+    })
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('notifies the parent only once even if close is pressed multiple times', () => {
     const { getByTestId, onClose } = renderSurveyModal()
 

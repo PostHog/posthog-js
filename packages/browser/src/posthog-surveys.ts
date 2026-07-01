@@ -42,6 +42,9 @@ export class PostHogSurveys implements Extension {
         surveys: Survey[]
         context: { isLoaded: boolean; error?: string }
     }> | null = null
+    // Backs off the stale-cache refresh for one TTL after a failure, so a surveys-API outage can't
+    // turn the ~1s display poll into a per-poll request storm.
+    private _lastSurveyRefreshFailedAt: number | null = null
 
     private get _config() {
         return this._instance.config
@@ -231,7 +234,7 @@ export class PostHogSurveys implements Extension {
             // If the cache has aged past its TTL, kick off a background refresh so server-side
             // changes (e.g. a survey switched from popover to API) reach a long-lived tab. The
             // next poll then evaluates the refreshed definitions.
-            if (this._isSurveyCacheStale() && !this._getSurveysInFlightPromise) {
+            if (this._isSurveyCacheStale() && !this._getSurveysInFlightPromise && !this._isSurveyRefreshBackingOff()) {
                 this.getSurveys(() => {}, true)
             }
             return
@@ -265,11 +268,13 @@ export class PostHogSurveys implements Extension {
                 if (statusCode !== 200 || !response.json) {
                     const error = `Surveys API could not be loaded, status: ${statusCode}`
                     logger.error(error)
+                    this._lastSurveyRefreshFailedAt = Date.now()
                     const context = { isLoaded: false, error }
                     callback([], context)
                     resolvePromise?.({ surveys: [], context })
                     return
                 }
+                this._lastSurveyRefreshFailedAt = null
                 const surveys = response.json.surveys || []
 
                 const eventOrActionBasedSurveys = surveys.filter(
@@ -300,6 +305,13 @@ export class PostHogSurveys implements Extension {
     private _isSurveyCacheStale(): boolean {
         const surveysLoadedAt = this._instance.get_property(SURVEYS_LOADED_AT)
         return isNumber(surveysLoadedAt) && Date.now() - surveysLoadedAt > SURVEYS_CACHE_TTL_MS
+    }
+
+    private _isSurveyRefreshBackingOff(): boolean {
+        return (
+            isNumber(this._lastSurveyRefreshFailedAt) &&
+            Date.now() - this._lastSurveyRefreshFailedAt < SURVEYS_CACHE_TTL_MS
+        )
     }
 
     /**
