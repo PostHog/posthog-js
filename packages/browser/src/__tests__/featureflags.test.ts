@@ -1292,6 +1292,33 @@ describe('featureflags', () => {
 
             expect(called).toEqual(false)
         })
+
+        it('should isolate a throwing callback so later callbacks still fire', () => {
+            // The logged error is expected here, so swallow it rather than letting the
+            // test setup's console.error guard throw.
+            // eslint-disable-next-line no-console
+            console.error = jest.fn()
+
+            featureFlags._hasLoadedFlags = true
+
+            const throwingCallback = jest.fn(() => {
+                throw new Error('user callback blew up')
+            })
+            const laterCallback = jest.fn()
+
+            featureFlags.onFeatureFlags(throwingCallback)
+            featureFlags.onFeatureFlags(laterCallback)
+
+            // Both are called immediately since flags are already loaded, so reset before re-firing.
+            throwingCallback.mockClear()
+            laterCallback.mockClear()
+
+            expect(() => featureFlags._fireFeatureFlagsCallbacks()).not.toThrow()
+
+            expect(throwingCallback).toHaveBeenCalledTimes(1)
+            // The later callback still fires even though the earlier one threw.
+            expect(laterCallback).toHaveBeenCalledTimes(1)
+        })
     })
 
     describe('featureFlagsReloading event', () => {
