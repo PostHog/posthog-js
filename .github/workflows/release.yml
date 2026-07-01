@@ -143,6 +143,31 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_VERSION: ${{ steps.get-version.outputs.version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_version="$PACKAGE_VERSION"
+                  if [ -z "$package_version" ] && [ -f packages/browser/package.json ] && [ -n "$(git status --porcelain -- packages/browser/package.json)" ]; then
+                      package_version=$(jq -r '.version // empty' packages/browser/package.json)
+                  fi
+
+                  package_ref="posthog-js"
+                  if [ -n "$package_version" ]; then
+                      package_ref="posthog-js@v$package_version"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$package_version"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
             - name: Send failure event to PostHog
               if: ${{ failure() }}
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
@@ -155,7 +180,9 @@ jobs:
                         "jobStatus": "${{ job.status }}",
                         "ref": "${{ github.ref }}",
                         "jobName": "version-bump",
-                        "packageName": "posthog-js"
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}"
                       }
 
             - name: Notify Slack - Failed
@@ -165,7 +192,7 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to bump versions for `posthog-js`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to bump versions for `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
     notify-rejected:
@@ -334,6 +361,33 @@ jobs:
             ####################################################
             # Notify ourselves in case of a failure here
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+                  PACKAGE_PATH: ${{ steps.get-package-path.outputs.path }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_version="$PACKAGE_VERSION"
+                  if [ -z "$package_version" ] && [ -n "$PACKAGE_PATH" ] && [ -f "$PACKAGE_PATH/package.json" ]; then
+                      package_version=$(jq -r '.version // empty' "$PACKAGE_PATH/package.json")
+                  fi
+
+                  package_ref="$PACKAGE_NAME"
+                  if [ -n "$package_version" ]; then
+                      package_ref="$PACKAGE_NAME@v$package_version"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$package_version"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
             - name: Send failure event to PostHog
               if: ${{ failure() }}
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
@@ -345,8 +399,10 @@ jobs:
                         "commitSha": "${{ github.sha }}",
                         "jobStatus": "${{ job.status }}",
                         "ref": "${{ github.ref }}",
+                        "jobName": "publish",
                         "packageName": "${{ matrix.package.name }}",
-                        "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}"
                       }
 
             - name: Notify Slack - Failed
@@ -357,7 +413,7 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to release `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
     build-s3-artifacts:
@@ -628,6 +684,26 @@ jobs:
                   VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
               run: node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION"
 
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_ref="posthog-js"
+                  if [ -n "$PACKAGE_VERSION" ]; then
+                      package_ref="posthog-js@v$PACKAGE_VERSION"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$PACKAGE_VERSION"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
             - name: Send failure event to PostHog
               if: ${{ failure() }}
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
@@ -641,7 +717,8 @@ jobs:
                         "ref": "${{ github.ref }}",
                         "jobName": "upload-s3",
                         "packageName": "posthog-js",
-                        "packageVersion": "${{ needs.build-s3-artifacts.outputs.committed-version }}",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
                         "region": "${{ matrix.region.name }}",
                         "bucket": "${{ matrix.region.bucket }}"
                       }
@@ -654,7 +731,7 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to upload posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist to ${{ matrix.region.bucket }}! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to upload ${{ steps.release-failure-metadata.outputs.package_ref }} dist to ${{ matrix.region.bucket }}! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
     notify-released:
@@ -697,6 +774,24 @@ jobs:
             needs.upload-s3.result == 'failure' &&
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
+            - name: Resolve partial release metadata
+              id: partial-release-metadata
+              env:
+                  PACKAGE_VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_ref="posthog-js"
+                  if [ -n "$PACKAGE_VERSION" ]; then
+                      package_ref="posthog-js@v$PACKAGE_VERSION"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
             - name: Notify Slack - Partial Release
               continue-on-error: true # Slack failure shouldn't mark release as failed
               uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
@@ -704,5 +799,5 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '⚠️ npm packages released, but S3 publish failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} immutable assets and/or major-version or top-level aliases need attention. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '⚠️ npm packages released, but S3 publish failed — ${{ steps.partial-release-metadata.outputs.package_ref }} immutable assets and/or major-version or top-level aliases need attention. <${{ steps.partial-release-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'warning'

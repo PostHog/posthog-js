@@ -42,7 +42,7 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y ripgrep
 
             - name: Sweep issues
-              uses: PostHog/posthog-watcher-action@321404b6b373c2efffce607996f7f501c65ed182
+              uses: PostHog/posthog-watcher-action@92f333b9e509f45fb03cbc27dc788e6d9fa5290f
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: sweep
