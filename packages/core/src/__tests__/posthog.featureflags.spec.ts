@@ -900,9 +900,13 @@ describe('PostHog Feature Flags v4', () => {
         })
       })
 
-      it('should let caller-supplied feature flag properties override cached values', async () => {
+      it.each([
+        ['a string variant', 'server-value'],
+        ['boolean false (client-side disable)', false],
+        ['null', null],
+      ])('lets a caller-supplied $feature/* value (%s) override the cached value', async (_case, overrideValue) => {
         posthog.capture('test-event', {
-          '$feature/feature-1': 'server-value',
+          '$feature/feature-1': overrideValue,
           $active_feature_flags: ['server-flag'],
         })
 
@@ -913,7 +917,7 @@ describe('PostHog Feature Flags v4', () => {
             {
               event: 'test-event',
               properties: {
-                '$feature/feature-1': 'server-value',
+                '$feature/feature-1': overrideValue,
                 $active_feature_flags: ['server-flag'],
                 '$feature/feature-2': true,
               },
