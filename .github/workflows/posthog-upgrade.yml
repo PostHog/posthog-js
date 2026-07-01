@@ -157,5 +157,6 @@ jobs:
                         "ref": "${{ github.ref }}",
                         "repository": "Posthog/posthog",
                         "packageName": "${{ github.event.inputs.package_name }}",
-                        "packageVersion": "${{ github.event.inputs.package_version }}"
+                        "packageVersion": "${{ github.event.inputs.package_version }}",
+                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                       }
