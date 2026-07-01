@@ -81,8 +81,10 @@ export function getSubmitFeedbackDescriptor(name: string = SUBMIT_FEEDBACK_NAME)
       readOnlyHint: true,
       // Interacts with external entities because we store this in analytics.
       openWorldHint: true,
-      // Not truly idempotent, but marking it so keeps agents willing to call it proactively.
-      idempotentHint: true,
+      // Each call records a distinct `$mcp_feedback` event, so it is NOT idempotent —
+      // a client that retried a timed-out call on this hint would duplicate the event.
+      // `readOnlyHint` already signals it's safe to call proactively.
+      idempotentHint: false,
       // Never deletes any data from the MCP server.
       destructiveHint: false,
     },

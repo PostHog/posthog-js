@@ -25,23 +25,23 @@ describe('collectFeedback (submit_feedback virtual tool)', () => {
   })
 
   describe('tools/list injection', () => {
-    it('adds submit_feedback with its structured schema when collectFeedback is true', async () => {
-      instrument(server, fakePostHog(), { collectFeedback: true })
+    it.each([
+      [true, true],
+      [false, false],
+    ])('advertises submit_feedback (with its schema) iff collectFeedback is %s', async (enabled, shouldBePresent) => {
+      instrument(server, fakePostHog(), { collectFeedback: enabled })
 
       const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       const tool = tools.find((t: any) => t.name === SUBMIT_FEEDBACK)
 
-      expect(tool).toBeDefined()
-      expect(tool.description).toContain('feedback')
-      expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['feedback_type', 'sentiment', 'summary']))
-      expect(tool.inputSchema.properties.sentiment.enum).toContain('negative')
-    })
-
-    it('omits submit_feedback when collectFeedback is false', async () => {
-      instrument(server, fakePostHog(), { collectFeedback: false })
-
-      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
-      expect(tools.find((t: any) => t.name === SUBMIT_FEEDBACK)).toBeUndefined()
+      if (shouldBePresent) {
+        expect(tool).toBeDefined()
+        expect(tool.description).toContain('feedback')
+        expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['feedback_type', 'sentiment', 'summary']))
+        expect(tool.inputSchema.properties.sentiment.enum).toContain('negative')
+      } else {
+        expect(tool).toBeUndefined()
+      }
     })
 
     it('does not inject the analytics context param into submit_feedback', async () => {
