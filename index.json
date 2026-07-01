@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/2335": {
+    "key": "PostHog/posthog-js/issue/2335",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2335",
+    "url": "https://github.com/PostHog/posthog-js/issues/2335",
+    "conclusion": "Valid feature request; current Node local-evaluation cache does not cover remote config payloads.",
+    "labels": [
+      "enhancement",
+      "feature/flags",
+      "team/feature-flags",
+      "node"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-01T09:33:45.419Z"
+  },
   "PostHog/posthog-js/issue/2342": {
     "key": "PostHog/posthog-js/issue/2342",
     "repo": "PostHog/posthog-js",
