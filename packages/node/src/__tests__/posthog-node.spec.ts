@@ -1,4 +1,5 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import ErrorTracking from '@/extensions/error-tracking'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
 import { UUID_REGEX } from '@posthog/core'
@@ -113,6 +114,35 @@ describe('PostHog Node.js', () => {
           timestamp: expect.any(String),
         },
       ])
+    })
+
+    it('flush waits for pending captureException async work before flushing', async () => {
+      mockedFetch.mockClear()
+      const originalBuildEventMessage = ErrorTracking.buildEventMessage
+      const buildEventMessageSpy = jest
+        .spyOn(ErrorTracking, 'buildEventMessage')
+        .mockImplementation(async (...args) => {
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          return originalBuildEventMessage(...args)
+        })
+
+      try {
+        posthog.captureException(new Error('boom'), 'user-1')
+        const flushPromise = posthog.flush()
+        expect(mockedFetch).not.toHaveBeenCalled()
+
+        jest.advanceTimersByTime(10)
+        await flushPromise
+
+        const batchEvents = getLastBatchEvents()
+        expect(batchEvents).toHaveLength(1)
+        expect(batchEvents?.[0]).toMatchObject({
+          distinct_id: 'user-1',
+          event: '$exception',
+        })
+      } finally {
+        buildEventMessageSpy.mockRestore()
+      }
     })
 
     it('safely flushes circular event properties', async () => {
@@ -999,9 +1029,9 @@ describe('PostHog Node.js', () => {
       }
 
       await ph.shutdown()
-      // all capture calls happen during shutdown
+      // flush waits for all pending capture preparation before sending the batch
       const batchEvents = getLastBatchEvents()
-      expect(batchEvents?.length).toEqual(6)
+      expect(batchEvents?.length).toEqual(10)
       expect(batchEvents?.[batchEvents?.length - 1]).toMatchObject({
         // last event in batch
         distinct_id: '9',
@@ -1014,8 +1044,8 @@ describe('PostHog Node.js', () => {
         timestamp: expect.any(String),
       })
       expect(10).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('capture')).length)
-      // 1 for the captured events, 1 for the final flush of feature flag called events
-      expect(2).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('flush')).length)
+      // all pending capture preparation is joined before the first flush, so one batch sends all events
+      expect(1).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('flush')).length)
     })
   })
 
