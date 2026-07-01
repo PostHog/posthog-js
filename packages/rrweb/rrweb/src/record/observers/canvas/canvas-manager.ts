@@ -182,8 +182,27 @@ export class CanvasManager {
       true,
     );
     const snapshotInProgressMap: Map<number, boolean> = new Map();
-    const worker =
-      new ImageBitmapDataURLWorker() as ImageBitmapDataURLRequestWorker;
+
+    // The inline worker is materialized by the bundler as a `blob:` object URL and loaded via
+    // `importScripts(blobURL)` inside the worker. A strict page CSP (worker-src/script-src blob:),
+    // an ad blocker, or a transient network hiccup can make that load fail — synchronously as a
+    // thrown error here, or asynchronously as a worker error event. Either way, quietly disable
+    // canvas snapshotting instead of letting an uncaught NetworkError escape and pollute error
+    // tracking; the rest of session replay keeps working.
+    let worker: ImageBitmapDataURLRequestWorker;
+    try {
+      worker = new ImageBitmapDataURLWorker() as ImageBitmapDataURLRequestWorker;
+    } catch {
+      return;
+    }
+
+    let workerErrored = false;
+    worker.onerror = () => {
+      workerErrored = true;
+      // stop the capture loop; nothing can be encoded without the worker.
+      cancelAnimationFrame(rafId);
+      worker.terminate?.();
+    };
     worker.onmessage = (e) => {
       const { id } = e.data;
       snapshotInProgressMap.set(id, false);
@@ -256,6 +275,10 @@ export class CanvasManager {
     };
 
     const takeCanvasSnapshots = (timestamp: DOMHighResTimeStamp) => {
+      // the worker failed to load (e.g. CSP blocked the blob script); stop capturing.
+      if (workerErrored) {
+        return;
+      }
       if (lastSnapshotTime && timestamp - lastSnapshotTime < timeBetweenSnapshots) {
         rafId = requestAnimationFrame(takeCanvasSnapshots);
         return;
