@@ -34,7 +34,12 @@ import {
   updateFlagValue,
 } from './featureFlagUtils'
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
-import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
+import {
+  applyCallerFeatureFlagOverrides,
+  maybeAdd,
+  PostHogCoreStateless,
+  QuotaLimitedFeature,
+} from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
 import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString, getEventUuid } from './utils'
 import { EventHint } from './error-tracking'
@@ -220,13 +225,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   private enrichProperties(properties?: PostHogEventProperties): PostHogEventProperties {
-    return {
+    const userProperties = properties || {}
+    const enriched: PostHogEventProperties = {
       ...this.props, // Persisted properties first
       ...this.sessionProps, // Followed by session properties
-      ...(properties || {}), // Followed by user specified properties
+      ...userProperties, // Followed by user specified properties
       ...this.getCommonEventProperties(), // Followed by FF props
       $session_id: this.getSessionId(),
     }
+    applyCallerFeatureFlagOverrides(enriched, userProperties)
+    return enriched
   }
 
   /**
