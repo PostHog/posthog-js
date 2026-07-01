@@ -1,5 +1,12 @@
 # rrweb
 
+## 0.0.75
+
+### Patch Changes
+
+- [#4033](https://github.com/PostHog/posthog-js/pull/4033) [`e803b8f`](https://github.com/PostHog/posthog-js/commit/e803b8f253a0498da4469657203813102b3d3e8f) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay: guard the canvas recording inline worker against blob-script load failures. When a strict page CSP (worker-src / script-src blob:), an ad blocker, or a network hiccup prevents the inline worker from loading, canvas snapshotting now disables itself quietly instead of surfacing an uncaught NetworkError. The rest of session replay keeps working.
+  (2026-07-01)
+
 ## 0.0.74
 
 ### Patch Changes

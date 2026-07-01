@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.396.4
+
+### Patch Changes
+
+- [#4035](https://github.com/PostHog/posthog-js/pull/4035) [`18e543b`](https://github.com/PostHog/posthog-js/commit/18e543b301705048b2eef0d864088541a09a3150) Thanks [@posthog](https://github.com/apps/posthog)! - fix(web): isolate `onFeatureFlags` callbacks so a throwing user handler no longer breaks the remaining callback chain or gets misattributed as an SDK error
+  (2026-07-01)
+
+- [#4039](https://github.com/PostHog/posthog-js/pull/4039) [`15bcb42`](https://github.com/PostHog/posthog-js/commit/15bcb42e3fa97bfec8de87a4118ee870b960d41f) Thanks [@github-actions](https://github.com/apps/github-actions)! - fix(replay): measure `$snapshot_bytes` as UTF-8 byte length instead of UTF-16 string length, so non-ASCII session replay payloads are counted accurately against the message size limit
+  (2026-07-01)
+
 ## 1.396.3
 
 ### Patch Changes

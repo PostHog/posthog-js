@@ -1,6 +1,6 @@
 {
   "name": "@posthog/rrweb-plugin-canvas-webrtc-record",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "",
   "type": "module",
   "main": "./dist/rrweb-plugin-canvas-webrtc-record.umd.cjs",
