@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/3595": {
+    "key": "PostHog/posthog-js/issue/3595",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3595",
+    "url": "https://github.com/PostHog/posthog-js/issues/3595",
+    "conclusion": "Valid feature request; current SDK typings do not provide project-specific feature flag key/variant safety.",
+    "labels": [
+      "enhancement",
+      "feature/flags",
+      "team/feature-flags",
+      "node",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-01T09:36:48.807Z"
+  },
   "PostHog/posthog-js/issue/2623": {
     "key": "PostHog/posthog-js/issue/2623",
     "repo": "PostHog/posthog-js",
