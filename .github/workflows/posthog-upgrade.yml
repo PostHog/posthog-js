@@ -153,8 +153,7 @@ jobs:
               run: |
                   set -euo pipefail
 
-                  run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                  job_url="$run_url"
+                  job_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                   if jobs_json=$(gh api "/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs?per_page=100" 2>/dev/null); then
                       resolved_job_url=$(jq -r --arg name "$JOB_NAME" '.jobs[] | select(.name == $name) | .html_url' <<< "$jobs_json" | head -n 1)
                       if [ -n "$resolved_job_url" ]; then
@@ -163,7 +162,6 @@ jobs:
                   fi
 
                   {
-                      echo "run_url=$run_url"
                       echo "job_url=$job_url"
                   } >> "$GITHUB_OUTPUT"
 
@@ -182,7 +180,6 @@ jobs:
                         "repository": "Posthog/posthog",
                         "packageName": "${{ github.event.inputs.package_name }}",
                         "packageVersion": "${{ github.event.inputs.package_version }}",
-                        "workflowRunUrl": "${{ steps.release-failure-metadata.outputs.run_url }}",
                         "workflowJobUrl": "${{ steps.release-failure-metadata.outputs.job_url }}",
                         "actionUrl": "${{ steps.release-failure-metadata.outputs.job_url }}"
                       }
