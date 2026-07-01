@@ -1,10 +1,6 @@
 name: TestCafe
 on: [pull_request]
 env:
-  BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
-  BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
-  POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
-  POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
   BROWSERSTACK_DEBUG: "true"
   BROWSERSTACK_NETWORK_LOGS: "true"
   BROWSERSTACK_CONSOLE: "info"
@@ -20,6 +16,11 @@ jobs:
   browsers:
     name: Test on ${{ matrix.name }}
     runs-on: ubuntu-22.04
+    env:
+      BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
+      BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
+      POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
+      POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
 
     strategy:
       matrix:
