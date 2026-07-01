@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2623](https://github.com/PostHog/posthog-js/issues/2623) | Valid feature flag persistence bug with a plausible SDK-side race around identify-triggered flag reloads. | feature/flags, team/feature-flags, web |  | no | 2026-07-01T09:35:43.950Z |
 | PostHog/posthog-js | [issue 2335](https://github.com/PostHog/posthog-js/issues/2335) | Valid feature request; current Node local-evaluation cache does not cover remote config payloads. | enhancement, feature/flags, team/feature-flags, node |  | no | 2026-07-01T09:33:45.419Z |
 | PostHog/posthog-js | [issue 2342](https://github.com/PostHog/posthog-js/issues/2342) | Needs maintainer guidance/repro; current SDK has no awaitable init and will log repeated request failures for invalid tokens/config. | feature/flags, team/feature-flags, web |  | no | 2026-06-30T09:40:57.877Z |
 | PostHog/posthog-js | [issue 859](https://github.com/PostHog/posthog-js/issues/859) | Valid bug; bootstrapped false feature flag values are currently filtered out before they can be read. | feature/flags, team/feature-flags |  | no | 2026-06-30T09:38:39.365Z |
