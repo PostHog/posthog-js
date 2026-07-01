@@ -170,7 +170,7 @@ async function fetchBrowserStack(fetch, url, options = {}, firstAttempt = 1) {
             return wrapResponseBodyReaders(fetch, url, options, response, attempt)
         } catch (error) {
             if (!isRetryableError(error) || attempt >= maxAttempts) {
-                throw addBrowserStackContext(error, url, options, maxAttempts)
+                throw addBrowserStackContext(error, url, options, attempt)
             }
 
             await sleep(logRetry(url, options, attempt, maxAttempts, error.message || error))
@@ -193,7 +193,7 @@ function wrapResponseBodyReaders(fetch, url, options, response, attemptsUsed) {
                 payload = await original()
             } catch (error) {
                 if (!isRetryableError(error) || attemptsUsed >= getMaxAttempts()) {
-                    throw addBrowserStackContext(error, url, options, getMaxAttempts())
+                    throw addBrowserStackContext(error, url, options, attemptsUsed)
                 }
 
                 await sleep(logRetry(url, options, attemptsUsed, getMaxAttempts(), error.message || error))
@@ -208,7 +208,7 @@ function wrapResponseBodyReaders(fetch, url, options, response, attemptsUsed) {
             }
 
             if (attemptsUsed >= getMaxAttempts()) {
-                throw addBrowserStackContext(payloadError, url, options, getMaxAttempts())
+                throw addBrowserStackContext(payloadError, url, options, attemptsUsed)
             }
 
             await sleep(logRetry(url, options, attemptsUsed, getMaxAttempts(), payloadError.message))
@@ -245,14 +245,16 @@ function patchNodeFetch(fetch) {
     return patchedFetch
 }
 
-Module._load = function patchedLoad(request, parent, isMain) {
-    const loadedModule = originalLoad.apply(this, arguments)
+if (process.env.JEST_WORKER_ID === undefined) {
+    Module._load = function patchedLoad(request, parent, isMain) {
+        const loadedModule = originalLoad.apply(this, arguments)
 
-    if (request === 'node-fetch') {
-        return patchNodeFetch(loadedModule)
+        if (request === 'node-fetch') {
+            return patchNodeFetch(loadedModule)
+        }
+
+        return loadedModule
     }
-
-    return loadedModule
 }
 
 module.exports = {
