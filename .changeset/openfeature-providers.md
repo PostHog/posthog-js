@@ -1,6 +1,6 @@
 ---
-'@posthog/openfeature-node': minor
-'@posthog/openfeature-web': minor
+'@posthog/openfeature-node-provider': minor
+'@posthog/openfeature-web-provider': minor
 ---
 
-Initial release of the official PostHog providers for the OpenFeature SDK: `@posthog/openfeature-node` (server, backed by `posthog-node`) and `@posthog/openfeature-web` (browser, backed by `posthog-js`).
+Initial release of the official PostHog providers for the OpenFeature SDK: `@posthog/openfeature-node-provider` (server, backed by `posthog-node`) and `@posthog/openfeature-web-provider` (browser, backed by `posthog-js`).

@@ -1,10 +1,10 @@
-# @posthog/openfeature-web
+# @posthog/openfeature-web-provider
 
 Official [PostHog](https://posthog.com) provider for the [OpenFeature](https://openfeature.dev) **web**
 SDK ([`@openfeature/web-sdk`](https://openfeature.dev/docs/reference/technologies/client/web)), backed by
 [`posthog-js`](https://posthog.com/docs/libraries/js).
 
-For the server, use [`@posthog/openfeature-node`](../openfeature-node).
+For the server, use [`@posthog/openfeature-node-provider`](../openfeature-node-provider).
 
 ## Documentation
 

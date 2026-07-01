@@ -1,5 +1,5 @@
 {
-  "name": "@posthog/openfeature-node",
+  "name": "@posthog/openfeature-node-provider",
   "version": "0.0.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
@@ -8,9 +8,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PostHog/posthog-js.git",
-    "directory": "packages/openfeature-node"
+    "directory": "packages/openfeature-node-provider"
   },
-  "homepage": "https://github.com/PostHog/posthog-js/tree/main/packages/openfeature-node#readme",
+  "homepage": "https://github.com/PostHog/posthog-js/tree/main/packages/openfeature-node-provider#readme",
   "author": {
     "name": "PostHog",
     "email": "engineering@posthog.com",
