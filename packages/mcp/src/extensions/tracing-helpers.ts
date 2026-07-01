@@ -2,7 +2,7 @@
 // Copyright (c) 2025 MCPcat
 // Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
 
-import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, McpEvent } from '../types'
+import type { CompatibleRequestHandlerExtra, JsonRecord, MCPAnalyticsData, MCPRequestLike, McpEvent } from '../types'
 import { resolveEventProperties } from './internal'
 
 /**
@@ -44,6 +44,17 @@ export async function applyResolvedMetadata(
 export function getContextArgument(request: MCPRequestLike): string | undefined {
   const context = request.params?.arguments?.context
   return typeof context === 'string' ? context : undefined
+}
+
+/**
+ * Reads the full arguments object off a tool-call request as a plain record.
+ * Used by virtual tools (e.g. `submit_feedback`) that consume their own
+ * structured arguments rather than the SDK-injected `context`. Returns an empty
+ * record when no arguments were supplied.
+ */
+export function getToolArguments(request: MCPRequestLike): JsonRecord {
+  const args = request.params?.arguments
+  return args && typeof args === 'object' ? (args as JsonRecord) : {}
 }
 
 /**

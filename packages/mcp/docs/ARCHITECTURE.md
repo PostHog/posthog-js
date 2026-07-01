@@ -27,7 +27,7 @@ The host application supplies its own `posthog-node` client as the positional `p
 2. Wrap the user-provided `posthog` client in an `McpEventSink`.
 3. Build per-server tracking state (session id, identity cache, callbacks, the sink) stored in a module-level `WeakMap`.
 4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `instrument()` is also wrapped.
-5. Optionally register the `get_more_tools` virtual tool when `options.reportMissing: true`.
+5. Optionally register the `get_more_tools` virtual tool when `options.reportMissing: true`, and the `submit_feedback` virtual tool when `options.collectFeedback: true`.
 
 Two thin adapters exist for the two MCP server shapes, each wrapping the shared `captureToolCall()` lifecycle in `src/extensions/instrumentation.ts`:
 
@@ -93,6 +93,7 @@ All events are emitted by `buildPostHogCaptureEvents`. The main event name is co
 | `$mcp_tools_list`      | Client lists tools                                            | `$mcp_listed_tool_names` (array of tool names advertised); useful for "did this client discover us?" and "which advertised tools never get called?"                              |
 | `$mcp_initialize`      | Client/server handshake                                       | `$mcp_client_name`, `$mcp_client_version`, `$mcp_server_name`, `$mcp_server_version`                                                                                            |
 | `$mcp_missing_capability` | Agent calls the `get_more_tools` virtual tool             | A capability gap, **not** a tool invocation. The `context` arg is captured as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`                                      |
+| `$mcp_feedback`           | Agent calls the `submit_feedback` virtual tool            | Structured feedback, **not** a tool invocation. The `submit_feedback` fields are spread as `$mcp_`-prefixed properties (`$mcp_feedback_type`, `$mcp_sentiment`, `$mcp_summary`, …). Requires `collectFeedback: true` |
 | `$mcp_resources_list`  | Client lists resources                                        | —                                                                                                                                                                               |
 | `$mcp_resource_read`   | Resource fetched                                              | `$mcp_resource_name`, `$mcp_parameters`, `$mcp_response`                                                                                                                        |
 | `$mcp_prompts_list`    | Client lists prompts                                          | —                                                                                                                                                                               |
@@ -128,6 +129,22 @@ All wire keys live in `PostHogMCPAnalyticsProperty` (`src/extensions/constants.t
 | `Parameters`     | `$mcp_parameters`         | object                                | Sanitized MCP request payload (see §3)                                                                                                                                                |
 | `Response`       | `$mcp_response`           | object                                | Sanitized tool result                                                                                                                                                                 |
 
+### Feedback properties (`$mcp_feedback` event only)
+
+Emitted only when `collectFeedback: true` and the agent calls the `submit_feedback` virtual tool. Each maps from a `submit_feedback` argument; `null`/absent fields are omitted.
+
+| Constant                       | Wire key                       | Type                                              | Source (`submit_feedback` arg) |
+| ------------------------------ | ------------------------------ | ------------------------------------------------- | ------------------------------ |
+| `FeedbackType`                 | `$mcp_feedback_type`           | `"product" \| "mcp" \| "docs" \| "other"`         | `feedback_type`                |
+| `FeedbackSentiment`            | `$mcp_sentiment`               | `"positive" \| "neutral" \| "negative" \| "mixed"`| `sentiment`                    |
+| `FeedbackSummary`              | `$mcp_summary`                 | string                                            | `summary`                      |
+| `FeedbackCategory`             | `$mcp_category`                | string                                            | `category`                     |
+| `FeedbackProductArea`          | `$mcp_product_area`            | string                                            | `product_area`                 |
+| `FeedbackFrictionPoints`       | `$mcp_friction_points`         | string                                            | `friction_points`              |
+| `FeedbackSuggestedImprovement` | `$mcp_suggested_improvement`   | string                                            | `suggested_improvement`        |
+| `FeedbackTaskCompleted`        | `$mcp_task_completed`          | boolean                                           | `task_completed`               |
+| `FeedbackDetails`              | `$mcp_details`                 | string                                            | `details`                      |
+
 ### Person & group properties
 
 | Key                        | On                                | Source                                                                                       |
@@ -154,6 +171,7 @@ The `posthog-node` client is **not** an option — it is the required positional
 | `enableExceptionAutocapture` | `true`                                    | When `false`, a failed tool call does not emit the sibling `$exception` event.                                                          |
 | `enableConversationId`       | `false`                                   | Inject the `conversation_id` parameter into every tool and stamp `$mcp_conversation_id` on events.                                      |
 | `reportMissing`              | `false`                                   | Register the `get_more_tools` virtual tool.                                                                                             |
+| `collectFeedback`            | `false`                                   | Register the `submit_feedback` virtual tool so agents can send structured feedback, captured as `$mcp_feedback`.                        |
 | `context`                    | `true` (object form: `{ description }`)   | Inject required `context` arg into every tool schema.                                                                                   |
 | `intentFallback`             | —                                         | Consumer-supplied callback returning a `$mcp_intent` string when the client didn't pass a `context` argument. SDK does no inference.    |
 | `identify`                   | —                                         | Per-request callback returning `{ distinctId, properties?, groups? } \| null` — posthog-node's `identify` shape. `properties` → `$set`, `groups` → `$groups`. |
@@ -358,6 +376,7 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | Session id derivation & timeout                  | `src/extensions/session.ts`, `src/extensions/ids.ts`             |
 | `conversation_id` injection + minting            | `src/extensions/conversation-id.ts`                           |
 | `get_more_tools` virtual tool                    | `src/extensions/tools.ts`                                     |
+| `submit_feedback` virtual tool                   | `src/extensions/feedback.ts`                                  |
 | Auto-redaction & binary stubbing                 | `src/extensions/sanitization.ts`, `src/extensions/mcp-payloads.ts` |
 | Size / depth / breadth caps                      | `src/extensions/truncation.ts`                                |
 | `context` JSON-Schema injection                  | `src/extensions/context-parameters.ts`                        |

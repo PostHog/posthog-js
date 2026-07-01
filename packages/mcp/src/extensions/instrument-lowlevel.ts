@@ -8,13 +8,14 @@ import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
+import { buildFeedbackEventProperties, handleSubmitFeedback, resolveFeedbackToolName } from './feedback'
 import {
   handleInitializeRequest,
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
 } from './instrumentation'
-import { getContextArgument } from './tracing-helpers'
+import { getContextArgument, getToolArguments } from './tracing-helpers'
 
 type MCPRequestHandler = NonNullable<
   MCPServerLike['_requestHandlers'] extends Map<string, infer THandler> ? THandler : never
@@ -71,6 +72,19 @@ async function handleToolCallRequest(
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
       execute: async () => handleReportMissing({ context }),
+    })
+  }
+
+  if (request.params?.name === resolveFeedbackToolName(data.options)) {
+    const feedback = getToolArguments(request)
+    return await captureToolCall({
+      server,
+      data,
+      request,
+      extra,
+      eventType: MCPAnalyticsEventType.mcpFeedback,
+      eventProperties: buildFeedbackEventProperties(feedback),
+      execute: async () => handleSubmitFeedback(feedback),
     })
   }
 

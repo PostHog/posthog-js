@@ -129,6 +129,7 @@ function getLowLevelServer(server: MCPServerLike | HighLevelMCPServerLike): MCPS
  */
 const DEFAULT_OPTIONS = {
   reportMissing: false,
+  collectFeedback: false,
   enableConversationId: false,
 } satisfies Partial<MCPAnalyticsOptions>
 
@@ -199,6 +200,7 @@ export {
 } from './extensions/constants'
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
+export { getFeedbackResult } from './extensions/feedback'
 export { setLogger } from './extensions/logger'
 // Re-export the posthog-node client so a single import works:
 //   import { PostHog, instrument } from "@posthog/mcp"
@@ -207,6 +209,7 @@ export { PostHog, type PostHogOptions } from 'posthog-node'
 export type {
   BeforeSendFn,
   CaptureEventData,
+  FeedbackCaptureData,
   InitializeCaptureData,
   McpAnalytics,
   McpCaptureCommon,
