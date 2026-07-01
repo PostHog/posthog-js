@@ -1,4 +1,18 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "issue-4051-auto-none-no-comment-no-close-1782939392285",
+      "kind": "issue",
+      "number": 4051,
+      "mode": "auto",
+      "enqueuedAt": "2026-07-01T20:56:32.285Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 28547248064,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28547248064"
+      },
+      "attempts": 0
+    }
+  ]
 }
