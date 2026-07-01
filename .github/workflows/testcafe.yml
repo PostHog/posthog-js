@@ -71,31 +71,30 @@ jobs:
         run: |
           set -o pipefail
 
-          # The BrowserStack TestCafe provider makes BrowserStack API calls without retries.
-          # BrowserStack occasionally closes compressed API responses early before tests run.
-          retryable_browserstack_api_url='https://api.browserstack.com/'
+          # BrowserStack setup/API retries happen inside browserstack-node-fetch-patch.cjs so
+          # a real IE assertion failure is not retried as infrastructure flakiness.
+          output_file="$(mktemp)"
 
-          for attempt in 1 2 3; do
-            output_file="$(mktemp)"
-            echo "TestCafe attempt ${attempt}/3"
-
-            if pnpm testcafe "${BROWSER}" --stop-on-first-fail 2>&1 | tee "${output_file}"; then
-              rm -f "${output_file}"
-              exit 0
-            fi
-
-            exit_code="${PIPESTATUS[0]}"
-
-            if grep -Fq "${retryable_browserstack_api_url}" "${output_file}" && [ "${attempt}" -lt 3 ]; then
-              echo "::warning::BrowserStack API fetch failed; retrying TestCafe."
-              rm -f "${output_file}"
-              sleep $((attempt * 10))
-              continue
-            fi
-
+          if pnpm testcafe "${BROWSER}" --stop-on-first-fail 2>&1 | tee "${output_file}"; then
             rm -f "${output_file}"
-            exit "${exit_code}"
-          done
+            exit 0
+          fi
+
+          exit_code="${PIPESTATUS[0]}"
+
+          if {
+            grep -Fq "POSTHOG_BROWSERSTACK_SETUP_FAILURE" "${output_file}" ||
+              grep -Fq "BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY" "${output_file}"
+          }; then
+            echo "::error title=BrowserStack setup failed::BrowserStack API/session setup failed after retry/backoff. This is infrastructure setup, not an IE11 test assertion failure."
+          elif grep -Fq "POSTHOG_BROWSERSTACK_API_FAILURE" "${output_file}"; then
+            echo "::error title=BrowserStack API failed::BrowserStack API failed after retry/backoff outside initial setup."
+          else
+            echo "::error title=IE11 TestCafe failed::TestCafe reached IE11 and failed without a BrowserStack setup marker. Treat this as a browser/test failure."
+          fi
+
+          rm -f "${output_file}"
+          exit "${exit_code}"
         working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
