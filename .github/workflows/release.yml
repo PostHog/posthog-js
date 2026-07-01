@@ -303,45 +303,92 @@ jobs:
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: pnpm install --frozen-lockfile && pnpm build
 
-            - name: Publish ${{ matrix.package.name }} to NPM
+            # A concurrent release run (main gets a push per merge, plus one per
+            # `[version bump]` commit) can publish this exact version during the
+            # install/build above. Re-check the registry right before publishing so
+            # an already-published version short-circuits the publish/tag/release
+            # tail as a no-op instead of erroring on npm's republish rejection.
+            - name: Check registry before publishing
+              id: preflight
               if: steps.check-package-version.outputs.is-new-version == 'true'
+              env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
               run: |
-                  pnpm publish --filter=${{ matrix.package.name }} --access public --no-git-checks
+                  if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
+                      echo "$PACKAGE_NAME@$PACKAGE_VERSION is already on npm; skipping publish."
+                      echo "should-publish=false" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "should-publish=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Publish ${{ matrix.package.name }} to NPM
+              if: steps.preflight.outputs.should-publish == 'true'
               env:
                   NPM_CONFIG_PROVENANCE: true
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+              run: |
+                  set +e
+                  pnpm publish --filter="$PACKAGE_NAME" --access public --no-git-checks
+                  status=$?
+                  set -e
+                  if [ $status -ne 0 ]; then
+                      # A concurrent run can publish this exact version in the seconds
+                      # between the preflight check and here; npm rejects the republish
+                      # with a 403. The version being on the registry is the desired end
+                      # state, so treat that specific case as success.
+                      if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
+                          echo "$PACKAGE_NAME@$PACKAGE_VERSION already exists on npm after a concurrent publish; treating as success."
+                      else
+                          exit $status
+                      fi
+                  fi
 
             - name: Tag repository with package_name and package_version
-              if: steps.check-package-version.outputs.is-new-version == 'true'
+              if: steps.preflight.outputs.should-publish == 'true'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
               run: |
-                  gh api "repos/${{ github.repository }}/git/refs" \
-                    -f "ref=refs/tags/$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    -f "sha=$(git rev-parse HEAD)"
+                  # A concurrent run that publishes first also creates this tag, so
+                  # skip when it already exists rather than failing on a 422.
+                  if gh api "repos/${{ github.repository }}/git/refs/tags/$PACKAGE_NAME@$COMMITTED_VERSION" >/dev/null 2>&1; then
+                      echo "Tag $PACKAGE_NAME@$COMMITTED_VERSION already exists; skipping."
+                  else
+                      gh api "repos/${{ github.repository }}/git/refs" \
+                        -f "ref=refs/tags/$PACKAGE_NAME@$COMMITTED_VERSION" \
+                        -f "sha=$(git rev-parse HEAD)"
+                  fi
 
             - name: Create GitHub release
-              if: steps.check-package-version.outputs.is-new-version == 'true'
+              if: steps.preflight.outputs.should-publish == 'true'
               working-directory: ${{ steps.get-package-path.outputs.path }}
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
               run: |
-                  # read from the first until the second header in the changelog file
-                  # this assumes the formatting of the file
-                  # and that this workflow is always running for the most recent entry in the file
-                  LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
-                  gh release create "$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    --target main \
-                    --title "$PACKAGE_NAME@$COMMITTED_VERSION" \
-                    --notes "$LAST_CHANGELOG_ENTRY"
+                  # A concurrent run that publishes first also creates this release, so
+                  # skip when it already exists rather than failing.
+                  if gh release view "$PACKAGE_NAME@$COMMITTED_VERSION" >/dev/null 2>&1; then
+                      echo "Release $PACKAGE_NAME@$COMMITTED_VERSION already exists; skipping."
+                  else
+                      # read from the first until the second header in the changelog file
+                      # this assumes the formatting of the file
+                      # and that this workflow is always running for the most recent entry in the file
+                      LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
+                      gh release create "$PACKAGE_NAME@$COMMITTED_VERSION" \
+                        --target main \
+                        --title "$PACKAGE_NAME@$COMMITTED_VERSION" \
+                        --notes "$LAST_CHANGELOG_ENTRY"
+                  fi
 
             ########################################################
             ############## posthog-js auto-update ##################
             - name: Dispatch posthog upgrade for posthog-js
-              if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+              if: matrix.package.name == 'posthog-js' && steps.preflight.outputs.should-publish == 'true'
               env:
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
