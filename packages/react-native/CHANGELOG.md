@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.54.0
+
+### Minor Changes
+
+- [#3970](https://github.com/PostHog/posthog-js/pull/3970) [`0f83f93`](https://github.com/PostHog/posthog-js/commit/0f83f93a6e78605444b2fe914e12c526ac3250d3) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add a `requestHeaders` option to send custom headers (e.g. `Authorization`) with SDK requests, including session replay and native error/crash uploads via the native plugin. Useful for reverse-proxy setups that require authentication.
+  (2026-07-01)
+
+### Patch Changes
+
+- Updated dependencies [[`0f83f93`](https://github.com/PostHog/posthog-js/commit/0f83f93a6e78605444b2fe914e12c526ac3250d3)]:
+  - @posthog/react-native-plugin@2.1.2
+
 ## 4.53.3
 
 ### Patch Changes
