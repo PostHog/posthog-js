@@ -193,7 +193,6 @@ jobs:
                         "jobName": "version-bump",
                         "packageName": "posthog-js",
                         "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
-                        "workflowJobUrl": "${{ steps.release-failure-metadata.outputs.job_url }}",
                         "actionUrl": "${{ steps.release-failure-metadata.outputs.job_url }}"
                       }
 
@@ -423,7 +422,6 @@ jobs:
                         "jobName": "publish",
                         "packageName": "${{ matrix.package.name }}",
                         "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
-                        "workflowJobUrl": "${{ steps.release-failure-metadata.outputs.job_url }}",
                         "actionUrl": "${{ steps.release-failure-metadata.outputs.job_url }}"
                       }
 
@@ -750,7 +748,6 @@ jobs:
                         "jobName": "upload-s3",
                         "packageName": "posthog-js",
                         "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
-                        "workflowJobUrl": "${{ steps.release-failure-metadata.outputs.job_url }}",
                         "actionUrl": "${{ steps.release-failure-metadata.outputs.job_url }}",
                         "region": "${{ matrix.region.name }}",
                         "bucket": "${{ matrix.region.bucket }}"
