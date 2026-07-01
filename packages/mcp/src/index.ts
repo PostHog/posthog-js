@@ -9,6 +9,7 @@ import { MCPAnalyticsEventType } from './extensions/event-types'
 import { IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { log, setLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
+import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
@@ -65,6 +66,11 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
       return createAnalyticsHandle(lowLevelServer)
     }
 
+    if (posthog) {
+      // Report `$lib: 'posthog-node-mcp'` on this client's events instead of the
+      // inherited `posthog-node`. Relabels every event the client sends.
+      applyMcpLibIdentity(posthog)
+    }
     const sink = posthog ? new McpEventSink(posthog) : undefined
     const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, sink)
 

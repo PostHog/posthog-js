@@ -34,6 +34,7 @@ import {
   STRING_FORMAT,
   createLogger,
   getEventUuid,
+  safeJsonStringify,
 } from './utils'
 import { uuidv7 } from './vendor/uuidv7'
 import {
@@ -112,8 +113,25 @@ export function isPostHogFetchNetworkError(err: unknown): err is PostHogFetchNet
   return err instanceof PostHogFetchNetworkError
 }
 
+function isRetryableFlagsFetchError(err: unknown): err is PostHogFetchNetworkError {
+  if (!(err instanceof PostHogFetchNetworkError)) {
+    return false
+  }
+
+  const cause = err.error as { code?: string; cause?: { code?: string } } | undefined
+  const code = cause?.code ?? cause?.cause?.code
+  return code !== 'ECONNREFUSED'
+}
+
 function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
+}
+
+function isPostHogFetchRetryableError(err: unknown): err is PostHogFetchHttpError | PostHogFetchNetworkError {
+  if (err instanceof PostHogFetchHttpError) {
+    return err.status === 408 || err.status === 429 || err.status >= 500
+  }
+  return isPostHogFetchNetworkError(err)
 }
 
 function isPostHogEventProperties(value: JsonType | undefined): value is PostHogEventProperties {
@@ -156,6 +174,7 @@ export abstract class PostHogCoreStateless {
   private shutdownPromise: Promise<void> | null = null
   private requestTimeout: number
   private featureFlagsRequestTimeoutMs: number
+  private featureFlagsRequestMaxRetries: number
   private remoteConfigRequestTimeoutMs: number
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
@@ -239,10 +258,11 @@ export abstract class PostHogCoreStateless {
     this._retryOptions = {
       retryCount: options.fetchRetryCount ?? 3,
       retryDelay: options.fetchRetryDelay ?? 3000, // 3 seconds
-      retryCheck: isPostHogFetchError,
+      retryCheck: isPostHogFetchRetryableError,
     }
     this.requestTimeout = options.requestTimeout ?? 10000 // 10 seconds
     this.featureFlagsRequestTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 3000 // 3 seconds
+    this.featureFlagsRequestMaxRetries = options.featureFlagsRequestMaxRetries ?? 1
     this.remoteConfigRequestTimeoutMs = options.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
     this.disableGeoip = options.disableGeoip ?? true
     this.disabled = (options.disabled ?? false) || missingApiKey
@@ -503,6 +523,28 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  protected async groupIdentifyStatelessImmediate(
+    groupType: string,
+    groupKey: string | number,
+    groupProperties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions,
+    distinctId?: string,
+    eventProperties?: PostHogEventProperties
+  ): Promise<void> {
+    const payload = this.buildPayload({
+      distinct_id: distinctId || `$${groupType}_${groupKey}`,
+      event: '$groupidentify',
+      properties: {
+        $group_type: groupType,
+        $group_key: groupKey,
+        $group_set: groupProperties || {},
+        ...(eventProperties || {}),
+      },
+    })
+
+    await this.sendImmediate('capture', payload, options)
+  }
+
   protected async getRemoteConfig(): Promise<PostHogRemoteConfig | undefined> {
     await this._initPromise
 
@@ -573,8 +615,13 @@ export abstract class PostHogCoreStateless {
 
     this._logger.info('Flags URL', url)
 
-    // Don't retry /flags API calls
-    return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.featureFlagsRequestTimeoutMs)
+    // Retry only network/transport/timeout failures for /flags. HTTP/API status errors are surfaced immediately.
+    return this.fetchWithRetry(
+      url,
+      fetchOptions,
+      { retryCount: this.featureFlagsRequestMaxRetries, retryCheck: isRetryableFlagsFetchError },
+      this.featureFlagsRequestTimeoutMs
+    )
       .then((response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>)
       .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
       .catch((error): GetFlagsResult => {
@@ -814,9 +861,8 @@ export abstract class PostHogCoreStateless {
   ): Promise<PostHogFeatureFlagDetails | undefined> {
     await this._initPromise
 
-    const extraPayload: Record<string, any> = {}
-    if (disableGeoip ?? this.disableGeoip) {
-      extraPayload['geoip_disable'] = true
+    const extraPayload: Record<string, any> = {
+      geoip_disable: disableGeoip ?? this.disableGeoip,
     }
     if (flagKeysToEvaluate) {
       extraPayload['flag_keys_to_evaluate'] = flagKeysToEvaluate
@@ -1037,7 +1083,7 @@ export abstract class PostHogCoreStateless {
       data.historical_migration = true
     }
 
-    const payload = JSON.stringify(data)
+    const payload = safeJsonStringify(data)
 
     const url = `${this.host}/batch/`
 
@@ -1233,7 +1279,7 @@ export abstract class PostHogCoreStateless {
         data.historical_migration = true
       }
 
-      const payload = JSON.stringify(data)
+      const payload = safeJsonStringify(data)
 
       const url = `${this.host}/batch/`
 
@@ -1254,8 +1300,8 @@ export abstract class PostHogCoreStateless {
           if (isPostHogFetchContentTooLargeError(err)) {
             return false
           }
-          // otherwise, retry on network errors
-          return isPostHogFetchError(err)
+          // otherwise, retry on transient HTTP and network errors
+          return isPostHogFetchRetryableError(err)
         },
       }
 
@@ -1328,7 +1374,7 @@ export abstract class PostHogCoreStateless {
           if (isPostHogFetchContentTooLargeError(err)) {
             return false
           }
-          return isPostHogFetchError(err)
+          return isPostHogFetchRetryableError(err)
         },
       })
       return { kind: 'ok' }

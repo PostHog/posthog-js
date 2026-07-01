@@ -1,5 +1,12 @@
 # @posthog/nuxt
 
+## 1.7.78
+
+### Patch Changes
+
+- [#4005](https://github.com/PostHog/posthog-js/pull/4005) [`ace8824`](https://github.com/PostHog/posthog-js/commit/ace8824481b9ab81cee06c03692ca29ed125c168) Thanks [@ioannisj](https://github.com/ioannisj)! - Augment `@nuxt/schema` so `posthogConfig` is a known key on `NuxtConfig`/`NuxtOptions`. Without this, using `posthogConfig` in `nuxt.config.ts` (as the wizard generates) reports a TS2353 error.
+  (2026-06-30)
+
 ## 1.7.77
 
 ### Patch Changes

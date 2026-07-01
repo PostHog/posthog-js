@@ -19,6 +19,7 @@ import {
 } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
+import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
 import { McpEventSink } from './sink'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
@@ -84,6 +85,8 @@ export class PostHogMCP extends PostHog {
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
+    // Report `$lib: 'posthog-node-mcp'` instead of the inherited `posthog-node`.
+    applyMcpLibIdentity(this)
   }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */

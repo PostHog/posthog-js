@@ -418,7 +418,8 @@ export class Autocapture implements Extension {
                 isCopyAutocapture,
                 // we also don't want to restrict copy checks to clicks,
                 // so we pass that knowledge in here, rather than add the logic inside the check
-                isCopyAutocapture ? ['copy', 'cut'] : undefined
+                isCopyAutocapture ? ['copy', 'cut'] : undefined,
+                this.instance
             )
         ) {
             const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {

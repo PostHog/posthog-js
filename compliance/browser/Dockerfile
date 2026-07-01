@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY packages/rrweb ./packages/rrweb
 COPY packages/browser ./packages/browser
 
 # Install pnpm
-RUN npm install -g pnpm
+RUN npm install -g pnpm@11.7.0
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile

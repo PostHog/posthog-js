@@ -41,6 +41,8 @@ describe('PostHogMCP', () => {
     expect(typeof posthog.shutdown).toBe('function')
   })
 
+  // `$lib` / `$lib_version` identity is covered for both emit paths in lib-identity.test.ts.
+
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
       posthog.captureToolCall({
