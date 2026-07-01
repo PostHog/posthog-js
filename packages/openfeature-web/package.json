@@ -7,9 +7,10 @@
   "description": "Official PostHog provider for the OpenFeature web SDK (browser), backed by posthog-js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/PostHog/posthog-js.git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
     "directory": "packages/openfeature-web"
   },
+  "homepage": "https://github.com/PostHog/posthog-js/tree/main/packages/openfeature-web#readme",
   "author": {
     "name": "PostHog",
     "email": "engineering@posthog.com",
