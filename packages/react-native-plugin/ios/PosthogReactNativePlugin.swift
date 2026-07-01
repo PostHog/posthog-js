@@ -180,8 +180,9 @@ class PosthogReactNativePlugin: NSObject {
 
         // Forward custom headers (e.g. Authorization for a reverse proxy) so the native SDK
         // attaches them to the requests it sends directly (session replay, crash uploads).
-        if let requestHeaders = sdkOptions["requestHeaders"] as? [String: String] {
-            config.requestHeaders = requestHeaders
+        // Keep only string values so a stray non-string doesn't drop every header (matches Android).
+        if let rawHeaders = sdkOptions["requestHeaders"] as? [String: Any] {
+            config.requestHeaders = rawHeaders.compactMapValues { $0 as? String }
         }
 
         if !sdkVersion.isEmpty {
