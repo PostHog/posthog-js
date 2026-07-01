@@ -1,4 +1,4 @@
-import { LOAD_EXT_NOT_FOUND } from './constants'
+import { LOAD_EXT_NOT_FOUND, LOGS_CAPTURE_ENABLED_SERVER_SIDE } from './constants'
 import Config from './config'
 import { PostHog } from './posthog-core'
 import type { CaptureLogOptions, RemoteConfig, Logger, LogSdkContext, LogAttributeValue, OtlpLogRecord } from './types'
@@ -29,7 +29,9 @@ export class PostHogLogs implements Extension {
     private _droppedWarned: boolean = false
 
     constructor(private readonly _instance: PostHog) {
-        if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
+        const localEnabled = !!this._instance?.config.logs?.captureConsoleLogs
+        const remoteEnabled = !!this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]
+        if (localEnabled || remoteEnabled) {
             this._isLogsEnabled = true
         }
     }
@@ -39,9 +41,18 @@ export class PostHogLogs implements Extension {
     }
 
     onRemoteConfig(response: RemoteConfig) {
-        // only load logs if they are enabled
         const logCapture = response.logs?.captureConsoleLogs
-        if (isNullish(logCapture) || !logCapture) {
+        const remoteEnabled = !isNullish(logCapture) && !!logCapture
+
+        // Persist the remote-enabled bit so console capture can start loading at
+        // init on the next page load, not only after remote config returns.
+        if (this._instance?.persistence) {
+            this._instance.persistence.register({
+                [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: remoteEnabled,
+            })
+        }
+
+        if (!remoteEnabled) {
             return
         }
         this._isLogsEnabled = true

@@ -1,5 +1,6 @@
 import { PostHogLogs } from '../posthog-logs'
 import { PostHog } from '../posthog-core'
+import { LOGS_CAPTURE_ENABLED_SERVER_SIDE } from '../constants'
 
 import { assignableWindow } from '../utils/globals'
 
@@ -182,6 +183,56 @@ describe('posthog-logs', () => {
                 logs.onRemoteConfig(response)
 
                 expect(loadIfEnabledSpy).toHaveBeenCalled()
+            })
+
+            it('should persist the enabled bit when captureConsoleLogs is true', () => {
+                const response = {
+                    supportedCompression: [],
+                    toolbarParams: {},
+                    toolbarVersion: 'toolbar' as const,
+                    isAuthenticated: false,
+                    siteApps: [],
+                    logs: { captureConsoleLogs: true },
+                }
+
+                logs.onRemoteConfig(response)
+
+                expect((mockPostHog as any).persistence.register).toHaveBeenCalledWith({
+                    [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true,
+                })
+            })
+
+            it('should persist false when captureConsoleLogs is false', () => {
+                const response = {
+                    supportedCompression: [],
+                    toolbarParams: {},
+                    toolbarVersion: 'toolbar' as const,
+                    isAuthenticated: false,
+                    siteApps: [],
+                    logs: { captureConsoleLogs: false },
+                }
+
+                logs.onRemoteConfig(response)
+
+                expect((mockPostHog as any).persistence.register).toHaveBeenCalledWith({
+                    [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false,
+                })
+            })
+        })
+
+        describe('constructor', () => {
+            it('should enable logs at init when the persisted remote-enabled bit is set', () => {
+                const instanceWithPersistedBit = {
+                    ...mockPostHog,
+                    persistence: {
+                        register: jest.fn(),
+                        props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true },
+                    },
+                } as unknown as PostHog
+
+                const logsFromPersisted = new PostHogLogs(instanceWithPersistedBit)
+
+                expect((logsFromPersisted as any)._isLogsEnabled).toBe(true)
             })
         })
 
