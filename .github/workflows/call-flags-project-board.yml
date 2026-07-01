@@ -15,4 +15,5 @@ jobs:
             pr_number: ${{ github.event.pull_request.number }}
             pr_node_id: ${{ github.event.pull_request.node_id }}
             is_draft: ${{ github.event.pull_request.draft }}
+        # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit -- reusable workflow requires inherited secrets
         secrets: inherit
