@@ -2458,7 +2458,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     personProperties?: Record<string, string>,
     groupProperties?: Record<string, Record<string, string>>
   ): { allPersonProperties: Record<string, string>; allGroupProperties: Record<string, Record<string, string>> } {
-    const allPersonProperties = { distinct_id: distinctId, ...(personProperties || {}) }
+    const allPersonProperties = { ...(personProperties || {}) }
 
     const allGroupProperties: Record<string, Record<string, string>> = {}
     if (groups) {

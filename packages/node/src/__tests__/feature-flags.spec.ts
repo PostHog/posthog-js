@@ -772,7 +772,6 @@ describe('local evaluation', () => {
           distinct_id: 'some-distinct-id_outside_rollout?',
           groups: {},
           person_properties: {
-            distinct_id: 'some-distinct-id_outside_rollout?',
             region: 'USA',
             email: 'a@b.com',
           },
@@ -795,7 +794,7 @@ describe('local evaluation', () => {
           token: 'TEST_API_KEY',
           distinct_id: 'some-distinct-id',
           groups: {},
-          person_properties: { distinct_id: 'some-distinct-id', doesnt_matter: '1' },
+          person_properties: { doesnt_matter: '1' },
           group_properties: {},
           geoip_disable: true,
           flag_keys_to_evaluate: ['complex-flag'],
