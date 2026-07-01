@@ -1,6 +1,7 @@
 /**
  * @jest-environment node
  */
+/* eslint-disable @typescript-eslint/no-require-imports */
 
 const {
     isRetryableError,
@@ -116,6 +117,9 @@ describe('browserstack-node-fetch-patch', () => {
         expect(isSetupRequest(browserListUrl)).toBe(true)
         expect(isSetupRequest(setupUrl, { method: 'POST' })).toBe(true)
         expect(isSetupRequest('https://hub-cloud.browserstack.com/wd/hub/session/session-id/url')).toBe(false)
+        expect(
+            isSetupRequest('https://hub-cloud.browserstack.com/wd/hub/session/session-id/url', { method: 'POST' })
+        ).toBe(false)
     })
 
     it('reports actual attempts for non-retryable setup failures', async () => {

@@ -6,7 +6,6 @@ const BROWSERSTACK_HOSTS = new Set(['api.browserstack.com', 'hub-cloud.browserst
 const DEFAULT_MAX_ATTEMPTS = 4
 const DEFAULT_BACKOFF_MS = [1000, 3000, 7000]
 const RETRYABLE_BROWSERSTACK_PAYLOAD_STATUSES = new Set([13])
-const SESSION_URL_PATH = /^\/wd\/hub\/session\/[^/]+\/url$/
 const originalLoad = Module._load
 
 function getMaxAttempts() {
@@ -57,17 +56,11 @@ function isSetupRequest(url, options = {}) {
         return false
     }
 
-    if (
-        target.pathname === '/automate/browsers.json' ||
-        /^\/automate\/sessions\/[^/]+\.json$/.test(target.pathname)
-    ) {
+    if (target.pathname === '/automate/browsers.json' || /^\/automate\/sessions\/[^/]+\.json$/.test(target.pathname)) {
         return true
     }
 
-    return (
-        getMethod(options) === 'POST' &&
-        (target.pathname === '/wd/hub/session' || SESSION_URL_PATH.test(target.pathname))
-    )
+    return getMethod(options) === 'POST' && target.pathname === '/wd/hub/session'
 }
 
 function getMethod(options = {}) {
@@ -207,7 +200,8 @@ function wrapResponseBodyReaders(fetch, url, options, response, attemptsUsed) {
                 return retryResponse[method]()
             }
 
-            const payloadError = method === 'json' && isSetupRequest(url, options) && getBrowserStackPayloadError(payload)
+            const payloadError =
+                method === 'json' && isSetupRequest(url, options) && getBrowserStackPayloadError(payload)
 
             if (!payloadError) {
                 return payload
