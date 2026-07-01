@@ -320,6 +320,7 @@ jobs:
                   fi
 
             - name: Publish ${{ matrix.package.name }} to NPM
+              id: publish
               if: steps.preflight.outputs.should-publish == 'true'
               env:
                   NPM_CONFIG_PROVENANCE: true
@@ -338,6 +339,10 @@ jobs:
                       else
                           exit $status
                       fi
+                  else
+                      # published=true only when this run did the publish, so
+                      # downstream one-shot steps run exactly once across a race.
+                      echo "published=true" >> "$GITHUB_OUTPUT"
                   fi
 
             - name: Tag repository with package_name and package_version
@@ -381,7 +386,7 @@ jobs:
             ########################################################
             ############## posthog-js auto-update ##################
             - name: Dispatch posthog upgrade for posthog-js
-              if: matrix.package.name == 'posthog-js' && steps.preflight.outputs.should-publish == 'true'
+              if: matrix.package.name == 'posthog-js' && steps.publish.outputs.published == 'true'
               env:
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
