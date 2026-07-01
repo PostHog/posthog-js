@@ -58,6 +58,10 @@ describe('heatmaps', () => {
         posthog.register({ $current_test_name: expect.getState().currentTestName })
     })
 
+    afterEach(() => {
+        jest.restoreAllMocks()
+    })
+
     it('should send generated heatmap data', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
@@ -127,6 +131,25 @@ describe('heatmaps', () => {
 
         expect(beforeSendMock).toBeCalledTimes(1)
         expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/'][0].target_fixed).toBe(false)
+    })
+
+    it('does not crash on mousemove when getComputedStyle throws for a cross-realm element', async () => {
+        jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+            throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
+        })
+
+        const el = document.createElement('div')
+        document.body.appendChild(el)
+
+        posthog.heatmaps?.['_onMouseMove']?.(createMockMouseEvent({ target: el }))
+
+        expect(() => jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)).not.toThrow()
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/'][0]).toMatchObject({
+            type: 'mousemove',
+            target_fixed: false,
+        })
     })
 
     it('should handle empty mouse moves', async () => {
