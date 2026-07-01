@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4046": {
+    "key": "PostHog/posthog-js/issue/4046",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4046",
+    "url": "https://github.com/PostHog/posthog-js/issues/4046",
+    "conclusion": "Valid feature request; current code confirms the Convex flag refresh loop is not gated before scheduling.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "feature/flags",
+      "team/feature-flags"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-01T13:38:03.572Z"
+  },
   "PostHog/posthog-js/issue/3595": {
     "key": "PostHog/posthog-js/issue/3595",
     "repo": "PostHog/posthog-js",
