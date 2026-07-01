@@ -127,6 +127,15 @@ describe(`SessionRecording utility functions`, () => {
                 size: 86,
             })
         })
+
+        it(`should report UTF-8 bytes for non-ASCII payloads`, () => {
+            const data = { text: '€' } as unknown as eventWithTime
+
+            expect(ensureMaxMessageSize(data)).toEqual({
+                event: data,
+                size: 14,
+            })
+        })
     })
 
     describe(`truncateLargeConsoleLogs`, () => {
@@ -242,6 +251,17 @@ describe(`SessionRecording utility functions`, () => {
                     },
                 },
             })
+        })
+    })
+
+    describe('estimateSize', () => {
+        it('should return the UTF-8 byte length of serialized data', () => {
+            const data = { text: '€' }
+            const serialized = JSON.stringify(data)
+
+            expect(serialized).toBe('{"text":"€"}')
+            expect(serialized.length).toBe(12)
+            expect(estimateSize(data)).toBe(14)
         })
     })
 
