@@ -1,3 +1,4 @@
+import { isFunction } from '@posthog/core'
 import type { GetServerSidePropsContext } from 'next'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/clientCache.node.js'
@@ -8,10 +9,10 @@ import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.
 /**
  * Creates a PostHog server client scoped to the current request.
  *
- * Reads the user's identity from the PostHog cookie in request headers
- * and sets it as context via `enterContext()`. The returned client is
- * ready to use — methods like `getAllFlags()`, `getFeatureFlagResult()`,
- * and `capture()` automatically use the current user's identity.
+ * Reads the user's identity from the PostHog cookie in request headers.
+ * The returned client is ready to use — methods like `getAllFlags()`,
+ * `getFeatureFlagResult()`, and `capture()` automatically use the current
+ * user's identity.
  *
  * @param ctx - The Next.js GetServerSidePropsContext
  * @param apiKey - PostHog project API key. If omitted, reads from NEXT_PUBLIC_POSTHOG_KEY.
@@ -44,11 +45,28 @@ export async function getServerSidePostHog(
 
     const cookieStore = cookieStoreFromHeader(ctx.req.headers.cookie || '')
 
-    if (!isOptedOut(cookieStore, resolvedApiKey)) {
-        const state = readPostHogCookie(cookieStore, resolvedApiKey)
-        const tracing = readTracingHeaders(ctx.req.headers)
-        client.enterContext(buildContextData(tracing, state))
+    if (isOptedOut(cookieStore, resolvedApiKey)) {
+        return client
     }
 
-    return client
+    const state = readPostHogCookie(cookieStore, resolvedApiKey)
+    const tracing = readTracingHeaders(ctx.req.headers)
+    const contextData = buildContextData(tracing, state)
+
+    // Wrap the shared client in a Proxy that applies request-scoped context
+    // to every method call. We can't use enterContext() here because
+    // AsyncLocalStorage.enterWith() doesn't propagate back to the caller
+    // across the await boundary of this async function.
+    return new Proxy(client, {
+        get(target, prop, receiver) {
+            if (prop === 'withContext') {
+                return Reflect.get(target, prop, receiver)
+            }
+            const value = Reflect.get(target, prop, receiver)
+            if (isFunction(value)) {
+                return (...args: unknown[]) => target.withContext(contextData, () => value.apply(target, args))
+            }
+            return value
+        },
+    }) as IPostHog
 }
