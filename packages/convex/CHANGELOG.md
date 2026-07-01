@@ -1,5 +1,23 @@
 # @posthog/convex
 
+## 2.0.31
+
+### Patch Changes
+
+- [#4021](https://github.com/PostHog/posthog-js/pull/4021) [`89d486c`](https://github.com/PostHog/posthog-js/commit/89d486c753fdded6e25021a32ef6ced3f89cfb37) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Fix `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` being ignored. The flag-refresh interval was read when the cron was registered, but Convex forwards component env vars only at runtime, so the value was always empty there and the cron was pinned to the 60s default. The refresh now runs as a self-rescheduling loop that reads the interval at runtime, with a supervisor cron that keeps the loop alive, so the configured interval is honoured.
+
+  Fixes [#3957](https://github.com/PostHog/posthog-js/issues/3957). (2026-07-01)
+
+## 2.0.30
+
+### Patch Changes
+
+- [#4006](https://github.com/PostHog/posthog-js/pull/4006) [`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `groupIdentifyImmediate()` to await the network request when identifying a group, mirroring `captureImmediate`/`identifyImmediate`/`aliasImmediate`. Useful in edge/serverless environments where the background queue may not flush. The Convex integration now uses it directly instead of routing `$groupidentify` through `captureImmediate`.
+  (2026-06-30)
+- Updated dependencies [[`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c)]:
+  - @posthog/core@1.39.0
+  - posthog-node@5.39.0
+
 ## 2.0.29
 
 ### Patch Changes

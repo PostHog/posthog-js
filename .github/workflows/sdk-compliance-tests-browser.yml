@@ -24,9 +24,10 @@ permissions:
 
 jobs:
   test-browser-sdk:
-    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@39d05346c4638d24f94e591ab89c9c6fcdb52d6b
+    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@68498bcf3ae95ac941476e6ca3d42d6086e1c7fd
     with:
       adapter-dockerfile: compliance/browser/Dockerfile
       adapter-context: .
-      test-harness-version: latest
+      test-harness-version: "0.9.0"
+      sdk-type: client
       report-name: browser-sdk-compliance-report

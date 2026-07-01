@@ -121,10 +121,11 @@ describe('exception autocapture', () => {
       disableCompression: true,
     })
 
-    const mockedCapture = jest.spyOn(ph, 'capture').mockImplementation()
+    const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
 
     const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
     await Promise.all(captureExceptions)
+    await ph.flush()
 
     // captures until rate limited
     expect(mockedCapture).toHaveBeenCalledTimes(9)

@@ -49,6 +49,110 @@ describe('PostHog Core', () => {
       ])
     })
 
+    it('waits for pending promises that enqueue events before flushing', async () => {
+      const successfulMessages: any[] = []
+      let resolvePending!: () => void
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.addPendingPromise(
+        new Promise<void>((resolve) => {
+          resolvePending = resolve
+        }).then(() => {
+          posthog.capture('pending-event')
+        })
+      )
+
+      const flushPromise = posthog.flushWithPendingPromises()
+      await waitForPromises()
+      expect(mocks.fetch).not.toHaveBeenCalled()
+
+      resolvePending()
+      await expect(flushPromise).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'pending-event' }])
+    })
+
+    it('does not wait for unrelated pending promises added after flush starts', async () => {
+      const successfulMessages: any[] = []
+      let resolvePending!: () => void
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(
+        new Promise<void>((resolve) => {
+          resolvePending = resolve
+        })
+      )
+
+      const flushPromise = posthog.flushWithPendingPromises()
+      posthog.addPendingPromise(new Promise<void>(() => {}))
+      resolvePending()
+
+      await expect(flushPromise).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
+    it('flushes queued events even if a pending promise rejects', async () => {
+      const successfulMessages: any[] = []
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(Promise.reject(new Error('pending failure')))
+
+      await expect(posthog.flushWithPendingPromises()).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
+    it('regular flush does not wait for pending promises', async () => {
+      const successfulMessages: any[] = []
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(new Promise<void>(() => {}))
+
+      await expect(posthog.flush()).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
     it.each([
       ['with ReadableStream body', { cancel: jest.fn().mockResolvedValue(undefined) }, true],
       ['with null body', null, false],
@@ -73,7 +177,22 @@ describe('PostHog Core', () => {
       }
     })
 
-    it.each([400, 500])('responds with an error after retries with %s error', async (status) => {
+    it.each([400, 401, 403])('responds with an error without retries with %s error', async (status) => {
+      mocks.fetch.mockImplementation(() => {
+        return Promise.resolve({
+          status: status,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+      })
+      posthog.capture('test-event-1')
+
+      jest.useRealTimers()
+      await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([408, 429, 500])('responds with an error after retries with %s error', async (status) => {
       mocks.fetch.mockImplementation(() => {
         return Promise.resolve({
           status: status,

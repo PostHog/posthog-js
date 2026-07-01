@@ -7,28 +7,31 @@ import {
   JsonType,
   PostHogCaptureOptions,
   PostHogCoreStateless,
+  PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
   PostHogPersistedProperty,
+  safeSetTimeout,
+  uuidv7,
 } from '@posthog/core'
 import {
+  AllFlagsOptions,
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
   FeatureFlagOverrideOptions,
   FeatureFlagResult,
+  FlagEvaluationOptions,
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
   OverrideFeatureFlagsOptions,
-  SetPersonPropertiesMessage,
-  UnsetPersonPropertiesMessage,
   PostHogOptions,
   SendFeatureFlagsOptions,
-  FlagEvaluationOptions,
-  AllFlagsOptions,
+  SetPersonPropertiesMessage,
+  UnsetPersonPropertiesMessage,
 } from './types'
 import {
   EvaluatedFlagRecord,
@@ -37,15 +40,13 @@ import {
   FlagCalledEventParams,
 } from './feature-flag-evaluations'
 import {
-  FeatureFlagsPoller,
   type FeatureFlagEvaluationContext,
-  RequiresServerEvaluation,
+  FeatureFlagsPoller,
   InconclusiveMatchError,
+  RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
-import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
-import { uuidv7 } from '@posthog/core'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -239,7 +240,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   override async flush(): Promise<void> {
-    const flushPromise = super.flush()
+    const flushPromise = this.flushWithPendingPromises()
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
@@ -312,7 +313,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private async resolveWaitUntilFlush(): Promise<void> {
     const resolve = this._consumeWaitUntilCycle()
     try {
-      await super.flush()
+      await this.flushWithPendingPromises()
     } catch {
       // Flush errors are already logged by flush() internals
     } finally {
@@ -531,18 +532,31 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  private _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+  private _sendPreparedEvent(
+    type: string,
+    props: EventMessage,
+    immediate: boolean,
+    prepareOptions?: { includeContextProperties?: boolean }
+  ): Promise<void> {
     return this.addPendingPromise(
-      this.prepareEventMessage(props)
+      this._prepareEventMessage(props, prepareOptions)
         .then(({ distinctId, event, properties, options }) => {
           const captureOptions: PostHogCaptureOptions = {
             timestamp: options.timestamp,
             disableGeoip: options.disableGeoip,
             uuid: options.uuid,
           }
+          const message = {
+            distinctId,
+            event,
+            properties: {
+              ...properties,
+              ...this.getCommonEventProperties(),
+            },
+          }
           return immediate
-            ? super.captureStatelessImmediate(distinctId, event, properties, captureOptions)
-            : super.captureStateless(distinctId, event, properties, captureOptions)
+            ? this.sendImmediate(type, message, captureOptions)
+            : this.enqueue(type, message, captureOptions)
         })
         .catch((err) => {
           if (err) {
@@ -550,6 +564,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           }
         })
     )
+  }
+
+  _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+    return this._sendPreparedEvent('capture', props, immediate)
   }
 
   /**
@@ -675,7 +693,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    super.identifyStateless(distinctId, eventProperties, { disableGeoip })
+    this._sendPreparedEvent(
+      'identify',
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
+      false,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -709,7 +732,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    await super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+    await this._sendPreparedEvent(
+      'identify',
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
+      true,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -789,7 +817,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The alias data containing distinctId and alias
    */
   alias(data: { distinctId: string; alias: string; disableGeoip?: boolean }): void {
-    super.aliasStateless(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip })
+    this._sendPreparedEvent(
+      'alias',
+      {
+        distinctId: data.distinctId,
+        event: '$create_alias',
+        properties: { distinct_id: data.distinctId, alias: data.alias },
+        disableGeoip: data.disableGeoip,
+      },
+      false,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -810,7 +848,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the alias is processed
    */
   async aliasImmediate(data: { distinctId: string; alias: string; disableGeoip?: boolean }): Promise<void> {
-    await super.aliasStatelessImmediate(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip })
+    await this._sendPreparedEvent(
+      'alias',
+      {
+        distinctId: data.distinctId,
+        event: '$create_alias',
+        properties: { distinct_id: data.distinctId, alias: data.alias },
+        disableGeoip: data.disableGeoip,
+      },
+      true,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -1964,7 +2012,67 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The group identify data
    */
   groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip }: GroupIdentifyMessage): void {
-    super.groupIdentifyStateless(groupType, groupKey, properties, { disableGeoip }, distinctId)
+    this._sendPreparedEvent(
+      'capture',
+      {
+        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        event: '$groupidentify',
+        properties: {
+          $group_type: groupType,
+          $group_key: groupKey,
+          $group_set: properties || {},
+        },
+        disableGeoip,
+      },
+      false,
+      { includeContextProperties: false }
+    )
+  }
+
+  /**
+   * Create or update a group and its properties immediately (synchronously).
+   *
+   * @example
+   * ```ts
+   * // Immediately create or update a company group
+   * await client.groupIdentifyImmediate({
+   *   groupType: 'company',
+   *   groupKey: 'acme-corp',
+   *   properties: {
+   *     name: 'Acme Corporation',
+   *     industry: 'Technology',
+   *     employee_count: 500
+   *   }
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The group identify data
+   * @returns Promise that resolves when the group identify is processed
+   */
+  async groupIdentifyImmediate({
+    groupType,
+    groupKey,
+    properties,
+    distinctId,
+    disableGeoip,
+  }: GroupIdentifyMessage): Promise<void> {
+    await this._sendPreparedEvent(
+      'capture',
+      {
+        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        event: '$groupidentify',
+        properties: {
+          $group_type: groupType,
+          $group_key: groupKey,
+          $group_set: properties || {},
+        },
+        disableGeoip,
+      },
+      true,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -2432,7 +2540,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           { syntheticException },
           distinctId,
           additionalProperties
-        ).then((msg) => this.capture({ ...msg, uuid, flags }))
+        ).then((msg) => this._capturePreparedEvent({ ...msg, uuid, flags }, false))
       )
     }
   }
@@ -2499,6 +2607,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     properties: PostHogEventProperties
     options: PostHogCaptureOptions
   }> {
+    return this._prepareEventMessage(props)
+  }
+
+  private async _prepareEventMessage(
+    props: EventMessage,
+    options: { includeContextProperties?: boolean } = {}
+  ): Promise<{
+    distinctId: string
+    event: string
+    properties: PostHogEventProperties
+    options: PostHogCaptureOptions
+  }> {
     const {
       distinctId,
       event,
@@ -2512,21 +2632,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }: EventMessage = props
 
     const contextData = this.context?.get()
+    const includeContextProperties = options.includeContextProperties ?? true
 
     let mergedDistinctId = distinctId || contextData?.distinctId
 
-    const mergedProperties = {
-      ...this.props,
-      ...(contextData?.properties || {}),
-      ...(properties || {}),
-    }
+    const mergedProperties = includeContextProperties
+      ? {
+          ...this.props,
+          ...(contextData?.properties || {}),
+          ...(properties || {}),
+        }
+      : { ...(properties || {}) }
 
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()
       mergedProperties.$process_person_profile = false
     }
 
-    if (contextData?.sessionId && !mergedProperties.$session_id) {
+    if (includeContextProperties && contextData?.sessionId && !mergedProperties.$session_id) {
       mergedProperties.$session_id = contextData.sessionId
     }
 
@@ -2592,12 +2715,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
       .then((additionalProperties) => {
         // No matter what - capture the event
-        const props = {
+        const resolvedGroups = eventMessage.groups || groups
+
+        return {
           ...additionalProperties,
           ...(eventMessage.properties || {}),
-          $groups: eventMessage.groups || groups,
+          // Only stamp $groups from the top-level `groups` when present — otherwise a
+          // caller-provided properties.$groups would be clobbered with undefined (#3888).
+          ...(resolvedGroups !== undefined && Object.keys(resolvedGroups).length > 0
+            ? { $groups: resolvedGroups }
+            : {}),
         } as PostHogEventProperties
-        return props
       })
 
     // Handle bot pageview collection based on preview flag

@@ -36,13 +36,16 @@ jobs:
                   repository: 'PostHog/posthog'
                   token: ${{ steps.upgrader.outputs.token }}
 
-            - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pin v5.0.0
-
-            - name: Set up Node.js
-              uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+            - name: Setup Node.js
+              uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
               with:
-                  node-version: 22
-                  cache: pnpm
+                node-version: 24
+
+            - name: Setup pnpm
+              uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
+              with:
+                cache: false
+                install: false
 
             - name: Install new package version in main repo
               id: pnpm-upgrade
@@ -54,15 +57,41 @@ jobs:
                   sed -i "s|${PACKAGE_NAME}:.*|${PACKAGE_NAME}: ^${PACKAGE_VERSION}|" pnpm-workspace.yaml
                   pnpm i --no-frozen-lockfile
 
-            - name: Generate branch name
-              id: generate-branch-name
+            - name: Generate pull request details
+              id: generate-pr-details
               shell: bash
               env:
+                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
                   PACKAGE_NAME_SANITIZED=$(echo "$PACKAGE_NAME" | sed 's/@//g' | sed 's/\//-/g')
-                  echo "branch_name=${PACKAGE_NAME_SANITIZED}-$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+                  TITLE_PREFIX="chore(deps): Update ${PACKAGE_NAME} to "
+                  PR_TITLE="${TITLE_PREFIX}${PACKAGE_VERSION}"
+                  EXISTING_BRANCH=$(gh pr list \
+                      --repo PostHog/posthog \
+                      --state open \
+                      --limit 100 \
+                      --json title,headRefName,headRepositoryOwner \
+                      --jq ".[] | select(.title | startswith(\"${TITLE_PREFIX}\")) | select(.headRepositoryOwner.login == \"PostHog\") | .headRefName" | head -n 1)
+
+                  if [ -n "$EXISTING_BRANCH" ]; then
+                      BRANCH_NAME="$EXISTING_BRANCH"
+                  else
+                      BRANCH_NAME="${PACKAGE_NAME_SANITIZED}-upgrade"
+                  fi
+
+                  echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+                  echo "title=$PR_TITLE" >> "$GITHUB_OUTPUT"
+                  {
+                      echo 'body<<EOF'
+                      echo '## Changes'
+                      echo
+                      echo "$PACKAGE_NAME version $PACKAGE_VERSION has been released. This updates PostHog to use it."
+                      echo
+                      echo "[GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${PACKAGE_NAME}?activeTab=version)"
+                      echo 'EOF'
+                  } >> "$GITHUB_OUTPUT"
 
             - name: Create main repo pull request
               id: main-repo-pr
@@ -71,16 +100,11 @@ jobs:
                   HUSKY: '0'
               with:
                   token: ${{ steps.upgrader.outputs.token }}
-                  commit-message: 'chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}'
-                  branch: ${{ steps.generate-branch-name.outputs.branch_name }}
+                  commit-message: ${{ steps.generate-pr-details.outputs.title }}
+                  branch: ${{ steps.generate-pr-details.outputs.branch_name }}
                   delete-branch: true
-                  title: 'chore(deps): Update ${{ github.event.inputs.package_name }} to ${{ github.event.inputs.package_version }}'
-                  body: |
-                      ## Changes
-
-                      ${{ github.event.inputs.package_name }} version ${{ github.event.inputs.package_version }} has been released. This updates PostHog to use it.
-
-                      [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ github.event.inputs.package_name }}?activeTab=version)
+                  title: ${{ steps.generate-pr-details.outputs.title }}
+                  body: ${{ steps.generate-pr-details.outputs.body }}
 
             - name: Output pull request result
               shell: bash
@@ -91,12 +115,26 @@ jobs:
               run: |
                   echo "PostHog pull request for $PACKAGE_NAME version $PACKAGE_VERSION ready: $PR_URL"
 
+            - name: Update pull request metadata
+              env:
+                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
+                  PR_BODY: ${{ steps.generate-pr-details.outputs.body }}
+                  PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
+                  PR_TITLE: ${{ steps.generate-pr-details.outputs.title }}
+              run: |
+                  gh pr edit "$PR_NUMBER" \
+                      --repo PostHog/posthog \
+                      --title "$PR_TITLE" \
+                      --body "$PR_BODY"
+
             - name: Enable automerge
               env:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
                   PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
               run: |
-                  gh pr merge "$PR_NUMBER" --auto --squash
+                  if [ "$(gh pr view "$PR_NUMBER" --repo PostHog/posthog --json autoMergeRequest --jq '.autoMergeRequest != null')" = "false" ]; then
+                      gh pr merge "$PR_NUMBER" --repo PostHog/posthog --auto --squash
+                  fi
 
             - name: Assign reviewers
               env:
@@ -119,5 +157,6 @@ jobs:
                         "ref": "${{ github.ref }}",
                         "repository": "Posthog/posthog",
                         "packageName": "${{ github.event.inputs.package_name }}",
-                        "packageVersion": "${{ github.event.inputs.package_version }}"
+                        "packageVersion": "${{ github.event.inputs.package_version }}",
+                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                       }

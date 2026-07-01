@@ -1,6 +1,9 @@
 {
     "private": true,
-    "packageManager": "pnpm@10.23.0",
+    "packageManager": "pnpm@11.7.0",
+    "engines": {
+        "node": "24.x"
+    },
     "scripts": {
         "build-rollup": "pnpm --filter=posthog-js build-rollup",
         "clean": "turbo clean",
@@ -16,6 +19,7 @@
         "build": "turbo build",
         "dev": "turbo dev",
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
+        "check:package-tarballs": "node scripts/check-package-tarballs.js",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
         "bump": "pnpm changeset version",
         "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",

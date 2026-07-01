@@ -1,5 +1,58 @@
 # @posthog/mcp
 
+## 0.7.0
+
+### Minor Changes
+
+- [#4025](https://github.com/PostHog/posthog-js/pull/4025) [`5590094`](https://github.com/PostHog/posthog-js/commit/5590094403a1f9484f3e08a5e21311f6adb0cc60) Thanks [@gesh](https://github.com/gesh)! - Stamp the standard PostHog `$lib` / `$lib_version` (value `posthog-node-mcp`) on every event, so MCP events self-identify the same way every other PostHog SDK does. Both emit paths are covered: `PostHogMCP` overrides its library id, and `instrument()` applies it to the client you pass in. Note that posthog-node sets `$lib` at the client level, so for `instrument()` this relabels every event that client sends as `posthog-node-mcp` — pass a client dedicated to your MCP server's analytics.
+  (2026-06-30)
+
+## 0.6.0
+
+### Minor Changes
+
+- [#4022](https://github.com/PostHog/posthog-js/pull/4022) [`d9e19e0`](https://github.com/PostHog/posthog-js/commit/d9e19e020b5e5306887793b80ce861e9ea5097d8) Thanks [@gesh](https://github.com/gesh)! - Emit `$mcp_lib` (`@posthog/mcp`) and `$mcp_lib_version` on every `$mcp_*` event (and the `$exception` sibling) so you can tell which analytics SDK release produced the data. The version was already resolved at runtime but never mapped to a property. Namespaced like `@posthog/ai`'s `$ai_lib` rather than overriding `$lib`, which stays the transport SDK (`posthog-node`).
+  (2026-06-30)
+
+## 0.5.1
+
+### Patch Changes
+
+- [#4009](https://github.com/PostHog/posthog-js/pull/4009) [`ae68de1`](https://github.com/PostHog/posthog-js/commit/ae68de1fd602cfdacbe6d0501583479862e4e252) Thanks [@gesh](https://github.com/gesh)! - Fix `$mcp_client_name` being dropped from every other captured event. `getSessionInfo` cached the client identity but then overwrote the cache with `undefined` on the next event, so consecutive tool calls alternated between carrying and lacking the client name (showing up as a large "other" slice in MCP analytics). The cached client name/version are now reused instead of refetched.
+  (2026-06-29)
+
+## 0.5.0
+
+### Minor Changes
+
+- [#3995](https://github.com/PostHog/posthog-js/pull/3995) [`e86f61a`](https://github.com/PostHog/posthog-js/commit/e86f61a30df9fec6f59ba2de4c4b2cb596fd0d7f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add `instrumentMutator(posthog, options?)` — a point-free `(server) => server` helper for framework server-mutation hooks like `@rekog/mcp-nest`'s `serverMutator`. It instruments the server and returns it, so `serverMutator: instrumentMutator(posthog)` just works (no need to remember that `instrument()` returns the analytics handle, not the server).
+  (2026-06-26)
+
+## 0.4.4
+
+### Patch Changes
+
+- [#3896](https://github.com/PostHog/posthog-js/pull/3896) [`606ef43`](https://github.com/PostHog/posthog-js/commit/606ef43d69fd09a00a67df2a404d8739cc50c654) Thanks [@GauthierPLM](https://github.com/GauthierPLM)! - Forward $groups as a first-class groups field from the MCP analytics sink so the group association is no longer dropped on $mcp\_\* events (fixes #3888).
+  (2026-06-26)
+- Updated dependencies [[`606ef43`](https://github.com/PostHog/posthog-js/commit/606ef43d69fd09a00a67df2a404d8739cc50c654)]:
+  - posthog-node@5.38.6
+
+## 0.4.3
+
+### Patch Changes
+
+- [#3993](https://github.com/PostHog/posthog-js/pull/3993) [`fb43a92`](https://github.com/PostHog/posthog-js/commit/fb43a92a293f8a47d9be93925557ef6efb4cda96) Thanks [@gesh](https://github.com/gesh)! - Instrument MCP request handlers through a single `setRequestHandler` patch instead of one per method. Internal refactor — no change to the analytics captured.
+  (2026-06-26)
+- Updated dependencies [[`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f)]:
+  - @posthog/core@1.38.0
+
+## 0.4.2
+
+### Patch Changes
+
+- [#3976](https://github.com/PostHog/posthog-js/pull/3976) [`a29194f`](https://github.com/PostHog/posthog-js/commit/a29194f82b6603805a032b3864cad00d16dd4116) Thanks [@gesh](https://github.com/gesh)! - Capture tool listings (and the injected `context` parameter) on MCP servers that register their `tools/list` handler after `instrument()` runs — e.g. `@rekog/mcp-nest`, which hands a bare server to `instrument()` and only then registers its handlers.
+  (2026-06-25)
+
 ## 0.4.1
 
 ### Patch Changes

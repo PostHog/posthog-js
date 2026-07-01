@@ -7,6 +7,7 @@ import './App.css'
 function App() {
     const [name, setName] = useState('')
     const [procedureStatus, setProcedureStatus] = useState<string | null>(null)
+    const [procFlags, setProcFlags] = useState<Record<string, boolean | string> | null>(null)
 
     const posthog = usePostHog()
     const conn = useSpacetimeDB()
@@ -18,6 +19,7 @@ function App() {
     const addPerson = useReducer(reducers.add)
     const requestFlagEval = useReducer(reducers.requestFlagEval)
     const captureEvent = useProcedure(procedures.captureEvent)
+    const evaluateFlags = useProcedure(procedures.evaluateFlags)
 
     // Tie posthog-js to the SpacetimeDB identity so frontend, sidecar, and
     // procedure events all land on one person.
@@ -48,6 +50,17 @@ function App() {
         if (!connected) return
         const ok = await captureEvent({ distinctId: myDistinctId, event: 'server_side_ping' })
         setProcedureStatus(ok ? 'sent ✓' : 'failed ✗')
+    }
+
+    const handleProcedureFlags = async () => {
+        if (!connected) return
+        try {
+            const json = await evaluateFlags()
+            const parsed = JSON.parse(json)
+            setProcFlags(parsed && typeof parsed === 'object' ? parsed : {})
+        } catch {
+            setProcFlags({})
+        }
     }
 
     return (
@@ -91,12 +104,11 @@ function App() {
             </section>
 
             <section>
-                <h2>3. Local feature-flag evaluation</h2>
+                <h2>3. Feature flags via sidecar (local eval)</h2>
                 <p className="hint">
-                    Asks the backend to evaluate flags via the <code>requestFlagEval</code> reducer. The sidecar
-                    evaluates them <strong>locally</strong> with the personal API key, then writes them to the{' '}
-                    <code>feature_flag</code> table — which this view subscribes to. Your distinct id:{' '}
-                    <code>{myDistinctId.slice(0, 16)}…</code>
+                    The <code>requestFlagEval</code> reducer signals the sidecar, which evaluates flags{' '}
+                    <strong>locally</strong> with the personal API key and writes them to the <code>feature_flag</code>{' '}
+                    table this view subscribes to. Your distinct id: <code>{myDistinctId.slice(0, 16)}…</code>
                 </p>
                 <button onClick={() => connected && requestFlagEval()} disabled={!connected}>
                     Evaluate my flags
@@ -117,6 +129,33 @@ function App() {
                     )
                 ) : (
                     <p className="hint">Not evaluated yet.</p>
+                )}
+            </section>
+
+            <section>
+                <h2>4. Feature flags via procedure (remote eval)</h2>
+                <p className="hint">
+                    The <code>evaluateFlags</code> procedure POSTs to PostHog's <code>/flags</code> endpoint over{' '}
+                    <code>ctx.http</code> and returns the result <strong>directly</strong> to this caller — no sidecar,
+                    no personal key, no table.
+                </p>
+                <button onClick={handleProcedureFlags} disabled={!connected}>
+                    Evaluate my flags
+                </button>
+                {procFlags === null ? (
+                    <p className="hint">Not evaluated yet.</p>
+                ) : Object.keys(procFlags).length === 0 ? (
+                    <p className="hint">
+                        No flags returned for this distinct id (none active, or none defined in the project).
+                    </p>
+                ) : (
+                    <ul>
+                        {Object.entries(procFlags).map(([key, value]) => (
+                            <li key={key}>
+                                <code>{key}</code>: <strong>{String(value)}</strong>
+                            </li>
+                        ))}
+                    </ul>
                 )}
             </section>
 

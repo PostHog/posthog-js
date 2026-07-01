@@ -1,9 +1,11 @@
 import { AutocaptureConfig, PostHogConfig, Properties } from './types'
+import type { PostHog } from './posthog-core'
 import { each, entries } from './utils'
 
 import { isNullish, isString, isUndefined, isArray, isBoolean } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
+import { getTargetingUrl } from './utils/url-targeting-utils'
 import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
 import { includes, trim } from '@posthog/core'
 
@@ -11,8 +13,8 @@ export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
 }
 
-function checkForURLMatches(urlsList: (string | RegExp)[]): boolean {
-    const url = window?.location.href
+function checkForURLMatches(urlsList: (string | RegExp)[], instance?: PostHog): boolean {
+    const url = getTargetingUrl(instance)
     return !!(url && urlsList && urlsList.some((regex) => url.match(regex)))
 }
 
@@ -364,7 +366,8 @@ export function shouldCaptureDomEvent(
     event: Event,
     autocaptureConfig: AutocaptureConfig | undefined = undefined,
     captureOnAnyElement?: boolean,
-    allowedEventTypes?: string[]
+    allowedEventTypes?: string[],
+    instance?: PostHog
 ): boolean {
     if (!window || cannotCheckForAutocapture(el)) {
         return false
@@ -372,14 +375,14 @@ export function shouldCaptureDomEvent(
 
     if (autocaptureConfig?.url_allowlist) {
         // if the current URL is not in the allow list, don't capture
-        if (!checkForURLMatches(autocaptureConfig.url_allowlist)) {
+        if (!checkForURLMatches(autocaptureConfig.url_allowlist, instance)) {
             return false
         }
     }
 
     if (autocaptureConfig?.url_ignorelist) {
         // if the current URL is in the ignore list, don't capture
-        if (checkForURLMatches(autocaptureConfig.url_ignorelist)) {
+        if (checkForURLMatches(autocaptureConfig.url_ignorelist, instance)) {
             return false
         }
     }

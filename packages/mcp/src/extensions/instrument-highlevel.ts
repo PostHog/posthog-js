@@ -8,11 +8,12 @@ import { stripConversationId } from './conversation-id'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
-import { createWrappedTool, getLiteralValue, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
+import { createWrappedTool, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
-  instrumentInitializeHandler,
-  instrumentToolsListHandler,
+  handleInitializeRequest,
+  handleListToolsRequest,
+  patchRequestHandlers,
   captureToolCall,
   readToolMetaCategory,
 } from './instrumentation'
@@ -72,8 +73,6 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 
             const nextValue = addTracingToToolCallbackInternal(value, property, server)
 
-            instrumentToolsListHandler(server.server as MCPServerLike)
-
             if (typeof nextValue.update === 'function') {
               const originalUpdate = nextValue.update
               nextValue.update = function (...updateArgs: unknown[]) {
@@ -130,7 +129,7 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
  * (the high-level SDK turns thrown errors into `isError` results otherwise).
  *
  * This is purely the tool-facing concern; event capture lives in
- * {@link captureToolCall} via {@link handleWrappedToolsCall}.
+ * {@link captureToolCall} via {@link handleToolCallRequest}.
  */
 function addTracingToToolCallbackInternal(
   tool: RegisteredTool,
@@ -202,38 +201,9 @@ function addTracingToToolCallbackInternal(
   return wrappedTool
 }
 
-function setupToolsCallHandlerWrapping(server: HighLevelMCPServerLike): void {
-  const lowLevelServer = server.server as MCPServerLike
-
-  const existingHandler = lowLevelServer._requestHandlers.get('tools/call')
-  if (existingHandler) {
-    const wrappedHandler = createToolsCallWrapper(existingHandler, lowLevelServer)
-    lowLevelServer._requestHandlers.set('tools/call', wrappedHandler)
-  }
-
-  const originalSetRequestHandler = lowLevelServer.setRequestHandler.bind(lowLevelServer)
-
-  lowLevelServer.setRequestHandler = ((requestSchema: unknown, handler: MCPRequestHandler) => {
-    const shape = getObjectShape(requestSchema)
-    const method = shape?.method ? getLiteralValue(shape.method) : undefined
-
-    if (method === 'tools/call') {
-      const wrappedHandler = createToolsCallWrapper(handler, lowLevelServer)
-      return originalSetRequestHandler(requestSchema, wrappedHandler)
-    }
-
-    return originalSetRequestHandler(requestSchema, handler)
-  }) as MCPServerLike['setRequestHandler']
-}
-
-function createToolsCallWrapper(originalHandler: MCPRequestHandler, server: MCPServerLike): MCPRequestHandler {
-  return async (request: MCPRequest, extra: MCPRequestExtra) =>
-    await handleWrappedToolsCall(originalHandler, server, request, extra)
-}
-
-async function handleWrappedToolsCall(
-  originalHandler: MCPRequestHandler,
+async function handleToolCallRequest(
   server: MCPServerLike,
+  originalCallToolHandler: MCPRequestHandler,
   request: MCPRequest,
   extra: MCPRequestExtra
 ): Promise<unknown> {
@@ -242,7 +212,7 @@ async function handleWrappedToolsCall(
     log(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
-    return await originalHandler(request, extra)
+    return await originalCallToolHandler(request, extra)
   }
 
   if (request.params?.name === resolveMissingCapabilityToolName(data.options)) {
@@ -267,7 +237,7 @@ async function handleWrappedToolsCall(
     data,
     request,
     extra,
-    execute: () => originalHandler(request, extra),
+    execute: () => originalCallToolHandler(request, extra),
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {
@@ -280,11 +250,16 @@ async function handleWrappedToolsCall(
 
 export function instrumentHighLevelServer(server: HighLevelMCPServerLike): void {
   try {
-    const mcpAnalyticsData = getServerTrackingData(server.server)
+    const lowLevelServer = server.server
+    const mcpAnalyticsData = getServerTrackingData(lowLevelServer)
 
-    setupToolsCallHandlerWrapping(server)
-
-    instrumentInitializeHandler(server.server)
+    // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
+    const handlers = {
+      initialize: handleInitializeRequest,
+      'tools/list': handleListToolsRequest,
+      'tools/call': handleToolCallRequest,
+    }
+    patchRequestHandlers(lowLevelServer, handlers)
 
     server._registeredTools = addTracingToToolRegistry(server._registeredTools, server)
 
@@ -292,8 +267,6 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike): void 
       seedToolDescriptionsFromRegistry(mcpAnalyticsData.toolDescriptions, server._registeredTools)
       seedToolCategoriesFromRegistry(mcpAnalyticsData.toolCategories, server._registeredTools)
     }
-
-    instrumentToolsListHandler(server.server)
 
     setupListenerToRegisteredTools(server)
   } catch (error) {
