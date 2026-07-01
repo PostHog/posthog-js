@@ -143,19 +143,12 @@ jobs:
               run: |
                   gh pr edit "$PR_NUMBER" --repo PostHog/posthog --add-reviewer PostHog/client-libraries-approvers --add-reviewer PostHog/team-client-libraries
 
-            # This job runs after posthog-js is already published; it only opens the
-            # dependency-bump PR in the PostHog/posthog monorepo. A failure here means
-            # the upgrade PR could not be opened, not that the release failed. It records
-            # its own analytics event and posts an accurate alert rather than a
-            # "Failed to release" one.
             - name: Send failure event to PostHog
               if: ${{ failure() }}
               continue-on-error: true
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
-                  # Distinct from release.yml's event name so the release-failure CDP
-                  # alert does not fire for an upgrade-PR failure.
                   event: 'posthog-js-github-upgrade-pr-failure'
                   properties: >-
                       {
@@ -170,7 +163,6 @@ jobs:
 
             - name: Notify Slack that the upgrade PR failed
               if: ${{ failure() }}
-              # #alerts-posthog-js; override with a repo var when one exists.
               uses: slackapi/slack-github-action@af78098f536edbc4de71162a307590698245be95 # v3.0.1
               with:
                   method: chat.postMessage
