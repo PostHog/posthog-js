@@ -303,11 +303,8 @@ jobs:
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: pnpm install --frozen-lockfile && pnpm build
 
-            # A concurrent release run (main gets a push per merge, plus one per
-            # `[version bump]` commit) can publish this exact version during the
-            # install/build above. Re-check the registry right before publishing so
-            # an already-published version short-circuits the publish/tag/release
-            # tail as a no-op instead of erroring on npm's republish rejection.
+            # Re-check the registry after the build: a concurrent run may have
+            # already published this version, making the publish tail a no-op.
             - name: Check registry before publishing
               id: preflight
               if: steps.check-package-version.outputs.is-new-version == 'true'
@@ -334,10 +331,8 @@ jobs:
                   status=$?
                   set -e
                   if [ $status -ne 0 ]; then
-                      # A concurrent run can publish this exact version in the seconds
-                      # between the preflight check and here; npm rejects the republish
-                      # with a 403. The version being on the registry is the desired end
-                      # state, so treat that specific case as success.
+                      # A concurrent publish of the same version returns a 403; the
+                      # version being on the registry is the desired end state.
                       if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
                           echo "$PACKAGE_NAME@$PACKAGE_VERSION already exists on npm after a concurrent publish; treating as success."
                       else
@@ -352,8 +347,7 @@ jobs:
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
               run: |
-                  # A concurrent run that publishes first also creates this tag, so
-                  # skip when it already exists rather than failing on a 422.
+                  # Skip when a concurrent run already created the tag.
                   if gh api "repos/${{ github.repository }}/git/refs/tags/$PACKAGE_NAME@$COMMITTED_VERSION" >/dev/null 2>&1; then
                       echo "Tag $PACKAGE_NAME@$COMMITTED_VERSION already exists; skipping."
                   else
@@ -370,8 +364,7 @@ jobs:
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
               run: |
-                  # A concurrent run that publishes first also creates this release, so
-                  # skip when it already exists rather than failing.
+                  # Skip when a concurrent run already created the release.
                   if gh release view "$PACKAGE_NAME@$COMMITTED_VERSION" >/dev/null 2>&1; then
                       echo "Release $PACKAGE_NAME@$COMMITTED_VERSION already exists; skipping."
                   else
