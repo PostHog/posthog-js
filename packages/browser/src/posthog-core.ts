@@ -1352,7 +1352,18 @@ export class PostHog implements PostHogInterface {
             this.sessionPersistence.update_campaign_params()
         }
         if (this.config.save_referrer) {
-            this.sessionPersistence.update_referrer_info()
+            // posthog.register() writes to this.persistence (regular persistence).
+            // update_referrer_info() writes to this.sessionPersistence, which is
+            // merged AFTER persistence in calculateEventProperties — so session values
+            // silently win for shared keys.  Skip the SDK update when the user has
+            // explicitly registered a custom $referrer or $referring_domain via
+            // posthog.register(), so their value is not overwritten on every pageview
+            // (e.g. in SPA-in-iframe scenarios where document.referrer is the iframe
+            // origin rather than the embedding page).
+            const persistenceProps = this.persistence.props
+            if (!('$referrer' in persistenceProps) && !('$referring_domain' in persistenceProps)) {
+                this.sessionPersistence.update_referrer_info()
+            }
         }
 
         if (this.config.save_campaign_params || this.config.save_referrer) {
