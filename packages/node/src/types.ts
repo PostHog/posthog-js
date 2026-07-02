@@ -145,6 +145,23 @@ export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   persistence?: 'memory'
+  /**
+   * Credential that enables local feature flag evaluation and remote config.
+   *
+   * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).
+   * When provided, the client can evaluate feature flags locally and decrypt remote
+   * config payloads via `getRemoteConfigPayload`. Prefer this over the deprecated
+   * `personalApiKey` option; when both are set, `secretKey` takes precedence.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { secretKey: 'phs_...' })
+   * ```
+   */
+  secretKey?: string
+  /**
+   * @deprecated Use `secretKey` instead.
+   */
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
@@ -153,8 +170,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   // Maximum size of cache that deduplicates $feature_flag_called calls per user.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
-  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when personalApiKey is provided.
-  // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
+  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when secretKey is provided.
+  // We recommend setting this to false if you are only using the secretKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
    * Optional cache provider for feature flag definitions.
