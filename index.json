@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/3618": {
+    "key": "PostHog/posthog-js/issue/3618",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3618",
+    "url": "https://github.com/PostHog/posthog-js/issues/3618",
+    "conclusion": "Valid feature request; the browser SDK currently adds the `_` cache-buster unconditionally and there is no opt-out.",
+    "labels": [
+      "enhancement",
+      "web",
+      "feature"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-02T09:34:10.541Z"
+  },
   "PostHog/posthog-js/issue/3615": {
     "key": "PostHog/posthog-js/issue/3615",
     "repo": "PostHog/posthog-js",
