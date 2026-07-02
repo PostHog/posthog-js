@@ -155,6 +155,7 @@ jobs:
                         "commitSha": "${{ github.sha }}",
                         "jobStatus": "${{ job.status }}",
                         "ref": "${{ github.ref }}",
+                        "jobName": "posthog-upgrade",
                         "repository": "PostHog/posthog",
                         "packageName": "${{ github.event.inputs.package_name }}",
                         "packageVersion": "${{ github.event.inputs.package_version }}",
