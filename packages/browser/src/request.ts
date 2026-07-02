@@ -288,21 +288,24 @@ const _fetch = (options: RequestWithOptions) => {
     }
 
     let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
-    let timeoutReason: Error | null = null
+    // Set the instant our own timeout fires, before the abort propagates. This is the source of
+    // truth for "we timed out ourselves" - see the `.catch` below for why we can't rely on the
+    // abort reason.
+    let timedOut = false
 
     if (AbortController) {
         const controller = new AbortController()
         aborter = {
             signal: controller.signal,
             timeout: setTimeout(() => {
+                timedOut = true
                 // Abort with an explicit reason. Without one, the browser rejects the fetch with a
                 // reason-less `DOMException: AbortError: signal is aborted without reason`, which is
                 // indistinguishable from a host app's own aborted fetches wherever it surfaces (the
                 // `{ statusCode: 0, error }` callback, logs, stack traces). An explicit reason makes
                 // our own request timeouts identifiable. We keep `name === 'AbortError'` so existing
                 // timeout handling (e.g. feature flag timeout detection) keeps working.
-                timeoutReason = timeoutAbortReason(options.timeout)
-                controller.abort(timeoutReason)
+                controller.abort(timeoutAbortReason(options.timeout))
             }, options.timeout),
         }
     }
@@ -341,11 +344,18 @@ const _fetch = (options: RequestWithOptions) => {
             })
         })
         .catch((error) => {
-            // Identity comparison against the exact reason we created, so a genuine network error
-            // that happens to settle in the same turn as the timeout is never misclassified.
-            if (error === timeoutReason) {
+            // Detect our own timeout via the `timedOut` flag rather than by comparing `error`
+            // against the reason we passed to `controller.abort(...)`. Not every browser propagates
+            // the abort reason to the fetch rejection - some reject with a generic native
+            // `DOMException: AbortError: The operation was aborted.` instead - so a reference (or
+            // message) comparison misses those and misclassifies our own timeout as a real error.
+            // The flag is set synchronously the instant our timeout fires, and we additionally
+            // require `name === 'AbortError'` so a genuine network error that happens to settle
+            // just after the timeout is never mislabelled.
+            if (timedOut && (error as Error)?.name === 'AbortError') {
                 // Our own request timeout is an expected, intentional abort (the request queue
-                // retries), not a genuine failure - so log it at `warn` rather than `error`.
+                // retries), not a genuine failure - so log it at `warn` rather than `error`. This
+                // also keeps it out of error tracking's console-error capture as an exception.
                 logger.warn(error)
             } else {
                 logger.error(error)

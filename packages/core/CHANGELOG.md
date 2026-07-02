@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.39.6
+
+### Patch Changes
+
+- [#4059](https://github.com/PostHog/posthog-js/pull/4059) [`532f2c3`](https://github.com/PostHog/posthog-js/commit/532f2c3b07f6cd44a10c40790616256d24f2e5a1) Thanks [@jiuyige](https://github.com/jiuyige)! - Add per-call sendEvent option support to React Native feature flag helpers.
+  (2026-07-02)
+
 ## 1.39.5
 
 ### Patch Changes

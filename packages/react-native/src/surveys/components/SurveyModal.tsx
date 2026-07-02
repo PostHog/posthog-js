@@ -25,6 +25,14 @@ const VIEWPORT_BUFFER = 0
 // Matches RN Modal's fade animation duration (Android only).
 const MODAL_FADE_DURATION_MS = 250
 
+// iOS normally notifies the parent via Modal.onDismiss, but Fabric can fail to fire it
+// (https://github.com/facebook/react-native/issues/48245). When that happens the parent never
+// clears the active survey, so this transparent full-screen Modal stays mounted and swallows
+// every touch — the app appears frozen. This is the safety-net delay after which we notify the
+// parent ourselves if onDismiss still hasn't fired. Longer than the dismiss animation so the
+// real onDismiss stays the primary path on the happy path.
+const IOS_DISMISS_FALLBACK_MS = 1000
+
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { survey, surveyLanguage, appearance, onShow, onClose: onCloseProp, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
@@ -35,6 +43,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const [contentMounted, setContentMounted] = useState(true)
   const isClosingRef = useRef(false)
   const closeNotifiedRef = useRef(false)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const notifyParentClosed = useCallback(() => {
     if (closeNotifiedRef.current) return
     closeNotifiedRef.current = true
@@ -46,12 +55,24 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
     setContentMounted(false)
     requestAnimationFrame(() => {
       setIsVisible(false)
-      // Android Modal has no onDismiss; wait the fade duration before notifying.
-      if (Platform.OS !== 'ios') {
-        setTimeout(notifyParentClosed, MODAL_FADE_DURATION_MS)
-      }
+      // Always schedule a fallback to notify the parent. On Android the Modal has no onDismiss,
+      // so this is the only notification path (after the fade). On iOS onDismiss is the primary
+      // path, but it can silently fail to fire — this timer guarantees the parent still unmounts
+      // the Modal so it can never stay up intercepting touches. notifyParentClosed is idempotent,
+      // so whichever fires first wins and the other becomes a no-op.
+      const fallbackDelay = Platform.OS === 'ios' ? IOS_DISMISS_FALLBACK_MS : MODAL_FADE_DURATION_MS
+      closeTimerRef.current = setTimeout(notifyParentClosed, fallbackDelay)
     })
   }, [notifyParentClosed])
+
+  // Clear the pending fallback timer on unmount so it can't fire after the survey is gone.
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current)
+      }
+    }
+  }, [])
   const insets = useOptionalSafeAreaInsets()
   const { height: windowHeight } = useWindowDimensions()
   const [keyboardHeight, setKeyboardHeight] = useState(0)

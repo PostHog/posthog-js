@@ -160,6 +160,21 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
     properties[PostHogMCPAnalyticsProperty.IsError] = event.isError
   }
 
+  if (event.isError) {
+    // Surface the failure reason directly on the primary event so the dashboard
+    // can break errors down by cause without joining to the `$exception` sibling
+    // (which can be disabled, and isn't emitted when no error value is passed).
+    const firstException = event.error?.$exception_list?.[0]
+    const errorType = event.errorType ?? firstException?.type
+    if (errorType) {
+      properties[PostHogMCPAnalyticsProperty.ErrorType] = errorType
+    }
+    if (firstException?.value) {
+      // Already bounded to MAX_ERROR_MESSAGE_LENGTH by `truncateExceptionList`.
+      properties[PostHogMCPAnalyticsProperty.ErrorMessage] = firstException.value
+    }
+  }
+
   if (event.parameters !== undefined) {
     properties[PostHogMCPAnalyticsProperty.Parameters] = event.parameters
   }
