@@ -957,7 +957,7 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param key The feature flag key
-   * @param options Optional lookup settings
+   * @param options Optional per-call settings
    * @returns True if enabled, false if disabled, undefined if not loaded
    */
   isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
@@ -981,7 +981,7 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param key The feature flag key
-   * @param options Optional lookup settings
+   * @param options Optional per-call settings
    * @returns The feature flag value or undefined if not loaded
    */
   getFeatureFlag(key: string, options?: FeatureFlagResultOptions): boolean | string | undefined {
