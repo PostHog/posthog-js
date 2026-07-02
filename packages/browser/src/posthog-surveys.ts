@@ -1,4 +1,10 @@
-import { LOAD_EXT_NOT_FOUND, SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT } from './constants'
+import {
+    LOAD_EXT_NOT_FOUND,
+    SURVEYS,
+    SURVEYS_CACHE_TTL_MS,
+    SURVEYS_LOADED_AT,
+    SURVEYS_REFRESH_BACKOFF_MS,
+} from './constants'
 
 const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
 const SURVEY_DISABLED = 'Disabled. Not loading surveys.'
@@ -234,7 +240,7 @@ export class PostHogSurveys implements Extension {
             // If the cache has aged past its TTL, kick off a background refresh so server-side
             // changes (e.g. a survey switched from popover to API) reach a long-lived tab. The
             // next poll then evaluates the refreshed definitions.
-            if (this._isSurveyCacheStale() && !this._getSurveysInFlightPromise && !this._isSurveyRefreshBackingOff()) {
+            if (this._shouldBackgroundRefreshSurveys()) {
                 this.getSurveys(() => {}, true)
             }
             return
@@ -299,6 +305,14 @@ export class PostHogSurveys implements Extension {
     }
 
     /**
+     * Whether to kick off a background refresh of the cached definitions: the cache is stale, no
+     * fetch is already in flight, and we're not backing off after a recent failure.
+     */
+    private _shouldBackgroundRefreshSurveys(): boolean {
+        return this._isSurveyCacheStale() && !this._getSurveysInFlightPromise && !this._isSurveyRefreshBackingOff()
+    }
+
+    /**
      * Whether the cached `$surveys` definitions have aged past their TTL. Returns false when no
      * timestamp is recorded (e.g. surveys injected directly in tests) so the cache stays valid.
      */
@@ -310,7 +324,7 @@ export class PostHogSurveys implements Extension {
     private _isSurveyRefreshBackingOff(): boolean {
         return (
             isNumber(this._lastSurveyRefreshFailedAt) &&
-            Date.now() - this._lastSurveyRefreshFailedAt < SURVEYS_CACHE_TTL_MS
+            Date.now() - this._lastSurveyRefreshFailedAt < SURVEYS_REFRESH_BACKOFF_MS
         )
     }
 

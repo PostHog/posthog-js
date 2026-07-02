@@ -119,6 +119,9 @@ export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
 // server-side changes (e.g. a survey switched from popover to API) propagate to a
 // long-lived tab without needing a page reload.
 export const SURVEYS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+// After a failed background refresh we back off for the same window as the cache TTL before
+// trying again. Aliased to make the shared duration intentional rather than coincidental.
+export const SURVEYS_REFRESH_BACKOFF_MS = SURVEYS_CACHE_TTL_MS
 export const LOAD_EXT_NOT_FOUND = 'PostHog loadExternalDependency extension not found.'
 
 /* EVENT NAMES - interned to reduce bundle size */
