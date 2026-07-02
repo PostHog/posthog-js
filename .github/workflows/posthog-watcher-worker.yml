@@ -48,7 +48,7 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y ripgrep
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@92f333b9e509f45fb03cbc27dc788e6d9fa5290f
+              uses: PostHog/posthog-watcher-action@66668349cf7569a534d518ec70bd3f9afb8932ab
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
@@ -58,6 +58,7 @@ jobs:
                   allow-security-ai: 'true'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
+                  fix-pr-review-team: PostHog/team-client-libraries
                   approve-project-resources: 'true'
                   state-enabled: 'true'
 
@@ -78,7 +79,7 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y ripgrep
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@92f333b9e509f45fb03cbc27dc788e6d9fa5290f
+              uses: PostHog/posthog-watcher-action@66668349cf7569a534d518ec70bd3f9afb8932ab
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}
@@ -89,5 +90,6 @@ jobs:
                   allow-security-ai: 'true'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
+                  fix-pr-review-team: PostHog/team-client-libraries
                   approve-project-resources: 'true'
                   state-enabled: 'true'
