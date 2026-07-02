@@ -93,6 +93,39 @@ describe('local evaluation', () => {
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
   })
 
+  it('locally evaluates person distinct_id conditions without sending it in remote person properties', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Distinct ID Feature',
+          key: 'distinct-id-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'distinct_id', type: 'person', value: 'some-distinct-id', operator: 'exact' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('distinct-id-flag', 'some-distinct-id')).toEqual(true)
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
   describe('early exit', () => {
     // First group's properties match but its rollout (0%) excludes everyone; the second group
     // would otherwise match. Mirrors the server-side `OutOfRolloutBound` short-circuit.
@@ -772,7 +805,6 @@ describe('local evaluation', () => {
           distinct_id: 'some-distinct-id_outside_rollout?',
           groups: {},
           person_properties: {
-            distinct_id: 'some-distinct-id_outside_rollout?',
             region: 'USA',
             email: 'a@b.com',
           },
@@ -795,7 +827,7 @@ describe('local evaluation', () => {
           token: 'TEST_API_KEY',
           distinct_id: 'some-distinct-id',
           groups: {},
-          person_properties: { distinct_id: 'some-distinct-id', doesnt_matter: '1' },
+          person_properties: { doesnt_matter: '1' },
           group_properties: {},
           geoip_disable: true,
           flag_keys_to_evaluate: ['complex-flag'],

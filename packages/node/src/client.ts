@@ -1002,7 +1002,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const evaluationContext = this.createFeatureFlagEvaluationContext(
       distinctId,
       groups,
-      personProperties,
+      this.personPropertiesForLocalEvaluation(distinctId, personProperties),
       groupProperties
     )
 
@@ -1060,8 +1060,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       const flagsResponse = await super.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
-        evaluationContext.personProperties,
-        evaluationContext.groupProperties,
+        personProperties,
+        groupProperties,
         disableGeoip,
         [key]
       )
@@ -1627,7 +1627,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const evaluationContext = this.createFeatureFlagEvaluationContext(
       resolvedDistinctId,
       groups,
-      personProperties,
+      this.personPropertiesForLocalEvaluation(resolvedDistinctId, personProperties),
       groupProperties
     )
 
@@ -1651,8 +1651,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       const remoteEvaluationResult = await super.getFeatureFlagsAndPayloadsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
-        evaluationContext.personProperties,
-        evaluationContext.groupProperties,
+        personProperties,
+        groupProperties,
         disableGeoip,
         flagKeys
       )
@@ -1794,7 +1794,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const evaluationContext = this.createFeatureFlagEvaluationContext(
       resolvedDistinctId,
       groups,
-      personProperties,
+      this.personPropertiesForLocalEvaluation(resolvedDistinctId, personProperties),
       groupProperties
     )
 
@@ -1839,8 +1839,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       const details = await super.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
-        evaluationContext.personProperties,
-        evaluationContext.groupProperties,
+        personProperties,
+        groupProperties,
         disableGeoip,
         flagKeys
       )
@@ -2458,7 +2458,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     personProperties?: Record<string, string>,
     groupProperties?: Record<string, Record<string, string>>
   ): { allPersonProperties: Record<string, string>; allGroupProperties: Record<string, Record<string, string>> } {
-    const allPersonProperties = { distinct_id: distinctId, ...(personProperties || {}) }
+    const allPersonProperties = { ...(personProperties || {}) }
 
     const allGroupProperties: Record<string, Record<string, string>> = {}
     if (groups) {
@@ -2471,6 +2471,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     return { allPersonProperties, allGroupProperties }
+  }
+
+  private personPropertiesForLocalEvaluation(
+    distinctId: string,
+    personProperties?: Record<string, any>
+  ): Record<string, any> {
+    return { distinct_id: distinctId, ...(personProperties || {}) }
   }
 
   private createFeatureFlagEvaluationContext(
