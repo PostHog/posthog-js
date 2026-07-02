@@ -3008,6 +3008,46 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Flushes any queued events and resolves once teardown is complete.
+     *
+     * @remarks
+     * This exists primarily for parity with the server-side
+     * [Node.js SDK](/docs/libraries/node), whose `shutdown()` you call once before a
+     * process exits. In the browser there is no process to exit — the SDK already
+     * flushes pending events on `pagehide`/`unload` — so this method is mostly a
+     * graceful no-op that best-effort flushes the request queues and always resolves.
+     *
+     * It is safe to call in isomorphic teardown code (for example a Nuxt/Next module
+     * that calls `shutdown()` on both the server and the client) so the same
+     * symmetric cleanup works in either environment without throwing.
+     *
+     * {@label Lifecycle}
+     * @example
+     * ```js
+     * // symmetric teardown that runs on both server and client
+     * await posthog.shutdown()
+     * ```
+     *
+     * @public
+     *
+     * @param {number} [_shutdownTimeoutMs] Accepted for call-site parity with the Node.js SDK. The browser flush is synchronous, so this is ignored.
+     * @returns {Promise<void>} A promise that resolves once the queues have been flushed.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    async shutdown(_shutdownTimeoutMs?: number): Promise<void> {
+        if (!this.__loaded) {
+            logger.uninitializedWarning('posthog.shutdown')
+            return
+        }
+
+        // Best-effort flush of anything still queued, mirroring page-unload teardown
+        // so no buffered events are silently dropped when teardown is explicit.
+        this.logs?.flushLogs('sendBeacon')
+        this._requestQueue?.unload()
+        this._retryQueue?.unload()
+    }
+
+    /**
      * Set HMAC-based identity verification.
      *
      * @remarks

@@ -191,6 +191,19 @@ export interface PostHog {
     reset(reset_device_id?: boolean): void
 
     /**
+     * Flush any queued events and gracefully tear down the SDK.
+     *
+     * @remarks
+     * Provided for parity with the server-side Node.js SDK. In the browser the SDK
+     * already flushes on page unload, so this best-effort flushes queued events and
+     * always resolves — it never throws — which makes isomorphic teardown safe.
+     *
+     * @param {number} [shutdownTimeoutMs] Accepted for parity with the Node.js SDK; unused in the browser.
+     * @returns {Promise<void>} Resolves once teardown is complete.
+     */
+    shutdown(shutdownTimeoutMs?: number): Promise<void>
+
+    /**
      * Create a person profile for the current user.
      */
     createPersonProfile(): void
