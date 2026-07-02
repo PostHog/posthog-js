@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3618](https://github.com/PostHog/posthog-js/issues/3618) | Valid feature request; the browser SDK currently adds the `_` cache-buster unconditionally and there is no opt-out. | enhancement, web, feature |  | no | 2026-07-02T09:34:10.541Z |
 | PostHog/posthog-js | [issue 3615](https://github.com/PostHog/posthog-js/issues/3615) | Likely valid @posthog/ai bug: OpenAI-compatible OpenRouter Claude cache tokens are forwarded inclusively and can be double-counted by PostHog cost accounting. | bug, team/llm-analytics |  | no | 2026-07-02T09:32:12.004Z |
 | PostHog/posthog-js | [issue 3614](https://github.com/PostHog/posthog-js/issues/3614) | Likely a real LLM analytics bug, but the report points to the Python SDK or backend trace processing rather than a clear posthog-js package issue. | bug, team/llm-analytics |  | no | 2026-07-02T09:30:32.128Z |
 | PostHog/posthog-js | [issue 4051](https://github.com/PostHog/posthog-js/issues/4051) | Valid feature tracking issue; keep open and labeled for feature flags. | enhancement, feature/flags, team/feature-flags |  | no | 2026-07-01T20:57:56.770Z |
