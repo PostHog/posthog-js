@@ -2531,4 +2531,40 @@ describe('Feature flag error tracking', () => {
     // $feature_flag_error should not be present
     expect(featureFlagEvent.properties.$feature_flag_error).toBeUndefined()
   })
+
+  it('should not send $feature_flag_called from getFeatureFlag when sendEvent is false', async () => {
+    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/flags/')) {
+        return Promise.resolve({
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              flags: {
+                'my-flag': {
+                  key: 'my-flag',
+                  enabled: true,
+                  variant: undefined,
+                  reason: undefined,
+                  metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+                },
+              },
+              errorsWhileComputingFlags: false,
+              requestId: 'test-request-id',
+              evaluatedAt: Date.now(),
+            }),
+        })
+      }
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ status: 'ok' }) })
+    })
+
+    await posthog.reloadFeatureFlagsAsync()
+
+    expect(posthog.getFeatureFlag('my-flag', { sendEvent: false })).toBe(true)
+
+    await posthog.flush()
+
+    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    expect(captureCall).toBeUndefined()
+  })
 })

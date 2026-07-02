@@ -22,6 +22,7 @@ import {
   patchFetchForTracingHeaders,
   safeSetTimeout,
   FeatureFlagValue,
+  FeatureFlagResultOptions,
   ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
 import { Properties } from '@posthog/types'
@@ -956,10 +957,11 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param key The feature flag key
+   * @param options Optional lookup settings
    * @returns True if enabled, false if disabled, undefined if not loaded
    */
-  isFeatureEnabled(key: string): boolean | undefined {
-    return super.isFeatureEnabled(key)
+  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
+    return super.isFeatureEnabled(key, options)
   }
 
   /**
@@ -979,10 +981,11 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param key The feature flag key
+   * @param options Optional lookup settings
    * @returns The feature flag value or undefined if not loaded
    */
-  getFeatureFlag(key: string): boolean | string | undefined {
-    return super.getFeatureFlag(key)
+  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): boolean | string | undefined {
+    return super.getFeatureFlag(key, options)
   }
 
   /**
