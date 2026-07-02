@@ -53,6 +53,7 @@ describe('self-rescheduling flag refresh loop', () => {
     delete process.env.POSTHOG_HOST
     delete process.env.POSTHOG_PERSONAL_API_KEY
     delete process.env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS
+    delete process.env.POSTHOG_DISABLE_LOCAL_EVALUATION
   })
 
   test('queues the next tick at the configured interval, not the 60s default', async () => {
@@ -147,5 +148,47 @@ describe('self-rescheduling flag refresh loop', () => {
     expect(flagsFetches).toBe(1)
     const row = await t.run(async (ctx) => ctx.db.query('flagDefinitions').first())
     expect(row).not.toBeNull()
+  })
+
+  describe('gated when local evaluation is not enabled (issue #4046)', () => {
+    const disabledCases: [string, () => void][] = [
+      ['no personal API key', () => delete process.env.POSTHOG_PERSONAL_API_KEY],
+      [
+        'key set but POSTHOG_DISABLE_LOCAL_EVALUATION=true',
+        () => (process.env.POSTHOG_DISABLE_LOCAL_EVALUATION = 'true'),
+      ],
+    ]
+
+    test.each(disabledCases)('supervisor schedules nothing (%s)', async (_label, disable) => {
+      disable()
+      const t = convexTest(schema, modules)
+
+      await t.mutation(internal.lib.ensureRefreshLoop, {})
+
+      expect(byName(await scheduledJobs(t), 'refreshLoop')).toHaveLength(0)
+    })
+
+    test.each(disabledCases)(
+      'a tick queues no successor and no fetch, so a live chain stops (%s)',
+      async (_label, disable) => {
+        disable()
+        const t = convexTest(schema, modules)
+
+        await t.mutation(internal.lib.refreshLoop, {})
+
+        const jobs = await scheduledJobs(t)
+        expect(byName(jobs, 'refreshLoop')).toHaveLength(0)
+        expect(byName(jobs, 'refreshFlagDefinitions')).toHaveLength(0)
+      }
+    )
+
+    test('key set with POSTHOG_DISABLE_LOCAL_EVALUATION=false: supervisor still schedules', async () => {
+      process.env.POSTHOG_DISABLE_LOCAL_EVALUATION = 'false'
+      const t = convexTest(schema, modules)
+
+      await t.mutation(internal.lib.ensureRefreshLoop, {})
+
+      expect(pending(byName(await scheduledJobs(t), 'refreshLoop'))).toHaveLength(1)
+    })
   })
 })

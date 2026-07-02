@@ -337,6 +337,17 @@ export const _getCurrentEtag = internalQuery({
 
 export const DEFAULT_INTERVAL_SECONDS = 60
 
+export function envFlagIsTrue(raw: string | undefined): boolean {
+  const value = (raw ?? '').trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on'
+}
+
+function localEvaluationEnabled(): boolean {
+  const personalApiKey = (env.POSTHOG_PERSONAL_API_KEY ?? '').trim()
+  if (!personalApiKey) return false
+  return !envFlagIsTrue(env.POSTHOG_DISABLE_LOCAL_EVALUATION)
+}
+
 // Read at runtime, where the forwarded value is visible. String-typed on the wire, so an invalid
 // value warns and falls back rather than failing. Exported for tests.
 export function readPollingIntervalSeconds(): number {
@@ -370,13 +381,14 @@ async function recordLoopJob(ctx: MutationCtx, jobId: GenericId<'_scheduled_func
  * tick commits atomically with this one, so the chain can't silently break. The fetch is a separate
  * at-most-once action; if it fails, the next tick refetches.
  *
- * Never invoke directly (e.g. dashboard "Run function"): it unconditionally queues a successor, so a
- * manual call forks the chain into two loops that run forever and double the cadence — the
- * supervisor can't detect the fork. Use `ensureRefreshLoop` to (re)start it.
+ * Never invoke directly (e.g. dashboard "Run function"): while local evaluation is enabled it queues
+ * a successor, so a manual call forks the chain into two loops that run forever and double the
+ * cadence — the supervisor can't detect the fork. Use `ensureRefreshLoop` to (re)start it.
  */
 export const refreshLoop = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (!localEvaluationEnabled()) return
     await ctx.scheduler.runAfter(0, api.lib.refreshFlagDefinitions, {})
     const nextId = await ctx.scheduler.runAfter(readPollingIntervalSeconds() * 1000, internal.lib.refreshLoop, {})
     await recordLoopJob(ctx, nextId)
@@ -391,6 +403,7 @@ export const refreshLoop = internalMutation({
 export const ensureRefreshLoop = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (!localEvaluationEnabled()) return
     const state = await ctx.db.query('refreshLoopState').first()
     if (state) {
       const job = await ctx.db.system.get(state.loopJobId)
