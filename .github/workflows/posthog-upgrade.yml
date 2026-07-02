@@ -146,19 +146,22 @@ jobs:
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Send failure event to PostHog
               if: ${{ failure() }}
-              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
+              continue-on-error: true
+              uses: PostHog/posthog-github-action@9a6a19d360820ab4d95ecc4a5a7564062c895f84 # v1.3.0
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
-                  event: 'posthog-js-github-release-workflow-failure'
+                  event: 'posthog-sdk-github-release-workflow-failure'
                   properties: >-
                       {
                         "commitSha": "${{ github.sha }}",
                         "jobStatus": "${{ job.status }}",
                         "ref": "${{ github.ref }}",
+                        "repository": "${{ github.repository }}",
+                        "sdk": "posthog-js",
+                        "targetRepository": "PostHog/posthog",
                         "jobName": "posthog-upgrade",
-                        "repository": "PostHog/posthog",
                         "packageName": "${{ github.event.inputs.package_name }}",
-                        "packageVersion": "${{ github.event.inputs.package_version }}",
+                        "packageVersion": "${{ github.event.inputs.package_version || 'unknown' }}",
                         "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
                         "alertText": ":warning: Downstream PostHog/posthog dependency bump failed for ${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}",
                         "alertContext": "This is the monorepo upgrade workflow, not a posthog-js release failure."
