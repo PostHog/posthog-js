@@ -2532,7 +2532,10 @@ describe('Feature flag error tracking', () => {
     expect(featureFlagEvent.properties.$feature_flag_error).toBeUndefined()
   })
 
-  it('should not send $feature_flag_called from getFeatureFlag when sendEvent is false', async () => {
+  it.each([
+    ['getFeatureFlag', (client: PostHog) => client.getFeatureFlag('my-flag', { sendEvent: false })],
+    ['isFeatureEnabled', (client: PostHog) => client.isFeatureEnabled('my-flag', { sendEvent: false })],
+  ] as const)('should not send $feature_flag_called from %s when sendEvent is false', async (_, callFn) => {
     ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
@@ -2559,7 +2562,7 @@ describe('Feature flag error tracking', () => {
 
     await posthog.reloadFeatureFlagsAsync()
 
-    expect(posthog.getFeatureFlag('my-flag', { sendEvent: false })).toBe(true)
+    expect(callFn(posthog)).toBe(true)
 
     await posthog.flush()
 
