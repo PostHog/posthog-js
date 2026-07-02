@@ -900,6 +900,32 @@ describe('PostHog Feature Flags v4', () => {
         })
       })
 
+      it.each([
+        ['a string variant', 'server-value'],
+        ['boolean false (client-side disable)', false],
+        ['null', null],
+      ])('lets a caller-supplied $feature/* value (%s) override the cached value', async (_case, overrideValue) => {
+        posthog.capture('test-event', {
+          '$feature/feature-1': overrideValue,
+          $active_feature_flags: ['server-flag'],
+        })
+
+        await waitForPromises()
+
+        expect(parseBody(mocks.fetch.mock.calls[1])).toMatchObject({
+          batch: [
+            {
+              event: 'test-event',
+              properties: {
+                '$feature/feature-1': overrideValue,
+                $active_feature_flags: ['server-flag'],
+                '$feature/feature-2': true,
+              },
+            },
+          ],
+        })
+      })
+
       it('should override flags', () => {
         posthog.overrideFeatureFlag({
           'feature-2': false,

@@ -83,6 +83,18 @@ class PostHogFetchNetworkError extends Error {
 export const maybeAdd = (key: string, value: JsonType | undefined): Record<string, JsonType> =>
   value !== undefined ? { [key]: value } : {}
 
+// Caller-supplied `$feature/*` and `$active_feature_flags` win over the SDK's cached flag values.
+export const applyCallerFeatureFlagOverrides = (
+  target: PostHogEventProperties,
+  callerProperties: PostHogEventProperties
+): void => {
+  for (const key of Object.keys(callerProperties)) {
+    if (key.startsWith('$feature/') || key === '$active_feature_flags') {
+      target[key] = callerProperties[key]
+    }
+  }
+}
+
 export async function logFlushError(err: any): Promise<void> {
   if (err instanceof PostHogFetchHttpError) {
     let text = ''
@@ -384,13 +396,16 @@ export abstract class PostHogCoreStateless {
     event: string
     properties?: PostHogEventProperties
   }): PostHogEventProperties {
+    const userProperties = payload.properties || {}
+    const properties: PostHogEventProperties = {
+      ...userProperties,
+      ...this.getCommonEventProperties(), // Common PH props
+    }
+    applyCallerFeatureFlagOverrides(properties, userProperties)
     return {
       distinct_id: payload.distinct_id,
       event: payload.event,
-      properties: {
-        ...(payload.properties || {}),
-        ...this.getCommonEventProperties(), // Common PH props
-      },
+      properties,
     }
   }
 
