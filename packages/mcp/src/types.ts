@@ -136,6 +136,13 @@ export interface Event {
   conversationId?: string
   duration?: number
   error?: ErrorProperties | null
+  /**
+   * Coarse failure category → `$mcp_error_type`. An explicit, low-cardinality
+   * label the host can supply (e.g. `validation`, `permission`, `timeout`).
+   * When omitted on an errored call, it falls back to the thrown error's type
+   * (the `$exception_list` entry's `type`).
+   */
+  errorType?: string
   eventId?: string
   eventType: MCPAnalyticsEventType
   groups?: Record<string, string>
@@ -317,6 +324,13 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
    * synthesized from the tool name.
    */
   error?: unknown
+  /**
+   * Coarse failure category → `$mcp_error_type` (e.g. `validation`,
+   * `permission`, `timeout`, `rate_limited`). A low-cardinality label that lets
+   * the dashboard break failures down by reason without joining to `$exception`.
+   * When omitted on an error, the SDK falls back to the thrown error's type.
+   */
+  errorType?: string
 }
 
 /** Payload for {@link PostHogMCP.captureInitialize}. Emits `$mcp_initialize`. */
@@ -350,6 +364,8 @@ export interface ToolsListCaptureData extends McpCaptureCommon {
   isError?: boolean
   /** The thrown value when `isError` is true → fans out an `$exception` sibling. */
   error?: unknown
+  /** Coarse failure category → `$mcp_error_type`. Falls back to the thrown error's type. */
+  errorType?: string
 }
 
 /** Options for {@link PostHogMCP.prepareToolList}. */

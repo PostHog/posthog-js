@@ -40,6 +40,8 @@ export const PostHogMCPAnalyticsProperty = {
   ClientVersion: '$mcp_client_version',
   ConversationId: '$mcp_conversation_id',
   DurationMs: '$mcp_duration_ms',
+  ErrorMessage: '$mcp_error_message',
+  ErrorType: '$mcp_error_type',
   IsError: '$mcp_is_error',
   Intent: '$mcp_intent',
   IntentSource: '$mcp_intent_source',
