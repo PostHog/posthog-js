@@ -1,6 +1,7 @@
 import { PostHog } from 'posthog-node'
 import { PostHogAzureOpenAI } from '../src/openai/azure'
 import openaiModule from 'openai'
+import { UUIDV7_REGEX } from './test-utils'
 
 let mockAzureEmbeddingResponse: any = {}
 
@@ -708,7 +709,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
 
       // Should have a generated trace ID
       expect(typeof properties['$ai_trace_id']).toBe('string')
-      expect(properties['$ai_trace_id']).toHaveLength(36) // UUID v4 length
+      expect(properties['$ai_trace_id']).toMatch(UUIDV7_REGEX)
     })
 
     conditionalTest('embeddings with custom trace ID', async () => {

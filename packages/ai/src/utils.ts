@@ -9,7 +9,7 @@ import type {
   FormattedImageContent,
   FormattedDocumentContent,
 } from './types'
-import { v4 as uuidv4 } from 'uuid'
+import { uuidv7 } from '@posthog/core'
 import { isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
 
@@ -624,7 +624,7 @@ function addDefaults(params: MonitoringEventProperties): MonitoringEventProperti
   return {
     ...params,
     privacyMode: params.privacyMode ?? false,
-    traceId: params.traceId ?? uuidv4(),
+    traceId: params.traceId ?? uuidv7(),
   }
 }
 
