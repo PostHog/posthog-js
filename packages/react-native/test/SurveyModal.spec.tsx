@@ -227,6 +227,51 @@ describe('SurveyModal close behavior', () => {
     expect(queryByTestId('parent-unmounted')).not.toBeNull()
   })
 
+  it('notifies the parent on iOS via the fallback timer even when onDismiss never fires', () => {
+    // Regression: iOS used to notify the parent only through Modal.onDismiss. When Fabric
+    // failed to fire onDismiss, the parent never cleared the active survey and this transparent
+    // full-screen Modal stayed mounted swallowing every touch — the app appeared frozen. The
+    // fallback timer guarantees the parent is still notified. The mocked Modal cannot fire
+    // onDismiss, so this exercises exactly that failure mode.
+    const rn = jest.requireMock('react-native')
+    const originalOS = rn.Platform.OS
+    rn.Platform.OS = 'ios'
+    try {
+      const { getByTestId, onClose } = renderSurveyModal()
+
+      clickCancel(getByTestId)
+      expect(onClose).not.toHaveBeenCalled()
+
+      act(() => {
+        jest.runAllTimers()
+      })
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      rn.Platform.OS = originalOS
+    }
+  })
+
+  it('does not notify the parent when unmounted before the close timer fires', () => {
+    // Once the close timer is scheduled, clearing it on unmount stops it from calling onClose
+    // against an already-torn-down parent (which would trigger a React update-on-unmounted warning).
+    const { getByTestId, onClose, unmount } = renderSurveyModal()
+
+    clickCancel(getByTestId)
+    // Let the requestAnimationFrame run so the fallback timer is scheduled, but keep the fade
+    // duration (250ms) from elapsing so the timer is still pending at unmount.
+    act(() => {
+      jest.advanceTimersByTime(50)
+    })
+    expect(onClose).not.toHaveBeenCalled()
+
+    unmount()
+    act(() => {
+      jest.runAllTimers()
+    })
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('notifies the parent only once even if close is pressed multiple times', () => {
     const { getByTestId, onClose } = renderSurveyModal()
 
