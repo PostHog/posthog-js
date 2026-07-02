@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/3615": {
+    "key": "PostHog/posthog-js/issue/3615",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3615",
+    "url": "https://github.com/PostHog/posthog-js/issues/3615",
+    "conclusion": "Likely valid @posthog/ai bug: OpenAI-compatible OpenRouter Claude cache tokens are forwarded inclusively and can be double-counted by PostHog cost accounting.",
+    "labels": [
+      "bug",
+      "team/llm-analytics"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-02T09:32:12.004Z"
+  },
   "PostHog/posthog-js/issue/3614": {
     "key": "PostHog/posthog-js/issue/3614",
     "repo": "PostHog/posthog-js",
