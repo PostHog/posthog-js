@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.396.5
+
+### Patch Changes
+
+- [#4050](https://github.com/PostHog/posthog-js/pull/4050) [`d7cf13b`](https://github.com/PostHog/posthog-js/commit/d7cf13bf13a0c3c57f3f25a15ef69679f0456f0d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Prevent uncaught `getComputedStyle` crashes in heatmaps and autocapture when the event target is a cross-realm element (e.g. from an iframe or synthetic event)
+  (2026-07-02)
+- Updated dependencies [[`5e7e132`](https://github.com/PostHog/posthog-js/commit/5e7e132757682e4f91d40601506b635f346c7b67)]:
+    - @posthog/core@1.39.5
+
 ## 1.396.4
 
 ### Patch Changes

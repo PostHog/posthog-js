@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.39.4
+
+### Patch Changes
+
+- [#4047](https://github.com/PostHog/posthog-js/pull/4047) [`0c11747`](https://github.com/PostHog/posthog-js/commit/0c11747de9ca10a48f840fff1814c33c71742736) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop duplicating `distinct_id` inside `/flags` person properties.
+  (2026-07-02)
+- Updated dependencies [[`5e7e132`](https://github.com/PostHog/posthog-js/commit/5e7e132757682e4f91d40601506b635f346c7b67)]:
+  - @posthog/core@1.39.5
+
 ## 5.39.3
 
 ### Patch Changes
