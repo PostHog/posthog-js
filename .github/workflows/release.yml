@@ -182,7 +182,9 @@ jobs:
                         "jobName": "version-bump",
                         "packageName": "posthog-js",
                         "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
-                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}"
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "alertText": ":rotating_light: Failed to prepare release ${{ steps.release-failure-metadata.outputs.package_ref }} :rotating_light:",
+                        "alertContext": "The version bump/changelog step failed before packages were published."
                       }
 
             - name: Notify Slack - Failed
@@ -402,7 +404,9 @@ jobs:
                         "jobName": "publish",
                         "packageName": "${{ matrix.package.name }}",
                         "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
-                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}"
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "alertText": ":rotating_light: Failed to release ${{ steps.release-failure-metadata.outputs.package_ref }} :rotating_light:",
+                        "alertContext": "The package publish step in the posthog-js release workflow failed."
                       }
 
             - name: Notify Slack - Failed
@@ -719,6 +723,8 @@ jobs:
                         "packageName": "posthog-js",
                         "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
                         "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "alertText": ":rotating_light: Failed to upload ${{ steps.release-failure-metadata.outputs.package_ref }} dist to ${{ matrix.region.bucket }} :rotating_light:",
+                        "alertContext": "The S3/CDN artifact upload failed; npm packages may already be published.",
                         "region": "${{ matrix.region.name }}",
                         "bucket": "${{ matrix.region.bucket }}"
                       }

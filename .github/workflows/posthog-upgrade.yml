@@ -155,8 +155,10 @@ jobs:
                         "commitSha": "${{ github.sha }}",
                         "jobStatus": "${{ job.status }}",
                         "ref": "${{ github.ref }}",
-                        "repository": "Posthog/posthog",
+                        "repository": "PostHog/posthog",
                         "packageName": "${{ github.event.inputs.package_name }}",
                         "packageVersion": "${{ github.event.inputs.package_version }}",
-                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                        "alertText": ":warning: Downstream PostHog/posthog dependency bump failed for ${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}",
+                        "alertContext": "This is the monorepo upgrade workflow, not a posthog-js release failure."
                       }
