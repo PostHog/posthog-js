@@ -601,6 +601,57 @@ describe('logs entrypoint', () => {
         })
     })
 
+    describe('re-entrancy protection', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('exposes the original console method via __rrweb_original__ so the internal logger does not re-enter capture', () => {
+            const originalConsoleLog = assignableWindow.console.log
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect((assignableWindow.console.log as any).__rrweb_original__).toBe(originalConsoleLog)
+        })
+
+        it('does not recurse when the capture path itself logs to the console', () => {
+            // Simulate the real fault: _captureConsoleLog logs to the (wrapped) console,
+            // as checkAndGetSessionAndWindowId does via PostHog's internal logger.
+            mockEmit.mockImplementation(() => {
+                assignableWindow.console.log('internal debug from capture path')
+            })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect(() => assignableWindow.console.log('user message')).not.toThrow()
+            // The user's log is captured once; the nested internal log is not re-captured.
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: '"user message"',
+                })
+            )
+        })
+
+        it('resumes capturing after a nested log completes', () => {
+            mockEmit.mockImplementationOnce(() => {
+                assignableWindow.console.log('internal debug from capture path')
+            })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('first message')
+            assignableWindow.console.log('second message')
+
+            expect(mockEmit).toHaveBeenCalledTimes(2)
+            expect(mockEmit.mock.calls[0][0].body).toBe('"first message"')
+            expect(mockEmit.mock.calls[1][0].body).toBe('"second message"')
+        })
+    })
+
     describe('consent / opt-out handling', () => {
         beforeEach(() => {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
