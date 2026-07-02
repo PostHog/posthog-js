@@ -429,6 +429,7 @@ export function truncateEvent<T extends Event | McpEvent>(event: T): T {
   result.serverVersion = truncateString(result.serverVersion, MAX_METADATA_LENGTH)
   result.clientName = truncateString(result.clientName, MAX_METADATA_LENGTH)
   result.clientVersion = truncateString(result.clientVersion, MAX_METADATA_LENGTH)
+  result.errorType = truncateString(result.errorType, MAX_METADATA_LENGTH)
 
   // Error field limits — operate on the core `$exception_list` shape
   if (result.error != null && typeof result.error === 'object') {
