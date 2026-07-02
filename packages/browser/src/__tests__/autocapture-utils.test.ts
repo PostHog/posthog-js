@@ -23,6 +23,7 @@ import { AutocaptureConfig, PostHogConfig } from '../types'
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
         document!.getElementsByTagName('html')[0].innerHTML = ''
+        jest.restoreAllMocks()
     })
 
     describe(`getSafeText`, () => {
@@ -209,6 +210,18 @@ describe(`Autocapture utility functions`, () => {
             expect(shouldCaptureDomEvent(null as unknown as Element, makeMouseEvent({}))).toBe(false)
             expect(shouldCaptureDomEvent(undefined as unknown as Element, makeMouseEvent({}))).toBe(false)
             expect(shouldCaptureDomEvent(`div` as unknown as Element, makeMouseEvent({}))).toBe(false)
+        })
+
+        it(`does not throw when getComputedStyle throws for a cross-realm element`, () => {
+            jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+                throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
+            })
+
+            const el = document!.createElement(`div`)
+            const parent = document!.createElement(`div`)
+            parent.appendChild(el)
+
+            expect(() => shouldCaptureDomEvent(el, makeMouseEvent({}))).not.toThrow()
         })
 
         it(`should NOT capture "click" events on <form> elements`, () => {
