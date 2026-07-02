@@ -1399,6 +1399,35 @@ describe('PostHog Node.js', () => {
       expect(posthog.options.personalApiKey).toEqual('TEST_PERSONAL_API_KEY')
     })
 
+    it.each([
+      { name: 'resolves secretKey into the personal api key', keyOption: { secretKey: 'TEST_SECRET_KEY' } },
+      {
+        name: 'still accepts the deprecated personalApiKey alias',
+        keyOption: { personalApiKey: 'TEST_PERSONAL_API_KEY' },
+      },
+    ])('$name', async ({ keyOption }) => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        ...keyOption,
+        disableCompression: true,
+      })
+
+      expect(posthog.options.personalApiKey).toEqual(Object.values(keyOption)[0])
+    })
+
+    it('prefers secretKey over personalApiKey when both are set', async () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        secretKey: 'TEST_SECRET_KEY',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        disableCompression: true,
+      })
+
+      expect(posthog.options.personalApiKey).toEqual('TEST_SECRET_KEY')
+    })
+
     it('should not start local evaluation polling or fetch flags when api key is missing', async () => {
       mockedFetch.mockClear()
 
