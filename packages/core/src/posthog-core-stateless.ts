@@ -125,7 +125,13 @@ export function isPostHogFetchNetworkError(err: unknown): err is PostHogFetchNet
   return err instanceof PostHogFetchNetworkError
 }
 
-function isRetryableFlagsFetchError(err: unknown): err is PostHogFetchNetworkError {
+function isRetryableFlagsFetchError(
+  err: unknown
+): err is PostHogFetchNetworkError | (PostHogFetchHttpError & { status: 502 | 504 }) {
+  if (err instanceof PostHogFetchHttpError) {
+    return err.status === 502 || err.status === 504
+  }
+
   if (!(err instanceof PostHogFetchNetworkError)) {
     return false
   }
@@ -631,7 +637,7 @@ export abstract class PostHogCoreStateless {
 
     this._logger.info('Flags URL', url)
 
-    // Retry only network/transport/timeout failures for /flags. HTTP/API status errors are surfaced immediately.
+    // Retry only network/transport/timeout failures and selected gateway HTTP errors for /flags.
     return this.fetchWithRetry(
       url,
       fetchOptions,

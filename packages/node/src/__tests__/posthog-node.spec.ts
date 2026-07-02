@@ -2890,7 +2890,7 @@ describe('PostHog Node.js', () => {
       )
     })
 
-    it('should add default person & group properties for feature flags', async () => {
+    it('should forward person properties and add default group properties for feature flags', async () => {
       await posthog.getFeatureFlag('random_key', 'some_id', {
         groups: { company: 'id:5', instance: 'app.posthog.com' },
         personProperties: { x1: 'y1' },
@@ -2906,7 +2906,6 @@ describe('PostHog Node.js', () => {
             distinct_id: 'some_id',
             groups: { company: 'id:5', instance: 'app.posthog.com' },
             person_properties: {
-              distinct_id: 'some_id',
               x1: 'y1',
             },
             group_properties: {
@@ -2966,9 +2965,7 @@ describe('PostHog Node.js', () => {
             token: 'TEST_API_KEY',
             distinct_id: 'some_id',
             groups: {},
-            person_properties: {
-              distinct_id: 'some_id',
-            },
+            person_properties: {},
             group_properties: {},
             geoip_disable: true,
           }),
@@ -2990,9 +2987,7 @@ describe('PostHog Node.js', () => {
             token: 'TEST_API_KEY',
             distinct_id: 'some_id',
             groups: { company: 'id:5' },
-            person_properties: {
-              distinct_id: 'some_id',
-            },
+            person_properties: {},
             group_properties: { company: { $group_key: 'id:5' } },
             geoip_disable: true,
           }),
@@ -3010,9 +3005,7 @@ describe('PostHog Node.js', () => {
             token: 'TEST_API_KEY',
             distinct_id: 'some_id',
             groups: {},
-            person_properties: {
-              distinct_id: 'some_id',
-            },
+            person_properties: {},
             group_properties: {},
             geoip_disable: true,
             flag_keys_to_evaluate: ['random_key'],
@@ -3032,9 +3025,7 @@ describe('PostHog Node.js', () => {
             token: 'TEST_API_KEY',
             distinct_id: 'some_id',
             groups: {},
-            person_properties: {
-              distinct_id: 'some_id',
-            },
+            person_properties: {},
             group_properties: {},
             geoip_disable: true,
             flag_keys_to_evaluate: ['random_key'],

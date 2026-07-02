@@ -33,7 +33,14 @@ function elementOrParentPositionMatches(el: Element | null, matches: string[], b
             return false
         }
 
-        if (includes(matches, window?.getComputedStyle(curEl).position)) {
+        let position: string | undefined
+        try {
+            position = (curEl.ownerDocument?.defaultView ?? window)?.getComputedStyle(curEl).position
+        } catch {
+            return false
+        }
+
+        if (includes(matches, position)) {
             return true
         }
 
