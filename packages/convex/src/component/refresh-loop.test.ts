@@ -190,5 +190,16 @@ describe('self-rescheduling flag refresh loop', () => {
 
       expect(pending(byName(await scheduledJobs(t), 'refreshLoop'))).toHaveLength(1)
     })
+
+    // Disabling the poll must NOT flip localEvalConfigured to false — otherwise the client throws
+    // a misleading "set your API key" error at users who only turned off the background refresh.
+    test('key set with POSTHOG_DISABLE_LOCAL_EVALUATION=true keeps localEvalConfigured true', async () => {
+      process.env.POSTHOG_DISABLE_LOCAL_EVALUATION = 'true'
+      const t = convexTest(schema, modules)
+
+      const result = await t.query(api.lib.getFlagDefinitions, {})
+
+      expect(result.localEvalConfigured).toBe(true)
+    })
   })
 })

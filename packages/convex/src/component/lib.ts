@@ -418,9 +418,9 @@ export const ensureRefreshLoop = internalMutation({
 
 /**
  * Fetches flag definitions from PostHog's local-evaluation endpoint and stores them in the
- * `flagDefinitions` table. Called automatically by the refresh loop (see above) when
- * `POSTHOG_PERSONAL_API_KEY` is set, and also exposed publicly so the client's
- * `reloadFeatureFlags(ctx)` method (parity with `posthog-node`) can trigger an on-demand refresh.
+ * `flagDefinitions` table. Called automatically by the refresh loop (see above) when local
+ * evaluation is enabled, and also exposed publicly so the client's `reloadFeatureFlags(ctx)`
+ * method (parity with `posthog-node`) can trigger an on-demand refresh.
  */
 export const refreshFlagDefinitions = action({
   args: {},
