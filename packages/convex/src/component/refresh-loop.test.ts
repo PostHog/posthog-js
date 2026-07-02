@@ -53,6 +53,7 @@ describe('self-rescheduling flag refresh loop', () => {
     delete process.env.POSTHOG_HOST
     delete process.env.POSTHOG_PERSONAL_API_KEY
     delete process.env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS
+    delete process.env.POSTHOG_DISABLE_LOCAL_EVALUATION
   })
 
   test('queues the next tick at the configured interval, not the 60s default', async () => {
@@ -147,5 +148,56 @@ describe('self-rescheduling flag refresh loop', () => {
     expect(flagsFetches).toBe(1)
     const row = await t.run(async (ctx) => ctx.db.query('flagDefinitions').first())
     expect(row).not.toBeNull()
+  })
+
+  describe('gated when local evaluation is not enabled (issue #4046)', () => {
+    test('no personal API key: supervisor schedules nothing', async () => {
+      delete process.env.POSTHOG_PERSONAL_API_KEY
+      const t = convexTest(schema, modules)
+
+      await t.mutation(internal.lib.ensureRefreshLoop, {})
+
+      expect(byName(await scheduledJobs(t), 'refreshLoop')).toHaveLength(0)
+    })
+
+    test('no personal API key: a tick queues no successor and no fetch', async () => {
+      delete process.env.POSTHOG_PERSONAL_API_KEY
+      const t = convexTest(schema, modules)
+
+      await t.mutation(internal.lib.refreshLoop, {})
+
+      const jobs = await scheduledJobs(t)
+      expect(byName(jobs, 'refreshLoop')).toHaveLength(0)
+      expect(byName(jobs, 'refreshFlagDefinitions')).toHaveLength(0)
+    })
+
+    test('key set but POSTHOG_DISABLE_LOCAL_EVALUATION=true: supervisor schedules nothing', async () => {
+      process.env.POSTHOG_DISABLE_LOCAL_EVALUATION = 'true'
+      const t = convexTest(schema, modules)
+
+      await t.mutation(internal.lib.ensureRefreshLoop, {})
+
+      expect(byName(await scheduledJobs(t), 'refreshLoop')).toHaveLength(0)
+    })
+
+    test('key set but disabled: a tick queues no successor, so a live chain stops', async () => {
+      process.env.POSTHOG_DISABLE_LOCAL_EVALUATION = 'true'
+      const t = convexTest(schema, modules)
+
+      await t.mutation(internal.lib.refreshLoop, {})
+
+      const jobs = await scheduledJobs(t)
+      expect(byName(jobs, 'refreshLoop')).toHaveLength(0)
+      expect(byName(jobs, 'refreshFlagDefinitions')).toHaveLength(0)
+    })
+
+    test('key set with POSTHOG_DISABLE_LOCAL_EVALUATION=false: supervisor still schedules', async () => {
+      process.env.POSTHOG_DISABLE_LOCAL_EVALUATION = 'false'
+      const t = convexTest(schema, modules)
+
+      await t.mutation(internal.lib.ensureRefreshLoop, {})
+
+      expect(pending(byName(await scheduledJobs(t), 'refreshLoop'))).toHaveLength(1)
+    })
   })
 })
