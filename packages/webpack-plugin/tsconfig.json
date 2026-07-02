@@ -2,7 +2,6 @@
     "extends": "@posthog-tooling/tsconfig-base",
     "compilerOptions": {
         "rootDir": "./src",
-        "baseUrl": "./src",
         "target": "ES6",
         "skipLibCheck": true,
         "declaration": true,
