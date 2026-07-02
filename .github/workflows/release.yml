@@ -143,6 +143,31 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_VERSION: ${{ steps.get-version.outputs.version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_version="$PACKAGE_VERSION"
+                  if [ -z "$package_version" ] && [ -f packages/browser/package.json ] && [ -n "$(git status --porcelain -- packages/browser/package.json)" ]; then
+                      package_version=$(jq -r '.version // empty' packages/browser/package.json)
+                  fi
+
+                  package_ref="posthog-js"
+                  if [ -n "$package_version" ]; then
+                      package_ref="posthog-js@v$package_version"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$package_version"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
             - name: Send failure event to PostHog
               if: ${{ failure() }}
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
@@ -155,7 +180,11 @@ jobs:
                         "jobStatus": "${{ job.status }}",
                         "ref": "${{ github.ref }}",
                         "jobName": "version-bump",
-                        "packageName": "posthog-js"
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "alertText": ":rotating_light: Failed to prepare release ${{ steps.release-failure-metadata.outputs.package_ref }} :rotating_light:",
+                        "alertContext": "The version bump/changelog step failed before packages were published."
                       }
 
             - name: Notify Slack - Failed
@@ -165,7 +194,7 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to bump versions for `posthog-js`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to bump versions for `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
     notify-rejected:
@@ -314,6 +343,8 @@ jobs:
             ########################################################
             ############## posthog-js auto-update ##################
             - name: Dispatch posthog upgrade for posthog-js
+              id: dispatch-posthog-upgrade
+              continue-on-error: true
               if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
               env:
                   PACKAGE_NAME: ${{ matrix.package.name }}
@@ -334,8 +365,59 @@ jobs:
             ####################################################
             # Notify ourselves in case of a failure here
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() || steps.dispatch-posthog-upgrade.outcome == 'failure' }}
+              env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+                  PACKAGE_PATH: ${{ steps.get-package-path.outputs.path }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_version="$PACKAGE_VERSION"
+                  if [ -z "$package_version" ] && [ -n "$PACKAGE_PATH" ] && [ -f "$PACKAGE_PATH/package.json" ]; then
+                      package_version=$(jq -r '.version // empty' "$PACKAGE_PATH/package.json")
+                  fi
+
+                  package_ref="$PACKAGE_NAME"
+                  if [ -n "$package_version" ]; then
+                      package_ref="$PACKAGE_NAME@v$package_version"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$package_version"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Send PostHog upgrade dispatch failure event
+              if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
+              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "failure",
+                        "ref": "${{ github.ref }}",
+                        "jobName": "publish",
+                        "failedStepName": "dispatch-posthog-upgrade",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "alertText": ":warning: Failed to dispatch PostHog/posthog upgrade for ${{ steps.release-failure-metadata.outputs.package_ref }}",
+                        "alertContext": "The SDK release may have succeeded; only the downstream monorepo upgrade workflow dispatch failed."
+                      }
+
+            - name: Fail if posthog upgrade dispatch failed
+              if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
+              run: exit 1
+
             - name: Send failure event to PostHog
-              if: ${{ failure() }}
+              if: ${{ failure() && steps.dispatch-posthog-upgrade.outcome != 'failure' }}
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
@@ -345,19 +427,23 @@ jobs:
                         "commitSha": "${{ github.sha }}",
                         "jobStatus": "${{ job.status }}",
                         "ref": "${{ github.ref }}",
+                        "jobName": "publish",
                         "packageName": "${{ matrix.package.name }}",
-                        "packageVersion": "${{ steps.check-package-version.outputs.committed-version }}"
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "alertText": ":rotating_light: Failed to release ${{ steps.release-failure-metadata.outputs.package_ref }} :rotating_light:",
+                        "alertContext": "The package publish step in the posthog-js release workflow failed."
                       }
 
             - name: Notify Slack - Failed
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              if: ${{ failure() && steps.dispatch-posthog-upgrade.outcome != 'failure' && needs.notify-approval-needed.outputs.slack_ts != '' }}
               uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to release `${{ matrix.package.name }}@v${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to release `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
     build-s3-artifacts:
@@ -401,6 +487,45 @@ jobs:
                   retention-days: 1
                   if-no-files-found: error
 
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_VERSION: ${{ steps.check-version.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_ref="posthog-js"
+                  if [ -n "$PACKAGE_VERSION" ]; then
+                      package_ref="posthog-js@v$PACKAGE_VERSION"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$PACKAGE_VERSION"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "jobName": "build-s3-artifacts",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "alertText": ":rotating_light: Failed to build ${{ steps.release-failure-metadata.outputs.package_ref }} dist artifacts for S3 :rotating_light:",
+                        "alertContext": "The browser SDK dist artifact build/upload step failed before S3 upload."
+                      }
+
     build-toolbar:
         # Build the toolbar bundle from posthog/posthog@master once per region.
         # Each region gets its own `TOOLBAR_PUBLIC_PATH`, so asset URLs baked
@@ -439,14 +564,16 @@ jobs:
                   ref: master
                   fetch-depth: 1
 
-            - name: Install pnpm
-              uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # pin v5.0.0
-
             - name: Setup Node.js
-              uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+              uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
               with:
-                  node-version: '24'
-                  cache: 'pnpm'
+                node-version: 24
+
+            - name: Setup pnpm
+              uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
+              with:
+                cache: false
+                install: false
 
             - name: Install frontend dependencies
               run: pnpm --filter=@posthog/frontend... install --frozen-lockfile
@@ -545,6 +672,47 @@ jobs:
                   retention-days: 1
                   if-no-files-found: error
 
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_VERSION: ${{ needs.version-bump.outputs.version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_ref="posthog-js"
+                  if [ -n "$PACKAGE_VERSION" ]; then
+                      package_ref="posthog-js@v$PACKAGE_VERSION"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$PACKAGE_VERSION"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-js-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "jobName": "build-toolbar",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "region": "${{ matrix.region.name }}",
+                        "sourceRepository": "PostHog/posthog",
+                        "alertText": ":rotating_light: Failed to build toolbar for ${{ steps.release-failure-metadata.outputs.package_ref }} (${{ matrix.region.name }}) :rotating_light:",
+                        "alertContext": "The PostHog/posthog toolbar bundle failed to build for the SDK CDN release."
+                      }
+
     upload-s3:
         # Matrixed per region so each cell downloads only the toolbar artifact
         # that was built with the matching `TOOLBAR_PUBLIC_PATH`. posthog-js's
@@ -578,14 +746,14 @@ jobs:
                       pnpm-workspace.yaml
                       tooling/release
 
-            - name: Install pnpm
-              uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
-
-            - name: Setup Node.js
-              uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+            - name: Setup pnpm and Node.js
+              uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
               with:
-                  node-version: '24'
-                  cache: 'pnpm'
+                # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
+                # until https://github.com/jasongin/nvs/pull/315 lands.
+                runtime: node@24
+                cache: false
+                install: false
 
             - name: Install release tooling dependencies
               run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
@@ -626,6 +794,26 @@ jobs:
                   VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
               run: node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION"
 
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_ref="posthog-js"
+                  if [ -n "$PACKAGE_VERSION" ]; then
+                      package_ref="posthog-js@v$PACKAGE_VERSION"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$PACKAGE_VERSION"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
             - name: Send failure event to PostHog
               if: ${{ failure() }}
               uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1.2.0
@@ -639,7 +827,10 @@ jobs:
                         "ref": "${{ github.ref }}",
                         "jobName": "upload-s3",
                         "packageName": "posthog-js",
-                        "packageVersion": "${{ needs.build-s3-artifacts.outputs.committed-version }}",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version }}",
+                        "actionUrl": "${{ steps.release-failure-metadata.outputs.action_url }}",
+                        "alertText": ":rotating_light: Failed to upload ${{ steps.release-failure-metadata.outputs.package_ref }} dist to ${{ matrix.region.bucket }} :rotating_light:",
+                        "alertContext": "The S3/CDN artifact upload failed; npm packages may already be published.",
                         "region": "${{ matrix.region.name }}",
                         "bucket": "${{ matrix.region.bucket }}"
                       }
@@ -652,7 +843,7 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '❌ Failed to upload posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} dist to ${{ matrix.region.bucket }}! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '❌ Failed to upload ${{ steps.release-failure-metadata.outputs.package_ref }} dist to ${{ matrix.region.bucket }}! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
     notify-released:
@@ -695,6 +886,24 @@ jobs:
             needs.upload-s3.result == 'failure' &&
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
+            - name: Resolve partial release metadata
+              id: partial-release-metadata
+              env:
+                  PACKAGE_VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_ref="posthog-js"
+                  if [ -n "$PACKAGE_VERSION" ]; then
+                      package_ref="posthog-js@v$PACKAGE_VERSION"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
             - name: Notify Slack - Partial Release
               continue-on-error: true # Slack failure shouldn't mark release as failed
               uses: PostHog/.github/.github/actions/slack-thread-reply@5fc4680761e8ac29a61b212756230eba0e276d8c
@@ -702,5 +911,5 @@ jobs:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '⚠️ npm packages released, but S3 publish failed — posthog-js v${{ needs.build-s3-artifacts.outputs.committed-version }} immutable assets and/or major-version or top-level aliases need attention. <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  message: '⚠️ npm packages released, but S3 publish failed — ${{ steps.partial-release-metadata.outputs.package_ref }} immutable assets and/or major-version or top-level aliases need attention. <${{ steps.partial-release-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'warning'

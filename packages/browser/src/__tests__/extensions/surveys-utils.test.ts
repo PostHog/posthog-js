@@ -563,6 +563,31 @@ describe('doesSurveyUrlMatch', () => {
             expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
         })
     })
+
+    describe('get_current_url override', () => {
+        const posthogWith = (getCurrentUrl?: (defaultUrl: string) => string): PostHog =>
+            ({ config: { get_current_url: getCurrentUrl } }) as PostHog
+
+        it('matches against the overridden URL instead of window.location.href', () => {
+            // raw browser URL would not match the survey condition
+            mockWindowLocation('https://generated-host.skin/game')
+            const survey = { conditions: { url: 'app.example.com', events: null, actions: null } }
+
+            expect(
+                doesSurveyUrlMatch(
+                    survey,
+                    posthogWith(() => 'https://app.example.com/settings')
+                )
+            ).toBe(true)
+        })
+
+        it('falls back to window.location.href when no override is configured', () => {
+            mockWindowLocation('https://app.example.com/settings')
+            const survey = { conditions: { url: 'app.example.com', events: null, actions: null } }
+
+            expect(doesSurveyUrlMatch(survey, posthogWith())).toBe(true)
+        })
+    })
 })
 
 describe('addSurveyCSSVariablesToElement', () => {

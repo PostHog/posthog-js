@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.2.2
+
+### Patch Changes
+
+- [#3966](https://github.com/PostHog/posthog-js/pull/3966) [`a277530`](https://github.com/PostHog/posthog-js/commit/a27753096392d34b6e359533198232e355c267b7) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip capturing pending OpenAI background Responses without token usage.
+  (2026-06-25)
+
 ## 8.2.1
 
 ### Patch Changes

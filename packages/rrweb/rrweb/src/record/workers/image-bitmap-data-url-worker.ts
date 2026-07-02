@@ -24,6 +24,11 @@ export interface ImageBitmapDataURLRequestWorker {
     transfer?: [ImageBitmap],
   ) => void;
   onmessage: (message: MessageEvent<ImageBitmapDataURLWorkerResponse>) => void;
+  // the inline worker is materialized as a `blob:` URL loaded via `importScripts`; a strict
+  // CSP (worker-src/script-src blob:), an ad blocker, or a network hiccup can make that load
+  // fail, surfacing as an error event rather than a thrown error at construction time.
+  onerror?: ((this: AbstractWorker, ev: ErrorEvent) => unknown) | null;
+  terminate?: () => void;
 }
 
 interface ImageBitmapDataURLResponseWorker {

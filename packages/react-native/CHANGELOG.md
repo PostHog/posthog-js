@@ -1,5 +1,61 @@
 # posthog-react-native
 
+## 4.54.1
+
+### Patch Changes
+
+- [#4055](https://github.com/PostHog/posthog-js/pull/4055) [`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry `/flags` requests that receive HTTP 502 or 504 responses across SDKs that use the shared core flags client.
+  (2026-07-02)
+- Updated dependencies [[`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0)]:
+  - @posthog/core@1.39.4
+
+## 4.54.0
+
+### Minor Changes
+
+- [#3970](https://github.com/PostHog/posthog-js/pull/3970) [`0f83f93`](https://github.com/PostHog/posthog-js/commit/0f83f93a6e78605444b2fe914e12c526ac3250d3) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add a `requestHeaders` option to send custom headers (e.g. `Authorization`) with SDK requests, including session replay and native error/crash uploads via the native plugin. Useful for reverse-proxy setups that require authentication.
+  (2026-07-01)
+
+### Patch Changes
+
+- Updated dependencies [[`0f83f93`](https://github.com/PostHog/posthog-js/commit/0f83f93a6e78605444b2fe914e12c526ac3250d3)]:
+  - @posthog/react-native-plugin@2.1.2
+
+## 4.53.3
+
+### Patch Changes
+
+- [#4019](https://github.com/PostHog/posthog-js/pull/4019) [`6b80631`](https://github.com/PostHog/posthog-js/commit/6b80631fd259345afd25195fdd9cba09e32a51be) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Survey question content now scrolls only when it overflows the modal. Short surveys that fit no longer scroll or bounce, while longer surveys remain fully scrollable.
+  (2026-06-30)
+
+## 4.53.2
+
+### Patch Changes
+
+- [#3971](https://github.com/PostHog/posthog-js/pull/3971) [`b660af2`](https://github.com/PostHog/posthog-js/commit/b660af2d737f6f1b5d256cb3a9f3be685f5938ed) Thanks [@github-actions](https://github.com/apps/github-actions)! - Support capturing additional event properties from `data-ph-capture-attribute-*` props in autocapture, matching the browser SDK.
+  (2026-06-29)
+
+## 4.53.1
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+- Updated dependencies [[`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b)]:
+  - @posthog/core@1.38.1
+
+## 4.53.0
+
+### Minor Changes
+
+- [#3977](https://github.com/PostHog/posthog-js/pull/3977) [`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `getAllFeatureFlags()`, which returns all currently loaded feature flags as structured `FeatureFlagResult`s (`key`, `enabled`, `variant`, `payload`). It is a synchronous read of the cached flags and does not send a `$feature_flag_called` event.
+  (2026-06-26)
+
+### Patch Changes
+
+- Updated dependencies [[`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f)]:
+  - @posthog/core@1.38.0
+
 ## 4.52.0
 
 ### Minor Changes

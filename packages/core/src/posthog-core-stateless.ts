@@ -34,6 +34,7 @@ import {
   STRING_FORMAT,
   createLogger,
   getEventUuid,
+  safeJsonStringify,
 } from './utils'
 import { uuidv7 } from './vendor/uuidv7'
 import {
@@ -112,8 +113,31 @@ export function isPostHogFetchNetworkError(err: unknown): err is PostHogFetchNet
   return err instanceof PostHogFetchNetworkError
 }
 
+function isRetryableFlagsFetchError(
+  err: unknown
+): err is PostHogFetchNetworkError | (PostHogFetchHttpError & { status: 502 | 504 }) {
+  if (err instanceof PostHogFetchHttpError) {
+    return err.status === 502 || err.status === 504
+  }
+
+  if (!(err instanceof PostHogFetchNetworkError)) {
+    return false
+  }
+
+  const cause = err.error as { code?: string; cause?: { code?: string } } | undefined
+  const code = cause?.code ?? cause?.cause?.code
+  return code !== 'ECONNREFUSED'
+}
+
 function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
+}
+
+function isPostHogFetchRetryableError(err: unknown): err is PostHogFetchHttpError | PostHogFetchNetworkError {
+  if (err instanceof PostHogFetchHttpError) {
+    return err.status === 408 || err.status === 429 || err.status >= 500
+  }
+  return isPostHogFetchNetworkError(err)
 }
 
 function isPostHogEventProperties(value: JsonType | undefined): value is PostHogEventProperties {
@@ -153,9 +177,11 @@ export abstract class PostHogCoreStateless {
   private maxQueueSize: number
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
+  private flushPromises: Set<Promise<any>> = new Set()
   private shutdownPromise: Promise<void> | null = null
   private requestTimeout: number
   private featureFlagsRequestTimeoutMs: number
+  private featureFlagsRequestMaxRetries: number
   private remoteConfigRequestTimeoutMs: number
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
@@ -239,10 +265,11 @@ export abstract class PostHogCoreStateless {
     this._retryOptions = {
       retryCount: options.fetchRetryCount ?? 3,
       retryDelay: options.fetchRetryDelay ?? 3000, // 3 seconds
-      retryCheck: isPostHogFetchError,
+      retryCheck: isPostHogFetchRetryableError,
     }
     this.requestTimeout = options.requestTimeout ?? 10000 // 10 seconds
     this.featureFlagsRequestTimeoutMs = options.featureFlagsRequestTimeoutMs ?? 3000 // 3 seconds
+    this.featureFlagsRequestMaxRetries = options.featureFlagsRequestMaxRetries ?? 1
     this.remoteConfigRequestTimeoutMs = options.remoteConfigRequestTimeoutMs ?? 3000 // 3 seconds
     this.disableGeoip = options.disableGeoip ?? true
     this.disabled = (options.disabled ?? false) || missingApiKey
@@ -503,6 +530,28 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  protected async groupIdentifyStatelessImmediate(
+    groupType: string,
+    groupKey: string | number,
+    groupProperties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions,
+    distinctId?: string,
+    eventProperties?: PostHogEventProperties
+  ): Promise<void> {
+    const payload = this.buildPayload({
+      distinct_id: distinctId || `$${groupType}_${groupKey}`,
+      event: '$groupidentify',
+      properties: {
+        $group_type: groupType,
+        $group_key: groupKey,
+        $group_set: groupProperties || {},
+        ...(eventProperties || {}),
+      },
+    })
+
+    await this.sendImmediate('capture', payload, options)
+  }
+
   protected async getRemoteConfig(): Promise<PostHogRemoteConfig | undefined> {
     await this._initPromise
 
@@ -573,8 +622,13 @@ export abstract class PostHogCoreStateless {
 
     this._logger.info('Flags URL', url)
 
-    // Don't retry /flags API calls
-    return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.featureFlagsRequestTimeoutMs)
+    // Retry only network/transport/timeout failures and selected gateway HTTP errors for /flags.
+    return this.fetchWithRetry(
+      url,
+      fetchOptions,
+      { retryCount: this.featureFlagsRequestMaxRetries, retryCheck: isRetryableFlagsFetchError },
+      this.featureFlagsRequestTimeoutMs
+    )
       .then((response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>)
       .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
       .catch((error): GetFlagsResult => {
@@ -814,9 +868,8 @@ export abstract class PostHogCoreStateless {
   ): Promise<PostHogFeatureFlagDetails | undefined> {
     await this._initPromise
 
-    const extraPayload: Record<string, any> = {}
-    if (disableGeoip ?? this.disableGeoip) {
-      extraPayload['geoip_disable'] = true
+    const extraPayload: Record<string, any> = {
+      geoip_disable: disableGeoip ?? this.disableGeoip,
     }
     if (flagKeysToEvaluate) {
       extraPayload['flag_keys_to_evaluate'] = flagKeysToEvaluate
@@ -1037,7 +1090,7 @@ export abstract class PostHogCoreStateless {
       data.historical_migration = true
     }
 
-    const payload = JSON.stringify(data)
+    const payload = safeJsonStringify(data)
 
     const url = `${this.host}/batch/`
 
@@ -1128,6 +1181,28 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  private async waitForPendingPromises(
+    maxPromiseId: number,
+    ignoredPromises: (Promise<any> | null | undefined)[] = []
+  ): Promise<void> {
+    const ignoredPendingPromises = ignoredPromises.filter((promise): promise is Promise<any> => !!promise)
+    let iteration = 0
+
+    while (true) {
+      const promises = this.promiseQueue.getPromises([...ignoredPendingPromises, ...this.flushPromises], maxPromiseId)
+      if (promises.length === 0) {
+        return
+      }
+
+      if (iteration > 0) {
+        this._logger.debug(`flush() re-checking ${promises.length} pending promise(s) before flushing`)
+      }
+
+      await Promise.all(promises.map((promise) => promise.catch(() => {})))
+      iteration++
+    }
+  }
+
   /**
    * Flushes the queue of pending events.
    *
@@ -1156,22 +1231,44 @@ export abstract class PostHogCoreStateless {
    * @throws PostHogFetchNetworkError
    * @throws Error
    */
-  async flush(): Promise<void> {
+  protected flushWithPendingPromises(): Promise<void> {
+    return this.flushInternal(true)
+  }
+
+  flush(): Promise<void> {
+    return this.flushInternal(false)
+  }
+
+  private flushInternal(waitForPendingPromises: boolean): Promise<void> {
     if (this.disabled) {
-      return
+      return Promise.resolve()
     }
 
-    // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
-    // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
-    // Use a custom allSettled implementation to avoid issues with patching Promise on RN
-    const nextFlushPromise = allSettled([this.flushPromise]).then(() => {
-      return this._flush()
-    })
+    const previousFlushPromise = this.flushPromise
+    const maxPromiseId = this.promiseQueue.maxId
+
+    // Register this flush in the promise queue synchronously so shutdown() can't miss it,
+    // but exclude it from the pending-work wait to avoid self-waiting.
+    const nextFlushPromise: Promise<void> = Promise.resolve()
+      .then(() => {
+        if (waitForPendingPromises) {
+          return this.waitForPendingPromises(maxPromiseId, [previousFlushPromise, nextFlushPromise])
+        }
+      })
+      // Wait for the current flush operation to finish (regardless of success or failure), then try to flush again.
+      // Use allSettled instead of finally to be defensive around flush throwing errors immediately rather than rejecting.
+      // Use a custom allSettled implementation to avoid issues with patching Promise on RN
+      .then(() => allSettled([previousFlushPromise]))
+      .then(() => {
+        return this._flush()
+      })
 
     this.flushPromise = nextFlushPromise
+    this.flushPromises.add(nextFlushPromise)
     void this.addPendingPromise(nextFlushPromise)
 
     allSettled([nextFlushPromise]).then(() => {
+      this.flushPromises.delete(nextFlushPromise)
       // If there are no others waiting to flush, clear the promise.
       // We don't strictly need to do this, but it could make debugging easier
       if (this.flushPromise === nextFlushPromise) {
@@ -1233,7 +1330,7 @@ export abstract class PostHogCoreStateless {
         data.historical_migration = true
       }
 
-      const payload = JSON.stringify(data)
+      const payload = safeJsonStringify(data)
 
       const url = `${this.host}/batch/`
 
@@ -1254,8 +1351,8 @@ export abstract class PostHogCoreStateless {
           if (isPostHogFetchContentTooLargeError(err)) {
             return false
           }
-          // otherwise, retry on network errors
-          return isPostHogFetchError(err)
+          // otherwise, retry on transient HTTP and network errors
+          return isPostHogFetchRetryableError(err)
         },
       }
 
@@ -1328,7 +1425,7 @@ export abstract class PostHogCoreStateless {
           if (isPostHogFetchContentTooLargeError(err)) {
             return false
           }
-          return isPostHogFetchError(err)
+          return isPostHogFetchRetryableError(err)
         },
       })
       return { kind: 'ok' }

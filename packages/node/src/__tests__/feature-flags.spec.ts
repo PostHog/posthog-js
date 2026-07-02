@@ -1751,6 +1751,89 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
+  it("computes 'not in' cohort conditions locally (negated cohort membership)", async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exclude Team',
+          key: 'exclude-team',
+          active: true,
+          rollout_percentage: 100,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, type: 'cohort', operator: 'not_in' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+        {
+          id: 2,
+          name: 'Include Team',
+          key: 'include-team',
+          active: true,
+          rollout_percentage: 100,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, type: 'cohort', operator: 'in' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '98': {
+          type: 'OR',
+          values: [{ key: 'email', operator: 'regex', value: '.*@example\\.com$', type: 'person' }],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: {},
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // In the cohort + `not_in` => excluded => OFF. (Pre-fix this incorrectly returned `true`.)
+    expect(
+      await posthog.getFeatureFlag('exclude-team', 'some-distinct-id', {
+        personProperties: { email: 'team@example.com' },
+      })
+    ).toEqual(false)
+    // Not in the cohort + `not_in` => ON.
+    expect(
+      await posthog.getFeatureFlag('exclude-team', 'some-distinct-id', {
+        personProperties: { email: 'outsider@example.org' },
+      })
+    ).toEqual(true)
+
+    // `in` keeps working: in the cohort => ON, not in the cohort => OFF.
+    expect(
+      await posthog.getFeatureFlag('include-team', 'some-distinct-id', {
+        personProperties: { email: 'team@example.com' },
+      })
+    ).toEqual(true)
+    expect(
+      await posthog.getFeatureFlag('include-team', 'some-distinct-id', {
+        personProperties: { email: 'outsider@example.org' },
+      })
+    ).toEqual(false)
+
+    // All evaluated locally; the /flags (decide) API must not be consulted.
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
   it('gets feature flag with variant overrides', async () => {
     const flags = {
       flags: [
@@ -2823,7 +2906,6 @@ describe('getFeatureFlag', () => {
         '$feature/complex-flag': true,
         $feature_flag: 'complex-flag',
         $feature_flag_response: true,
-        $groups: undefined,
         $lib: posthog.getLibraryId(),
         $lib_version: posthog.getLibraryVersion(),
         locally_evaluated: true,
@@ -6067,7 +6149,9 @@ describe('ETag support for local evaluation polling', () => {
   jest.useFakeTimers()
 
   afterEach(async () => {
+    jest.useRealTimers()
     await posthog.shutdown()
+    jest.useFakeTimers()
   })
 
   it('stores ETag from response and sends it on subsequent requests', async () => {
@@ -6098,15 +6182,14 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial load
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call should not have If-None-Match header
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Trigger a reload
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // Second call should have If-None-Match header with the ETag
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"abc123"')
@@ -6164,26 +6247,23 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial load
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call should not have If-None-Match header
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
-    // Verify flags were loaded
-    const flag1 = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag1).toBe(true)
+    // Verify flags were loaded locally
+    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
 
     // Trigger a reload (should get 304)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // Verify the request that triggered 304 included the If-None-Match header
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"test-etag"')
 
-    // Verify flags are still available after 304
-    const flag2 = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag2).toBe(true)
+    // Verify flags are still available locally after 304
+    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
 
     // Verify fetch was called twice
     expect(mockFetch).toHaveBeenCalledTimes(2)
@@ -6221,19 +6301,18 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call - no ETag
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Second call
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
 
     // Third call
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
   })
 
@@ -6270,16 +6349,15 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // Second call should have the ETag from first response
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"initial-etag"')
 
     // Third call should not have ETag (server stopped sending it)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBeUndefined()
   })
 
@@ -6331,19 +6409,17 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // Multiple 304 responses should not cause any issues
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     expect(mockFetch).toHaveBeenCalledTimes(3)
 
-    // Flags should still work
-    const flag = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag).toBe(true)
+    // Flags should still work locally
+    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
   })
 
   it('updates ETag when server sends new ETag with 304 response', async () => {
@@ -6397,19 +6473,18 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call has no ETag
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Second call uses initial ETag
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
 
     // Third call should use the updated ETag from the 304 response
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
   })
 })
@@ -6420,7 +6495,9 @@ describe('error handling and backoff', () => {
   jest.useFakeTimers()
 
   afterEach(async () => {
-    await posthog.shutdown()
+    jest.useRealTimers()
+    await posthog.shutdown(100).catch(() => undefined)
+    jest.useFakeTimers()
   })
 
   /**
@@ -6469,16 +6546,13 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-3')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-3', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
@@ -6494,14 +6568,12 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
@@ -6517,14 +6589,12 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
@@ -6567,12 +6637,11 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial fetch with a short delay
-    await new Promise((r) => setTimeout(r, 50))
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1)
 
     // On-demand fetch should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(1)
 
     // Advance mock time past the exponential backoff period
@@ -6580,7 +6649,7 @@ describe('error handling and backoff', () => {
     mockTime += 2001
 
     // Now on-demand fetch should be allowed (backoff expired based on Date.now())
-    await posthog.getFeatureFlag('test-flag', 'user-2')
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     // fetchCallCount should be 2 (on-demand fetch was allowed after backoff expired)
     expect(fetchCallCount).toBe(2)
@@ -6621,32 +6690,32 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await new Promise((r) => setTimeout(r, 50))
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1) // Initial fetch, backoff = 2s
 
     // Advance past 2s backoff, trigger second error
     mockTime += 2001
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // backoff now = 4s
 
     // 2s is NOT enough anymore
     mockTime += 2001
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // Still blocked
 
     // 4s total is enough
     mockTime += 2000
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(3) // backoff now = 8s
 
     // 4s is NOT enough anymore
     mockTime += 4001
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(3) // Still blocked
 
     // 8s total is enough
     mockTime += 4000
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(4) // Exponential backoff verified!
 
     Date.now = originalDateNow
@@ -6699,17 +6768,15 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1) // Initial 401
 
     // Use reloadFeatureFlags to trigger a retry (uses forceReload=true, bypasses backoff)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCallCount).toBe(2) // Retry succeeded with 200
 
     // Now on-demand fetch should work immediately (backoff cleared by 200 response)
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
 
     // The getFeatureFlag call should not trigger another fetch because
     // loadedSuccessfullyOnce is now true (flags loaded successfully)
@@ -6747,24 +6814,21 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1) // Initial fetch
 
     // On-demand fetch should be blocked
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(1) // Still blocked
 
     // reloadFeatureFlags uses forceReload=true internally, should bypass backoff
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // reloadFeatureFlags should have bypassed backoff and made a new fetch
     expect(fetchCallCount).toBe(2)
 
     // On-demand fetch should still be blocked (new backoff started after 401)
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // Still blocked
   })
 })

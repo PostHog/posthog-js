@@ -5,7 +5,7 @@
  */
 
 const express = require('express')
-const { PostHog } = require('../../packages/node/dist/entrypoints/index.node')
+const { PostHog } = require('../packages/node/dist/entrypoints/index.node')
 
 const app = express()
 app.use(express.json())
@@ -20,22 +20,38 @@ const state = {
     pendingEvents: 0,
 }
 
+async function discardClient() {
+    if (!state.client) {
+        return
+    }
+
+    const client = state.client
+    state.client = null
+
+    // Test resets should discard queued events instead of flushing them into
+    // the next mock-server scenario.
+    try {
+        client.clearFlushTimer?.()
+        client.setPersistedProperty?.('queue', [])
+        await client.shutdown(1)
+    } catch (error) {
+        // Ignore reset-time shutdown errors; the next test starts with a fresh client.
+    }
+}
+
 app.get('/health', (req, res) => {
     res.json({
         sdk_name: 'posthog-node',
-        sdk_version: require('../../packages/node/package.json').version,
+        sdk_version: require('../packages/node/package.json').version,
         adapter_version: '1.0.0',
         capabilities: ['capture_v0', 'encoding_gzip'],
     })
 })
 
-app.post('/init', (req, res) => {
-    const { api_key, host, flush_at, flush_interval_ms, max_retries, enable_compression } = req.body
+app.post('/init', async (req, res) => {
+    const { api_key, host, flush_at, flush_interval_ms, max_retries, enable_compression, disable_geoip } = req.body
 
-    // Shutdown existing client
-    if (state.client) {
-        state.client.shutdown()
-    }
+    await discardClient()
 
     // Reset state
     state.totalEventsCaptured = 0
@@ -48,8 +64,14 @@ app.post('/init', (req, res) => {
     // Create new client
     state.client = new PostHog(api_key, {
         host,
-        flushAt: flush_at ?? 1,
+        // Respect the harness batch-size configuration, including flush_at: 1
+        // for auto-flush compliance tests. Default to 2 only when omitted so
+        // ad-hoc single-event captures wait for an explicit /flush call.
+        flushAt: flush_at ?? 2,
         flushInterval: flush_interval_ms ?? 100,
+        fetchRetryCount: max_retries ?? 3,
+        disableCompression: enable_compression === undefined ? undefined : !enable_compression,
+        disableGeoip: disable_geoip ?? false,
         // Use before_send to track events being sent
         before_send: (event) => {
             // Track that event is being sent
@@ -125,12 +147,21 @@ app.post('/flush', async (req, res) => {
         return res.status(400).json({ error: 'SDK not initialized' })
     }
 
+    const sentBeforeFlush = state.totalEventsSent
+
     try {
         await state.client.flush()
         res.json({ success: true, events_flushed: state.totalEventsSent })
     } catch (error) {
+        // The harness deliberately configures mock-server failures for retry
+        // assertions. Treat SDK flush rejections as a completed adapter action
+        // so the harness can inspect the outbound requests it caused.
         state.lastError = error.message
-        res.status(500).json({ error: error.message })
+        res.json({
+            success: false,
+            events_flushed: Math.max(0, state.totalEventsSent - sentBeforeFlush),
+            error: error.message,
+        })
     }
 })
 
@@ -174,8 +205,11 @@ app.post('/get_feature_flag', async (req, res) => {
             groupProperties: group_properties,
             disableGeoip: disable_geoip,
             onlyEvaluateLocally: !force_remote,
-            sendFeatureFlagEvents: false,
         })
+
+        // Feature flag calls enqueue a $feature_flag_called event by default.
+        // Flush it before returning so it cannot leak into the next test case.
+        await state.client.flush()
 
         res.json({ success: true, value })
     } catch (error) {
@@ -184,11 +218,8 @@ app.post('/get_feature_flag', async (req, res) => {
     }
 })
 
-app.post('/reset', (req, res) => {
-    if (state.client) {
-        state.client.shutdown()
-        state.client = null
-    }
+app.post('/reset', async (req, res) => {
+    await discardClient()
 
     state.totalEventsCaptured = 0
     state.totalEventsSent = 0

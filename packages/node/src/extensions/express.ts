@@ -103,7 +103,7 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
         contextData.distinctId,
         additionalProperties
       ).then((msg) => {
-        posthog.capture(msg)
+        return posthog._capturePreparedEvent(msg, false)
       })
     )
 

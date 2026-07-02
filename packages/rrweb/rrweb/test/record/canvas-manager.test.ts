@@ -15,12 +15,36 @@ vi.mock('../../src/record/observers/canvas/webgl', () => ({
   default: () => () => {},
 }));
 
+// Controls the mocked inline worker so individual tests can simulate a worker that fails to
+// load — either by throwing at construction (synchronous importScripts failure) or by firing an
+// error event (asynchronous blob-script load failure under a strict CSP).
+const workerControl = vi.hoisted(() => ({
+  throwOnConstruct: false,
+  instances: [] as Array<{
+    onmessage: ((e: MessageEvent) => void) | null;
+    onerror: ((e: ErrorEvent) => void) | null;
+    postMessage: (...args: unknown[]) => void;
+    terminate: () => void;
+  }>,
+}));
+
 vi.mock(
   '../../src/record/workers/image-bitmap-data-url-worker?worker&inline',
   () => ({
     default: class {
       onmessage: ((e: MessageEvent) => void) | null = null;
-      postMessage() {}
+      onerror: ((e: ErrorEvent) => void) | null = null;
+      postMessage = vi.fn();
+      terminate = vi.fn();
+      constructor() {
+        if (workerControl.throwOnConstruct) {
+          throw new DOMException(
+            "Failed to execute 'importScripts' on 'WorkerGlobalScope'",
+            'NetworkError',
+          );
+        }
+        workerControl.instances.push(this);
+      }
     },
   }),
 );
@@ -32,6 +56,8 @@ describe('CanvasManager FPS observer', () => {
   beforeEach(() => {
     rafCallbacks = new Map();
     nextRafId = 1;
+    workerControl.throwOnConstruct = false;
+    workerControl.instances = [];
 
     vi.stubGlobal(
       'requestAnimationFrame',
@@ -90,6 +116,40 @@ describe('CanvasManager FPS observer', () => {
     createCanvasManager(win);
 
     expect(rafCallbacks.size).toBeGreaterThan(0);
+  });
+
+  it('should not throw and should not start the rAF loop when the worker fails to construct', () => {
+    workerControl.throwOnConstruct = true;
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    // A CSP-blocked blob worker throws NetworkError on construction; this must not escape.
+    expect(() => createCanvasManager(win)).not.toThrow();
+    expect(rafCallbacks.size).toBe(0);
+  });
+
+  it('should stop the rAF loop when the worker fires an error event', () => {
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    createCanvasManager(win);
+    expect(rafCallbacks.size).toBeGreaterThan(0);
+
+    const worker = workerControl.instances[0];
+    expect(worker).toBeDefined();
+    expect(worker.onerror).toBeTypeOf('function');
+
+    // Simulate the asynchronous blob-script load failure.
+    worker.onerror!({ message: 'NetworkError' } as ErrorEvent);
+
+    expect(worker.terminate).toHaveBeenCalled();
+    // The capture loop must not schedule any further frames.
+    flushRaf(1000);
+    expect(rafCallbacks.size).toBe(0);
   });
 
   it('should recover from createImageBitmap errors', async () => {

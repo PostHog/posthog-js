@@ -3,8 +3,9 @@ import {
   getPayloadsFromFlags,
   getFeatureFlagValue,
   normalizeFlagsResponse,
+  flagDetailsToResults,
 } from '@/featureFlagUtils'
-import { PostHogFlagsResponse, FeatureFlagDetail } from '@/types'
+import { PostHogFlagsResponse, FeatureFlagDetail, FeatureFlagResult } from '@/types'
 
 describe('featureFlagUtils', () => {
   describe('getFeatureFlagValue', () => {
@@ -158,6 +159,40 @@ describe('featureFlagUtils', () => {
       }
 
       expect(getPayloadsFromFlags(flags)).toEqual({})
+    })
+  })
+
+  describe('flagDetailsToResults', () => {
+    const detail = (
+      key: string,
+      enabled: boolean,
+      variant: string | undefined,
+      payload: string | undefined
+    ): FeatureFlagDetail => ({
+      key,
+      enabled,
+      variant,
+      reason: undefined,
+      metadata: { id: 1, version: undefined, description: undefined, payload },
+    })
+
+    it.each<[string, Record<string, FeatureFlagDetail>, FeatureFlagResult[]]>([
+      [
+        'projects details into results and decodes payloads',
+        { bool: detail('bool', true, undefined, '{"color":"blue"}'), variant: detail('variant', true, 'v1', '[5]') },
+        [
+          { key: 'bool', enabled: true, variant: undefined, payload: { color: 'blue' } },
+          { key: 'variant', enabled: true, variant: 'v1', payload: [5] },
+        ],
+      ],
+      [
+        'includes disabled flags as enabled: false with a null payload',
+        { off: detail('off', false, undefined, undefined) },
+        [{ key: 'off', enabled: false, variant: undefined, payload: null }],
+      ],
+      ['returns an empty array for no flags', {}, []],
+    ])('%s', (_name, flags, expected) => {
+      expect(flagDetailsToResults(flags)).toEqual(expected)
     })
   })
 

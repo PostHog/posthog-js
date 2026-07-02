@@ -86,7 +86,7 @@ export default class ErrorTracking {
             })
             return
           }
-          return this.client.capture(eventMessage)
+          return this.client._capturePreparedEvent(eventMessage, false)
         }
       })()
     )

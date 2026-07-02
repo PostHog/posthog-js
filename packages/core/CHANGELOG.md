@@ -1,5 +1,54 @@
 # @posthog/core
 
+## 1.39.4
+
+### Patch Changes
+
+- [#4055](https://github.com/PostHog/posthog-js/pull/4055) [`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry `/flags` requests that receive HTTP 502 or 504 responses across SDKs that use the shared core flags client.
+  (2026-07-02)
+
+## 1.39.3
+
+### Patch Changes
+
+- [#4028](https://github.com/PostHog/posthog-js/pull/4028) [`a664b81`](https://github.com/PostHog/posthog-js/commit/a664b815dd074c8eed87830904fa182306d07e6b) Thanks [@marandaneto](https://github.com/marandaneto)! - Make Node `flush()` wait for pending asynchronous SDK work before draining the event queue, so events produced by helpers like `captureException()` are not missed. Pending work rejections no longer prevent queued events from flushing.
+  (2026-07-01)
+
+## 1.39.2
+
+### Patch Changes
+
+- [#4027](https://github.com/PostHog/posthog-js/pull/4027) [`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely serialize event batches with circular property references instead of crashing during flush.
+  (2026-06-30)
+
+## 1.39.1
+
+### Patch Changes
+
+- [#3998](https://github.com/PostHog/posthog-js/pull/3998) [`0c95bce`](https://github.com/PostHog/posthog-js/commit/0c95bce7a2b01707691783a41730ec89699cb429) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry capture and logs requests on transient HTTP errors such as 408, 429, and 5xx while continuing to avoid retries for non-retryable 4xx responses.
+  (2026-06-30)
+
+## 1.39.0
+
+### Minor Changes
+
+- [#4006](https://github.com/PostHog/posthog-js/pull/4006) [`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `groupIdentifyImmediate()` to await the network request when identifying a group, mirroring `captureImmediate`/`identifyImmediate`/`aliasImmediate`. Useful in edge/serverless environments where the background queue may not flush. The Convex integration now uses it directly instead of routing `$groupidentify` through `captureImmediate`.
+  (2026-06-30)
+
+## 1.38.1
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+
+## 1.38.0
+
+### Minor Changes
+
+- [#3977](https://github.com/PostHog/posthog-js/pull/3977) [`6200888`](https://github.com/PostHog/posthog-js/commit/6200888e5741dea2e6e11a5da1c98b6c79e62a3f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `getAllFeatureFlags()`, which returns all currently loaded feature flags as structured `FeatureFlagResult`s (`key`, `enabled`, `variant`, `payload`). It is a synchronous read of the cached flags and does not send a `$feature_flag_called` event.
+  (2026-06-26)
+
 ## 1.37.3
 
 ### Patch Changes

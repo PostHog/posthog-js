@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.7.77",
+  "version": "1.7.80",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -30,7 +30,7 @@
     "build": "nuxt-module-build build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
     "lint": "eslint .",
-    "test:unit": "node tests/vue-plugin.test.mjs"
+    "test:unit": "node tests/vue-plugin.test.mjs && node tests/sourcemaps-ssr.test.mjs"
   },
   "dependencies": {
     "@posthog/cli": "catalog:",
