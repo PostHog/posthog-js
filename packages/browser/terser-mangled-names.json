@@ -567,6 +567,7 @@
         "_setupSessionRotationHandler",
         "_setupSiteApps",
         "_setupTriggerGroups",
+        "_shouldBackgroundRefreshSurveys",
         "_shouldCapturePageleave",
         "_shouldDisableFlags",
         "_shouldDisplaySurvey",
