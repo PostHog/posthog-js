@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/2650": {
+    "key": "PostHog/posthog-js/issue/2650",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2650",
+    "url": "https://github.com/PostHog/posthog-js/issues/2650",
+    "conclusion": "Plausible replay bug, but needs a minimal reproduction before a safe fix can be scoped",
+    "labels": [
+      "feature/replay",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-02T09:36:44.069Z"
+  },
   "PostHog/posthog-js/issue/2527": {
     "key": "PostHog/posthog-js/issue/2527",
     "repo": "PostHog/posthog-js",
