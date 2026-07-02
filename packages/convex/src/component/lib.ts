@@ -381,9 +381,9 @@ async function recordLoopJob(ctx: MutationCtx, jobId: GenericId<'_scheduled_func
  * tick commits atomically with this one, so the chain can't silently break. The fetch is a separate
  * at-most-once action; if it fails, the next tick refetches.
  *
- * Never invoke directly (e.g. dashboard "Run function"): it unconditionally queues a successor, so a
- * manual call forks the chain into two loops that run forever and double the cadence — the
- * supervisor can't detect the fork. Use `ensureRefreshLoop` to (re)start it.
+ * Never invoke directly (e.g. dashboard "Run function"): while local evaluation is enabled it queues
+ * a successor, so a manual call forks the chain into two loops that run forever and double the
+ * cadence — the supervisor can't detect the fork. Use `ensureRefreshLoop` to (re)start it.
  */
 export const refreshLoop = internalMutation({
   args: {},
