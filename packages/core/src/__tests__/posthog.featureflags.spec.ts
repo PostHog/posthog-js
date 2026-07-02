@@ -1251,6 +1251,54 @@ describe('PostHog Feature Flags v4', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
       })
 
+      it.each([502, 504])('should retry HTTP %i responses and return the successful flags response', async (status) => {
+        let flagsRequestCount = 0
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                flagsRequestCount++
+                if (flagsRequestCount < 2) {
+                  return Promise.resolve({
+                    status,
+                    text: () => Promise.resolve('error'),
+                    json: () => Promise.resolve({ error: 'error' }),
+                  })
+                }
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: createMockFeatureFlags(),
+                      requestId: 'retry-success',
+                      evaluatedAt: 1640995200000,
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await jest.advanceTimersByTimeAsync(1)
+        const result = await resultPromise
+
+        expect(result.success).toBe(true)
+        if (result.success) {
+          expect(result.response.featureFlags).toEqual(expectedFeatureFlagResponses)
+        }
+        expect(mocks.fetch).toHaveBeenCalledTimes(2)
+      })
+
       it('should not retry when featureFlagsRequestMaxRetries is 0', async () => {
         ;[posthog, mocks] = createTestClient(
           'TEST_API_KEY',
