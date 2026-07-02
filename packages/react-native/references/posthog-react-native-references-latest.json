@@ -428,6 +428,12 @@
               "isOptional": false,
               "type": "string",
               "name": "key"
+            },
+            {
+              "description": "Optional per-call settings",
+              "isOptional": true,
+              "type": "FeatureFlagResultOptions",
+              "name": "options"
             }
           ],
           "returnType": {
@@ -739,6 +745,12 @@
               "isOptional": false,
               "type": "string",
               "name": "key"
+            },
+            {
+              "description": "Optional per-call settings",
+              "isOptional": true,
+              "type": "FeatureFlagResultOptions",
+              "name": "options"
             }
           ],
           "returnType": {

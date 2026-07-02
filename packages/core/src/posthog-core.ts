@@ -1068,8 +1068,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
-  getFeatureFlag(key: string): FeatureFlagValue | undefined {
-    const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlag' })
+  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
+    const result = this._getFeatureFlagResult(key, {
+      missingFlagBehavior: 'getFeatureFlag',
+      sendEvent: options?.sendEvent,
+    })
     return result?.variant ?? result?.enabled
   }
 
@@ -1137,8 +1140,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
-  isFeatureEnabled(key: string): boolean | undefined {
-    const response = this.getFeatureFlag(key)
+  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
+    const response = this.getFeatureFlag(key, options)
     if (response === undefined) {
       return undefined
     }
