@@ -1299,6 +1299,40 @@ describe('PostHog Feature Flags v4', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(2)
       })
 
+      it.each([502, 504])('should return api_error after exhausting retries for HTTP %i responses', async (status) => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1, featureFlagsRequestMaxRetries: 2 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.resolve({
+                  status,
+                  text: () => Promise.resolve('error'),
+                  json: () => Promise.resolve({ error: 'error' }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await jest.advanceTimersByTimeAsync(1)
+        await jest.advanceTimersByTimeAsync(1)
+
+        await expect(resultPromise).resolves.toEqual({
+          success: false,
+          error: { type: 'api_error', statusCode: status },
+        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
+      })
+
       it('should not retry when featureFlagsRequestMaxRetries is 0', async () => {
         ;[posthog, mocks] = createTestClient(
           'TEST_API_KEY',
