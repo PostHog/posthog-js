@@ -5,6 +5,7 @@ import { TextDecoder } from 'util'
 import * as fflate from 'fflate'
 import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
+import { logger } from '../utils/logger'
 
 jest.mock('../utils/globals', () => ({
     ...jest.requireActual('../utils/globals'),
@@ -323,6 +324,9 @@ describe('request', () => {
                 })
             })
 
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
             const callback = jest.fn()
             request(createRequest({ callback, timeout: 8000 }))
 
@@ -342,6 +346,67 @@ describe('request', () => {
             expect(response.statusCode).toBe(0)
             expect(response.error.name).toBe('AbortError')
             expect(response.error.message).toBe('PostHog request timed out after 8000ms')
+
+            // Our own timeout is expected (the queue retries), so it is logged at warn, not error -
+            // which also keeps it out of error tracking's console-error capture.
+            expect(warnSpy).toHaveBeenCalledWith(reason)
+            expect(errorSpy).not.toHaveBeenCalled()
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('logs our own timeout at warn even when the browser does not propagate the abort reason', async () => {
+            // Some browsers reject the fetch with a generic native `AbortError` DOMException instead
+            // of the reason we passed to `controller.abort(...)`, so detection must not rely on the
+            // reason reaching the rejection - only on `timedOut` + `name === 'AbortError'`.
+            const nativeAbortError = new Error('The operation was aborted.')
+            nativeAbortError.name = 'AbortError'
+            mockedFetch.mockImplementation((_url: string, opts: any) => {
+                return new Promise((_resolve, reject) => {
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    opts.signal?.addEventListener('abort', () => reject(nativeAbortError))
+                })
+            })
+
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = jest.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            jest.advanceTimersByTime(8000)
+            await flushPromises()
+
+            expect(warnSpy).toHaveBeenCalledWith(nativeAbortError)
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: nativeAbortError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('logs a genuine abort/network error at error, not warn, when we did not time out', async () => {
+            // An `AbortError` we did not cause (e.g. the host app aborted, or the page unloaded)
+            // must still be logged at error - `timedOut` is false so it is not treated as our timeout.
+            const foreignAbortError = new Error('The operation was aborted.')
+            foreignAbortError.name = 'AbortError'
+            mockedFetch.mockImplementation(() => Promise.reject(foreignAbortError))
+
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = jest.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            await flushPromises()
+
+            expect(errorSpy).toHaveBeenCalledWith(foreignAbortError)
+            expect(warnSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: foreignAbortError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
         })
 
         it('supports nextOptions parameter', async () => {
