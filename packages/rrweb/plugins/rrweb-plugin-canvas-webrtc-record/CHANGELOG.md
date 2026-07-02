@@ -1,5 +1,12 @@
 # @rrweb/rrweb-plugin-canvas-webrtc-record
 
+## 0.0.14
+
+### Patch Changes
+
+- Updated dependencies [[`e803b8f`](https://github.com/PostHog/posthog-js/commit/e803b8f253a0498da4469657203813102b3d3e8f)]:
+    - @posthog/rrweb@0.0.75
+
 ## 0.0.13
 
 ### Patch Changes

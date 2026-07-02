@@ -1128,7 +1128,13 @@ export class PostHogFeatureFlags implements Extension {
         this.addFeatureFlagsHandler(callback)
         if (this._hasLoadedFlags) {
             const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
-            callback(flags, flagVariants)
+            // Isolate the callback so a user-provided handler that throws surfaces as a logged
+            // error rather than propagating out of onFeatureFlags as a posthog-js SDK error.
+            try {
+                callback(flags, flagVariants)
+            } catch (error) {
+                logger.error('Error while running feature flags callback', error)
+            }
         }
         return () => this.removeFeatureFlagsHandler(callback)
     }
@@ -1220,7 +1226,16 @@ export class PostHogFeatureFlags implements Extension {
 
     _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
-        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants, { errorsLoading }))
+        this.featureFlagEventHandlers.forEach((handler) => {
+            // Isolate each handler: a user-provided onFeatureFlags callback that throws must not
+            // break the callback chain (preventing later handlers from firing) or surface as a
+            // posthog-js SDK error in error tracking.
+            try {
+                handler(flags, flagVariants, { errorsLoading })
+            } catch (error) {
+                logger.error('Error while running feature flags callback', error)
+            }
+        })
     }
 
     /**

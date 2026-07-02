@@ -1,8 +1,6 @@
 name: Playwright Integration Tests
 on: [pull_request]
 env:
-  POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
-  POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
   POSTHOG_API_HOST: https://us.i.posthog.com
   POSTHOG_PROJECT_ID: 11213
 
@@ -19,6 +17,8 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       CAN_RUN_INTEGRATION_TESTS: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
+      POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
 
     strategy:
       fail-fast: false

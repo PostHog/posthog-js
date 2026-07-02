@@ -1,7 +1,7 @@
 import { PostHog as PostHogEdge } from 'posthog-node/edge'
-import { action, env, internalMutation, internalQuery, query } from './_generated/server.js'
+import { action, env, internalMutation, internalQuery, query, type MutationCtx } from './_generated/server.js'
 import { api, internal } from './_generated/api.js'
-import { v } from 'convex/values'
+import { v, type GenericId } from 'convex/values'
 import { version } from './version.js'
 
 /**
@@ -151,17 +151,11 @@ export const groupIdentify = action({
     const { projectToken, host } = readConfig()
     if (!projectToken) return
     const client = getClient(projectToken, host)
-    // posthog-node doesn't expose a `groupIdentifyImmediate`, so we send the same `$groupidentify`
-    // event via `captureImmediate` to keep parity with capture/identify/alias/captureException —
-    // resolve when the network call completes, without resorting to shutdown().
-    await client.captureImmediate({
-      distinctId: args.distinctId || `$${args.groupType}_${args.groupKey}`,
-      event: '$groupidentify',
-      properties: {
-        $group_type: args.groupType,
-        $group_key: args.groupKey,
-        $group_set: parseProperties(args.properties) ?? {},
-      },
+    await client.groupIdentifyImmediate({
+      groupType: args.groupType,
+      groupKey: args.groupKey,
+      properties: parseProperties(args.properties) ?? {},
+      distinctId: args.distinctId,
       disableGeoip: args.disableGeoip,
     })
   },
@@ -336,9 +330,82 @@ export const _getCurrentEtag = internalQuery({
   },
 })
 
+// --- Local-evaluation refresh loop ---
+//
+// A self-rescheduling chain rather than a fixed-interval cron, so the runtime-only
+// `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` governs the cadence (see `crons.ts` for why a cron can't).
+
+export const DEFAULT_INTERVAL_SECONDS = 60
+
+// Read at runtime, where the forwarded value is visible. String-typed on the wire, so an invalid
+// value warns and falls back rather than failing. Exported for tests.
+export function readPollingIntervalSeconds(): number {
+  const raw = (env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS ?? '').trim()
+  if (!raw) return DEFAULT_INTERVAL_SECONDS
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+    console.warn(
+      `[PostHog] POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS="${raw}" is not a positive integer; ` +
+        `falling back to ${DEFAULT_INTERVAL_SECONDS}s.`
+    )
+    return DEFAULT_INTERVAL_SECONDS
+  }
+  return parsed
+}
+
+// Record the latest queued tick in the `refreshLoopState` singleton so `ensureRefreshLoop` can
+// tell a live chain from a dead one before scheduling.
+async function recordLoopJob(ctx: MutationCtx, jobId: GenericId<'_scheduled_functions'>): Promise<void> {
+  const existing = await ctx.db.query('refreshLoopState').first()
+  if (existing) {
+    await ctx.db.patch(existing._id, { loopJobId: jobId })
+  } else {
+    await ctx.db.insert('refreshLoopState', { loopJobId: jobId })
+  }
+}
+
+/**
+ * One tick: kick off a refresh now, then queue the next tick at the configured interval. A mutation
+ * so the chain is durable — scheduled mutations run exactly-once with retries, and queuing the next
+ * tick commits atomically with this one, so the chain can't silently break. The fetch is a separate
+ * at-most-once action; if it fails, the next tick refetches.
+ *
+ * Never invoke directly (e.g. dashboard "Run function"): it unconditionally queues a successor, so a
+ * manual call forks the chain into two loops that run forever and double the cadence — the
+ * supervisor can't detect the fork. Use `ensureRefreshLoop` to (re)start it.
+ */
+export const refreshLoop = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    await ctx.scheduler.runAfter(0, api.lib.refreshFlagDefinitions, {})
+    const nextId = await ctx.scheduler.runAfter(readPollingIntervalSeconds() * 1000, internal.lib.refreshLoop, {})
+    await recordLoopJob(ctx, nextId)
+  },
+})
+
+/**
+ * Supervisor, called by the cron in `crons.ts`: starts the chain unless a tick is already pending
+ * or running, recording the new tick's id so the next call sees it as alive. Idempotent —
+ * overlapping runs can't spawn duplicate chains.
+ */
+export const ensureRefreshLoop = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const state = await ctx.db.query('refreshLoopState').first()
+    if (state) {
+      const job = await ctx.db.system.get(state.loopJobId)
+      if (job && (job.state.kind === 'pending' || job.state.kind === 'inProgress')) {
+        return
+      }
+    }
+    const jobId = await ctx.scheduler.runAfter(0, internal.lib.refreshLoop, {})
+    await recordLoopJob(ctx, jobId)
+  },
+})
+
 /**
  * Fetches flag definitions from PostHog's local-evaluation endpoint and stores them in the
- * `flagDefinitions` table. Called automatically by the cron registered in `crons.ts` when
+ * `flagDefinitions` table. Called automatically by the refresh loop (see above) when
  * `POSTHOG_PERSONAL_API_KEY` is set, and also exposed publicly so the client's
  * `reloadFeatureFlags(ctx)` method (parity with `posthog-node`) can trigger an on-demand refresh.
  */

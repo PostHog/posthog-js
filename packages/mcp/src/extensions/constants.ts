@@ -11,6 +11,12 @@ export const DEFAULT_CONVERSATION_ID_DESCRIPTION =
 
 export const POSTHOG_MCP_ANALYTICS_SOURCE = 'posthog_mcp_analytics'
 
+// The `$lib` identity stamped on every event @posthog/mcp sends. posthog-node
+// would otherwise report itself (`posthog-node`, the transport SDK); we override
+// `getLibraryId()` so MCP events self-identify the same way every other PostHog
+// SDK does. See `applyMcpLibIdentity` in `./lib-identity`.
+export const POSTHOG_MCP_LIB_NAME = 'posthog-node-mcp'
+
 // All PostHog-owned event names start with `$` per the PostHog convention.
 // Non-`$` names would be treated as customer-defined events and confuse the schema.
 export const PostHogMCPAnalyticsEvent = {

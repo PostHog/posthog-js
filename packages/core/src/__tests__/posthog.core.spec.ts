@@ -155,6 +155,7 @@ describe('PostHog Core', () => {
     })
 
     it('should handle network errors', async () => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, featureFlagsRequestMaxRetries: 0 })
       const emitSpy = jest.spyOn(posthog['_events'], 'emit')
       mocks.fetch.mockImplementation((url) => {
         if (url.includes('/flags/?v=2')) {

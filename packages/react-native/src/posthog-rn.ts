@@ -85,6 +85,11 @@ export interface PostHogOptions extends PostHogCoreOptions {
   customStorage?: PostHogCustomStorage
 
   /**
+   * A list of headers that should be sent with requests to the PostHog API.
+   */
+  requestHeaders?: { [header_name: string]: string }
+
+  /**
    * Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
    * Application Installed and Application Updated events are not supported with persistence set to 'memory'.
    *
@@ -214,6 +219,7 @@ export class PostHog extends PostHogCore {
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
   private _overrideDisplayLanguage: string | null
+  private _requestHeaders: { [header_name: string]: string } = {}
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -262,6 +268,7 @@ export class PostHog extends PostHogCore {
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
+    this._requestHeaders = options?.requestHeaders ?? {}
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -575,6 +582,10 @@ export class PostHog extends PostHogCore {
       return ''
     }
     return `${this.getLibraryId()}/${this.getLibraryVersion()}`
+  }
+
+  protected getCustomHeaders(): { [key: string]: string } {
+    return { ...super.getCustomHeaders(), ...this._requestHeaders }
   }
 
   getCommonEventProperties(): PostHogEventProperties {
@@ -2110,9 +2121,14 @@ export class PostHog extends PostHogCore {
       anonymousId: this.getAnonymousId(),
       sdkVersion: this.getLibraryVersion(),
       flushAt: this.flushAt,
+      // Native-sent requests (session replay, crash uploads) bypass the JS request path,
+      // so the configured headers are passed through to the native plugin as well.
+      requestHeaders: this._requestHeaders,
     }
 
-    this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(sdkOptions)}`)
+    // Log header names only: requestHeaders values can carry secrets (e.g. an Authorization token).
+    const loggableSdkOptions = { ...sdkOptions, requestHeaders: Object.keys(this._requestHeaders) }
+    this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(loggableSdkOptions)}`)
 
     try {
       const wasSessionReplayEnabled = enableSessionReplay

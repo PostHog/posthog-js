@@ -1,6 +1,43 @@
-import { getPersonPropertiesHash } from './string-utils'
+import { getPersonPropertiesHash, safeJsonStringify } from './string-utils'
 
 describe('string-utils', () => {
+  describe('safeJsonStringify', () => {
+    it.each([
+      [
+        'replaces circular references',
+        () => {
+          const circular: Record<string, any> = { foo: 'bar' }
+          circular.self = circular
+          return {
+            value: circular,
+            expected: { foo: 'bar', self: '[Circular]' },
+          }
+        },
+      ],
+      [
+        'preserves shared non-circular references',
+        () => {
+          const shared = { id: 1 }
+          return {
+            value: { a: shared, b: shared },
+            expected: { a: { id: 1 }, b: { id: 1 } },
+          }
+        },
+      ],
+      [
+        'serializes bigint values as strings',
+        () => ({
+          value: { count: BigInt(123) },
+          expected: { count: '123' },
+        }),
+      ],
+    ])('%s', (_description, buildCase) => {
+      const { value, expected } = buildCase()
+
+      expect(JSON.parse(safeJsonStringify(value))).toEqual(expected)
+    })
+  })
+
   describe('getPersonPropertiesHash', () => {
     it('should return consistent hash regardless of top-level key order', () => {
       const hash1 = getPersonPropertiesHash('user-1', { b: 'value-b', a: 'value-a' })

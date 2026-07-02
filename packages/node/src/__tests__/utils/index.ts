@@ -23,6 +23,17 @@ export const apiImplementationV4 = (flagsResponse: PostHogV2FlagsResponse | Erro
           })
     }
 
+    if ((url as any).includes('batch/')) {
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () =>
+          Promise.resolve({
+            status: 'ok',
+          }),
+      }) as any
+    }
+
     return Promise.resolve({
       status: 400,
       text: () => Promise.resolve('ok'),
