@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/3614": {
+    "key": "PostHog/posthog-js/issue/3614",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3614",
+    "url": "https://github.com/PostHog/posthog-js/issues/3614",
+    "conclusion": "Likely a real LLM analytics bug, but the report points to the Python SDK or backend trace processing rather than a clear posthog-js package issue.",
+    "labels": [
+      "bug",
+      "team/llm-analytics"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-02T09:30:32.128Z"
+  },
   "PostHog/posthog-js/issue/4051": {
     "key": "PostHog/posthog-js/issue/4051",
     "repo": "PostHog/posthog-js",
