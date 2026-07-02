@@ -9,9 +9,12 @@ function _useNavigationTrackerDisabled(): void {
   return
 }
 
+const normalizeRegex = /[^a-z0-9]/gi
+
 function _useNavigationTracker(
   options?: PostHogAutocaptureNavigationTrackerOptions,
   navigationRef?: PostHogNavigationRef,
+  ignoreScreenNames: string[] = [],
   client?: PostHog
 ): void {
   const posthog = useOverridablePostHog(client, 'useNavigationTracker')
@@ -95,6 +98,16 @@ function _useNavigationTracker(
     const currentRouteName = options?.routeToName?.(name, params) || name || 'Unknown'
 
     if (currentRouteName) {
+      const normalizedRouteName = currentRouteName.toLowerCase()?.replace(normalizeRegex, '')
+      const normalizedScreenNames = ignoreScreenNames.map((screenName) =>
+        screenName.toLowerCase()?.replace(normalizeRegex, '')
+      )
+      const skipScreenTracking = normalizedScreenNames?.length && normalizedScreenNames?.includes(normalizedRouteName)
+
+      if (skipScreenTracking) {
+        return
+      }
+
       const properties = options?.routeToProperties?.(currentRouteName, params)
       posthog.screen(currentRouteName, properties)
     }

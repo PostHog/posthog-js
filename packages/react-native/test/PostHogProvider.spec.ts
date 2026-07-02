@@ -7,6 +7,14 @@ import { PostHogProvider } from '../src/PostHogProvider'
 import { usePostHog } from '../src/hooks/usePostHog'
 import type { PostHog } from '../src/posthog-rn'
 
+const mockUseNavigationState = jest.fn()
+const mockUseNavigation = jest.fn()
+
+jest.mock('@react-navigation/native', () => ({
+  useNavigationState: (cb: any) => mockUseNavigationState(cb),
+  useNavigation: () => mockUseNavigation(),
+}))
+
 Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
 AppState.addEventListener = jest.fn()
 
@@ -59,5 +67,76 @@ describe('PostHogProvider', () => {
     } finally {
       consoleErrorSpy.mockRestore()
     }
+  })
+
+  describe('autocapture', () => {
+    beforeEach(() => {
+      jest.useFakeTimers()
+      mockUseNavigationState.mockReset()
+      mockUseNavigation.mockReset()
+    })
+
+    afterEach(() => {
+      jest.useRealTimers()
+    })
+
+    it('ignores screen in ignoreScreenNames', () => {
+      const mockRoute = { name: routeName, params: {} }
+      mockUseNavigationState.mockImplementation((cb) => cb({ routes: [mockRoute] }))
+      mockUseNavigation.mockReturnValue({ isReady: () => true, getCurrentRoute: () => mockRoute })
+
+      const mockPostHog = { screen: jest.fn(), isDisabled: false } as any
+
+      render(
+        React.createElement(PostHogProvider, { client: mockPostHog, autocapture: { captureScreens: true, ignoreScreenNames } },
+          React.createElement(CaptureClient, { onClient: jest.fn() })
+        )
+      )
+
+      jest.advanceTimersByTime(1)
+
+      expect(mockPostHog.screen).toHaveBeenCalledWith(null)
+    })
+
+    it.each([
+      {
+        description: 'tracks screen not in ignoreScreenNames',
+        routeName: 'home',
+        ignoreScreenNames: ['surveys'],
+        expectedCall: ['home', undefined],
+      },
+      {
+        description: 'tracks screen when ignoreScreenNames is empty',
+        routeName: 'home',
+        ignoreScreenNames: [],
+        expectedCall: ['home', undefined],
+      },
+      {
+        description: 'tracks screen with non-alphanumeric chars (normalized)',
+        routeName: '$&home',
+        ignoreScreenNames: ['$HOME'],
+        expectedCall: ['home', undefined],
+      },
+    ])('$description', ({ routeName, ignoreScreenNames, expectedCall }: {
+      routeName: string,
+      ignoreScreenNames: string[],
+      expectedCall: [string, Record<string, any> | undefined]
+    }) => {
+      const mockRoute = { name: routeName, params: {} }
+      mockUseNavigationState.mockImplementation((cb) => cb({ routes: [mockRoute] }))
+      mockUseNavigation.mockReturnValue({ isReady: () => true, getCurrentRoute: () => mockRoute })
+
+      const mockPostHog = { screen: jest.fn(), isDisabled: false } as any
+
+      render(
+        React.createElement(PostHogProvider, { client: mockPostHog, autocapture: { captureScreens: true, ignoreScreenNames } },
+          React.createElement(CaptureClient, { onClient: jest.fn() })
+        )
+      )
+
+      jest.advanceTimersByTime(1)
+
+      expect(mockPostHog.screen).toHaveBeenCalledWith(...expectedCall)
+    })
   })
 })

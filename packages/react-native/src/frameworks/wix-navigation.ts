@@ -9,6 +9,8 @@ import { OptionalReactNativeNavigationWix } from '../optional/OptionalReactNativ
 import { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureOptions } from '../types'
 
+const normalizeRegex = /[^a-z0-9]/gi
+
 export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAutocaptureOptions = {}): boolean => {
   if (!OptionalReactNativeNavigationWix) {
     return false
@@ -27,6 +29,20 @@ export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAuto
 
     if (currentRouteName) {
       const properties = options?.navigation?.routeToProperties?.(currentRouteName, passProps || {})
+      const ignoreScreenNames = options?.ignoreScreenNames || []
+      const normalizedScreenNames = ignoreScreenNames.map((screenName) =>
+        screenName.toLowerCase()?.replace(normalizeRegex, '')
+      )
+
+      const normalizedCurrentRoute = currentRouteName.toLowerCase()?.replace(normalizeRegex, '')
+
+      const skipScreenTracking =
+        normalizedScreenNames?.length && normalizedScreenNames?.includes(normalizedCurrentRoute)
+
+      if (skipScreenTracking) {
+        return
+      }
+
       posthog.screen(currentRouteName, properties)
     }
   })
