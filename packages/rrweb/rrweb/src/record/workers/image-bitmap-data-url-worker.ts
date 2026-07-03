@@ -9,7 +9,9 @@ const transparentFingerprintMap: Map<string, string> = new Map();
 
 function fnv1aHash(data: Uint8ClampedArray): string {
   // hash 32-bit words rather than bytes: RGBA buffers are multi-megabyte,
-  // always word-aligned, and this runs on every captured frame
+  // always word-aligned, and this runs on every captured frame. Callers must
+  // pass word-aligned views with a word-multiple byteLength (ImageData.data
+  // always is) — trailing bytes would be silently ignored otherwise
   const view = new Uint32Array(
     data.buffer,
     data.byteOffset,
@@ -97,13 +99,16 @@ worker.onmessage = async function (e) {
       if (fingerprint === lastFingerprint) {
         return worker.postMessage({ id }); // unchanged
       }
-      lastFingerprintMap.set(id, fingerprint);
 
-      // a canvas that starts out transparent isn't worth transmitting
+      // a canvas that starts out transparent isn't worth transmitting; raw
+      // all-zero pixels is deliberately narrower than the old "encodes to the
+      // same bytes as a transparent canvas" check (e.g. alpha-0 pixels with
+      // non-zero RGB now transmit) — we send more, never less
       if (
         lastFingerprint === undefined &&
         fingerprint === transparentFingerprint(width, height)
       ) {
+        lastFingerprintMap.set(id, fingerprint);
         return worker.postMessage({ id });
       }
 
@@ -116,6 +121,10 @@ worker.onmessage = async function (e) {
         displayWidth,
         displayHeight,
       });
+      // only record the fingerprint once the frame was actually sent — a
+      // transient encode failure must retry on the next frame, not be
+      // remembered as "unchanged" and suppressed forever
+      lastFingerprintMap.set(id, fingerprint);
     } catch {
       // Always respond so the main thread clears snapshotInProgressMap
       worker.postMessage({ id });

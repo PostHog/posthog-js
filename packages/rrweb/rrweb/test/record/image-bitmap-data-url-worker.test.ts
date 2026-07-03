@@ -5,11 +5,23 @@ type MessageHandler = (e: {
   data: ImageBitmapDataURLWorkerParams;
 }) => Promise<void>;
 
-const convertToBlob = vi.fn();
+const convertToBlob = vi.fn(
+  (
+    options: { type?: string; quality?: number } | undefined,
+    pixels: Uint8ClampedArray,
+  ) =>
+    Promise.resolve({
+      type: options?.type ?? 'image/webp',
+      arrayBuffer: () => Promise.resolve(pixels.buffer),
+    }),
+);
 const postMessage = vi.fn();
 
 type FakeBitmap = { pixels: Uint8ClampedArray; close: () => void };
 
+// deliberately does not model real canvas semantics the worker depends on:
+// real getImageData returns an unpremultiplied copy and real drawImage
+// composites source-over onto a premultiplied backing store
 class FakeOffscreenCanvas {
   width: number;
   height: number;
@@ -29,13 +41,8 @@ class FakeOffscreenCanvas {
     };
   }
 
-  convertToBlob(options?: { type?: string }) {
-    convertToBlob(options);
-    const encoded = this.pixels.slice();
-    return Promise.resolve({
-      type: options?.type ?? 'image/webp',
-      arrayBuffer: () => Promise.resolve(encoded.buffer),
-    });
+  convertToBlob(options?: { type?: string; quality?: number }) {
+    return convertToBlob(options, this.pixels.slice());
   }
 }
 
@@ -97,11 +104,31 @@ describe('image-bitmap-data-url-worker', () => {
     expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
 
     expect(convertToBlob).toHaveBeenCalledTimes(1);
+    expect(convertToBlob).toHaveBeenCalledWith(
+      { type: 'image/webp', quality: 0.4 },
+      expect.anything(),
+    );
+  });
+
+  it('retries the encode on the next frame after a transient failure', async () => {
+    const onmessage = await loadWorker();
+    convertToBlob.mockImplementationOnce(() =>
+      Promise.reject(new Error('encode failed')),
+    );
+
+    await onmessage(frame(1, CONTENT_A));
+    expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+
+    await onmessage(frame(1, CONTENT_A));
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
   });
 
   it.each([
     ['different content', CONTENT_A, CONTENT_B],
     ['content going blank', CONTENT_A, BLANK],
+    ['content after a blank first frame', BLANK, CONTENT_A],
   ])(
     're-encodes and sends when the canvas changes to %s',
     async (_name, first, second) => {
