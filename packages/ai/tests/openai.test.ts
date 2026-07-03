@@ -655,6 +655,73 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$ai_cache_read_input_tokens']).toBe(5)
   })
 
+  // The cache-reporting tests below are fully mocked (no API calls), so they
+  // run unconditionally instead of using `conditionalTest`.
+  test('declares inclusive cache token reporting so ingestion does not double-bill Claude via OpenAI-compatible hosts (#3615)', async () => {
+    // OpenAI-convention usage reports prompt_tokens INCLUSIVE of cached tokens.
+    // Ingestion classifies claude* models as Anthropic-convention (exclusive)
+    // and would price the 27,929 cached tokens twice unless the event declares
+    // the convention via $ai_cache_reporting_exclusive: false. Numbers taken
+    // from the #3615 report (Claude via OpenRouter).
+    mockOpenAiChatResponse.model = 'anthropic/claude-sonnet-4.6'
+    mockOpenAiChatResponse.usage = {
+      prompt_tokens: 32611,
+      completion_tokens: 561,
+      total_tokens: 33172,
+      prompt_tokens_details: {
+        cached_tokens: 27929,
+      },
+    }
+
+    await client.chat.completions.create({
+      model: 'anthropic/claude-sonnet-4.6',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    // Token counts stay raw (OpenAI convention, consistent with $ai_usage)…
+    expect(properties['$ai_input_tokens']).toBe(32611)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(27929)
+    // …and the event declares the convention so ingestion subtracts instead of double-billing.
+    expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+  })
+
+  test('declares inclusive cache token reporting on streaming completions', async () => {
+    const stream = (await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      stream: true,
+      posthogDistinctId: 'test-id',
+    })) as unknown as AsyncIterable<ChatCompletionChunk>
+
+    // Consume the stream to trigger the monitoring capture
+    for await (const _chunk of stream) {
+      // no-op
+    }
+    await flushPromises()
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_cache_reporting_exclusive']).toBe(false)
+  })
+
+  test('user-provided posthogProperties can override the cache reporting declaration', async () => {
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+      posthogProperties: { $ai_cache_reporting_exclusive: true },
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_cache_reporting_exclusive']).toBe(true)
+  })
+
   // New test: ensure captureImmediate is used when flag is set
   conditionalTest('captureImmediate flag', async () => {
     await client.chat.completions.create({
