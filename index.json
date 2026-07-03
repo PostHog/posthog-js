@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/3826": {
+    "key": "PostHog/posthog-js/issue/3826",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3826",
+    "url": "https://github.com/PostHog/posthog-js/issues/3826",
+    "conclusion": "Valid enhancement: Expo Android config plugin lacks explicit Kotlin DSL support for posthog-react-native Gradle edits.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "Android",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-03T09:35:07.771Z"
+  },
   "PostHog/posthog-js/issue/3674": {
     "key": "PostHog/posthog-js/issue/3674",
     "repo": "PostHog/posthog-js",
