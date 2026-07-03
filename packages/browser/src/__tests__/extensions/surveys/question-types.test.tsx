@@ -88,7 +88,7 @@ describe('MultipleChoiceQuestion', () => {
             expect(onSubmit).toHaveBeenCalledWith('Purple')
         })
 
-        it('focuses on open-ended input when selecting the option', () => {
+        it('focuses on open-ended input when selecting the option', async () => {
             const { container, getByText } = render(
                 <MultipleChoiceQuestion {...baseProps} question={singleChoiceQuestion} />
             )
@@ -100,10 +100,8 @@ describe('MultipleChoiceQuestion', () => {
             // Get the input element using its specific id
             const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
 
-            // Use a small timeout to allow for the focus to be set
-            setTimeout(() => {
-                expect(document.activeElement).toBe(openInput)
-            }, 0)
+            // Focus is set on a short timeout to allow for the animation
+            await waitFor(() => expect(document.activeElement).toBe(openInput))
         })
     })
 
@@ -216,7 +214,7 @@ describe('MultipleChoiceQuestion', () => {
             expect(baseProps.onSubmit).toHaveBeenCalledWith(['Red', 'Purple'])
         })
 
-        it('focuses on open-ended input when selecting the option', () => {
+        it('focuses on open-ended input when selecting the option', async () => {
             const { container, getByText } = render(
                 <MultipleChoiceQuestion {...baseProps} question={multipleChoiceQuestion} />
             )
@@ -228,10 +226,8 @@ describe('MultipleChoiceQuestion', () => {
             // Get the input element using its specific id
             const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
 
-            // Use a small timeout to allow for the focus to be set
-            setTimeout(() => {
-                expect(document.activeElement).toBe(openInput)
-            }, 0)
+            // Focus is set on a short timeout to allow for the animation
+            await waitFor(() => expect(document.activeElement).toBe(openInput))
         })
 
         it('does not propagate keydown events from open choice input', () => {
@@ -348,6 +344,32 @@ describe('OpenTextQuestion', () => {
         // Required question, empty input → invalid.
         fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
         expect(onSubmit).not.toHaveBeenCalled()
+    })
+
+    it('autofocuses the input by default', async () => {
+        const { container } = render(<OpenTextQuestion {...baseProps} question={openTextQuestion} />)
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        await waitFor(() => expect(document.activeElement).toBe(textarea))
+    })
+
+    it('does not autofocus when appearance.disableAutofocus is true', async () => {
+        const { container } = render(
+            <OpenTextQuestion
+                {...baseProps}
+                appearance={{ ...mockAppearance, disableAutofocus: true }}
+                question={openTextQuestion}
+            />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        // Give the (skipped) focus timeout time to fire, then assert focus never moved.
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        expect(document.activeElement).not.toBe(textarea)
     })
 })
 
