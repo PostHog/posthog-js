@@ -99,6 +99,24 @@ describe('PostHogWebProvider', () => {
         (p) => p.resolveObjectEvaluation('flag', {}),
         { value: { a: 1 } },
       ],
+      [
+        'disabled flag as string → default / DEFAULT',
+        { key: 'flag', enabled: false },
+        (p) => p.resolveStringEvaluation('flag', 'fallback'),
+        { value: 'fallback', reason: StandardResolutionReasons.DEFAULT },
+      ],
+      [
+        'disabled flag as number → default / DEFAULT',
+        { key: 'flag', enabled: false },
+        (p) => p.resolveNumberEvaluation('flag', 42),
+        { value: 42, reason: StandardResolutionReasons.DEFAULT },
+      ],
+      [
+        'disabled flag as object → default / DEFAULT',
+        { key: 'flag', enabled: false },
+        (p) => p.resolveObjectEvaluation('flag', { fallback: true }),
+        { value: { fallback: true }, reason: StandardResolutionReasons.DEFAULT },
+      ],
     ])('resolves %s', (_name, result, resolve, expected) => {
       const { client } = makeClient(result)
       expect(resolve(new PostHogWebProvider(client))).toMatchObject(expected)
@@ -106,9 +124,33 @@ describe('PostHogWebProvider', () => {
 
     it.each<[string, FlagResult | undefined, Resolve, ErrorCode]>([
       [
-        'string from a boolean flag (no variant)',
+        'string from an enabled boolean flag (no variant)',
         { key: 'flag', enabled: true },
         (p) => p.resolveStringEvaluation('flag', 'x'),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'number from an enabled boolean flag (no variant)',
+        { key: 'flag', enabled: true },
+        (p) => p.resolveNumberEvaluation('flag', 0),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'number from a non-numeric variant',
+        { key: 'flag', enabled: true, variant: 'not-a-number' },
+        (p) => p.resolveNumberEvaluation('flag', 0),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'object from an enabled flag with no payload',
+        { key: 'flag', enabled: true, variant: 'x' },
+        (p) => p.resolveObjectEvaluation('flag', {}),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
+        'object from a non-object payload',
+        { key: 'flag', enabled: true, variant: 'x', payload: 'not-an-object' },
+        (p) => p.resolveObjectEvaluation('flag', {}),
         ErrorCode.TYPE_MISMATCH,
       ],
       [
@@ -152,16 +194,24 @@ describe('PostHogWebProvider', () => {
 
     it('resolves on timeout when the flags callback never fires', async () => {
       // onFeatureFlags never invokes its callback and reloadFeatureFlags is a no-op,
-      // so only the reloadTimeoutMs safety net can settle initialize().
-      const client = {
-        getFeatureFlagResult: jest.fn(),
-        reloadFeatureFlags: jest.fn(),
-        onFeatureFlags: jest.fn(() => () => {}),
-        setPersonPropertiesForFlags: jest.fn(),
-        group: jest.fn(),
-      } as unknown as PostHog
-      const provider = new PostHogWebProvider(client, { reloadTimeoutMs: 20 })
-      await expect(provider.initialize()).resolves.toBeUndefined()
+      // so only the reloadTimeoutMs safety net can settle initialize(). Fake timers
+      // keep this deterministic and instant rather than waiting on real wall-clock.
+      jest.useFakeTimers()
+      try {
+        const client = {
+          getFeatureFlagResult: jest.fn(),
+          reloadFeatureFlags: jest.fn(),
+          onFeatureFlags: jest.fn(() => () => {}),
+          setPersonPropertiesForFlags: jest.fn(),
+          group: jest.fn(),
+        } as unknown as PostHog
+        const provider = new PostHogWebProvider(client, { reloadTimeoutMs: 20 })
+        const pending = provider.initialize()
+        await jest.runAllTimersAsync()
+        await expect(pending).resolves.toBeUndefined()
+      } finally {
+        jest.useRealTimers()
+      }
     })
 
     it('reconciles person properties and groups from the context on change', async () => {
@@ -193,6 +243,20 @@ describe('PostHogWebProvider', () => {
       const provider = new PostHogWebProvider(client)
       await provider.onContextChange({}, { groups: { organization: 'acme' } })
       expect(group).toHaveBeenCalledWith('organization', 'acme', undefined)
+    })
+
+    it('skips reconciliation when the context is deeply unchanged', async () => {
+      const { client, reloadFeatureFlags, setPersonPropertiesForFlags, group } = makeClient({
+        key: 'flag',
+        enabled: true,
+      })
+      const provider = new PostHogWebProvider(client)
+      const ctx = { targetingKey: 'user_1', plan: 'pro', groups: { organization: 'acme' } }
+      // Deeply-equal but distinct object instances (as a re-render would produce).
+      await provider.onContextChange(ctx, { ...ctx, groups: { ...ctx.groups } })
+      expect(reloadFeatureFlags).not.toHaveBeenCalled()
+      expect(setPersonPropertiesForFlags).not.toHaveBeenCalled()
+      expect(group).not.toHaveBeenCalled()
     })
   })
 

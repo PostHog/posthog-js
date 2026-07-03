@@ -42,6 +42,9 @@
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
+  "engines": {
+    "node": "^20.20.0 || >=22.22.0"
+  },
   "files": [
     "dist/"
   ],

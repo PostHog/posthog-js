@@ -110,13 +110,19 @@ export function resolveBooleanDetails(
 
 export function resolveStringDetails(
   result: PostHogFlagResult | undefined,
-  flagKey: string
+  flagKey: string,
+  defaultValue: string
 ): ResolutionDetails<string> {
   const resolved = ensureResolved(result, flagKey)
   if (resolved.variant === undefined) {
-    // A boolean flag has no string variant. Surface a type mismatch so the
-    // caller gets its default value (per the OpenFeature spec) rather than a
-    // surprising "true"/"false" string.
+    if (!resolved.enabled) {
+      // A disabled or unmatched flag has no variant. Resolve to the caller's
+      // default (per the OpenFeature spec) rather than throwing — a throw would
+      // set reason=ERROR and fire every registered error hook on an ordinary
+      // disabled-flag read.
+      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT }
+    }
+    // An enabled boolean flag has no string variant: a genuine type mismatch.
     throw new TypeMismatchError(`Flag '${flagKey}' has no string variant (boolean flag).`)
   }
   return { value: resolved.variant, variant: resolved.variant, reason: reasonFor(resolved) }
@@ -124,10 +130,14 @@ export function resolveStringDetails(
 
 export function resolveNumberDetails(
   result: PostHogFlagResult | undefined,
-  flagKey: string
+  flagKey: string,
+  defaultValue: number
 ): ResolutionDetails<number> {
   const resolved = ensureResolved(result, flagKey)
   if (resolved.variant === undefined) {
+    if (!resolved.enabled) {
+      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT }
+    }
     throw new TypeMismatchError(`Flag '${flagKey}' has no variant to parse as a number.`)
   }
   const value = Number(resolved.variant)
@@ -139,11 +149,15 @@ export function resolveNumberDetails(
 
 export function resolveObjectDetails<T extends JsonValue>(
   result: PostHogFlagResult | undefined,
-  flagKey: string
+  flagKey: string,
+  defaultValue: T
 ): ResolutionDetails<T> {
   const resolved = ensureResolved(result, flagKey)
   const payload = resolved.payload
   if (typeof payload !== 'object' || payload === null) {
+    if (!resolved.enabled) {
+      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT }
+    }
     throw new TypeMismatchError(`Flag '${flagKey}' has no object/JSON payload.`)
   }
   return { value: payload as T, variant: resolved.variant, reason: reasonFor(resolved) }

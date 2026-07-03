@@ -73,7 +73,14 @@ export class PostHogWebProvider implements Provider {
     await this._reconcile(context)
   }
 
-  async onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): Promise<void> {
+  async onContextChange(oldContext: EvaluationContext, newContext: EvaluationContext): Promise<void> {
+    // The web SDK runs this handler on every setContext() call with no equality
+    // check, so a host that re-sets an equivalent context (e.g. a React
+    // integration passing a fresh object each render) would otherwise trigger a
+    // $groupidentify and a flag reload every time. Skip when nothing changed.
+    if (deepEqual(oldContext, newContext)) {
+      return
+    }
     await this._reconcile(newContext)
   }
 
@@ -81,16 +88,16 @@ export class PostHogWebProvider implements Provider {
     return resolveBooleanDetails(this._evaluate(flagKey), flagKey)
   }
 
-  resolveStringEvaluation(flagKey: string, _defaultValue: string): ResolutionDetails<string> {
-    return resolveStringDetails(this._evaluate(flagKey), flagKey)
+  resolveStringEvaluation(flagKey: string, defaultValue: string): ResolutionDetails<string> {
+    return resolveStringDetails(this._evaluate(flagKey), flagKey, defaultValue)
   }
 
-  resolveNumberEvaluation(flagKey: string, _defaultValue: number): ResolutionDetails<number> {
-    return resolveNumberDetails(this._evaluate(flagKey), flagKey)
+  resolveNumberEvaluation(flagKey: string, defaultValue: number): ResolutionDetails<number> {
+    return resolveNumberDetails(this._evaluate(flagKey), flagKey, defaultValue)
   }
 
-  resolveObjectEvaluation<T extends JsonValue>(flagKey: string, _defaultValue: T): ResolutionDetails<T> {
-    return resolveObjectDetails<T>(this._evaluate(flagKey), flagKey)
+  resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T): ResolutionDetails<T> {
+    return resolveObjectDetails<T>(this._evaluate(flagKey), flagKey, defaultValue)
   }
 
   private _evaluate(flagKey: string): ReturnType<PostHog['getFeatureFlagResult']> {
@@ -121,14 +128,16 @@ export class PostHogWebProvider implements Provider {
     return new Promise<void>((resolve) => {
       let settled = false
       let subscribed = false
+      // Cleanups are collected as they're created so `finish` never has to
+      // reference `unsubscribe`/`timer` before they're declared below.
+      const cleanups: Array<() => void> = []
 
       const finish = (): void => {
         if (settled) {
           return
         }
         settled = true
-        clearTimeout(timer)
-        unsubscribe()
+        cleanups.forEach((fn) => fn())
         resolve()
       }
 
@@ -140,12 +149,40 @@ export class PostHogWebProvider implements Provider {
           finish()
         }
       })
-      subscribed = true
       // Safety net: resolve anyway if posthog-js never delivers the callback
       // (uninitialised SDK, silent network failure, ...) so the OpenFeature
       // client can't get stuck NOT_READY forever.
       const timer = setTimeout(finish, this._reloadTimeoutMs)
+      cleanups.push(unsubscribe, () => clearTimeout(timer))
+      subscribed = true
       this._client.reloadFeatureFlags()
     })
   }
+}
+
+/**
+ * Deep structural equality for evaluation contexts (which are JSON-like, with
+ * possibly-nested `groupProperties`). Used to skip redundant reconciliation
+ * when the host re-sets an equivalent context.
+ */
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true
+  }
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime()
+  }
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) {
+    return false
+  }
+  const aKeys = Object.keys(a as Record<string, unknown>)
+  const bKeys = Object.keys(b as Record<string, unknown>)
+  if (aKeys.length !== bKeys.length) {
+    return false
+  }
+  return aKeys.every(
+    (key) =>
+      Object.prototype.hasOwnProperty.call(b, key) &&
+      deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])
+  )
 }
