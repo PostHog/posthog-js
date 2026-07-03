@@ -7,6 +7,7 @@
 import type { Properties, PropertyMatchType } from './types'
 import type {
     SurveyAppearance as CoreSurveyAppearance,
+    SurveyAppearanceColorScheme,
     SurveyQuestionTranslation,
     SurveyResponseValue as CoreSurveyResponseValue,
     SurveyTranslation,
@@ -49,7 +50,7 @@ export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position' 
     // Browser's SurveyPosition has more options than core (e.g., NextToTrigger)
     position?: SurveyPosition
     widgetType?: SurveyWidgetType
-    darkModeColorScheme?: 'light' | 'dark' | 'system'
+    darkModeColorScheme?: SurveyAppearanceColorScheme
     darkModeAppearance?: Omit<SurveyAppearance, 'darkModeColorScheme' | 'darkModeAppearance'>
 }
 

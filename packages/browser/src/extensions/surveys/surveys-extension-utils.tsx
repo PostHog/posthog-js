@@ -100,7 +100,7 @@ export const getSurveyAppearanceForColorScheme = (
 
     const shouldUseDarkMode =
         appearance.darkModeColorScheme === 'dark' ||
-        (appearance.darkModeColorScheme !== 'light' && window?.matchMedia?.('(prefers-color-scheme: dark)').matches)
+        (appearance.darkModeColorScheme !== 'light' && window?.matchMedia?.('(prefers-color-scheme: dark)')?.matches)
 
     return shouldUseDarkMode ? { ...appearance, ...appearance.darkModeAppearance } : appearance
 }
