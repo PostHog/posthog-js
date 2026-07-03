@@ -1,4 +1,4 @@
-import { toContentString, getTokensSource } from '../src/utils'
+import { toContentString, getTokensSource, getModelParams } from '../src/utils'
 
 describe('getTokensSource', () => {
   it.each([
@@ -199,5 +199,29 @@ describe('toContentString', () => {
       const result = toContentString(input)
       expect(result).toBe('[object Object]') // Falls back to String()
     })
+  })
+})
+
+describe('getModelParams', () => {
+  it('returns empty object for null params', () => {
+    expect(getModelParams(null)).toEqual({})
+  })
+
+  it('includes service_tier when provided', () => {
+    const params = { model: 'gpt-4o', service_tier: 'flex' } as any
+    expect(getModelParams(params)).toEqual({ service_tier: 'flex' })
+  })
+
+  it('includes service_tier alongside other model params', () => {
+    const params = { model: 'gpt-4o', temperature: 0.7, service_tier: 'priority' } as any
+    const result = getModelParams(params)
+    expect(result.service_tier).toBe('priority')
+    expect(result.temperature).toBe(0.7)
+  })
+
+  it('omits service_tier when not provided', () => {
+    const params = { model: 'gpt-4o', temperature: 0.5 } as any
+    const result = getModelParams(params)
+    expect(result).not.toHaveProperty('service_tier')
   })
 })
