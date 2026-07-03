@@ -465,6 +465,14 @@ function record<T = eventWithTime>(
       return console.warn('Failed to snapshot the document');
     }
 
+    // Register any already-attached open shadow roots. The onSerialize pass
+    // above catches hosts as they're walked, but registration for roots
+    // attached before recording started is entirely dependent on that pass;
+    // enumerating the DOM explicitly makes it order-independent and covers
+    // hosts a serialization edge case could skip. addShadowRoot dedupes via a
+    // WeakSet, so this is a no-op for roots already registered during the walk.
+    shadowDomManager.addExistingShadowRoots(document, document);
+
     wrappedEmit(
       {
         type: EventType.FullSnapshot,

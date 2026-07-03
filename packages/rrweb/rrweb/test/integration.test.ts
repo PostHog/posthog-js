@@ -967,6 +967,57 @@ describe('record integration tests', function (this: ISuite) {
     await assertSnapshot(snapshots);
   });
 
+  it('records mutations for a shadow host nested deep inside an added subtree', async () => {
+    // Coverage for the Vue / web-component pattern: a widget attaches an open
+    // shadow root while its host is still off-DOM (so the attachShadow patch,
+    // which only fires for hosts already in the document, skips it), then
+    // inserts the host buried inside a larger subtree. The host's shadow root
+    // must still get a MutationObserver so its later mutations are recorded.
+    const page: puppeteer.Page = await browser.newPage();
+    await page.goto('about:blank');
+    await page.setContent(getHtml.call(this, 'blank.html'));
+
+    await page.evaluate(() => {
+      // Build the subtree off-DOM and attach the shadow root *before* it is in
+      // the document, so the attachShadow patch (which only fires for hosts
+      // already in the DOM) does not register it. Registration then depends
+      // entirely on the mutation-time path when the subtree is appended.
+      const wrapper = document.createElement('section');
+      const inner = document.createElement('div');
+      const host = document.createElement('div');
+      const shadowRoot = host.attachShadow({ mode: 'open' });
+      shadowRoot.appendChild(document.createElement('p'));
+      inner.appendChild(host);
+      wrapper.appendChild(inner);
+      document.body.appendChild(wrapper);
+    });
+    await waitForRAF(page);
+
+    await page.evaluate(() => {
+      const host = document.querySelector('section div div') as HTMLDivElement;
+      const marker = document.createElement('span');
+      marker.id = 'shadow-marker';
+      (host.shadowRoot as ShadowRoot).appendChild(marker);
+    });
+    await waitForRAF(page);
+
+    const snapshots = (await page.evaluate(
+      'window.snapshots',
+    )) as eventWithTime[];
+
+    // The marker appended inside the pre-attached shadow root must show up as
+    // an incremental add, which only happens if the shadow root's observer was
+    // wired up when the subtree was inserted.
+    const recordedMarker = snapshots.some(
+      (e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        ((e.data as { adds?: { node?: { attributes?: { id?: string } } }[] })
+          .adds || []
+        ).some((add) => add.node?.attributes?.id === 'shadow-marker'),
+    );
+    expect(recordedMarker).toBe(true);
+  });
+
   it('should record moved shadow DOM', async () => {
     const page: puppeteer.Page = await browser.newPage();
     await page.goto('about:blank');

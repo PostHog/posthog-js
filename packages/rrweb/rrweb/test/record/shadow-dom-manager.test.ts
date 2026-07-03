@@ -59,6 +59,50 @@ describe('ShadowDomManager', () => {
     });
   }
 
+  it('addExistingShadowRoots() registers open shadow roots attached before recording started', () => {
+    const manager = createManager();
+
+    // A host whose shadow root was attached before the manager observes it.
+    // We attach *after* reset() to simulate the pre-existing-root case without
+    // relying on the attachShadow patch having fired for it.
+    const host = document.createElement('div');
+    const shadowRoot = host.attachShadow({ mode: 'open' });
+    manager.reset(); // drop the buffer registered by the attachShadow patch
+    document.body.appendChild(host);
+
+    const buffersBefore = mutationBuffers.length;
+    manager.addExistingShadowRoots(document, document);
+    expect(mutationBuffers.length).toBe(buffersBefore + 1);
+
+    // Idempotent: WeakSet dedup means a second pass adds nothing.
+    manager.addExistingShadowRoots(document, document);
+    expect(mutationBuffers.length).toBe(buffersBefore + 1);
+
+    void shadowRoot;
+    manager.reset();
+    document.body.removeChild(host);
+  });
+
+  it('addExistingShadowRoots() recurses into nested shadow roots', () => {
+    const manager = createManager();
+
+    const host = document.createElement('div');
+    const shadowRoot = host.attachShadow({ mode: 'open' });
+    const nestedHost = document.createElement('div');
+    shadowRoot.appendChild(nestedHost);
+    nestedHost.attachShadow({ mode: 'open' });
+    manager.reset();
+    document.body.appendChild(host);
+
+    const buffersBefore = mutationBuffers.length;
+    manager.addExistingShadowRoots(document, document);
+    // Both the outer and the nested shadow root get their own buffer.
+    expect(mutationBuffers.length).toBe(buffersBefore + 2);
+
+    manager.reset();
+    document.body.removeChild(host);
+  });
+
   it('reset() should not call MutationBuffer.reset() from restoreHandler to avoid infinite recursion', () => {
     const manager = createManager();
 

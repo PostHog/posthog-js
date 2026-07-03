@@ -107,6 +107,29 @@ export class ShadowDomManager {
   }
 
   /**
+   * Walk `root` for already-attached open shadow roots and start observing each
+   * one, recursing into nested shadow trees.
+   *
+   * The `attachShadow` patch only fires for shadow roots created *after*
+   * recording starts, and the full-snapshot `onSerialize` pass can miss a
+   * pre-existing host depending on ordering. Widgets (Vue / web-component
+   * setups are the common case) that call `attachShadow` at page load would
+   * otherwise never get a MutationObserver, so their incremental mutations are
+   * silently dropped from the replay. Enumerating existing hosts explicitly
+   * closes that gap. `addShadowRoot` dedupes via a WeakSet, so re-registering an
+   * already-observed root here is a no-op.
+   */
+  public addExistingShadowRoots(root: Document | ShadowRoot, doc: Document) {
+    root.querySelectorAll('*').forEach((el) => {
+      const shadowRoot = dom.shadowRoot(el);
+      if (shadowRoot && isNativeShadowDom(shadowRoot)) {
+        this.addShadowRoot(shadowRoot, doc);
+        this.addExistingShadowRoots(shadowRoot, doc);
+      }
+    });
+  }
+
+  /**
    * Monkey patch 'attachShadow' of an IFrameElement to observe newly added shadow doms.
    */
   public observeAttachShadow(iframeElement: HTMLIFrameElement) {
