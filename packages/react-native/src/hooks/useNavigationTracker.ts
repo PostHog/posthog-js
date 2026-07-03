@@ -14,7 +14,6 @@ const normalizeRegex = /[^a-z0-9]/gi
 function _useNavigationTracker(
   options?: PostHogAutocaptureNavigationTrackerOptions,
   navigationRef?: PostHogNavigationRef,
-  ignoreScreenNames: string[] = [],
   client?: PostHog
 ): void {
   const posthog = useOverridablePostHog(client, 'useNavigationTracker')

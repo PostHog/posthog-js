@@ -123,7 +123,7 @@ export const PostHogProvider = ({
   style,
   debug = false,
 }: PostHogProviderProps): JSX.Element | null => {
-  const captureAll = autocapture === true;
+  const captureAll = autocapture === true
   const captureNone = autocapture === false
 
   const posthog = useMemo(() => {
