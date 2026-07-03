@@ -82,8 +82,8 @@ export function patch(
             // above us and re-point it past us, removing our wrapper from the call path
             // without disturbing the newer wrappers.
             let current: any = source[name]
-            while (isFunction(current) && current.__posthog_layer__) {
-                const currentLayer = current.__posthog_layer__ as PatchLayer
+            while (isFunction(current) && (current as any).__posthog_layer__) {
+                const currentLayer = (current as any).__posthog_layer__ as PatchLayer
                 if (currentLayer.next === wrapped) {
                     currentLayer.next = layer.next
                     return
