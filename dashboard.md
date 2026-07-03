@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3755](https://github.com/PostHog/posthog-js/issues/3755) | Valid error-tracking feature request; not a small SDK-only change. | enhancement, feature, feature/error-tracking, team/error-tracking |  | no | 2026-07-03T09:30:14.105Z |
 | PostHog/posthog-js | [issue 2650](https://github.com/PostHog/posthog-js/issues/2650) | Plausible replay bug, but needs a minimal reproduction before a safe fix can be scoped | feature/replay, web |  | no | 2026-07-02T09:36:44.069Z |
 | PostHog/posthog-js | [issue 2527](https://github.com/PostHog/posthog-js/issues/2527) | Likely valid Next.js sourcemap retention/upload issue, but needs reproduction details before changing behavior. | feature/error-tracking, frameworks/next-js, team/error-tracking |  | no | 2026-07-02T09:35:19.514Z |
 | PostHog/posthog-js | [issue 3618](https://github.com/PostHog/posthog-js/issues/3618) | Valid feature request; the browser SDK currently adds the `_` cache-buster unconditionally and there is no opt-out. | enhancement, web, feature |  | no | 2026-07-02T09:34:10.541Z |
