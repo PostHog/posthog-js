@@ -207,16 +207,17 @@ describe('getModelParams', () => {
     expect(getModelParams(null)).toEqual({})
   })
 
-  it('includes service_tier when provided', () => {
-    const params = { model: 'gpt-4o', service_tier: 'flex' } as any
-    expect(getModelParams(params)).toEqual({ service_tier: 'flex' })
-  })
-
-  it('includes service_tier alongside other model params', () => {
-    const params = { model: 'gpt-4o', temperature: 0.7, service_tier: 'priority' } as any
+  it.each([
+    ['flex', { temperature: undefined }],
+    ['auto', { temperature: undefined }],
+    ['priority', { temperature: 0.7 }],
+  ])('includes service_tier "%s" alongside other model params', (service_tier, extra) => {
+    const params = { model: 'gpt-4o', service_tier, ...extra } as any
     const result = getModelParams(params)
-    expect(result.service_tier).toBe('priority')
-    expect(result.temperature).toBe(0.7)
+    expect(result.service_tier).toBe(service_tier)
+    if (extra.temperature !== undefined) {
+      expect(result.temperature).toBe(extra.temperature)
+    }
   })
 
   it('omits service_tier when not provided', () => {
