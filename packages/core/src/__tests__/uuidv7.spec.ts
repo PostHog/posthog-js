@@ -8,21 +8,18 @@ describe('uuidv7', () => {
     expect(uuidv7()).toMatch(UUID_V7_REGEX)
   })
 
-  it('falls back to a UUIDv4 string when the v7 generator throws', () => {
+  it('falls back to a UUIDv4 string when the v7 generator throws, then recovers', () => {
     // Out-of-spec Math.random() implementations (broken device RNGs, or pages
     // where another script clobbers Math.random — see #710 for the Date.now()
     // equivalent) produce out-of-range field values, making
     // V7Generator.generate() throw `RangeError: invalid field value`.
     const spy = jest.spyOn(Math, 'random').mockReturnValue(1) // spec says [0, 1)
     try {
-      expect(() => uuidv7()).not.toThrow()
       expect(uuidv7()).toMatch(UUID_V4_REGEX)
     } finally {
       spy.mockRestore()
     }
-  })
-
-  it('generates v7 ids again once the environment recovers', () => {
+    // the generator is not left in a broken state once the environment recovers
     expect(uuidv7()).toMatch(UUID_V7_REGEX)
   })
 })
