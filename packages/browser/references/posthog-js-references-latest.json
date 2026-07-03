@@ -4063,6 +4063,10 @@
           "name": "descriptionTextColor"
         },
         {
+          "type": "boolean",
+          "name": "disableAutofocus"
+        },
+        {
           "type": "string",
           "name": "disabledButtonOpacity"
         },
