@@ -45,8 +45,11 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * Items armed by an event or action but not yet shown live here, in memory only.
      * They are intentionally NOT persisted, so they do not survive a page reload: an
      * event trigger only displays an item in the session the event fired in. Once an
-     * item is shown, surviving items are promoted into persistence (see `onEvent`), so
-     * a reload re-reads and re-displays them until the user interacts.
+     * item is shown, surviving items are promoted into persistence (see `onEvent`) so
+     * a reload re-reads and re-displays them until the user interacts — but that
+     * persisted activation is scoped to the triggering session (see
+     * `_getPersistedActivatedIds`), so it does not leak into a brand-new session where
+     * the trigger never fired.
      */
     private _pendingActivatedItems: string[] = []
 
@@ -59,19 +62,26 @@ export abstract class EventReceiver<T extends EventTriggerable> {
 
     // Abstract methods for subclasses to implement
     protected abstract _getActivatedKey(): string
+    /** Persistence key under which the session id of the persisted activation set is stamped. */
+    protected abstract _getActivatedSessionKey(): string
     protected abstract _getShownEventName(): string
     protected abstract _getItems(callback: (items: T[]) => void): void
     protected abstract _cancelPendingItem(itemId: string): void
     protected abstract _getLogger(): ReturnType<typeof createLogger>
     protected abstract _setActivatedItems(eligibleItems: string[]): void
+    /** Persist the session id the current activation set belongs to. */
+    protected abstract _setActivatedSession(sessionId: string): void
+    /** Forget the persisted session stamp. */
+    protected abstract _clearActivatedSession(): void
     /** Check if item is permanently ineligible (e.g. completed/dismissed). Skip adding to activated list. */
     protected abstract _isItemPermanentlyIneligible(itemId?: string): boolean
 
     /**
      * Decide what a captured lifecycle `event` does to an already-activated `itemId`. Most items are
      * consumed when shown (so they only reappear when their trigger fires again). Surveys keep
-     * non-repeatable ones activated — promoting them to persistence on shown — until the user dismisses
-     * or answers them, so an event-triggered survey survives a reload until it's actually interacted with.
+     * non-repeatable ones activated — promoting them to session-scoped persistence on shown — until the
+     * user dismisses or answers them, so an event-triggered survey survives a reload within the
+     * triggering session (but not a brand-new session) until it's actually interacted with.
      */
     protected abstract _activationOutcome(event: string, itemId: string): ActivationOutcome
 
@@ -268,12 +278,19 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         this._getLogger().info('updating activated items', { activatedItems: this.getActivatedIds() })
     }
 
-    /** Move an in-memory activation into persistence so it survives a page reload. */
+    /**
+     * Move an in-memory activation into persistence so it survives a page reload within the
+     * triggering session. The set is (re)stamped with the current session id; reading it back
+     * via `_getPersistedActivatedIds` discards it once the session rolls over. Because we build
+     * on top of the session-scoped read, a stale set left over from a previous session is
+     * dropped here rather than accumulated.
+     */
     private _persistActivation(itemId: string): void {
         this._pendingActivatedItems = this._pendingActivatedItems.filter((id) => id !== itemId)
         const persisted = this._getPersistedActivatedIds()
         if (!persisted.includes(itemId)) {
             this._setActivatedItems([...persisted, itemId])
+            this._stampActivationSession()
         }
     }
 
@@ -281,17 +298,55 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     private _deactivateItems(itemIds: string[]): void {
         const remove = new Set(itemIds)
         this._pendingActivatedItems = this._pendingActivatedItems.filter((id) => !remove.has(id))
-        const persisted = this._getPersistedActivatedIds()
+        const persisted = this._getRawPersistedActivatedIds()
         const nextPersisted = persisted.filter((id) => !remove.has(id))
         if (nextPersisted.length !== persisted.length) {
             this._setActivatedItems(nextPersisted)
+            if (nextPersisted.length === 0) {
+                this._clearActivationSession()
+            }
         }
     }
 
-    private _getPersistedActivatedIds(): string[] {
+    /** The raw persisted set as stored, ignoring session scoping. */
+    private _getRawPersistedActivatedIds(): string[] {
         const activatedKey = this._getActivatedKey()
         const existingActivatedItems = this._instance?.persistence?.props[activatedKey]
         return existingActivatedItems ? existingActivatedItems : []
+    }
+
+    /**
+     * The persisted activations that still belong to the current session. A persisted activation
+     * is scoped to the session the item was shown in: an event/action trigger only earns a display
+     * in the session it fired in, so once the session rolls over the activation is stale and must
+     * not silently re-display the item in a brand-new session where the trigger never fired.
+     */
+    private _getPersistedActivatedIds(): string[] {
+        const ids = this._getRawPersistedActivatedIds()
+        if (ids.length === 0) {
+            return []
+        }
+        const stampedSessionId = this._instance?.persistence?.props[this._getActivatedSessionKey()]
+        const currentSessionId = this._instance?.get_session_id?.()
+        // No resolvable session (e.g. cookieless mode) → treat the activation as un-scopable and
+        // do not carry it across a reload.
+        if (!currentSessionId || stampedSessionId !== currentSessionId) {
+            return []
+        }
+        return ids
+    }
+
+    /** Stamp the persisted activation set with the current session id. */
+    private _stampActivationSession(): void {
+        const currentSessionId = this._instance?.get_session_id?.()
+        if (currentSessionId) {
+            this._setActivatedSession(currentSessionId)
+        }
+    }
+
+    /** Forget the session stamp once nothing is persisted under it. */
+    private _clearActivationSession(): void {
+        this._clearActivatedSession()
     }
 
     getActivatedIds(): string[] {
@@ -308,9 +363,10 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      */
     reset(): void {
         this._pendingActivatedItems = []
-        if (this._getPersistedActivatedIds().length > 0) {
+        if (this._getRawPersistedActivatedIds().length > 0) {
             this._setActivatedItems([])
         }
+        this._clearActivationSession()
     }
 
     getEventToItemsMap(): Map<string, string[]> {

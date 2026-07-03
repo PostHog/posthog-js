@@ -1,4 +1,4 @@
-import { SURVEYS_ACTIVATED } from '../constants'
+import { SURVEYS_ACTIVATED, SURVEYS_ACTIVATED_SESSION } from '../constants'
 import { Survey, SurveyEventName, SurveySchedule } from '../posthog-surveys-types'
 import { PostHog } from '../posthog-core'
 import { SURVEY_LOGGER as logger } from './survey-utils'
@@ -22,6 +22,10 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
         return SURVEYS_ACTIVATED
     }
 
+    protected _getActivatedSessionKey(): string {
+        return SURVEYS_ACTIVATED_SESSION
+    }
+
     protected _getShownEventName(): string {
         return SurveyEventName.SHOWN
     }
@@ -40,6 +44,14 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
 
     protected _setActivatedItems(eligibleItems: string[]): void {
         this._instance?.persistence?.register({ [SURVEYS_ACTIVATED]: eligibleItems })
+    }
+
+    protected _setActivatedSession(sessionId: string): void {
+        this._instance?.persistence?.register({ [SURVEYS_ACTIVATED_SESSION]: sessionId })
+    }
+
+    protected _clearActivatedSession(): void {
+        this._instance?.persistence?.unregister(SURVEYS_ACTIVATED_SESSION)
     }
 
     protected _isItemPermanentlyIneligible(): boolean {
