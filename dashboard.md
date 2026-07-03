@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3674](https://github.com/PostHog/posthog-js/issues/3674) | Valid LLM analytics feature request, but it spans docs, JS SDK, server-side OTLP mapping, and upstream AI SDK gaps. | enhancement, team/llm-analytics, documentation |  | no | 2026-07-03T09:33:37.528Z |
 | PostHog/posthog-js | [issue 2150](https://github.com/PostHog/posthog-js/issues/2150) | Valid React Native autocapture feature request; not a small/safe sweep fix without gesture-classification design. | enhancement, feature/autocapture, feature/mobile, feature/replay, react-native, Android, iOS |  | no | 2026-07-03T09:32:09.302Z |
 | PostHog/posthog-js | [issue 3755](https://github.com/PostHog/posthog-js/issues/3755) | Valid error-tracking feature request; not a small SDK-only change. | enhancement, feature, feature/error-tracking, team/error-tracking |  | no | 2026-07-03T09:30:14.105Z |
 | PostHog/posthog-js | [issue 2650](https://github.com/PostHog/posthog-js/issues/2650) | Plausible replay bug, but needs a minimal reproduction before a safe fix can be scoped | feature/replay, web |  | no | 2026-07-02T09:36:44.069Z |
