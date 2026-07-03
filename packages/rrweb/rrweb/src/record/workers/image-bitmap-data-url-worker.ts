@@ -5,7 +5,7 @@ import type {
 } from '@posthog/rrweb-types';
 
 const lastFingerprintMap: Map<number, string> = new Map();
-const transparentFingerprintMap: Map<string, string> = new Map();
+const transparentFingerprintMap: Map<number, string> = new Map();
 
 function fnv1aHash(data: Uint8ClampedArray): string {
   // hash 32-bit words rather than bytes: RGBA buffers are multi-megabyte,
@@ -26,11 +26,13 @@ function fnv1aHash(data: Uint8ClampedArray): string {
 }
 
 function transparentFingerprint(width: number, height: number): string {
-  const key = `${width}-${height}`;
-  let fingerprint = transparentFingerprintMap.get(key);
+  // the hash of an all-zero buffer depends only on its length, so key by
+  // pixel count — this sits on the per-frame path for still-blank canvases
+  const pixelCount = width * height;
+  let fingerprint = transparentFingerprintMap.get(pixelCount);
   if (fingerprint === undefined) {
-    fingerprint = fnv1aHash(new Uint8ClampedArray(width * height * 4));
-    transparentFingerprintMap.set(key, fingerprint);
+    fingerprint = fnv1aHash(new Uint8ClampedArray(pixelCount * 4));
+    transparentFingerprintMap.set(pixelCount, fingerprint);
   }
   return fingerprint;
 }
@@ -91,25 +93,20 @@ worker.onmessage = async function (e) {
       bitmap.close();
 
       // fingerprint the raw pixels so unchanged frames skip the expensive
-      // encode below entirely, instead of encoding first and deduping after
-      const pixels = reusableCtx!.getImageData(0, 0, width, height);
-      const fingerprint = fnv1aHash(pixels.data);
-      const lastFingerprint = lastFingerprintMap.get(id);
-
-      if (fingerprint === lastFingerprint) {
-        return worker.postMessage({ id }); // unchanged
-      }
-
-      // a canvas that starts out transparent isn't worth transmitting; raw
+      // encode below entirely, instead of encoding first and deduping after.
+      // an unseen canvas is compared against the transparent fingerprint, so
+      // one that starts out blank is skipped like an unchanged frame; raw
       // all-zero pixels is deliberately narrower than the old "encodes to the
       // same bytes as a transparent canvas" check (e.g. alpha-0 pixels with
       // non-zero RGB now transmit) — we send more, never less
-      if (
-        lastFingerprint === undefined &&
-        fingerprint === transparentFingerprint(width, height)
-      ) {
-        lastFingerprintMap.set(id, fingerprint);
-        return worker.postMessage({ id });
+      const fingerprint = fnv1aHash(
+        reusableCtx!.getImageData(0, 0, width, height).data,
+      );
+      const lastFingerprint =
+        lastFingerprintMap.get(id) ?? transparentFingerprint(width, height);
+
+      if (fingerprint === lastFingerprint) {
+        return worker.postMessage({ id }); // unchanged, or still blank
       }
 
       const blob = await reusableCanvas.convertToBlob(dataURLOptions); // takes a while

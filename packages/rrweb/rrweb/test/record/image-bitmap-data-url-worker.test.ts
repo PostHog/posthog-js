@@ -6,13 +6,10 @@ type MessageHandler = (e: {
 }) => Promise<void>;
 
 const convertToBlob = vi.fn(
-  (
-    options: { type?: string; quality?: number } | undefined,
-    pixels: Uint8ClampedArray,
-  ) =>
+  (options?: { type?: string; quality?: number }) =>
     Promise.resolve({
       type: options?.type ?? 'image/webp',
-      arrayBuffer: () => Promise.resolve(pixels.buffer),
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)),
     }),
 );
 const postMessage = vi.fn();
@@ -42,7 +39,7 @@ class FakeOffscreenCanvas {
   }
 
   convertToBlob(options?: { type?: string; quality?: number }) {
-    return convertToBlob(options, this.pixels.slice());
+    return convertToBlob(options);
   }
 }
 
@@ -104,10 +101,10 @@ describe('image-bitmap-data-url-worker', () => {
     expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
 
     expect(convertToBlob).toHaveBeenCalledTimes(1);
-    expect(convertToBlob).toHaveBeenCalledWith(
-      { type: 'image/webp', quality: 0.4 },
-      expect.anything(),
-    );
+    expect(convertToBlob).toHaveBeenCalledWith({
+      type: 'image/webp',
+      quality: 0.4,
+    });
   });
 
   it('retries the encode on the next frame after a transient failure', async () => {
