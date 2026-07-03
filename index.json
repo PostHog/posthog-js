@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3827": {
+    "key": "PostHog/posthog-js/issue/3827",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3827",
+    "url": "https://github.com/PostHog/posthog-js/issues/3827",
+    "conclusion": "Valid feature request; current code intentionally excludes react-native-macos and the native plugin is packaged for iOS only.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-03T09:36:20.314Z"
+  },
   "PostHog/posthog-js/issue/3826": {
     "key": "PostHog/posthog-js/issue/3826",
     "repo": "PostHog/posthog-js",
