@@ -457,10 +457,25 @@ let defaultGenerator: V7Generator | undefined;
 /**
  * Generates a UUIDv7 string.
  *
+ * Falls back to a UUIDv4 string if the v7 generator throws. `V7Generator`
+ * validates its timestamp and random fields and throws `RangeError: invalid
+ * field value` when `Date.now()` or `Math.random()` misbehaves — e.g. a page
+ * clobbered by a legacy `Date` polyfill (see
+ * https://github.com/PostHog/posthog-js/issues/710) or a device with a broken
+ * RNG/clock. The v4 generator performs no field validation and never reads
+ * the clock, so it cannot throw; id generation should never crash the host
+ * app.
+ *
  * @returns The 8-4-4-4-12 canonical hexadecimal string representation
  * ("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx").
  */
-export const uuidv7 = (): string => uuidv7obj().toString();
+export const uuidv7 = (): string => {
+  try {
+    return uuidv7obj().toString();
+  } catch {
+    return uuidv4();
+  }
+};
 
 /** Generates a UUIDv7 object. */
 export const uuidv7obj = (): UUID =>
