@@ -1,5 +1,23 @@
 # posthog-js
 
+## 1.396.6
+
+### Patch Changes
+
+- [#4053](https://github.com/PostHog/posthog-js/pull/4053) [`45d1b36`](https://github.com/PostHog/posthog-js/commit/45d1b36e517d9eeb3d68b0398d80599b88293386) Thanks [@posthog](https://github.com/apps/posthog)! - feat(web): add a graceful `shutdown()` to the browser client for parity with posthog-node, so isomorphic teardown code (e.g. the Nuxt module) that calls `posthog.shutdown()` on the client no longer throws `TypeError: shutdown is not a function`. It best-effort flushes the queued events and always resolves.
+  (2026-07-03)
+
+- [#4054](https://github.com/PostHog/posthog-js/pull/4054) [`f0657eb`](https://github.com/PostHog/posthog-js/commit/f0657eb867604175ed44f9f2f43762c93db7ebf6) Thanks [@posthog](https://github.com/apps/posthog)! - fix(web): detect our own feature-flag request timeouts via a `timedOut` flag instead of the abort reason, so they are logged at `warn` (not `error`) on browsers that don't propagate `controller.abort(reason)` — keeping benign timeouts out of error tracking's console-error capture
+  (2026-07-03)
+
+- [#4031](https://github.com/PostHog/posthog-js/pull/4031) [`94a0530`](https://github.com/PostHog/posthog-js/commit/94a053043847293a4427e315e67c798b58894107) Thanks [@posthog](https://github.com/apps/posthog)! - Improve survey display reliability:
+    - **posthog-js**: refresh the cached `$surveys` definitions after a short TTL (stale-while-revalidate) so server-side changes such as switching a survey from popover to API propagate to long-lived tabs without a page reload.
+    - **posthog-js**: add `posthog.surveys.markSurveyAsSeen(surveyId, { iteration })` so custom integrators that render surveys through their own backend can honour the "already seen" and wait-period checks.
+    - **posthog-react-native**: guarantee the survey `Modal` notifies its parent on close even when iOS `Modal.onDismiss` fails to fire, so the transparent full-screen modal can no longer stay mounted intercepting touches and freezing the app. (2026-07-03)
+
+- Updated dependencies [[`45d1b36`](https://github.com/PostHog/posthog-js/commit/45d1b36e517d9eeb3d68b0398d80599b88293386)]:
+    - @posthog/types@1.392.1
+
 ## 1.396.5
 
 ### Patch Changes
