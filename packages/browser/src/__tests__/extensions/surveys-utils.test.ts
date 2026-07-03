@@ -3,6 +3,7 @@ import {
     canActivateRepeatedly,
     doesSurveyUrlMatch,
     getFontFamily,
+    getSurveyAppearanceForColorScheme,
     getSurveySeen,
     hasEvents,
     hasWaitPeriodPassed,
@@ -670,6 +671,72 @@ describe('addSurveyCSSVariablesToElement', () => {
             expect(element.style.getPropertyValue('--ph-survey-rating-active-text-color')).toBe('#020617')
             // Inactive rating uses inputTextColor
             expect(element.style.getPropertyValue('--ph-survey-rating-text-color')).toBe('#ff0000')
+        })
+    })
+
+    describe('dark mode appearance', () => {
+        const mockPrefersDarkMode = (matches: boolean): void => {
+            Object.defineProperty(window, 'matchMedia', {
+                writable: true,
+                value: jest.fn().mockImplementation((query) => ({
+                    matches,
+                    media: query,
+                    onchange: null,
+                    addListener: jest.fn(),
+                    removeListener: jest.fn(),
+                    addEventListener: jest.fn(),
+                    removeEventListener: jest.fn(),
+                    dispatchEvent: jest.fn(),
+                })),
+            })
+        }
+
+        it('uses darkModeAppearance when color scheme is dark', () => {
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
+                backgroundColor: '#ffffff',
+                textColor: '#111111',
+                darkModeColorScheme: 'dark',
+                darkModeAppearance: {
+                    backgroundColor: '#111827',
+                    textColor: '#f9fafb',
+                },
+            })
+
+            expect(element.style.getPropertyValue('--ph-survey-background-color')).toBe('#111827')
+            expect(element.style.getPropertyValue('--ph-survey-text-primary-color')).toBe('#f9fafb')
+        })
+
+        it('uses system preference when color scheme is not explicitly light or dark', () => {
+            mockPrefersDarkMode(true)
+
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
+                backgroundColor: '#ffffff',
+                darkModeAppearance: {
+                    backgroundColor: '#111827',
+                },
+            })
+
+            expect(element.style.getPropertyValue('--ph-survey-background-color')).toBe('#111827')
+        })
+
+        it('keeps light appearance when color scheme is light', () => {
+            mockPrefersDarkMode(true)
+
+            addSurveyCSSVariablesToElement(element, SurveyType.Popover, {
+                backgroundColor: '#ffffff',
+                darkModeColorScheme: 'light',
+                darkModeAppearance: {
+                    backgroundColor: '#111827',
+                },
+            })
+
+            expect(element.style.getPropertyValue('--ph-survey-background-color')).toBe('#ffffff')
+        })
+
+        it('returns the original appearance when no dark mode appearance is configured', () => {
+            const appearance = { backgroundColor: '#ffffff' }
+
+            expect(getSurveyAppearanceForColorScheme(appearance)).toBe(appearance)
         })
     })
 })

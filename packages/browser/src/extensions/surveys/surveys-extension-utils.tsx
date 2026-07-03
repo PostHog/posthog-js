@@ -91,17 +91,32 @@ const BOTTOM_BORDER_SURVEY_POSITIONS: SurveyPosition[] = [
     SurveyPosition.Right,
 ]
 
+export const getSurveyAppearanceForColorScheme = (
+    appearance?: SurveyAppearance | null
+): SurveyAppearance | null | undefined => {
+    if (isNullish(appearance) || isNullish(appearance.darkModeAppearance)) {
+        return appearance
+    }
+
+    const shouldUseDarkMode =
+        appearance.darkModeColorScheme === 'dark' ||
+        (appearance.darkModeColorScheme !== 'light' && window?.matchMedia?.('(prefers-color-scheme: dark)').matches)
+
+    return shouldUseDarkMode ? { ...appearance, ...appearance.darkModeAppearance } : appearance
+}
+
 export const addSurveyCSSVariablesToElement = (
     element: HTMLElement,
     type: SurveyType,
     appearance?: SurveyAppearance | null
 ) => {
-    const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
+    const resolvedAppearance = getSurveyAppearanceForColorScheme(appearance)
+    const effectiveAppearance = { ...defaultSurveyAppearance, ...resolvedAppearance }
     const hostStyle = element.style
 
     const surveyHasBottomBorder =
         !BOTTOM_BORDER_SURVEY_POSITIONS.includes(effectiveAppearance.position) ||
-        (type === SurveyType.Widget && appearance?.widgetType === SurveyWidgetType.Tab)
+        (type === SurveyType.Widget && resolvedAppearance?.widgetType === SurveyWidgetType.Tab)
 
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
     hostStyle.setProperty('--ph-survey-box-padding', effectiveAppearance.boxPadding)
@@ -125,7 +140,7 @@ export const addSurveyCSSVariablesToElement = (
     hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
     hostStyle.setProperty(
         '--ph-survey-submit-button-text-color',
-        appearance?.submitButtonTextColor || getContrastingTextColor(effectiveAppearance.submitButtonColor)
+        resolvedAppearance?.submitButtonTextColor || getContrastingTextColor(effectiveAppearance.submitButtonColor)
     )
     hostStyle.setProperty('--ph-survey-rating-bg-color', effectiveAppearance.ratingButtonColor)
     hostStyle.setProperty('--ph-survey-rating-active-bg-color', effectiveAppearance.ratingButtonActiveColor)
@@ -137,7 +152,7 @@ export const addSurveyCSSVariablesToElement = (
     // Primary text color: use override if provided, otherwise auto-calculate from background
     hostStyle.setProperty(
         '--ph-survey-text-primary-color',
-        appearance?.textColor || getContrastingTextColor(effectiveAppearance.backgroundColor)
+        resolvedAppearance?.textColor || getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
     hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
@@ -146,14 +161,14 @@ export const addSurveyCSSVariablesToElement = (
 
     // Use user-provided inputBackground (or deprecated inputBackgroundColor for backwards compat)
     // Fallback to internal default, with slight adjustment for white backgrounds
-    const userInputBg = appearance?.inputBackground || appearance?.inputBackgroundColor
+    const userInputBg = resolvedAppearance?.inputBackground || resolvedAppearance?.inputBackgroundColor
     let inputBgColor = userInputBg || effectiveAppearance.inputBackground
     if (!userInputBg && effectiveAppearance.backgroundColor === 'white') {
         inputBgColor = '#f8f8f8'
     }
     hostStyle.setProperty('--ph-survey-input-background', inputBgColor)
     // Input text color applies to both text inputs and inactive rating buttons
-    const inputTextColor = appearance?.inputTextColor || getContrastingTextColor(inputBgColor)
+    const inputTextColor = resolvedAppearance?.inputTextColor || getContrastingTextColor(inputBgColor)
     hostStyle.setProperty('--ph-survey-input-text-color', inputTextColor)
     hostStyle.setProperty('--ph-survey-rating-text-color', inputTextColor)
     hostStyle.setProperty('--ph-survey-scrollbar-thumb-color', effectiveAppearance.scrollbarThumbColor)

@@ -591,7 +591,9 @@ export type EvaluationReason = {
 }
 
 // survey types
-export type SurveyAppearance = {
+export type SurveyAppearanceColorScheme = 'light' | 'dark' | 'system'
+
+type SurveyAppearanceBase = {
   // keep in sync with frontend/src/types.ts -> SurveyAppearance
   backgroundColor?: string
   // Optional override for main survey text color. If not set, auto-calculated from backgroundColor.
@@ -626,6 +628,11 @@ export type SurveyAppearance = {
   widgetSelector?: string
   widgetLabel?: string
   widgetColor?: string
+}
+
+export type SurveyAppearance = SurveyAppearanceBase & {
+  darkModeColorScheme?: SurveyAppearanceColorScheme
+  darkModeAppearance?: SurveyAppearanceBase
 }
 
 export enum SurveyPosition {

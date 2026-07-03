@@ -30,7 +30,7 @@ export interface SurveyEventWithFilters {
 
 // Extends core SurveyAppearance with browser-specific fields
 // Omit 'position' from core because browser's SurveyPosition has additional values (e.g., NextToTrigger)
-export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position' | 'widgetType'> {
+export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position' | 'widgetType' | 'darkModeAppearance'> {
     // Browser-specific fields not in core
     /** @deprecated - not currently used */
     descriptionTextColor?: string
@@ -49,6 +49,8 @@ export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position' 
     // Browser's SurveyPosition has more options than core (e.g., NextToTrigger)
     position?: SurveyPosition
     widgetType?: SurveyWidgetType
+    darkModeColorScheme?: 'light' | 'dark' | 'system'
+    darkModeAppearance?: Omit<SurveyAppearance, 'darkModeColorScheme' | 'darkModeAppearance'>
 }
 
 export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
