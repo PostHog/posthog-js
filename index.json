@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3755": {
+    "key": "PostHog/posthog-js/issue/3755",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3755",
+    "url": "https://github.com/PostHog/posthog-js/issues/3755",
+    "conclusion": "Valid error-tracking feature request; not a small SDK-only change.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-03T09:30:14.105Z"
+  },
   "PostHog/posthog-js/issue/2650": {
     "key": "PostHog/posthog-js/issue/2650",
     "repo": "PostHog/posthog-js",
