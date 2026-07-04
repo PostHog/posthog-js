@@ -8,8 +8,7 @@
 import { OptionalReactNativeNavigationWix } from '../optional/OptionalReactNativeNavigationWix'
 import { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureOptions } from '../types'
-
-const normalizeRegex = /[^a-z0-9]/gi
+import { normalizeRegex } from '../utils'
 
 export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAutocaptureOptions = {}): boolean => {
   if (!OptionalReactNativeNavigationWix) {
@@ -36,7 +35,7 @@ export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAuto
 
       const normalizedCurrentRoute = currentRouteName.toLowerCase()?.replace(normalizeRegex, '')
 
-    const skipScreenTracking =
+      const skipScreenTracking =
         normalizedScreenNames?.length && normalizedScreenNames?.includes(normalizedCurrentRoute)
 
       if (skipScreenTracking) {

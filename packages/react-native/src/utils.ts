@@ -43,3 +43,5 @@ export function isWindows(): boolean {
 }
 
 export const isHermes = () => !!GLOBAL_OBJ.HermesInternal
+
+export const normalizeRegex = /[^a-z0-9]/gi

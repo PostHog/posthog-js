@@ -3,13 +3,12 @@ import { OptionalReactNativeNavigation } from '../optional/OptionalReactNativeNa
 import type { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureNavigationTrackerOptions } from '../types'
 import { useOverridablePostHog } from './utils'
+import { normalizeRegex } from '../utils'
 import { PostHogNavigationRef } from '../types'
 
 function _useNavigationTrackerDisabled(): void {
   return
 }
-
-const normalizeRegex = /[^a-z0-9]/gi
 
 function _useNavigationTracker(
   options?: PostHogAutocaptureNavigationTrackerOptions,
