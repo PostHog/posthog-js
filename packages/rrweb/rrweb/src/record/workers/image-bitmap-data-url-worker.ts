@@ -96,9 +96,10 @@ worker.onmessage = async function (e) {
           willReadFrequently: true,
         })!;
       }
+      const ctx = reusableCtx!;
 
-      reusableCtx!.clearRect(0, 0, width, height);
-      reusableCtx!.drawImage(bitmap, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(bitmap, 0, 0);
       bitmap.close();
 
       // fingerprint the raw pixels so unchanged frames skip the expensive
@@ -108,7 +109,7 @@ worker.onmessage = async function (e) {
       const fingerprint = frameFingerprint(
         width,
         height,
-        reusableCtx!.getImageData(0, 0, width, height).data,
+        ctx.getImageData(0, 0, width, height).data,
       );
       const lastFingerprint =
         lastFingerprintMap.get(id) ?? transparentFingerprint(width, height);
