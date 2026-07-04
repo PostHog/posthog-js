@@ -1,5 +1,6 @@
 import { PostHog } from 'posthog-node'
 import PostHogOpenAI, { WrappedCompletions } from '../src/openai'
+import { PostHogAzureOpenAI } from '../src/openai/azure'
 import openaiModule from 'openai'
 import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -1194,9 +1195,9 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_error']).toContain('503')
     })
 
-    test('does not emit an unhandled rejection from the analytics stream when streaming fails', async () => {
+    test('does not emit an unhandled rejection from analytics streams when streaming fails', async () => {
       const unhandledRejectionHandler = jest.fn()
-      process.once('unhandledRejection', unhandledRejectionHandler)
+      process.on('unhandledRejection', unhandledRejectionHandler)
 
       try {
         const createThrowingStream = () => ({
@@ -1206,32 +1207,89 @@ describe('PostHogOpenAI - Jest test suite', () => {
             throw error
           },
         })
-        const errorStream = {
+        const createThrowingTeeStream = () => ({
           tee: jest.fn().mockReturnValue([createThrowingStream(), createThrowingStream()]),
+        })
+        const createAudioFile = () => {
+          const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
+          mockFile.name = 'test.mp3'
+          return mockFile
         }
-
-        const ChatMock: any = openaiModule.Chat
-        ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(errorStream)
-
-        const stream = await client.chat.completions.create({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Test error' }],
-          stream: true,
-          posthogDistinctId: 'error-user',
+        const azureClient = new PostHogAzureOpenAI({
+          apiKey: 'test-api-key',
+          posthog: mockPostHogClient as any,
         })
 
-        await expect(async () => {
-          for await (const _chunk of stream) {
-            // Should throw before completing
-          }
-        }).rejects.toThrow('Stream interrupted')
+        // Exercise every wrapper with a detached analytics stream consumer.
+        const streamFactories = [
+          async () => {
+            const ChatMock: any = openaiModule.Chat
+            ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(createThrowingTeeStream())
+            return client.chat.completions.create({
+              model: 'gpt-4',
+              messages: [{ role: 'user', content: 'Test error' }],
+              stream: true,
+              posthogDistinctId: 'error-user',
+            })
+          },
+          async () => {
+            const ResponsesMock: any = openaiModule.Responses
+            ResponsesMock.prototype.create = jest.fn().mockResolvedValue(createThrowingTeeStream())
+            return client.responses.create({
+              model: 'gpt-4',
+              input: 'Test error',
+              stream: true,
+              posthogDistinctId: 'error-user',
+            } as any)
+          },
+          async () => {
+            const AudioMock: any = openaiModule.Audio
+            const TranscriptionsMock = AudioMock.Transcriptions
+            TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(createThrowingTeeStream())
+            return client.audio.transcriptions.create({
+              file: createAudioFile(),
+              model: 'whisper-1',
+              stream: true,
+              posthogDistinctId: 'error-user',
+            } as any)
+          },
+          async () => {
+            const ChatMock: any = openaiModule.Chat
+            ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(createThrowingTeeStream())
+            return azureClient.chat.completions.create({
+              model: 'gpt-4',
+              messages: [{ role: 'user', content: 'Test error' }],
+              stream: true,
+              posthogDistinctId: 'error-user',
+            })
+          },
+          async () => {
+            const ResponsesMock: any = openaiModule.Responses
+            ResponsesMock.prototype.create = jest.fn().mockResolvedValue(createThrowingTeeStream())
+            return azureClient.responses.create({
+              model: 'gpt-4',
+              input: 'Test error',
+              stream: true,
+              posthogDistinctId: 'error-user',
+            } as any)
+          },
+        ]
 
-        await flushPromises()
-        await new Promise((resolve) => {
-          setTimeout(resolve, 0)
-        })
+        for (const createStream of streamFactories) {
+          const stream = (await createStream()) as AsyncIterable<unknown>
+          await expect(async () => {
+            for await (const _chunk of stream) {
+              // Should throw before completing
+            }
+          }).rejects.toThrow('Stream interrupted')
 
-        expect(unhandledRejectionHandler).not.toHaveBeenCalled()
+          await flushPromises()
+          await new Promise((resolve) => {
+            setTimeout(resolve, 0)
+          })
+
+          expect(unhandledRejectionHandler).not.toHaveBeenCalled()
+        }
       } finally {
         process.off('unhandledRejection', unhandledRejectionHandler)
       }
