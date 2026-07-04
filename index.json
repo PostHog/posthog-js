@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3524": {
+    "key": "PostHog/posthog-js/issue/3524",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3524",
+    "url": "https://github.com/PostHog/posthog-js/issues/3524",
+    "conclusion": "Valid React Native surveys feature request; should be opt-in rather than changing default dismissal behavior.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "feature/surveys",
+      "react-native"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-04T09:11:07.589Z"
+  },
   "PostHog/posthog-js/issue/3523": {
     "key": "PostHog/posthog-js/issue/3523",
     "repo": "PostHog/posthog-js",
