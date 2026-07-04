@@ -7,11 +7,9 @@ import type {
 const lastFingerprintMap: Map<number, string> = new Map();
 const transparentFingerprintMap: Map<number, string> = new Map();
 
-function fnv1aHash(data: Uint8ClampedArray): string {
-  // hash 32-bit words rather than bytes: RGBA buffers are multi-megabyte,
-  // always word-aligned, and this runs on every captured frame. Callers must
-  // pass word-aligned views with a word-multiple byteLength (ImageData.data
-  // always is) — trailing bytes would be silently ignored otherwise
+// fnv1a over 32-bit words rather than bytes: RGBA pixel buffers are
+// multi-megabyte, always word-aligned, and this runs on every captured frame
+function hashPixels(data: Uint8ClampedArray): string {
   const view = new Uint32Array(
     data.buffer,
     data.byteOffset,
@@ -25,16 +23,27 @@ function fnv1aHash(data: Uint8ClampedArray): string {
   return (hash >>> 0).toString(16);
 }
 
+// fingerprints are dimension-tagged: raw pixels alone can't distinguish a
+// same-pixel-count resize (e.g. a solid-fill 100x200 -> 200x100), and the
+// replayer must repaint after one
+function frameFingerprint(
+  width: number,
+  height: number,
+  data: Uint8ClampedArray,
+): string {
+  return `${width}x${height}:${hashPixels(data)}`;
+}
+
 function transparentFingerprint(width: number, height: number): string {
-  // the hash of an all-zero buffer depends only on its length, so key by
+  // the hash of an all-zero buffer depends only on its length, so memoize by
   // pixel count — this sits on the per-frame path for still-blank canvases
   const pixelCount = width * height;
-  let fingerprint = transparentFingerprintMap.get(pixelCount);
-  if (fingerprint === undefined) {
-    fingerprint = fnv1aHash(new Uint8ClampedArray(pixelCount * 4));
-    transparentFingerprintMap.set(pixelCount, fingerprint);
+  let hash = transparentFingerprintMap.get(pixelCount);
+  if (hash === undefined) {
+    hash = hashPixels(new Uint8ClampedArray(pixelCount * 4));
+    transparentFingerprintMap.set(pixelCount, hash);
   }
-  return fingerprint;
+  return `${width}x${height}:${hash}`;
 }
 
 export interface ImageBitmapDataURLRequestWorker {
@@ -95,11 +104,10 @@ worker.onmessage = async function (e) {
       // fingerprint the raw pixels so unchanged frames skip the expensive
       // encode below entirely, instead of encoding first and deduping after.
       // an unseen canvas is compared against the transparent fingerprint, so
-      // one that starts out blank is skipped like an unchanged frame; raw
-      // all-zero pixels is deliberately narrower than the old "encodes to the
-      // same bytes as a transparent canvas" check (e.g. alpha-0 pixels with
-      // non-zero RGB now transmit) — we send more, never less
-      const fingerprint = fnv1aHash(
+      // one that starts out blank is skipped like an unchanged frame
+      const fingerprint = frameFingerprint(
+        width,
+        height,
         reusableCtx!.getImageData(0, 0, width, height).data,
       );
       const lastFingerprint =

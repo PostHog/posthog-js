@@ -54,14 +54,16 @@ const BLANK = new Uint8ClampedArray(BYTES);
 function frame(
   id: number,
   pixels: Uint8ClampedArray,
+  width = WIDTH,
+  height = HEIGHT,
 ): { data: ImageBitmapDataURLWorkerParams } {
   const bitmap: FakeBitmap = { pixels, close: () => {} };
   return {
     data: {
       id,
       bitmap,
-      width: WIDTH,
-      height: HEIGHT,
+      width,
+      height,
       displayWidth: 4,
       displayHeight: 4,
       dataURLOptions: { type: 'image/webp', quality: 0.4 },
@@ -145,6 +147,19 @@ describe('image-bitmap-data-url-worker', () => {
       );
     },
   );
+
+  it('re-sends a resized canvas even when raw pixels are byte-identical', async () => {
+    const onmessage = await loadWorker();
+    const solidFill = new Uint8ClampedArray(BYTES).fill(7);
+
+    await onmessage(frame(1, solidFill, 2, 2));
+    await onmessage(frame(1, solidFill, 4, 1));
+
+    expect(postMessage).toHaveBeenCalledTimes(2);
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
+  });
 
   it('skips a blank first frame without encoding at all', async () => {
     const onmessage = await loadWorker();
