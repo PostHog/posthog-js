@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3785](https://github.com/PostHog/posthog-js/issues/3785) | Valid @posthog/next feature request; current pageview helper only captures concrete URLs. | enhancement, feature, frameworks/next-js, feature/web-analytics |  | no | 2026-07-04T09:12:09.306Z |
 | PostHog/posthog-js | [issue 3524](https://github.com/PostHog/posthog-js/issues/3524) | Valid React Native surveys feature request; should be opt-in rather than changing default dismissal behavior. | enhancement, feature, feature/surveys, react-native |  | no | 2026-07-04T09:11:07.589Z |
 | PostHog/posthog-js | [issue 3523](https://github.com/PostHog/posthog-js/issues/3523) | Valid React Native surveys feature request; backdrop is not implemented yet, while positioning appears already addressed. | enhancement, feature, feature/surveys, react-native |  | no | 2026-07-04T09:10:01.130Z |
 | PostHog/posthog-js | [issue 3827](https://github.com/PostHog/posthog-js/issues/3827) | Valid feature request; current code intentionally excludes react-native-macos and the native plugin is packaged for iOS only. | enhancement, react-native, feature/error-tracking, team/error-tracking |  | no | 2026-07-03T09:36:20.314Z |
