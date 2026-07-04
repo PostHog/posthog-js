@@ -1160,6 +1160,10 @@ describe('posthog-logs', () => {
 
             const sendCount = () => (mockPostHog._send_request as jest.Mock).mock.calls.length
 
+            const setOnline = (value: boolean) => {
+                Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
+            }
+
             it.each([1, 2])('still attempts the network after %i consecutive status-0 failures', async (failures) => {
                 for (let i = 0; i < failures; i++) {
                     await flushWith(0)
@@ -1199,11 +1203,11 @@ describe('posthog-logs', () => {
             )
 
             it('does not count status-0 failures while the browser reports itself offline', async () => {
-                Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true })
+                setOnline(false)
                 for (let i = 0; i < 3; i++) {
                     await flushWith(0)
                 }
-                Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true })
+                setOnline(true)
 
                 await flushWith(0)
 
@@ -1219,7 +1223,7 @@ describe('posthog-logs', () => {
                 expect(countAfterTrip).toBe(3) // breaker tripped after 3
 
                 // Go offline — the online guard should bypass the fatal-drop short-circuit.
-                Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true })
+                setOnline(false)
 
                 // Capture + flush with status 0 while tripped AND offline.
                 // The send MUST be attempted (online guard lifts the short-circuit).
@@ -1230,7 +1234,7 @@ describe('posthog-logs', () => {
                 expect((logs as any)._queue.length).toBeGreaterThan(0)
 
                 // Restore online — reconnect flush delivers the retained records.
-                Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true })
+                setOnline(true)
                 ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 200 })
                 )
