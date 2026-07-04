@@ -267,7 +267,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               })
               throw error
             }
-          })()
+          })().catch(() => {
+            // Swallow: analytics must never crash the host process. The caller
+            // already receives this error via their own tee of the stream.
+          })
 
           // Return the other stream to the user
           return stream2

@@ -906,6 +906,59 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_provider_metadata']).toEqual({ system_fingerprint: 'fp_stream_test' })
     })
 
+    test('does not emit an unhandled rejection when the stream errors mid-flight', async () => {
+      const streamError = new Error('provider error injected into SSE stream')
+      const createErroringIterator = (): MockAsyncIterator<ChatCompletionChunk> => ({
+        async *[Symbol.asyncIterator]() {
+          yield mockStreamChunks[0]
+          throw streamError
+        },
+      })
+
+      const ChatMock: any = openaiModule.Chat
+      ;(ChatMock.Completions as any).prototype.create = jest.fn().mockImplementation(() => {
+        const mockStream = {
+          tee: jest.fn().mockReturnValue([createErroringIterator(), createErroringIterator()]),
+        }
+        return createMockAPIPromise(mockStream)
+      })
+
+      const unhandledRejections: unknown[] = []
+      const onUnhandledRejection = (reason: unknown): void => {
+        unhandledRejections.push(reason)
+      }
+      process.on('unhandledRejection', onUnhandledRejection)
+
+      try {
+        const stream = await client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Tell me about streaming' }],
+          stream: true,
+          posthogDistinctId: 'test-stream-error-user',
+        })
+
+        // The caller's copy of the stream must still surface the error
+        await expect(async () => {
+          for await (const _chunk of stream) {
+            // consume until the error
+          }
+        }).rejects.toThrow(streamError)
+
+        // Let the internal analytics tee finish and any floating rejection surface
+        await flushPromises()
+        await new Promise((resolve) => setImmediate(resolve))
+        await new Promise((resolve) => setImmediate(resolve))
+
+        // The analytics error event is still captured
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+        // The detached analytics consumer must not crash the host process
+        expect(unhandledRejections).toEqual([])
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection)
+      }
+    })
+
     conditionalTest('handles streaming with tool calls', async () => {
       // Create stream chunks with tool calls
       mockStreamChunks = createMockStreamChunks({
