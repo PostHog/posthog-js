@@ -26,6 +26,12 @@ const CONSOLE_SCOPE_NAME = 'console'
 // settles via its callback first; this only fires on a genuinely callback-less
 // send (e.g. request enqueued before load, or a transport that never reports).
 const LOGS_SEND_TIMEOUT_MS = 90000
+// Mirrors the event retry queue's status-0 budget: a request that dies before any
+// HTTP response while the browser reports itself online is almost always
+// deterministically blocked (ad blocker, CORS, extension), so retrying forever
+// only burns network. After this many consecutive such failures we stop sending
+// and drop batches; the `online` event reopens the pipe.
+const MAX_CONSECUTIVE_STATUS_ZERO_FAILURES = 3
 
 export class PostHogLogs implements Extension {
     private _isLogsEnabled: boolean = false
@@ -47,6 +53,10 @@ export class PostHogLogs implements Extension {
     private _consoleResolvedConfig: ResolvedPostHogLogsConfig | undefined
     private _consoleResolvedFrom: PostHog['config']['logs']
 
+    // Shared across both cores: they send to the same endpoint, so one blocker
+    // verdict covers both.
+    private _consecutiveStatusZeroFailures = 0
+
     constructor(private readonly _instance: PostHog) {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
@@ -58,6 +68,7 @@ export class PostHogLogs implements Extension {
     }
 
     private _onReconnect = (): void => {
+        this._consecutiveStatusZeroFailures = 0
         this._core?.onReconnect()
         this._consoleCore?.onReconnect()
     }
@@ -237,6 +248,13 @@ export class PostHogLogs implements Extension {
     private _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
         // eslint-disable-next-line compat/compat
         return new Promise((resolve) => {
+            if (this._consecutiveStatusZeroFailures >= MAX_CONSECUTIVE_STATUS_ZERO_FAILURES) {
+                // Tripped: drop the batch without touching the network. `fatal`
+                // advances the queue so records don't pile up while blocked.
+                resolve({ kind: 'fatal', error: new Error('logs endpoint is unreachable, dropping batch') })
+                return
+            }
+
             let settled = false
             const settle = (outcome: SendLogsBatchOutcome) => {
                 if (settled) {
@@ -264,6 +282,7 @@ export class PostHogLogs implements Extension {
                 fireCallbackOnDrop: true,
                 callback: (response) => {
                     const status = response.statusCode
+                    this._trackEndpointReachability(status)
                     if (status >= 200 && status < 300) {
                         settle({ kind: 'ok' })
                     } else if (status === 413) {
@@ -281,6 +300,25 @@ export class PostHogLogs implements Extension {
                 },
             })
         })
+    }
+
+    // Feeds the status-0 circuit breaker checked at the top of `_sendLogsBatch`.
+    private _trackEndpointReachability(statusCode: number): void {
+        if (statusCode === 0) {
+            // `onLine === false` is genuine offline: those records wait for the
+            // reconnect flush, so they don't count toward the trip.
+            if (window?.navigator.onLine !== false) {
+                this._consecutiveStatusZeroFailures++
+                if (this._consecutiveStatusZeroFailures === MAX_CONSECUTIVE_STATUS_ZERO_FAILURES) {
+                    this._logger.warn(
+                        'Log requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped sending logs; will try again when connectivity changes.'
+                    )
+                }
+            }
+        } else {
+            // Any HTTP response proves the endpoint is reachable.
+            this._consecutiveStatusZeroFailures = 0
+        }
     }
 
     // Drains both the programmatic and console queues over the given transport.
