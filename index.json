@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/3862": {
+    "key": "PostHog/posthog-js/issue/3862",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3862",
+    "url": "https://github.com/PostHog/posthog-js/issues/3862",
+    "conclusion": "Already implemented in the current repository state",
+    "labels": [
+      "enhancement",
+      "feature/autocapture",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-04T09:14:54.111Z"
+  },
   "PostHog/posthog-js/issue/3842": {
     "key": "PostHog/posthog-js/issue/3842",
     "repo": "PostHog/posthog-js",
