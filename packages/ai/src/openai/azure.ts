@@ -274,9 +274,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
                 error: error,
               })
-              throw error
             }
-          })()
+          })().catch(() => undefined)
 
           // Return the other stream to the user
           return stream2
@@ -469,9 +468,8 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 completionId: completionIdFromResponse,
                 error: error,
               })
-              throw error
             }
-          })()
+          })().catch(() => undefined)
 
           return stream2
         }

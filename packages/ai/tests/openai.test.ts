@@ -1194,6 +1194,49 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_error']).toContain('503')
     })
 
+    test('does not emit an unhandled rejection from the analytics stream when streaming fails', async () => {
+      const unhandledRejectionHandler = jest.fn()
+      process.once('unhandledRejection', unhandledRejectionHandler)
+
+      try {
+        const createThrowingStream = () => ({
+          [Symbol.asyncIterator]: async function* () {
+            const error = new Error('Stream interrupted') as Error & { status: number }
+            error.status = 503
+            throw error
+          },
+        })
+        const errorStream = {
+          tee: jest.fn().mockReturnValue([createThrowingStream(), createThrowingStream()]),
+        }
+
+        const ChatMock: any = openaiModule.Chat
+        ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(errorStream)
+
+        const stream = await client.chat.completions.create({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Test error' }],
+          stream: true,
+          posthogDistinctId: 'error-user',
+        })
+
+        await expect(async () => {
+          for await (const _chunk of stream) {
+            // Should throw before completing
+          }
+        }).rejects.toThrow('Stream interrupted')
+
+        await flushPromises()
+        await new Promise((resolve) => {
+          setTimeout(resolve, 0)
+        })
+
+        expect(unhandledRejectionHandler).not.toHaveBeenCalled()
+      } finally {
+        process.off('unhandledRejection', unhandledRejectionHandler)
+      }
+    })
+
     conditionalTest('tracks time to first token in streaming', async () => {
       // Create a simple streaming response with content
       mockStreamChunks = createMockStreamChunks({

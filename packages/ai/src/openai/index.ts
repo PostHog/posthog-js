@@ -359,9 +359,8 @@ export class WrappedCompletions extends Completions {
                 providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
                 error,
               })
-              throw error
             }
-          })()
+          })().catch(() => undefined)
 
           // Return the other stream to the user
           return stream2
@@ -593,9 +592,8 @@ export class WrappedResponses extends Responses {
                 completionId: completionIdFromResponse,
                 error,
               })
-              throw error
             }
-          })()
+          })().catch(() => undefined)
 
           return stream2
         }
@@ -966,9 +964,8 @@ export class WrappedTranscriptions extends Transcriptions {
                 usage: { inputTokens: 0, outputTokens: 0 },
                 error,
               })
-              throw error
             }
-          })()
+          })().catch(() => undefined)
 
           return stream2
         }
