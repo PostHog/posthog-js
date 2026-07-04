@@ -1222,6 +1222,39 @@ describe('posthog-logs', () => {
                 expect(sendCount()).toBe(4)
             })
 
+            it('counter resets to 0 on reconnect — needs 3 fresh failures to trip again', async () => {
+                // Trip the breaker (3 failures then 1 dropped).
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                expect(sendCount()).toBe(3)
+                await flushWith(0)
+                expect(sendCount()).toBe(3) // still 3 — the 4th was dropped
+
+                // Reset the breaker via the online event.
+                assignableWindow.dispatchEvent(new Event('online'))
+
+                // Verify the counter was actually reset to 0.
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(0)
+
+                // The online event schedules a reconnect flush (empty queue, no send).
+                // The first flushWith after online resolves that lingering flush promise,
+                // so the second and third explicit flushes are the real first two failures.
+                await flushWith(0) // drains lingering online-reconnect flush promise
+                await flushWith(0) // failure 1
+                await flushWith(0) // failure 2
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(2)
+
+                // Third failure: re-trips (counter=3), still sends on this flush.
+                await flushWith(0)
+                const countWhenRetripped = sendCount()
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(3)
+
+                // Fourth failure post-reset: breaker is tripped — dropped, no send.
+                await flushWith(0)
+                expect(sendCount()).toBe(countWhenRetripped) // no new send
+            })
+
             it('one tripped breaker silences the console queue too — both cores share the endpoint', async () => {
                 for (let i = 0; i < 3; i++) {
                     await flushWith(0)
