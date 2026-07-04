@@ -252,7 +252,7 @@ export class PostHogLogs implements Extension {
         return new Promise((resolve) => {
             if (
                 this._consecutiveStatusZeroFailures >= MAX_CONSECUTIVE_STATUS_ZERO_FAILURES &&
-                window?.navigator.onLine !== false
+                this._isBrowserOnline()
             ) {
                 // Tripped: drop the batch without touching the network. `fatal`
                 // advances the queue so records don't pile up while blocked.
@@ -309,14 +309,18 @@ export class PostHogLogs implements Extension {
         })
     }
 
+    // Returns true when the browser reports itself online (or the API is absent).
+    // False means the browser is explicitly offline — genuine network loss, not a
+    // blocker.  No `window` means no `online` event listener either (constructor),
+    // so the circuit breaker would never reopen; treat as indeterminate (false).
+    private _isBrowserOnline(): boolean {
+        return !!(window && window.navigator.onLine !== false)
+    }
+
     // Feeds the status-0 circuit breaker checked at the top of `_sendLogsBatch`.
     private _trackEndpointReachability(statusCode: number): void {
         if (statusCode === 0) {
-            // `onLine === false` is genuine offline: those records wait for the
-            // reconnect flush, so they don't count toward the trip.
-            // No `window` means no `online` event listener either (see constructor),
-            // so the breaker would never reopen — don't count in that environment.
-            if (window && window.navigator.onLine !== false) {
+            if (this._isBrowserOnline()) {
                 this._consecutiveStatusZeroFailures++
                 if (this._consecutiveStatusZeroFailures === MAX_CONSECUTIVE_STATUS_ZERO_FAILURES) {
                     this._logger.warn(
