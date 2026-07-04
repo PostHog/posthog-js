@@ -309,10 +309,11 @@ export class PostHogLogs implements Extension {
         })
     }
 
-    // Returns true when the browser reports itself online (or the API is absent).
-    // False means the browser is explicitly offline — genuine network loss, not a
-    // blocker.  No `window` means no `online` event listener either (constructor),
-    // so the circuit breaker would never reopen; treat as indeterminate (false).
+    // Returns true when the browser reports itself online (`navigator.onLine`
+    // missing counts as online). Returns false when the browser is explicitly
+    // offline — genuine network loss, not a blocker — or when there is no
+    // `window` at all: no `window` means no `online` event listener either
+    // (constructor), so a tripped breaker could never reopen.
     private _isBrowserOnline(): boolean {
         return !!(window && window.navigator.onLine !== false)
     }
