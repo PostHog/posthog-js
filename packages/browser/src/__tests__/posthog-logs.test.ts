@@ -1215,7 +1215,7 @@ describe('posthog-logs', () => {
             })
 
             it('queues (retry-later) instead of dropping when the breaker is tripped but the browser is offline', async () => {
-                // Trip the breaker (3 status-0 failures + 1 flush that is dropped).
+                // Trip the breaker (3 status-0 failures while online).
                 for (let i = 0; i < 3; i++) {
                     await flushWith(0)
                 }
@@ -1231,7 +1231,7 @@ describe('posthog-logs', () => {
                 expect(sendCount()).toBe(countAfterTrip + 1) // request was made
 
                 // The batch MUST be retained (offline => retry-later, not fatal).
-                expect((logs as any)._queue.length).toBeGreaterThan(0)
+                expect((logs as any)._queue).toHaveLength(4)
 
                 // Restore online — reconnect flush delivers the retained records.
                 setOnline(true)
@@ -1239,7 +1239,7 @@ describe('posthog-logs', () => {
                     opts.callback?.({ statusCode: 200 })
                 )
                 assignableWindow.dispatchEvent(new Event('online'))
-                expect(sendCount()).toBeGreaterThan(countAfterTrip + 1)
+                expect(sendCount()).toBe(countAfterTrip + 2)
             })
 
             it('reopens on the online event so recovery is possible', async () => {
