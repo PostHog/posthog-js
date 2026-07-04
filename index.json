@@ -1,4 +1,14 @@
 {
+  "PostHog/posthog-js/issue/4074": {
+    "key": "PostHog/posthog-js/issue/4074",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4074",
+    "url": "https://github.com/PostHog/posthog-js/issues/4074",
+    "conclusion": "Valid bug; the source matches the reported unhandled rejection pattern in detached OpenAI stream tee consumers.",
+    "labels": [],
+    "closed": false,
+    "updatedAt": "2026-07-04T18:59:08.110Z"
+  },
   "PostHog/posthog-js/issue/3862": {
     "key": "PostHog/posthog-js/issue/3862",
     "repo": "PostHog/posthog-js",
