@@ -170,6 +170,17 @@ describe('image-bitmap-data-url-worker', () => {
     expect(convertToBlob).not.toHaveBeenCalled();
   });
 
+  it('keeps skipping a never-sent canvas that resizes while blank', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, BLANK, 2, 2));
+    await onmessage(frame(1, BLANK, 4, 1));
+
+    expect(postMessage).toHaveBeenNthCalledWith(1, { id: 1 });
+    expect(postMessage).toHaveBeenNthCalledWith(2, { id: 1 });
+    expect(convertToBlob).not.toHaveBeenCalled();
+  });
+
   it('tracks fingerprints per canvas id', async () => {
     const onmessage = await loadWorker();
 
