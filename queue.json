@@ -2,19 +2,6 @@
   "version": 1,
   "items": [
     {
-      "id": "issue-4074-auto-none-no-comment-no-close-1783190945776",
-      "kind": "issue",
-      "number": 4074,
-      "mode": "auto",
-      "enqueuedAt": "2026-07-04T18:49:05.776Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 28716175526,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28716175526"
-      },
-      "attempts": 2
-    },
-    {
       "id": "pull_request-4075-fix-address-review-3523706864-no-close-1783191433724",
       "kind": "pull_request",
       "number": 4075,
