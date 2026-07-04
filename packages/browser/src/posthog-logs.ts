@@ -320,7 +320,12 @@ export class PostHogLogs implements Extension {
     // Feeds the status-0 circuit breaker checked at the top of `_sendLogsBatch`.
     private _trackEndpointReachability(statusCode: number): void {
         if (statusCode === 0) {
-            if (this._isBrowserOnline()) {
+            // Before `init` completes, `_send_request` synthesizes `{ statusCode: 0 }`
+            // without any network attempt (the `fireCallbackOnDrop` path), so only
+            // post-load failures count — a deferred init must not arrive to an
+            // already-tripped breaker. `__loaded` flips on init, not on a successful
+            // request, so a blocked-from-the-start page still trips as intended.
+            if (this._instance.__loaded && this._isBrowserOnline()) {
                 this._consecutiveStatusZeroFailures++
                 if (this._consecutiveStatusZeroFailures === MAX_CONSECUTIVE_STATUS_ZERO_FAILURES) {
                     this._logger.warn(

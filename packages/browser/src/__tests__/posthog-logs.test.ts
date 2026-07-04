@@ -56,6 +56,7 @@ describe('posthog-logs', () => {
 
             // Create mock PostHog instance
             mockPostHog = {
+                __loaded: true,
                 config: {
                     disable_logs: false,
                     token: 'test-token',
@@ -1201,6 +1202,22 @@ describe('posthog-logs', () => {
                     expect(sendCount()).toBe(6)
                 }
             )
+
+            it('does not count pre-init synthetic drops — only post-load failures feed the breaker', async () => {
+                // Before `init` completes, `_send_request` synthesizes
+                // `{ statusCode: 0 }` without any network attempt
+                // (`fireCallbackOnDrop` on the `!__loaded` path). A deferred init
+                // must not arrive to an already-tripped breaker.
+                ;(mockPostHog as any).__loaded = false
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                ;(mockPostHog as any).__loaded = true
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
+            })
 
             it('does not count status-0 failures while the browser reports itself offline', async () => {
                 setOnline(false)
