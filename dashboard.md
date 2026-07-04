@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4074](https://github.com/PostHog/posthog-js/issues/4074) | Valid bug; the source matches the reported unhandled rejection pattern in detached OpenAI stream tee consumers. |  |  | no | 2026-07-04T18:59:08.110Z |
 | PostHog/posthog-js | [issue 3862](https://github.com/PostHog/posthog-js/issues/3862) | Already implemented in the current repository state | enhancement, feature/autocapture, web |  | no | 2026-07-04T09:14:54.111Z |
 | PostHog/posthog-js | [issue 3842](https://github.com/PostHog/posthog-js/issues/3842) | Valid feature request; current @posthog/ai OTel filtering excludes Genkit spans. | enhancement, team/llm-analytics |  | no | 2026-07-04T09:13:35.796Z |
 | PostHog/posthog-js | [issue 3785](https://github.com/PostHog/posthog-js/issues/3785) | Valid @posthog/next feature request; current pageview helper only captures concrete URLs. | enhancement, feature, frameworks/next-js, feature/web-analytics |  | no | 2026-07-04T09:12:09.306Z |
