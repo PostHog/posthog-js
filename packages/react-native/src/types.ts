@@ -1,6 +1,7 @@
 export type PostHogAutocaptureNavigationTrackerOptions = {
   routeToName?: (name: string, params: any) => string
   routeToProperties?: (name: string, params: any) => Record<string, any>
+  ignoreScreenNames?: string[]
 }
 
 /**
@@ -54,7 +55,7 @@ export type PostHogAutocaptureOptions = {
    * List of screen names to ignore during autocapture
    *
    * @default []
-  */
+   */
 
   propsToCapture?: string[]
 
