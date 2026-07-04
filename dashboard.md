@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3523](https://github.com/PostHog/posthog-js/issues/3523) | Valid React Native surveys feature request; backdrop is not implemented yet, while positioning appears already addressed. | enhancement, feature, feature/surveys, react-native |  | no | 2026-07-04T09:10:01.130Z |
 | PostHog/posthog-js | [issue 3827](https://github.com/PostHog/posthog-js/issues/3827) | Valid feature request; current code intentionally excludes react-native-macos and the native plugin is packaged for iOS only. | enhancement, react-native, feature/error-tracking, team/error-tracking |  | no | 2026-07-03T09:36:20.314Z |
 | PostHog/posthog-js | [issue 3826](https://github.com/PostHog/posthog-js/issues/3826) | Valid enhancement: Expo Android config plugin lacks explicit Kotlin DSL support for posthog-react-native Gradle edits. | enhancement, react-native, Android, feature/error-tracking, team/error-tracking |  | no | 2026-07-03T09:35:07.771Z |
 | PostHog/posthog-js | [issue 3674](https://github.com/PostHog/posthog-js/issues/3674) | Valid LLM analytics feature request, but it spans docs, JS SDK, server-side OTLP mapping, and upstream AI SDK gaps. | enhancement, team/llm-analytics, documentation |  | no | 2026-07-03T09:33:37.528Z |
