@@ -1210,6 +1210,34 @@ describe('posthog-logs', () => {
                 expect(sendCount()).toBe(4)
             })
 
+            it('queues (retry-later) instead of dropping when the breaker is tripped but the browser is offline', async () => {
+                // Trip the breaker (3 status-0 failures + 1 flush that is dropped).
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                const countAfterTrip = sendCount()
+                expect(countAfterTrip).toBe(3) // breaker tripped after 3
+
+                // Go offline — the online guard should bypass the fatal-drop short-circuit.
+                Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true })
+
+                // Capture + flush with status 0 while tripped AND offline.
+                // The send MUST be attempted (online guard lifts the short-circuit).
+                await flushWith(0)
+                expect(sendCount()).toBe(countAfterTrip + 1) // request was made
+
+                // The batch MUST be retained (offline => retry-later, not fatal).
+                expect((logs as any)._queue.length).toBeGreaterThan(0)
+
+                // Restore online — reconnect flush delivers the retained records.
+                Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true })
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 200 })
+                )
+                assignableWindow.dispatchEvent(new Event('online'))
+                expect(sendCount()).toBeGreaterThan(countAfterTrip + 1)
+            })
+
             it('reopens on the online event so recovery is possible', async () => {
                 for (let i = 0; i < 4; i++) {
                     await flushWith(0)
