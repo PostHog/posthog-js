@@ -1304,6 +1304,22 @@ describe('posthog-logs', () => {
                 expect(sendCount()).toBe(countWhenRetripped) // no new send
             })
 
+            it('reset clears the tripped breaker so future sends can recover immediately', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                await flushWith(0)
+                expect(sendCount()).toBe(3) // tripped: the 4th flush made no request
+
+                logs.reset()
+
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(0)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
+            })
+
             it('one tripped breaker silences the console queue too — both cores share the endpoint', async () => {
                 for (let i = 0; i < 3; i++) {
                     await flushWith(0)

@@ -149,6 +149,7 @@ export class PostHogLogs implements Extension {
         this._core?.reset()
         this._consoleQueue = []
         this._consoleCore?.reset()
+        this._consecutiveStatusZeroFailures = 0
     }
 
     captureLog(options: CaptureLogOptions): void {
