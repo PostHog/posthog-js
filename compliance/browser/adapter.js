@@ -36,13 +36,6 @@ if (typeof localStorage === 'undefined') {
 }
 
 // Set up state before overrides
-const ALLOWED_HARNESS_HOSTS = new Map([
-    ['localhost', 'localhost'],
-    ['127.0.0.1', '127.0.0.1'],
-    ['test-harness', 'test-harness'],
-    ['host.docker.internal', 'host.docker.internal'],
-])
-
 const state = {
     instance: null,
     capturedEvents: [],
@@ -55,20 +48,25 @@ const state = {
 
 function normalizeAllowedHarnessHost(rawHost) {
     const parsed = new URL(rawHost)
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    if (parsed.protocol !== 'http:') {
         throw new Error('Unsupported harness host protocol')
     }
 
-    const canonicalHost = ALLOWED_HARNESS_HOSTS.get(parsed.hostname.toLowerCase())
-    if (!canonicalHost) {
-        throw new Error('Unsupported harness host')
+    // Return fixed origins instead of interpolating user-controlled input into
+    // the outbound URL. The compliance harness always serves the mock API on
+    // 8081; only these known hostnames are supported by the adapter.
+    switch (parsed.hostname.toLowerCase()) {
+        case 'test-harness':
+            return 'http://test-harness:8081'
+        case 'localhost':
+            return 'http://localhost:8081'
+        case '127.0.0.1':
+            return 'http://127.0.0.1:8081'
+        case 'host.docker.internal':
+            return 'http://host.docker.internal:8081'
+        default:
+            throw new Error('Unsupported harness host')
     }
-
-    if (parsed.port && !/^\d{1,5}$/.test(parsed.port)) {
-        throw new Error('Unsupported harness host port')
-    }
-
-    return `${parsed.protocol}//${canonicalHost}${parsed.port ? `:${parsed.port}` : ''}`
 }
 
 // Override XMLHttpRequest to track requests BEFORE importing PostHog
