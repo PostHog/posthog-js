@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3930](https://github.com/PostHog/posthog-js/issues/3930) | Valid RN/core feature-flag spec-parity issue; current code can return undefined for the boolean helper. | feature/flags, team/feature-flags, react-native, feature/mobile |  | no | 2026-07-05T09:26:47.466Z |
 | PostHog/posthog-js | [issue 482](https://github.com/PostHog/posthog-js/issues/482) | Keep open; current SDK has partial error hooks, but adblock/status-0 init-time failures are not consistently surfaced. | enhancement, AdBlocker, feature/flags, feature/surveys |  | no | 2026-07-05T09:25:15.887Z |
 | PostHog/posthog-js | [issue 4074](https://github.com/PostHog/posthog-js/issues/4074) | Valid bug; the source matches the reported unhandled rejection pattern in detached OpenAI stream tee consumers. |  |  | no | 2026-07-04T18:59:08.110Z |
 | PostHog/posthog-js | [issue 3862](https://github.com/PostHog/posthog-js/issues/3862) | Already implemented in the current repository state | enhancement, feature/autocapture, web |  | no | 2026-07-04T09:14:54.111Z |
