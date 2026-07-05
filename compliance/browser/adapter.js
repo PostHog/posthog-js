@@ -36,6 +36,13 @@ if (typeof localStorage === 'undefined') {
 }
 
 // Set up state before overrides
+const ALLOWED_HARNESS_HOSTS = new Map([
+    ['localhost', 'localhost'],
+    ['127.0.0.1', '127.0.0.1'],
+    ['test-harness', 'test-harness'],
+    ['host.docker.internal', 'host.docker.internal'],
+])
+
 const state = {
     instance: null,
     capturedEvents: [],
@@ -44,6 +51,24 @@ const state = {
     requestsMade: [],
     host: 'http://localhost:8081',
     maxRetries: 3,
+}
+
+function normalizeAllowedHarnessHost(rawHost) {
+    const parsed = new URL(rawHost)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('Unsupported harness host protocol')
+    }
+
+    const canonicalHost = ALLOWED_HARNESS_HOSTS.get(parsed.hostname.toLowerCase())
+    if (!canonicalHost) {
+        throw new Error('Unsupported harness host')
+    }
+
+    if (parsed.port && !/^\d{1,5}$/.test(parsed.port)) {
+        throw new Error('Unsupported harness host port')
+    }
+
+    return `${parsed.protocol}//${canonicalHost}${parsed.port ? `:${parsed.port}` : ''}`
 }
 
 // Override XMLHttpRequest to track requests BEFORE importing PostHog
@@ -209,13 +234,6 @@ function normalizeEventForContract(event) {
     return event
 }
 
-function normalizePayloadForContract(data) {
-    if (Array.isArray(data)) {
-        return data.map(normalizeEventForContract)
-    }
-    return normalizeEventForContract(data)
-}
-
 async function parseResponse(response) {
     const text = await response.text()
     const parsed = { statusCode: response.status, text }
@@ -314,14 +332,18 @@ app.post('/init', (req, res) => {
     state.pendingEvents = []
     state.totalEventsSent = 0
     state.requestsMade = []
-    state.host = host
+    try {
+        state.host = normalizeAllowedHarnessHost(host)
+    } catch (error) {
+        return res.status(400).json({ error: error.message })
+    }
     state.maxRetries = max_retries ?? 3
 
     discardInstance()
     global.localStorage.clear()
 
     posthog.init(api_key, {
-        api_host: host,
+        api_host: state.host,
         persistence: 'memory',
         autocapture: false,
         disable_session_recording: true,
@@ -392,7 +414,7 @@ app.get('/state', (req, res) => {
         pending_events: state.pendingEvents.length,
         total_events_captured: state.capturedEvents.length,
         total_events_sent: state.totalEventsSent,
-        total_retries: 0,
+        total_retries: state.requestsMade.reduce((sum, request) => sum + (request.retry_attempt > 0 ? 1 : 0), 0),
         last_error: null,
         requests_made: state.requestsMade,
     })
