@@ -241,6 +241,10 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
+    destroy(): void {
+        window?.removeEventListener('online', this._onOnline)
+    }
+
     private get _config() {
         return this._instance.config
     }

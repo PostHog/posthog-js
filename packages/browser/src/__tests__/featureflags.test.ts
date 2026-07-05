@@ -1265,6 +1265,15 @@ describe('featureflags', () => {
 
                 expect(instance._send_request).toHaveBeenCalledTimes(4)
             })
+
+            it('removes the online event listener on destroy', () => {
+                const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+
+                featureFlags.destroy()
+
+                expect(removeEventListenerSpy).toHaveBeenCalledWith('online', featureFlags['_onOnline'])
+                removeEventListenerSpy.mockRestore()
+            })
         })
     })
 
