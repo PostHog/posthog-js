@@ -27,6 +27,7 @@ import { createLogger } from '../../../utils/logger'
 import { document, window } from '../../../utils/globals'
 import { formDataToQuery } from '../../../utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
+import { addEventListener } from '../../../utils'
 
 const logger = createLogger('[ConversationsManager]')
 
@@ -38,6 +39,10 @@ const POLL_INTERVAL_MS = 5000 // 5 seconds
 const REATTACH_CHECK_INTERVAL_MS = 1000 // 1 second
 const RESTORE_EXCHANGE_ENDPOINT = '/api/conversations/v1/widget/restore'
 const RESTORE_REQUEST_ENDPOINT = '/api/conversations/v1/widget/restore/request'
+// Polling runs every 5s while the widget is visible, so repeated status-0
+// failures can become an endless blocked-request loop. Match the browser event
+// retry budget and pause polling after this many consecutive online failures.
+const MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES = 3
 
 // Singleton guard: only one ConversationsManager per page.
 // The toolbar's internal PostHog instance is excluded from creating a manager
@@ -70,6 +75,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _currentView: WidgetView = 'messages'
     private _tickets: Ticket[] = []
     private _showTicketList: boolean = false
+    private _consecutivePollingStatusZeroFailures: number = 0
 
     constructor(
         config: ConversationsRemoteConfig,
@@ -84,7 +90,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._isWidgetEnabled = config.widgetEnabled === true
         this._isDomainAllowed = isCurrentDomainAllowed(config.domains)
 
+        if (window) {
+            addEventListener(window, 'online', this._onOnline)
+        }
+
         this._initialize()
+    }
+
+    private _onOnline = (): void => {
+        this._consecutivePollingStatusZeroFailures = 0
     }
 
     private _currentUrl(): string | undefined {
@@ -278,6 +292,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
+                    this._trackPollingEndpointReachability(response.statusCode)
+
                     if (response.statusCode === 429) {
                         reject(new Error('Too many requests. Please wait before trying again.'))
                         return
@@ -744,7 +760,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Poll for new messages
      */
     private _pollMessages = async (): Promise<void> => {
-        if (this._isPollingMessages || !this._currentTicketId) {
+        if (this._isPollingMessages || !this._currentTicketId || this._hasPollingCircuitBreakerTripped()) {
             return
         }
 
@@ -760,7 +776,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Poll for tickets list
      */
     private _pollTickets = async (): Promise<void> => {
-        if (this._isPollingTickets) {
+        if (this._isPollingTickets || this._hasPollingCircuitBreakerTripped()) {
             return
         }
 
@@ -848,6 +864,33 @@ export class ConversationsManager implements ConversationsManagerInterface {
         } else {
             await this._pollTickets()
         }
+    }
+
+    private _hasPollingCircuitBreakerTripped(): boolean {
+        return (
+            this._consecutivePollingStatusZeroFailures >= MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES &&
+            this._isBrowserOnline()
+        )
+    }
+
+    private _isBrowserOnline(): boolean {
+        return !!(window && window.navigator.onLine !== false)
+    }
+
+    private _trackPollingEndpointReachability(statusCode: number): void {
+        if (statusCode === 0) {
+            if (this._isBrowserOnline()) {
+                this._consecutivePollingStatusZeroFailures++
+                if (this._consecutivePollingStatusZeroFailures === MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES) {
+                    logger.warn(
+                        'Conversations polling requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped polling conversations; will try again when connectivity changes.'
+                    )
+                }
+            }
+            return
+        }
+
+        this._consecutivePollingStatusZeroFailures = 0
     }
 
     /**
@@ -1156,6 +1199,8 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
+                    this._trackPollingEndpointReachability(response.statusCode)
+
                     if (response.statusCode === 429) {
                         reject(new Error('Too many requests. Please wait before trying again.'))
                         return
@@ -1334,6 +1379,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
     destroy(): void {
         this._stopPolling()
         this._stopReattachWatcher()
+        if (window) {
+            window.removeEventListener('online', this._onOnline)
+        }
 
         // Unsubscribe from identify events
         if (this._unsubscribeIdentifyListener) {
@@ -1367,6 +1415,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._currentTicketId = null
         this._lastMessageTimestamp = null
         this._unreadCount = 0
+        this._consecutivePollingStatusZeroFailures = 0
 
         // Destroy the widget
         this.destroy()

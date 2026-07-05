@@ -1,4 +1,4 @@
-import { entries, extend } from './utils'
+import { addEventListener, entries, extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
     FlagsResponse,
@@ -40,10 +40,16 @@ import {
 import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
+import { window } from './utils/globals'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
 const FLAG_TIMEOUT_MSG = '" failed. Feature flags didn\'t load in time.'
+// Mirrors the event retry queue's status-0 budget: repeated requests that die
+// before any HTTP response while the browser reports itself online are usually
+// deterministically blocked (ad blocker, CORS, extension). Stop periodic /flags
+// refreshes after this many consecutive failures until connectivity changes.
+const MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES = 3
 
 /**
  * Error type constants for the $feature_flag_error property.
@@ -218,9 +224,21 @@ export class PostHogFeatureFlags implements Extension {
     private _flagsLoadedFromRemote: boolean = false
     private _hasLoggedDeprecationWarning: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
+    private _consecutiveStatusZeroFailures: number = 0
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
+        if (window) {
+            addEventListener(window, 'online', this._onOnline)
+        }
+    }
+
+    private _onOnline = (): void => {
+        const wasTripped = this._hasStatusZeroCircuitBreakerTripped()
+        this._consecutiveStatusZeroFailures = 0
+        if (wasTripped) {
+            this.reloadFeatureFlags()
+        }
     }
 
     private get _config() {
@@ -527,6 +545,10 @@ export class PostHogFeatureFlags implements Extension {
             return
         }
 
+        if (this._hasStatusZeroCircuitBreakerTripped()) {
+            return
+        }
+
         if (this._reloadDebouncer) {
             // If we're already in a debounce then we don't want to do anything
             return
@@ -568,6 +590,9 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         if (this._instance._shouldDisableFlags()) {
             // The way this is documented is essentially used to refuse to ever call the /flags endpoint.
+            return
+        }
+        if (this._hasStatusZeroCircuitBreakerTripped()) {
             return
         }
         if (this._requestInFlight) {
@@ -625,6 +650,7 @@ export class PostHogFeatureFlags implements Extension {
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 let errorsLoading = true
+                this._trackStatusZeroReachability(response.statusCode)
 
                 if (response.statusCode === 200) {
                     // successful request
@@ -692,6 +718,32 @@ export class PostHogFeatureFlags implements Extension {
                 }
             },
         })
+    }
+
+    private _hasStatusZeroCircuitBreakerTripped(): boolean {
+        return (
+            this._consecutiveStatusZeroFailures >= MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES && this._isBrowserOnline()
+        )
+    }
+
+    private _isBrowserOnline(): boolean {
+        return !!(window && window.navigator.onLine !== false)
+    }
+
+    private _trackStatusZeroReachability(statusCode: number): void {
+        if (statusCode === 0) {
+            if (this._isBrowserOnline()) {
+                this._consecutiveStatusZeroFailures++
+                if (this._consecutiveStatusZeroFailures === MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES) {
+                    logger.warn(
+                        'Feature flag requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped refreshing feature flags; will try again when connectivity changes.'
+                    )
+                }
+            }
+            return
+        }
+
+        this._consecutiveStatusZeroFailures = 0
     }
 
     /**
@@ -1360,5 +1412,6 @@ export class PostHogFeatureFlags implements Extension {
         this.$anon_distinct_id = undefined
         this._clearDebouncer()
         this._override_warning = false
+        this._consecutiveStatusZeroFailures = 0
     }
 }

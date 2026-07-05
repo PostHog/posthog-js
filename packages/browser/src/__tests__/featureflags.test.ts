@@ -1198,6 +1198,74 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
         })
+
+        describe('status 0 circuit breaker', () => {
+            const setOnline = (value: boolean) => {
+                Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
+            }
+
+            const reloadWith = (statusCode: number) => {
+                instance._send_request.mockImplementationOnce(({ callback }) =>
+                    callback({ statusCode, json: statusCode === 200 ? {} : null })
+                )
+
+                featureFlags.reloadFeatureFlags()
+                jest.advanceTimersByTime(10)
+            }
+
+            afterEach(() => {
+                delete (window.navigator as any).onLine
+            })
+
+            it('stops refreshing feature flags after 3 consecutive online status-0 failures', () => {
+                for (let i = 0; i < 3; i++) {
+                    reloadWith(0)
+                }
+                expect(instance._send_request).toHaveBeenCalledTimes(3)
+
+                reloadWith(0)
+
+                expect(instance._send_request).toHaveBeenCalledTimes(3)
+            })
+
+            it('resets the status-0 budget after any HTTP response', () => {
+                reloadWith(0)
+                reloadWith(0)
+                reloadWith(500)
+                reloadWith(0)
+                reloadWith(0)
+
+                reloadWith(0)
+
+                expect(instance._send_request).toHaveBeenCalledTimes(6)
+            })
+
+            it('does not count status-0 failures while the browser reports itself offline', () => {
+                setOnline(false)
+                for (let i = 0; i < 3; i++) {
+                    reloadWith(0)
+                }
+                setOnline(true)
+
+                reloadWith(0)
+
+                expect(instance._send_request).toHaveBeenCalledTimes(4)
+            })
+
+            it('retries on the online event', () => {
+                for (let i = 0; i < 3; i++) {
+                    reloadWith(0)
+                }
+                reloadWith(0)
+                expect(instance._send_request).toHaveBeenCalledTimes(3)
+
+                instance._send_request.mockImplementationOnce(({ callback }) => callback({ statusCode: 0, json: null }))
+                window.dispatchEvent(new Event('online'))
+                jest.advanceTimersByTime(10)
+
+                expect(instance._send_request).toHaveBeenCalledTimes(4)
+            })
+        })
     })
 
     describe('onFeatureFlags', () => {
