@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3816](https://github.com/PostHog/posthog-js/issues/3816) | Valid React Native mobile feature request; not currently implemented in this repo. | enhancement, feature/product-analytics, feature/mobile, react-native, Android, iOS |  | no | 2026-07-05T09:30:29.417Z |
 | PostHog/posthog-js | [issue 3817](https://github.com/PostHog/posthog-js/issues/3817) | Valid feature request: React Native surveys do not currently expose a manual displaySurvey API like web. | enhancement, feature/surveys, react-native, feature/mobile |  | no | 2026-07-05T09:29:09.157Z |
 | PostHog/posthog-js | [issue 3928](https://github.com/PostHog/posthog-js/issues/3928) | Valid React Native spec-parity enhancement; current code matches the reported behavior gap. | enhancement, react-native, feature/mobile |  | no | 2026-07-05T09:28:11.199Z |
 | PostHog/posthog-js | [issue 3930](https://github.com/PostHog/posthog-js/issues/3930) | Valid RN/core feature-flag spec-parity issue; current code can return undefined for the boolean helper. | feature/flags, team/feature-flags, react-native, feature/mobile |  | no | 2026-07-05T09:26:47.466Z |
