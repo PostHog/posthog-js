@@ -1206,7 +1206,7 @@ describe('PostHogAnthropic - streaming error safety', () => {
 
       // The caller's copy of the stream must still surface the error
       await expect(async () => {
-        for await (const _chunk of stream as AsyncIterable<unknown>) {
+        for await (const _chunk of stream as unknown as AsyncIterable<unknown>) {
           // consume until the error
         }
       }).rejects.toThrow(streamError)
