@@ -286,7 +286,6 @@
         "_isActivatingTrigger",
         "_isActivityChangeBelowGranularity",
         "_isBelowMinimumDuration",
-        "_isBrowserOnline",
         "_isCacheStale",
         "_isConsoleLogCaptureEnabled",
         "_isConversationsEnabled",

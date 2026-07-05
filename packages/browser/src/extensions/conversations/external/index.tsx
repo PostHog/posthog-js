@@ -24,7 +24,7 @@ import { ConversationsManager as ConversationsManagerInterface } from '../postho
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget, WidgetView } from './components/ConversationsWidget'
 import { createLogger } from '../../../utils/logger'
-import { document, window } from '../../../utils/globals'
+import { document, isBrowserOnline, window } from '../../../utils/globals'
 import { formDataToQuery } from '../../../utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
 import { addEventListener } from '../../../utils'
@@ -869,17 +869,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _hasPollingCircuitBreakerTripped(): boolean {
         return (
             this._consecutivePollingStatusZeroFailures >= MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES &&
-            this._isBrowserOnline()
+            isBrowserOnline()
         )
-    }
-
-    private _isBrowserOnline(): boolean {
-        return !!(window && window.navigator.onLine !== false)
     }
 
     private _trackPollingEndpointReachability(statusCode: number): void {
         if (statusCode === 0) {
-            if (this._isBrowserOnline()) {
+            if (isBrowserOnline()) {
                 this._consecutivePollingStatusZeroFailures++
                 if (this._consecutivePollingStatusZeroFailures === MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES) {
                     logger.warn(

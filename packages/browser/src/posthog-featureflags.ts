@@ -40,7 +40,7 @@ import {
 import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
-import { window } from './utils/globals'
+import { isBrowserOnline, window } from './utils/globals'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
@@ -721,18 +721,12 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _hasStatusZeroCircuitBreakerTripped(): boolean {
-        return (
-            this._consecutiveStatusZeroFailures >= MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES && this._isBrowserOnline()
-        )
-    }
-
-    private _isBrowserOnline(): boolean {
-        return !!(window && window.navigator.onLine !== false)
+        return this._consecutiveStatusZeroFailures >= MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES && isBrowserOnline()
     }
 
     private _trackStatusZeroReachability(statusCode: number): void {
         if (statusCode === 0) {
-            if (this._isBrowserOnline()) {
+            if (isBrowserOnline()) {
                 this._consecutiveStatusZeroFailures++
                 if (this._consecutiveStatusZeroFailures === MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES) {
                     logger.warn(
