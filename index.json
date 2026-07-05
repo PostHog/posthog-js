@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/3816": {
+    "key": "PostHog/posthog-js/issue/3816",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3816",
+    "url": "https://github.com/PostHog/posthog-js/issues/3816",
+    "conclusion": "Valid React Native mobile feature request; not currently implemented in this repo.",
+    "labels": [
+      "enhancement",
+      "feature/product-analytics",
+      "feature/mobile",
+      "react-native",
+      "Android",
+      "iOS"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-05T09:30:29.417Z"
+  },
   "PostHog/posthog-js/issue/3817": {
     "key": "PostHog/posthog-js/issue/3817",
     "repo": "PostHog/posthog-js",
