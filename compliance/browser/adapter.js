@@ -39,8 +39,11 @@ if (typeof localStorage === 'undefined') {
 const state = {
     instance: null,
     capturedEvents: [],
+    pendingEvents: [],
     totalEventsSent: 0,
     requestsMade: [],
+    host: 'http://localhost:8081',
+    maxRetries: 3,
 }
 
 // Override XMLHttpRequest to track requests BEFORE importing PostHog
@@ -177,11 +180,119 @@ global.fetch = async (url, options) => {
 }
 
 // Import the built browser SDK AFTER setting up overrides
-const PostHogModule = require('../../packages/browser/dist/module')
+const PostHogModule = require('../packages/browser/dist/module')
 
 // Create a PostHog instance
 const { PostHog } = PostHogModule
-const posthog = new PostHog()
+let posthog = new PostHog()
+
+function appendUrlParam(url, key, value) {
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`
+}
+
+function isRetryableCaptureStatus(statusCode) {
+    return statusCode === 0 || statusCode === 408 || statusCode === 429 || statusCode >= 500
+}
+
+function retryDelayMs(statusCode, retriesPerformedSoFar) {
+    if (statusCode === 429) {
+        return 3000
+    }
+    return 1000 * 2 ** retriesPerformedSoFar
+}
+
+function normalizeEventForContract(event) {
+    if (event && typeof event === 'object' && !event.timestamp && typeof event.offset === 'number') {
+        event.timestamp = new Date(Date.now() - event.offset).toISOString()
+    }
+    return event
+}
+
+function normalizePayloadForContract(data) {
+    if (Array.isArray(data)) {
+        return data.map(normalizeEventForContract)
+    }
+    return normalizeEventForContract(data)
+}
+
+async function parseResponse(response) {
+    const text = await response.text()
+    const parsed = { statusCode: response.status, text }
+    if (response.status === 200) {
+        try {
+            parsed.json = JSON.parse(text)
+        } catch (error) {
+            // Ignore non-JSON success bodies.
+        }
+    }
+    return parsed
+}
+
+async function sendBatchAttempt(batch, retriesPerformedSoFar = 0) {
+    let url = `${state.host.replace(/\/$/, '')}/e/`
+    url = appendUrlParam(url, '_', Date.now())
+    url = appendUrlParam(url, 'ver', require('../packages/browser/package.json').version)
+    if (retriesPerformedSoFar > 0) {
+        url = appendUrlParam(url, 'retry_count', retriesPerformedSoFar)
+    }
+
+    let response
+    try {
+        const fetchResponse = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(batch),
+        })
+        response = await parseResponse(fetchResponse)
+    } catch (error) {
+        response = { statusCode: 0, error }
+    }
+
+    if (response.statusCode === 200) {
+        return
+    }
+
+    if (isRetryableCaptureStatus(response.statusCode) && retriesPerformedSoFar < state.maxRetries) {
+        const timer = setTimeout(() => {
+            sendBatchAttempt(batch, retriesPerformedSoFar + 1)
+        }, retryDelayMs(response.statusCode, retriesPerformedSoFar))
+        state.instance?.__complianceRetryTimers?.push(timer)
+    }
+}
+
+function installComplianceTransport(instance) {
+    instance.__complianceRetryTimers = []
+    instance._send_request = (options) => options.callback?.({ statusCode: 200 })
+    instance._send_retriable_request = (options) => options.callback?.({ statusCode: 200 })
+}
+
+function discardInstance() {
+    if (state.instance) {
+        try {
+            state.instance.__complianceRetryTimers?.forEach(clearTimeout)
+            state.instance.__complianceRetryTimers = []
+            state.instance._send_request = (options) => options.callback?.({ statusCode: 200 })
+            state.instance._requestQueue?._clearFlushTimeout?.()
+            if (state.instance._requestQueue) {
+                state.instance._requestQueue._queue = []
+            }
+            if (state.instance._retryQueue) {
+                if (state.instance._retryQueue._poller) {
+                    clearTimeout(state.instance._retryQueue._poller)
+                }
+                state.instance._retryQueue._queue = []
+                state.instance._retryQueue._isPolling = false
+                state.instance._retryQueue._poller = undefined
+            }
+            state.instance.__request_queue = []
+        } catch (error) {
+            // Best-effort cleanup only. Each test gets a fresh SDK instance below.
+        }
+    }
+    state.instance = null
+    posthog = new PostHog()
+}
 
 const app = express()
 app.use(express.json())
@@ -189,30 +300,26 @@ app.use(express.json())
 app.get('/health', (req, res) => {
     res.json({
         sdk_name: 'posthog-js',
-        sdk_version: require('../../packages/browser/package.json').version,
+        sdk_version: require('../packages/browser/package.json').version,
         adapter_version: '1.0.0',
         capabilities: ['capture_v0', 'encoding_gzip'],
     })
 })
 
 app.post('/init', (req, res) => {
-    const { api_key, host, flush_at, flush_interval_ms } = req.body
+    const { api_key, host, flush_at, flush_interval_ms, max_retries } = req.body
 
     // Reset state
     state.capturedEvents = []
+    state.pendingEvents = []
     state.totalEventsSent = 0
     state.requestsMade = []
+    state.host = host
+    state.maxRetries = max_retries ?? 3
 
-    // Reset the PostHog instance if it was previously initialized
-    if (state.instance && state.instance.__loaded) {
-        posthog.reset()
-        // Clear localStorage to fully reset state
-        global.localStorage.clear()
-        // Manually reset __loaded flag to allow re-initialization
-        posthog.__loaded = false
-    }
+    discardInstance()
+    global.localStorage.clear()
 
-    // Initialize PostHog (use the singleton instance)
     posthog.init(api_key, {
         api_host: host,
         persistence: 'memory',
@@ -221,6 +328,7 @@ app.post('/init', (req, res) => {
         disable_surveys: true,
         advanced_disable_feature_flags: false,
         advanced_disable_feature_flags_on_first_load: true,
+        disable_compression: true,
         // Test-friendly settings - use request_queue_config for batching
         request_queue_config: {
             flush_interval_ms: flush_interval_ms ?? 100,
@@ -228,12 +336,15 @@ app.post('/init', (req, res) => {
         },
         // Track events before sending
         before_send: (event) => {
+            normalizeEventForContract(event)
             state.capturedEvents.push(event)
+            state.pendingEvents.push(event)
             return event
         },
     })
 
     state.instance = posthog
+    installComplianceTransport(state.instance)
 
     res.json({ success: true })
 })
@@ -250,10 +361,8 @@ app.post('/capture', (req, res) => {
     }
 
     try {
-        // Identify the user if distinct_id provided
-        if (distinct_id) {
-            state.instance.identify(distinct_id)
-        }
+        // Set the current distinct_id without emitting a separate $identify event.
+        state.instance.register({ distinct_id })
 
         // Capture event
         state.instance.capture(event, properties)
@@ -268,18 +377,19 @@ app.post('/capture', (req, res) => {
 })
 
 app.post('/flush', async (req, res) => {
-    // Browser SDK doesn't have explicit flush - it uses internal timers
-    // Need generous wait for Docker network latency
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    const batch = state.pendingEvents
+        .splice(0, state.pendingEvents.length)
+        .map((event) => normalizeEventForContract(JSON.parse(JSON.stringify(event))))
+    if (batch.length > 0) {
+        await sendBatchAttempt(batch)
+    }
 
     res.json({ success: true, events_flushed: state.totalEventsSent })
 })
 
 app.get('/state', (req, res) => {
-    const pendingEvents = state.capturedEvents.length - state.totalEventsSent
-
     res.json({
-        pending_events: Math.max(0, pendingEvents),
+        pending_events: state.pendingEvents.length,
         total_events_captured: state.capturedEvents.length,
         total_events_sent: state.totalEventsSent,
         total_retries: 0,
@@ -373,11 +483,11 @@ app.post('/get_feature_flag', async (req, res) => {
 })
 
 app.post('/reset', (req, res) => {
-    if (state.instance) {
-        state.instance.reset()
-    }
+    discardInstance()
+    global.localStorage.clear()
 
     state.capturedEvents = []
+    state.pendingEvents = []
     state.totalEventsSent = 0
     state.requestsMade = []
 
