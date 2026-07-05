@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/3928": {
+    "key": "PostHog/posthog-js/issue/3928",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3928",
+    "url": "https://github.com/PostHog/posthog-js/issues/3928",
+    "conclusion": "Valid React Native spec-parity enhancement; current code matches the reported behavior gap.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/mobile"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-05T09:28:11.199Z"
+  },
   "PostHog/posthog-js/issue/3930": {
     "key": "PostHog/posthog-js/issue/3930",
     "repo": "PostHog/posthog-js",
