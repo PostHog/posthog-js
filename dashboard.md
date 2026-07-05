@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3817](https://github.com/PostHog/posthog-js/issues/3817) | Valid feature request: React Native surveys do not currently expose a manual displaySurvey API like web. | enhancement, feature/surveys, react-native, feature/mobile |  | no | 2026-07-05T09:29:09.157Z |
 | PostHog/posthog-js | [issue 3928](https://github.com/PostHog/posthog-js/issues/3928) | Valid React Native spec-parity enhancement; current code matches the reported behavior gap. | enhancement, react-native, feature/mobile |  | no | 2026-07-05T09:28:11.199Z |
 | PostHog/posthog-js | [issue 3930](https://github.com/PostHog/posthog-js/issues/3930) | Valid RN/core feature-flag spec-parity issue; current code can return undefined for the boolean helper. | feature/flags, team/feature-flags, react-native, feature/mobile |  | no | 2026-07-05T09:26:47.466Z |
 | PostHog/posthog-js | [issue 482](https://github.com/PostHog/posthog-js/issues/482) | Keep open; current SDK has partial error hooks, but adblock/status-0 init-time failures are not consistently surfaced. | enhancement, AdBlocker, feature/flags, feature/surveys |  | no | 2026-07-05T09:25:15.887Z |
