@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/482": {
+    "key": "PostHog/posthog-js/issue/482",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 482",
+    "url": "https://github.com/PostHog/posthog-js/issues/482",
+    "conclusion": "Keep open; current SDK has partial error hooks, but adblock/status-0 init-time failures are not consistently surfaced.",
+    "labels": [
+      "enhancement",
+      "AdBlocker",
+      "feature/flags",
+      "feature/surveys"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-05T09:25:15.887Z"
+  },
   "PostHog/posthog-js/issue/4074": {
     "key": "PostHog/posthog-js/issue/4074",
     "repo": "PostHog/posthog-js",
