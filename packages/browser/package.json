@@ -80,7 +80,7 @@
         "@babel/preset-typescript": "catalog:",
         "@jest/globals": "^29.7.0",
         "@jridgewell/sourcemap-codec": "^1.5.5",
-        "@playwright/test": "^1.61.1",
+        "@playwright/test": "^1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-plugin-console-record": "workspace:*",
