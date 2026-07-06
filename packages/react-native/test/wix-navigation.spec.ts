@@ -96,7 +96,9 @@ describe('wix-navigation', () => {
 
     it('should ignore screens specified in ignoreScreenNames', () => {
       withReactNativeNavigation(mockPostHog, {
-        ignoreScreenNames: ['LoginScreen', 'Signup-Screen'],
+        navigation: {
+          ignoreScreenNames: ['LoginScreen'],
+        },
       })
       expect(registeredCallback).toBeDefined()
 
@@ -108,13 +110,24 @@ describe('wix-navigation', () => {
       registeredCallback!({ componentName: 'loginscreen' })
       expect(mockPostHog.screen).not.toHaveBeenCalled()
 
-      // Normalized match
-      registeredCallback!({ componentName: 'SignupScreen' })
-      expect(mockPostHog.screen).not.toHaveBeenCalled()
-
       // Non-ignored screen should be captured
       registeredCallback!({ componentName: 'HomeScreen' })
       expect(mockPostHog.screen).toHaveBeenCalledWith('HomeScreen', undefined)
+    })
+
+    it('should not treat differently-punctuated names as a match', () => {
+      withReactNativeNavigation(mockPostHog, {
+        navigation: {
+          ignoreScreenNames: ['Signup-Screen'],
+        },
+      })
+      expect(registeredCallback).toBeDefined()
+
+      // 'SignupScreen' only matches 'Signup-Screen' if punctuation is stripped before
+      // comparing, which would collide with unrelated screen names (see PR #3996 review) -
+      // matching is a plain case-insensitive exact compare, so this should still be captured.
+      registeredCallback!({ componentName: 'SignupScreen' })
+      expect(mockPostHog.screen).toHaveBeenCalledWith('SignupScreen', undefined)
     })
 
     it('should fall back to Unknown if componentName is not provided and routeToName is not defined', () => {
