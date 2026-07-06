@@ -56,6 +56,7 @@
         "react/package.json",
         "react/surveys/package.json",
         "react/slim/package.json",
+        "customizations/package.json",
         "rrweb/package.json",
         "rrweb-types/package.json",
         "rrweb-plugin-console-record/package.json"
