@@ -13,10 +13,10 @@ export function generateAnonymousId(): string {
  * Resolves the distinct id of the user making the current request, from a
  * server-side source of truth (e.g. the app's auth session).
  *
- * Called once per `getPostHog()` / `getServerSidePostHog()` call, so it may
+ * Called once per `getPostHog()` call, so it may
  * read request-scoped state such as `cookies()` / `headers()` or auth helpers
- * like next-auth's `auth()`. When called from `getServerSidePostHog()`, the
- * `GetServerSidePropsContext` is passed so Pages Router auth helpers (e.g.
+ * like next-auth's `auth()`. When `getPostHog(ctx)` is called with a
+ * `GetServerSidePropsContext` (Pages Router), the resolver receives it so Pages Router auth helpers (e.g.
  * `getServerSession(ctx.req, ctx.res, ...)`) can be used; in App Router it is
  * `undefined`. Return `null`/`undefined` when there is no authenticated user
  * to fall back to the client-provided identity (PostHog cookie / tracing

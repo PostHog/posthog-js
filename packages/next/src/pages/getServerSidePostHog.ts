@@ -8,7 +8,7 @@ import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shar
 import { withRequestContext } from '../server/getPostHog.js'
 
 /**
- * Implementation behind `createPostHog().getServerSidePostHog` (Pages Router).
+ * Implementation behind the Pages Router path of `createPostHog().getPostHog(ctx)`.
  *
  * Reads the user's identity from the PostHog cookie in request headers and
  * applies it to every method call on the returned client, so methods like

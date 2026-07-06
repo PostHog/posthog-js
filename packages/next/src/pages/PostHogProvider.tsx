@@ -11,7 +11,7 @@ export interface PagesPostHogProviderProps {
     apiKey?: string
     /** Optional posthog-js configuration overrides. */
     clientOptions?: Partial<PostHogConfig>
-    /** Server-evaluated bootstrap data from createPostHog().getServerSidePostHog. */
+    /** Server-evaluated bootstrap data from createPostHog().getPostHog(ctx). */
     bootstrap?: BootstrapConfig
     children: React.ReactNode
 }

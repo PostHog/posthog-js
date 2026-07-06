@@ -307,7 +307,7 @@ describe('createPostHog', () => {
         })
     })
 
-    describe('getServerSidePostHog (Pages Router)', () => {
+    describe('getPostHog(ctx) (Pages Router)', () => {
         function createMockPagesContext(pagesCookies: Record<string, string> = {}) {
             return {
                 req: {
@@ -329,8 +329,8 @@ describe('createPostHog', () => {
                 ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
             })
 
-            const { getServerSidePostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
-            const client = await getServerSidePostHog(ctx)
+            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const client = await getPostHog(ctx)
             client.capture({ event: 'test_event' })
 
             expect(getDistinctId).toHaveBeenCalledWith(ctx)
@@ -345,8 +345,8 @@ describe('createPostHog', () => {
                 ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
             })
 
-            const { getServerSidePostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId: () => null })
-            const client = await getServerSidePostHog(ctx)
+            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId: () => null })
+            const client = await getPostHog(ctx)
             client.capture({ event: 'test_event' })
 
             expect(mockWithContext).toHaveBeenCalledWith(
@@ -359,8 +359,8 @@ describe('createPostHog', () => {
             const getDistinctId = jest.fn(() => 'server-user')
             const ctx = createMockPagesContext({ __ph_opt_in_out_phc_test123: '0' })
 
-            const { getServerSidePostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
-            const client = await getServerSidePostHog(ctx)
+            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const client = await getPostHog(ctx)
             client.capture({ event: 'test_event' })
 
             expect(getDistinctId).not.toHaveBeenCalled()
@@ -372,8 +372,8 @@ describe('createPostHog', () => {
                 ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
             })
 
-            const { getServerSidePostHog } = createPostHog({ apiKey: 'phc_test123' })
-            await getServerSidePostHog(ctx)
+            const { getPostHog } = createPostHog({ apiKey: 'phc_test123' })
+            await getPostHog(ctx)
 
             expect(mockEnterContext).not.toHaveBeenCalled()
         })

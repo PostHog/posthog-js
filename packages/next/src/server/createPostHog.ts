@@ -22,10 +22,10 @@ export interface CreatePostHogConfig {
      * server events still correlate with the browser session. Return
      * `null`/`undefined` to fall back to the client-provided distinct id.
      *
-     * Runs once per `getPostHog()` / `getServerSidePostHog()` call, in request
-     * scope — it may call `cookies()`/`headers()` or auth helpers that do.
-     * When called from `getServerSidePostHog()`, it receives the
-     * `GetServerSidePropsContext` for Pages Router auth helpers. Wrap
+     * Runs once per `getPostHog()` call, in request scope — it may call
+     * `cookies()`/`headers()` or auth helpers that do. When `getPostHog(ctx)`
+     * is called with a `GetServerSidePropsContext` (Pages Router), the
+     * resolver receives that context for Pages Router auth helpers. Wrap
      * resolvers that do their own I/O (e.g. a database session lookup) in
      * React's `cache()` so multiple `getPostHog()` calls in one render don't
      * repeat it. It is not called for opted-out users. Errors are logged and
@@ -37,19 +37,15 @@ export interface CreatePostHogConfig {
 
 export interface CreatePostHogResult {
     /**
-     * Returns a PostHog server client scoped to the current App Router
-     * request (server components, route handlers, server actions).
+     * Returns a PostHog server client scoped to the current request.
      *
-     * Calls `cookies()` and `headers()` internally, which opts the route
-     * into dynamic rendering.
+     * In the App Router (server components, route handlers, server actions),
+     * call it with no arguments — it reads `cookies()` and `headers()`
+     * internally, which opts the route into dynamic rendering. In the Pages
+     * Router, pass the `GetServerSidePropsContext` so identity is read from
+     * the request.
      */
-    getPostHog: () => Promise<IPostHog>
-    /**
-     * Returns a PostHog server client scoped to the current Pages Router
-     * request. Call it with the `GetServerSidePropsContext` inside
-     * `getServerSideProps`.
-     */
-    getServerSidePostHog: (ctx: GetServerSidePropsContext) => Promise<IPostHog>
+    getPostHog: (ctx?: GetServerSidePropsContext) => Promise<IPostHog>
 }
 
 /**
@@ -86,18 +82,18 @@ export interface CreatePostHogResult {
  * }
  * ```
  *
- * In the Pages Router, use `getServerSidePostHog` inside `getServerSideProps`;
- * the resolver receives the context so it can read the session from the request:
+ * In the Pages Router, pass the `GetServerSidePropsContext`; the resolver
+ * receives it so it can read the session from the request:
  * ```ts
  * // lib/posthog.ts
- * export const { getServerSidePostHog } = createPostHog({
+ * export const { getPostHog } = createPostHog({
  *     getDistinctId: async (ctx) =>
  *         ctx ? (await getServerSession(ctx.req, ctx.res, authOptions))?.user?.id : undefined,
  * })
  *
  * // pages/index.tsx
  * export const getServerSideProps: GetServerSideProps = async (ctx) => {
- *     const posthog = await getServerSidePostHog(ctx)
+ *     const posthog = await getPostHog(ctx)
  *     const flags = await posthog.getAllFlagsAndPayloads()
  *     return { props: { posthogBootstrap: flags } }
  * }
@@ -105,7 +101,9 @@ export interface CreatePostHogResult {
  */
 export function createPostHog(config: CreatePostHogConfig = {}): CreatePostHogResult {
     return {
-        getPostHog: () => getRequestScopedPostHog(config.apiKey, config.options, config.getDistinctId),
-        getServerSidePostHog: (ctx) => getServerSidePostHog(ctx, config.apiKey, config.options, config.getDistinctId),
+        getPostHog: (ctx?: GetServerSidePropsContext) =>
+            ctx
+                ? getServerSidePostHog(ctx, config.apiKey, config.options, config.getDistinctId)
+                : getRequestScopedPostHog(config.apiKey, config.options, config.getDistinctId),
     }
 }
