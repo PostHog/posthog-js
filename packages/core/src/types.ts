@@ -848,8 +848,8 @@ export type Survey = {
   }
   start_date?: string
   end_date?: string
-  current_iteration?: number
-  current_iteration_start_date?: string
+  current_iteration?: number | null
+  current_iteration_start_date?: string | null
   schedule?: SurveySchedule
 }
 

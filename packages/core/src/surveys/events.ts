@@ -1,3 +1,4 @@
+import { SurveyWithIteration } from './keys'
 import { SurveyResponses, SurveyResponseValue } from '../types'
 import { isArray, isNullish, isUndefined } from '../utils'
 
@@ -72,9 +73,4 @@ type SurveyQuestionForResponses = {
 
 type SurveyForResponses = {
   questions: SurveyQuestionForResponses[]
-}
-
-type SurveyWithIteration = {
-  id: string
-  current_iteration?: number | null
 }

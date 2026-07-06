@@ -355,7 +355,11 @@ describe('getActiveMatchingSurveys', () => {
       expect(result).toHaveLength(0)
     })
 
-    it('should include repeating surveys seen in a previous iteration', () => {
+    it.each([
+      ['seen in a previous iteration', 'repeating-survey_1', 1],
+      ['already seen in the current iteration', 'repeating-survey_2', 0],
+      ['seen before it became repeating (bare id key)', 'repeating-survey', 1],
+    ])('repeating survey %s -> %s shown', (_name, seenKey, expectedLength) => {
       const surveys = [
         createMockSurvey({
           id: 'repeating-survey',
@@ -364,24 +368,9 @@ describe('getActiveMatchingSurveys', () => {
         }),
       ]
 
-      const result = getActiveMatchingSurveys(surveys, mockFlags, ['repeating-survey_1'], mockActivatedSurveys)
+      const result = getActiveMatchingSurveys(surveys, mockFlags, [seenKey], mockActivatedSurveys)
 
-      expect(result).toHaveLength(1)
-      expect(result[0].id).toBe('repeating-survey')
-    })
-
-    it('should exclude repeating surveys already seen in the current iteration', () => {
-      const surveys = [
-        createMockSurvey({
-          id: 'repeating-survey',
-          schedule: SurveySchedule.Recurring,
-          current_iteration: 2,
-        }),
-      ]
-
-      const result = getActiveMatchingSurveys(surveys, mockFlags, ['repeating-survey_2'], mockActivatedSurveys)
-
-      expect(result).toHaveLength(0)
+      expect(result).toHaveLength(expectedLength)
     })
   })
 

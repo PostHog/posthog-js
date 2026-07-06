@@ -11,7 +11,6 @@ import {
   SurveyQuestionDescriptionContentType,
   SurveyMatchType,
 } from '@posthog/core'
-import { canSurveyActivateRepeatedly, doesSurveyActivateByEvent, getSurveyStorageKey } from '@posthog/core/surveys'
 
 // Extended operator type to include numeric operators not in core SurveyMatchType
 export type PropertyOperator = SurveyMatchType | 'gt' | 'lt'
@@ -214,23 +213,9 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
   // return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
-export const hasEvents = (survey: Survey): boolean => {
-  return doesSurveyActivateByEvent(survey)
-}
-
 // export const hasActions = (survey: Survey): boolean => {
 //   return survey.conditions?.actions?.values.length !== undefined && survey.conditions.actions.values.length > 0
 // }
-
-export const canActivateRepeatedly = (survey: Survey): boolean => {
-  return canSurveyActivateRepeatedly(survey)
-}
-
-// Keying by iteration (shared with the web SDK) lets a repeating survey show again
-// on this device when a new iteration starts. No prefix: keys live in a dedicated list.
-export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
-  return getSurveyStorageKey('', survey)
-}
 
 /**
  * Use the Fisher-yates algorithm to shuffle this array

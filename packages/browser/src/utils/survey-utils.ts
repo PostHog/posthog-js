@@ -1,9 +1,9 @@
-import { getSurveyStorageKey } from '@posthog/core/surveys'
+import { getSurveyIterationKey } from '@posthog/core/surveys'
 
 import { DisplaySurveyOptions, Survey, SurveyType, DisplaySurveyType } from '../posthog-surveys-types'
 import { createLogger } from '../utils/logger'
 
-export { doesSurveyActivateByEvent, getSurveyInteractionProperty, getSurveyStorageKey } from '@posthog/core/surveys'
+export { doesSurveyActivateByEvent, getSurveyInteractionProperty } from '@posthog/core/surveys'
 
 export const SURVEY_LOGGER = createLogger('[Surveys]')
 
@@ -18,6 +18,12 @@ export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): 
 export const SURVEY_SEEN_PREFIX = 'seenSurvey_'
 export const SURVEY_IN_PROGRESS_PREFIX = 'inProgressSurvey_'
 export const SURVEY_ABANDONED_PREFIX = 'abandonedSurvey_'
+
+// Prefix namespacing is a localStorage concern, so it stays in the browser package;
+// the iteration-qualified key itself is shared with the other SDKs via @posthog/core.
+export const getSurveyStorageKey = (prefix: string, survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
+    return `${prefix}${getSurveyIterationKey(survey)}`
+}
 
 export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
     return getSurveyStorageKey(SURVEY_SEEN_PREFIX, survey)

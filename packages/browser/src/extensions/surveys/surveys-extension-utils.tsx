@@ -13,9 +13,11 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
 import {
+    doesSurveyActivateByEvent,
     getSurveyInteractionProperty,
     getSurveySeenKey,
     getSurveyAbandonedKey,
+    getSurveyStorageKey,
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
@@ -24,9 +26,7 @@ import { isNullish, type SurveyResponses } from '@posthog/core'
 import {
     buildSurveyResponseProperties,
     canSurveyActivateRepeatedly,
-    doesSurveyActivateByEvent,
     getSurveyResponseKey,
-    getSurveyStorageKey,
     surveyHasResponses,
 } from '@posthog/core/surveys'
 

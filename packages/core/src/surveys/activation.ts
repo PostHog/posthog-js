@@ -1,29 +1,17 @@
 import { SurveySchedule } from '../types'
 
-type SurveyWithIteration = {
-  id: string
-  current_iteration?: number | null
-}
-
+// Structural type instead of Pick<Survey, 'schedule' | 'conditions'>: the browser SDK
+// has its own Survey type using literal unions where core uses enums, so picking from
+// core's Survey would reject browser values. The template-literal schedule type accepts
+// both while still rejecting arbitrary strings.
 type SurveyForRepeatActivation = {
-  schedule?: string | null
+  schedule?: `${SurveySchedule}` | null
   conditions?: {
     events?: {
       repeatedActivation?: boolean
       values?: { name: string }[]
     } | null
   } | null
-}
-
-/**
- * Storage key for per-survey display state (seen, in-progress, abandoned, ...).
- * Keyed by iteration so repeating surveys become visible again when a new iteration starts.
- */
-export function getSurveyStorageKey(prefix: string, survey: SurveyWithIteration): string {
-  if (survey.current_iteration && survey.current_iteration > 0) {
-    return `${prefix}${survey.id}_${survey.current_iteration}`
-  }
-  return `${prefix}${survey.id}`
 }
 
 export function doesSurveyActivateByEvent(survey: SurveyForRepeatActivation): boolean {

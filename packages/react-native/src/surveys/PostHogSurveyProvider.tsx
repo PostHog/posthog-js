@@ -6,12 +6,7 @@ import { getActiveMatchingSurveys } from './getActiveMatchingSurveys'
 import { useSurveyStorage } from './useSurveyStorage'
 import { useActivatedSurveys } from './useActivatedSurveys'
 import { SurveyModal } from './components/SurveyModal'
-import {
-  defaultSurveyAppearance,
-  getContrastingTextColor,
-  getSurveySeenKey,
-  SurveyAppearanceTheme,
-} from './surveys-utils'
+import { defaultSurveyAppearance, getContrastingTextColor, SurveyAppearanceTheme } from './surveys-utils'
 import { Survey, SurveyAppearance, SurveyType, type SurveyResponses } from '@posthog/core'
 import { usePostHog } from '../hooks/usePostHog'
 import { useFeatureFlags } from '../hooks/useFeatureFlags'
@@ -174,7 +169,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
         setLastSeenSurveyDate(new Date())
       },
       onClose: (submitted: boolean, responses: SurveyResponses) => {
-        setSeenSurvey(getSurveySeenKey(activeSurvey))
+        setSeenSurvey(activeSurvey)
         setActiveSurvey(undefined)
         if (!submitted) {
           dismissedSurveyEvent(translatedActiveSurvey.survey, responses, posthog, translatedActiveSurvey.language)
