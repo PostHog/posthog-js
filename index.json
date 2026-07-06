@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/3813": {
+    "key": "PostHog/posthog-js/issue/3813",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3813",
+    "url": "https://github.com/PostHog/posthog-js/issues/3813",
+    "conclusion": "Valid React Native enhancement/privacy issue; opt-out currently persists consent and drops events, but does not stop integration work like session replay or autocapture hooks.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/mobile",
+      "feature/replay",
+      "feature/autocapture"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-06T09:44:14.219Z"
+  },
   "PostHog/posthog-js/issue/3814": {
     "key": "PostHog/posthog-js/issue/3814",
     "repo": "PostHog/posthog-js",
