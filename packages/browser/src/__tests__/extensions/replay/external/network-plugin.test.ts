@@ -501,6 +501,45 @@ describe('network plugin', () => {
                 await expect(patchedFetch('https://example.com')).resolves.toBe(sentinelResponse)
                 expect(fetchCallCount).toBe(1)
             })
+
+            it('fetch still delegates to the host when request recording throws', async () => {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                let fetchCallCount = 0
+                const sentinelResponse = { status: 204, headers: { forEach: () => {} } }
+                mockWindow.fetch = async () => {
+                    fetchCallCount++
+                    return sentinelResponse
+                }
+
+                global.Request = class {
+                    url: string
+                    method = 'GET'
+                    headers = {
+                        forEach: () => {
+                            throw new Error('HeaderReadFailed')
+                        },
+                    }
+
+                    constructor(url: string) {
+                        this.url = url
+                    }
+                } as any
+
+                let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
+                jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const plugin = getRecordNetworkPlugin({ recordBody: { request: true, response: false } })
+                    plugin.observer(() => {}, mockWindow, { recordBody: { request: true, response: false } })
+                    patchedFetch = mockWindow.fetch
+                })
+
+                // request header/body recording must not throw or block the host's original fetch
+                await expect(patchedFetch('https://example.com')).resolves.toBe(sentinelResponse)
+                expect(fetchCallCount).toBe(1)
+            })
         })
     })
 
