@@ -176,7 +176,12 @@ export class PostHogTracingProcessor implements TracingProcessor {
   }
 
   private _handleError(error: unknown, context: string): void {
-    this._onError?.(error, context)
+    try {
+      this._onError?.(error, context)
+    } catch (handlerError) {
+      // Preserve the tracing processor's non-throwing contract even if the error handler fails.
+      void handlerError
+    }
   }
 
   private _captureEvent(event: string, properties: Record<string, any>, distinctId?: string): void {

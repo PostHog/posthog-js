@@ -885,6 +885,25 @@ describe('PostHogTracingProcessor', () => {
       expect(onError).toHaveBeenCalledWith(captureError, 'capture')
     })
 
+    it('does not throw when onError throws', async () => {
+      mockClient.capture.mockImplementation(() => {
+        throw new Error('capture failed')
+      })
+      const onError = jest.fn(() => {
+        throw new Error('onError failed')
+      })
+      const proc = new PostHogTracingProcessor({
+        client: mockClient,
+        distinctId: 'test-user',
+        onError,
+      })
+
+      await expect(proc.onSpanEnd(createMockSpan() as any)).resolves.toBeUndefined()
+
+      expect(onError).toHaveBeenCalledTimes(1)
+      expect(onError).toHaveBeenCalledWith(expect.any(Error), 'capture')
+    })
+
     it('reports flush failures through onError without throwing', async () => {
       const flushError = new Error('flush failed')
       mockClient.flush.mockRejectedValueOnce(flushError)
