@@ -324,13 +324,16 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
-        it('click followed by a selection change, not a dead click', () => {
+        it.each([
+            { scenario: 'selection change after click', clickTimestamp: 900, selectionTimestamp: 999 },
+            { scenario: 'selection change just before click', clickTimestamp: 950, selectionTimestamp: 900 },
+        ])('$scenario, not a dead click', ({ clickTimestamp, selectionTimestamp }) => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
-                timestamp: 900,
+                timestamp: clickTimestamp,
             })
-            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 999
+            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = selectionTimestamp
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
