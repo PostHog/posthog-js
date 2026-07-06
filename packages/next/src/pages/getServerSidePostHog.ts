@@ -4,34 +4,25 @@ import { getOrCreateNodeClient } from '../server/clientCache.node.js'
 import { cookieStoreFromHeader, readPostHogCookie, isOptedOut } from '../shared/cookie.js'
 import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
 import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.js'
+import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shared/identity.js'
 
 /**
- * Creates a PostHog server client scoped to the current request.
+ * Implementation behind `createPostHog().getServerSidePostHog` (Pages Router).
  *
  * Reads the user's identity from the PostHog cookie in request headers
  * and sets it as context via `enterContext()`. The returned client is
  * ready to use — methods like `getAllFlags()`, `getFeatureFlagResult()`,
  * and `capture()` automatically use the current user's identity.
  *
- * @param ctx - The Next.js GetServerSidePropsContext
- * @param apiKey - PostHog project API key. If omitted, reads from NEXT_PUBLIC_POSTHOG_KEY.
- * @param options - Optional posthog-node configuration
- *
- * @example
- * ```tsx
- * import { getServerSidePostHog } from '@posthog/next/pages'
- *
- * export const getServerSideProps: GetServerSideProps = async (ctx) => {
- *   const posthog = await getServerSidePostHog(ctx)
- *   const flags = await posthog.getAllFlagsAndPayloads()
- *   return { props: { posthogBootstrap: flags } }
- * }
- * ```
+ * When a `getDistinctId` resolver is provided, it receives the
+ * `GetServerSidePropsContext` and its result takes precedence over the
+ * client-provided identity. The resolver is never called for opted-out users.
  */
 export async function getServerSidePostHog(
     ctx: GetServerSidePropsContext,
     apiKey?: string,
-    options?: Partial<PostHogOptions>
+    options?: Partial<PostHogOptions>,
+    getDistinctId?: PostHogDistinctIdResolver
 ): Promise<IPostHog> {
     const resolvedApiKey = resolveApiKey(apiKey)
     const host = resolveHostOrDefault(options?.host)
@@ -47,7 +38,16 @@ export async function getServerSidePostHog(
     if (!isOptedOut(cookieStore, resolvedApiKey)) {
         const state = readPostHogCookie(cookieStore, resolvedApiKey)
         const tracing = readTracingHeaders(ctx.req.headers)
-        client.enterContext(buildContextData(tracing, state))
+        const contextData = buildContextData(tracing, state)
+
+        if (getDistinctId) {
+            const serverDistinctId = await resolveServerDistinctId(getDistinctId, ctx)
+            if (serverDistinctId) {
+                contextData.distinctId = serverDistinctId
+            }
+        }
+
+        client.enterContext(contextData)
     }
 
     return client

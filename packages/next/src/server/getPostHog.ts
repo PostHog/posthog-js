@@ -5,33 +5,26 @@ import { getOrCreateNodeClient } from './clientCache.node.js'
 import { readPostHogCookie, isOptedOut } from '../shared/cookie.js'
 import { resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
 import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.js'
+import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shared/identity.js'
 
 /**
- * Returns a PostHog server client scoped to the current request.
+ * Implementation behind `createPostHog().getPostHog` (App Router).
  *
- * Reads the user's identity from the PostHog cookie and returns a
- * request-scoped client. Methods like `getAllFlags()`, `getFeatureFlagResult()`,
- * and `capture()` automatically use the current user's identity.
+ * Builds request-scoped context from the PostHog cookie and tracing headers,
+ * so methods like `getAllFlags()` and `capture()` automatically use the
+ * current user's identity. Calls `cookies()` and `headers()` internally,
+ * which opts the route into dynamic rendering.
  *
- * Calls `cookies()` and `headers()` internally, which opts the route into dynamic rendering.
- *
- * @param apiKey - PostHog project API key. If omitted, reads from `NEXT_PUBLIC_POSTHOG_KEY`.
- * @param options - Optional `posthog-node` configuration (e.g., `{ host: '...' }`).
- * @returns A `posthog-node` client scoped to the current user.
- *
- * @example
- * ```ts
- * import { getPostHog } from '@posthog/next'
- *
- * export default async function Page() {
- *     const posthog = await getPostHog()
- *     const flags = await posthog.getAllFlags()
- *     posthog.capture({ event: 'page_viewed' })
- *     return <div>...</div>
- * }
- * ```
+ * When a `getDistinctId` resolver is provided, the server-resolved identity
+ * takes precedence over the client-provided one (cookie / tracing headers) —
+ * client identity is spoofable, so the server is the source of truth.
+ * The resolver is never called for opted-out users.
  */
-export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptions>): Promise<IPostHog> {
+export async function getRequestScopedPostHog(
+    apiKey?: string,
+    options?: Partial<PostHogOptions>,
+    getDistinctId?: PostHogDistinctIdResolver
+): Promise<IPostHog> {
     const resolvedApiKey = resolveApiKey(apiKey)
     const host = resolveHostOrDefault(options?.host)
     const resolvedOptions = { ...options, host }
@@ -51,6 +44,13 @@ export async function getPostHog(apiKey?: string, options?: Partial<PostHogOptio
     const headerStore = await headers()
     const tracing = readTracingHeaders(headerStore)
     const contextData = buildContextData(tracing, state)
+
+    if (getDistinctId) {
+        const serverDistinctId = await resolveServerDistinctId(getDistinctId)
+        if (serverDistinctId) {
+            contextData.distinctId = serverDistinctId
+        }
+    }
 
     // Wrap the shared client in a Proxy that applies request-scoped context
     // to every method call. We can't use enterContext() here because
