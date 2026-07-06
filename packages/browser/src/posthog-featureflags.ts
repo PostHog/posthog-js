@@ -40,7 +40,8 @@ import {
 import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
-import { isBrowserOnline, window } from './utils/globals'
+import { window } from './utils/globals'
+import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
@@ -725,23 +726,22 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _hasStatusZeroCircuitBreakerTripped(): boolean {
-        return this._consecutiveStatusZeroFailures >= MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES && isBrowserOnline()
+        return isStatusZeroFailureCircuitBreakerTripped(
+            this._consecutiveStatusZeroFailures,
+            MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES
+        )
     }
 
     private _trackStatusZeroReachability(statusCode: number): void {
-        if (statusCode === 0) {
-            if (isBrowserOnline()) {
-                this._consecutiveStatusZeroFailures++
-                if (this._consecutiveStatusZeroFailures === MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES) {
-                    logger.warn(
-                        'Feature flag requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped refreshing feature flags; will try again when connectivity changes.'
-                    )
-                }
-            }
-            return
-        }
-
-        this._consecutiveStatusZeroFailures = 0
+        this._consecutiveStatusZeroFailures = updateStatusZeroFailureCount(
+            statusCode,
+            this._consecutiveStatusZeroFailures,
+            MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES,
+            () =>
+                logger.warn(
+                    'Feature flag requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped refreshing feature flags; will try again when connectivity changes.'
+                )
+        )
     }
 
     /**
