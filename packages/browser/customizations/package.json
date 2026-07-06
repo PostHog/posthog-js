@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-customizations",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point exposing the optional posthog-js customizations (setAllPersonProfilePropertiesAsPersonPropertiesForFlags, before-send helpers, redux/kea loggers). ESM-only; consumed by bundlers via the `module` field.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/customizations"
+    },
+    "main": "../dist/customizations.js",
+    "module": "../dist/customizations.js",
+    "types": "../dist/customizations.d.ts"
+}
