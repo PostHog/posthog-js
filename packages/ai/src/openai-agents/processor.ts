@@ -17,7 +17,7 @@ import type {
   SpeechGroupSpanData,
   MCPListToolsSpanData,
 } from '@openai/agents-core'
-import { MAX_OUTPUT_SIZE, truncate, withPrivacyMode } from '../utils'
+import { MAX_OUTPUT_SIZE, toContentString, truncate, utf8ByteLength, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
@@ -43,9 +43,9 @@ function normalizeInputRoles(input: unknown): unknown {
   })
 }
 
-function safeString(value: unknown): string {
+function safeContentString(value: unknown): string {
   try {
-    return String(value)
+    return toContentString(value)
   } catch {
     return Object.prototype.toString.call(value)
   }
@@ -57,9 +57,9 @@ function ensureSerializable(obj: unknown): unknown {
   }
   try {
     const serializedValue = JSON.stringify(obj)
-    return serializedValue === undefined ? safeString(obj) : obj
+    return serializedValue === undefined ? safeContentString(obj) : obj
   } catch {
-    return safeString(obj)
+    return safeContentString(obj)
   }
 }
 
@@ -72,24 +72,15 @@ function stringifyForSizeCheck(value: unknown): string | null {
     return value
   }
 
-  const serializableValue = ensureSerializable(value)
-  if (serializableValue === null || serializableValue === undefined) {
-    return null
-  }
-  if (typeof serializableValue === 'string') {
-    return serializableValue
-  }
-
   try {
-    return JSON.stringify(serializableValue) ?? safeString(serializableValue)
+    return JSON.stringify(value) ?? safeContentString(value)
   } catch {
-    return safeString(serializableValue)
+    return safeContentString(value)
   }
 }
 
-function exceedsMaxOutputSize(value: unknown): boolean {
-  const serializedValue = stringifyForSizeCheck(value)
-  return serializedValue === null ? false : new TextEncoder().encode(serializedValue).length > MAX_OUTPUT_SIZE
+function exceedsMaxOutputSize(serializedValue: string | null): boolean {
+  return serializedValue === null ? false : utf8ByteLength(serializedValue) > MAX_OUTPUT_SIZE
 }
 
 function parseIsoTimestamp(isoStr: string | null | undefined): number | null {
@@ -110,7 +101,15 @@ interface TraceMetadata {
 }
 
 export type DistinctIdResolver = string | ((trace: Trace) => string | null | undefined)
-export type TracingProcessorErrorHandler = (error: unknown, context: string) => void
+export type TracingProcessorErrorContext =
+  | 'capture'
+  | 'onTraceStart'
+  | 'onTraceEnd'
+  | 'onSpanStart'
+  | 'onSpanEnd'
+  | 'shutdown'
+  | 'forceFlush'
+export type TracingProcessorErrorHandler = (error: unknown, context: TracingProcessorErrorContext) => void
 
 export interface PostHogTracingProcessorOptions {
   client: PostHog
@@ -181,7 +180,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
 
   private _prepareCapturedValue(value: unknown): unknown {
     const serializableValue = ensureSerializable(value)
-    const boundedValue = exceedsMaxOutputSize(serializableValue) ? truncate(serializableValue) : serializableValue
+    const serializedValue = stringifyForSizeCheck(serializableValue)
+    const boundedValue = exceedsMaxOutputSize(serializedValue) ? truncate(serializedValue) : serializableValue
     return this._withPrivacyMode(boundedValue)
   }
 
@@ -203,7 +203,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     }
   }
 
-  private _handleError(error: unknown, context: string): void {
+  private _handleError(error: unknown, context: TracingProcessorErrorContext): void {
     try {
       this._onError?.(error, context)
     } catch (handlerError) {
