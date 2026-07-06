@@ -1559,21 +1559,9 @@
     {
       "id": "ActionStepStringMatching",
       "name": "ActionStepStringMatching",
-      "properties": [
-        {
-          "type": "\"contains\"",
-          "name": "Contains"
-        },
-        {
-          "type": "\"exact\"",
-          "name": "Exact"
-        },
-        {
-          "type": "\"regex\"",
-          "name": "Regex"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof ActionStepStringMatching)[keyof typeof ActionStepStringMatching]"
     },
     {
       "id": "ActionStepType",
@@ -1620,7 +1608,7 @@
       "name": "BasicSurveyQuestion",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Open;\n}"
+      "example": "SurveyQuestionBase & {\n    type: typeof SurveyQuestionType.Open;\n}"
     },
     {
       "id": "BeforeSendFn_2",
@@ -1728,7 +1716,7 @@
       "name": "EndBranching",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.End;\n}"
+      "example": "{\n    type: typeof SurveyQuestionBranchingType.End;\n}"
     },
     {
       "id": "ErrorEventLike",
@@ -2059,7 +2047,7 @@
       "name": "LinkSurveyQuestion",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Link;\n    link?: string | null;\n}"
+      "example": "SurveyQuestionBase & {\n    type: typeof SurveyQuestionType.Link;\n    link?: string | null;\n}"
     },
     {
       "id": "Logger",
@@ -2119,14 +2107,14 @@
       "name": "MultipleSurveyQuestion",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice;\n    choices: string[];\n    hasOpenChoice?: boolean;\n    shuffleOptions?: boolean;\n    skipSubmitButton?: boolean;\n}"
+      "example": "SurveyQuestionBase & {\n    type: typeof SurveyQuestionType.SingleChoice | typeof SurveyQuestionType.MultipleChoice;\n    choices: string[];\n    hasOpenChoice?: boolean;\n    shuffleOptions?: boolean;\n    skipSubmitButton?: boolean;\n}"
     },
     {
       "id": "NextQuestionBranching",
       "name": "NextQuestionBranching",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.NextQuestion;\n}"
+      "example": "{\n    type: typeof SurveyQuestionBranchingType.NextQuestion;\n}"
     },
     {
       "id": "ObjectLike",
@@ -2480,7 +2468,7 @@
       "name": "RatingSurveyQuestion",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Rating;\n    display: SurveyRatingDisplay;\n    scale: 2 | 3 | 5 | 7 | 10;\n    lowerBoundLabel: string;\n    upperBoundLabel: string;\n    skipSubmitButton?: boolean;\n}"
+      "example": "SurveyQuestionBase & {\n    type: typeof SurveyQuestionType.Rating;\n    display: SurveyRatingDisplay;\n    scale: 2 | 3 | 5 | 7 | 10;\n    lowerBoundLabel: string;\n    upperBoundLabel: string;\n    skipSubmitButton?: boolean;\n}"
     },
     {
       "id": "RejectionLike",
@@ -2501,7 +2489,7 @@
       "name": "ResponseBasedBranching",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.ResponseBased;\n    responseValues: Record<string, any>;\n}"
+      "example": "{\n    type: typeof SurveyQuestionBranchingType.ResponseBased;\n    responseValues: Record<string, any>;\n}"
     },
     {
       "id": "RetriableOptions",
@@ -2562,7 +2550,7 @@
       "name": "SpecificQuestionBranching",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.SpecificQuestion;\n    index: number;\n}"
+      "example": "{\n    type: typeof SurveyQuestionBranchingType.SpecificQuestion;\n    index: number;\n}"
     },
     {
       "id": "StackFrame",
@@ -2657,7 +2645,7 @@
       "name": "Survey",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    id: string;\n    name: string;\n    description?: string;\n    type: SurveyType;\n    translations?: Record<string, SurveyTranslation>;\n    feature_flag_keys?: {\n        key: string;\n        value?: string;\n    }[];\n    linked_flag_key?: string;\n    targeting_flag_key?: string;\n    internal_targeting_flag_key?: string;\n    questions: SurveyQuestion[];\n    appearance?: SurveyAppearance;\n    conditions?: {\n        url?: string;\n        selector?: string;\n        seenSurveyWaitPeriodInDays?: number;\n        urlMatchType?: SurveyMatchType;\n        events?: {\n            repeatedActivation?: boolean;\n            values?: {\n                name: string;\n            }[];\n        };\n        actions?: {\n            values: SurveyActionType[];\n        };\n        deviceTypes?: string[];\n        deviceTypesMatchType?: SurveyMatchType;\n        linkedFlagVariant?: string;\n    };\n    start_date?: string;\n    end_date?: string;\n    current_iteration?: number;\n    current_iteration_start_date?: string;\n    schedule?: SurveySchedule;\n}"
+      "example": "{\n    id: string;\n    name: string;\n    description?: string;\n    type: SurveyType;\n    translations?: Record<string, SurveyTranslation>;\n    feature_flag_keys?: {\n        key: string;\n        value?: string;\n    }[];\n    linked_flag_key?: string;\n    targeting_flag_key?: string;\n    internal_targeting_flag_key?: string;\n    questions: SurveyQuestion[];\n    appearance?: SurveyAppearance;\n    conditions?: {\n        url?: string;\n        selector?: string;\n        seenSurveyWaitPeriodInDays?: number;\n        urlMatchType?: SurveyMatchType;\n        events?: {\n            repeatedActivation?: boolean;\n            values?: {\n                name: string;\n            }[];\n        };\n        actions?: {\n            values: SurveyActionType[];\n        };\n        deviceTypes?: string[];\n        deviceTypesMatchType?: SurveyMatchType;\n        linkedFlagVariant?: string;\n    };\n    start_date?: string;\n    end_date?: string;\n    current_iteration?: number | null;\n    current_iteration_start_date?: string | null;\n    schedule?: SurveySchedule | null;\n}"
     },
     {
       "id": "SurveyActionType",
@@ -2676,76 +2664,16 @@
     {
       "id": "SurveyMatchType",
       "name": "SurveyMatchType",
-      "properties": [
-        {
-          "type": "\"exact\"",
-          "name": "Exact"
-        },
-        {
-          "type": "\"icontains\"",
-          "name": "Icontains"
-        },
-        {
-          "type": "\"is_not\"",
-          "name": "IsNot"
-        },
-        {
-          "type": "\"not_icontains\"",
-          "name": "NotIcontains"
-        },
-        {
-          "type": "\"not_regex\"",
-          "name": "NotRegex"
-        },
-        {
-          "type": "\"regex\"",
-          "name": "Regex"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyMatchType)[keyof typeof SurveyMatchType]"
     },
     {
       "id": "SurveyPosition",
       "name": "SurveyPosition",
-      "properties": [
-        {
-          "type": "\"center\"",
-          "name": "Center"
-        },
-        {
-          "type": "\"left\"",
-          "name": "Left"
-        },
-        {
-          "type": "\"middle_center\"",
-          "name": "MiddleCenter"
-        },
-        {
-          "type": "\"middle_left\"",
-          "name": "MiddleLeft"
-        },
-        {
-          "type": "\"middle_right\"",
-          "name": "MiddleRight"
-        },
-        {
-          "type": "\"right\"",
-          "name": "Right"
-        },
-        {
-          "type": "\"top_center\"",
-          "name": "TopCenter"
-        },
-        {
-          "type": "\"top_left\"",
-          "name": "TopLeft"
-        },
-        {
-          "type": "\"top_right\"",
-          "name": "TopRight"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
     },
     {
       "id": "SurveyQuestion",
@@ -2764,40 +2692,16 @@
     {
       "id": "SurveyQuestionBranchingType",
       "name": "SurveyQuestionBranchingType",
-      "properties": [
-        {
-          "type": "\"end\"",
-          "name": "End"
-        },
-        {
-          "type": "\"next_question\"",
-          "name": "NextQuestion"
-        },
-        {
-          "type": "\"response_based\"",
-          "name": "ResponseBased"
-        },
-        {
-          "type": "\"specific_question\"",
-          "name": "SpecificQuestion"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
     },
     {
       "id": "SurveyQuestionDescriptionContentType",
       "name": "SurveyQuestionDescriptionContentType",
-      "properties": [
-        {
-          "type": "\"html\"",
-          "name": "Html"
-        },
-        {
-          "type": "\"text\"",
-          "name": "Text"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionDescriptionContentType)[keyof typeof SurveyQuestionDescriptionContentType]"
     },
     {
       "id": "SurveyQuestionTranslation",
@@ -2837,44 +2741,16 @@
     {
       "id": "SurveyQuestionType",
       "name": "SurveyQuestionType",
-      "properties": [
-        {
-          "type": "\"link\"",
-          "name": "Link"
-        },
-        {
-          "type": "\"multiple_choice\"",
-          "name": "MultipleChoice"
-        },
-        {
-          "type": "\"open\"",
-          "name": "Open"
-        },
-        {
-          "type": "\"rating\"",
-          "name": "Rating"
-        },
-        {
-          "type": "\"single_choice\"",
-          "name": "SingleChoice"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
     },
     {
       "id": "SurveyRatingDisplay",
       "name": "SurveyRatingDisplay",
-      "properties": [
-        {
-          "type": "\"emoji\"",
-          "name": "Emoji"
-        },
-        {
-          "type": "\"number\"",
-          "name": "Number"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyRatingDisplay)[keyof typeof SurveyRatingDisplay]"
     },
     {
       "id": "SurveyResponse",
@@ -2886,21 +2762,9 @@
     {
       "id": "SurveySchedule",
       "name": "SurveySchedule",
-      "properties": [
-        {
-          "type": "\"always\"",
-          "name": "Always"
-        },
-        {
-          "type": "\"once\"",
-          "name": "Once"
-        },
-        {
-          "type": "\"recurring\"",
-          "name": "Recurring"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
     },
     {
       "id": "SurveyTranslation",
@@ -2936,25 +2800,9 @@
     {
       "id": "SurveyType",
       "name": "SurveyType",
-      "properties": [
-        {
-          "type": "\"api\"",
-          "name": "API"
-        },
-        {
-          "type": "\"external_survey\"",
-          "name": "ExternalSurvey"
-        },
-        {
-          "type": "\"popover\"",
-          "name": "Popover"
-        },
-        {
-          "type": "\"widget\"",
-          "name": "Widget"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyType)[keyof typeof SurveyType]"
     },
     {
       "id": "SurveyValidationRule",
@@ -2978,36 +2826,16 @@
     {
       "id": "SurveyValidationType",
       "name": "SurveyValidationType",
-      "properties": [
-        {
-          "type": "\"max_length\"",
-          "name": "MaxLength"
-        },
-        {
-          "type": "\"min_length\"",
-          "name": "MinLength"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyValidationType)[keyof typeof SurveyValidationType]"
     },
     {
       "id": "SurveyWidgetType",
       "name": "SurveyWidgetType",
-      "properties": [
-        {
-          "type": "\"button\"",
-          "name": "Button"
-        },
-        {
-          "type": "\"selector\"",
-          "name": "Selector"
-        },
-        {
-          "type": "\"tab\"",
-          "name": "Tab"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
       "id": "UnsetPersonPropertiesMessage",
