@@ -24,6 +24,7 @@
 - [ ] @posthog/next
 - [ ] @posthog/nextjs-config
 - [ ] @posthog/nuxt
+- [ ] @posthog/openfeature-web-provider
 - [ ] @posthog/rollup-plugin
 - [ ] @posthog/webpack-plugin
 - [ ] @posthog/types

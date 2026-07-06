@@ -25,6 +25,7 @@ Please see the main [PostHog docs](https://posthog.com/docs).
 - [@posthog/convex](./packages/convex/README.md)
 - [@posthog/nextjs-config](./packages/nextjs-config/README.md)
 - [@posthog/nuxt](./packages/nuxt/README.md)
+- [@posthog/openfeature-web-provider](./packages/openfeature-web-provider/README.md)
 - [@posthog/plugin-utils](./packages/plugin-utils/README.md)
 - [@posthog/rollup-plugin](./packages/rollup-plugin/README.md)
 - [@posthog/types](./packages/types/README.md)
