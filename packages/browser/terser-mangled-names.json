@@ -306,6 +306,7 @@
         "_isPollingMessages",
         "_isPollingTickets",
         "_isPostHogException",
+        "_isPostHogRequestTimeout",
         "_isPreviewMode",
         "_isProductToursFeatureFlagEnabled",
         "_isRecordingEnabled",
