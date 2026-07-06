@@ -792,6 +792,96 @@ describe('ConversationsManager', () => {
 
             expect(mockPosthog._send_request).not.toHaveBeenCalled()
         })
+
+        describe('status 0 circuit breaker', () => {
+            let nextStatusCode = 200
+
+            const pollWith = async (statusCode: number) => {
+                nextStatusCode = statusCode
+                await act(async () => {
+                    await manager['_poll']()
+                })
+            }
+
+            const setOnline = (value: boolean) => {
+                Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
+            }
+
+            beforeEach(() => {
+                nextStatusCode = 200
+                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                    options.callback({
+                        statusCode: nextStatusCode,
+                        json: nextStatusCode === 200 ? createMockGetMessagesResponse() : null,
+                    })
+                })
+            })
+
+            afterEach(() => {
+                delete (window.navigator as any).onLine
+            })
+
+            it('stops polling after 3 consecutive online status-0 failures', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+            })
+
+            it('also gates direct polling entrypoints after the breaker trips', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+
+                await act(async () => {
+                    await manager['_pollMessages']()
+                    await manager['_pollTickets']()
+                })
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+            })
+
+            it('resets the polling status-0 budget after any HTTP response', async () => {
+                await pollWith(0)
+                await pollWith(0)
+                await pollWith(500)
+                await pollWith(0)
+                await pollWith(0)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(6)
+            })
+
+            it('does not count status-0 failures while the browser reports itself offline', async () => {
+                setOnline(false)
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                setOnline(true)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+            })
+
+            it('reopens polling on the online event', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                await pollWith(0)
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+
+                window.dispatchEvent(new Event('online'))
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+            })
+        })
     })
 
     describe('identify handling', () => {
