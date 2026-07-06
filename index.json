@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3810": {
+    "key": "PostHog/posthog-js/issue/3810",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3810",
+    "url": "https://github.com/PostHog/posthog-js/issues/3810",
+    "conclusion": "Valid React Native mobile feature request; RN currently only wires network timing/telemetry, not network request/response bodies.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/mobile",
+      "team/logs"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-06T09:48:08.415Z"
+  },
   "PostHog/posthog-js/issue/3811": {
     "key": "PostHog/posthog-js/issue/3811",
     "repo": "PostHog/posthog-js",
