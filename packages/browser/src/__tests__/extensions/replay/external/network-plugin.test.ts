@@ -430,6 +430,78 @@ describe('network plugin', () => {
                 })
             })
         })
+
+        describe('instrumentation failures degrade gracefully', () => {
+            // instrumentation runs before we delegate to the host's open/fetch, so if it throws we must
+            // not let the exception escape and misattribute a failure to session replay
+            const OriginalRequest = global.Request
+
+            afterEach(() => {
+                global.Request = OriginalRequest
+            })
+
+            it('XHR open still delegates to the host when Request construction throws', () => {
+                jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const { mockWindow } = createMockWindow()
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                    const openCalls: any[] = []
+                    mockWindow.XMLHttpRequest.prototype.open = function (...args: any[]) {
+                        openCalls.push(args)
+                    }
+
+                    global.Request = class {
+                        constructor() {
+                            throw new Error('InvalidMethod')
+                        }
+                    } as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    const xhr = new mockWindow.XMLHttpRequest()
+                    expect(() => xhr.open('GET', 'https://example.com')).not.toThrow()
+
+                    // the host's original open still ran with the original arguments
+                    expect(openCalls).toHaveLength(1)
+                    expect(openCalls[0][0]).toBe('GET')
+                    expect(openCalls[0][1]).toBe('https://example.com')
+                })
+            })
+
+            it('fetch still delegates to the host when Request construction throws', async () => {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                let fetchCallCount = 0
+                const sentinelResponse = { sentinel: true }
+                mockWindow.fetch = async () => {
+                    fetchCallCount++
+                    return sentinelResponse
+                }
+
+                let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
+                jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+                    patchedFetch = mockWindow.fetch
+                })
+
+                global.Request = class {
+                    constructor() {
+                        throw new Error('InvalidMethod')
+                    }
+                } as any
+
+                // the wrapper must not throw and the host's original fetch must still run
+                await expect(patchedFetch('https://example.com')).resolves.toBe(sentinelResponse)
+                expect(fetchCallCount).toBe(1)
+            })
+        })
     })
 
     describe('_tryReadBodyStreaming', () => {
