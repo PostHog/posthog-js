@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.396.7
+
+### Patch Changes
+
+- [#4080](https://github.com/PostHog/posthog-js/pull/4080) [`08cd27b`](https://github.com/PostHog/posthog-js/commit/08cd27bfd602ab378b2e48833ddf837abffbd8c2) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(web): stop repeatedly hitting blocked feature flag and conversations polling endpoints after consecutive status-0 failures
+  (2026-07-06)
+
 ## 1.396.6
 
 ### Patch Changes
