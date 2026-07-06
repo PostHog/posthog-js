@@ -16,3 +16,4 @@ export {
   getLanguageFromStoredPersonProperties,
   normalizeLanguageCode,
 } from './translations'
+export { canSurveyActivateRepeatedly, doesSurveyActivateByEvent, getSurveyStorageKey } from './state'

@@ -10,8 +10,8 @@ import {
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
   SurveyMatchType,
-  SurveySchedule,
 } from '@posthog/core'
+import { canSurveyActivateRepeatedly, doesSurveyActivateByEvent, getSurveyStorageKey } from '@posthog/core/surveys'
 
 // Extended operator type to include numeric operators not in core SurveyMatchType
 export type PropertyOperator = SurveyMatchType | 'gt' | 'lt'
@@ -215,7 +215,7 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
 }
 
 export const hasEvents = (survey: Survey): boolean => {
-  return survey.conditions?.events?.values !== undefined && survey.conditions.events.values.length > 0
+  return doesSurveyActivateByEvent(survey)
 }
 
 // export const hasActions = (survey: Survey): boolean => {
@@ -223,18 +223,13 @@ export const hasEvents = (survey: Survey): boolean => {
 // }
 
 export const canActivateRepeatedly = (survey: Survey): boolean => {
-  return (
-    !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) || survey.schedule === SurveySchedule.Always
-  )
+  return canSurveyActivateRepeatedly(survey)
 }
 
-// Mirrors the web SDK's seen-key logic: keying by iteration lets a repeating survey
-// show again on this device when a new iteration starts.
+// Keying by iteration (shared with the web SDK) lets a repeating survey show again
+// on this device when a new iteration starts. No prefix: keys live in a dedicated list.
 export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
-  if (survey.current_iteration && survey.current_iteration > 0) {
-    return `${survey.id}_${survey.current_iteration}`
-  }
-  return survey.id
+  return getSurveyStorageKey('', survey)
 }
 
 /**
