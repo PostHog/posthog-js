@@ -47,7 +47,7 @@
     "@edge-runtime/jest-environment": "^4.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
-    "@types/express": "^5.0.5",
+    "@types/express": "^5.0.6",
     "@types/jest": "catalog:",
     "@types/node": "^20.0.0",
     "jest": "catalog:",
