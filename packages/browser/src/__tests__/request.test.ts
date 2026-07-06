@@ -438,7 +438,7 @@ describe('request', () => {
                     true,
                     '&compression=base64',
                 ],
-                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, ''],
+                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, '&_=1700000000000'],
                 ['never keepalive with large JSON POST', 'POST', veryLargeBodyData, undefined, false, ''],
                 ['never keepalive with large GZIP POST', 'POST', veryLargeBodyData, Compression.GZipJS, false, ''],
                 [
@@ -470,7 +470,7 @@ describe('request', () => {
                         })
                     )
                     expect(mockedFetch).toHaveBeenCalledWith(
-                        `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000${expectedURLParams}`,
+                        `https://any.posthog-instance.com?ver=1.23.45${expectedURLParams}`,
                         expect.objectContaining({
                             headers: new Headers(),
                             keepalive: expectedKeepAlive,
@@ -641,7 +641,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000',
+                    'https://any.posthog-instance.com/',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -667,7 +667,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&compression=base64',
+                    'https://any.posthog-instance.com/?compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -693,7 +693,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000',
+                    'https://any.posthog-instance.com/',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob

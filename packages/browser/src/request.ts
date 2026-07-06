@@ -368,15 +368,24 @@ const _sendBeacon = (options: RequestWithOptions) => {
     }
 }
 
-const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
-    return extendURLParams(url, {
-        _: new Date().getTime().toString(),
-        // Gzip is self-describing via its magic-byte header, so the capture endpoint detects it
-        // (and base64, on legacy paths) without this hint — sending `compression` for gzip is
-        // redundant. Omit it for gzip (the default) to keep the URL minimal; non-gzip codecs
-        // (base64) still need the hint on non-legacy endpoints such as session replay.
-        ...(compression && compression !== Compression.GZipJS ? { compression } : {}),
-    })
+const buildRequestURL = (
+    url: string,
+    method: RequestWithOptions['method'],
+    compression?: RequestWithOptions['compression']
+): string => {
+    const params: Record<string, string> = {}
+    // The cache-buster only matters for GET requests; POSTs aren't cached, so skip it there.
+    if (method !== 'POST') {
+        params._ = new Date().getTime().toString()
+    }
+    // Gzip is self-describing via its magic-byte header, so the capture endpoint detects it
+    // (and base64, on legacy paths) without this hint — sending `compression` for gzip is
+    // redundant. Omit it for gzip (the default) to keep the URL minimal; non-gzip codecs
+    // (base64) still need the hint on non-legacy endpoints such as session replay.
+    if (compression && compression !== Compression.GZipJS) {
+        params.compression = compression
+    }
+    return Object.keys(params).length ? extendURLParams(url, params) : url
 }
 
 const AVAILABLE_TRANSPORTS: {
@@ -412,7 +421,7 @@ export const request = (_options: RequestWithOptions) => {
     const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
 
-    options.url = buildRequestURL(options.url, options.compression)
+    options.url = buildRequestURL(options.url, options.method, options.compression)
 
     const transport = options.transport ?? 'fetch'
 
@@ -448,7 +457,7 @@ export const request = (_options: RequestWithOptions) => {
                     transportMethod({
                         ...options,
                         compression: undefined,
-                        url: buildRequestURL(_options.url, undefined),
+                        url: buildRequestURL(_options.url, _options.method, undefined),
                     })
                     return
                 }
