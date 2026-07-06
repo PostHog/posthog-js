@@ -1374,6 +1374,58 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
   })
 
+  describe('responses.stream()', () => {
+    conditionalTest('captures $ai_generation event with posthog params via responses.stream()', async () => {
+      const responseCompletedChunk = {
+        type: 'response.completed',
+        response: {
+          id: 'resp-stream-test',
+          model: 'gpt-4o',
+          status: 'completed',
+          output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello!' }] }],
+          usage: { input_tokens: 10, output_tokens: 5, output_tokens_details: { reasoning_tokens: 0 }, input_tokens_details: { cached_tokens: 0 } },
+        },
+      }
+
+      const mockStream = {
+        [Symbol.asyncIterator]: () => {
+          const chunks = [responseCompletedChunk]
+          let i = 0
+          return { next: async () => i < chunks.length ? { value: chunks[i++], done: false } : { value: undefined, done: true } }
+        },
+        finalResponse: jest.fn().mockResolvedValue({
+          id: 'resp-stream-test',
+          model: 'gpt-4o',
+          status: 'completed',
+          output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello!' }] }],
+          usage: { input_tokens: 10, output_tokens: 5, output_tokens_details: { reasoning_tokens: 0 }, input_tokens_details: { cached_tokens: 0 } },
+        }),
+      }
+
+      const ResponsesMock: any = openaiModule.Responses
+      ResponsesMock.prototype.stream = jest.fn().mockReturnValue(mockStream)
+
+      const runner = client.responses.stream({
+        model: 'gpt-4o',
+        input: 'Hello',
+        posthogDistinctId: 'test-stream-user',
+      } as any)
+
+      for await (const _ of runner) { /* consume */ }
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const { distinctId, event, properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(distinctId).toBe('test-stream-user')
+      expect(event).toBe('$ai_generation')
+      expect(properties['$ai_provider']).toBe('openai')
+      expect(properties['$ai_model']).toBe('gpt-4o')
+      expect(properties['$ai_input_tokens']).toBe(10)
+      expect(properties['$ai_output_tokens']).toBe(5)
+      expect(properties['$ai_completion_id']).toBe('resp-stream-test')
+    })
+  })
+
   describe('Embeddings', () => {
     conditionalTest('basic embeddings', async () => {
       const response = await client.embeddings.create({
