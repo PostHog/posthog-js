@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.396.8
+
+### Patch Changes
+
+- [#4062](https://github.com/PostHog/posthog-js/pull/4062) [`2af0026`](https://github.com/PostHog/posthog-js/commit/2af002652afd87401e299a18295da08443753e89) Thanks [@posthog](https://github.com/apps/posthog)! - fix(web): prevent an infinite-recursion stack overflow in the logs console capture. The console wrapper's own capture path can emit internal debug lines through PostHog's logger, which wrote back to the wrapped console and re-entered capture until the stack blew (`RangeError: Maximum call stack size exceeded`). The wrapper now exposes the original console method via `__rrweb_original__` (so the internal logger bypasses it) and guards against re-entrancy from any code that logs mid-capture.
+  (2026-07-06)
+
 ## 1.396.7
 
 ### Patch Changes
