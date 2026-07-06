@@ -214,13 +214,21 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
 }
 
 /**
+ * Prefix of the message on the `Error` we use as the abort reason for our own request timeouts.
+ * It is intentionally identifiable ("PostHog request timed out ...") so exception autocapture can
+ * recognise and drop these benign, self-inflicted aborts without touching genuine host-app
+ * `AbortError`s. See `PostHogExceptions._isPostHogRequestTimeout`.
+ */
+export const REQUEST_TIMED_OUT_MESSAGE_PREFIX = 'PostHog request timed out'
+
+/**
  * Builds the reason used when aborting a fetch because our own request timeout elapsed.
  * It keeps `name === 'AbortError'` (so callers that detect timeouts by error name keep working)
  * but carries a descriptive message, so it is never a reason-less
  * `signal is aborted without reason` exception.
  */
 const timeoutAbortReason = (timeout?: number): Error => {
-    const reason = new Error(`PostHog request timed out${timeout ? ` after ${timeout}ms` : ''}`)
+    const reason = new Error(`${REQUEST_TIMED_OUT_MESSAGE_PREFIX}${timeout ? ` after ${timeout}ms` : ''}`)
     reason.name = 'AbortError'
     return reason
 }
@@ -354,8 +362,11 @@ const _fetch = (options: RequestWithOptions) => {
             // just after the timeout is never mislabelled.
             if (timedOut && (error as Error)?.name === 'AbortError') {
                 // Our own request timeout is an expected, intentional abort (the request queue
-                // retries), not a genuine failure - so log it at `warn` rather than `error`. This
-                // also keeps it out of error tracking's console-error capture as an exception.
+                // retries), not a genuine failure - so log it at `warn` rather than `error`.
+                // NB: the log level does not gate exception autocapture (the posthog logger is a
+                // no-op unless debug is enabled). These aborts are kept out of error tracking by an
+                // explicit filter keyed off the identifiable abort reason - see
+                // `REQUEST_TIMED_OUT_MESSAGE_PREFIX` and `PostHogExceptions._isPostHogRequestTimeout`.
                 logger.warn(error)
             } else {
                 logger.error(error)

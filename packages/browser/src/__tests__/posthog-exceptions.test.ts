@@ -214,6 +214,39 @@ describe('PostHogExceptions', () => {
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })
         })
+
+        describe('PostHog request timeouts', () => {
+            it('drops our own benign request timeout aborts', () => {
+                const exception = { type: 'AbortError', value: 'PostHog request timed out after 60000ms' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalled()
+            })
+
+            it('drops our own request timeout aborts even without a specific timeout in the message', () => {
+                const exception = { type: 'AbortError', value: 'PostHog request timed out' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalled()
+            })
+
+            it('captures genuine host-app AbortErrors', () => {
+                const exception = { type: 'AbortError', value: 'The user aborted a request.' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures non-AbortError exceptions that mention a timed-out request', () => {
+                const exception = { type: 'TypeError', value: 'PostHog request timed out after 60000ms' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures our own request timeout aborts when __capturePostHogExceptions is enabled', () => {
+                config.error_tracking.__capturePostHogExceptions = true
+                const exception = { type: 'AbortError', value: 'PostHog request timed out after 60000ms' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+        })
     })
 
     describe('exception steps', () => {

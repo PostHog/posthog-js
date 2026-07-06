@@ -3,6 +3,7 @@ import { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
+import { REQUEST_TIMED_OUT_MESSAGE_PREFIX } from './request'
 import { propertyComparisons } from './utils/property-utils'
 import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
 
@@ -125,13 +126,18 @@ export class PostHogExceptions implements Extension {
                     return
                 }
 
-                if (
-                    !this._instance.config.error_tracking.__capturePostHogExceptions &&
-                    this._isPostHogException(exceptionList)
-                ) {
-                    this._addDroppedExceptionStep('Exception dropped: thrown by the PostHog SDK')
-                    logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
-                    return
+                if (!this._instance.config.error_tracking.__capturePostHogExceptions) {
+                    if (this._isPostHogException(exceptionList)) {
+                        this._addDroppedExceptionStep('Exception dropped: thrown by the PostHog SDK')
+                        logger.info('Skipping exception capture because it was thrown by the PostHog SDK')
+                        return
+                    }
+
+                    if (this._isPostHogRequestTimeout(exceptionList)) {
+                        this._addDroppedExceptionStep('Exception dropped: PostHog request timeout')
+                        logger.info('Skipping exception capture because it is a benign PostHog request timeout')
+                        return
+                    }
                 }
             }
 
@@ -248,6 +254,20 @@ export class PostHogExceptions implements Extension {
         }
 
         return false
+    }
+
+    // posthog-js aborts its own in-flight requests once our request timeout elapses (see
+    // `request.ts`). That abort surfaces as an `AbortError` carrying an identifiable message, is
+    // expected, and is already handled gracefully (the request queue retries, the feature-flag path
+    // maps it to a timeout). Recognise it by that reason so we drop only our own benign timeouts and
+    // let genuine host-app `AbortError`s through.
+    private _isPostHogRequestTimeout(exceptionList: ErrorTracking.ExceptionList): boolean {
+        return exceptionList.some(
+            (exception) =>
+                exception.type === 'AbortError' &&
+                isString(exception.value) &&
+                exception.value.indexOf(REQUEST_TIMED_OUT_MESSAGE_PREFIX) !== -1
+        )
     }
 
     private _isExceptionList(candidate: unknown): candidate is ErrorTracking.ExceptionList {
