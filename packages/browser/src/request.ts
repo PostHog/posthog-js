@@ -1,7 +1,7 @@
 import { each, find } from './utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
-import { formDataToQuery, getQueryParam } from './utils/request-utils'
+import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
 import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } from './utils/globals'
@@ -34,22 +34,6 @@ const SIXTY_FOUR_KILOBYTES = 64 * 1024
 */
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
 let nativeAsyncGzipDisabled = false
-
-const removeURLParam = (url: string, param: string): string => {
-    const [urlWithoutHash, hash] = url.split('#')
-    const [baseUrl, search] = urlWithoutHash.split('?')
-
-    if (!search) {
-        return url
-    }
-
-    const updatedSearch = search
-        .split('&')
-        .filter((pair) => pair.split('=')[0] !== param)
-        .join('&')
-
-    return `${baseUrl}${updatedSearch ? `?${updatedSearch}` : ''}${hash ? `#${hash}` : ''}`
-}
 
 type EncodedBody = {
     contentType: string
@@ -144,7 +128,7 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
     const fallbackToUncompressed = (): EncodedRequest => {
         return {
-            url: removeURLParam(options.url, 'compression'),
+            url: options.url,
             encodedBody: encodePostData({
                 ...options,
                 compression: undefined,
@@ -157,7 +141,7 @@ const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest =
     try {
         encodedBody = encodePostData(options)
     } catch (error) {
-        if (isGzipRequest(options.compression, getQueryParam(options.url, 'compression'))) {
+        if (isGzipRequest(options.compression)) {
             logger.error('Failed to gzip request body, sending uncompressed payload', error)
             return fallbackToUncompressed()
         }
@@ -165,11 +149,7 @@ const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest =
         throw error
     }
 
-    if (
-        !encodedBody ||
-        !isGzipRequest(options.compression, getQueryParam(options.url, 'compression')) ||
-        isGzipData(encodedBody.body)
-    ) {
+    if (!encodedBody || !isGzipRequest(options.compression) || isGzipData(encodedBody.body)) {
         return { url: options.url, encodedBody }
     }
 
@@ -391,8 +371,11 @@ const _sendBeacon = (options: RequestWithOptions) => {
 const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
     return extendURLParams(url, {
         _: new Date().getTime().toString(),
-        ver: Config.JS_SDK_VERSION,
-        compression,
+        // Gzip is self-describing via its magic-byte header, so the capture endpoint detects it
+        // (and base64, on legacy paths) without this hint — sending `compression` for gzip is
+        // redundant. Omit it for gzip (the default) to keep the URL minimal; non-gzip codecs
+        // (base64) still need the hint on non-legacy endpoints such as session replay.
+        ...(compression && compression !== Compression.GZipJS ? { compression } : {}),
     })
 }
 
