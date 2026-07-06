@@ -586,6 +586,25 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_span_type).toBe('custom')
       expect(call.properties.$ai_custom_data).toEqual({ query: 'SELECT * FROM users', rows: 100 })
     })
+
+    it('stringifies custom span data when JSON serialization fails', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'custom',
+          name: 'unserializable_payload',
+          data: {
+            toJSON() {
+              throw new Error('Cannot serialize')
+            },
+          },
+        },
+      })
+
+      await expect(processor.onSpanEnd(span as any)).resolves.toBeUndefined()
+
+      const call = mockClient.capture.mock.calls[0][0]
+      expect(call.properties.$ai_custom_data).toBe('[object Object]')
+    })
   })
 
   describe('response spans', () => {
@@ -952,6 +971,20 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$ai_latency).toBeCloseTo(2.0, 1)
+    })
+
+    it('ignores invalid runtime timestamp values', async () => {
+      const span = createMockSpan({
+        spanData: { type: 'generation', model: 'gpt-4o' },
+        startedAt: Symbol('invalid') as any,
+        endedAt: '2024-01-01T00:00:02.000Z',
+      })
+
+      // Don't call onSpanStart to skip recording start time
+      await expect(processor.onSpanEnd(span as any)).resolves.toBeUndefined()
+
+      const call = mockClient.capture.mock.calls[0][0]
+      expect(call.properties.$ai_latency).toBe(0)
     })
   })
 
