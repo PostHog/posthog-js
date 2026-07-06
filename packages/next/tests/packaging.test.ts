@@ -24,6 +24,7 @@ interface SubpathExports {
     worker?: string
     browser?: string
     'react-server'?: string
+    node?: string
     default?: string
 }
 interface PackageJson {
@@ -50,6 +51,7 @@ describe('package.json#exports routing', () => {
         expect(pages.edge).toBe('./dist/pages.edge.js')
         expect(pages.worker).toBe('./dist/pages.edge.js')
         expect(pages['react-server']).toBe('./dist/pages.js')
+        expect(pages.node).toBe('./dist/pages.js')
         expect(pages.default).toBe('./dist/pages.client.js')
     })
 
@@ -143,9 +145,9 @@ describeIfBuilt('Transitive import closure of each built barrel', () => {
     // in. If they stop doing so, the server-side API has likely lost the
     // intended functionality (e.g. a re-export was accidentally dropped).
     it.each([
-        ['pages.js', { 'server-only': true, 'posthog-node': true, 'posthog-node/edge': false }],
+        ['pages.js', { 'server-only': false, 'posthog-node': true, 'posthog-node/edge': false }],
         ['index.js', { 'server-only': true, 'posthog-node': true, 'posthog-node/edge': false }],
-        ['pages.edge.js', { 'server-only': true, 'posthog-node': false, 'posthog-node/edge': false }],
+        ['pages.edge.js', { 'server-only': false, 'posthog-node': false, 'posthog-node/edge': false }],
         ['server.edge.js', { 'server-only': false, 'posthog-node': true, 'posthog-node/edge': false }],
     ])('server/edge barrel %s keeps the expected bare imports', (file, expected) => {
         const imports = bareImportsReachableFrom(path.join(DIST_DIR, file))
