@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3809": {
+    "key": "PostHog/posthog-js/issue/3809",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3809",
+    "url": "https://github.com/PostHog/posthog-js/issues/3809",
+    "conclusion": "Already implemented in React Native autocapture",
+    "labels": [
+      "enhancement",
+      "feature/autocapture",
+      "react-native",
+      "feature/mobile"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-06T09:49:12.033Z"
+  },
   "PostHog/posthog-js/issue/3810": {
     "key": "PostHog/posthog-js/issue/3810",
     "repo": "PostHog/posthog-js",
