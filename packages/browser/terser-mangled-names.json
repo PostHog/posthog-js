@@ -263,7 +263,6 @@
         "_hasLoggedDeprecationWarning",
         "_hasPassedMinimumDuration",
         "_hasPersonProcessing",
-        "_hasPollingCircuitBreakerTripped",
         "_hasProcessedRestoreToken",
         "_hasQueuedRecords",
         "_hasStatusZeroCircuitBreakerTripped",

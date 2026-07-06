@@ -764,7 +764,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Poll for new messages
      */
     private _pollMessages = async (): Promise<void> => {
-        if (this._isPollingMessages || !this._currentTicketId || this._hasPollingCircuitBreakerTripped()) {
+        if (
+            this._isPollingMessages ||
+            !this._currentTicketId ||
+            isStatusZeroFailureCircuitBreakerTripped(
+                this._consecutivePollingStatusZeroFailures,
+                MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES
+            )
+        ) {
             return
         }
 
@@ -780,7 +787,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Poll for tickets list
      */
     private _pollTickets = async (): Promise<void> => {
-        if (this._isPollingTickets || this._hasPollingCircuitBreakerTripped()) {
+        if (
+            this._isPollingTickets ||
+            isStatusZeroFailureCircuitBreakerTripped(
+                this._consecutivePollingStatusZeroFailures,
+                MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES
+            )
+        ) {
             return
         }
 
@@ -868,13 +881,6 @@ export class ConversationsManager implements ConversationsManagerInterface {
         } else {
             await this._pollTickets()
         }
-    }
-
-    private _hasPollingCircuitBreakerTripped(): boolean {
-        return isStatusZeroFailureCircuitBreakerTripped(
-            this._consecutivePollingStatusZeroFailures,
-            MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES
-        )
     }
 
     private _trackPollingEndpointReachability(statusCode: number): void {
