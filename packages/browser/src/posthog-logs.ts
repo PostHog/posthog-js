@@ -16,6 +16,7 @@ import { addEventListener } from './utils'
 import { createLogger } from './utils/logger'
 import { Extension } from './extensions/types'
 import { resolveLogsConfig } from './logs-defaults'
+import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
 
 const LOGS_ENDPOINT = '/i/v1/logs'
 // OTLP instrumentation-scope name for console auto-capture, distinguishing it from
@@ -252,8 +253,10 @@ export class PostHogLogs implements Extension {
         // eslint-disable-next-line compat/compat
         return new Promise((resolve) => {
             if (
-                this._consecutiveStatusZeroFailures >= MAX_CONSECUTIVE_STATUS_ZERO_FAILURES &&
-                this._isBrowserOnline()
+                isStatusZeroFailureCircuitBreakerTripped(
+                    this._consecutiveStatusZeroFailures,
+                    MAX_CONSECUTIVE_STATUS_ZERO_FAILURES
+                )
             ) {
                 // Tripped: drop the batch without touching the network. `fatal`
                 // advances the queue so records don't pile up while blocked.
@@ -310,34 +313,25 @@ export class PostHogLogs implements Extension {
         })
     }
 
-    // Returns true when the browser reports itself online (`navigator.onLine`
-    // missing counts as online). Returns false when the browser is explicitly
-    // offline — genuine network loss, not a blocker — or when there is no
-    // `window` at all: no `window` means no `online` event listener either
-    // (constructor), so a tripped breaker could never reopen.
-    private _isBrowserOnline(): boolean {
-        return !!(window && window.navigator.onLine !== false)
-    }
-
     // Feeds the status-0 circuit breaker checked at the top of `_sendLogsBatch`.
     private _trackEndpointReachability(statusCode: number): void {
-        if (statusCode === 0) {
-            // Before `init` completes, `_send_request` synthesizes `{ statusCode: 0 }`
-            // without any network attempt (the `fireCallbackOnDrop` path), so only
-            // post-load failures count — a deferred init must not arrive to an
-            // already-tripped breaker. `__loaded` flips on init, not on a successful
-            // request, so a blocked-from-the-start page still trips as intended.
-            if (this._instance.__loaded && this._isBrowserOnline()) {
-                this._consecutiveStatusZeroFailures++
-                if (this._consecutiveStatusZeroFailures === MAX_CONSECUTIVE_STATUS_ZERO_FAILURES) {
-                    this._logger.warn(
-                        'Log requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped sending logs; will try again when connectivity changes.'
-                    )
-                }
-            }
-        } else {
-            this._consecutiveStatusZeroFailures = 0
+        // Before `init` completes, `_send_request` synthesizes `{ statusCode: 0 }`
+        // without any network attempt (the `fireCallbackOnDrop` path), so only
+        // post-load failures count — a deferred init must not arrive to an
+        // already-tripped breaker. `__loaded` flips on init, not on a successful
+        // request, so a blocked-from-the-start page still trips as intended.
+        if (statusCode === 0 && !this._instance.__loaded) {
+            return
         }
+        this._consecutiveStatusZeroFailures = updateStatusZeroFailureCount(
+            statusCode,
+            this._consecutiveStatusZeroFailures,
+            MAX_CONSECUTIVE_STATUS_ZERO_FAILURES,
+            () =>
+                this._logger.warn(
+                    'Log requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped sending logs; will try again when connectivity changes.'
+                )
+        )
     }
 
     // Drains both the programmatic and console queues over the given transport.
