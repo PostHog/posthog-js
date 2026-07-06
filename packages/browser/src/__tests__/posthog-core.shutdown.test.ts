@@ -34,6 +34,14 @@ describe('shutdown()', () => {
         expect(retryQueueUnload).toHaveBeenCalledTimes(1)
     })
 
+    it('destroys feature flags listeners', async () => {
+        const featureFlagsDestroy = jest.spyOn(instance.featureFlags!, 'destroy')
+
+        await instance.shutdown()
+
+        expect(featureFlagsDestroy).toHaveBeenCalledTimes(1)
+    })
+
     it('does not throw when called before the client has loaded', async () => {
         const uninitialized = new PostHog()
 
