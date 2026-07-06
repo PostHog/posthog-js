@@ -354,6 +354,35 @@ describe('getActiveMatchingSurveys', () => {
 
       expect(result).toHaveLength(0)
     })
+
+    it('should include repeating surveys seen in a previous iteration', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'repeating-survey',
+          schedule: SurveySchedule.Recurring,
+          current_iteration: 2,
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, ['repeating-survey_1'], mockActivatedSurveys)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('repeating-survey')
+    })
+
+    it('should exclude repeating surveys already seen in the current iteration', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'repeating-survey',
+          schedule: SurveySchedule.Recurring,
+          current_iteration: 2,
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, ['repeating-survey_2'], mockActivatedSurveys)
+
+      expect(result).toHaveLength(0)
+    })
   })
 
   describe('Linked flag filtering', () => {

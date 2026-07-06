@@ -4,7 +4,8 @@ import { usePostHog } from '../hooks/usePostHog'
 
 type SurveyStorage = {
   seenSurveys: string[]
-  setSeenSurvey: (surveyId: string) => void
+  // Keys come from getSurveySeenKey — survey ID, iteration-suffixed for repeating surveys
+  setSeenSurvey: (surveyKey: string) => void
   lastSeenSurveyDate: Date | undefined
   setLastSeenSurveyDate: (date: Date) => void
 }
@@ -34,10 +35,10 @@ export function useSurveyStorage(): SurveyStorage {
   return {
     seenSurveys,
     setSeenSurvey: useCallback(
-      (surveyId: string) => {
+      (surveyKey: string) => {
         setSeenSurveys((current) => {
           // To keep storage bounded, only keep the last 20 seen surveys
-          const newValue = [surveyId, ...current.filter((id) => id !== surveyId)]
+          const newValue = [surveyKey, ...current.filter((key) => key !== surveyKey)]
           posthogStorage.setPersistedProperty(
             PostHogPersistedProperty.SurveysSeen,
             JSON.stringify(newValue.slice(0, 20))

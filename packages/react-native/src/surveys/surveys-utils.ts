@@ -228,6 +228,15 @@ export const canActivateRepeatedly = (survey: Survey): boolean => {
   )
 }
 
+// Mirrors the web SDK's seen-key logic: keying by iteration lets a repeating survey
+// show again on this device when a new iteration starts.
+export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
+  if (survey.current_iteration && survey.current_iteration > 0) {
+    return `${survey.id}_${survey.current_iteration}`
+  }
+  return survey.id
+}
+
 /**
  * Use the Fisher-yates algorithm to shuffle this array
  * https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle

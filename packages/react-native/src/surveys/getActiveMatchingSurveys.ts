@@ -1,4 +1,4 @@
-import { canActivateRepeatedly, hasEvents, surveyValidationMap } from './surveys-utils'
+import { canActivateRepeatedly, getSurveySeenKey, hasEvents, surveyValidationMap } from './surveys-utils'
 import { currentDeviceType } from '../native-deps'
 import { FeatureFlagValue, Survey, SurveyMatchType } from '@posthog/core'
 
@@ -40,7 +40,7 @@ export function getActiveMatchingSurveys(
       return false
     }
 
-    if (seenSurveys.includes(survey.id) && !canActivateRepeatedly(survey)) {
+    if (seenSurveys.includes(getSurveySeenKey(survey)) && !canActivateRepeatedly(survey)) {
       return false
     }
 
