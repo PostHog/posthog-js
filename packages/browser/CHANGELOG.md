@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.396.9
+
+### Patch Changes
+
+- [#4077](https://github.com/PostHog/posthog-js/pull/4077) [`2595440`](https://github.com/PostHog/posthog-js/commit/2595440b0e8771a59388a119ab56857de42b53ee) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(web): stop retrying log batches forever when requests die before an HTTP response (status 0, e.g. an ad blocker) — after 3 consecutive such failures while the browser reports itself online, the logs pipeline stops sending and drops batches instead of buffering and retrying for the life of the page; the `online` event reopens it, and genuine offline periods still queue for the reconnect flush
+  (2026-07-06)
+
 ## 1.396.8
 
 ### Patch Changes
