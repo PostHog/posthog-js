@@ -28,6 +28,38 @@ export function withRequestContext(client: IPostHog, contextData: Parameters<IPo
     }) as IPostHog
 }
 
+/**
+ * Dedupes server identity resolution per request. Next's request store reuses
+ * the same read-only headers object for repeated `headers()` calls, so a
+ * WeakMap keyed on it scopes the cache to the request and lets entries be
+ * garbage-collected with it. This is the same mechanism used by the Flags
+ * SDK's `dedupe()` helper; React's `cache()` is a no-op outside RSC render and
+ * unavailable under the `react >= 18` peer range.
+ *
+ * Results are keyed per resolver so factories with different resolvers don't
+ * share identities. Rejections are cached too, ensuring a rethrown Next.js
+ * control-flow error is rethrown on every call in the request.
+ */
+const resolverResultsByRequest = new WeakMap<object, Map<PostHogDistinctIdResolver, Promise<string | undefined>>>()
+
+function resolveServerDistinctIdOncePerRequest(
+    headerStore: object,
+    getDistinctId: PostHogDistinctIdResolver
+): Promise<string | undefined> {
+    let byResolver = resolverResultsByRequest.get(headerStore)
+    if (!byResolver) {
+        byResolver = new Map()
+        resolverResultsByRequest.set(headerStore, byResolver)
+    }
+
+    let result = byResolver.get(getDistinctId)
+    if (!result) {
+        result = resolveServerDistinctId(getDistinctId)
+        byResolver.set(getDistinctId, result)
+    }
+    return result
+}
+
 export async function getRequestScopedPostHog(
     apiKey?: string,
     options?: Partial<PostHogOptions>,
@@ -54,7 +86,7 @@ export async function getRequestScopedPostHog(
     const contextData = buildContextData(tracing, state)
 
     if (getDistinctId) {
-        const serverDistinctId = await resolveServerDistinctId(getDistinctId)
+        const serverDistinctId = await resolveServerDistinctIdOncePerRequest(headerStore, getDistinctId)
         if (serverDistinctId) {
             contextData.distinctId = serverDistinctId
         }

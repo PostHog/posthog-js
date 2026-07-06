@@ -297,7 +297,7 @@ describe('createPostHog', () => {
             warnSpy.mockRestore()
         })
 
-        it('calls the resolver once per getPostHog call', async () => {
+        it('does not re-run the resolver per captured event', async () => {
             const getDistinctId = jest.fn(() => 'server-user')
 
             const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
@@ -306,6 +306,33 @@ describe('createPostHog', () => {
             client.capture({ event: 'two' })
 
             expect(getDistinctId).toHaveBeenCalledTimes(1)
+        })
+
+        it('resolves identity once per request across multiple getPostHog() calls', async () => {
+            const getDistinctId = jest.fn(() => 'server-user')
+
+            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const client1 = await getPostHog()
+            const client2 = await getPostHog()
+            client1.capture({ event: 'one' })
+            client2.capture({ event: 'two' })
+
+            expect(getDistinctId).toHaveBeenCalledTimes(1)
+            expect(mockWithContext).toHaveBeenCalledWith(
+                expect.objectContaining({ distinctId: 'server-user' }),
+                expect.any(Function)
+            )
+        })
+
+        it('resolves identity again for a new request', async () => {
+            const getDistinctId = jest.fn(() => 'server-user')
+
+            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            await getPostHog()
+            ;(headers as jest.Mock).mockResolvedValue(createMockHeaders({}))
+            await getPostHog()
+
+            expect(getDistinctId).toHaveBeenCalledTimes(2)
         })
 
         it('keeps identities separate across interleaved requests on the shared client', async () => {
