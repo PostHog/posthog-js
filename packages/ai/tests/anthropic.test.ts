@@ -2,6 +2,7 @@ import { PostHog } from 'posthog-node'
 import PostHogAnthropic, { WrappedMessages } from '../src/anthropic'
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import { version } from '../package.json'
+import { collectUnhandledRejections } from './test-utils'
 
 // Type definitions
 interface MockAnthropicResponseOptions {
@@ -1162,5 +1163,59 @@ describe('PostHogAnthropic - $ai_base_url', () => {
 
     const { properties } = (ph.capture as jest.Mock).mock.calls[0][0]
     expect(properties['$ai_base_url']).toBe('https://gateway.posthog.com/anthropic')
+  })
+})
+
+describe('PostHogAnthropic - streaming error safety', () => {
+  let safetyMockPostHogClient: PostHog
+  let safetyClient: PostHogAnthropic
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    safetyMockPostHogClient = new (PostHog as any)()
+    safetyClient = new PostHogAnthropic({
+      apiKey: 'test-api-key',
+      posthog: safetyMockPostHogClient as any,
+    })
+  })
+
+  test('messages stream error is not rethrown unhandled', async () => {
+    const streamError = new Error('provider error injected into SSE stream')
+    const createErroringIterator = (): { [Symbol.asyncIterator](): AsyncIterator<unknown> } => ({
+      async *[Symbol.asyncIterator]() {
+        yield { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'partial' } }
+        throw streamError
+      },
+    })
+
+    const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
+    ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation(() =>
+      Promise.resolve({
+        tee: jest.fn().mockReturnValue([createErroringIterator(), createErroringIterator()]),
+      })
+    )
+
+    const unhandledRejections = await collectUnhandledRejections(async () => {
+      const stream = await safetyClient.messages.create({
+        model: 'claude-3-5-sonnet-20240620',
+        max_tokens: 100,
+        messages: [{ role: 'user', content: 'Tell me about streaming' }],
+        stream: true,
+        posthogDistinctId: 'test-stream-error-user',
+      } as any)
+
+      // The caller's copy of the stream must still surface the error
+      await expect(async () => {
+        for await (const _chunk of stream as unknown as AsyncIterable<unknown>) {
+          // consume until the error
+        }
+      }).rejects.toThrow(streamError)
+    })
+
+    // The analytics error event is still captured
+    expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+    // The detached analytics consumer must not crash the host process
+    expect(unhandledRejections).toEqual([])
   })
 })

@@ -189,6 +189,43 @@ describe('buildPostHogCaptureEvents', () => {
     expect(findEvent(events, PostHogMCPAnalyticsEvent.Exception)).toBeDefined()
   })
 
+  // `undefined` expected value = property must be absent.
+  it.each<[string, Partial<Event>, string | undefined, string | undefined]>([
+    [
+      'derives type and message from the thrown error',
+      { isError: true, error: makeError('Connection timeout', 'TimeoutError') },
+      'TimeoutError',
+      'Connection timeout',
+    ],
+    [
+      'explicit errorType overrides the thrown error type, message still flows',
+      { isError: true, errorType: 'rate_limited', error: makeError('429 Too Many Requests', 'Error') },
+      'rate_limited',
+      '429 Too Many Requests',
+    ],
+    [
+      'explicit errorType with no thrown error stamps type only',
+      { isError: true, errorType: 'validation' },
+      'validation',
+      undefined,
+    ],
+    ['successful call omits both', { isError: false }, undefined, undefined],
+  ])('error properties on the tool-call event: %s', (_, overrides, expectedType, expectedMessage) => {
+    const [event] = buildPostHogCaptureEvents(makeEvent(overrides))
+
+    if (expectedType === undefined) {
+      expect(event.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ErrorType)
+    } else {
+      expect(event.properties[PostHogMCPAnalyticsProperty.ErrorType]).toBe(expectedType)
+    }
+
+    if (expectedMessage === undefined) {
+      expect(event.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ErrorMessage)
+    } else {
+      expect(event.properties[PostHogMCPAnalyticsProperty.ErrorMessage]).toBe(expectedMessage)
+    }
+  })
+
   it('includes $set person properties from identity data', () => {
     const [event] = buildPostHogCaptureEvents(
       makeEvent({

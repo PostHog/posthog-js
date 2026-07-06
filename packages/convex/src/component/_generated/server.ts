@@ -34,6 +34,7 @@ import type { DataModel } from "./dataModel.js";
  * Typesafe environment variables declared in `convex.config.ts`.
  */
 type Env = {
+  readonly POSTHOG_DISABLE_LOCAL_EVALUATION: string | undefined;
   readonly POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS: string | undefined;
   readonly POSTHOG_HOST: string | undefined;
   readonly POSTHOG_PERSONAL_API_KEY: string | undefined;

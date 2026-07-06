@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globals'
 import type { Crons } from 'convex/server'
-import { DEFAULT_INTERVAL_SECONDS, readPollingIntervalSeconds } from './lib.js'
+import { DEFAULT_INTERVAL_SECONDS, envFlagIsTrue, readPollingIntervalSeconds } from './lib.js'
 
 describe('cron registration', () => {
   let originalPak: string | undefined
@@ -93,5 +93,15 @@ describe('readPollingIntervalSeconds', () => {
     process.env.POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS = '60.5'
     expect(readPollingIntervalSeconds()).toBe(DEFAULT_INTERVAL_SECONDS)
     expect(warnSpy).toHaveBeenCalled()
+  })
+})
+
+describe('envFlagIsTrue', () => {
+  test.each(['1', 'true', 'TRUE', 'yes', 'on', '  On  '])('treats %j as true', (raw) => {
+    expect(envFlagIsTrue(raw)).toBe(true)
+  })
+
+  test.each([undefined, '', '   ', 'false', '0', 'off', 'no', 'disabled', '2'])('treats %j as false', (raw) => {
+    expect(envFlagIsTrue(raw)).toBe(false)
   })
 })
