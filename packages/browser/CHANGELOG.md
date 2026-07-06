@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.398.0
+
+### Minor Changes
+
+- [#4070](https://github.com/PostHog/posthog-js/pull/4070) [`ef119bf`](https://github.com/PostHog/posthog-js/commit/ef119bfbc4d39a9b10a6a774ca987c3fbac12519) Thanks [@posthog](https://github.com/apps/posthog)! - Add a `disableAutofocus` survey appearance option. When set, open-text survey questions no longer steal focus when they render, which is useful for embedded (inline) surveys that shouldn't grab the caret or scroll the page on load. Defaults to `false`, preserving the existing autofocus behavior.
+  (2026-07-06)
+
 ## 1.397.0
 
 ### Minor Changes
