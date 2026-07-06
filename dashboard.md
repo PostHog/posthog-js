@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3811](https://github.com/PostHog/posthog-js/issues/3811) | Valid React Native feature request; RN touch autocapture exists but there is no rage-touch/rageclick detection today. | enhancement, react-native, feature/mobile, feature/autocapture, feature/product-analytics |  | no | 2026-07-06T09:45:49.659Z |
 | PostHog/posthog-js | [issue 3813](https://github.com/PostHog/posthog-js/issues/3813) | Valid React Native enhancement/privacy issue; opt-out currently persists consent and drops events, but does not stop integration work like session replay or autocapture hooks. | enhancement, react-native, feature/mobile, feature/replay, feature/autocapture |  | no | 2026-07-06T09:44:14.219Z |
 | PostHog/posthog-js | [issue 3814](https://github.com/PostHog/posthog-js/issues/3814) | Valid React Native feature request; current RN surveys do not appear to implement feedback widget/user feedback support. | enhancement, react-native, feature/mobile, feature/surveys |  | no | 2026-07-06T09:41:52.029Z |
 | PostHog/posthog-js | [issue 3816](https://github.com/PostHog/posthog-js/issues/3816) | Valid React Native mobile feature request; not currently implemented in this repo. | enhancement, feature/product-analytics, feature/mobile, react-native, Android, iOS |  | no | 2026-07-05T09:30:29.417Z |
