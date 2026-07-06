@@ -330,10 +330,14 @@ describe('createPostHog', () => {
             })
 
             const { getServerSidePostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
-            await getServerSidePostHog(ctx)
+            const client = await getServerSidePostHog(ctx)
+            client.capture({ event: 'test_event' })
 
             expect(getDistinctId).toHaveBeenCalledWith(ctx)
-            expect(mockEnterContext).toHaveBeenCalledWith(expect.objectContaining({ distinctId: 'server-user' }))
+            expect(mockWithContext).toHaveBeenCalledWith(
+                expect.objectContaining({ distinctId: 'server-user' }),
+                expect.any(Function)
+            )
         })
 
         it('falls back to the cookie distinct id when the resolver returns null', async () => {
@@ -342,9 +346,13 @@ describe('createPostHog', () => {
             })
 
             const { getServerSidePostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId: () => null })
-            await getServerSidePostHog(ctx)
+            const client = await getServerSidePostHog(ctx)
+            client.capture({ event: 'test_event' })
 
-            expect(mockEnterContext).toHaveBeenCalledWith(expect.objectContaining({ distinctId: 'cookie-user' }))
+            expect(mockWithContext).toHaveBeenCalledWith(
+                expect.objectContaining({ distinctId: 'cookie-user' }),
+                expect.any(Function)
+            )
         })
 
         it('does not call the resolver when the user is opted out', async () => {
@@ -352,9 +360,21 @@ describe('createPostHog', () => {
             const ctx = createMockPagesContext({ __ph_opt_in_out_phc_test123: '0' })
 
             const { getServerSidePostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
-            await getServerSidePostHog(ctx)
+            const client = await getServerSidePostHog(ctx)
+            client.capture({ event: 'test_event' })
 
             expect(getDistinctId).not.toHaveBeenCalled()
+            expect(mockWithContext).not.toHaveBeenCalled()
+        })
+
+        it('never uses enterContext (it does not survive the await boundary back to getServerSideProps)', async () => {
+            const ctx = createMockPagesContext({
+                ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
+            })
+
+            const { getServerSidePostHog } = createPostHog({ apiKey: 'phc_test123' })
+            await getServerSidePostHog(ctx)
+
             expect(mockEnterContext).not.toHaveBeenCalled()
         })
     })

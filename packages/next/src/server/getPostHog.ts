@@ -8,6 +8,27 @@ import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.
 import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shared/identity.js'
 
 /**
+ * Wraps the shared client in a Proxy that applies request-scoped context to
+ * every method call. `enterContext()` can't be used after the `await`s in the
+ * request-scoped getters because `AsyncLocalStorage.enterWith()` doesn't
+ * propagate back to the caller across the await boundary of an async function.
+ */
+export function withRequestContext(client: IPostHog, contextData: Parameters<IPostHog['withContext']>[0]): IPostHog {
+    return new Proxy(client, {
+        get(target, prop, receiver) {
+            if (prop === 'withContext') {
+                return Reflect.get(target, prop, receiver)
+            }
+            const value = Reflect.get(target, prop, receiver)
+            if (isFunction(value)) {
+                return (...args: unknown[]) => target.withContext(contextData, () => value.apply(target, args))
+            }
+            return value
+        },
+    }) as IPostHog
+}
+
+/**
  * Implementation behind `createPostHog().getPostHog` (App Router).
  *
  * Builds request-scoped context from the PostHog cookie and tracing headers,
@@ -52,20 +73,5 @@ export async function getRequestScopedPostHog(
         }
     }
 
-    // Wrap the shared client in a Proxy that applies request-scoped context
-    // to every method call. We can't use enterContext() here because
-    // AsyncLocalStorage.enterWith() doesn't propagate back to the caller
-    // across the await boundary of this async function.
-    return new Proxy(client, {
-        get(target, prop, receiver) {
-            if (prop === 'withContext') {
-                return Reflect.get(target, prop, receiver)
-            }
-            const value = Reflect.get(target, prop, receiver)
-            if (isFunction(value)) {
-                return (...args: unknown[]) => target.withContext(contextData, () => value.apply(target, args))
-            }
-            return value
-        },
-    }) as IPostHog
+    return withRequestContext(client, contextData)
 }
