@@ -1,11 +1,8 @@
-import { SurveySchedule } from '../types'
+import { Survey, SurveySchedule } from '../types'
 
-// Structural type instead of Pick<Survey, 'schedule' | 'conditions'>: the browser SDK
-// has its own Survey type using literal unions where core uses enums, so picking from
-// core's Survey would reject browser values. The template-literal schedule type accepts
-// both while still rejecting arbitrary strings.
-type SurveyForRepeatActivation = {
-  schedule?: `${SurveySchedule}` | null
+// conditions is narrowed to the fields these predicates actually read, so both SDKs'
+// Survey shapes (which still drift in nested condition types) satisfy it structurally.
+type SurveyForRepeatActivation = Pick<Survey, 'schedule'> & {
   conditions?: {
     events?: {
       repeatedActivation?: boolean
