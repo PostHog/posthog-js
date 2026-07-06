@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3814": {
+    "key": "PostHog/posthog-js/issue/3814",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3814",
+    "url": "https://github.com/PostHog/posthog-js/issues/3814",
+    "conclusion": "Valid React Native feature request; current RN surveys do not appear to implement feedback widget/user feedback support.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/mobile",
+      "feature/surveys"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-06T09:41:52.029Z"
+  },
   "PostHog/posthog-js/issue/3816": {
     "key": "PostHog/posthog-js/issue/3816",
     "repo": "PostHog/posthog-js",
