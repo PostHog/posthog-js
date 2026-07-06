@@ -615,6 +615,24 @@ describe('logs entrypoint', () => {
             expect((assignableWindow.console.log as any).__rrweb_original__).toBe(originalConsoleLog)
         })
 
+        it('flattens an existing __rrweb_original__ marker while preserving the wrapper chain for user logs', () => {
+            const deepestOriginalConsoleLog = jest.fn()
+            const firstWrapper = jest.fn()
+            const secondWrapper = jest.fn()
+            ;(firstWrapper as any).__rrweb_original__ = deepestOriginalConsoleLog
+            ;(secondWrapper as any).__rrweb_original__ = firstWrapper
+            assignableWindow.console.log = secondWrapper as any
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect((assignableWindow.console.log as any).__rrweb_original__).toBe(deepestOriginalConsoleLog)
+
+            assignableWindow.console.log('user message')
+
+            expect(secondWrapper).toHaveBeenCalledWith('user message')
+        })
+
         it('does not recurse when the capture path itself logs to the console', () => {
             // Simulate the real fault: _captureConsoleLog logs to the (wrapped) console,
             // as checkAndGetSessionAndWindowId does via PostHog's internal logger.

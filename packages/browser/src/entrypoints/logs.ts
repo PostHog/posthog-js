@@ -343,6 +343,13 @@ const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
     info: 'info',
 }
 
+const originalConsoleMethod = (method: any): any => {
+    while (method?.__rrweb_original__) {
+        method = method.__rrweb_original__
+    }
+    return method
+}
+
 const initializeLogs = (posthog: PostHog) => {
     // `host` is carried here because the core SDK context has no equivalent. Session
     // attributes (window.id, sessionStartTimestamp, lastActivityTimestamp) are added
@@ -403,7 +410,8 @@ const initializeLogs = (posthog: PostHog) => {
         // Expose the original console method the same way rrweb's console plugin does, so
         // PostHog's internal logger (utils/logger.ts) writes to the real console instead of
         // re-entering this wrapper when it emits debug lines from inside the capture path.
-        ;(wrapped as any).__rrweb_original__ = originalConsoleLog
+        // Flatten an existing marker if another console plugin already wrapped this method.
+        ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
         assignableWindow.console[level] = wrapped
     }
 }
