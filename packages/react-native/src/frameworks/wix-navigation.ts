@@ -28,7 +28,9 @@ export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAuto
     if (currentRouteName) {
       const ignoreScreenNames = options?.navigation?.ignoreScreenNames ?? []
       const properties = options?.navigation?.routeToProperties?.(currentRouteName, passProps || {})
-      const skipScreenCapture = ignoreScreenNames.some((name: string) => name.toLowerCase() === currentRouteName.toLowerCase())
+      const skipScreenCapture = ignoreScreenNames.some(
+        (name: string) => name?.toLowerCase() === currentRouteName?.toLowerCase()
+      )
 
       if (skipScreenCapture) {
         return

@@ -95,26 +95,6 @@ describe('useNavigationTracker', () => {
     expect(mockPostHog.screen).toHaveBeenCalledWith('profile', undefined)
   })
 
-  it('ignores screen with case-insensitive and normalized check', () => {
-    const mockRoute = { name: '$&Home', params: {} }
-    mockUseNavigationState.mockImplementation((cb) => cb({ routes: [mockRoute] }))
-    mockUseNavigation.mockReturnValue({ isReady: () => true, getCurrentRoute: () => mockRoute })
-
-    renderHook(
-      () =>
-        useNavigationTracker(
-          {
-            ignoreScreenNames: ['$HOME'],
-          },
-          undefined,
-          mockPostHog
-        ),
-      { wrapper }
-    )
-
-    expect(mockPostHog.screen).not.toHaveBeenCalled()
-  })
-
   it('customizes route name using routeToName', () => {
     const mockRoute = { name: 'user', params: { id: '123' } }
     mockUseNavigationState.mockImplementation((cb) => cb({ routes: [mockRoute] }))

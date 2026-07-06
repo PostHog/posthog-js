@@ -3,7 +3,6 @@ import { OptionalReactNativeNavigation } from '../optional/OptionalReactNativeNa
 import type { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureNavigationTrackerOptions } from '../types'
 import { useOverridablePostHog } from './utils'
-import { normalizeRegex } from '../utils'
 import { PostHogNavigationRef } from '../types'
 
 function _useNavigationTrackerDisabled(): void {
@@ -96,10 +95,8 @@ function _useNavigationTracker(
     const currentRouteName = options?.routeToName?.(name, params) || name || 'Unknown'
 
     if (currentRouteName) {
-      const normalizedRouteName = currentRouteName.toLowerCase()?.replace(normalizeRegex, '')
-      const normalizedScreenNames = (options?.ignoreScreenNames ?? []).map((screenName) =>
-        screenName.toLowerCase()?.replace(normalizeRegex, '')
-      )
+      const normalizedRouteName = currentRouteName.toLowerCase()
+      const normalizedScreenNames = (options?.ignoreScreenNames ?? []).map((screenName) => screenName?.toLowerCase())
       const skipScreenTracking = normalizedScreenNames?.length && normalizedScreenNames?.includes(normalizedRouteName)
 
       if (skipScreenTracking) {

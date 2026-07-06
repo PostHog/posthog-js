@@ -29,7 +29,7 @@ export default function RootLayout() {
                 captureTouches: true,
                 customLabelProp: 'ph-my-label',
                 navigation: {
-                    ignoreScreenNames: ['about'], // ignore the 404 page
+                    ignoreScreenNames: ['about'], 
                 }
             }}
             debug={true}

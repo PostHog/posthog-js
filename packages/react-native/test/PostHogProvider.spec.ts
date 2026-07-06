@@ -220,43 +220,5 @@ describe('PostHogProvider', () => {
 
       expect(mockPostHog.screen).toHaveBeenCalledWith('home', undefined)
     })
-
-    it('should still ignore screen tracking when screen names contains non-alphanumeric characters', () => {
-      const mockRoute = { name: '$&home', params: {} }
-      mockUseNavigationState.mockImplementation((cb) => cb({ routes: [mockRoute] }))
-
-      const mockNavigation = {
-        isReady: () => true,
-        getCurrentRoute: () => mockRoute,
-      }
-      mockUseNavigation.mockReturnValue(mockNavigation)
-
-      const onClient = jest.fn()
-      const mockPostHog = {
-        screen: jest.fn(),
-        debug: jest.fn(),
-        isDisabled: false,
-      } as any
-
-      render(
-        React.createElement(
-          PostHogProvider,
-          {
-            client: mockPostHog,
-            autocapture: {
-              captureScreens: true,
-              navigation: {
-                ignoreScreenNames: ['$HOME'],
-              },
-            },
-          },
-          React.createElement(CaptureClient, { onClient })
-        )
-      )
-
-      jest.advanceTimersByTime(1)
-
-      expect(mockPostHog.screen).not.toHaveBeenCalled()
-    })
   })
 })
