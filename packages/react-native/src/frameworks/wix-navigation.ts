@@ -8,7 +8,6 @@
 import { OptionalReactNativeNavigationWix } from '../optional/OptionalReactNativeNavigationWix'
 import { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureOptions } from '../types'
-import { normalizeRegex } from '../utils'
 
 export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAutocaptureOptions = {}): boolean => {
   if (!OptionalReactNativeNavigationWix) {
@@ -27,18 +26,11 @@ export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAuto
       options?.navigation?.routeToName?.(componentName, passProps || {}) || componentName || 'Unknown'
 
     if (currentRouteName) {
+      const ignoreScreenNames = options?.navigation?.ignoreScreenNames ?? []
       const properties = options?.navigation?.routeToProperties?.(currentRouteName, passProps || {})
-      const ignoreScreenNames = options?.ignoreScreenNames || []
-      const normalizedScreenNames = ignoreScreenNames.map((screenName) =>
-        screenName.toLowerCase()?.replace(normalizeRegex, '')
-      )
+      const skipScreenCapture = ignoreScreenNames.some((name: string) => name.toLowerCase() === currentRouteName.toLowerCase())
 
-      const normalizedCurrentRoute = currentRouteName.toLowerCase()?.replace(normalizeRegex, '')
-
-      const skipScreenTracking =
-        normalizedScreenNames?.length && normalizedScreenNames?.includes(normalizedCurrentRoute)
-
-      if (skipScreenTracking) {
+      if (skipScreenCapture) {
         return
       }
 

@@ -50,7 +50,7 @@ function PostHogNavigationHook({
   options?: PostHogAutocaptureOptions
   client?: PostHog
 }): JSX.Element | null {
-  useNavigationTracker(options?.navigation, options?.navigationRef, options?.ignoreScreenNames, client)
+  useNavigationTracker(options?.navigation, options?.navigationRef, client)
   return null
 }
 

@@ -97,7 +97,7 @@ function _useNavigationTracker(
 
     if (currentRouteName) {
       const normalizedRouteName = currentRouteName.toLowerCase()?.replace(normalizeRegex, '')
-      const normalizedScreenNames = options?.ignoreScreenNames.map((screenName) =>
+      const normalizedScreenNames = (options?.ignoreScreenNames ?? []).map((screenName) =>
         screenName.toLowerCase()?.replace(normalizeRegex, '')
       )
       const skipScreenTracking = normalizedScreenNames?.length && normalizedScreenNames?.includes(normalizedRouteName)
