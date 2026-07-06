@@ -867,6 +867,37 @@ describe('PostHogTracingProcessor', () => {
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$ai_error_type).toBe(expectedType)
     })
+
+    it('reports capture failures through onError without throwing', async () => {
+      const captureError = new Error('capture failed')
+      mockClient.capture.mockImplementation(() => {
+        throw captureError
+      })
+      const onError = jest.fn()
+      const proc = new PostHogTracingProcessor({
+        client: mockClient,
+        distinctId: 'test-user',
+        onError,
+      })
+
+      await expect(proc.onSpanEnd(createMockSpan() as any)).resolves.toBeUndefined()
+
+      expect(onError).toHaveBeenCalledWith(captureError, 'capture')
+    })
+
+    it('reports flush failures through onError without throwing', async () => {
+      const flushError = new Error('flush failed')
+      mockClient.flush.mockRejectedValueOnce(flushError)
+      const onError = jest.fn()
+      const proc = new PostHogTracingProcessor({
+        client: mockClient,
+        onError,
+      })
+
+      await expect(proc.forceFlush()).resolves.toBeUndefined()
+
+      expect(onError).toHaveBeenCalledWith(flushError, 'forceFlush')
+    })
   })
 
   describe('latency calculation', () => {

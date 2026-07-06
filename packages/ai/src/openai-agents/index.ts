@@ -2,7 +2,7 @@ import { PostHogTracingProcessor } from './processor'
 import type { PostHogTracingProcessorOptions } from './processor'
 
 export { PostHogTracingProcessor } from './processor'
-export type { PostHogTracingProcessorOptions, DistinctIdResolver } from './processor'
+export type { PostHogTracingProcessorOptions, DistinctIdResolver, TracingProcessorErrorHandler } from './processor'
 
 export type InstrumentOptions = PostHogTracingProcessorOptions
 
