@@ -1,4 +1,19 @@
 import { assignableWindow } from '../../utils/globals'
+import type { PostHogConfig } from '../../types'
+import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations'
+
+// everything the `src/customizations` barrel exports — keep in sync with customizations/index.ts
+const EXPECTED_EXPORTS = [
+    'setAllPersonProfilePropertiesAsPersonPropertiesForFlags',
+    'sampleByDistinctId',
+    'sampleBySessionId',
+    'sampleByEvent',
+    'printAndDropEverything',
+    'posthogReduxLogger',
+    'posthogKeaLogger',
+    'sessionRecordingLoggerForPostHogInstance',
+    'browserConsoleLogger',
+]
 
 describe('customizations entrypoints', () => {
     beforeEach(() => {
@@ -6,20 +21,35 @@ describe('customizations entrypoints', () => {
         delete assignableWindow.posthogCustomizations
     })
 
-    it('exports setAllPersonProfilePropertiesAsPersonPropertiesForFlags from the module entrypoint', async () => {
+    it('exports all customizations from the module entrypoint', async () => {
         // backs the `posthog-js/customizations` subpath — the importable alternative
         // to the internal `posthog-js/lib/src/customizations` path, which is CJS-only
         // and unresolvable under native ESM / Node16 module resolution
         const entry = await import('../../entrypoints/customizations.es')
 
-        expect(typeof entry.setAllPersonProfilePropertiesAsPersonPropertiesForFlags).toBe('function')
+        for (const name of EXPECTED_EXPORTS) {
+            expect(typeof (entry as Record<string, unknown>)[name]).toBe('function')
+        }
     })
 
-    it('publishes customizations on window.posthogCustomizations from the script entrypoint', async () => {
+    it('publishes all customizations on window.posthogCustomizations from the script entrypoint', async () => {
         await import('../../entrypoints/customizations.full')
 
-        expect(
-            typeof assignableWindow.posthogCustomizations?.setAllPersonProfilePropertiesAsPersonPropertiesForFlags
-        ).toBe('function')
+        for (const name of EXPECTED_EXPORTS) {
+            expect(typeof assignableWindow.posthogCustomizations?.[name]).toBe('function')
+        }
+    })
+
+    it('setAllPersonProfilePropertiesAsPersonPropertiesForFlags accepts the instance passed to `loaded`', () => {
+        // compile-time regression for the documented usage
+        // (https://posthog.com/docs/feature-flags/property-overrides): the `loaded`
+        // callback receives a `PostHogInterface`, not the concrete `PostHog` class
+        const config: Partial<PostHogConfig> = {
+            loaded: (posthog) => {
+                setAllPersonProfilePropertiesAsPersonPropertiesForFlags(posthog)
+            },
+        }
+
+        expect(config.loaded).toBeDefined()
     })
 })
