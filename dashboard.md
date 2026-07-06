@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3814](https://github.com/PostHog/posthog-js/issues/3814) | Valid React Native feature request; current RN surveys do not appear to implement feedback widget/user feedback support. | enhancement, react-native, feature/mobile, feature/surveys |  | no | 2026-07-06T09:41:52.029Z |
 | PostHog/posthog-js | [issue 3816](https://github.com/PostHog/posthog-js/issues/3816) | Valid React Native mobile feature request; not currently implemented in this repo. | enhancement, feature/product-analytics, feature/mobile, react-native, Android, iOS |  | no | 2026-07-05T09:30:29.417Z |
 | PostHog/posthog-js | [issue 3817](https://github.com/PostHog/posthog-js/issues/3817) | Valid feature request: React Native surveys do not currently expose a manual displaySurvey API like web. | enhancement, feature/surveys, react-native, feature/mobile |  | no | 2026-07-05T09:29:09.157Z |
 | PostHog/posthog-js | [issue 3928](https://github.com/PostHog/posthog-js/issues/3928) | Valid React Native spec-parity enhancement; current code matches the reported behavior gap. | enhancement, react-native, feature/mobile |  | no | 2026-07-05T09:28:11.199Z |
