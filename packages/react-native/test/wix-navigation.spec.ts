@@ -102,11 +102,11 @@ describe('wix-navigation', () => {
       })
       expect(registeredCallback).toBeDefined()
 
-      // Exact match
+      // Exact match check
       registeredCallback!({ componentName: 'LoginScreen' })
       expect(mockPostHog.screen).not.toHaveBeenCalled()
 
-      // Case-insensitive match
+      // Case-insensitive match check
       registeredCallback!({ componentName: 'loginscreen' })
       expect(mockPostHog.screen).not.toHaveBeenCalled()
 

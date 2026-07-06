@@ -3,9 +3,7 @@ import React from 'react'
 import { renderHook, cleanup } from '@testing-library/react'
 import { useNavigationTracker } from '../src/hooks/useNavigationTracker'
 import { PostHogContext } from '../src/PostHogContext'
-import type { PostHog } from '../src/posthog-rn'
 
-// Mock react-native
 jest.mock('react-native', () => ({
   Platform: {
     OS: 'ios',
