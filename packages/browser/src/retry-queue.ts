@@ -9,6 +9,8 @@ import { addEventListener } from './utils'
 
 const thirtyMinutes = 30 * 60 * 1000
 const DEFAULT_MAX_RETRIES = 10
+// NOTE: posthog-logs.ts mirrors this budget with its own `MAX_CONSECUTIVE_STATUS_ZERO_FAILURES`.
+// Keep the constant value and the warning copy in sync.
 const STATUS_CODE_ZERO_MAX_RETRIES = 3
 
 /**

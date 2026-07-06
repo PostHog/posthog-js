@@ -56,6 +56,7 @@ describe('posthog-logs', () => {
 
             // Create mock PostHog instance
             mockPostHog = {
+                __loaded: true,
                 config: {
                     disable_logs: false,
                     token: 'test-token',
@@ -1137,6 +1138,224 @@ describe('posthog-logs', () => {
                 await jest.advanceTimersByTimeAsync(3000)
 
                 expect((logs as any)._queue).toHaveLength(1)
+            })
+        })
+
+        describe('status 0 circuit breaker', () => {
+            beforeEach(() => {
+                jest.useFakeTimers()
+            })
+
+            afterEach(() => {
+                jest.useRealTimers()
+                delete (window.navigator as any).onLine
+            })
+
+            const flushWith = async (statusCode: number) => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode })
+                )
+                logs.captureLog({ body: 'x' })
+                await (logs as any)._core.flush().catch(() => {})
+            }
+
+            const sendCount = () => (mockPostHog._send_request as jest.Mock).mock.calls.length
+
+            const setOnline = (value: boolean) => {
+                Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
+            }
+
+            it.each([1, 2])('still attempts the network after %i consecutive status-0 failures', async (failures) => {
+                for (let i = 0; i < failures; i++) {
+                    await flushWith(0)
+                }
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(failures + 1)
+            })
+
+            it('stops sending and drops the batch after 3 consecutive status-0 failures', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                expect(sendCount()).toBe(3)
+                expect((logs as any)._queue).toHaveLength(3)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(3)
+                expect((logs as any)._queue).toHaveLength(0)
+            })
+
+            it.each([200, 429, 503])(
+                'a %i response resets the count — any HTTP response proves the endpoint is reachable',
+                async (statusCode) => {
+                    await flushWith(0)
+                    await flushWith(0)
+                    await flushWith(statusCode)
+                    await flushWith(0)
+                    await flushWith(0)
+
+                    await flushWith(0)
+
+                    expect(sendCount()).toBe(6)
+                }
+            )
+
+            it('does not count pre-init synthetic drops — only post-load failures feed the breaker', async () => {
+                // Before `init` completes, `_send_request` synthesizes
+                // `{ statusCode: 0 }` without any network attempt
+                // (`fireCallbackOnDrop` on the `!__loaded` path). A deferred init
+                // must not arrive to an already-tripped breaker.
+                ;(mockPostHog as any).__loaded = false
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                ;(mockPostHog as any).__loaded = true
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
+            })
+
+            it('does not count status-0 failures while the browser reports itself offline', async () => {
+                setOnline(false)
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                setOnline(true)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
+            })
+
+            it('queues (retry-later) instead of dropping when the breaker is tripped but the browser is offline', async () => {
+                // Trip the breaker (3 status-0 failures while online).
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                const countAfterTrip = sendCount()
+                expect(countAfterTrip).toBe(3) // breaker tripped after 3
+
+                // Go offline — the online guard should bypass the fatal-drop short-circuit.
+                setOnline(false)
+
+                // Capture + flush with status 0 while tripped AND offline.
+                // The send MUST be attempted (online guard lifts the short-circuit).
+                await flushWith(0)
+                expect(sendCount()).toBe(countAfterTrip + 1) // request was made
+
+                // The batch MUST be retained (offline => retry-later, not fatal).
+                expect((logs as any)._queue).toHaveLength(4)
+
+                // Restore online — reconnect flush delivers the retained records.
+                setOnline(true)
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 200 })
+                )
+                assignableWindow.dispatchEvent(new Event('online'))
+                expect(sendCount()).toBe(countAfterTrip + 2)
+            })
+
+            it('reopens on the online event so recovery is possible', async () => {
+                for (let i = 0; i < 4; i++) {
+                    await flushWith(0)
+                }
+                expect(sendCount()).toBe(3) // tripped: the 4th flush made no request
+
+                logs.captureLog({ body: 'after whitelist' })
+                assignableWindow.dispatchEvent(new Event('online'))
+
+                expect(sendCount()).toBe(4)
+            })
+
+            it('counter resets to 0 on reconnect — needs 3 fresh failures to trip again', async () => {
+                // Trip the breaker (3 failures then 1 dropped).
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                expect(sendCount()).toBe(3)
+                await flushWith(0)
+                expect(sendCount()).toBe(3) // still 3 — the 4th was dropped
+
+                // Reset the breaker via the online event.
+                assignableWindow.dispatchEvent(new Event('online'))
+
+                // Verify the counter was actually reset to 0.
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(0)
+
+                // The online event schedules a reconnect flush (empty queue, no send).
+                // The first flushWith after online resolves that lingering flush promise,
+                // so the second and third explicit flushes are the real first two failures.
+                await flushWith(0) // drains lingering online-reconnect flush promise
+                await flushWith(0) // failure 1
+                await flushWith(0) // failure 2
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(2)
+
+                // Third failure: re-trips (counter=3), still sends on this flush.
+                await flushWith(0)
+                const countWhenRetripped = sendCount()
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(3)
+
+                // Fourth failure post-reset: breaker is tripped — dropped, no send.
+                await flushWith(0)
+                expect(sendCount()).toBe(countWhenRetripped) // no new send
+            })
+
+            it('reset clears the tripped breaker so future sends can recover immediately', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                await flushWith(0)
+                expect(sendCount()).toBe(3) // tripped: the 4th flush made no request
+
+                logs.reset()
+
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(0)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
+            })
+
+            it('one tripped breaker silences the console queue too — both cores share the endpoint', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+
+                logs._captureConsoleLog({ body: 'console x' })
+                await (logs as any)._consoleCore.flush().catch(() => {})
+
+                expect(sendCount()).toBe(3)
+                expect((logs as any)._consoleQueue).toHaveLength(0)
+            })
+
+            it('warns once when it stops sending', async () => {
+                for (let i = 0; i < 4; i++) {
+                    await flushWith(0)
+                }
+
+                const breakerWarnings = mockLogger.warn.mock.calls.filter(([msg]) =>
+                    String(msg).includes('ad blockers')
+                )
+                expect(breakerWarnings).toHaveLength(1)
+            })
+
+            it('does not count the send-timeout backstop toward the status-0 trip', async () => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                for (let i = 0; i < 3; i++) {
+                    logs.captureLog({ body: 'x' })
+                    const flushPromise = (logs as any)._core.flush().catch(() => {})
+                    await jest.advanceTimersByTimeAsync(91000)
+                    await flushPromise
+                }
+                expect(sendCount()).toBe(3)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
             })
         })
 

@@ -16,6 +16,7 @@ import { addEventListener } from './utils'
 import { createLogger } from './utils/logger'
 import { Extension } from './extensions/types'
 import { resolveLogsConfig } from './logs-defaults'
+import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
 
 const LOGS_ENDPOINT = '/i/v1/logs'
 // OTLP instrumentation-scope name for console auto-capture, distinguishing it from
@@ -26,6 +27,14 @@ const CONSOLE_SCOPE_NAME = 'console'
 // settles via its callback first; this only fires on a genuinely callback-less
 // send (e.g. request enqueued before load, or a transport that never reports).
 const LOGS_SEND_TIMEOUT_MS = 90000
+// Mirrors the event retry queue's status-0 budget (see retry-queue.ts
+// `STATUS_CODE_ZERO_MAX_RETRIES`): a request that dies before any HTTP response
+// while the browser reports itself online is almost always deterministically
+// blocked (ad blocker, CORS, extension), so retrying forever only burns network.
+// After this many consecutive such failures we stop sending and drop batches;
+// the `online` event reopens the pipe.
+// NOTE: keep the constant value and the warning copy in sync with retry-queue.ts.
+const MAX_CONSECUTIVE_STATUS_ZERO_FAILURES = 3
 
 export class PostHogLogs implements Extension {
     private _isLogsEnabled: boolean = false
@@ -47,6 +56,10 @@ export class PostHogLogs implements Extension {
     private _consoleResolvedConfig: ResolvedPostHogLogsConfig | undefined
     private _consoleResolvedFrom: PostHog['config']['logs']
 
+    // Shared across both cores: they send to the same endpoint, so one blocker
+    // verdict covers both.
+    private _consecutiveStatusZeroFailures = 0
+
     constructor(private readonly _instance: PostHog) {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
@@ -58,6 +71,7 @@ export class PostHogLogs implements Extension {
     }
 
     private _onReconnect = (): void => {
+        this._consecutiveStatusZeroFailures = 0
         this._core?.onReconnect()
         this._consoleCore?.onReconnect()
     }
@@ -136,6 +150,7 @@ export class PostHogLogs implements Extension {
         this._core?.reset()
         this._consoleQueue = []
         this._consoleCore?.reset()
+        this._consecutiveStatusZeroFailures = 0
     }
 
     captureLog(options: CaptureLogOptions): void {
@@ -237,6 +252,20 @@ export class PostHogLogs implements Extension {
     private _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
         // eslint-disable-next-line compat/compat
         return new Promise((resolve) => {
+            if (
+                isStatusZeroFailureCircuitBreakerTripped(
+                    this._consecutiveStatusZeroFailures,
+                    MAX_CONSECUTIVE_STATUS_ZERO_FAILURES
+                )
+            ) {
+                // Tripped: drop the batch without touching the network. `fatal`
+                // advances the queue so records don't pile up while blocked.
+                // The `onLine` guard ensures genuine offline periods still queue
+                // for the reconnect flush instead of being fatally dropped.
+                resolve({ kind: 'fatal', error: new Error('logs endpoint is unreachable, dropping batch') })
+                return
+            }
+
             let settled = false
             const settle = (outcome: SendLogsBatchOutcome) => {
                 if (settled) {
@@ -264,6 +293,7 @@ export class PostHogLogs implements Extension {
                 fireCallbackOnDrop: true,
                 callback: (response) => {
                     const status = response.statusCode
+                    this._trackEndpointReachability(status)
                     if (status >= 200 && status < 300) {
                         settle({ kind: 'ok' })
                     } else if (status === 413) {
@@ -281,6 +311,27 @@ export class PostHogLogs implements Extension {
                 },
             })
         })
+    }
+
+    // Feeds the status-0 circuit breaker checked at the top of `_sendLogsBatch`.
+    private _trackEndpointReachability(statusCode: number): void {
+        // Before `init` completes, `_send_request` synthesizes `{ statusCode: 0 }`
+        // without any network attempt (the `fireCallbackOnDrop` path), so only
+        // post-load failures count — a deferred init must not arrive to an
+        // already-tripped breaker. `__loaded` flips on init, not on a successful
+        // request, so a blocked-from-the-start page still trips as intended.
+        if (statusCode === 0 && !this._instance.__loaded) {
+            return
+        }
+        this._consecutiveStatusZeroFailures = updateStatusZeroFailureCount(
+            statusCode,
+            this._consecutiveStatusZeroFailures,
+            MAX_CONSECUTIVE_STATUS_ZERO_FAILURES,
+            () =>
+                this._logger.warn(
+                    'Log requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped sending logs; will try again when connectivity changes.'
+                )
+        )
     }
 
     // Drains both the programmatic and console queues over the given transport.
@@ -331,6 +382,11 @@ export class PostHogLogs implements Extension {
             scopeName,
             Config.LIB_VERSION
         )
+        // Intentionally bypasses the circuit breaker and does not feed
+        // `_trackEndpointReachability`: this is a best-effort "last gasp" send
+        // (page unload or explicit transport flush) where `sendBeacon` in particular
+        // is sometimes honoured even by blockers, and the callback-less path means
+        // we can't track the outcome anyway.
         this._instance._send_request({
             method: 'POST',
             url: this._logsUrl(),

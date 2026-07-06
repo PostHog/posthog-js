@@ -623,6 +623,7 @@
         "_tickets",
         "_timestamp",
         "_totalBytes",
+        "_trackEndpointReachability",
         "_trackPollingEndpointReachability",
         "_trackStatusZeroReachability",
         "_translateSurveyForRendering",
