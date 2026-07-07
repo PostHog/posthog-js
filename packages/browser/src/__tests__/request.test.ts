@@ -260,29 +260,28 @@ describe('request', () => {
             )
         })
 
-        it('does not add a compression query param for gzip requests', () => {
+        it.each([
+            [
+                'does not add a compression query param for gzip requests',
+                'https://any.posthog-instance.com?ver=1.23.45',
+                'https://any.posthog-instance.com?ver=1.23.45&_=1700000000000',
+            ],
+            [
+                'removes an existing compression query param for gzip requests',
+                'https://any.posthog-instance.com?ver=1.23.45&compression=gzip-js',
+                'https://any.posthog-instance.com?ver=1.23.45&_=1700000000000',
+            ],
+        ])('%s', (_label, url, expectedUrl) => {
             request(
                 createRequest({
+                    url,
                     method: 'POST',
                     compression: Compression.GZipJS,
                     data: { foo: 'bar' },
                 })
             )
 
-            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com?ver=1.23.45&_=1700000000000')
-        })
-
-        it('removes an existing compression query param for gzip requests', () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com?ver=1.23.45&compression=gzip-js',
-                    method: 'POST',
-                    compression: Compression.GZipJS,
-                    data: { foo: 'bar' },
-                })
-            )
-
-            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com?ver=1.23.45&_=1700000000000')
+            expect(mockedFetch.mock.calls[0][0]).toBe(expectedUrl)
         })
 
         it('calls the callback handler when successful', async () => {
