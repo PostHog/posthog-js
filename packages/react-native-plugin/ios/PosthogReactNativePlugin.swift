@@ -126,49 +126,53 @@ class PosthogReactNativePlugin: NSObject {
             isReactNativeFatalJsError(event) ? nil : event
         }
 
-        if #available(iOS 15.0, *) {
-            config.surveys = false
-        }
+        // Session replay is iOS-only in posthog-ios; the config surface and the surveys flag
+        // don't exist on macOS. Error tracking (below) is the only supported feature there.
+        #if os(iOS)
+            if #available(iOS 15.0, *) {
+                config.surveys = false
+            }
 
-        // Always apply the session replay configuration so that recording started later
-        // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
-        // sessionReplayEnabled only controls whether recording starts at setup.
-        config.sessionReplay = sessionReplayEnabled
-        config.sessionReplayConfig.screenshotMode = true
+            // Always apply the session replay configuration so that recording started later
+            // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+            // sessionReplayEnabled only controls whether recording starts at setup.
+            config.sessionReplay = sessionReplayEnabled
+            config.sessionReplayConfig.screenshotMode = true
 
-        let maskAllTextInputs = sdkReplayConfig["maskAllTextInputs"] as? Bool ?? true
-        config.sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
+            let maskAllTextInputs = sdkReplayConfig["maskAllTextInputs"] as? Bool ?? true
+            config.sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
 
-        let maskAllImages = sdkReplayConfig["maskAllImages"] as? Bool ?? true
-        config.sessionReplayConfig.maskAllImages = maskAllImages
+            let maskAllImages = sdkReplayConfig["maskAllImages"] as? Bool ?? true
+            config.sessionReplayConfig.maskAllImages = maskAllImages
 
-        let maskAllSandboxedViews = sdkReplayConfig["maskAllSandboxedViews"] as? Bool ?? true
-        config.sessionReplayConfig.maskAllSandboxedViews = maskAllSandboxedViews
+            let maskAllSandboxedViews = sdkReplayConfig["maskAllSandboxedViews"] as? Bool ?? true
+            config.sessionReplayConfig.maskAllSandboxedViews = maskAllSandboxedViews
 
-        // read throttleDelayMs and use iOSdebouncerDelayMs as a fallback for back compatibility
-        let throttleDelayMs =
-            (sdkReplayConfig["throttleDelayMs"] as? Int)
-                ?? (sdkReplayConfig["iOSdebouncerDelayMs"] as? Int)
-                ?? 1000
+            // read throttleDelayMs and use iOSdebouncerDelayMs as a fallback for back compatibility
+            let throttleDelayMs =
+                (sdkReplayConfig["throttleDelayMs"] as? Int)
+                    ?? (sdkReplayConfig["iOSdebouncerDelayMs"] as? Int)
+                    ?? 1000
 
-        let timeInterval: TimeInterval = Double(throttleDelayMs) / 1000.0
-        config.sessionReplayConfig.throttleDelay = timeInterval
+            let timeInterval: TimeInterval = Double(throttleDelayMs) / 1000.0
+            config.sessionReplayConfig.throttleDelay = timeInterval
 
-        let captureNetworkTelemetry = sdkReplayConfig["captureNetworkTelemetry"] as? Bool ?? true
-        config.sessionReplayConfig.captureNetworkTelemetry = captureNetworkTelemetry
+            let captureNetworkTelemetry = sdkReplayConfig["captureNetworkTelemetry"] as? Bool ?? true
+            config.sessionReplayConfig.captureNetworkTelemetry = captureNetworkTelemetry
 
-        let captureLog = sdkReplayConfig["captureLog"] as? Bool ?? true
-        config.sessionReplayConfig.captureLogs = captureLog
+            let captureLog = sdkReplayConfig["captureLog"] as? Bool ?? true
+            config.sessionReplayConfig.captureLogs = captureLog
 
-        config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
+            config.sessionReplayConfig.sampleRate = sdkReplayConfig["sampleRate"] as? NSNumber
 
-        let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
-        config.sessionReplayConfig.screenshotModeBackgroundCapture = screenshotModeBackgroundCapture
+            let screenshotModeBackgroundCapture = sdkReplayConfig["screenshotModeBackgroundCapture"] as? Bool ?? false
+            config.sessionReplayConfig.screenshotModeBackgroundCapture = screenshotModeBackgroundCapture
 
-        let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
-        if !endpoint.isEmpty {
-            config.snapshotEndpoint = endpoint
-        }
+            let endpoint = decideReplayConfig["endpoint"] as? String ?? ""
+            if !endpoint.isEmpty {
+                config.snapshotEndpoint = endpoint
+            }
+        #endif
 
         let distinctId = sdkOptions["distinctId"] as? String ?? ""
         let anonymousId = sdkOptions["anonymousId"] as? String ?? ""
@@ -221,8 +225,12 @@ class PosthogReactNativePlugin: NSObject {
 
     @objc(isEnabled:withRejecter:)
     func isEnabled(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
-        let isEnabled = PostHogSDK.shared.isSessionReplayActive()
-        resolve(isEnabled)
+        #if os(iOS)
+            resolve(PostHogSDK.shared.isSessionReplayActive())
+        #else
+            // Session replay is unsupported on macOS.
+            resolve(false)
+        #endif
     }
 
     @objc(endSession:withRejecter:)
@@ -261,13 +269,17 @@ class PosthogReactNativePlugin: NSObject {
     func startRecording(
         resumeCurrent: Bool, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
     ) {
-        PostHogSDK.shared.startSessionRecording(resumeCurrent: resumeCurrent)
+        #if os(iOS)
+            PostHogSDK.shared.startSessionRecording(resumeCurrent: resumeCurrent)
+        #endif
         resolve(nil)
     }
 
     @objc(stopRecording:withRejecter:)
     func stopRecording(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
-        PostHogSDK.shared.stopSessionRecording()
+        #if os(iOS)
+            PostHogSDK.shared.stopSessionRecording()
+        #endif
         resolve(nil)
     }
 
