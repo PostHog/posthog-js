@@ -13,17 +13,19 @@ const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/flags/': any[] } = 
     '/flags/': [],
 }
 
+const isGzipData = (data: Uint8Array): boolean => data[0] === 0x1f && data[1] === 0x8b
+
 const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
     let body = req.body
 
     if (typeof body === 'string') {
         try {
             const b64Encoded = req.url.href.includes('compression=base64')
-            const gzipCompressed = req.url.href.includes('compression=gzip-js')
+            const data = new Uint8Array(req._body)
+            const gzipCompressed = isGzipData(data)
             if (b64Encoded) {
                 body = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
             } else if (gzipCompressed) {
-                const data = new Uint8Array(req._body)
                 const decoded = strFromU8(decompressSync(data))
                 body = JSON.parse(decoded)
             } else {
