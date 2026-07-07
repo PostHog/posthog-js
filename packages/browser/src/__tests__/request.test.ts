@@ -240,12 +240,12 @@ describe('request', () => {
         it('removes existing ver from capture endpoints', () => {
             request(
                 createRequest({
-                    url: 'https://any.posthog-instance.com/e/?ver=1.23.45&ip=0',
+                    url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
                 })
             )
 
             const requestedUrl = mockedFetch.mock.calls[0][0]
-            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?ip=0&_=1700000000000')
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?foo=bar&_=1700000000000')
         })
 
         it('keeps ver on feature flag requests', () => {
