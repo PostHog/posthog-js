@@ -9,7 +9,7 @@ can see the same activity from the client and the backend:
    backend instrumentation with SpacetimeDB.**
 3. **In-module** — an _unstable_ SpacetimeDB procedure posts `server_side_ping` to PostHog directly
    over `ctx.http`, from inside the database.
-4. **Feature-flag evaluation, two ways** — the sidecar evaluates _locally_ (personal key) and writes
+4. **Feature-flag evaluation, two ways** — the sidecar evaluates _locally_ (secret key) and writes
    results back through a table, or a procedure evaluates _remotely_ over `ctx.http` and returns them
    to the caller (see below).
 
@@ -27,20 +27,20 @@ so prefer the sidecar unless you specifically need capture inside a transaction.
 
 ## Feature flags: evaluate in the backend, read through the database
 
-Local flag evaluation needs a personal API key and the flag definitions in memory — that belongs in a
+Local flag evaluation needs a secret key and the flag definitions in memory — that belongs in a
 trusted backend, not the module or the browser. So the sidecar owns it, and results flow back to
 clients the SpacetimeDB way — through a subscribed table:
 
 ```
 "Evaluate my flags"
   → requestFlagEval()             — reducer inserts ctx.sender into flag_request (event table)
-  → sidecar onInsert              — posthog.getAllFlags(), local eval with the personal key
+  → sidecar onInsert              — posthog.getAllFlags(), local eval with the secret key
   → setFeatureFlags()             — reducer upserts the feature_flag table
   → client useTable(feature_flag) — renders the flags reactively
 ```
 
 `flag_request` is an _event table_ (rows are never stored — they only fire `onInsert`), making it a
-clean request channel. The personal key lives only in the sidecar's environment. Change a flag in
+clean request channel. The secret key lives only in the sidecar's environment. Change a flag in
 PostHog and click again to see the new value flow through.
 
 A procedure can do the same job remotely, no sidecar required. `evaluateFlags` POSTs to PostHog's
@@ -57,7 +57,7 @@ Two ways to evaluate, pick per use case:
 | -------- | ------------------------------------------------ | ------------------------------------------ |
 | Eval     | in-process, polls flag definitions               | PostHog's `/flags` endpoint, per call      |
 | Result   | written to `feature_flag`, read via subscription | returned directly to the caller            |
-| Needs    | a running sidecar + personal key                 | nothing extra (project token only)         |
+| Needs    | a running sidecar + secret key                   | nothing extra (project token only)         |
 | Best for | fan-out, many distinct ids, no per-call latency  | on-demand, single caller, no extra process |
 
 Both are keyed on `ctx.sender`, so a caller only ever evaluates its own flags.
@@ -95,7 +95,7 @@ cp .env.example .env.local   # then set your PostHog project API key
 Set `VITE_POSTHOG_PROJECT_TOKEN` / `POSTHOG_PROJECT_TOKEN` to your project key (Project settings →
 API keys), and — for layer 3 — replace `POSTHOG_PROJECT_TOKEN` at the top of
 `spacetimedb/src/index.ts` with the same key.
-For local flag evaluation (layer 4), set `POSTHOG_PERSONAL_API_KEY` to a personal key (`phx_…`); without
+For local flag evaluation (layer 4), set `POSTHOG_SECRET_KEY` to a secret key (`phx_…` or `phs_…`); without
 it the sidecar still works but evaluates flags remotely instead of locally.
 
 ## Run

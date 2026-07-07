@@ -6,7 +6,7 @@ export default defineConfig({
     plugins: [
         cloudflare(),
         posthog({
-            personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY!,
+            secretKey: process.env.POSTHOG_SECRET_KEY!,
             projectId: process.env.POSTHOG_PROJECT_ID!,
             host: process.env.POSTHOG_API_HOST,
             sourcemaps: {
