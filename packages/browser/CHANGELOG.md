@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.398.1
+
+### Patch Changes
+
+- [#4096](https://github.com/PostHog/posthog-js/pull/4096) [`5013ab6`](https://github.com/PostHog/posthog-js/commit/5013ab6acd64b4200304cdf9464805c06c07a05f) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop sending the deprecated `ver` query parameter to capture and session recording endpoints.
+  (2026-07-07)
+
 ## 1.398.0
 
 ### Minor Changes
