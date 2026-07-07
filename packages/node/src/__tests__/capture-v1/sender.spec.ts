@@ -483,6 +483,17 @@ describe('V1CaptureSender', () => {
 
       expect(sleeps).toEqual([100])
     })
+
+    it('honors Retry-After on a 200 partial-retry response', async () => {
+      const { sender, fetch, sleeps } = makeSender({ initialRetryDelayMs: 100, maxAttempts: 2 })
+      fetch
+        .mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'retry' } } }, { 'Retry-After': '3' }))
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.sendV1Batch([msg('u1')])
+
+      expect(sleeps).toEqual([3000])
+    })
   })
 
   describe('default hooks (no injection)', () => {

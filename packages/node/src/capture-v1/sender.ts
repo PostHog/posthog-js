@@ -153,7 +153,10 @@ export class V1CaptureSender {
         return
       }
       pending = retryable
-      await this.sleep(this.backoffDelay(attempt))
+      // A 200 partial-retry body can also carry Retry-After (e.g. rate-limited
+      // retry events); honor it as a minimum the same way as on a retryable status.
+      const retryAfterMs = this.parseRetryAfter(response)
+      await this.sleep(this.backoffDelay(attempt, retryAfterMs))
     }
   }
 
