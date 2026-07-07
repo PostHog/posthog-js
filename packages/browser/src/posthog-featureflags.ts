@@ -38,6 +38,7 @@ import {
 } from './constants'
 
 import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
+import Config from './config'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
 import { window } from './utils/globals'
@@ -610,6 +611,8 @@ export class PostHogFeatureFlags implements Extension {
         const data: Record<string, any> = {
             token: token,
             distinct_id: this._instance.get_distinct_id(),
+            $lib: Config.LIB_NAME,
+            $lib_version: Config.LIB_VERSION,
             groups: this._instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: {
@@ -963,6 +966,8 @@ export class PostHogFeatureFlags implements Extension {
         const data: Record<string, any> = {
             distinct_id: this._instance.get_distinct_id(),
             token,
+            $lib: Config.LIB_NAME,
+            $lib_version: Config.LIB_VERSION,
         }
 
         // Add evaluation contexts if configured

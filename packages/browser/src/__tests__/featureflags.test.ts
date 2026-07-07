@@ -1765,6 +1765,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -1815,6 +1817,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 $device_id: 'test-device-uuid-123',
                 groups: undefined,
@@ -1836,6 +1840,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -1854,6 +1860,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -1876,6 +1884,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $device_id: 'device-uuid-456',
                 $anon_distinct_id: 'anon_id_789',
                 groups: undefined,
@@ -1897,6 +1907,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 $device_id: 'device-uuid-999',
                 groups: undefined,
@@ -1918,6 +1930,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 $device_id: 'device-uuid-888',
                 groups: undefined,
@@ -1958,6 +1972,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: 'rando_id',
                 groups: undefined,
                 group_properties: undefined,
@@ -1982,6 +1998,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: 'rando_id',
                 groups: undefined,
                 group_properties: undefined,
@@ -1997,6 +2015,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[1][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -2011,6 +2031,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[2][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -2036,6 +2058,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -2125,6 +2149,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -2165,6 +2191,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -2262,6 +2290,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
@@ -2292,6 +2322,8 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 person_properties: {},
