@@ -24,7 +24,7 @@ interface AutocaptureOptions {
   unhandledRejections?: boolean
   console?: boolean | LogLevel[]
   /**
-   * Enables native iOS/Android crash autocapture through the optional native plugin.
+   * Enables native iOS/Android/macOS crash autocapture through the optional native plugin.
    * Disabled by default. Requires `@posthog/react-native-plugin` installed.
    */
   nativeCrashes?: boolean

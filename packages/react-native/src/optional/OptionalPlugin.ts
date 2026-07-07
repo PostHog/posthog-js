@@ -18,12 +18,13 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
 
 export let OptionalReactNativePlugin: PostHogReactNativePluginExtended | undefined = undefined
 
-if (Platform.OS !== 'macos' && Platform.OS !== 'web') {
+if (Platform.OS !== 'web') {
   try {
     OptionalReactNativePlugin = require('@posthog/react-native-plugin')
   } catch (e) {}
 
-  if (!OptionalReactNativePlugin) {
+  // The legacy fallback is session-replay only and has no macOS support, so it's iOS/Android only.
+  if (!OptionalReactNativePlugin && Platform.OS !== 'macos') {
     try {
       OptionalReactNativePlugin = require('posthog-react-native-session-replay')
     } catch (e) {}
