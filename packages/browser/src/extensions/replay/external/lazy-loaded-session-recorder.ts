@@ -463,6 +463,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
+    // session ids that have shipped a FullSnapshot, and the one we last tried to heal (see _ensureFullSnapshotForSession)
+    private _sessionsWithFullSnapshot: string[] = []
+    private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
     private _windowId: string
     private _sessionId: string
@@ -1258,7 +1261,45 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        this._ensureFullSnapshotForSession(event, targetSessionId)
+
         this._captureSnapshotBuffered(properties)
+    }
+
+    // Every session id must ship a FullSnapshot before its incrementals are of any use: without one the
+    // recording is unplayable until the next periodic snapshot (a several-minute leading hole). Snapshots
+    // can be lost between rrweb and capture (e.g. a failed compression), and a session-id rotation can slip
+    // through restart paths, so when an incremental is about to ship for a session that has not seen a
+    // FullSnapshot we request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
+    private _ensureFullSnapshotForSession(event: eventWithTime, targetSessionId: string) {
+        if (event.type === EventType.FullSnapshot) {
+            this._sessionsWithFullSnapshot.push(targetSessionId)
+            if (this._sessionsWithFullSnapshot.length > 6) {
+                this._sessionsWithFullSnapshot = this._sessionsWithFullSnapshot.slice(-6)
+            }
+            return
+        }
+
+        if (event.type !== EventType.IncrementalSnapshot) {
+            return
+        }
+
+        if (
+            // only heal when this recorder has already shipped a FullSnapshot to another session —
+            // that is the session-rotation signature; on a fresh start rrweb's own init snapshot is
+            // always ordered ahead of any incremental
+            this._sessionsWithFullSnapshot.length === 0 ||
+            this._sessionsWithFullSnapshot.includes(targetSessionId) ||
+            this._fullSnapshotHealAttemptedFor === targetSessionId
+        ) {
+            return
+        }
+
+        this._fullSnapshotHealAttemptedFor = targetSessionId
+        logger.info('incremental snapshot for a session with no full snapshot - requesting one', {
+            sessionId: targetSessionId,
+        })
+        this._tryTakeFullSnapshot()
     }
 
     private _finishQueuedCompressionEvent(queuedEvent: QueuedCompressionEvent) {
@@ -1659,10 +1700,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // have different target session IDs than this._sessionId
         const targetSessionId = properties.$session_id as string
 
+        // A session-id mismatch must flush and rebind even while idle: an idle rotation restarts the
+        // recorder before any user interaction clears the idle state, and skipping the rebind here
+        // appends the new session's Meta and FullSnapshot to the old session's buffer — shipping them
+        // under the old session id and leaving the new session unplayable until its next full snapshot.
+        const sessionChanged = this._buffer.sessionId !== targetSessionId
+
         if (
-            !this._isIdle && // we never want to flush when idle
-            (this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-                this._buffer.sessionId !== targetSessionId)
+            sessionChanged ||
+            // we never want to flush a healthy same-session buffer while idle
+            (!this._isIdle &&
+                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
             // After flushing, update buffer to use the new target session/window IDs
