@@ -868,8 +868,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "GroupIdentifyMessage",
+              "type": "any",
               "name": "{ groupType, groupKey, properties, distinctId, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "GroupIdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -897,8 +903,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "GroupIdentifyMessage",
+              "type": "any",
               "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "GroupIdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -931,8 +943,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "IdentifyMessage",
+              "type": "any",
               "name": "{ distinctId, properties, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "IdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -960,8 +978,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "IdentifyMessage",
+              "type": "any",
               "name": "{ distinctId, properties, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "IdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -1181,8 +1205,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "SetPersonPropertiesMessage",
+              "type": "any",
               "name": "{ distinctId, properties, propertiesOnce }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "SetPersonPropertiesMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -1210,8 +1240,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "UnsetPersonPropertiesMessage",
+              "type": "any",
               "name": "{ distinctId, properties }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "UnsetPersonPropertiesMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -1718,8 +1754,8 @@
       "path": "src/extensions/context/types.ts"
     },
     {
-      "id": "CookieStore",
-      "name": "CookieStore",
+      "id": "CookieStore_2",
+      "name": "CookieStore_2",
       "properties": [],
       "path": "../core/src/cookie.ts"
     },
