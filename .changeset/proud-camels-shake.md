@@ -2,4 +2,4 @@
 '@posthog/next': patch
 ---
 
-Fix `@posthog/next/pages` resolving to the client barrel in Pages Router server bundles. Server code resolves the `node` export condition (not `react-server`), which previously fell through to `default` — leaving the server API undefined inside `getServerSideProps`. The `node` condition now routes to the server barrel, and the modules it reaches no longer import `server-only` (whose non-react-server build throws at import time).
+Fix `@posthog/next/pages` so Pages Router server bundles resolve the server entrypoint instead of the client barrel. Next.js resolves these bundles with the `node` export condition rather than `react-server`; previously, that fell through to `default`, leaving the server API undefined in `getServerSideProps`. The `node` condition now points to the server barrel, and that import path no longer pulls in `server-only`, which throws outside React Server builds.
