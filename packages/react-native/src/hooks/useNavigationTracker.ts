@@ -3,6 +3,7 @@ import { OptionalReactNativeNavigation } from '../optional/OptionalReactNativeNa
 import type { PostHog } from '../posthog-rn'
 import { PostHogAutocaptureNavigationTrackerOptions } from '../types'
 import { useOverridablePostHog } from './utils'
+import { shouldIgnoreScreen } from '../autocapture/utils'
 import { PostHogNavigationRef } from '../types'
 
 function _useNavigationTrackerDisabled(): void {
@@ -95,11 +96,9 @@ function _useNavigationTracker(
     const currentRouteName = options?.routeToName?.(name, params) || name || 'Unknown'
 
     if (currentRouteName) {
-      const normalizedRouteName = currentRouteName.toLowerCase()
-      const normalizedScreenNames = (options?.ignoreScreenNames ?? []).map((screenName) => screenName?.toLowerCase())
-      const skipScreenTracking = normalizedScreenNames?.length && normalizedScreenNames?.includes(normalizedRouteName)
+      const skipScreenCapture = shouldIgnoreScreen(currentRouteName, options?.ignoreScreenNames)
 
-      if (skipScreenTracking) {
+      if (skipScreenCapture) {
         return
       }
 
@@ -111,10 +110,16 @@ function _useNavigationTracker(
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     // NOTE: The navigation stacks may not be fully rendered initially. This means the first route can be missed (it doesn't update useNavigationState)
-    // If missing we simply wait a tick and call it again.
+    // If missing we simply wait a tick on the event loop and call it again.
+    let timer: ReturnType<typeof setTimeout> | undefined
     if (!routes) {
-      setTimeout(trackRoute, 1)
-      return
+      timer = setTimeout(trackRoute, 1)
+
+      return () => {
+        if (timer) {
+          clearTimeout(timer)
+        }
+      }
     }
     trackRoute()
   }, [routes, trackRoute])

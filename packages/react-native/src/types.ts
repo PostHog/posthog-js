@@ -1,6 +1,12 @@
 export type PostHogAutocaptureNavigationTrackerOptions = {
   routeToName?: (name: string, params: any) => string
   routeToProperties?: (name: string, params: any) => Record<string, any>
+  /**
+   * List of screen names to ignore during autocapture. Matching is case-insensitive.
+   * Only applies to autocaptured screens — manual `posthog.screen()` calls are not filtered.
+   *
+   * @default []
+   */
   ignoreScreenNames?: string[]
 }
 

@@ -7,6 +7,7 @@
 
 import { OptionalReactNativeNavigationWix } from '../optional/OptionalReactNativeNavigationWix'
 import { PostHog } from '../posthog-rn'
+import { shouldIgnoreScreen } from '../autocapture/utils'
 import { PostHogAutocaptureOptions } from '../types'
 
 export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAutocaptureOptions = {}): boolean => {
@@ -26,15 +27,13 @@ export const withReactNativeNavigation = (posthog: PostHog, options: PostHogAuto
       options?.navigation?.routeToName?.(componentName, passProps || {}) || componentName || 'Unknown'
 
     if (currentRouteName) {
-      const ignoreScreenNames = options?.navigation?.ignoreScreenNames ?? []
-      const properties = options?.navigation?.routeToProperties?.(currentRouteName, passProps || {})
-      const skipScreenCapture = ignoreScreenNames.some(
-        (name: string) => name?.toLowerCase() === currentRouteName?.toLowerCase()
-      )
-
+      const skipScreenCapture = shouldIgnoreScreen(currentRouteName, options?.navigation?.ignoreScreenNames)
+      
       if (skipScreenCapture) {
         return
       }
+
+      const properties = options?.navigation?.routeToProperties?.(currentRouteName, passProps || {})
 
       posthog.screen(currentRouteName, properties)
     }

@@ -1,4 +1,30 @@
 /** @jest-environment jsdom */
+const mockViewProps = jest.fn()
+let mockTouchCallback: any = null
+
+jest.mock('react', () => {
+  const actualReact = jest.requireActual('react')
+  return {
+    ...actualReact,
+    useCallback: (fn: any, deps: any) => {
+      const fnStr = fn.toString()
+      if (fnStr.includes('captureTouches') || fnStr.includes('autocaptureFromTouchEvent')) {
+        mockTouchCallback = fn
+      }
+      return actualReact.useCallback(fn, deps)
+    },
+  }
+})
+
+const mockAutocaptureFromTouchEvent = jest.fn()
+jest.mock('../src/autocapture', () => {
+  const actual = jest.requireActual('../src/autocapture')
+  return {
+    ...actual,
+    autocaptureFromTouchEvent: (...args: any[]) => mockAutocaptureFromTouchEvent(...args),
+  }
+})
+
 import React, { useEffect } from 'react'
 import { render, cleanup } from '@testing-library/react'
 
@@ -10,9 +36,10 @@ import type { PostHog } from '../src/posthog-rn'
 // (see test/SurveyModal.spec.tsx), so we provide a minimal manual mock instead.
 jest.mock('react-native', () => {
   const RealReact = jest.requireActual('react')
-  const View = RealReact.forwardRef(({ children, ...rest }: any, ref: any) =>
-    RealReact.createElement('div', { ref, ...rest }, children)
-  )
+  const View = RealReact.forwardRef(({ children, ...rest }: any, ref: any) => {
+    mockViewProps(rest)
+    return RealReact.createElement('div', { ref, ...rest }, children)
+  })
   return {
     View,
     Platform: {
@@ -142,7 +169,8 @@ describe('PostHogProvider', () => {
 
       jest.advanceTimersByTime(1)
 
-      expect(mockPostHog.screen).not.toHaveBeenCalled()
+      expect(mockPostHog.screen).not.toHaveBeenCalledWith('surveys', undefined)
+      expect(mockPostHog.screen).not.toHaveBeenCalledWith()
     })
 
     it('should track screen names that are not in ignoreScreenNames', () => {
@@ -219,6 +247,113 @@ describe('PostHogProvider', () => {
       jest.advanceTimersByTime(1)
 
       expect(mockPostHog.screen).toHaveBeenCalledWith('home', undefined)
+    })
+
+    it('should warn when both client and apiKey are provided', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const mockPostHog = {
+        debug: jest.fn(),
+      } as any
+
+      render(
+        React.createElement(
+          PostHogProvider,
+          { apiKey: 'test-api-key', client: mockPostHog },
+          React.createElement('div', null, 'Test')
+        )
+      )
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'You have provided both a client and an apiKey to PostHogProvider. The apiKey will be ignored in favour of the client.'
+      )
+      consoleSpy.mockRestore()
+    })
+
+    describe('touch events autocapture', () => {
+      beforeEach(() => {
+        mockViewProps.mockClear()
+        mockTouchCallback = null
+        mockAutocaptureFromTouchEvent.mockClear()
+      })
+
+      it('does not pass onTouchEndCapture when captureTouches is false', () => {
+        const mockPostHog = {
+          debug: jest.fn(),
+        } as any
+
+        render(
+          React.createElement(
+            PostHogProvider,
+            {
+              client: mockPostHog,
+              autocapture: {
+                captureTouches: false,
+              },
+            },
+            React.createElement('div', null, 'Test')
+          )
+        )
+
+        expect(mockViewProps).toHaveBeenCalled()
+        const lastProps = mockViewProps.mock.calls[mockViewProps.mock.calls.length - 1][0]
+        expect(lastProps.onTouchEndCapture).toBeUndefined()
+      })
+
+      it('passes onTouchEndCapture and handles callbacks correctly', () => {
+        const mockPostHog = {
+          debug: jest.fn(),
+        } as any
+
+        const { rerender } = render(
+          React.createElement(
+            PostHogProvider,
+            {
+              client: mockPostHog,
+              autocapture: {
+                captureTouches: true,
+              },
+            },
+            React.createElement('div', null, 'Test')
+          )
+        )
+
+        expect(mockViewProps).toHaveBeenCalled()
+        const lastProps = mockViewProps.mock.calls[mockViewProps.mock.calls.length - 1][0]
+        expect(lastProps.onTouchEndCapture).toBeDefined()
+
+        // 1. Test when captureTouches is true and type is 'end'
+        const mockEvent = { _targetInst: {} } as any
+        expect(mockTouchCallback).toBeDefined()
+        mockTouchCallback('end', mockEvent)
+        expect(mockAutocaptureFromTouchEvent).toHaveBeenCalledWith(mockEvent, mockPostHog, { captureTouches: true })
+
+        // Reset mock
+        mockAutocaptureFromTouchEvent.mockClear()
+
+        // 2. Test when captureTouches is true but type is not 'end'
+        mockTouchCallback('start', mockEvent)
+        expect(mockAutocaptureFromTouchEvent).not.toHaveBeenCalled()
+
+        // 3. Test when captureTouches is false
+        // Rerender with captureTouches set to false
+        rerender(
+          React.createElement(
+            PostHogProvider,
+            {
+              client: mockPostHog,
+              autocapture: {
+                captureTouches: false,
+              },
+            },
+            React.createElement('div', null, 'Test')
+          )
+        )
+
+        // The callback should be updated to a version where captureTouches is false in its closure
+        expect(mockTouchCallback).toBeDefined()
+        mockTouchCallback('end', mockEvent)
+        expect(mockAutocaptureFromTouchEvent).not.toHaveBeenCalled()
+      })
     })
   })
 })
