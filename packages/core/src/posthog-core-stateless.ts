@@ -191,13 +191,13 @@ export abstract class PostHogCoreStateless {
   private flushPromise: Promise<any> | null = null
   private flushPromises: Set<Promise<any>> = new Set()
   private shutdownPromise: Promise<void> | null = null
-  private requestTimeout: number
+  protected requestTimeout: number
   private featureFlagsRequestTimeoutMs: number
   private featureFlagsRequestMaxRetries: number
   private remoteConfigRequestTimeoutMs: number
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
-  private historicalMigration: boolean
+  protected historicalMigration: boolean
   private evaluationContexts?: readonly string[]
   protected disabled
   protected disableCompression: boolean
@@ -1095,37 +1095,8 @@ export abstract class PostHogCoreStateless {
     }
     message = this.normalizeMessage(message)
 
-    const data: Record<string, any> = {
-      api_key: this.apiKey,
-      batch: [message],
-      sent_at: currentISOTime(),
-    }
-
-    if (this.historicalMigration) {
-      data.historical_migration = true
-    }
-
-    const payload = safeJsonStringify(data)
-
-    const url = `${this.host}/batch/`
-
-    const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
-    const fetchOptions: PostHogFetchOptions = {
-      method: 'POST',
-      headers: {
-        ...this.getCustomHeaders(),
-        'Content-Type': 'application/json',
-        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
-      },
-      body: gzippedPayload || payload,
-    }
-
     try {
-      const response = await this.fetchWithRetry(url, fetchOptions)
-      // Consume the response body to prevent cross-request promise warnings
-      // in runtimes like Cloudflare Workers that enforce body consumption.
-      // See: https://github.com/PostHog/posthog-js/issues/3173
-      await response.body?.cancel()?.catch(() => {})
+      await this.sendBatch([message])
     } catch (err) {
       this._events.emit('error', err)
     }
@@ -1307,6 +1278,50 @@ export abstract class PostHogCoreStateless {
     return headers
   }
 
+  /**
+   * Builds and sends one `/batch/` request for the given already-normalized
+   * messages, throwing on transport/HTTP error. Batch-size (413) shrinking,
+   * queue persistence, and error recovery stay with the callers (`_flush` and
+   * `sendImmediate`). This is the overridable seam that lets a subclass swap the
+   * capture submission transport (e.g. Capture V1) for both the batched and the
+   * immediate send paths at once.
+   */
+  protected async sendBatch(
+    batchMessages: (PostHogEventProperties | undefined)[],
+    retryOptions?: Partial<RetriableOptions>
+  ): Promise<void> {
+    const data: Record<string, any> = {
+      api_key: this.apiKey,
+      batch: batchMessages,
+      sent_at: currentISOTime(),
+    }
+
+    if (this.historicalMigration) {
+      data.historical_migration = true
+    }
+
+    const payload = safeJsonStringify(data)
+
+    const url = `${this.host}/batch/`
+
+    const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
+    const fetchOptions: PostHogFetchOptions = {
+      method: 'POST',
+      headers: {
+        ...this.getCustomHeaders(),
+        'Content-Type': 'application/json',
+        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
+      },
+      body: gzippedPayload || payload,
+    }
+
+    const response = await this.fetchWithRetry(url, fetchOptions, retryOptions)
+    // Consume the response body to prevent cross-request promise warnings
+    // in runtimes like Cloudflare Workers that enforce body consumption.
+    // See: https://github.com/PostHog/posthog-js/issues/3173
+    await response.body?.cancel()?.catch(() => {})
+  }
+
   private async _flush(): Promise<void> {
     this.clearFlushTimer()
     await this._initPromise
@@ -1335,31 +1350,6 @@ export abstract class PostHogCoreStateless {
         await this.flushStorage()
       }
 
-      const data: Record<string, any> = {
-        api_key: this.apiKey,
-        batch: batchMessages,
-        sent_at: currentISOTime(),
-      }
-
-      if (this.historicalMigration) {
-        data.historical_migration = true
-      }
-
-      const payload = safeJsonStringify(data)
-
-      const url = `${this.host}/batch/`
-
-      const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
-      const fetchOptions: PostHogFetchOptions = {
-        method: 'POST',
-        headers: {
-          ...this.getCustomHeaders(),
-          'Content-Type': 'application/json',
-          ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
-        },
-        body: gzippedPayload || payload,
-      }
-
       const retryOptions: Partial<RetriableOptions> = {
         retryCheck: (err) => {
           // don't automatically retry on 413 errors, we want to reduce the batch size first
@@ -1372,11 +1362,7 @@ export abstract class PostHogCoreStateless {
       }
 
       try {
-        const response = await this.fetchWithRetry(url, fetchOptions, retryOptions)
-        // Consume the response body to prevent cross-request promise warnings
-        // in runtimes like Cloudflare Workers that enforce body consumption.
-        // See: https://github.com/PostHog/posthog-js/issues/3173
-        await response.body?.cancel()?.catch(() => {})
+        await this.sendBatch(batchMessages, retryOptions)
       } catch (err) {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
