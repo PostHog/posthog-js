@@ -884,7 +884,7 @@ class FeatureFlagsPoller {
           // Invalid API key
           this.beginBackoff()
           throw new ClientError(
-            `Your project key or personal API key is invalid. Setting next polling interval to ${this.getPollingInterval()}ms. More information: https://posthog.com/docs/api#rate-limiting`
+            `Your project key or secret key is invalid. Setting next polling interval to ${this.getPollingInterval()}ms. More information: https://posthog.com/docs/api#rate-limiting`
           )
 
         case 402:
@@ -902,7 +902,7 @@ class FeatureFlagsPoller {
           // Permissions issue
           this.beginBackoff()
           throw new ClientError(
-            `Your personal API key does not have permission to fetch feature flag definitions for local evaluation. Setting next polling interval to ${this.getPollingInterval()}ms. Are you sure you're using the correct personal and Project API key pair? More information: https://posthog.com/docs/api/overview`
+            `Your secret key does not have permission to fetch feature flag definitions for local evaluation. Setting next polling interval to ${this.getPollingInterval()}ms. Are you sure you're using the correct secret and Project API key pair? More information: https://posthog.com/docs/api/overview`
           )
 
         case 429:

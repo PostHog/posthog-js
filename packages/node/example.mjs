@@ -58,7 +58,7 @@ loadEnvFile()
 
 // Get configuration
 const projectKey = process.env.POSTHOG_PROJECT_API_KEY || ''
-const personalApiKey = process.env.POSTHOG_PERSONAL_API_KEY || ''
+const secretKey = process.env.POSTHOG_PERSONAL_API_KEY || ''
 const host = process.env.POSTHOG_HOST || 'http://localhost:8000'
 
 // Check if project key is provided (required)
@@ -72,22 +72,22 @@ if (!projectKey) {
 // Import PostHog from the built output
 const { PostHog } = await import('./dist/entrypoints/index.node.mjs')
 
-// Check if personal API key is available for local evaluation
-const localEvalAvailable = Boolean(personalApiKey)
+// Check if secret key is available for local evaluation
+const localEvalAvailable = Boolean(secretKey)
 
 // Initialize PostHog client
 const posthog = new PostHog(projectKey, {
   host,
-  personalApiKey: personalApiKey || undefined,
+  secretKey: secretKey || undefined,
   featureFlagsPollingInterval: 10000,
 })
 
 console.log('🔑 PostHog Configuration:')
 console.log(`   Project API Key: ${projectKey.slice(0, 9)}...`)
 if (localEvalAvailable) {
-  console.log('   Personal API Key: [SET]')
+  console.log('   Secret Key: [SET]')
 } else {
-  console.log('   Personal API Key: [NOT SET] - Local evaluation examples will be skipped')
+  console.log('   Secret Key: [NOT SET] - Local evaluation examples will be skipped')
 }
 console.log(`   Host: ${host}\n`)
 
@@ -109,7 +109,7 @@ function prompt(question) {
 // Display menu and get user choice
 console.log('🚀 PostHog Node.js SDK Demo - Choose an example to run:\n')
 console.log('1. Identify and capture examples')
-const localEvalNote = localEvalAvailable ? '' : ' [requires personal API key]'
+const localEvalNote = localEvalAvailable ? '' : ' [requires secret key]'
 console.log(`2. Feature flag local evaluation examples${localEvalNote}`)
 console.log('3. Feature flag payload examples')
 console.log(`4. Flag dependencies examples${localEvalNote}`)
@@ -192,7 +192,7 @@ if (choice === '1') {
   })
 } else if (choice === '2') {
   if (!localEvalAvailable) {
-    console.log('\n❌ This example requires a personal API key for local evaluation.')
+    console.log('\n❌ This example requires a secret key for local evaluation.')
     console.log('   Set POSTHOG_PERSONAL_API_KEY environment variable to run this example.')
     await posthog.shutdown()
     process.exit(1)
@@ -298,7 +298,7 @@ if (choice === '1') {
   }
 } else if (choice === '4') {
   if (!localEvalAvailable) {
-    console.log('\n❌ This example requires a personal API key for local evaluation.')
+    console.log('\n❌ This example requires a secret key for local evaluation.')
     console.log('   Set POSTHOG_PERSONAL_API_KEY environment variable to run this example.')
     await posthog.shutdown()
     process.exit(1)
@@ -490,13 +490,13 @@ if (choice === '1') {
   console.log('\n' + '='.repeat(60))
   console.log('FEATURE FLAG REMOTE EVALUATION EXAMPLES')
   console.log('='.repeat(60))
-  console.log('🌐 These examples use a client WITHOUT a personal API key,')
+  console.log('🌐 These examples use a client WITHOUT a secret key,')
   console.log('   so all flag evaluations go through the /decide endpoint.\n')
 
-  // Create a separate client without personal API key for remote evaluation
+  // Create a separate client without secret key for remote evaluation
   const remoteClient = new PostHog(projectKey, {
     host,
-    // No personalApiKey - forces remote evaluation
+    // No secretKey - forces remote evaluation
   })
 
   remoteClient.debug(true)
@@ -574,13 +574,13 @@ if (choice === '1') {
   console.log('   - All evaluations went through the /decide endpoint')
   console.log('   - No local flag definitions were loaded')
   console.log('   - Person/group properties were sent to server for evaluation')
-  console.log('   - Useful when you cannot use a personal API key')
+  console.log('   - Useful when you cannot use a secret key')
 
   await remoteClient.shutdown()
 } else if (choice === '7') {
   console.log('\n🔄 Running all examples...')
   if (!localEvalAvailable) {
-    console.log('   (Skipping local evaluation examples - no personal API key set)\n')
+    console.log('   (Skipping local evaluation examples - no secret key set)\n')
   }
 
   // Run example 1 - Identify and Capture
@@ -656,7 +656,7 @@ if (choice === '1') {
 
   // Run example 6 - Remote Evaluation
   console.log(`\n${'🔸'.repeat(10)} REMOTE EVALUATION ${'🔸'.repeat(10)}`)
-  console.log('🌐 Testing remote evaluation (separate client without personal API key)...')
+  console.log('🌐 Testing remote evaluation (separate client without secret key)...')
 
   const remoteClient = new PostHog(projectKey, { host })
   const remoteFlag = await remoteClient.isFeatureEnabled('beta-feature', 'remote_demo_user', {

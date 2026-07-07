@@ -129,7 +129,7 @@ const loggingFetch = async (url, options) => {
 // Initialize PostHog with custom fetch
 const posthog = new PostHog(API_KEY, {
   host: HOST,
-  personalApiKey: PERSONAL_API_KEY,
+  secretKey: PERSONAL_API_KEY,
   featureFlagsPollingInterval: POLL_INTERVAL_MS,
   fetch: loggingFetch,
   debug: false,
