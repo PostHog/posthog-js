@@ -1,4 +1,4 @@
-import type { PostHogEventProperties, PostHogFetchResponse } from '@posthog/core'
+import { type PostHogEventProperties, type PostHogFetchResponse, isGzipSupported } from '@posthog/core'
 
 import { CaptureV1Error } from '@/capture-v1/errors'
 import { V1CaptureSender, type V1CaptureSenderConfig, type V1CaptureSenderHooks } from '@/capture-v1/sender'
@@ -538,8 +538,16 @@ describe('V1CaptureSender', () => {
       const sender = new V1CaptureSender({ ...baseConfig, compressionEnabled: true }, { fetch, onError: () => {} })
       await sender.sendV1Batch([msg('u1')])
 
-      expect(fetch.mock.calls[0][1].headers['Content-Encoding']).toBe('gzip')
-      expect(fetch.mock.calls[0][1].body).toBeInstanceOf(Blob)
+      // The default compressor is the platform gzip codec: it compresses where
+      // supported and transparently falls back to an uncompressed string where it
+      // is not (e.g. the edge runtime has no CompressionStream).
+      if (isGzipSupported()) {
+        expect(fetch.mock.calls[0][1].headers['Content-Encoding']).toBe('gzip')
+        expect(fetch.mock.calls[0][1].body).toBeInstanceOf(Blob)
+      } else {
+        expect(fetch.mock.calls[0][1].headers['Content-Encoding']).toBeUndefined()
+        expect(typeof fetch.mock.calls[0][1].body).toBe('string')
+      }
     })
   })
 })
