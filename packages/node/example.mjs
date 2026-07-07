@@ -58,7 +58,7 @@ loadEnvFile()
 
 // Get configuration
 const projectKey = process.env.POSTHOG_PROJECT_API_KEY || ''
-const secretKey = process.env.POSTHOG_PERSONAL_API_KEY || ''
+const secretKey = process.env.POSTHOG_SECRET_KEY || ''
 const host = process.env.POSTHOG_HOST || 'http://localhost:8000'
 
 // Check if project key is provided (required)
@@ -193,7 +193,7 @@ if (choice === '1') {
 } else if (choice === '2') {
   if (!localEvalAvailable) {
     console.log('\n❌ This example requires a secret key for local evaluation.')
-    console.log('   Set POSTHOG_PERSONAL_API_KEY environment variable to run this example.')
+    console.log('   Set POSTHOG_SECRET_KEY environment variable to run this example.')
     await posthog.shutdown()
     process.exit(1)
   }
@@ -299,7 +299,7 @@ if (choice === '1') {
 } else if (choice === '4') {
   if (!localEvalAvailable) {
     console.log('\n❌ This example requires a secret key for local evaluation.')
-    console.log('   Set POSTHOG_PERSONAL_API_KEY environment variable to run this example.')
+    console.log('   Set POSTHOG_SECRET_KEY environment variable to run this example.')
     await posthog.shutdown()
     process.exit(1)
   }
