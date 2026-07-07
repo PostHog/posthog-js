@@ -580,13 +580,13 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
               with:
-                node-version: 24
+                  node-version: 24
 
             - name: Setup pnpm
               uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
               with:
-                cache: false
-                install: false
+                  cache: false
+                  install: false
 
             - name: Install frontend dependencies
               run: pnpm --filter=@posthog/frontend... install --frozen-lockfile
@@ -615,35 +615,42 @@ jobs:
             # upload step has stable filenames. The runtime CSS loader in the
             # JS bundle expects the literal `toolbar.css`.
             #
+            # The upcoming code-split toolbar build emits canonical names
+            # directly: `toolbar.js` is a tiny loader and the hashed ESM app
+            # lives in `dist/toolbar/`. Accept either layout — a file that is
+            # already canonical needs no rename, and the chunk directory's
+            # names are content-hashed by design and must be preserved.
+            #
             # Toolbar source maps are discarded (we don't ship them to end users).
             - name: Normalize toolbar output filenames
               run: |
                   set -euo pipefail
                   # `set -e` alone doesn't propagate failures out of $(...)
                   # command substitutions. Without inherit_errexit, a failing
-                  # `find frontend/dist/assets` inside an echo would silently
-                  # print "0 files" and the step would pass, only to fail
-                  # confusingly later in upload-artifact's if-no-files-found.
+                  # `find` inside an echo would silently print "0 files" and
+                  # the step would pass, only to fail confusingly later in
+                  # upload-artifact's if-no-files-found.
                   shopt -s inherit_errexit
                   shopt -s nullglob
-                  jsfiles=(frontend/dist/toolbar-*.js)
-                  cssfiles=(frontend/dist/toolbar-*.css)
-                  if [ ${#jsfiles[@]} -ne 1 ]; then
-                      echo "❌ expected exactly one frontend/dist/toolbar-*.js, got ${#jsfiles[@]}: ${jsfiles[*]:-}"
-                      ls -la frontend/dist/ || true
-                      exit 1
-                  fi
-                  if [ ${#cssfiles[@]} -ne 1 ]; then
-                      echo "❌ expected exactly one frontend/dist/toolbar-*.css, got ${#cssfiles[@]}: ${cssfiles[*]:-}"
-                      ls -la frontend/dist/ || true
-                      exit 1
-                  fi
-                  mv "${jsfiles[0]}" frontend/dist/toolbar.js
-                  mv "${cssfiles[0]}" frontend/dist/toolbar.css
+                  for ext in js css; do
+                      if [ -f "frontend/dist/toolbar.$ext" ]; then
+                          echo "✓ toolbar.$ext already canonical, no rename needed"
+                          continue
+                      fi
+                      hashed=(frontend/dist/toolbar-*."$ext")
+                      if [ ${#hashed[@]} -ne 1 ]; then
+                          echo "❌ expected exactly one frontend/dist/toolbar-*.$ext, got ${#hashed[@]}: ${hashed[*]:-}"
+                          ls -la frontend/dist/ || true
+                          exit 1
+                      fi
+                      mv "${hashed[0]}" "frontend/dist/toolbar.$ext"
+                  done
                   rm -f frontend/dist/*.map
+                  if [ -d frontend/dist/toolbar ]; then
+                      find frontend/dist/toolbar -type f -name '*.map' -delete
+                  fi
                   echo "✓ normalized toolbar outputs:"
                   ls -la frontend/dist/toolbar.js frontend/dist/toolbar.css
-                  echo "✓ assets/ contains $(find frontend/dist/assets -type f | wc -l) files"
 
             # Assert the cross-repo contract: the `TOOLBAR_PUBLIC_PATH` env
             # var we passed in must actually appear in the bundle. If
@@ -658,17 +665,29 @@ jobs:
                   # step has several $(...) substitutions (find, wc, git
                   # rev-parse) that we want to fail loudly if they break.
                   shopt -s inherit_errexit
-                  if ! grep -aq "$TOOLBAR_PUBLIC_PATH" frontend/dist/toolbar.js; then
-                      echo "❌ toolbar.js does not contain TOOLBAR_PUBLIC_PATH='$TOOLBAR_PUBLIC_PATH'"
+                  # In the single-file build the public path is baked into
+                  # toolbar.js itself. In the code-split build toolbar.js is
+                  # just a loader (it resolves chunks relative to its own URL)
+                  # and the runtime CSS loader that uses TOOLBAR_PUBLIC_PATH
+                  # lives in a chunk under dist/toolbar/ — so search both.
+                  targets=(frontend/dist/toolbar.js)
+                  if [ -d frontend/dist/toolbar ]; then
+                      targets+=(frontend/dist/toolbar)
+                  fi
+                  if ! grep -arq "$TOOLBAR_PUBLIC_PATH" "${targets[@]}"; then
+                      echo "❌ toolbar bundle does not contain TOOLBAR_PUBLIC_PATH='$TOOLBAR_PUBLIC_PATH'"
+                      echo "   searched: ${targets[*]}"
                       echo "   posthog/posthog@$(git rev-parse HEAD) may not honour the env var yet."
                       exit 1
                   fi
+                  count_files() { if [ -d "$1" ]; then find "$1" -type f | wc -l | tr -d ' '; else echo 0; fi; }
                   echo "✓ TOOLBAR_PUBLIC_PATH baked into bundle"
                   echo "  region:              ${{ matrix.region.name }}"
                   echo "  TOOLBAR_PUBLIC_PATH: $TOOLBAR_PUBLIC_PATH"
                   echo "  toolbar.js:          $(wc -c < frontend/dist/toolbar.js) bytes"
                   echo "  toolbar.css:         $(wc -c < frontend/dist/toolbar.css) bytes"
-                  echo "  assets/:             $(find frontend/dist/assets -type f | wc -l | tr -d ' ') files"
+                  echo "  assets/:             $(count_files frontend/dist/assets) files"
+                  echo "  toolbar/:            $(count_files frontend/dist/toolbar) files"
                   echo "  built from:          PostHog/posthog@$(git rev-parse HEAD)"
 
             - name: Upload toolbar artifact
@@ -676,12 +695,18 @@ jobs:
               with:
                   name: toolbar-dist-${{ matrix.region.name }}
                   # Least common ancestor of these paths is `frontend/dist`,
-                  # so the artifact contains `toolbar.js`, `toolbar.css`, and
-                  # `assets/**` at the root (see actions/upload-artifact docs).
+                  # so the artifact contains `toolbar.js`, `toolbar.css`,
+                  # `assets/**`, and `toolbar/**` at the root (see
+                  # actions/upload-artifact docs). `assets/` and `toolbar/`
+                  # are each optional (matching neither layout of the build
+                  # is fine as long as something matched overall): today's
+                  # single-file build emits `assets/`, the upcoming
+                  # code-split build ships the hashed ESM app in `toolbar/`.
                   path: |
                       frontend/dist/toolbar.js
                       frontend/dist/toolbar.css
                       frontend/dist/assets
+                      frontend/dist/toolbar
                   retention-days: 1
                   if-no-files-found: error
 
@@ -765,11 +790,11 @@ jobs:
             - name: Setup pnpm and Node.js
               uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
               with:
-                # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
-                # until https://github.com/jasongin/nvs/pull/315 lands.
-                runtime: node@24
-                cache: false
-                install: false
+                  # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
+                  # until https://github.com/jasongin/nvs/pull/315 lands.
+                  runtime: node@24
+                  cache: false
+                  install: false
 
             - name: Install release tooling dependencies
               run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
