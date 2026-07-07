@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.398.2
+
+### Patch Changes
+
+- [#4063](https://github.com/PostHog/posthog-js/pull/4063) [`24aadd5`](https://github.com/PostHog/posthog-js/commit/24aadd5b645766a64f72315a08ef7fc35cffb23e) Thanks [@posthog](https://github.com/apps/posthog)! - Fix a `RangeError: Maximum call stack size exceeded` that could originate from the shared `patch()` fetch/XHR wrapper. posthog-js wraps `window.fetch` in two independent places (tracing headers and session-recording network capture), so their restores routinely ran out of order. Previously an out-of-order restore silently no-op'd, leaving the wrapper in the call path; repeated start/stop cycles grew the wrapper chain without bound until a real `fetch` walked a chain deep enough to overflow the stack. Wrappers now delegate through a mutable link so any layer can be torn down even when newer wrappers sit on top of it, keeping the chain bounded. Header-injection and network-capture behavior is unchanged.
+  (2026-07-07)
+
+- [#4100](https://github.com/PostHog/posthog-js/pull/4100) [`e250a24`](https://github.com/PostHog/posthog-js/commit/e250a2409566a46592f1eb71f9c40b652385d13f) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop adding the gzip compression query parameter to browser SDK requests.
+  (2026-07-07)
+
+- [#4083](https://github.com/PostHog/posthog-js/pull/4083) [`f07e241`](https://github.com/PostHog/posthog-js/commit/f07e241bed4201978045cd7c86826c7feff3aebb) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): harden session-replay network capture so instrumentation that throws (e.g. `new Request()` rejecting a URL/method) degrades gracefully and never breaks or misattributes the host application's own `xhr.open()` / `fetch()` calls
+  (2026-07-07)
+
 ## 1.398.1
 
 ### Patch Changes
