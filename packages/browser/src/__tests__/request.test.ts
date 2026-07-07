@@ -195,6 +195,71 @@ describe('request', () => {
             )
         })
 
+        it.each(['/e/', '/s/', '/i/v0/e/', '/i/v0/s/'])('does not add ver to browser capture endpoint %s', (path) => {
+            request(
+                createRequest({
+                    url: `https://any.posthog-instance.com${path}`,
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toContain('_=1700000000000')
+            expect(requestedUrl).not.toContain('ver=')
+        })
+
+        it('does not add ver to proxied capture endpoints', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/ingest/s/',
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/?_=1700000000000')
+        })
+
+        it('does not rely on String.prototype.endsWith for capture endpoint matching', () => {
+            const originalEndsWith = String.prototype.endsWith
+            // Simulate older browsers where String.prototype.endsWith is unavailable.
+            delete (String.prototype as any).endsWith
+
+            try {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/e/',
+                    })
+                )
+
+                const requestedUrl = mockedFetch.mock.calls[0][0]
+                expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?_=1700000000000')
+            } finally {
+                String.prototype.endsWith = originalEndsWith
+            }
+        })
+
+        it('removes existing ver from capture endpoints', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/?ver=1.23.45&ip=0',
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?ip=0&_=1700000000000')
+        })
+
+        it('keeps ver on feature flag requests', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/flags/?v=2',
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe(
+                'https://any.posthog-instance.com/flags/?v=2&_=1700000000000&ver=1.23.45'
+            )
+        })
+
         it('calls the callback handler when successful', async () => {
             request(createRequest())
             await flushPromises()
