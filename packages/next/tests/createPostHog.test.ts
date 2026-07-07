@@ -324,6 +324,40 @@ describe('createPostHog', () => {
             )
         })
 
+        it('shares an in-flight resolver promise for concurrent getPostHog() calls in the same request', async () => {
+            let resolveDistinctId!: (distinctId: string) => void
+            const distinctIdPromise = new Promise<string>((resolve) => {
+                resolveDistinctId = resolve
+            })
+            let markResolverStarted!: () => void
+            const resolverStarted = new Promise<void>((resolve) => {
+                markResolverStarted = resolve
+            })
+            const getDistinctId = jest.fn(() => {
+                markResolverStarted()
+                return distinctIdPromise
+            })
+
+            // The headers() mock resolves the same store object for the whole
+            // test, mirroring how Next returns one headers instance per request.
+            const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
+            const clientsPromise = Promise.all([getPostHog(), getPostHog()])
+
+            await resolverStarted
+            expect(getDistinctId).toHaveBeenCalledTimes(1)
+
+            resolveDistinctId('server-user')
+            const [client1, client2] = await clientsPromise
+            client1.capture({ event: 'one' })
+            client2.capture({ event: 'two' })
+
+            expect(getDistinctId).toHaveBeenCalledTimes(1)
+            expect(mockWithContext).toHaveBeenCalledWith(
+                expect.objectContaining({ distinctId: 'server-user' }),
+                expect.any(Function)
+            )
+        })
+
         it('resolves identity again for a new request', async () => {
             const getDistinctId = jest.fn(() => 'server-user')
 
