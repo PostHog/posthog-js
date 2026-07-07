@@ -1,0 +1,74 @@
+{
+  "name": "@posthog/openfeature-node-provider",
+  "version": "0.0.0",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
+  "description": "Official PostHog provider for the OpenFeature server SDK (Node), backed by posthog-node",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/openfeature-node-provider"
+  },
+  "homepage": "https://github.com/PostHog/posthog-js/tree/main/packages/openfeature-node-provider#readme",
+  "author": {
+    "name": "PostHog",
+    "email": "engineering@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "build": "rslib build",
+    "dev": "rslib build --watch",
+    "test:unit": "jest",
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "engines": {
+    "node": "^20.20.0 || >=22.22.0"
+  },
+  "files": [
+    "dist/"
+  ],
+  "keywords": [
+    "posthog",
+    "openfeature",
+    "feature-flags",
+    "node",
+    "server"
+  ],
+  "peerDependencies": {
+    "@openfeature/core": "^1.11.0",
+    "@openfeature/server-sdk": "^1.17.0",
+    "posthog-node": ">=5.21.2"
+  },
+  "devDependencies": {
+    "@openfeature/core": "^1.11.0",
+    "@openfeature/server-sdk": "^1.22.0",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@rslib/core": "catalog:",
+    "@types/jest": "catalog:",
+    "@types/node": "^22.15.23",
+    "jest": "catalog:",
+    "posthog-node": "workspace:*",
+    "ts-jest": "catalog:"
+  }
+}
