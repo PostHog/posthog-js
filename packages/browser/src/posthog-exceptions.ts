@@ -266,7 +266,7 @@ export class PostHogExceptions implements Extension {
             (exception) =>
                 exception.type === 'AbortError' &&
                 isString(exception.value) &&
-                exception.value.indexOf(REQUEST_TIMED_OUT_MESSAGE_PREFIX) !== -1
+                exception.value.indexOf(REQUEST_TIMED_OUT_MESSAGE_PREFIX) === 0
         )
     }
 

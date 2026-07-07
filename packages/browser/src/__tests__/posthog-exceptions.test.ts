@@ -234,6 +234,12 @@ describe('PostHogExceptions', () => {
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })
 
+            it('captures AbortErrors that only mention the timeout message mid-string', () => {
+                const exception = { type: 'AbortError', value: 'wrapped: PostHog request timed out after 60000ms' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
             it('captures non-AbortError exceptions that mention a timed-out request', () => {
                 const exception = { type: 'TypeError', value: 'PostHog request timed out after 60000ms' }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
