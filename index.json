@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/3796": {
+    "key": "PostHog/posthog-js/issue/3796",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3796",
+    "url": "https://github.com/PostHog/posthog-js/issues/3796",
+    "conclusion": "Valid React Native session replay feature request; RN currently forces screenshot mode and has no supported wireframe mode option.",
+    "labels": [
+      "enhancement",
+      "feature/replay",
+      "react-native",
+      "feature/mobile",
+      "iOS",
+      "Android"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-07T09:33:40.822Z"
+  },
   "PostHog/posthog-js/issue/3809": {
     "key": "PostHog/posthog-js/issue/3809",
     "repo": "PostHog/posthog-js",
