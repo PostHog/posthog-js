@@ -463,8 +463,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
-    // session ids that have shipped a FullSnapshot, and the one we last tried to heal (see _ensureFullSnapshotForSession)
-    private _sessionsWithFullSnapshot: string[] = []
+    // ship-time FullSnapshot tracking for _ensureFullSnapshotForSession (unlike _fullSnapshotTimestamps, which records emit-time debug telemetry)
+    private _lastFullSnapshotSessionId: string | undefined = undefined
     private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
     private _windowId: string
@@ -1266,17 +1266,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._captureSnapshotBuffered(properties)
     }
 
-    // Every session id must ship a FullSnapshot before its incrementals are of any use: without one the
-    // recording is unplayable until the next periodic snapshot (a several-minute leading hole). Snapshots
-    // can be lost between rrweb and capture (e.g. a failed compression), and a session-id rotation can slip
-    // through restart paths, so when an incremental is about to ship for a session that has not seen a
-    // FullSnapshot we request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
+    // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic snapshot, so request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
     private _ensureFullSnapshotForSession(event: eventWithTime, targetSessionId: string) {
         if (event.type === EventType.FullSnapshot) {
-            this._sessionsWithFullSnapshot.push(targetSessionId)
-            if (this._sessionsWithFullSnapshot.length > 6) {
-                this._sessionsWithFullSnapshot = this._sessionsWithFullSnapshot.slice(-6)
-            }
+            this._lastFullSnapshotSessionId = targetSessionId
             return
         }
 
@@ -1285,11 +1278,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (
-            // only heal when this recorder has already shipped a FullSnapshot to another session —
-            // that is the session-rotation signature; on a fresh start rrweb's own init snapshot is
-            // always ordered ahead of any incremental
-            this._sessionsWithFullSnapshot.length === 0 ||
-            this._sessionsWithFullSnapshot.includes(targetSessionId) ||
+            // deliberately conservative: only heal after this recorder shipped a FullSnapshot to another session (the rotation signature), since on a fresh start rrweb's init snapshot is always ordered ahead of any incremental
+            this._lastFullSnapshotSessionId === undefined ||
+            this._lastFullSnapshotSessionId === targetSessionId ||
             this._fullSnapshotHealAttemptedFor === targetSessionId
         ) {
             return
@@ -1700,10 +1691,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // have different target session IDs than this._sessionId
         const targetSessionId = properties.$session_id as string
 
-        // A session-id mismatch must flush and rebind even while idle: an idle rotation restarts the
-        // recorder before any user interaction clears the idle state, and skipping the rebind here
-        // appends the new session's Meta and FullSnapshot to the old session's buffer — shipping them
-        // under the old session id and leaving the new session unplayable until its next full snapshot.
+        // A session-id mismatch must flush and rebind even while idle, or an idle rotation appends the new session's Meta and FullSnapshot to the old session's buffer and ships them under the old session id.
         const sessionChanged = this._buffer.sessionId !== targetSessionId
 
         if (

@@ -12,6 +12,12 @@ const createFullSnapshot = (data: Record<string, unknown> = {}) => ({
     timestamp: 123,
 })
 
+const createIncrementalSnapshot = (timestamp: number) => ({
+    type: 3,
+    data: { source: 0, adds: [], attributes: [], removes: [], texts: [] },
+    timestamp,
+})
+
 const createCustomSnapshot = () => ({
     type: 5,
     data: {
@@ -273,8 +279,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
             gzipSupported: true,
         })
 
-        // an idle session-id rotation restarts the recorder before any user interaction clears the
-        // idle state: _onSessionIdCallback sets _isIdle to 'unknown' and start() adopts the new id
+        // an idle rotation adopts the new session id before any user interaction clears the idle state
         lazyLoadedSessionRecording['_isIdle'] = 'unknown'
         lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
 
@@ -305,23 +310,21 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         await lazyLoadedSessionRecording['_compressionQueue']
         expect(takeFullSnapshot).not.toHaveBeenCalled()
 
-        // an idle rotation adopts the new session id without any user interaction clearing the
-        // idle state; the new session's full snapshot never ships (the rotation bug), so the next
-        // incremental for the new session must trigger a healing snapshot
+        // an idle rotation adopts the new session id whose full snapshot never ships (the rotation bug), so the next incremental must trigger a healing snapshot
         lazyLoadedSessionRecording['_isIdle'] = 'unknown'
         lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
-        emit({ type: 3, data: { source: 0, adds: [], attributes: [], removes: [], texts: [] }, timestamp: 100 })
+        emit(createIncrementalSnapshot(100))
         await lazyLoadedSessionRecording['_compressionQueue']
         expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
 
         // only healed once per session id, even if the requested snapshot has not landed yet
-        emit({ type: 3, data: { source: 0, adds: [], attributes: [], removes: [], texts: [] }, timestamp: 200 })
+        emit(createIncrementalSnapshot(200))
         await lazyLoadedSessionRecording['_compressionQueue']
         expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
 
         // once the healed full snapshot ships, incrementals stop triggering healing
         emit(createFullSnapshot({ content: 'healed' }))
-        emit({ type: 3, data: { source: 0, adds: [], attributes: [], removes: [], texts: [] }, timestamp: 300 })
+        emit(createIncrementalSnapshot(300))
         await lazyLoadedSessionRecording['_compressionQueue']
         expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
     })
