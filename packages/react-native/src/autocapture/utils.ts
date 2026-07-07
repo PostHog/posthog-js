@@ -2,7 +2,7 @@ export const shouldIgnoreScreen = (currentRouteName: string, ignoreScreenNames?:
   const normalizedRouteName = (currentRouteName || '').toLowerCase()
   const normalizedScreenNames = (ignoreScreenNames ?? []).map((screenName) => screenName?.toLowerCase()) || []
 
-  const screenMatch = normalizedScreenNames.some((name: string) => name?.toLowerCase() === normalizedRouteName)
+  const screenMatch = normalizedScreenNames.some((name: string) => name === normalizedRouteName)
 
   return screenMatch
 }
