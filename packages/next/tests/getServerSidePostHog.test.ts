@@ -61,9 +61,6 @@ describe('getServerSidePostHog', () => {
             }),
         })
 
-        // enterContext() set inside the async helper would not survive the
-        // await boundary back in the caller's getServerSideProps, so context
-        // must be applied per method call instead.
         const posthog = await getServerSidePostHog(ctx, 'phc_test123')
         posthog.getAllFlags()
 

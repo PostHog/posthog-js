@@ -1,4 +1,3 @@
-// Mock posthog-node
 const mockCapture = jest.fn()
 const mockWithContext = jest.fn((_, fn) => fn())
 const mockEnterContext = jest.fn()
@@ -11,7 +10,6 @@ jest.mock('posthog-node', () => ({
     })),
 }))
 
-// Mock next/headers cookies()
 function createMockCookies(entries: Record<string, string>) {
     return {
         get: jest.fn((name: string) => {

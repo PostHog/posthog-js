@@ -1,6 +1,3 @@
-// No `import 'server-only'` here: this module is reachable from the `./pages`
-// `node` export condition (Pages Router server bundles), where server-only's
-// non-react-server build throws at import time. See getPostHog.ts.
 import type { GetServerSidePropsContext } from 'next'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { getRequestScopedPostHog } from './getPostHog.js'
@@ -13,24 +10,15 @@ export interface CreatePostHogConfig {
     /** Optional `posthog-node` configuration (e.g., `{ host: '...' }`). */
     options?: Partial<PostHogOptions>
     /**
-     * Resolves the distinct id for the current request from a server-side
-     * source of truth, such as your auth session. When it returns a non-empty
-     * string, that id overrides the client-provided distinct id (from the
-     * PostHog cookie and tracing headers) for every event and flag evaluation
-     * made through the returned client. Session and device linkage
-     * (`$session_id`, `$device_id`, `$window_id`) stays client-provided so
-     * server events still correlate with the browser session. Return
-     * `null`/`undefined` to fall back to the client-provided distinct id.
+     * Resolves a trusted distinct id for the current request, such as an auth
+     * session user id. A non-empty result overrides the client-provided
+     * cookie/tracing distinct id for server events and flag evaluations, while
+     * session/device/window linkage stays client-provided. Return nullish to
+     * fall back to the client identity.
      *
-     * Runs once per `getPostHog()` call, in request scope — it may call
-     * `cookies()`/`headers()` or auth helpers that do. When `getPostHog(ctx)`
-     * is called with a `GetServerSidePropsContext` (Pages Router), the
-     * resolver receives that context for Pages Router auth helpers. Wrap
-     * resolvers that do their own I/O (e.g. a database session lookup) in
-     * React's `cache()` so multiple `getPostHog()` calls in one render don't
-     * repeat it. It is not called for opted-out users. Errors are logged and
-     * treated as "no identity"; Next.js `redirect()`/`notFound()` propagate
-     * normally.
+     * Runs once per `getPostHog()` call. In Pages Router, `getPostHog(ctx)`
+     * passes `ctx` to the resolver; in App Router it may call request-scoped
+     * auth helpers directly. Skipped for opted-out users.
      */
     getDistinctId?: PostHogDistinctIdResolver
 }
@@ -54,11 +42,11 @@ export interface CreatePostHogResult {
  * feature flags are attributed to the authenticated user regardless of the
  * client-provided distinct id, which is spoofable.
  *
- * Define it once in a shared module and import it everywhere you need
- * server-side PostHog. Mark that module `server-only` so an accidental import
- * from a client component fails with a clear build-time error.
+ * Define it once in a shared server module and import it everywhere you need
+ * server-side PostHog. In App Router apps, mark that module `server-only` so
+ * accidental client imports fail at build time.
  *
- * @example
+ * @example App Router
  * ```ts
  * // lib/posthog.ts
  * import 'server-only'
@@ -78,14 +66,17 @@ export interface CreatePostHogResult {
  *     const posthog = await getPostHog()
  *     // Attributed to the logged-in user, or the client identity when logged out
  *     posthog.capture({ event: 'checkout_started' })
- *     // ...
  * }
  * ```
  *
- * In the Pages Router, pass the `GetServerSidePropsContext`; the resolver
- * receives it so it can read the session from the request:
+ * @example Pages Router
+ * Import from `@posthog/next/pages` in Pages Router server code and pass the
+ * `GetServerSidePropsContext`; the resolver receives it so it can read the
+ * session from the request:
  * ```ts
  * // lib/posthog.ts
+ * import { createPostHog } from '@posthog/next/pages'
+ *
  * export const { getPostHog } = createPostHog({
  *     getDistinctId: async (ctx) =>
  *         ctx ? (await getServerSession(ctx.req, ctx.res, authOptions))?.user?.id : undefined,

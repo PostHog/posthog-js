@@ -77,7 +77,8 @@ export async function resolveServerDistinctId(
             )
             return undefined
         }
-        return distinctId.trim() !== '' ? distinctId : undefined
+        const trimmed = distinctId.trim()
+        return trimmed !== '' ? trimmed : undefined
     } catch (error) {
         if (isNextControlFlowError(error)) {
             throw error

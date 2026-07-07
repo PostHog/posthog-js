@@ -7,20 +7,6 @@ import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.
 import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shared/identity.js'
 import { withRequestContext } from '../server/getPostHog.js'
 
-/**
- * Implementation behind the Pages Router path of `createPostHog().getPostHog(ctx)`.
- *
- * Reads the user's identity from the PostHog cookie in request headers and
- * applies it to every method call on the returned client, so methods like
- * `getAllFlags()`, `getFeatureFlagResult()`, and `capture()` automatically use
- * the current user's identity. Context is applied via a `withContext` proxy —
- * `enterContext()` set inside this async helper would not survive the `await`
- * boundary back in the caller's `getServerSideProps`.
- *
- * When a `getDistinctId` resolver is provided, it receives the
- * `GetServerSidePropsContext` and its result takes precedence over the
- * client-provided identity. The resolver is never called for opted-out users.
- */
 export async function getServerSidePostHog(
     ctx: GetServerSidePropsContext,
     apiKey?: string,

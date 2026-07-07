@@ -8,10 +8,10 @@ import { readTracingHeaders, buildContextData } from '../shared/tracing-headers.
 import { resolveServerDistinctId, type PostHogDistinctIdResolver } from '../shared/identity.js'
 
 /**
- * Wraps the shared client in a Proxy that applies request-scoped context to
- * every method call. `enterContext()` can't be used after the `await`s in the
- * request-scoped getters because `AsyncLocalStorage.enterWith()` doesn't
- * propagate back to the caller across the await boundary of an async function.
+ * Wraps the shared client in a Proxy that applies request-scoped context
+ * to every method call. We can't use enterContext() here because
+ * AsyncLocalStorage.enterWith() doesn't propagate back to the caller
+ * across the await boundary of this async function.
  */
 export function withRequestContext(client: IPostHog, contextData: Parameters<IPostHog['withContext']>[0]): IPostHog {
     return new Proxy(client, {
@@ -28,19 +28,6 @@ export function withRequestContext(client: IPostHog, contextData: Parameters<IPo
     }) as IPostHog
 }
 
-/**
- * Implementation behind `createPostHog().getPostHog` (App Router).
- *
- * Builds request-scoped context from the PostHog cookie and tracing headers,
- * so methods like `getAllFlags()` and `capture()` automatically use the
- * current user's identity. Calls `cookies()` and `headers()` internally,
- * which opts the route into dynamic rendering.
- *
- * When a `getDistinctId` resolver is provided, the server-resolved identity
- * takes precedence over the client-provided one (cookie / tracing headers) —
- * client identity is spoofable, so the server is the source of truth.
- * The resolver is never called for opted-out users.
- */
 export async function getRequestScopedPostHog(
     apiKey?: string,
     options?: Partial<PostHogOptions>,
