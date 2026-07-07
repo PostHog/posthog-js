@@ -409,12 +409,16 @@ const isVersionlessEndpoint = (url: string): boolean => {
 
 const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
     const versionlessEndpoint = isVersionlessEndpoint(url)
+    const requestURL = versionlessEndpoint ? removeURLParam(url, 'ver') : url
 
-    return extendURLParams(versionlessEndpoint ? removeURLParam(url, 'ver') : url, {
-        _: new Date().getTime().toString(),
-        ...(versionlessEndpoint ? {} : { ver: Config.JS_SDK_VERSION }),
-        compression,
-    })
+    return extendURLParams(
+        compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
+        {
+            _: new Date().getTime().toString(),
+            ...(versionlessEndpoint ? {} : { ver: Config.JS_SDK_VERSION }),
+            ...(compression === Compression.GZipJS ? {} : { compression }),
+        }
+    )
 }
 
 const AVAILABLE_TRANSPORTS: {

@@ -260,6 +260,30 @@ describe('request', () => {
             )
         })
 
+        it.each([
+            [
+                'does not add a compression query param for gzip requests',
+                'https://any.posthog-instance.com?ver=1.23.45',
+                'https://any.posthog-instance.com?ver=1.23.45&_=1700000000000',
+            ],
+            [
+                'removes an existing compression query param for gzip requests',
+                'https://any.posthog-instance.com?ver=1.23.45&compression=gzip-js',
+                'https://any.posthog-instance.com?ver=1.23.45&_=1700000000000',
+            ],
+        ])('%s', (_label, url, expectedUrl) => {
+            request(
+                createRequest({
+                    url,
+                    method: 'POST',
+                    compression: Compression.GZipJS,
+                    data: { foo: 'bar' },
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe(expectedUrl)
+        })
+
         it('calls the callback handler when successful', async () => {
             request(createRequest())
             await flushPromises()
@@ -494,14 +518,7 @@ describe('request', () => {
         describe('keepalive with fetch and large bodies can cause some browsers to reject network calls', () => {
             it.each([
                 ['always keepalive with small json POST', 'POST', 'small', undefined, true, ''],
-                [
-                    'always keepalive with small gzip POST',
-                    'POST',
-                    'small',
-                    Compression.GZipJS,
-                    true,
-                    '&compression=gzip-js',
-                ],
+                ['always keepalive with small gzip POST', 'POST', 'small', Compression.GZipJS, true, ''],
                 [
                     'always keepalive with small base64 POST',
                     'POST',
@@ -510,16 +527,9 @@ describe('request', () => {
                     true,
                     '&compression=base64',
                 ],
-                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, '&compression=gzip-js'],
+                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, ''],
                 ['never keepalive with large JSON POST', 'POST', veryLargeBodyData, undefined, false, ''],
-                [
-                    'never keepalive with large GZIP POST',
-                    'POST',
-                    veryLargeBodyData,
-                    Compression.GZipJS,
-                    false,
-                    '&compression=gzip-js',
-                ],
+                ['never keepalive with large GZIP POST', 'POST', veryLargeBodyData, Compression.GZipJS, false, ''],
                 [
                     'never keepalive with large base64 POST',
                     'POST',
@@ -772,7 +782,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -910,7 +920,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
 
@@ -931,7 +941,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
 
             mockedIsolatedFetch.mockClear()
@@ -950,7 +960,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
 
@@ -996,7 +1006,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
     })
