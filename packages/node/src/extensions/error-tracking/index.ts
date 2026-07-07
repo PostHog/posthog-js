@@ -19,12 +19,19 @@ export default class ErrorTracking {
     this._exceptionAutocaptureEnabled = options.enableExceptionAutocapture || false
     this._logger = _logger
 
-    // by default captures ten exceptions before rate limiting by exception type
-    // refills at a rate of one token / 10 second period
-    // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
+    // Burst protection is scoped PER EXCEPTION TYPE: the rate limiter is keyed by exception type
+    // (see `consumeRateLimit(exceptionType)` below), so each distinct type gets its own fresh
+    // token bucket. There is no aggregate cap across all types — a burst made up of many distinct
+    // types is not throttled in total, only per individual type.
+    //
+    // By default each exception type captures ten exceptions before being rate limited, then
+    // refills at a rate of one token / 10 second period (e.g. captures 1 rate-limited exception of
+    // that type every 10 seconds until the burst ends). The bucket size and refill rate can be
+    // tuned via the `__exceptionRateLimiterBucketSize` and `__exceptionRateLimiterRefillRate`
+    // options, matching the browser SDK.
     this._rateLimiter = new BucketedRateLimiter({
-      refillRate: 1,
-      bucketSize: 10,
+      refillRate: options.__exceptionRateLimiterRefillRate ?? 1,
+      bucketSize: options.__exceptionRateLimiterBucketSize ?? 10,
       refillInterval: 10000, // ten seconds in milliseconds
       _logger: this._logger,
     })
