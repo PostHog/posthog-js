@@ -62,6 +62,8 @@ jobs:
                   approve-project-resources: 'true'
                   state-enabled: 'true'
                   pi-session-sharing: 'true'
+                  pi-session-sharing-mode: gist
+                  pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}
 
     process-issue:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs['issue-number'] != '' }}
@@ -95,3 +97,5 @@ jobs:
                   approve-project-resources: 'true'
                   state-enabled: 'true'
                   pi-session-sharing: 'true'
+                  pi-session-sharing-mode: gist
+                  pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}
