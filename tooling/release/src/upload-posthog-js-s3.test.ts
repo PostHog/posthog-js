@@ -178,14 +178,39 @@ test('collectReleaseAssets publishes the code-split toolbar chunk directory when
         )
 
         const plans = buildAssetUploadPlans('1.370.0', assets)
-        const chunkUpload = plans.immutable.find((upload) => upload.key.endsWith('chunk-hedgehog-E5F6A7B8.js'))
+
+        // The chunk must flow through all three prefixes: the loaders published at the major-alias
+        // (`/static/1/toolbar.js`) and compatibility (`/static/toolbar.js`) paths resolve their chunks
+        // relative to their own URLs too, so a chunk missing from those plans is a broken toolbar for
+        // unversioned-CDN users.
+        const findChunk = (uploads: ReturnType<typeof buildAssetUploadPlans>['immutable']) =>
+            uploads.find((upload) => upload.key.endsWith('chunk-hedgehog-E5F6A7B8.js'))
         assert.deepEqual(
-            { key: chunkUpload?.key, cacheControl: chunkUpload?.cacheControl, contentType: chunkUpload?.contentType },
-            {
-                key: 'static/1.370.0/toolbar/chunk-hedgehog-E5F6A7B8.js',
-                cacheControl: 'public, max-age=31536000, immutable',
-                contentType: 'application/javascript',
-            }
+            (['immutable', 'majorAlias', 'compatibility'] as const).map((prefix) => {
+                const chunkUpload = findChunk(plans[prefix])
+                return {
+                    key: chunkUpload?.key,
+                    cacheControl: chunkUpload?.cacheControl,
+                    contentType: chunkUpload?.contentType,
+                }
+            }),
+            [
+                {
+                    key: 'static/1.370.0/toolbar/chunk-hedgehog-E5F6A7B8.js',
+                    cacheControl: 'public, max-age=31536000, immutable',
+                    contentType: 'application/javascript',
+                },
+                {
+                    key: 'static/1/toolbar/chunk-hedgehog-E5F6A7B8.js',
+                    cacheControl: 'public, max-age=300',
+                    contentType: 'application/javascript',
+                },
+                {
+                    key: 'static/toolbar/chunk-hedgehog-E5F6A7B8.js',
+                    cacheControl: 'public, max-age=300',
+                    contentType: 'application/javascript',
+                },
+            ]
         )
     } finally {
         await fs.rm(distDir, { recursive: true, force: true })
