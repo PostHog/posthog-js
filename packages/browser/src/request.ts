@@ -1,7 +1,7 @@
 import { each, find } from './utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
-import { formDataToQuery, getQueryParam } from './utils/request-utils'
+import { convertToURL, formDataToQuery, getQueryParam } from './utils/request-utils'
 
 import { logger } from './utils/logger'
 import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } from './utils/globals'
@@ -388,12 +388,37 @@ const _sendBeacon = (options: RequestWithOptions) => {
     }
 }
 
+const VERSIONLESS_ENDPOINTS = ['/e/', '/s/']
+
+const getURLPath = (url: string): string => {
+    const parsedURL = convertToURL(url)
+    const path = parsedURL?.pathname || url.split(/[?#]/)[0]
+
+    return path ? (path[0] === '/' ? path : `/${path}`) : '/'
+}
+
+const hasEndpointSuffix = (path: string, endpoint: string): boolean => {
+    return path.slice(path.length - endpoint.length) === endpoint
+}
+
+const isVersionlessEndpoint = (url: string): boolean => {
+    const path = getURLPath(url)
+
+    return VERSIONLESS_ENDPOINTS.some((endpoint) => hasEndpointSuffix(path, endpoint))
+}
+
 const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
-    return extendURLParams(url, {
-        _: new Date().getTime().toString(),
-        ver: Config.JS_SDK_VERSION,
-        compression,
-    })
+    const versionlessEndpoint = isVersionlessEndpoint(url)
+    const requestURL = versionlessEndpoint ? removeURLParam(url, 'ver') : url
+
+    return extendURLParams(
+        compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
+        {
+            _: new Date().getTime().toString(),
+            ...(versionlessEndpoint ? {} : { ver: Config.JS_SDK_VERSION }),
+            ...(compression === Compression.GZipJS ? {} : { compression }),
+        }
+    )
 }
 
 const AVAILABLE_TRANSPORTS: {

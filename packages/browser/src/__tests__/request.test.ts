@@ -195,6 +195,95 @@ describe('request', () => {
             )
         })
 
+        it.each(['/e/', '/s/', '/i/v0/e/', '/i/v0/s/'])('does not add ver to browser capture endpoint %s', (path) => {
+            request(
+                createRequest({
+                    url: `https://any.posthog-instance.com${path}`,
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toContain('_=1700000000000')
+            expect(requestedUrl).not.toContain('ver=')
+        })
+
+        it('does not add ver to proxied capture endpoints', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/ingest/s/',
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/?_=1700000000000')
+        })
+
+        it('does not rely on String.prototype.endsWith for capture endpoint matching', () => {
+            const originalEndsWith = String.prototype.endsWith
+            // Simulate older browsers where String.prototype.endsWith is unavailable.
+            delete (String.prototype as any).endsWith
+
+            try {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/e/',
+                    })
+                )
+
+                const requestedUrl = mockedFetch.mock.calls[0][0]
+                expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?_=1700000000000')
+            } finally {
+                String.prototype.endsWith = originalEndsWith
+            }
+        })
+
+        it('removes existing ver from capture endpoints', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?foo=bar&_=1700000000000')
+        })
+
+        it('keeps ver on feature flag requests', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/flags/?v=2',
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe(
+                'https://any.posthog-instance.com/flags/?v=2&_=1700000000000&ver=1.23.45'
+            )
+        })
+
+        it.each([
+            [
+                'does not add a compression query param for gzip requests',
+                'https://any.posthog-instance.com?ver=1.23.45',
+                'https://any.posthog-instance.com?ver=1.23.45&_=1700000000000',
+            ],
+            [
+                'removes an existing compression query param for gzip requests',
+                'https://any.posthog-instance.com?ver=1.23.45&compression=gzip-js',
+                'https://any.posthog-instance.com?ver=1.23.45&_=1700000000000',
+            ],
+        ])('%s', (_label, url, expectedUrl) => {
+            request(
+                createRequest({
+                    url,
+                    method: 'POST',
+                    compression: Compression.GZipJS,
+                    data: { foo: 'bar' },
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe(expectedUrl)
+        })
+
         it('calls the callback handler when successful', async () => {
             request(createRequest())
             await flushPromises()
@@ -429,14 +518,7 @@ describe('request', () => {
         describe('keepalive with fetch and large bodies can cause some browsers to reject network calls', () => {
             it.each([
                 ['always keepalive with small json POST', 'POST', 'small', undefined, true, ''],
-                [
-                    'always keepalive with small gzip POST',
-                    'POST',
-                    'small',
-                    Compression.GZipJS,
-                    true,
-                    '&compression=gzip-js',
-                ],
+                ['always keepalive with small gzip POST', 'POST', 'small', Compression.GZipJS, true, ''],
                 [
                     'always keepalive with small base64 POST',
                     'POST',
@@ -445,16 +527,9 @@ describe('request', () => {
                     true,
                     '&compression=base64',
                 ],
-                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, '&compression=gzip-js'],
+                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, ''],
                 ['never keepalive with large JSON POST', 'POST', veryLargeBodyData, undefined, false, ''],
-                [
-                    'never keepalive with large GZIP POST',
-                    'POST',
-                    veryLargeBodyData,
-                    Compression.GZipJS,
-                    false,
-                    '&compression=gzip-js',
-                ],
+                ['never keepalive with large GZIP POST', 'POST', veryLargeBodyData, Compression.GZipJS, false, ''],
                 [
                     'never keepalive with large base64 POST',
                     'POST',
@@ -707,7 +782,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -845,7 +920,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
 
@@ -866,7 +941,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
 
             mockedIsolatedFetch.mockClear()
@@ -885,7 +960,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
 
@@ -931,7 +1006,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
     })

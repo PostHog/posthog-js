@@ -6,12 +6,12 @@ import { PostHog, setupExpressErrorHandler } from 'posthog-node'
 
 const app = express()
 
-const { POSTHOG_PROJECT_API_KEY, POSTHOG_API_HOST, POSTHOG_PERSONAL_API_KEY } = process.env
+const { POSTHOG_PROJECT_API_KEY, POSTHOG_API_HOST, POSTHOG_SECRET_KEY } = process.env
 
 const posthog = new PostHog(POSTHOG_PROJECT_API_KEY!, {
     host: POSTHOG_API_HOST,
     flushAt: 1,
-    personalApiKey: POSTHOG_PERSONAL_API_KEY,
+    secretKey: POSTHOG_SECRET_KEY,
     // By default PostHog uses node fetch but you can specify your own implementation if preferred
     // fetch(url, options) {
     //   console.log(url, options)

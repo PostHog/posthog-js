@@ -2897,7 +2897,7 @@
       "name": "PostHogInterface",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "\"config\" | \"init\""
+      "example": "Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'> & {\n    config: PostHogConfig;\n    set_config(config: Partial<PostHogConfig>): void;\n}"
     },
     {
       "id": "ProductTour",
@@ -4061,6 +4061,10 @@
           "description": "",
           "type": "string",
           "name": "descriptionTextColor"
+        },
+        {
+          "type": "boolean",
+          "name": "disableAutofocus"
         },
         {
           "type": "string",

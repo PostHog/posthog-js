@@ -9,6 +9,8 @@ function getGzipEncodedPayloady(req: Request): Record<string, any> {
     if (!data) {
         throw new Error('Expected body to be present')
     }
+    expect(data[0]).toBe(0x1f)
+    expect(data[1]).toBe(0x8b)
     const decoded = strFromU8(decompressSync(data))
 
     return JSON.parse(decoded)
@@ -56,7 +58,9 @@ test.describe('event capture', () => {
         expect(captureRequests.length).toEqual(1)
         const captureRequest = captureRequests[0]
         expect(captureRequest.headers()['content-type']).toEqual('text/plain')
-        expect(captureRequest.url()).toMatch(/gzip/)
+        const captureRequestUrl = new URL(captureRequest.url())
+        expect(captureRequestUrl.searchParams.has('compression')).toBe(false)
+        expect(captureRequest.url()).not.toContain('gzip')
         // webkit doesn't allow us to read the body for some reason
         // see e.g. https://github.com/microsoft/playwright/issues/6479
         if (browserName !== 'webkit') {

@@ -1,5 +1,60 @@
 # posthog-js
 
+## 1.398.2
+
+### Patch Changes
+
+- [#4063](https://github.com/PostHog/posthog-js/pull/4063) [`24aadd5`](https://github.com/PostHog/posthog-js/commit/24aadd5b645766a64f72315a08ef7fc35cffb23e) Thanks [@posthog](https://github.com/apps/posthog)! - Fix a `RangeError: Maximum call stack size exceeded` that could originate from the shared `patch()` fetch/XHR wrapper. posthog-js wraps `window.fetch` in two independent places (tracing headers and session-recording network capture), so their restores routinely ran out of order. Previously an out-of-order restore silently no-op'd, leaving the wrapper in the call path; repeated start/stop cycles grew the wrapper chain without bound until a real `fetch` walked a chain deep enough to overflow the stack. Wrappers now delegate through a mutable link so any layer can be torn down even when newer wrappers sit on top of it, keeping the chain bounded. Header-injection and network-capture behavior is unchanged.
+  (2026-07-07)
+
+- [#4100](https://github.com/PostHog/posthog-js/pull/4100) [`e250a24`](https://github.com/PostHog/posthog-js/commit/e250a2409566a46592f1eb71f9c40b652385d13f) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop adding the gzip compression query parameter to browser SDK requests.
+  (2026-07-07)
+
+- [#4083](https://github.com/PostHog/posthog-js/pull/4083) [`f07e241`](https://github.com/PostHog/posthog-js/commit/f07e241bed4201978045cd7c86826c7feff3aebb) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): harden session-replay network capture so instrumentation that throws (e.g. `new Request()` rejecting a URL/method) degrades gracefully and never breaks or misattributes the host application's own `xhr.open()` / `fetch()` calls
+  (2026-07-07)
+
+## 1.398.1
+
+### Patch Changes
+
+- [#4096](https://github.com/PostHog/posthog-js/pull/4096) [`5013ab6`](https://github.com/PostHog/posthog-js/commit/5013ab6acd64b4200304cdf9464805c06c07a05f) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop sending the deprecated `ver` query parameter to capture and session recording endpoints.
+  (2026-07-07)
+
+## 1.398.0
+
+### Minor Changes
+
+- [#4070](https://github.com/PostHog/posthog-js/pull/4070) [`ef119bf`](https://github.com/PostHog/posthog-js/commit/ef119bfbc4d39a9b10a6a774ca987c3fbac12519) Thanks [@posthog](https://github.com/apps/posthog)! - Add a `disableAutofocus` survey appearance option. When set, open-text survey questions no longer steal focus when they render, which is useful for embedded (inline) surveys that shouldn't grab the caret or scroll the page on load. Defaults to `false`, preserving the existing autofocus behavior.
+  (2026-07-06)
+
+## 1.397.0
+
+### Minor Changes
+
+- [#4089](https://github.com/PostHog/posthog-js/pull/4089) [`cc340db`](https://github.com/PostHog/posthog-js/commit/cc340dbc62b18d6f4fb8bb7b96c3944956b9b435) Thanks [@bs1180](https://github.com/bs1180)! - feat(web): add a `posthog-js/customizations` subpath entry point exposing the optional customizations (`setAllPersonProfilePropertiesAsPersonPropertiesForFlags`, the `before-send` sampling helpers, and the redux/kea loggers) as a proper ES module with bundled types, replacing the internal `posthog-js/lib/src/customizations` deep import. Also fixes the TypeScript definitions so `setAllPersonProfilePropertiesAsPersonPropertiesForFlags` accepts the instance passed to the `loaded` callback (the documented usage), and the `loaded` callback's instance type now includes `config`.
+  (2026-07-06)
+
+## 1.396.9
+
+### Patch Changes
+
+- [#4077](https://github.com/PostHog/posthog-js/pull/4077) [`2595440`](https://github.com/PostHog/posthog-js/commit/2595440b0e8771a59388a119ab56857de42b53ee) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(web): stop retrying log batches forever when requests die before an HTTP response (status 0, e.g. an ad blocker) — after 3 consecutive such failures while the browser reports itself online, the logs pipeline stops sending and drops batches instead of buffering and retrying for the life of the page; the `online` event reopens it, and genuine offline periods still queue for the reconnect flush
+  (2026-07-06)
+
+## 1.396.8
+
+### Patch Changes
+
+- [#4062](https://github.com/PostHog/posthog-js/pull/4062) [`2af0026`](https://github.com/PostHog/posthog-js/commit/2af002652afd87401e299a18295da08443753e89) Thanks [@posthog](https://github.com/apps/posthog)! - fix(web): prevent an infinite-recursion stack overflow in the logs console capture. The console wrapper's own capture path can emit internal debug lines through PostHog's logger, which wrote back to the wrapped console and re-entered capture until the stack blew (`RangeError: Maximum call stack size exceeded`). The wrapper now exposes the original console method via `__rrweb_original__` (so the internal logger bypasses it) and guards against re-entrancy from any code that logs mid-capture.
+  (2026-07-06)
+
+## 1.396.7
+
+### Patch Changes
+
+- [#4080](https://github.com/PostHog/posthog-js/pull/4080) [`08cd27b`](https://github.com/PostHog/posthog-js/commit/08cd27bfd602ab378b2e48833ddf837abffbd8c2) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(web): stop repeatedly hitting blocked feature flag and conversations polling endpoints after consecutive status-0 failures
+  (2026-07-06)
+
 ## 1.396.6
 
 ### Patch Changes

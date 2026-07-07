@@ -49,9 +49,9 @@
               "code": "\n\n// Basic initialization\nconst client = new PostHogBackendClient(\n  'your-api-key',\n  { host: 'https://app.posthog.com' }\n)\n\n\n"
             },
             {
-              "id": "with_personal_api_key",
-              "name": "With personal API key",
-              "code": "\n\n// With personal API key\nconst client = new PostHogBackendClient(\n  'your-api-key',\n  {\n    host: 'https://app.posthog.com',\n    personalApiKey: 'your-personal-api-key'\n  }\n)\n\n\n\n"
+              "id": "with_a_secret_key_(personal_api_key_or_project_secret_api_key)_for_local_evaluation",
+              "name": "With a secret key (Personal API Key or Project Secret API Key) for local evaluation",
+              "code": "\n\n// With a secret key (Personal API Key or Project Secret API Key) for local evaluation\nconst client = new PostHogBackendClient(\n  'your-api-key',\n  {\n    host: 'https://app.posthog.com',\n    secretKey: 'your-secret-key'\n  }\n)\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -868,8 +868,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "GroupIdentifyMessage",
+              "type": "any",
               "name": "{ groupType, groupKey, properties, distinctId, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "GroupIdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -897,8 +903,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "GroupIdentifyMessage",
+              "type": "any",
               "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "GroupIdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -931,8 +943,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "IdentifyMessage",
+              "type": "any",
               "name": "{ distinctId, properties, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "IdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -960,8 +978,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "IdentifyMessage",
+              "type": "any",
               "name": "{ distinctId, properties, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "IdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -1181,8 +1205,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "SetPersonPropertiesMessage",
+              "type": "any",
               "name": "{ distinctId, properties, propertiesOnce }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "SetPersonPropertiesMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -1210,8 +1240,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "UnsetPersonPropertiesMessage",
+              "type": "any",
               "name": "{ distinctId, properties }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "UnsetPersonPropertiesMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -1718,8 +1754,8 @@
       "path": "src/extensions/context/types.ts"
     },
     {
-      "id": "CookieStore",
-      "name": "CookieStore",
+      "id": "CookieStore_2",
+      "name": "CookieStore_2",
       "properties": [],
       "path": "../core/src/cookie.ts"
     },
@@ -2303,7 +2339,7 @@
       "name": "PostHogOptions",
       "properties": [],
       "path": "src/types.ts",
-      "example": "Omit<PostHogCoreOptions, 'before_send'> & {\n    persistence?: 'memory';\n    personalApiKey?: string;\n    privacyMode?: boolean;\n    enableExceptionAutocapture?: boolean;\n    featureFlagsPollingInterval?: number;\n    maxCacheSize?: number;\n    fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>;\n    enableLocalEvaluation?: boolean;\n    flagDefinitionCacheProvider?: FlagDefinitionCacheProvider;\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    custom_blocked_useragents?: string[];\n    __preview_capture_bot_pageviews?: boolean;\n    strictLocalEvaluation?: boolean;\n    featureFlagsLogWarnings?: boolean;\n    waitUntil?: (promise: Promise<unknown>) => void;\n    waitUntilDebounceMs?: number;\n    waitUntilMaxWaitMs?: number;\n    isServer?: boolean;\n}"
+      "example": "Omit<PostHogCoreOptions, 'before_send'> & {\n    persistence?: 'memory';\n    secretKey?: string;\n    personalApiKey?: string;\n    privacyMode?: boolean;\n    enableExceptionAutocapture?: boolean;\n    featureFlagsPollingInterval?: number;\n    maxCacheSize?: number;\n    fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>;\n    enableLocalEvaluation?: boolean;\n    flagDefinitionCacheProvider?: FlagDefinitionCacheProvider;\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    custom_blocked_useragents?: string[];\n    __preview_capture_bot_pageviews?: boolean;\n    strictLocalEvaluation?: boolean;\n    featureFlagsLogWarnings?: boolean;\n    waitUntil?: (promise: Promise<unknown>) => void;\n    waitUntilDebounceMs?: number;\n    waitUntilMaxWaitMs?: number;\n    isServer?: boolean;\n}"
     },
     {
       "id": "PostHogPersistedProperty",

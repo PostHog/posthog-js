@@ -302,4 +302,8 @@ export const CompressionStream = global?.CompressionStream
 export const userAgent = navigator?.userAgent
 export const assignableWindow: AssignableWindow = win ?? ({} as any)
 
+export function isBrowserOnline(): boolean {
+    return !!(win && win.navigator.onLine !== false)
+}
+
 export { win as window }

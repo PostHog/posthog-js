@@ -1,5 +1,19 @@
 # posthog-ai
 
+## 8.3.0
+
+### Minor Changes
+
+- [#4084](https://github.com/PostHog/posthog-js/pull/4084) [`f4b453a`](https://github.com/PostHog/posthog-js/commit/f4b453ac477212816f3cc3df681d5de7494bd70e) Thanks [@marandaneto](https://github.com/marandaneto)! - Add optional error callback support to the OpenAI Agents tracing processor.
+  (2026-07-07)
+
+## 8.2.3
+
+### Patch Changes
+
+- [#4076](https://github.com/PostHog/posthog-js/pull/4076) [`68640de`](https://github.com/PostHog/posthog-js/commit/68640de9d7020b996489dd0ce582334f22c4bee5) Thanks [@bamtheboozle](https://github.com/bamtheboozle)! - fix: prevent unhandled promise rejection from crashing the host process when a streamed provider response errors mid-flight (OpenAI, Azure OpenAI, Anthropic wrappers)
+  (2026-07-06)
+
 ## 8.2.2
 
 ### Patch Changes

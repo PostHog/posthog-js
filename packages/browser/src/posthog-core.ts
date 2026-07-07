@@ -3045,6 +3045,7 @@ export class PostHog implements PostHogInterface {
         this.logs?.flushLogs('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
+        this.featureFlags?.destroy()
     }
 
     /**
