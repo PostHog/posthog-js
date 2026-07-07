@@ -13,6 +13,7 @@ import {
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
   PostHogPersistedProperty,
+  RetriableOptions,
   safeSetTimeout,
   uuidv7,
 } from '@posthog/core'
@@ -48,6 +49,9 @@ import {
 import ErrorTracking from './extensions/error-tracking'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
+import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
+import { isLegacyOnlyEvent } from './capture-v1/routing'
+import { V1CaptureSender } from './capture-v1/sender'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -131,6 +135,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
 
+  private readonly captureMode: CaptureMode
+  private _v1Sender?: V1CaptureSender
+
   // Feature flag overrides for local testing/development
   private _flagOverrides?: Record<string, FeatureFlagValue>
   private _payloadOverrides?: Record<string, JsonType>
@@ -184,6 +191,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(normalizedApiKey, normalizedOptions)
 
     this.options = normalizedOptions
+    this.captureMode = resolveCaptureMode(normalizedOptions.captureMode)
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -392,6 +400,67 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
     return this.options.fetch ? this.options.fetch(url, options) : fetch(url, options)
+  }
+
+  /**
+   * Capture submission seam shared by the batched (`_flush`) and immediate
+   * (`sendImmediate`) paths. In `v0` mode this is the unchanged legacy `/batch/`
+   * send. In `v1` mode, `$ai_*` events are split off to the legacy submitter
+   * (they have no v1 form yet) and the rest go to the Capture V1 endpoint.
+   */
+  protected async sendBatch(
+    batchMessages: (PostHogEventProperties | undefined)[],
+    retryOptions?: Partial<RetriableOptions>
+  ): Promise<void> {
+    if (this.captureMode !== 'v1') {
+      return super.sendBatch(batchMessages, retryOptions)
+    }
+
+    const legacyOnly: (PostHogEventProperties | undefined)[] = []
+    const v1Eligible: PostHogEventProperties[] = []
+    for (const message of batchMessages) {
+      if (message !== undefined && !isLegacyOnlyEvent(message)) {
+        v1Eligible.push(message)
+      } else {
+        legacyOnly.push(message)
+      }
+    }
+
+    const sends: Promise<void>[] = []
+    if (legacyOnly.length > 0) {
+      // Keeps full v0 semantics (throws so `_flush` can shrink/persist/retry) for AI events.
+      sends.push(super.sendBatch(legacyOnly, retryOptions))
+    }
+    if (v1Eligible.length > 0) {
+      sends.push(this.getV1Sender().sendV1Batch(v1Eligible))
+    }
+    await Promise.all(sends)
+  }
+
+  private getV1Sender(): V1CaptureSender {
+    if (!this._v1Sender) {
+      this._v1Sender = new V1CaptureSender(
+        {
+          host: this.host,
+          apiKey: this.apiKey,
+          libraryId: this.getLibraryId(),
+          libraryVersion: this.getLibraryVersion(),
+          userAgent: this.getCustomUserAgent() || undefined,
+          historicalMigration: this.historicalMigration,
+          compressionEnabled: !this.disableCompression,
+          requestTimeoutMs: this.requestTimeout,
+          // Reuse the existing v0 retry knobs: 1 initial attempt + fetchRetryCount retries.
+          maxAttempts: (this.options.fetchRetryCount ?? 3) + 1,
+          initialRetryDelayMs: this.options.fetchRetryDelay ?? 3000,
+          isDebug: this.isDebug,
+        },
+        {
+          fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+          onError: (error) => this._events.emit('error', error),
+        }
+      )
+    }
+    return this._v1Sender
   }
 
   /**
