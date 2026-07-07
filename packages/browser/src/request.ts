@@ -214,13 +214,21 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
 }
 
 /**
+ * Prefix of the message carried by the abort reason we build in {@link timeoutAbortReason}.
+ * It is the stable, identifiable marker for "posthog-js aborted its own request because our
+ * timeout elapsed". Error tracking uses it to suppress these intentional aborts so they never
+ * become captured `$exception` events - see `_isOwnRequestTimeout` in `posthog-exceptions.ts`.
+ */
+export const POSTHOG_REQUEST_TIMEOUT_ABORT_MESSAGE = 'PostHog request timed out'
+
+/**
  * Builds the reason used when aborting a fetch because our own request timeout elapsed.
  * It keeps `name === 'AbortError'` (so callers that detect timeouts by error name keep working)
  * but carries a descriptive message, so it is never a reason-less
  * `signal is aborted without reason` exception.
  */
 const timeoutAbortReason = (timeout?: number): Error => {
-    const reason = new Error(`PostHog request timed out${timeout ? ` after ${timeout}ms` : ''}`)
+    const reason = new Error(`${POSTHOG_REQUEST_TIMEOUT_ABORT_MESSAGE}${timeout ? ` after ${timeout}ms` : ''}`)
     reason.name = 'AbortError'
     return reason
 }

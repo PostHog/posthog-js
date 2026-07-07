@@ -214,6 +214,42 @@ describe('PostHogExceptions', () => {
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })
         })
+
+        describe('PostHog request timeout aborts', () => {
+            it('drops our own request timeout abort so it never becomes a $exception', () => {
+                exceptions.sendExceptionEvent({
+                    $exception_list: [{ type: 'AbortError', value: 'PostHog request timed out after 60000ms' }],
+                })
+                expect(captureMock).not.toBeCalled()
+            })
+
+            it('drops the abort even without a duration suffix in the message', () => {
+                exceptions.sendExceptionEvent({
+                    $exception_list: [{ type: 'AbortError', value: 'PostHog request timed out' }],
+                })
+                expect(captureMock).not.toBeCalled()
+            })
+
+            it('drops the abort even when capturing PostHog SDK exceptions is enabled', () => {
+                config.error_tracking.__capturePostHogExceptions = true
+                exceptions.sendExceptionEvent({
+                    $exception_list: [{ type: 'AbortError', value: 'PostHog request timed out after 3000ms' }],
+                })
+                expect(captureMock).not.toBeCalled()
+            })
+
+            it('still captures unrelated AbortErrors', () => {
+                const exception = { type: 'AbortError', value: 'The user aborted a request.' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('does not drop other errors that mention the timeout message mid-string', () => {
+                const exception = { type: 'TypeError', value: 'wrapped: PostHog request timed out after 3000ms' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+        })
     })
 
     describe('exception steps', () => {

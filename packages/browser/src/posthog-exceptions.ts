@@ -4,6 +4,7 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
+import { POSTHOG_REQUEST_TIMEOUT_ABORT_MESSAGE } from './request'
 import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
 
 const logger = createLogger('[Error tracking]')
@@ -113,6 +114,18 @@ export class PostHogExceptions implements Extension {
             const exceptionList = properties.$exception_list
 
             if (this._isExceptionList(exceptionList)) {
+                if (this._isOwnRequestTimeout(exceptionList)) {
+                    // posthog-js aborts its own in-flight requests when our request timeout elapses.
+                    // That abort is intentional and benign (the request queue retries), but Chromium
+                    // surfaces the abort reason as an unhandled promise rejection - so it reaches this
+                    // capture path via the autocapture unhandled-rejection wrapper and would otherwise
+                    // be recorded as a real `$exception`. Drop it unconditionally so our own timeouts
+                    // never pollute error tracking, regardless of `__capturePostHogExceptions`.
+                    this._addDroppedExceptionStep('Exception dropped: PostHog request timeout')
+                    logger.info('Skipping exception capture because it is a PostHog request timeout')
+                    return
+                }
+
                 if (this._matchesSuppressionRule(exceptionList)) {
                     this._addDroppedExceptionStep('Exception dropped: matched a suppression rule')
                     logger.info('Skipping exception capture because a suppression rule matched')
@@ -237,6 +250,15 @@ export class PostHogExceptions implements Extension {
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
         const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
         return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
+    }
+
+    private _isOwnRequestTimeout(exceptionList: ErrorTracking.ExceptionList): boolean {
+        if (exceptionList.length === 0) {
+            return false
+        }
+
+        const { type, value } = exceptionList[0]
+        return type === 'AbortError' && isString(value) && value.indexOf(POSTHOG_REQUEST_TIMEOUT_ABORT_MESSAGE) === 0
     }
 
     private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {
