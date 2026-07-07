@@ -586,6 +586,25 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_span_type).toBe('custom')
       expect(call.properties.$ai_custom_data).toEqual({ query: 'SELECT * FROM users', rows: 100 })
     })
+
+    it('stringifies custom span data when JSON serialization fails', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'custom',
+          name: 'unserializable_payload',
+          data: {
+            toJSON() {
+              throw new Error('Cannot serialize')
+            },
+          },
+        },
+      })
+
+      await expect(processor.onSpanEnd(span as any)).resolves.toBeUndefined()
+
+      const call = mockClient.capture.mock.calls[0][0]
+      expect(call.properties.$ai_custom_data).toBe('[object Object]')
+    })
   })
 
   describe('response spans', () => {
@@ -867,6 +886,56 @@ describe('PostHogTracingProcessor', () => {
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$ai_error_type).toBe(expectedType)
     })
+
+    it('reports capture failures through onError without throwing', async () => {
+      const captureError = new Error('capture failed')
+      mockClient.capture.mockImplementation(() => {
+        throw captureError
+      })
+      const onError = jest.fn()
+      const proc = new PostHogTracingProcessor({
+        client: mockClient,
+        distinctId: 'test-user',
+        onError,
+      })
+
+      await expect(proc.onSpanEnd(createMockSpan() as any)).resolves.toBeUndefined()
+
+      expect(onError).toHaveBeenCalledWith(captureError, 'capture')
+    })
+
+    it('does not throw when onError throws', async () => {
+      mockClient.capture.mockImplementation(() => {
+        throw new Error('capture failed')
+      })
+      const onError = jest.fn(() => {
+        throw new Error('onError failed')
+      })
+      const proc = new PostHogTracingProcessor({
+        client: mockClient,
+        distinctId: 'test-user',
+        onError,
+      })
+
+      await expect(proc.onSpanEnd(createMockSpan() as any)).resolves.toBeUndefined()
+
+      expect(onError).toHaveBeenCalledTimes(1)
+      expect(onError).toHaveBeenCalledWith(expect.any(Error), 'capture')
+    })
+
+    it('reports flush failures through onError without throwing', async () => {
+      const flushError = new Error('flush failed')
+      mockClient.flush.mockRejectedValueOnce(flushError)
+      const onError = jest.fn()
+      const proc = new PostHogTracingProcessor({
+        client: mockClient,
+        onError,
+      })
+
+      await expect(proc.forceFlush()).resolves.toBeUndefined()
+
+      expect(onError).toHaveBeenCalledWith(flushError, 'forceFlush')
+    })
   })
 
   describe('latency calculation', () => {
@@ -902,6 +971,20 @@ describe('PostHogTracingProcessor', () => {
 
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$ai_latency).toBeCloseTo(2.0, 1)
+    })
+
+    it('ignores invalid runtime timestamp values', async () => {
+      const span = createMockSpan({
+        spanData: { type: 'generation', model: 'gpt-4o' },
+        startedAt: Symbol('invalid') as any,
+        endedAt: '2024-01-01T00:00:02.000Z',
+      })
+
+      // Don't call onSpanStart to skip recording start time
+      await expect(processor.onSpanEnd(span as any)).resolves.toBeUndefined()
+
+      const call = mockClient.capture.mock.calls[0][0]
+      expect(call.properties.$ai_latency).toBe(0)
     })
   })
 
