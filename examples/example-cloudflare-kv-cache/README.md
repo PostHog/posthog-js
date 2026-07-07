@@ -25,7 +25,7 @@ This pattern is ideal for high-traffic edge applications where:
 ## Prerequisites
 
 - Node.js and pnpm installed
-- A PostHog account with a project API key and personal API key
+- A PostHog account with a project API key and secret key
 
 ## Setup
 
@@ -50,7 +50,7 @@ Edit `.env` and set:
 
 ```
 POSTHOG_PROJECT_API_KEY=your_project_api_key
-POSTHOG_PERSONAL_API_KEY=your_posthog_personal_api_key
+POSTHOG_SECRET_KEY=your_posthog_secret_key
 POSTHOG_HOST=https://us.i.posthog.com
 ```
 

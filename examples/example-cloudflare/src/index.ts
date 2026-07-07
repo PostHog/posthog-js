@@ -12,14 +12,14 @@ import { PostHog } from 'posthog-node';
 export interface Env {
 	POSTHOG_PROJECT_API_KEY: string;
 	POSTHOG_API_HOST: string;
-	POSTHOG_PERSONAL_API_KEY: string;
+	POSTHOG_SECRET_KEY: string;
 }
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const posthog = new PostHog(env.POSTHOG_PROJECT_API_KEY, {
 			host: env.POSTHOG_API_HOST,
-			personalApiKey: env.POSTHOG_PERSONAL_API_KEY,
+			secretKey: env.POSTHOG_SECRET_KEY,
 			featureFlagsPollingInterval: 10000,
 		});
 
