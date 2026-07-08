@@ -12,11 +12,14 @@ import {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
+  PostHogMetrics,
   PostHogPersistedProperty,
+  resolveMetricsConfig,
   RetriableOptions,
   safeSetTimeout,
   uuidv7,
 } from '@posthog/core'
+import type { Metrics } from '@posthog/core'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -133,6 +136,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private maxCacheSize: number
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
+  private _metrics?: PostHogMetrics
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
@@ -486,6 +490,30 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   getLibraryVersion(): string {
     return version
+  }
+
+  /**
+   * The `posthog.metrics` API: a statsd-style pre-aggregating metrics client.
+   * Samples are folded into per-series aggregates in memory and flushed
+   * periodically as one OTLP data point per series per window, so recording
+   * from hot paths is cheap. Configure via the `metrics` client option.
+   *
+   * @example
+   * ```ts
+   * client.metrics.count('jobs.processed', 1, { attributes: { queue: 'default' } })
+   * client.metrics.gauge('queue.depth', 42)
+   * client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+   * ```
+   *
+   * {@label Metrics}
+   */
+  public get metrics(): Metrics {
+    if (!this._metrics) {
+      // Lazy: `this` is the MetricsHost (isDisabled/optedOut/_sendMetricsBatch
+      // live on PostHogCoreStateless), so nothing is set up until first use.
+      this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
+    }
+    return this._metrics
   }
 
   /**
@@ -2381,6 +2409,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     await this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
+    if (this._metrics) {
+      // Send whatever is aggregated in the current window, then clear the
+      // flush timer so it can't fire after teardown.
+      await this._metrics.flush().catch(() => {})
+      this._metrics.reset()
+    }
     try {
       return await super._shutdown(shutdownTimeoutMs)
     } finally {

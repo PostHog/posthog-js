@@ -3,6 +3,7 @@ import type {
   ExceptionRateLimiterConfig,
   FeatureFlagValue,
   JsonType,
+  MetricsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
@@ -146,6 +147,17 @@ export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   persistence?: 'memory'
+  /**
+   * Configuration for the `posthog.metrics` API (count, gauge, histogram).
+   * Set `serviceName` so series can be filtered per service in the Metrics UI.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+   * client.metrics.count('invoices.processed')
+   * ```
+   */
+  metrics?: MetricsConfig
   /**
    * Credential that enables local feature flag evaluation and remote config.
    *

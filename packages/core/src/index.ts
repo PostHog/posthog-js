@@ -45,6 +45,7 @@ export {
   buildOtlpMetricsPayload,
   buildMetricsResourceAttributes,
   DEFAULT_HISTOGRAM_BOUNDS,
+  resolveMetricsConfig,
 } from './metrics'
 export type {
   MetricsHost,
@@ -59,6 +60,8 @@ export type {
   MetricAttributeValue,
   MetricSample,
   MetricType,
+  Metrics,
+  MetricsConfig,
 } from './metrics/types'
 export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'

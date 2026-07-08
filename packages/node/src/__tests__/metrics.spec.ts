@@ -1,0 +1,109 @@
+import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
+
+jest.mock('../version', () => ({ version: '1.2.3' }))
+
+const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+
+const options: PostHogOptions = {
+  host: 'http://example.com',
+  disableCompression: true,
+  fetchRetryCount: 0,
+  metrics: { serviceName: 'test-service' },
+}
+
+describe('PostHog Node.js metrics', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  beforeEach(() => {
+    mockedFetch.mockReset()
+    mockedFetch.mockResolvedValue({ status: 200, text: async () => '' } as any)
+    posthog = new PostHog('TEST_API_KEY', options)
+  })
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  const metricsCalls = (): [string, any][] =>
+    mockedFetch.mock.calls.filter((call) => (call[0] as string).includes('/i/v1/metrics')) as [string, any][]
+
+  const lastMetricsBody = (): any => {
+    const calls = metricsCalls()
+    return JSON.parse(calls[calls.length - 1][1].body)
+  }
+
+  const metricsByName = (body: any): Record<string, any> =>
+    Object.fromEntries(body.resourceMetrics[0].scopeMetrics[0].metrics.map((m: any) => [m.name, m]))
+
+  it('aggregates samples and flushes them as OTLP JSON to /i/v1/metrics with the project token', async () => {
+    posthog.metrics.count('jobs.processed', 1, { attributes: { queue: 'default' } })
+    posthog.metrics.count('jobs.processed', 1, { attributes: { queue: 'default' } })
+    posthog.metrics.gauge('queue.depth', 7)
+    posthog.metrics.histogram('job.duration', 42, { unit: 'ms' })
+
+    await posthog.metrics.flush()
+
+    const [url] = metricsCalls()[0]
+    expect(url).toBe('http://example.com/i/v1/metrics?token=TEST_API_KEY')
+
+    const body = lastMetricsBody()
+    expect(body.resourceMetrics[0].resource.attributes).toContainEqual({
+      key: 'service.name',
+      value: { stringValue: 'test-service' },
+    })
+
+    const metrics = metricsByName(body)
+    expect(metrics['jobs.processed'].sum.dataPoints[0].asDouble).toBe(2)
+    expect(metrics['jobs.processed'].sum.isMonotonic).toBe(true)
+    expect(metrics['queue.depth'].gauge.dataPoints[0].asDouble).toBe(7)
+    expect(metrics['job.duration'].unit).toBe('ms')
+    expect(metrics['job.duration'].histogram.dataPoints[0].count).toBe(1)
+  })
+
+  it('merges the window back and resends on network failure', async () => {
+    mockedFetch.mockRejectedValueOnce(new Error('connection refused'))
+
+    posthog.metrics.count('jobs.processed', 3)
+    await posthog.metrics.flush()
+    expect(metricsCalls()).toHaveLength(1)
+
+    posthog.metrics.count('jobs.processed', 2)
+    await posthog.metrics.flush()
+
+    expect(metricsCalls()).toHaveLength(2)
+    expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(5)
+  })
+
+  it('drops the batch on 413 instead of retrying it forever', async () => {
+    mockedFetch.mockResolvedValueOnce({ status: 413, text: async () => '' } as any)
+
+    posthog.metrics.count('jobs.processed', 3)
+    await posthog.metrics.flush()
+
+    posthog.metrics.count('jobs.processed', 2)
+    await posthog.metrics.flush()
+
+    expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(2)
+  })
+
+  it('flushes pending metrics on shutdown', async () => {
+    posthog.metrics.count('jobs.processed', 4)
+
+    await posthog.shutdown()
+
+    expect(metricsCalls()).toHaveLength(1)
+    expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(4)
+  })
+
+  it('captures nothing while disabled', async () => {
+    const disabled = new PostHog('TEST_API_KEY', { ...options, disabled: true })
+    disabled.metrics.count('jobs.processed', 1)
+
+    await disabled.metrics.flush()
+    await disabled.shutdown()
+
+    expect(metricsCalls()).toHaveLength(0)
+  })
+})

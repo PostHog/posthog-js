@@ -411,4 +411,5 @@ export class PostHogMetrics {
 }
 
 export { buildOtlpMetricsPayload, buildMetricsResourceAttributes, DEFAULT_HISTOGRAM_BOUNDS } from './metrics-utils'
+export { resolveMetricsConfig } from './config'
 export type { MetricsHost, PostHogMetricsConfig, ResolvedPostHogMetricsConfig, SendMetricsBatchOutcome } from './types'
