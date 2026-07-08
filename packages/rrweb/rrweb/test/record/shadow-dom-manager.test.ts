@@ -66,10 +66,8 @@ describe('ShadowDomManager', () => {
     document.body.appendChild(host);
     host.attachShadow({ mode: 'open' });
 
-    // Spy on MutationBuffer.prototype.reset to verify it's NOT called
-    // during ShadowDomManager.reset(). Calling buffer.reset() from the
-    // restoreHandler creates infinite mutual recursion because
-    // MutationBuffer.reset() calls this.shadowDomManager.reset()
+    // restoreHandlers must release via releaseCanvasManager(), never buffer.reset() —
+    // guards against reintroducing the shadowDomManager.reset() recursion that coupling once caused.
     const resetSpy = vi.spyOn(MutationBuffer.prototype, 'reset');
 
     manager.reset();
@@ -107,6 +105,28 @@ describe('ShadowDomManager', () => {
     manager.reset();
 
     expect(() => manager.reset()).not.toThrow();
+
+    document.body.removeChild(host);
+  });
+
+  it('resetForDoc() only tears down handlers owned by the given document', () => {
+    const manager = createManager();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const buffersBeforeAdd = mutationBuffers.length;
+    host.attachShadow({ mode: 'open' });
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // Tearing down a different document must leave this doc's shadow buffers alone.
+    const otherDoc = document.implementation.createHTMLDocument('other');
+    manager.resetForDoc(otherDoc);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // Tearing down the owning document removes them.
+    manager.resetForDoc(document);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd);
 
     document.body.removeChild(host);
   });
