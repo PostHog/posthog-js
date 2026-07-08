@@ -259,8 +259,7 @@ export default class MutationBuffer {
     this.releaseCanvasManager();
   }
 
-  // Releases at most once even if reset() runs twice (iframe pagehide + stop). Separate from
-  // reset() so shadow-root teardown can release without re-entering shadowDomManager.reset().
+  // Idempotent so teardown can run twice (iframe pagehide + stop); shadow restore handlers call this directly, not reset(), per the recursion-guard unit test.
   public releaseCanvasManager() {
     if (this.canvasManagerReleased) {
       return;
