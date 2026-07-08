@@ -648,6 +648,8 @@
         "_tryAddCustomEvent",
         "_tryRRWebMethod",
         "_tryTakeFullSnapshot",
+        "_typeByName",
+        "_typeCollisionWarned",
         "_unreadCount",
         "_unserializedId",
         "_unsubscribeIdentifyListener",
