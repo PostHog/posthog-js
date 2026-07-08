@@ -8,16 +8,8 @@ import {
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import {
-    isArray,
-    isNull,
-    isNumber,
-    isString,
-    getValidationError,
-    getLengthFromRules,
-    getRequirementsHint,
-    SurveyValidationType,
-} from '@posthog/core'
+import { isArray, isNull, isNumber, isString, SurveyValidationType } from '@posthog/core'
+import { getValidationError, getLengthFromRules, getRequirementsHint } from '@posthog/core/surveys'
 import {
     dissatisfiedEmoji,
     neutralEmoji,
@@ -38,6 +30,8 @@ export interface CommonQuestionProps {
     onPreviewSubmit: (res: string | string[] | number | null) => void
     initialValue?: string | string[] | number | null
     displayQuestionIndex: number
+    canGoBack?: boolean
+    onBack?: () => void
 }
 
 interface OpenEndedInputState {
@@ -95,6 +89,8 @@ export function OpenTextQuestion({
     onPreviewSubmit,
     displayQuestionIndex,
     initialValue,
+    canGoBack,
+    onBack,
 }: CommonQuestionProps & {
     question: BasicSurveyQuestion
 }) {
@@ -106,13 +102,17 @@ export function OpenTextQuestion({
         }
         return ''
     })
+    const disableAutofocus = appearance?.disableAutofocus
     useEffect(() => {
+        if (disableAutofocus) {
+            return
+        }
         setTimeout(() => {
             if (!isPreviewMode) {
                 inputRef.current?.focus()
             }
         }, 100)
-    }, [isPreviewMode])
+    }, [isPreviewMode, disableAutofocus])
 
     const htmlFor = `surveyQuestion${displayQuestionIndex}`
 
@@ -157,6 +157,10 @@ export function OpenTextQuestion({
                     }}
                     onKeyDown={(e) => {
                         e.stopPropagation()
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !validationError) {
+                            e.preventDefault()
+                            isPreviewMode ? handlePreviewSubmit() : handleSubmit()
+                        }
                     }}
                     value={text}
                 />
@@ -168,6 +172,8 @@ export function OpenTextQuestion({
                 appearance={appearance}
                 onSubmit={handleSubmit}
                 onPreviewSubmit={handlePreviewSubmit}
+                canGoBack={canGoBack}
+                onBack={onBack}
             />
         </Fragment>
     )
@@ -179,6 +185,8 @@ export function LinkQuestion({
     appearance,
     onSubmit,
     onPreviewSubmit,
+    canGoBack,
+    onBack,
 }: CommonQuestionProps & {
     question: LinkSurveyQuestion
 }) {
@@ -194,6 +202,8 @@ export function LinkQuestion({
                 appearance={appearance}
                 onSubmit={() => onSubmit('link clicked')}
                 onPreviewSubmit={() => onPreviewSubmit('link clicked')}
+                canGoBack={canGoBack}
+                onBack={onBack}
             />
         </Fragment>
     )
@@ -207,6 +217,8 @@ export function RatingQuestion({
     onSubmit,
     onPreviewSubmit,
     initialValue,
+    canGoBack,
+    onBack,
 }: CommonQuestionProps & {
     question: RatingSurveyQuestion
 }) {
@@ -310,6 +322,8 @@ export function RatingQuestion({
                 onSubmit={() => onSubmit(rating)}
                 onPreviewSubmit={() => onPreviewSubmit(rating)}
                 skipSubmitButton={question.skipSubmitButton}
+                canGoBack={canGoBack}
+                onBack={onBack}
             />
         </Fragment>
     )
@@ -349,6 +363,8 @@ export function MultipleChoiceQuestion({
     onSubmit,
     onPreviewSubmit,
     initialValue,
+    canGoBack,
+    onBack,
 }: CommonQuestionProps & {
     question: MultipleSurveyQuestion
 }) {
@@ -545,6 +561,8 @@ export function MultipleChoiceQuestion({
                 onSubmit={handleSubmit}
                 onPreviewSubmit={handleSubmit}
                 skipSubmitButton={shouldSkipSubmit}
+                canGoBack={canGoBack}
+                onBack={onBack}
             />
         </Fragment>
     )

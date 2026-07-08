@@ -39,6 +39,9 @@ describe('SessionIdManager property-based tests', () => {
             register: jest.fn().mockImplementation((props) => {
                 Object.assign(persistence.props, props)
             }),
+            load: jest.fn(),
+            flush: jest.fn(),
+            refreshKey: jest.fn(),
             _disabled: false,
         }
     }
@@ -412,11 +415,10 @@ describe('SessionIdManager property-based tests', () => {
             fc.property(
                 fc.record({
                     lastActivityTimestamp: arbitraryRecentTimestamp,
-                    currentTimestamp: arbitraryRecentTimestamp,
+                    offset: fc.integer({ min: 0, max: SESSION_TIMEOUT_MS - 1 }),
                 }),
-                ({ lastActivityTimestamp, currentTimestamp }) => {
-                    fc.pre(currentTimestamp >= lastActivityTimestamp)
-                    fc.pre(currentTimestamp - lastActivityTimestamp < SESSION_TIMEOUT_MS)
+                ({ lastActivityTimestamp, offset }) => {
+                    const currentTimestamp = lastActivityTimestamp + offset
 
                     uuidCounter = 0
                     resetPersistence()

@@ -87,6 +87,16 @@ describe('hasWaitPeriodPassed', () => {
         localStorage.setItem('lastSeenSurveyDate', '2025-01-08T11:59:59Z') // 7 days and 1 second ago
         expect(hasWaitPeriodPassed(7)).toBe(true)
     })
+
+    it('should not throw when localStorage.getItem is unavailable', () => {
+        const getItemSpy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            throw new Error('storage unavailable')
+        })
+
+        expect(hasWaitPeriodPassed(7)).toBe(true)
+
+        getItemSpy.mockRestore()
+    })
 })
 
 describe('getSurveySeen', () => {
@@ -121,6 +131,16 @@ describe('getSurveySeen', () => {
     describe('when survey has not been seen', () => {
         it('should return false when no localStorage entry exists', () => {
             expect(getSurveySeen(baseSurvey)).toBe(false)
+        })
+
+        it('should return false when localStorage access throws', () => {
+            const getItemSpy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+                throw new Error('storage unavailable')
+            })
+
+            expect(getSurveySeen(baseSurvey)).toBe(false)
+
+            getItemSpy.mockRestore()
         })
     })
 
@@ -541,6 +561,31 @@ describe('doesSurveyUrlMatch', () => {
                 },
             }
             expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
+        })
+    })
+
+    describe('get_current_url override', () => {
+        const posthogWith = (getCurrentUrl?: (defaultUrl: string) => string): PostHog =>
+            ({ config: { get_current_url: getCurrentUrl } }) as PostHog
+
+        it('matches against the overridden URL instead of window.location.href', () => {
+            // raw browser URL would not match the survey condition
+            mockWindowLocation('https://generated-host.skin/game')
+            const survey = { conditions: { url: 'app.example.com', events: null, actions: null } }
+
+            expect(
+                doesSurveyUrlMatch(
+                    survey,
+                    posthogWith(() => 'https://app.example.com/settings')
+                )
+            ).toBe(true)
+        })
+
+        it('falls back to window.location.href when no override is configured', () => {
+            mockWindowLocation('https://app.example.com/settings')
+            const survey = { conditions: { url: 'app.example.com', events: null, actions: null } }
+
+            expect(doesSurveyUrlMatch(survey, posthogWith())).toBe(true)
         })
     })
 })

@@ -7,37 +7,46 @@ import {
   JsonType,
   PostHogCaptureOptions,
   PostHogCoreStateless,
+  PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
   PostHogPersistedProperty,
+  safeSetTimeout,
+  uuidv7,
 } from '@posthog/core'
 import {
+  AllFlagsOptions,
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
   FeatureFlagOverrideOptions,
   FeatureFlagResult,
+  FlagEvaluationOptions,
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
   OverrideFeatureFlagsOptions,
   PostHogOptions,
   SendFeatureFlagsOptions,
-  FlagEvaluationOptions,
-  AllFlagsOptions,
+  SetPersonPropertiesMessage,
+  UnsetPersonPropertiesMessage,
 } from './types'
 import {
-  FeatureFlagsPoller,
+  EvaluatedFlagRecord,
+  FeatureFlagEvaluations,
+  FeatureFlagEvaluationsHost,
+  FlagCalledEventParams,
+} from './feature-flag-evaluations'
+import {
   type FeatureFlagEvaluationContext,
-  RequiresServerEvaluation,
+  FeatureFlagsPoller,
   InconclusiveMatchError,
+  RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
-import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
-import { uuidv7 } from '@posthog/core'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -45,6 +54,72 @@ import { ContextData, ContextOptions, IPostHogContext } from './extensions/conte
 const MINIMUM_POLLING_INTERVAL = 100
 const THIRTY_SECONDS = 30 * 1000
 const MAX_CACHE_SIZE = 50 * 1000
+
+const WAITUNTIL_DEBOUNCE_MS = 50
+const WAITUNTIL_MAX_WAIT_MS = 500
+const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
+
+// Process-wide dedup for deprecation warnings — without this, calling a deprecated
+// method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
+const _emittedDeprecations = new Set<string>()
+
+function emitDeprecationWarningOnce(id: string, message: string): void {
+  if (_emittedDeprecations.has(id)) {
+    return
+  }
+  _emittedDeprecations.add(id)
+  // eslint-disable-next-line no-console
+  console.warn(`[PostHog] ${message}`)
+}
+
+/**
+ * @internal — clears the process-wide deprecation dedup set. Test-only.
+ */
+export function _resetDeprecationWarningsForTests(): void {
+  _emittedDeprecations.clear()
+}
+
+function normalizeApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizePersonalApiKey(value?: unknown): string | undefined {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
+  return normalizedValue || undefined
+}
+
+function normalizeHost(value?: unknown): string {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
+  return normalizedValue || DEFAULT_NODE_HOST
+}
+
+function normalizeUnsetPersonProperties(value: string | string[]): string[] {
+  const propertyNames = Array.isArray(value) ? value : [value]
+  return propertyNames.filter(
+    (propertyName): propertyName is string => typeof propertyName === 'string' && propertyName.trim().length > 0
+  )
+}
+
+/**
+ * Derive `$feature/{key}` and `$active_feature_flags` event properties from a flat
+ * `{ key: value }` map returned by the legacy `sendFeatureFlags` path.
+ */
+function buildFlagEventProperties(flagValues: Record<string, FeatureFlagValue> | undefined): Record<string, any> {
+  if (!flagValues) {
+    return {}
+  }
+  const additionalProperties: Record<string, any> = {}
+  for (const [feature, variant] of Object.entries(flagValues)) {
+    additionalProperties[`$feature/${feature}`] = variant
+  }
+  const activeFlags = Object.keys(flagValues)
+    .filter((flag) => flagValues[flag] !== false)
+    .sort()
+  if (activeFlags.length > 0) {
+    additionalProperties['$active_feature_flags'] = activeFlags
+  }
+  return additionalProperties
+}
 
 // The actual exported Nodejs API.
 export abstract class PostHogBackendClient extends PostHogCoreStateless implements IPostHog {
@@ -60,7 +135,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _flagOverrides?: Record<string, FeatureFlagValue>
   private _payloadOverrides?: Record<string, JsonType>
 
-  distinctIdHasSentFlagCalls: Record<string, string[]>
+  distinctIdHasSentFlagCalls: Record<string, Set<string>>
+
+  // waitUntil debounce state (per-instance)
+  private _waitUntilCycle?: {
+    resolve: () => void
+    startedAt: number
+    timer: ReturnType<typeof setTimeout> | undefined
+  }
 
   /**
    * Initialize a new PostHog client instance.
@@ -76,12 +158,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @example
    * ```ts
-   * // With personal API key
+   * // With a secret key (Personal API Key or Project Secret API Key) for local evaluation
    * const client = new PostHogBackendClient(
    *   'your-api-key',
    *   {
    *     host: 'https://app.posthog.com',
-   *     personalApiKey: 'your-personal-api-key'
+   *     secretKey: 'your-secret-key'
    *   }
    * )
    * ```
@@ -92,34 +174,48 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param options - Configuration options for the client
    */
   constructor(apiKey: string, options: PostHogOptions = {}) {
-    super(apiKey, options)
+    const normalizedApiKey = normalizeApiKey(apiKey)
+    const normalizedOptions = {
+      ...options,
+      host: normalizeHost(options.host),
+      personalApiKey: normalizePersonalApiKey(options.secretKey ?? options.personalApiKey),
+    }
 
-    this.options = options
+    super(normalizedApiKey, normalizedOptions)
+
+    this.options = normalizedOptions
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
-      typeof options.featureFlagsPollingInterval === 'number'
-        ? Math.max(options.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
+      typeof normalizedOptions.featureFlagsPollingInterval === 'number'
+        ? Math.max(normalizedOptions.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
         : THIRTY_SECONDS
 
-    if (options.personalApiKey) {
-      if (options.personalApiKey.includes('phc_')) {
+    if (typeof normalizedOptions.waitUntilDebounceMs === 'number') {
+      this.options.waitUntilDebounceMs = Math.max(normalizedOptions.waitUntilDebounceMs, 0)
+    }
+    if (typeof normalizedOptions.waitUntilMaxWaitMs === 'number') {
+      this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
+    }
+
+    if (!this.disabled && normalizedOptions.personalApiKey) {
+      if (normalizedOptions.personalApiKey.includes('phc_')) {
         throw new Error(
           'Your Personal API key is invalid. These keys are prefixed with "phx_" and can be created in PostHog project settings.'
         )
       }
 
       // Only start the poller if local evaluation is enabled (defaults to true for backward compatibility)
-      const shouldEnableLocalEvaluation = options.enableLocalEvaluation !== false
+      const shouldEnableLocalEvaluation = normalizedOptions.enableLocalEvaluation !== false
 
       if (shouldEnableLocalEvaluation) {
         this.featureFlagsPoller = new FeatureFlagsPoller({
           pollingInterval: this.options.featureFlagsPollingInterval,
-          personalApiKey: options.personalApiKey,
-          projectApiKey: apiKey,
-          timeout: options.requestTimeout ?? 10000, // 10 seconds
+          personalApiKey: normalizedOptions.personalApiKey,
+          projectApiKey: normalizedApiKey,
+          timeout: normalizedOptions.requestTimeout ?? 10000, // 10 seconds
           host: this.host,
-          fetch: options.fetch,
+          fetch: normalizedOptions.fetch,
           onError: (err: Error) => {
             this._events.emit('error', err)
           },
@@ -127,15 +223,102 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             this._events.emit('localEvaluationFlagsLoaded', count)
           },
           customHeaders: this.getCustomHeaders(),
-          cacheProvider: options.flagDefinitionCacheProvider,
-          strictLocalEvaluation: options.strictLocalEvaluation,
+          cacheProvider: normalizedOptions.flagDefinitionCacheProvider,
+          strictLocalEvaluation: normalizedOptions.strictLocalEvaluation,
         })
       }
     }
 
-    this.errorTracking = new ErrorTracking(this, options, this._logger)
+    this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
     this.distinctIdHasSentFlagCalls = {}
-    this.maxCacheSize = options.maxCacheSize || MAX_CACHE_SIZE
+    this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
+  }
+
+  protected override enqueue(type: string, message: any, options?: PostHogCaptureOptions): void {
+    super.enqueue(type, message, options)
+    this.scheduleDebouncedFlush()
+  }
+
+  override async flush(): Promise<void> {
+    const flushPromise = this.flushWithPendingPromises()
+    const waitUntil = this.options.waitUntil
+    // Only register when no debounce promise is already keeping runtime alive
+    if (waitUntil && !this._waitUntilCycle) {
+      try {
+        waitUntil(flushPromise.catch(() => {}))
+      } catch {
+        // waitUntil may throw outside request context
+      }
+    }
+    return flushPromise
+  }
+
+  private scheduleDebouncedFlush(): void {
+    // `waitUntil` is a serverless construct
+    // if it doesn't exist, we can skip all the debounce logic and flush as normal
+    const waitUntil = this.options.waitUntil
+    if (!waitUntil) {
+      return
+    }
+
+    if (this.disabled || this.optedOut) {
+      return
+    }
+
+    if (!this._waitUntilCycle) {
+      let resolve: () => void
+      const promise = new Promise<void>((r) => {
+        resolve = r
+      })
+      try {
+        waitUntil(promise)
+      } catch {
+        // waitUntil may throw outside request context
+        return
+      }
+      this._waitUntilCycle = { resolve: resolve!, startedAt: Date.now(), timer: undefined }
+    }
+
+    // Max time cap: if we've been debouncing too long, flush now to prevent
+    // starvation from rapid concurrent captures. I.e., don't let a steady
+    // stream of captures keep pushing the flush back indefinitely.
+    const elapsed = Date.now() - this._waitUntilCycle.startedAt
+    const maxWaitMs = this.options.waitUntilMaxWaitMs ?? WAITUNTIL_MAX_WAIT_MS
+    const flushNow = elapsed >= maxWaitMs
+
+    if (this._waitUntilCycle.timer !== undefined) {
+      clearTimeout(this._waitUntilCycle.timer)
+    }
+
+    if (flushNow) {
+      void this.resolveWaitUntilFlush()
+      return
+    }
+
+    const debounceMs = this.options.waitUntilDebounceMs ?? WAITUNTIL_DEBOUNCE_MS
+    this._waitUntilCycle.timer = safeSetTimeout(() => {
+      void this.resolveWaitUntilFlush()
+    }, debounceMs)
+  }
+
+  private _consumeWaitUntilCycle(): (() => void) | undefined {
+    const cycle = this._waitUntilCycle
+    if (cycle) {
+      clearTimeout(cycle.timer)
+      this._waitUntilCycle = undefined
+    }
+    return cycle?.resolve
+  }
+
+  private async resolveWaitUntilFlush(): Promise<void> {
+    const resolve = this._consumeWaitUntilCycle()
+    try {
+      await this.flushWithPendingPromises()
+    } catch {
+      // Flush errors are already logged by flush() internals
+    } finally {
+      resolve?.()
+    }
   }
 
   /**
@@ -248,6 +431,35 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Returns the common properties attached to every captured event.
+   *
+   * @remarks
+   * Extends the shared core properties (`$lib`, `$lib_version`) with
+   * `$is_server: true` so that events emitted from the server-side SDKs
+   * (posthog-node and posthog-edge, which both extend this class) are
+   * distinguishable from browser and react-native events. Browser and
+   * react-native clients do not extend `PostHogBackendClient`, so they
+   * never receive this property.
+   *
+   * This is controlled by the `isServer` option, which defaults to `true`.
+   * When `isServer` is `false` (e.g. when using the SDK as a client/CLI), the
+   * `$is_server` property is omitted entirely so the device OS is attributed
+   * normally.
+   *
+   * @returns The common event properties, including `$is_server: true` when
+   * the `isServer` option is enabled.
+   */
+  protected override getCommonEventProperties(): PostHogEventProperties {
+    const commonProperties = super.getCommonEventProperties()
+
+    if (this.options.isServer ?? true) {
+      commonProperties.$is_server = true
+    }
+
+    return commonProperties
+  }
+
+  /**
    * Enable the PostHog client (opt-in).
    *
    * @example
@@ -307,6 +519,57 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.featureFlagsPoller?.debug(enabled)
   }
 
+  private _warnIfInvalidCapture(
+    props: EventMessage,
+    stringArgumentWarning: string,
+    exceptionCaptureWarning: string
+  ): void {
+    if (typeof props === 'string') {
+      this._logger.warn(stringArgumentWarning)
+    }
+    if (props.event === '$exception' && !props._originatedFromCaptureException) {
+      this._logger.warn(exceptionCaptureWarning)
+    }
+  }
+
+  private _sendPreparedEvent(
+    type: string,
+    props: EventMessage,
+    immediate: boolean,
+    prepareOptions?: { includeContextProperties?: boolean }
+  ): Promise<void> {
+    return this.addPendingPromise(
+      this._prepareEventMessage(props, prepareOptions)
+        .then(({ distinctId, event, properties, options }) => {
+          const captureOptions: PostHogCaptureOptions = {
+            timestamp: options.timestamp,
+            disableGeoip: options.disableGeoip,
+            uuid: options.uuid,
+          }
+          const message = {
+            distinctId,
+            event,
+            properties: {
+              ...properties,
+              ...this.getCommonEventProperties(),
+            },
+          }
+          return immediate
+            ? this.sendImmediate(type, message, captureOptions)
+            : this.enqueue(type, message, captureOptions)
+        })
+        .catch((err) => {
+          if (err) {
+            console.error(err)
+          }
+        })
+    )
+  }
+
+  _capturePreparedEvent(props: EventMessage, immediate: boolean): Promise<void> {
+    return this._sendPreparedEvent('capture', props, immediate)
+  }
+
   /**
    * Capture an event manually.
    *
@@ -326,29 +589,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns void
    */
   capture(props: EventMessage): void {
-    if (typeof props === 'string') {
-      this._logger.warn('Called capture() with a string as the first argument when an object was expected.')
-    }
-    if (props.event === '$exception' && !props._originatedFromCaptureException) {
-      this._logger.warn(
-        "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
-      )
-    }
-    this.addPendingPromise(
-      this.prepareEventMessage(props)
-        .then(({ distinctId, event, properties, options }) => {
-          return super.captureStateless(distinctId, event, properties, {
-            timestamp: options.timestamp,
-            disableGeoip: options.disableGeoip,
-            uuid: options.uuid,
-          })
-        })
-        .catch((err) => {
-          if (err) {
-            console.error(err)
-          }
-        })
+    this._warnIfInvalidCapture(
+      props,
+      'Called capture() with a string as the first argument when an object was expected.',
+      "Using `posthog.capture('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureException(error)` instead, which attaches required metadata automatically."
     )
+    this._capturePreparedEvent(props, false)
   }
 
   /**
@@ -395,29 +641,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the event is captured
    */
   async captureImmediate(props: EventMessage): Promise<void> {
-    if (typeof props === 'string') {
-      this._logger.warn('Called captureImmediate() with a string as the first argument when an object was expected.')
-    }
-    if (props.event === '$exception' && !props._originatedFromCaptureException) {
-      this._logger.warn(
-        "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
-      )
-    }
-    return this.addPendingPromise(
-      this.prepareEventMessage(props)
-        .then(({ distinctId, event, properties, options }) => {
-          return super.captureStatelessImmediate(distinctId, event, properties, {
-            timestamp: options.timestamp,
-            disableGeoip: options.disableGeoip,
-            uuid: options.uuid,
-          })
-        })
-        .catch((err) => {
-          if (err) {
-            console.error(err)
-          }
-        })
+    this._warnIfInvalidCapture(
+      props,
+      'Called captureImmediate() with a string as the first argument when an object was expected.',
+      "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
     )
+    return this._capturePreparedEvent(props, true)
   }
 
   /**
@@ -464,7 +693,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    super.identifyStateless(distinctId, eventProperties, { disableGeoip })
+    this._sendPreparedEvent(
+      'identify',
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
+      false,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -498,7 +732,72 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       $set_once: setOnceProps,
       $anon_distinct_id: $anon_distinct_id ?? undefined,
     }
-    super.identifyStatelessImmediate(distinctId, eventProperties, { disableGeoip })
+    await this._sendPreparedEvent(
+      'identify',
+      { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
+      true,
+      { includeContextProperties: false }
+    )
+  }
+
+  /**
+   * Set properties on a person profile.
+   *
+   * @example
+   * ```ts
+   * client.setPersonProperties({
+   *   distinctId: 'user_123',
+   *   properties: { plan: 'premium' },
+   *   propertiesOnce: { first_seen: '2026-06-15' }
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The data containing distinctId and properties to set
+   */
+  setPersonProperties({ distinctId, properties = {}, propertiesOnce = {} }: SetPersonPropertiesMessage): void {
+    if (Object.keys(properties).length === 0 && Object.keys(propertiesOnce).length === 0) {
+      return
+    }
+
+    const eventProperties: Record<string, any> = {}
+    if (Object.keys(properties).length > 0) {
+      eventProperties.$set = properties
+    }
+    if (Object.keys(propertiesOnce).length > 0) {
+      eventProperties.$set_once = propertiesOnce
+    }
+
+    this.capture({
+      distinctId,
+      event: '$set',
+      properties: eventProperties,
+    })
+  }
+
+  /**
+   * Remove properties from a person profile.
+   *
+   * @example
+   * ```ts
+   * client.unsetPersonProperties({
+   *   distinctId: 'user_123',
+   *   properties: ['plan', 'email']
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The data containing distinctId and property names to unset
+   */
+  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void {
+    const propertyNames = normalizeUnsetPersonProperties(properties)
+    if (propertyNames.length === 0) {
+      return
+    }
+
+    this.capture({ distinctId, event: '$set', properties: { $unset: propertyNames } })
   }
 
   /**
@@ -518,7 +817,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The alias data containing distinctId and alias
    */
   alias(data: { distinctId: string; alias: string; disableGeoip?: boolean }): void {
-    super.aliasStateless(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip })
+    this._sendPreparedEvent(
+      'alias',
+      {
+        distinctId: data.distinctId,
+        event: '$create_alias',
+        properties: { distinct_id: data.distinctId, alias: data.alias },
+        disableGeoip: data.disableGeoip,
+      },
+      false,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -539,7 +848,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the alias is processed
    */
   async aliasImmediate(data: { distinctId: string; alias: string; disableGeoip?: boolean }): Promise<void> {
-    await super.aliasStatelessImmediate(data.alias, data.distinctId, undefined, { disableGeoip: data.disableGeoip })
+    await this._sendPreparedEvent(
+      'alias',
+      {
+        distinctId: data.distinctId,
+        event: '$create_alias',
+        properties: { distinct_id: data.distinctId, alias: data.alias },
+        disableGeoip: data.disableGeoip,
+      },
+      true,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -646,6 +965,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     } = {},
     matchValue?: FeatureFlagValue
   ): Promise<FeatureFlagResult | undefined> {
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     const sendFeatureFlagEvents = options.sendFeatureFlagEvents ?? true
     // Check for overrides first - they take precedence over all evaluation
     if (this._flagOverrides !== undefined && key in this._flagOverrides) {
@@ -678,7 +1002,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const evaluationContext = this.createFeatureFlagEvaluationContext(
       distinctId,
       groups,
-      personProperties,
+      this.personPropertiesForLocalEvaluation(distinctId, personProperties),
       groupProperties
     )
 
@@ -736,8 +1060,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       const flagsResponse = await super.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
-        evaluationContext.personProperties,
-        evaluationContext.groupProperties,
+        personProperties,
+        groupProperties,
         disableGeoip,
         [key]
       )
@@ -795,47 +1119,38 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     // Send feature flag event if configured
     if (sendFeatureFlagEvents) {
-      // Compute the response value for event tracking
       const response = result === undefined ? undefined : result.enabled === false ? false : (result.variant ?? true)
-      const featureFlagReportedKey = `${key}_${response}`
-
-      if (
-        !(distinctId in this.distinctIdHasSentFlagCalls) ||
-        !this.distinctIdHasSentFlagCalls[distinctId].includes(featureFlagReportedKey)
-      ) {
-        if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
-          this.distinctIdHasSentFlagCalls = {}
-        }
-        if (Array.isArray(this.distinctIdHasSentFlagCalls[distinctId])) {
-          this.distinctIdHasSentFlagCalls[distinctId].push(featureFlagReportedKey)
-        } else {
-          this.distinctIdHasSentFlagCalls[distinctId] = [featureFlagReportedKey]
-        }
-
-        const properties: Record<string, any> = {
-          $feature_flag: key,
-          $feature_flag_response: response,
-          $feature_flag_id: flagId,
-          $feature_flag_version: flagVersion,
-          $feature_flag_reason: flagReason,
-          locally_evaluated: flagWasLocallyEvaluated,
-          [`$feature/${key}`]: response,
-          $feature_flag_request_id: requestId,
-          $feature_flag_evaluated_at: evaluatedAt,
-        }
-
-        if (featureFlagError) {
-          properties.$feature_flag_error = featureFlagError
-        }
-
-        this.capture({
-          distinctId,
-          event: '$feature_flag_called',
-          properties,
-          groups,
-          disableGeoip,
-        })
+      const properties: Record<string, any> = {
+        $feature_flag: key,
+        $feature_flag_response: response,
+        $feature_flag_id: flagId,
+        $feature_flag_version: flagVersion,
+        $feature_flag_reason: flagReason,
+        locally_evaluated: flagWasLocallyEvaluated,
+        [`$feature/${key}`]: response,
+        $feature_flag_request_id: requestId,
+        $feature_flag_evaluated_at: flagWasLocallyEvaluated ? Date.now() : evaluatedAt,
       }
+
+      if (flagWasLocallyEvaluated && this.featureFlagsPoller) {
+        const flagDefinitionsLoadedAt = this.featureFlagsPoller.getFlagDefinitionsLoadedAt()
+        if (flagDefinitionsLoadedAt !== undefined) {
+          properties.$feature_flag_definitions_loaded_at = flagDefinitionsLoadedAt
+        }
+      }
+
+      if (featureFlagError) {
+        properties.$feature_flag_error = featureFlagError
+      }
+
+      this._captureFlagCalledEventIfNeeded({
+        distinctId,
+        key,
+        response,
+        groups,
+        disableGeoip,
+        properties,
+      })
     }
 
     // Apply payload override if present (even when there's no flag override)
@@ -886,6 +1201,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Feature flags}
    *
+   * @deprecated Use {@link evaluateFlags} and call `flags.getFlag(key)` on the returned snapshot.
+   *   This consolidates flag evaluation into a single `/flags` request per incoming request and
+   *   avoids drift between the values your code branched on and the values attached to events.
+   *   Will be removed in the next major version.
+   *
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
    * @param options - Optional configuration for flag evaluation
@@ -903,6 +1223,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<FeatureFlagValue | undefined> {
+    emitDeprecationWarningOnce(
+      'getFeatureFlag',
+      '`getFeatureFlag` is deprecated and will be removed in a future major version. ' +
+        'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.getFlag(key)` instead — ' +
+        'this consolidates flag evaluation into a single `/flags` request per incoming request.'
+    )
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
       sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
@@ -945,6 +1271,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Feature flags}
    *
+   * @deprecated Use {@link evaluateFlags} and call `flags.getFlagPayload(key)` on the returned
+   *   snapshot. This consolidates flag evaluation into a single `/flags` request per incoming
+   *   request. Will be removed in the next major version.
+   *
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
    * @param matchValue - Optional match value to get payload for
@@ -965,6 +1295,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<JsonType | undefined> {
+    emitDeprecationWarningOnce(
+      'getFeatureFlagPayload',
+      '`getFeatureFlagPayload` is deprecated and will be removed in a future major version. ' +
+        'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.getFlagPayload(key)` instead — ' +
+        'this consolidates flag evaluation into a single `/flags` request per incoming request.'
+    )
     // Check for payload overrides first - they take precedence over all evaluation
     // This is checked independently from flag overrides
     if (this._payloadOverrides !== undefined && key in this._payloadOverrides) {
@@ -1067,6 +1403,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @throws Error if personal API key is not provided
    */
   async getRemoteConfigPayload(flagKey: string): Promise<JsonType | undefined> {
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     if (!this.options.personalApiKey) {
       throw new Error('Personal API key is required for remote config payload decryption')
     }
@@ -1119,6 +1460,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * {@label Feature flags}
    *
+   * @deprecated Use {@link evaluateFlags} and call `flags.isEnabled(key)` on the returned snapshot.
+   *   This consolidates flag evaluation into a single `/flags` request per incoming request.
+   *   Will be removed in the next major version.
+   *
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
    * @param options - Optional configuration for flag evaluation
@@ -1136,10 +1481,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<boolean | undefined> {
-    const feat = await this.getFeatureFlag(key, distinctId, options)
-    if (feat === undefined) {
+    emitDeprecationWarningOnce(
+      'isFeatureEnabled',
+      '`isFeatureEnabled` is deprecated and will be removed in a future major version. ' +
+        'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.isEnabled(key)` instead — ' +
+        'this consolidates flag evaluation into a single `/flags` request per incoming request.'
+    )
+    // Bypass the public `getFeatureFlag` so the user only sees one deprecation warning per call.
+    const result = await this._getFeatureFlagResult(key, distinctId, {
+      ...options,
+      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+    })
+    if (result === undefined) {
       return undefined
     }
+    if (result.enabled === false) {
+      return false
+    }
+    const feat: FeatureFlagValue = result.variant ?? true
     return !!feat || false
   }
 
@@ -1248,6 +1607,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return { featureFlags: {}, featureFlagPayloads: {} }
     }
 
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return { featureFlags: {}, featureFlagPayloads: {} }
+    }
+
     const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
@@ -1263,7 +1627,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const evaluationContext = this.createFeatureFlagEvaluationContext(
       resolvedDistinctId,
       groups,
-      personProperties,
+      this.personPropertiesForLocalEvaluation(resolvedDistinctId, personProperties),
       groupProperties
     )
 
@@ -1287,8 +1651,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       const remoteEvaluationResult = await super.getFeatureFlagsAndPayloadsStateless(
         evaluationContext.distinctId,
         evaluationContext.groups,
-        evaluationContext.personProperties,
-        evaluationContext.groupProperties,
+        personProperties,
+        groupProperties,
         disableGeoip,
         flagKeys
       )
@@ -1317,6 +1681,299 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     return { featureFlags, featureFlagPayloads }
+  }
+
+  /**
+   * Evaluate all feature flags for a user in a single call and return a
+   * {@link FeatureFlagEvaluations} snapshot. Branch on `.isEnabled()` / `.getFlag()`,
+   * then pass the same snapshot to `capture()` via the `flags` option so the
+   * captured event carries the exact flag values the code branched on.
+   *
+   * Prefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and
+   * over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation
+   * into a single `/flags` request per incoming request.
+   *
+   * **Local evaluation is transparent.** When the poller can resolve a flag from
+   * cached definitions, no network call is made and the snapshot's `$feature_flag_called`
+   * events are tagged `locally_evaluated: true`.
+   *
+   * **Trim the request.** Pass `flagKeys` to scope the underlying `/flags` request
+   * to a subset of flags — useful when you only need a few flags and want to reduce
+   * the response payload.
+   *
+   * **Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()`
+   * to filter which flags get attached to a captured event without re-fetching.
+   *
+   * @example
+   * Basic usage:
+   * ```ts
+   * const flags = await client.evaluateFlags('user_123', {
+   *   personProperties: { plan: 'enterprise' },
+   * })
+   * if (flags.isEnabled('new-dashboard')) {
+   *   renderNewDashboard()
+   * }
+   * client.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
+   * ```
+   *
+   * @example
+   * Scope the `/flags` request to specific keys:
+   * ```ts
+   * const flags = await client.evaluateFlags('user_123', {
+   *   flagKeys: ['new-dashboard', 'checkout-flow'],
+   *   personProperties: { plan: 'enterprise' },
+   * })
+   * ```
+   *
+   * @example
+   * Attach only the flags the developer actually checked:
+   * ```ts
+   * const flags = await client.evaluateFlags('user_123')
+   * if (flags.isEnabled('new-dashboard')) { ... }
+   * client.capture({ distinctId: 'user_123', event: 'page_viewed', flags: flags.onlyAccessed() })
+   * ```
+   *
+   * @example
+   * Use `withContext()` to avoid repeating the distinctId:
+   * ```ts
+   * await client.withContext({ distinctId: 'user_123' }, async () => {
+   *   const flags = await client.evaluateFlags()
+   *   if (flags.isEnabled('new-dashboard')) { ... }
+   *   client.capture({ event: 'page_viewed', flags })
+   * })
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
+   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`, including `flagKeys` to scope the `/flags` request.
+   * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
+   */
+  async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
+  async evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
+  async evaluateFlags(
+    distinctIdOrOptions?: string | AllFlagsOptions,
+    options?: AllFlagsOptions
+  ): Promise<FeatureFlagEvaluations> {
+    const { distinctId: resolvedDistinctId, options: resolvedOptions } = this._resolveDistinctId(
+      distinctIdOrOptions,
+      options
+    )
+
+    if (!resolvedDistinctId) {
+      this._logger.warn(
+        '[PostHog] distinctId is required to evaluate feature flags — pass it explicitly or use withContext()'
+      )
+      return new FeatureFlagEvaluations({
+        host: this._getFeatureFlagEvaluationsHost(),
+        distinctId: '',
+        flags: {},
+      })
+    }
+
+    if (this.disabled) {
+      this._logger.warn('The client is disabled')
+      return new FeatureFlagEvaluations({
+        host: this._getFeatureFlagEvaluationsHost(),
+        distinctId: resolvedDistinctId,
+        flags: {},
+      })
+    }
+
+    const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
+    let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
+
+    const adjustedProperties = this.addLocalPersonAndGroupProperties(
+      resolvedDistinctId,
+      groups,
+      personProperties,
+      groupProperties
+    )
+    personProperties = adjustedProperties.allPersonProperties
+    groupProperties = adjustedProperties.allGroupProperties
+    const evaluationContext = this.createFeatureFlagEvaluationContext(
+      resolvedDistinctId,
+      groups,
+      this.personPropertiesForLocalEvaluation(resolvedDistinctId, personProperties),
+      groupProperties
+    )
+
+    if (onlyEvaluateLocally == undefined) {
+      onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
+    }
+
+    const records: Record<string, EvaluatedFlagRecord> = {}
+    let requestId: string | undefined = undefined
+    let evaluatedAt: number | undefined = undefined
+    let errorsWhileComputing = false
+    let quotaLimited = false
+
+    // Try local evaluation first and decorate each flag with metadata from the poller.
+    // `flagKeys` scopes the evaluation to a subset of definitions when provided.
+    const localResult = await this.featureFlagsPoller?.getAllFlagsAndPayloads(evaluationContext, flagKeys)
+    const locallyEvaluatedKeys = new Set<string>()
+    if (localResult) {
+      for (const [key, value] of Object.entries(localResult.response)) {
+        const flagDef = this.featureFlagsPoller?.featureFlagsByKey[key]
+        records[key] = {
+          key,
+          enabled: value !== false,
+          variant: typeof value === 'string' ? value : undefined,
+          payload: localResult.payloads[key],
+          id: flagDef?.id,
+          // The local-evaluation flag definition (`PostHogFeatureFlag`) does not carry a
+          // version field; only the remote `/flags` response does via `metadata.version`.
+          version: undefined,
+          reason: 'Evaluated locally',
+          locallyEvaluated: true,
+        }
+        locallyEvaluatedKeys.add(key)
+      }
+    }
+
+    // Fall back to remote evaluation for any flags the poller couldn't resolve locally.
+    // We use the detail-shaped endpoint so the resulting records carry id/version/reason
+    // and fired $feature_flag_called events match what isFeatureEnabled()/getFeatureFlag() emit.
+    const fallbackToFlags = localResult ? localResult.fallbackToFlags : true
+    if (fallbackToFlags && !onlyEvaluateLocally) {
+      const details = await super.getFeatureFlagDetailsStateless(
+        evaluationContext.distinctId,
+        evaluationContext.groups,
+        personProperties,
+        groupProperties,
+        disableGeoip,
+        flagKeys
+      )
+      if (details) {
+        requestId = details.requestId
+        evaluatedAt = details.evaluatedAt
+        errorsWhileComputing = Boolean((details as any).errorsWhileComputingFlags)
+        quotaLimited = Array.isArray(details.quotaLimited) && details.quotaLimited.includes('feature_flags')
+        for (const [key, detail] of Object.entries(details.flags)) {
+          if (locallyEvaluatedKeys.has(key)) {
+            continue
+          }
+          let parsedPayload: JsonType | undefined = undefined
+          if (detail.metadata?.payload !== undefined) {
+            try {
+              parsedPayload = JSON.parse(detail.metadata.payload)
+            } catch {
+              parsedPayload = detail.metadata.payload
+            }
+          }
+          records[key] = {
+            key,
+            enabled: detail.enabled,
+            variant: detail.variant,
+            payload: parsedPayload,
+            id: detail.metadata?.id,
+            version: detail.metadata?.version,
+            reason: detail.reason?.description ?? detail.reason?.code,
+            locallyEvaluated: false,
+          }
+        }
+      }
+    }
+
+    // Apply overrides last so they take precedence over evaluation.
+    if (this._flagOverrides !== undefined) {
+      for (const [key, value] of Object.entries(this._flagOverrides)) {
+        if (value === undefined) {
+          delete records[key]
+          continue
+        }
+        const existing = records[key]
+        records[key] = {
+          key,
+          enabled: value !== false,
+          variant: typeof value === 'string' ? value : undefined,
+          payload: existing?.payload,
+          id: existing?.id,
+          version: existing?.version,
+          reason: existing?.reason,
+          locallyEvaluated: existing?.locallyEvaluated ?? false,
+        }
+      }
+    }
+    if (this._payloadOverrides !== undefined) {
+      for (const [key, payload] of Object.entries(this._payloadOverrides)) {
+        const existing = records[key]
+        if (existing) {
+          records[key] = { ...existing, payload }
+        }
+      }
+    }
+
+    return new FeatureFlagEvaluations({
+      host: this._getFeatureFlagEvaluationsHost(),
+      distinctId: resolvedDistinctId,
+      groups,
+      disableGeoip,
+      flags: records,
+      requestId,
+      evaluatedAt,
+      flagDefinitionsLoadedAt: this.featureFlagsPoller?.getFlagDefinitionsLoadedAt(),
+      errorsWhileComputing,
+      quotaLimited,
+    })
+  }
+
+  /**
+   * Fires a `$feature_flag_called` event for the given flag if the (distinctId, flag, response)
+   * triple hasn't already been reported for this client. Shared by the single-flag evaluation
+   * path and `FeatureFlagEvaluations.isEnabled() / getFlag()` so both paths dedupe identically.
+   *
+   * @internal
+   */
+  protected _captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void {
+    const { distinctId, key, response, groups, disableGeoip, properties } = params
+    const groupSuffix =
+      groups && Object.keys(groups).length > 0
+        ? `_${JSON.stringify(Object.entries(groups).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))}`
+        : ''
+    const featureFlagReportedKey = `${key}_${response}${groupSuffix}`
+
+    if (
+      distinctId in this.distinctIdHasSentFlagCalls &&
+      this.distinctIdHasSentFlagCalls[distinctId].has(featureFlagReportedKey)
+    ) {
+      return
+    }
+
+    if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
+      this.distinctIdHasSentFlagCalls = {}
+    }
+    if (this.distinctIdHasSentFlagCalls[distinctId] instanceof Set) {
+      this.distinctIdHasSentFlagCalls[distinctId].add(featureFlagReportedKey)
+    } else {
+      this.distinctIdHasSentFlagCalls[distinctId] = new Set([featureFlagReportedKey])
+    }
+
+    this.capture({
+      distinctId,
+      event: '$feature_flag_called',
+      properties,
+      groups,
+      disableGeoip,
+    })
+  }
+
+  private _featureFlagEvaluationsHost?: FeatureFlagEvaluationsHost
+
+  private _getFeatureFlagEvaluationsHost(): FeatureFlagEvaluationsHost {
+    if (!this._featureFlagEvaluationsHost) {
+      this._featureFlagEvaluationsHost = {
+        captureFlagCalledEventIfNeeded: (params) => this._captureFlagCalledEventIfNeeded(params),
+        logWarning: (message) => {
+          if (this.options.featureFlagsLogWarnings !== false) {
+            // These warnings guide API usage (misuse of `onlyAccessed()` / `only()`) and
+            // should always surface — unlike `this._logger.warn` which is gated on debug mode.
+            console.warn(`[PostHog] ${message}`)
+          }
+        },
+      }
+    }
+    return this._featureFlagEvaluationsHost
   }
 
   /**
@@ -1355,7 +2012,67 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The group identify data
    */
   groupIdentify({ groupType, groupKey, properties, distinctId, disableGeoip }: GroupIdentifyMessage): void {
-    super.groupIdentifyStateless(groupType, groupKey, properties, { disableGeoip }, distinctId)
+    this._sendPreparedEvent(
+      'capture',
+      {
+        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        event: '$groupidentify',
+        properties: {
+          $group_type: groupType,
+          $group_key: groupKey,
+          $group_set: properties || {},
+        },
+        disableGeoip,
+      },
+      false,
+      { includeContextProperties: false }
+    )
+  }
+
+  /**
+   * Create or update a group and its properties immediately (synchronously).
+   *
+   * @example
+   * ```ts
+   * // Immediately create or update a company group
+   * await client.groupIdentifyImmediate({
+   *   groupType: 'company',
+   *   groupKey: 'acme-corp',
+   *   properties: {
+   *     name: 'Acme Corporation',
+   *     industry: 'Technology',
+   *     employee_count: 500
+   *   }
+   * })
+   * ```
+   *
+   * {@label Identification}
+   *
+   * @param data - The group identify data
+   * @returns Promise that resolves when the group identify is processed
+   */
+  async groupIdentifyImmediate({
+    groupType,
+    groupKey,
+    properties,
+    distinctId,
+    disableGeoip,
+  }: GroupIdentifyMessage): Promise<void> {
+    await this._sendPreparedEvent(
+      'capture',
+      {
+        distinctId: distinctId || `$${groupType}_${groupKey}`,
+        event: '$groupidentify',
+        properties: {
+          $group_type: groupType,
+          $group_key: groupKey,
+          $group_set: properties || {},
+        },
+        disableGeoip,
+      },
+      true,
+      { includeContextProperties: false }
+    )
   }
 
   /**
@@ -1583,13 +2300,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when shutdown is complete
    */
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
-    this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
+    // Cancel any pending debounced flush — shutdown will flush directly.
+    const resolve = this._consumeWaitUntilCycle()
+
+    await this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
-    return super._shutdown(shutdownTimeoutMs)
+    try {
+      return await super._shutdown(shutdownTimeoutMs)
+    } finally {
+      this.distinctIdHasSentFlagCalls = {}
+      resolve?.()
+    }
   }
 
   private async _requestRemoteConfigPayload(flagKey: string): Promise<PostHogFetchResponse | undefined> {
-    if (!this.options.personalApiKey) {
+    if (this.disabled || !this.apiKey || !this.options.personalApiKey) {
       return undefined
     }
 
@@ -1662,6 +2387,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     disableGeoip?: boolean,
     sendFeatureFlagsOptions?: SendFeatureFlagsOptions
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
+    if (this.disabled || !this.apiKey) {
+      this._logger.warn('The client is disabled')
+      return undefined
+    }
+
     // Use properties directly from options if they exist
     const finalPersonProperties = sendFeatureFlagsOptions?.personProperties || {}
     const finalGroupProperties = sendFeatureFlagsOptions?.groupProperties || {}
@@ -1728,7 +2458,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     personProperties?: Record<string, string>,
     groupProperties?: Record<string, Record<string, string>>
   ): { allPersonProperties: Record<string, string>; allGroupProperties: Record<string, Record<string, string>> } {
-    const allPersonProperties = { distinct_id: distinctId, ...(personProperties || {}) }
+    const allPersonProperties = { ...(personProperties || {}) }
 
     const allGroupProperties: Record<string, Record<string, string>> = {}
     if (groups) {
@@ -1741,6 +2471,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     return { allPersonProperties, allGroupProperties }
+  }
+
+  private personPropertiesForLocalEvaluation(
+    distinctId: string,
+    personProperties?: Record<string, any>
+  ): Record<string, any> {
+    return { distinct_id: distinctId, ...(personProperties || {}) }
   }
 
   private createFeatureFlagEvaluationContext(
@@ -1791,19 +2528,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param error - The error to capture
    * @param distinctId - Optional user distinct ID
    * @param additionalProperties - Optional additional properties to include
+   * @param uuid - Optional event UUID
+   * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
    */
   captureException(
     error: unknown,
     distinctId?: string,
     additionalProperties?: Record<string | number, any>,
-    uuid?: EventMessage['uuid']
+    uuid?: EventMessage['uuid'],
+    flags?: FeatureFlagEvaluations
   ): void {
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
       this.addPendingPromise(
-        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.capture({ ...msg, uuid })
-        )
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties
+        ).then((msg) => this._capturePreparedEvent({ ...msg, uuid, flags }, false))
       )
     }
   }
@@ -1841,19 +2585,25 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param error - The error to capture
    * @param distinctId - Optional user distinct ID
    * @param additionalProperties - Optional additional properties to include
+   * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
    * @returns Promise that resolves when the error is captured
    */
   async captureExceptionImmediate(
     error: unknown,
     distinctId?: string,
-    additionalProperties?: Record<string | number, any>
+    additionalProperties?: Record<string | number, any>,
+    flags?: FeatureFlagEvaluations
   ): Promise<void> {
     if (!ErrorTracking.isPreviouslyCapturedError(error)) {
       const syntheticException = new Error('PostHog syntheticException')
-      this.addPendingPromise(
-        ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
-          this.captureImmediate(msg)
-        )
+      return this.addPendingPromise(
+        ErrorTracking.buildEventMessage(
+          this.getErrorPropertiesBuilder(),
+          error,
+          { syntheticException },
+          distinctId,
+          additionalProperties
+        ).then((msg) => this.captureImmediate({ ...msg, flags }))
       )
     }
   }
@@ -1864,25 +2614,49 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     properties: PostHogEventProperties
     options: PostHogCaptureOptions
   }> {
-    const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
-      props
+    return this._prepareEventMessage(props)
+  }
+
+  private async _prepareEventMessage(
+    props: EventMessage,
+    options: { includeContextProperties?: boolean } = {}
+  ): Promise<{
+    distinctId: string
+    event: string
+    properties: PostHogEventProperties
+    options: PostHogCaptureOptions
+  }> {
+    const {
+      distinctId,
+      event,
+      properties,
+      groups,
+      flags,
+      sendFeatureFlags,
+      timestamp,
+      disableGeoip,
+      uuid,
+    }: EventMessage = props
 
     const contextData = this.context?.get()
+    const includeContextProperties = options.includeContextProperties ?? true
 
     let mergedDistinctId = distinctId || contextData?.distinctId
 
-    const mergedProperties = {
-      ...this.props,
-      ...(contextData?.properties || {}),
-      ...(properties || {}),
-    }
+    const mergedProperties = includeContextProperties
+      ? {
+          ...this.props,
+          ...(contextData?.properties || {}),
+          ...(properties || {}),
+        }
+      : { ...(properties || {}) }
 
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()
       mergedProperties.$process_person_profile = false
     }
 
-    if (contextData?.sessionId && !mergedProperties.$session_id) {
+    if (includeContextProperties && contextData?.sessionId && !mergedProperties.$session_id) {
       mergedProperties.$session_id = contextData.sessionId
     }
 
@@ -1892,6 +2666,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       event,
       properties: mergedProperties,
       groups,
+      flags,
       sendFeatureFlags,
       timestamp,
       disableGeoip,
@@ -1905,39 +2680,41 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
     const eventProperties = await Promise.resolve()
       .then(async () => {
+        // Precedence: an explicit `flags` snapshot always wins, regardless of
+        // `sendFeatureFlags`. The snapshot guarantees the event carries the same
+        // values the developer branched on with no additional network call. The
+        // `sendFeatureFlags` path only runs when no snapshot is provided.
+        if (flags) {
+          if (sendFeatureFlags) {
+            console.warn(
+              '[PostHog] Both `flags` and `sendFeatureFlags` were passed to capture(); using `flags` and ignoring `sendFeatureFlags`.'
+            )
+          }
+          return flags._getEventProperties()
+        }
+
         if (sendFeatureFlags) {
+          emitDeprecationWarningOnce(
+            'sendFeatureFlags',
+            '`sendFeatureFlags` is deprecated and will be removed in a future major version. ' +
+              'Pass a `flags` snapshot from `posthog.evaluateFlags(...)` instead — it avoids a ' +
+              'second `/flags` request per capture and guarantees the event carries the exact ' +
+              'flag values your code branched on.'
+          )
           // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
           const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
-          return await this.getFeatureFlagsForEvent(
+          const flagValues = await this.getFeatureFlagsForEvent(
             eventMessage.distinctId!,
             groups,
             disableGeoip,
             sendFeatureFlagsOptions
           )
+          return buildFlagEventProperties(flagValues)
         }
 
-        if (eventMessage.event === '$feature_flag_called') {
-          // If we're capturing a $feature_flag_called event, we don't want to enrich the event with cached flags that may be out of date.
-          return {}
-        }
+        // $feature_flag_called events are not enriched with cached flags — the flags
+        // on that event should reflect the specific call, not a potentially stale snapshot.
         return {}
-      })
-      .then((flags) => {
-        // Derive the relevant flag properties to add
-        const additionalProperties: Record<string, any> = {}
-        if (flags) {
-          for (const [feature, variant] of Object.entries(flags)) {
-            additionalProperties[`$feature/${feature}`] = variant
-          }
-        }
-        const activeFlags = Object.keys(flags || {})
-          .filter((flag) => flags?.[flag] !== false)
-          .sort()
-        if (activeFlags.length > 0) {
-          additionalProperties['$active_feature_flags'] = activeFlags
-        }
-
-        return additionalProperties
       })
       .catch(() => {
         // Something went wrong getting the flag info - we should capture the event anyways
@@ -1945,12 +2722,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
       .then((additionalProperties) => {
         // No matter what - capture the event
-        const props = {
+        const resolvedGroups = eventMessage.groups || groups
+
+        return {
           ...additionalProperties,
           ...(eventMessage.properties || {}),
-          $groups: eventMessage.groups || groups,
+          // Only stamp $groups from the top-level `groups` when present — otherwise a
+          // caller-provided properties.$groups would be clobbered with undefined (#3888).
+          ...(resolvedGroups !== undefined && Object.keys(resolvedGroups).length > 0
+            ? { $groups: resolvedGroups }
+            : {}),
         } as PostHogEventProperties
-        return props
       })
 
     // Handle bot pageview collection based on preview flag

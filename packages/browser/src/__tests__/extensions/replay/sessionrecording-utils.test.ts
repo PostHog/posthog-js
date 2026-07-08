@@ -8,6 +8,7 @@ import {
     splitBuffer,
     SEVEN_MEGABYTES,
     estimateSize,
+    estimateCompressedEventSize,
     circularReferenceReplacer,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
@@ -124,6 +125,15 @@ describe(`SessionRecording utility functions`, () => {
                     ],
                 },
                 size: 86,
+            })
+        })
+
+        it(`should report UTF-8 bytes for non-ASCII payloads`, () => {
+            const data = { text: '€' } as unknown as eventWithTime
+
+            expect(ensureMaxMessageSize(data)).toEqual({
+                event: data,
+                size: 14,
             })
         })
     })
@@ -244,11 +254,24 @@ describe(`SessionRecording utility functions`, () => {
         })
     })
 
+    describe('estimateSize', () => {
+        it('should return the UTF-8 byte length of serialized data', () => {
+            const data = { text: '€' }
+            const serialized = JSON.stringify(data)
+
+            expect(serialized).toBe('{"text":"€"}')
+            expect(serialized.length).toBe(12)
+            expect(estimateSize(data)).toBe(14)
+        })
+    })
+
     describe('splitBuffer', () => {
         it('should return the same buffer if size is less than SEVEN_MEGABYTES', () => {
+            const perEventSize = (5 * 1024 * 1024) / 100
             const buffer = {
                 size: 5 * 1024 * 1024,
                 data: new Array(100).fill(0),
+                sizes: new Array(100).fill(perEventSize),
                 sessionId: 'session1',
                 windowId: 'window1',
             }
@@ -259,30 +282,37 @@ describe(`SessionRecording utility functions`, () => {
 
         it('should split the buffer into two halves if size is greater than or equal to SEVEN_MEGABYTES', () => {
             const data = new Array(100).fill(0)
-            const expectedSize = estimateSize(new Array(50).fill(0))
+            const perEventSize = estimateSize(0)
+            const sizes = new Array(100).fill(perEventSize)
+            const totalSize = sizes.reduce((a: number, b: number) => a + b, 0)
             const buffer = {
-                size: estimateSize(data),
+                size: totalSize,
                 data: data,
+                sizes: sizes,
                 sessionId: 'session1',
                 windowId: 'window1',
             }
 
             // size limit just below the size of the buffer
-            const result = splitBuffer(buffer, 200)
+            const result = splitBuffer(buffer, totalSize - 1)
+            const expectedHalfSize = 50 * perEventSize
 
             expect(result).toHaveLength(2)
             expect(result[0].data).toEqual(buffer.data.slice(0, 50))
-            expect(result[0].size).toEqual(expectedSize)
+            expect(result[0].size).toEqual(expectedHalfSize)
             expect(result[1].data).toEqual(buffer.data.slice(50))
-            expect(result[1].size).toEqual(expectedSize)
+            expect(result[1].size).toEqual(expectedHalfSize)
         })
 
         it('should recursively split the buffer until each part is smaller than SEVEN_MEGABYTES', () => {
             const largeDataArray = new Array(100).fill('a'.repeat(1024 * 1024))
-            const largeDataSize = estimateSize(largeDataArray) // >100mb
+            const perEventSize = estimateSize('a'.repeat(1024 * 1024))
+            const sizes = new Array(100).fill(perEventSize)
+            const totalSize = sizes.reduce((a: number, b: number) => a + b, 0)
             const buffer = {
-                size: largeDataSize,
+                size: totalSize,
                 data: largeDataArray,
+                sizes: sizes,
                 sessionId: 'session1',
                 windowId: 'window1',
             }
@@ -298,18 +328,18 @@ describe(`SessionRecording utility functions`, () => {
                 partTotal += part.size
             })
 
-            // it's a bit bigger because we have extra square brackets and commas when stringified
-            expect(partTotal).toBeGreaterThan(largeDataSize)
-            // but not much bigger!
-            expect(partTotal).toBeLessThan(largeDataSize * 1.001)
+            // sum of per-event sizes equals the original total
+            expect(partTotal).toEqual(totalSize)
             // we sent the same data overall
             expect(JSON.stringify(sentArray)).toEqual(JSON.stringify(largeDataArray))
         })
 
         it('should handle buffer with size exactly SEVEN_MEGABYTES', () => {
+            const perEventSize = SEVEN_MEGABYTES / 100
             const buffer = {
                 size: SEVEN_MEGABYTES,
                 data: new Array(100).fill(0),
+                sizes: new Array(100).fill(perEventSize),
                 sessionId: 'session1',
                 windowId: 'window1',
             }
@@ -325,6 +355,7 @@ describe(`SessionRecording utility functions`, () => {
             const buffer = {
                 size: 10 * 1024 * 1024,
                 data: [0],
+                sizes: [10 * 1024 * 1024],
                 sessionId: 'session1',
                 windowId: 'window1',
             }
@@ -332,6 +363,44 @@ describe(`SessionRecording utility functions`, () => {
             const result = splitBuffer(buffer)
 
             expect(result).toEqual([buffer])
+        })
+    })
+
+    describe('estimateCompressedEventSize', () => {
+        it.each([
+            ['null', null],
+            ['string', 'hello'],
+            ['empty string', ''],
+            ['number', 42],
+            ['negative number', -1],
+            ['float', 3.14],
+            ['true', true],
+            ['false', false],
+            ['empty object', {}],
+            ['empty array', []],
+            ['simple object', { a: 1, b: 'two' }],
+            ['nested object', { a: { b: { c: 3 } } }],
+            ['object with undefined values', { a: 1, b: undefined, c: 'three' }],
+            ['array with elements', [1, 'two', true, null]],
+            ['array with undefined', [1, undefined, 3]],
+            [
+                'compressed-event-like structure',
+                {
+                    type: 3,
+                    timestamp: 1700000000000,
+                    cv: '2024-10',
+                    data: {
+                        source: 0,
+                        texts: 'H4sIAAAAAAAAA8tIzcnJBwCGphA2BQAAAA==',
+                        attributes: 'H4sIAAAAAAAAA8tIzcnJBwCGphA2BQAAAA==',
+                        removes: 'H4sIAAAAAAAAA8tIzcnJBwCGphA2BQAAAA==',
+                        adds: 'H4sIAAAAAAAAA0tMTgYAYKMCpQQAAAA=',
+                        isAttachIframe: true,
+                    },
+                },
+            ],
+        ])('matches JSON.stringify length for %s', (_label, value) => {
+            expect(estimateCompressedEventSize(value)).toBe(JSON.stringify(value)?.length ?? 0)
         })
     })
 

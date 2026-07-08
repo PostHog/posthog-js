@@ -14,7 +14,7 @@ module.exports = {
     testPathIgnorePatterns: ['/node_modules/', '/cypress/', '/react/', '/test_data/', '/testcafe/'],
     moduleFileExtensions: ['js', 'json', 'ts', 'tsx'],
     setupFilesAfterEnv: ['./src/__tests__/setup.js'],
-    modulePathIgnorePatterns: ['src/__tests__/setup.js', 'src/__tests__/helpers/'],
+    modulePathIgnorePatterns: ['<rootDir>/lib/', 'src/__tests__/setup.js', 'src/__tests__/helpers/'],
     clearMocks: true,
     testEnvironment: 'jsdom',
     prettierPath: null,
@@ -25,6 +25,7 @@ module.exports = {
         '^preact/jsx-runtime$': path.join(preactRoot, 'jsx-runtime/dist/jsxRuntime.js'),
         '^preact/test-utils$': path.join(preactRoot, 'test-utils/dist/testUtils.js'),
         '^@testing-library/preact$': path.join(testingLibraryPreactCjs, 'index.js'),
+        '^@posthog/core/surveys$': '<rootDir>/../core/src/surveys/index.ts',
     },
     transform: {
         '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',

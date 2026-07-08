@@ -1,0 +1,44 @@
+<html>
+<head>
+    <title>PostHog Slim Bundle + Extension Bundles Test</title>
+</head>
+<body>
+    <h1>Slim Bundle Test</h1>
+    <div id="status">loading...</div>
+
+    <script type="module">
+        import posthog from '/dist/module.slim.js'
+        import {
+            AllExtensions,
+            FeatureFlagsExtensions,
+            ErrorTrackingExtensions,
+            ToolbarExtensions,
+            SurveysExtensions,
+            SessionReplayExtensions,
+            AnalyticsExtensions,
+            ExperimentsExtensions,
+            ConversationsExtensions,
+            LogsExtensions,
+            ProductToursExtensions,
+            SiteAppsExtensions,
+            TracingExtensions,
+        } from '/dist/extension-bundles.js'
+
+        window.posthog = posthog
+        window.AllExtensions = AllExtensions
+        window.FeatureFlagsExtensions = FeatureFlagsExtensions
+        window.ErrorTrackingExtensions = ErrorTrackingExtensions
+        window.ToolbarExtensions = ToolbarExtensions
+        window.SurveysExtensions = SurveysExtensions
+        window.SessionReplayExtensions = SessionReplayExtensions
+        window.AnalyticsExtensions = AnalyticsExtensions
+        window.ExperimentsExtensions = ExperimentsExtensions
+        window.ConversationsExtensions = ConversationsExtensions
+        window.LogsExtensions = LogsExtensions
+        window.ProductToursExtensions = ProductToursExtensions
+        window.SiteAppsExtensions = SiteAppsExtensions
+        window.TracingExtensions = TracingExtensions
+        window.__slim_bundle_ready = true
+    </script>
+</body>
+</html>

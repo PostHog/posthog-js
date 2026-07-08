@@ -1,56 +1,11 @@
 import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 
-// Mock external OpenTelemetry dependencies
-const mockLogs = {
-    setGlobalLoggerProvider: jest.fn(),
-    getLogger: jest.fn(() => ({
-        emit: jest.fn(),
-    })),
-}
-
-const mockOTLPLogExporter = jest.fn().mockImplementation(() => ({
-    export: jest.fn(),
-    shutdown: jest.fn(),
-}))
-
-const mockLoggerProvider = jest.fn().mockImplementation(() => ({
-    getLogger: jest.fn(() => ({
-        emit: jest.fn(),
-    })),
-    shutdown: jest.fn(),
-}))
-
-const mockBatchLogRecordProcessor = jest.fn().mockImplementation(() => ({
-    onEmit: jest.fn(),
-    shutdown: jest.fn(),
-}))
-
-const mockResourceFromAttributes = jest.fn((attrs) => ({
-    attributes: attrs,
-}))
-
-jest.mock('@opentelemetry/api-logs', () => ({
-    logs: mockLogs,
-}))
-
-jest.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
-    OTLPLogExporter: mockOTLPLogExporter,
-}))
-
-jest.mock('@opentelemetry/sdk-logs', () => ({
-    LoggerProvider: mockLoggerProvider,
-    BatchLogRecordProcessor: mockBatchLogRecordProcessor,
-}))
-
-jest.mock('@opentelemetry/resources', () => ({
-    resourceFromAttributes: mockResourceFromAttributes,
-}))
-
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
-    let mockLogger: any
+    // Console capture routes through the core pipeline via
+    // `posthog.logs._captureConsoleLog`; assert against that seam.
     let mockEmit: jest.Mock
 
     beforeEach(() => {
@@ -60,11 +15,8 @@ describe('logs entrypoint', () => {
         // Store original console
         originalConsole = { ...console }
 
-        // Set up mock logger
+        // Set up capture spy
         mockEmit = jest.fn()
-        mockLogger = { emit: mockEmit }
-
-        mockLogs.getLogger.mockReturnValue(mockLogger)
 
         // Mock PostHog instance
         mockPostHog = {
@@ -81,6 +33,8 @@ describe('logs entrypoint', () => {
                 })),
             },
             get_distinct_id: jest.fn(() => 'user-123'),
+            is_capturing: jest.fn(() => true),
+            logs: { _captureConsoleLog: mockEmit },
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -144,21 +98,6 @@ describe('logs entrypoint', () => {
             expect(typeof initializeLogs).toBe('function')
         })
 
-        it('should set up OpenTelemetry logging when called', () => {
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(mockPostHog)
-
-            expect(mockOTLPLogExporter).toHaveBeenCalledWith({
-                url: 'https://app.posthog.com/i/v1/logs?token=test-token',
-                headers: {
-                    'Content-Type': 'text/plain',
-                },
-            })
-            expect(mockBatchLogRecordProcessor).toHaveBeenCalled()
-            expect(mockLoggerProvider).toHaveBeenCalled()
-            expect(mockLogs.setGlobalLoggerProvider).toHaveBeenCalled()
-        })
-
         it('should wrap all console methods', () => {
             const originalMethods = {
                 log: assignableWindow.console.log,
@@ -178,55 +117,28 @@ describe('logs entrypoint', () => {
             expect(assignableWindow.console.error).not.toBe(originalMethods.error)
             expect(assignableWindow.console.debug).not.toBe(originalMethods.debug)
         })
-    })
 
-    describe('setupOpenTelemetry', () => {
-        beforeEach(async () => {
-            await import('../../entrypoints/logs')
-        })
-
-        it('should set up OpenTelemetry with correct attributes', () => {
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            expect(initializeLogs).toBeDefined()
-
-            initializeLogs(mockPostHog)
-
-            expect(mockResourceFromAttributes).toHaveBeenCalledWith({
-                'service.name': 'posthog-browser-logs',
-                host: 'example.com',
-                'session.id': 'session-123',
-                'window.id': 'window-456',
-            })
-
-            expect(mockOTLPLogExporter).toHaveBeenCalledWith({
-                url: 'https://app.posthog.com/i/v1/logs?token=test-token',
-                headers: {
-                    'Content-Type': 'text/plain',
-                },
-            })
-
-            expect(mockBatchLogRecordProcessor).toHaveBeenCalledWith(expect.any(Object))
-            expect(mockLoggerProvider).toHaveBeenCalledWith({
-                resource: { attributes: expect.any(Object) },
-                processors: [expect.any(Object)],
-            })
-
-            expect(mockLogs.setGlobalLoggerProvider).toHaveBeenCalledWith(expect.any(Object))
-        })
-
-        it('should handle missing session manager', () => {
+        it('should not throw when called without a session manager', () => {
             const postHogWithoutSession = {
                 ...mockPostHog,
                 sessionManager: null,
             } as unknown as PostHog
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(postHogWithoutSession)
+            expect(() => initializeLogs(postHogWithoutSession)).not.toThrow()
+        })
 
-            expect(mockResourceFromAttributes).toHaveBeenCalledWith({
-                'service.name': 'posthog-browser-logs',
-                host: 'example.com',
-            })
+        it('should not throw and should not capture when posthog.logs is undefined', () => {
+            const postHogWithoutLogs = {
+                ...mockPostHog,
+                logs: undefined,
+            } as unknown as PostHog
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(postHogWithoutLogs)
+
+            expect(() => assignableWindow.console.log('test')).not.toThrow()
+            expect(mockEmit).not.toHaveBeenCalled()
         })
     })
 
@@ -237,45 +149,53 @@ describe('logs entrypoint', () => {
             initializeLogs(mockPostHog)
         })
 
-        it('should emit logs when console methods are called', () => {
+        it('should capture logs when console methods are called', () => {
             assignableWindow.console.log('Test message')
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: '"Test message"',
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
-                    distinct_id: 'user-123',
-                    'location.href': 'https://example.com/test',
                 }),
             })
         })
 
-        it('should use correct severity levels for different console methods', () => {
-            const testCases = [
-                { method: 'log', expectedSeverity: 'INFO' },
-                { method: 'info', expectedSeverity: 'INFO' },
-                { method: 'warn', expectedSeverity: 'WARNING' },
-                { method: 'error', expectedSeverity: 'ERROR' },
-                { method: 'debug', expectedSeverity: 'DEBUG' },
-            ] as const
+        it.each([
+            ['log', 'info'],
+            ['info', 'info'],
+            ['warn', 'warn'],
+            ['error', 'error'],
+            ['debug', 'debug'],
+        ] as const)('should map console.%s to level %s', (method, expectedLevel) => {
+            ;(assignableWindow.console[method] as any)(`Test ${method} message`)
 
-            testCases.forEach(({ method, expectedSeverity }) => {
-                mockEmit.mockClear()
-                ;(assignableWindow.console[method] as any)(`Test ${method} message`)
-
-                expect(mockEmit).toHaveBeenCalledWith({
-                    severityText: expectedSeverity,
-                    body: `"Test ${method} message"`,
-                    attributes: expect.objectContaining({
-                        'log.source': `console.${method}`,
-                    }),
-                })
+            expect(mockEmit).toHaveBeenCalledWith({
+                level: expectedLevel,
+                body: `"Test ${method} message"`,
+                attributes: expect.objectContaining({
+                    'log.source': `console.${method}`,
+                }),
             })
         })
 
-        it('should not emit logs when no arguments are provided', () => {
+        it('should not capture logs when no arguments are provided', () => {
             assignableWindow.console.log()
+            expect(mockEmit).not.toHaveBeenCalled()
+        })
+
+        it('should still call originalConsoleLog when no arguments are provided', () => {
+            // The originalConsoleLog (the jest.fn() mock installed before initializeLogs
+            // wrapped it) must always run, even when capture is skipped due to empty args.
+            // We recover the original by re-installing a fresh mock and re-wrapping.
+            const originalLog = jest.fn()
+            assignableWindow.console.log = originalLog
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log()
+
+            expect(originalLog).toHaveBeenCalledTimes(1)
             expect(mockEmit).not.toHaveBeenCalled()
         })
 
@@ -283,7 +203,7 @@ describe('logs entrypoint', () => {
             assignableWindow.console.log('arg1', 'arg2', 123)
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: '"arg1" "arg2" 123',
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
@@ -314,7 +234,7 @@ describe('logs entrypoint', () => {
             assignableWindow.console.log(nestedObject)
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: JSON.stringify(nestedObject),
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
@@ -330,7 +250,7 @@ describe('logs entrypoint', () => {
             assignableWindow.console.log('string', { nested: { value: 'test' } })
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: expect.any(String),
                 attributes: expect.not.objectContaining({
                     'nested.value': 'test',
@@ -353,7 +273,7 @@ describe('logs entrypoint', () => {
             assignableWindow.console.error(error)
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'ERROR',
+                level: 'error',
                 body: '{"name":"Error","message":"Test error","stack":"Error stack trace"}',
                 attributes: expect.objectContaining({
                     'log.source': 'console.error',
@@ -371,7 +291,7 @@ describe('logs entrypoint', () => {
             assignableWindow.console.error(customError)
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'ERROR',
+                level: 'error',
                 body: JSON.stringify(customError),
                 attributes: expect.objectContaining({
                     'log.source': 'console.error',
@@ -388,33 +308,30 @@ describe('logs entrypoint', () => {
             await import('../../entrypoints/logs')
         })
 
-        it('should include session information in resource attributes', () => {
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(mockPostHog)
-
-            expect(mockResourceFromAttributes).toHaveBeenCalledWith({
-                'service.name': 'posthog-browser-logs',
-                host: 'example.com',
-                'session.id': 'session-123',
-                'window.id': 'window-456',
-            })
-        })
-
-        it('should include session timestamps in log attributes', () => {
+        it('sets host on the captured record', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
             assignableWindow.console.log('Test message')
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: '"Test message"',
-                attributes: expect.objectContaining({
-                    sessionStartTimestamp: expect.any(String),
-                    lastActivityTimestamp: expect.any(String),
-                }),
+                attributes: expect.objectContaining({ host: 'example.com' }),
             })
         })
+
+        it.each(['window.id', 'sessionStartTimestamp', 'lastActivityTimestamp'])(
+            'does not set %s — core adds session attributes from the SDK context downstream',
+            (attribute) => {
+                const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+                initializeLogs(mockPostHog)
+
+                assignableWindow.console.log('Test message')
+
+                expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty(attribute)
+            }
+        )
 
         it('should work without session manager', () => {
             const postHogWithoutSession = {
@@ -442,7 +359,7 @@ describe('logs entrypoint', () => {
 
             expect(mockEmit).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    severityText: 'INFO',
+                    level: 'info',
                     body: expect.stringContaining('[Circular]'),
                     attributes: expect.objectContaining({
                         'log.source': 'console.log',
@@ -546,7 +463,7 @@ describe('logs entrypoint', () => {
             assignableWindow.console.log(deepObj)
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: expect.any(String),
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
@@ -559,7 +476,7 @@ describe('logs entrypoint', () => {
             assignableWindow.console.log(null, undefined, '')
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: 'null  ""',
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
@@ -572,7 +489,7 @@ describe('logs entrypoint', () => {
             assignableWindow.console.log(testFunction)
 
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: '',
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
@@ -597,64 +514,31 @@ describe('logs entrypoint', () => {
             await import('../../entrypoints/logs')
         })
 
-        it('should use PostHog distinct_id in log attributes', () => {
-            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('custom-distinct-id')
-
+        it('should route console capture through posthog.logs._captureConsoleLog', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
             assignableWindow.console.log('Test message')
 
+            expect(mockEmit).toHaveBeenCalledTimes(1)
             expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
+                level: 'info',
                 body: '"Test message"',
                 attributes: expect.objectContaining({
-                    distinct_id: 'custom-distinct-id',
+                    'log.source': 'console.log',
                 }),
             })
         })
 
-        it('should use current location href in log attributes', () => {
-            Object.defineProperty(assignableWindow, 'location', {
-                value: {
-                    host: 'different.com',
-                    href: 'https://different.com/page',
-                },
-                writable: true,
-            })
-
+        it('should not set distinct_id or location.href — core adds posthogDistinctId/url.full', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
             assignableWindow.console.log('Test message')
 
-            expect(mockEmit).toHaveBeenCalledWith({
-                severityText: 'INFO',
-                body: '"Test message"',
-                attributes: expect.objectContaining({
-                    'location.href': 'https://different.com/page',
-                }),
-            })
-        })
-
-        it('should use PostHog config for OTLP exporter URL', () => {
-            const customPostHog = {
-                ...mockPostHog,
-                config: {
-                    api_host: 'https://custom.example.com',
-                    token: 'custom-token-123',
-                },
-            } as unknown as PostHog
-
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(customPostHog)
-
-            expect(mockOTLPLogExporter).toHaveBeenCalledWith({
-                url: 'https://custom.example.com/i/v1/logs?token=custom-token-123',
-                headers: {
-                    'Content-Type': 'text/plain',
-                },
-            })
+            const attributes = mockEmit.mock.calls[0][0].attributes
+            expect(attributes).not.toHaveProperty('distinct_id')
+            expect(attributes).not.toHaveProperty('location.href')
         })
     })
 })

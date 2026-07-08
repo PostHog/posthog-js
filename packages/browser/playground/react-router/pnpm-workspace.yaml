@@ -1,1 +1,8 @@
 pnpmfile: ../.pnpmfile.cjs
+minimumReleaseAge: 10080
+
+overrides:
+  posthog-js: link:../..
+
+blockExoticSubdeps: true
+trustPolicy: no-downgrade

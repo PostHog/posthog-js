@@ -84,6 +84,15 @@ describe('Exception Observer', () => {
             expect((window?.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__).toBe(true)
         })
 
+        it('does not call loadExternalDependency if script is already loaded', () => {
+            addErrorWrappingFlagToWindow()
+            loadScriptMock.mockClear()
+
+            exceptionObserver.startIfEnabledOrStop()
+
+            expect(loadScriptMock).not.toHaveBeenCalled()
+        })
+
         it('should remove instrument handlers when stopped', () => {
             exceptionObserver['_stopCapturing']()
             expectNoHandlers()
@@ -146,7 +155,7 @@ describe('Exception Observer', () => {
 
             expect(sendRequestSpy).toHaveBeenCalled()
             const request = sendRequestSpy.mock.calls[0][0]
-            expect(request.url).toBe('http://localhost/e/?ip=0')
+            expect(request.url).toBe('http://localhost/e/')
             expect(request.data).toMatchObject({
                 event: '$exception',
                 properties: {

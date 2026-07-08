@@ -1,12 +1,11 @@
 import { PostHog } from '../../posthog-core'
-import { RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
+import { PostHogConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '../../utils/logger'
-import { isBoolean, isNullish, isNumber, isUndefined, isObject } from '@posthog/core'
+import { isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window, location } from '../../utils/globals'
 import { maskQueryParams } from '../../utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '../../utils/event-utils'
-import { extendArray } from '../../utils'
 
 const logger = createLogger('[Web Vitals]')
 
@@ -31,11 +30,13 @@ export class WebVitalsAutocapture {
         this.startIfEnabled()
     }
 
+    private get _perfConfig(): PostHogConfig['capture_performance'] {
+        return this._instance.config.capture_performance
+    }
+
     public get allowedMetrics(): SupportedWebVitalsMetrics[] {
-        const clientConfigMetricAllowList: SupportedWebVitalsMetrics[] | undefined = isObject(
-            this._instance.config.capture_performance
-        )
-            ? this._instance.config.capture_performance?.web_vitals_allowed_metrics
+        const clientConfigMetricAllowList: SupportedWebVitalsMetrics[] | undefined = isObject(this._perfConfig)
+            ? this._perfConfig?.web_vitals_allowed_metrics
             : undefined
         return !isNullish(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
@@ -43,24 +44,23 @@ export class WebVitalsAutocapture {
     }
 
     public get flushToCaptureTimeoutMs(): number {
-        const clientConfig: number | undefined = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.web_vitals_delayed_flush_ms
+        const clientConfig: number | undefined = isObject(this._perfConfig)
+            ? this._perfConfig.web_vitals_delayed_flush_ms
             : undefined
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
     }
 
     public get useAttribution(): boolean {
-        const clientConfig: boolean | undefined = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.web_vitals_attribution
+        const clientConfig: boolean | undefined = isObject(this._perfConfig)
+            ? this._perfConfig.web_vitals_attribution
             : undefined
         return clientConfig ?? false
     }
 
     public get _maxAllowedValue(): number {
         const configured =
-            isObject(this._instance.config.capture_performance) &&
-            isNumber(this._instance.config.capture_performance.__web_vitals_max_value)
-                ? this._instance.config.capture_performance.__web_vitals_max_value
+            isObject(this._perfConfig) && isNumber(this._perfConfig.__web_vitals_max_value)
+                ? this._perfConfig.__web_vitals_max_value
                 : FIFTEEN_MINUTES_IN_MILLIS
         // you can set to 0 to disable the check or any value over ten seconds
         // 1 milli to 1 minute will be set to 15 minutes, cos that would be a silly low maximum
@@ -76,10 +76,10 @@ export class WebVitalsAutocapture {
         }
 
         // Otherwise, check config
-        const clientConfig = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.web_vitals
-            : isBoolean(this._instance.config.capture_performance)
-              ? this._instance.config.capture_performance
+        const clientConfig = isObject(this._perfConfig)
+            ? this._perfConfig.web_vitals
+            : isBoolean(this._perfConfig)
+              ? this._perfConfig
               : undefined
         return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
     }
@@ -137,7 +137,11 @@ export class WebVitalsAutocapture {
     }
 
     private _currentURL(): string | undefined {
-        const href = window ? window.location.href : undefined
+        const href = window
+            ? this._instance.config.disable_capture_url_hashes
+                ? stripUrlHash(window.location.href)
+                : window.location.href
+            : undefined
         if (!href) {
             logger.error('Could not determine current URL')
             return undefined
@@ -148,7 +152,7 @@ export class WebVitalsAutocapture {
         const customPersonalDataProperties = this._instance.config.custom_personal_data_properties
 
         const paramsToMask = maskPersonalDataProperties
-            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
             : []
 
         return maskQueryParams(href, paramsToMask, MASKED)
@@ -176,12 +180,6 @@ export class WebVitalsAutocapture {
     }
 
     private _addToBuffer = (metric: any) => {
-        const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
-        if (isUndefined(sessionIds)) {
-            logger.error('Could not read session ID. Dropping metrics!')
-            return
-        }
-
         this._buffer = this._buffer || { url: undefined, metrics: [], firstMetricTimestamp: undefined }
 
         const $currentUrl = this._currentURL()
@@ -229,13 +227,18 @@ export class WebVitalsAutocapture {
             metric.attribution.interactionTargetElement = undefined
         }
 
-        this._buffer.metrics.push({
+        const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
+        const bufferedMetric: Record<string, unknown> = {
             ...metric,
             $current_url: $currentUrl,
-            $session_id: sessionIds.sessionId,
-            $window_id: sessionIds.windowId,
             timestamp: Date.now(),
-        })
+        }
+        if (!isUndefined(sessionIds)) {
+            bufferedMetric.$session_id = sessionIds.sessionId
+            bufferedMetric.$window_id = sessionIds.windowId
+        }
+
+        this._buffer.metrics.push(bufferedMetric)
 
         if (this._buffer.metrics.length === this.allowedMetrics.length) {
             // we have all allowed metrics

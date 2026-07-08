@@ -2,12 +2,26 @@ import { defineNuxtModule, addPlugin, createResolver, addServerPlugin, addImport
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
 import type {} from 'nuxt/app'
-import { resolveBinaryPath, spawnLocal } from '@posthog/core/process'
+import { resolveBinaryPath, spawnLocal } from '@posthog/plugin-utils'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
+const DEFAULT_NUXT_HOST = 'https://us.i.posthog.com'
+
+function normalizeApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizePersonalApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeHost(value?: unknown): string {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
+  return normalizedValue || DEFAULT_NUXT_HOST
+}
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -23,6 +37,7 @@ interface SourcemapsConfig {
   /** @deprecated Use releaseName instead */
   project?: string
   releaseName?: string
+  build?: string | number
   logLevel?: LogLevel
   deleteAfterUpload?: boolean
   batchSize?: number
@@ -36,6 +51,15 @@ export interface ModuleOptions {
   clientConfig?: PostHogClientConfig
   serverConfig?: PostHogServerConfig
   sourcemaps: SourcemapsConfig | undefined
+}
+
+declare module '@nuxt/schema' {
+  interface NuxtConfig {
+    posthogConfig?: Partial<ModuleOptions>
+  }
+  interface NuxtOptions {
+    posthogConfig?: ModuleOptions
+  }
 }
 
 export interface PostHogCommon {
@@ -64,14 +88,16 @@ export default defineNuxtModule<ModuleOptions>({
 
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
+    const normalizedPublicKey = normalizeApiKey(options.publicKey)
+    const normalizedHost = normalizeHost(options.host)
     addPlugin(resolver.resolve('./runtime/vue-plugin'))
     addServerPlugin(resolver.resolve('./runtime/nitro-plugin'))
     addImportsDir(resolver.resolve('./runtime/composables'))
 
     Object.assign(nuxt.options.runtimeConfig.public, {
       posthog: {
-        publicKey: options.publicKey,
-        host: options.host,
+        publicKey: normalizedPublicKey,
+        host: normalizedHost,
         debug: options.debug,
       },
       posthogClientConfig: options.clientConfig,
@@ -127,9 +153,9 @@ export default defineNuxtModule<ModuleOptions>({
       const cliEnv = {
         ...process.env,
         RUST_LOG: `posthog_cli=${logLevel}`,
-        POSTHOG_CLI_HOST: options.host,
+        POSTHOG_CLI_HOST: normalizedHost,
         POSTHOG_CLI_PROJECT_ID: projectId,
-        POSTHOG_CLI_API_KEY: sourcemapsConfig.personalApiKey,
+        POSTHOG_CLI_API_KEY: normalizePersonalApiKey(sourcemapsConfig.personalApiKey),
       }
       return (args: string[]) => {
         return spawnLocal(cliBinaryPath, args, {
@@ -158,12 +184,16 @@ export default defineNuxtModule<ModuleOptions>({
       // We don't want to run this process during prepare and friends
       if (!isBuildProcess || !serverDir || !outputDir) return
       try {
-        // Inject server sourcemaps
-        await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
-        // Upload all assets
+        // Inject server sourcemaps only when an SSR server bundle is produced.
+        // With `ssr: false` (client-only / SPA mode) Nitro still reports
+        // serverDir, but no server output is written, so the inject would fail (#3005).
+        if (nuxt.options.ssr !== false) {
+          await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
+        }
+        // Upload all assets (public + any server output that exists)
         await cliRunner(getUploadArgs(outputDir, sourcemapsConfig))
       } catch (error) {
-        console.error('Failed to process server sourcemaps:', error)
+        console.error('Failed to process or upload sourcemaps:', error)
       }
     })
   },
@@ -180,6 +210,10 @@ function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
   const releaseVersion = sourcemapsConfig.releaseVersion ?? sourcemapsConfig.version
   if (releaseVersion) {
     processOptions.push('--release-version', releaseVersion)
+  }
+
+  if (sourcemapsConfig.build !== undefined && sourcemapsConfig.build !== '') {
+    processOptions.push('--build', String(sourcemapsConfig.build))
   }
 
   return processOptions

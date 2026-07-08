@@ -23,6 +23,7 @@ import type {
 } from './types'
 import {
   createFlagsResponseFromFlagsAndPayloads,
+  flagDetailsToResults,
   getEnabledFromValue,
   getFeatureFlagValue,
   getFlagValuesFromFlags,
@@ -33,9 +34,15 @@ import {
   updateFlagValue,
 } from './featureFlagUtils'
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
-import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
+import {
+  applyCallerFeatureFlagOverrides,
+  maybeAdd,
+  PostHogCoreStateless,
+  QuotaLimitedFeature,
+} from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
-import { isEmptyObject, isNullish, isPlainError, getPersonPropertiesHash, isObject } from './utils'
+import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString, getEventUuid } from './utils'
+import { EventHint } from './error-tracking'
 
 // Stores the parameters for a pending feature flags reload request
 interface FlagsAsyncOptions {
@@ -52,7 +59,8 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 export abstract class PostHogCore extends PostHogCoreStateless {
   // options
   private sendFeatureFlagEvent: boolean
-  private flagCallReported: { [key: string]: boolean } = {}
+  private disableRemoteFeatureFlags: boolean
+  private flagCallReported: { [key: string]: Set<FeatureFlagValue | undefined> } = {}
   private _beforeSend?: BeforeSendFn | BeforeSendFn[]
 
   // internal
@@ -81,6 +89,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     super(apiKey, { ...options, disableGeoip: disableGeoipOption, featureFlagsRequestTimeoutMs })
 
     this.sendFeatureFlagEvent = options?.sendFeatureFlagEvent ?? true
+    this.disableRemoteFeatureFlags = options?.disableRemoteFeatureFlags ?? false
     this._sessionExpirationTimeSeconds = options?.sessionExpirationTimeSeconds ?? 1800 // 30 minutes
     this._personProfiles = options?.personProfiles ?? 'identified_only'
     this._beforeSend = options?.before_send
@@ -147,9 +156,23 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._events.on(event, cb)
   }
 
+  /**
+   * Resets the user's ID and clears all persisted properties.
+   *
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+   * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless
+   * of what is passed in `propertiesToKeep`, to ensure in-flight data
+   * is not lost when identity changes.
+   *
+   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
+   */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
     this.wrap(() => {
-      const allPropertiesToKeep = [PostHogPersistedProperty.Queue, ...(propertiesToKeep || [])]
+      const allPropertiesToKeep = [
+        PostHogPersistedProperty.Queue,
+        PostHogPersistedProperty.LogsQueue,
+        ...(propertiesToKeep || []),
+      ]
 
       // clean up props
       this.clearProps()
@@ -163,8 +186,26 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
       }
 
-      this.reloadFeatureFlags()
+      if (this.disableRemoteFeatureFlags && !this.disabled) {
+        // No reload runs to emit the change, so emit the now-cleared flags directly
+        // (drives onFeatureFlags listeners, e.g. session replay re-arm). Callers re-push
+        // the new identity's flags via updateFlags(). Skip when the caller kept
+        // FeatureFlagDetails — those flags stay as-is, so there's nothing to emit.
+        if (!allPropertiesToKeep.includes(PostHogPersistedProperty.FeatureFlagDetails)) {
+          this.setKnownFeatureFlagDetails({ flags: {} })
+        }
+      } else {
+        this.reloadFeatureFlags()
+      }
     })
+  }
+
+  async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    try {
+      return await super._shutdown(shutdownTimeoutMs)
+    } finally {
+      this.flagCallReported = {}
+    }
   }
 
   protected getCommonEventProperties(): PostHogEventProperties {
@@ -184,13 +225,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   private enrichProperties(properties?: PostHogEventProperties): PostHogEventProperties {
-    return {
+    const userProperties = properties || {}
+    const enriched: PostHogEventProperties = {
       ...this.props, // Persisted properties first
       ...this.sessionProps, // Followed by session properties
-      ...(properties || {}), // Followed by user specified properties
+      ...userProperties, // Followed by user specified properties
       ...this.getCommonEventProperties(), // Followed by FF props
       $session_id: this.getSessionId(),
     }
+    applyCallerFeatureFlagOverrides(enriched, userProperties)
+    return enriched
   }
 
   /**
@@ -443,11 +487,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
+      const existingGroups = (this.props.$groups as PostHogGroupProperties) || {}
+      const isNewGroup = existingGroups[groupType] !== groupKey
+
       this.groups({
         [groupType]: groupKey,
       })
 
-      if (groupProperties) {
+      // Send $groupidentify when the group is new/changed OR when properties
+      // are provided. Skip only when the group already exists with the same
+      // key and no new properties are being set.
+      if (isNewGroup || groupProperties) {
         this.groupIdentify(groupType, groupKey, groupProperties, options)
       }
     })
@@ -475,13 +525,31 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    ***/
   setPersonPropertiesForFlags(properties: { [type: string]: JsonType }, reloadFeatureFlags = true): void {
     this.wrap(() => {
-      // Get persisted person properties
       const existingProperties =
         this.getPersistedProperty<Record<string, JsonType>>(PostHogPersistedProperty.PersonProperties) || {}
 
+      // If the caller passes { $set, $set_once }, split them apart so we can apply $set_once
+      // semantics (skip keys that already exist). Otherwise treat all properties as $set for
+      // backward compatibility with the public API.
+      const propsToSet =
+        (properties?.['$set'] as Record<string, JsonType>) || (!properties?.['$set_once'] ? properties : {})
+      const propsToSetOnce = properties?.['$set_once'] as Record<string, JsonType> | undefined
+
+      const setOnceProps: Record<string, JsonType> = {}
+      if (propsToSetOnce) {
+        for (const key in propsToSetOnce) {
+          if (Object.prototype.hasOwnProperty.call(propsToSetOnce, key)) {
+            if (!(key in existingProperties)) {
+              setOnceProps[key] = propsToSetOnce[key]
+            }
+          }
+        }
+      }
+
       this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, {
         ...existingProperties,
-        ...properties,
+        ...setOnceProps,
+        ...propsToSet,
       })
 
       if (reloadFeatureFlags) {
@@ -496,11 +564,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
-  setGroupPropertiesForFlags(properties: { [type: string]: Record<string, string> }): void {
+  setGroupPropertiesForFlags(properties: { [type: string]: Record<string, JsonType> }): void {
     this.wrap(() => {
       // Get persisted group properties
       const existingProperties =
-        this.getPersistedProperty<Record<string, Record<string, string>>>(PostHogPersistedProperty.GroupProperties) ||
+        this.getPersistedProperty<Record<string, Record<string, JsonType>>>(PostHogPersistedProperty.GroupProperties) ||
         {}
 
       if (Object.keys(existingProperties).length !== 0) {
@@ -528,6 +596,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   private async remoteConfigAsync(): Promise<PostHogRemoteConfig | undefined> {
     await this._initPromise
+    if (this.disabled) {
+      return undefined
+    }
     if (this._remoteConfigResponsePromise) {
       return this._remoteConfigResponsePromise
     }
@@ -540,6 +611,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   protected async flagsAsync(options?: FlagsAsyncOptions): Promise<PostHogFeatureFlagsResponse | undefined> {
     const { sendAnonDistinctId = true, fetchConfig = false, triggerOnRemoteConfig = false } = options ?? {}
     await this._initPromise
+    if (this.disabled) {
+      return undefined
+    }
+    // Config-fetching requests still go out (carrying disable_flags); only pure reloads no-op.
+    if (this.disableRemoteFeatureFlags && !fetchConfig) {
+      this._logger.info('Feature flags are disabled (disableRemoteFeatureFlags), skipping reload.')
+      return undefined
+    }
     if (this._flagsResponsePromise) {
       // Queue the reload request instead of dropping it
       // This ensures that requests with $anon_distinct_id (from identify()) are not lost
@@ -651,11 +730,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             // we only dont load flags if the remote config has no feature flags
             let willLoadFlags = false
             if (response.hasFeatureFlags === false) {
-              // resetting flags to empty object
-              this.setKnownFeatureFlagDetails({ flags: {} })
+              if (!this.disableRemoteFeatureFlags) {
+                this.setKnownFeatureFlagDetails({ flags: {} })
+              }
 
               this._logger.warn('Remote config has no feature flags, will not load feature flags.')
-            } else if (this.preloadFeatureFlags !== false) {
+            } else if (this.preloadFeatureFlags !== false && !this.disableRemoteFeatureFlags) {
               willLoadFlags = true
               this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true, triggerOnRemoteConfig: true })
             }
@@ -695,8 +775,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           this.getPersistedProperty<Record<string, Record<string, string>>>(PostHogPersistedProperty.GroupProperties) ||
           {}
 
+        const deviceId = this.getPersistedProperty<string>(PostHogPersistedProperty.DeviceId)
+
         const extraProperties = {
           $anon_distinct_id: sendAnonDistinctId ? this.getAnonymousId() : undefined,
+          // Only set by the React Native SDK; omitted from JSON when DeviceId is not persisted
+          $device_id: deviceId ?? undefined,
+          ...(this.disableRemoteFeatureFlags ? { disable_flags: true } : {}),
         }
 
         const result = await super.getFlags(
@@ -709,20 +794,24 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         )
 
         if (!result.success) {
-          this.setKnownFeatureFlagDetails({
-            flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
-            requestError: result.error,
-          })
+          if (!this.disableRemoteFeatureFlags) {
+            this.setKnownFeatureFlagDetails({
+              flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
+              requestError: result.error,
+            })
+          }
           return undefined
         }
 
         const res = result.response
 
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
-          this.setKnownFeatureFlagDetails({
-            flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
-            quotaLimited: res.quotaLimited,
-          })
+          if (!this.disableRemoteFeatureFlags) {
+            this.setKnownFeatureFlagDetails({
+              flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
+              quotaLimited: res.quotaLimited,
+            })
+          }
           this._logger.warn(
             '[FEATURE FLAGS] Feature flags quota limit exceeded. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
           )
@@ -730,9 +819,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           return res
         }
         if (res?.featureFlags) {
-          // clear flag call reported if we have new flags since they might have changed
-          if (this.sendFeatureFlagEvent) {
-            this.flagCallReported = {}
+          if (this.disableRemoteFeatureFlags) {
+            this.cacheSessionReplay('flags', res)
+            this.maybeNotifyRemoteConfig(triggerOnRemoteConfig, res)
+            return res
           }
 
           let newFeatureFlagDetails = res
@@ -753,6 +843,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
               flags: { ...currentFlagDetails?.flags, ...filteredFlags },
             }
           }
+          // Store the recording config before setKnownFeatureFlagDetails, which synchronously
+          // emits 'featureflags' — listeners (e.g. RN session replay re-evaluation) read this
+          // config and must see the version matching the new flag values.
+          this.cacheSessionReplay('flags', res)
           this.setKnownFeatureFlagDetails({
             flags: newFeatureFlagDetails.flags,
             requestId: res.requestId,
@@ -762,7 +856,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
           })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
-          this.cacheSessionReplay('flags', res)
 
           this.maybeNotifyRemoteConfig(triggerOnRemoteConfig, res)
         }
@@ -868,6 +961,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this._getFeatureFlagResult(key, options)
   }
 
+  /**
+   * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
+   * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+   */
+  getAllFeatureFlags(): FeatureFlagResult[] {
+    return flagDetailsToResults(this.getFeatureFlagDetails()?.flags ?? {})
+  }
+
   protected _getFeatureFlagResult(
     key: string,
     options: {
@@ -889,8 +990,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     const details = this.getFeatureFlagDetails()
     const isQuotaLimited = storedDetails?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)
     const featureFlag = details?.flags[key]
-    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]
     const flagValue: FeatureFlagValue | undefined = getFeatureFlagValue(featureFlag)
+    const sendEvent = (options.sendEvent ?? this.sendFeatureFlagEvent) && !this.flagCallReported[key]?.has(flagValue)
 
     if (sendEvent) {
       const errors: string[] = []
@@ -922,7 +1023,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const bootstrappedPayload = this.getBootstrappedFeatureFlagPayloads()?.[key]
       const featureFlagError = errors.length > 0 ? errors.join(',') : undefined
 
-      this.flagCallReported[key] = true
+      this.flagCallReported[key] = this.flagCallReported[key] ?? new Set()
+      this.flagCallReported[key].add(flagValue)
 
       const properties: Record<string, any> = {
         $feature_flag: key,
@@ -966,11 +1068,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
-  getFeatureFlag(key: string): FeatureFlagValue | undefined {
-    const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlag' })
+  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
+    const result = this._getFeatureFlagResult(key, {
+      missingFlagBehavior: 'getFeatureFlag',
+      sendEvent: options?.sendEvent,
+    })
     return result?.variant ?? result?.enabled
   }
 
+  /**
+   * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
+   */
   getFeatureFlagPayload(key: string): JsonType | undefined {
     const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlagPayload', sendEvent: false })
     return result?.payload
@@ -1000,7 +1108,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     details = details ?? { featureFlags: {}, featureFlagPayloads: {}, flags: {} }
 
-    const flags: Record<string, FeatureFlagDetail> = details.flags ?? {}
+    // Copy before applying overrides so reads don't mutate the stored flags in place.
+    const flags: Record<string, FeatureFlagDetail> = { ...(details.flags ?? {}) }
 
     for (const key in overriddenFlags) {
       if (!overriddenFlags[key]) {
@@ -1031,8 +1140,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
-  isFeatureEnabled(key: string): boolean | undefined {
-    const response = this.getFeatureFlag(key)
+  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
+    const response = this.getFeatureFlag(key, options)
     if (response === undefined) {
       return undefined
     }
@@ -1041,6 +1150,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   // Used when we want to trigger the reload but we don't care about the result
   reloadFeatureFlags(options?: { cb?: (err?: Error, flags?: PostHogFlagsResponse['featureFlags']) => void }): void {
+    if (this.disableRemoteFeatureFlags && !this.disabled) {
+      this._initPromise.then(() => options?.cb?.(undefined, this.getFeatureFlags()))
+      return
+    }
     this.flagsAsync({ sendAnonDistinctId: true })
       .then((res) => {
         options?.cb?.(undefined, res?.featureFlags)
@@ -1060,6 +1173,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   async reloadFeatureFlagsAsync(
     sendAnonDistinctId?: boolean
   ): Promise<PostHogFlagsResponse['featureFlags'] | undefined> {
+    if (this.disableRemoteFeatureFlags && !this.disabled) {
+      await this._initPromise
+      return this.getFeatureFlags()
+    }
     return (await this.flagsAsync({ sendAnonDistinctId: sendAnonDistinctId }))?.featureFlags
   }
 
@@ -1087,6 +1204,72 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         return this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, null)
       }
       return this.setPersistedProperty(PostHogPersistedProperty.OverrideFeatureFlags, flags)
+    })
+  }
+
+  /**
+   * Replaces (or merges into) the stored feature flags and payloads with locally supplied
+   * values, exactly as if they had been returned by the flags endpoint: the values are
+   * persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and
+   * `onFeatureFlags` listeners fire. Makes no network request.
+   *
+   * Intended for apps that evaluate flags outside the SDK (e.g. server-side local
+   * evaluation) and push the results in at runtime, typically together with the
+   * `disableRemoteFeatureFlags` option so the SDK never fetches flags itself.
+   *
+   * The values are cleared by `reset()`, so push them again after an identity change.
+   *
+   * @param flags - Flag keys mapped to their values (boolean, or a variant string)
+   * @param payloads - Optional flag keys mapped to their JSON payloads
+   * @param options - Set `merge: true` to merge with the currently stored flags instead of replacing them
+   */
+  updateFlags(
+    flags: Record<string, FeatureFlagValue>,
+    payloads?: Record<string, JsonType>,
+    options?: { merge?: boolean }
+  ): void {
+    this.wrap(() => {
+      // Merge against the raw stored flags, not the override-applied view.
+      const existingDetails = options?.merge ? this.getKnownFeatureFlagDetails()?.flags : undefined
+      const existingFlags = existingDetails ? getFlagValuesFromFlags(existingDetails) : {}
+      const existingPayloads: Record<string, JsonType> = {}
+      for (const key in existingDetails) {
+        const storedPayload = existingDetails[key].metadata?.payload
+        if (storedPayload !== undefined) {
+          existingPayloads[key] = parsePayload(storedPayload)
+        }
+      }
+      const finalFlags = { ...existingFlags, ...flags }
+      const finalPayloads = { ...existingPayloads, ...(payloads ?? {}) }
+
+      // Built by hand, not via createFlagsResponseFromFlagsAndPayloads, which drops false flags.
+      const flagDetails: Record<string, FeatureFlagDetail> = {}
+      for (const [key, value] of Object.entries(finalFlags)) {
+        const payload = finalPayloads[key]
+        let serializedPayload: string | undefined
+        if (payload !== undefined) {
+          try {
+            serializedPayload = JSON.stringify(payload)
+          } catch (e) {
+            this._logger.error(`updateFlags: could not serialize the payload for flag "${key}", dropping it.`, e)
+          }
+        }
+        flagDetails[key] = {
+          key,
+          enabled: getEnabledFromValue(value),
+          variant: getVariantFromValue(value),
+          reason: undefined,
+          // Locally supplied flags have no server-side id/version
+          metadata: {
+            id: undefined,
+            version: undefined,
+            description: undefined,
+            payload: serializedPayload,
+          },
+        }
+      }
+
+      this.setKnownFeatureFlagDetails({ flags: flagDetails })
     })
   }
 
@@ -1121,23 +1304,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * @param {Object} [additionalProperties] Any additional properties to add to the error event
    * @returns {CaptureResult} The result of the capture
    */
-  captureException(error: unknown, additionalProperties?: PostHogEventProperties): void {
-    const properties: { [key: string]: any } = {
-      $exception_level: 'error',
-      $exception_list: [
-        {
-          type: isPlainError(error) ? error.name : 'Error',
-          value: isPlainError(error) ? error.message : error,
-          mechanism: {
-            handled: true,
-            synthetic: false,
-          },
-        },
-      ],
-      ...additionalProperties,
+  captureException(error: unknown, additionalProperties?: PostHogEventProperties, hint?: EventHint): void {
+    try {
+      const exceptionProperties = this.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
+      this.capture(
+        '$exception',
+        { ...exceptionProperties, ...additionalProperties } as unknown as PostHogEventProperties,
+        { _originatedFromCaptureException: true }
+      )
+    } catch (e) {
+      this._logger.error('Error while capturing $exception:', e)
     }
-
-    this.capture('$exception', properties, { _originatedFromCaptureException: true })
   }
 
   /**
@@ -1359,9 +1536,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       }
 
       // Update person properties for feature flags evaluation
-      // Merge setOnce first, then set to allow overwriting
-      const mergedProperties = { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) }
-      this.setPersonPropertiesForFlags(mergedProperties, reloadFeatureFlags)
+      this.setPersonPropertiesForFlags(
+        { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+        reloadFeatureFlags
+      )
 
       this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 
@@ -1370,11 +1548,78 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
+   * Removes properties from the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @remarks
+   * Deletes the given person properties from the person profile in PostHog. This is the
+   * counterpart to {@link setPersonProperties} — instead of hand-passing `$unset` inside a
+   * `capture()` call, you can remove properties with a dedicated method.
+   * If `personProfiles` is set to `never`, this call is ignored.
+   *
+   * @example
+   * ```js
+   * // remove a single property
+   * posthog.unsetPersonProperties('plan')
+   * ```
+   *
+   * @example
+   * ```js
+   * // remove multiple properties
+   * posthog.unsetPersonProperties(['plan', 'email'])
+   * ```
+   *
+   * @public
+   *
+   * @param propertyNames - The name (or names) of the person properties to remove.
+   * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   */
+  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
+    this.wrap(() => {
+      const names = (isArray(propertyNames) ? propertyNames : [propertyNames]).filter(
+        (name) => isString(name) && name.length > 0
+      )
+      if (names.length === 0) {
+        return
+      }
+
+      if (!this._requirePersonProcessing('posthog.unsetPersonProperties')) {
+        return
+      }
+
+      // Remove the properties from the locally-stored person properties used for flag evaluation
+      // so flags re-evaluate without the unset values, mirroring setPersonPropertiesForFlags.
+      const existingProperties =
+        this.getPersistedProperty<Record<string, JsonType>>(PostHogPersistedProperty.PersonProperties) || {}
+      const nextProperties = { ...existingProperties }
+      for (const name of names) {
+        delete nextProperties[name]
+      }
+      this.setPersistedProperty<PostHogEventProperties>(PostHogPersistedProperty.PersonProperties, nextProperties)
+
+      if (reloadFeatureFlags) {
+        this.reloadFeatureFlags()
+      }
+
+      this.capture('$set', { $unset: names })
+
+      // Invalidate the setPersonProperties dedupe cache so a subsequent set of an unset
+      // property is not skipped as a duplicate.
+      this._cachedPersonProperties = null
+    })
+  }
+
+  /**
    * Override processBeforeEnqueue to run before_send hooks.
    * This runs after prepareMessage, giving users full control over the final event.
    *
-   * The internal message contains many fields (event, distinct_id, properties, type, library,
-   * library_version, timestamp, uuid). CaptureEvent exposes a subset matching the web SDK's
+   * The internal message contains many fields (event, distinct_id, properties, timestamp, uuid).
+   * Deprecated top-level type, library, and library_version values may still be present on legacy
+   * queued messages; type is a no-op, while library and library_version are only used as fallbacks
+   * for the official properties.$lib and properties.$lib_version fields.
+   * CaptureEvent exposes a subset matching the web SDK's
    * CaptureResult: uuid, event, properties, $set, $set_once, timestamp.
    * Note: $set/$set_once are extracted from properties.$set and properties.$set_once.
    */
@@ -1418,7 +1663,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     return {
       ...message,
-      uuid: result.uuid ?? message.uuid,
+      uuid: getEventUuid(result.uuid ?? message.uuid, uuidv7),
       event: result.event,
       properties: resultProps,
       timestamp: result.timestamp as unknown as JsonType,

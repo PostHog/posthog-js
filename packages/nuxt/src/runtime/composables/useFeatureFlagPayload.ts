@@ -25,18 +25,18 @@ import type { JsonType } from 'posthog-js'
  */
 export function useFeatureFlagPayload(flag: string) {
   const posthog = usePostHog()
-  const featureFlagPayload = ref<JsonType | undefined>(posthog?.getFeatureFlagPayload?.(flag))
+  const featureFlagPayload = ref<JsonType | undefined>(posthog?.getFeatureFlagResult?.(flag, { send_event: false })?.payload)
 
   let unsubscribe: (() => void) | undefined
   onMounted(() => {
     if (!posthog) return
 
     // Set initial value in case it wasn't available during setup
-    featureFlagPayload.value = posthog.getFeatureFlagPayload(flag)
+    featureFlagPayload.value = posthog.getFeatureFlagResult(flag, { send_event: false })?.payload
 
     // Update when feature flags are loaded
     unsubscribe = posthog.onFeatureFlags?.(() => {
-      featureFlagPayload.value = posthog.getFeatureFlagPayload(flag)
+      featureFlagPayload.value = posthog.getFeatureFlagResult(flag, { send_event: false })?.payload
     })
   })
 

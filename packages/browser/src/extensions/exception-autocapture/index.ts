@@ -1,11 +1,12 @@
 import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
+import { RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject } from '@posthog/core'
 import { ErrorTracking } from '@posthog/core'
+import { ExceptionAutoCaptureConfig } from '../../types'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
@@ -38,7 +39,7 @@ export class ExceptionObserver {
 
     private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
         const providedConfig = this._instance.config.capture_exceptions
-        let config = {
+        let config: Required<ExceptionAutoCaptureConfig> = {
             capture_unhandled_errors: false,
             capture_unhandled_rejections: false,
             capture_console_errors: false,
@@ -75,6 +76,7 @@ export class ExceptionObserver {
         if (assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
             // already loaded
             cb()
+            return
         }
 
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
@@ -161,6 +163,6 @@ export class ExceptionObserver {
             return
         }
 
-        this._instance.exceptions.sendExceptionEvent(errorProperties)
+        this._instance.exceptions?.sendExceptionEvent(errorProperties)
     }
 }

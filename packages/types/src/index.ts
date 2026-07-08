@@ -64,6 +64,7 @@ export type {
     PerformanceCaptureConfig,
     DeadClickCandidate,
     ExceptionAutoCaptureConfig,
+    ExceptionStepsConfig,
     DeadClicksAutoCaptureConfig,
     HeatmapConfig,
     ConfigDefaults,
@@ -73,6 +74,7 @@ export type {
     SlimDOMOptions,
     SessionRecordingOptions,
     RequestQueueConfig,
+    LogCaptureOptions,
     PostHogConfig,
 } from './posthog-config'
 
@@ -85,4 +87,24 @@ export type { SurveyRenderReason } from './survey'
 // Toolbar types
 export type { ToolbarParams, ToolbarUserIntent, ToolbarSource, ToolbarVersion } from './toolbar'
 
+// Feedback recording types
 export type { UserFeedbackRecordingResult } from './feedback-recording'
+
+// Tree-shakeable extension types
+export type { TreeShakeableConfig, TreeShakeable } from './tree-shakeable'
+
+// Log capture types
+export type {
+    LogSeverityLevel,
+    OtlpSeverityText,
+    OtlpSeverityEntry,
+    LogAttributeValue,
+    LogAttributes,
+    CaptureLogOptions,
+    Logger,
+    OtlpAnyValue,
+    OtlpKeyValue,
+    OtlpLogRecord,
+    OtlpLogsPayload,
+    BeforeSendLogFn,
+} from './capture-log'

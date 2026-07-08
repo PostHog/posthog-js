@@ -1,6 +1,9 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.5.66",
+  "version": "1.7.80",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
   "description": "Nuxt module for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -26,14 +29,16 @@
     "prepare": "nuxt prepare",
     "build": "nuxt-module-build build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:unit": "node tests/vue-plugin.test.mjs && node tests/sourcemaps-ssr.test.mjs"
   },
   "dependencies": {
     "@posthog/cli": "catalog:",
     "@nuxt/kit": ">=3.7.0",
-    "posthog-node": "workspace:*",
-    "@posthog/core": "workspace:*",
-    "posthog-js": "workspace:*"
+    "posthog-node": "workspace:^",
+    "@posthog/core": "workspace:^",
+    "@posthog/plugin-utils": "workspace:^",
+    "posthog-js": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

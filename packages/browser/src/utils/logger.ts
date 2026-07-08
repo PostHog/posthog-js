@@ -8,14 +8,14 @@ type CreateLoggerOptions = {
 }
 
 type PosthogJsLogger = Omit<Logger, 'createLogger'> & {
-    _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => void
+    _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => void
     uninitializedWarning: (methodName: string) => void
     createLogger: (prefix: string, options?: CreateLoggerOptions) => PosthogJsLogger
 }
 
 const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {}): PosthogJsLogger => {
     const logger: PosthogJsLogger = {
-        _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => {
+        _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
                 window &&
                 (Config.DEBUG || assignableWindow.POSTHOG_DEBUG || debugEnabled) &&
@@ -30,6 +30,10 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
                 // eslint-disable-next-line no-console
                 consoleLog(prefix, ...args)
             }
+        },
+
+        debug: (...args: any[]) => {
+            logger._log('debug', ...args)
         },
 
         info: (...args: any[]) => {

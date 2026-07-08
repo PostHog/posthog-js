@@ -1,17 +1,36 @@
 /// <reference lib="dom" />
 
 import type { PostHog } from 'posthog-node'
-import type { CachedPrompt, GetPromptOptions, PromptApiResponse, PromptVariables, PromptsDirectOptions } from './types'
+import type {
+  CachedPrompt,
+  GetPromptOptions,
+  PromptApiResponse,
+  PromptCodeFallbackResult,
+  PromptRemoteResult,
+  PromptResult,
+  PromptVariables,
+  PromptsDirectOptions,
+} from './types'
 
 const DEFAULT_CACHE_TTL_SECONDS = 300 // 5 minutes
+const DEFAULT_PROMPTS_HOST = 'https://us.posthog.com'
+type PromptVersionCache = Map<number | undefined, CachedPrompt>
+
+function normalizeApiKey(value?: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeHost(value?: unknown): string {
+  const normalizedHost = typeof value === 'string' ? value.trim() : ''
+  return (normalizedHost || DEFAULT_PROMPTS_HOST).replace(/\/+$/, '')
+}
 
 function isPromptApiResponse(data: unknown): data is PromptApiResponse {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    'prompt' in data &&
-    typeof (data as PromptApiResponse).prompt === 'string'
-  )
+  if (typeof data !== 'object' || data === null) {
+    return false
+  }
+  const record = data as Record<string, unknown>
+  return typeof record.prompt === 'string' && typeof record.name === 'string' && typeof record.version === 'number'
 }
 
 export interface PromptsWithPostHogOptions {
@@ -41,13 +60,18 @@ function isPromptsWithPostHog(options: PromptsOptions): options is PromptsWithPo
  * })
  *
  * // Fetch with caching and fallback
- * const template = await prompts.get('support-system-prompt', {
+ * const result = await prompts.get('support-system-prompt', {
  *   cacheTtlSeconds: 300,
  *   fallback: 'You are a helpful assistant.',
  * })
  *
+ * // Or fetch an exact published version
+ * const v3 = await prompts.get('support-system-prompt', {
+ *   version: 3,
+ * })
+ *
  * // Compile with variables
- * const systemPrompt = prompts.compile(template, {
+ * const systemPrompt = prompts.compile(result.prompt, {
  *   company: 'Acme Corp',
  *   tier: 'premium',
  * })
@@ -58,74 +82,108 @@ export class Prompts {
   private projectApiKey: string
   private host: string
   private defaultCacheTtlSeconds: number
-  private cache: Map<string, CachedPrompt> = new Map()
+  private cache: Map<string, PromptVersionCache> = new Map()
 
   constructor(options: PromptsOptions) {
     this.defaultCacheTtlSeconds = options.defaultCacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS
 
     if (isPromptsWithPostHog(options)) {
       this.personalApiKey = options.posthog.options.personalApiKey ?? ''
-      this.projectApiKey = options.posthog.apiKey ?? ''
+      this.projectApiKey = options.posthog.apiKey
       this.host = options.posthog.host
     } else {
       // Direct options
-      this.personalApiKey = options.personalApiKey
-      this.projectApiKey = options.projectApiKey
-      this.host = options.host ?? 'https://us.posthog.com'
+      this.personalApiKey = normalizeApiKey(options.personalApiKey)
+      this.projectApiKey = normalizeApiKey(options.projectApiKey)
+      this.host = normalizeHost(options.host)
+    }
+  }
+
+  private getPromptCache(name: string): PromptVersionCache | undefined {
+    return this.cache.get(name)
+  }
+
+  private getOrCreatePromptCache(name: string): PromptVersionCache {
+    const cachedPromptVersions = this.cache.get(name)
+    if (cachedPromptVersions) {
+      return cachedPromptVersions
+    }
+
+    const promptVersions: PromptVersionCache = new Map()
+    this.cache.set(name, promptVersions)
+    return promptVersions
+  }
+
+  private getPromptLabel(name: string, version?: number): string {
+    return version === undefined ? `"${name}"` : `"${name}" version ${version}`
+  }
+
+  /**
+   * Fetch a prompt by name from the PostHog API.
+   *
+   * Returns a `PromptResult` object carrying the prompt text alongside `source`,
+   * `name`, and `version` metadata. Read `result.prompt` for the template string.
+   */
+  async get(name: string, options?: GetPromptOptions): Promise<PromptResult> {
+    try {
+      return await this.getInternal(name, options)
+    } catch (error) {
+      const fallback = options?.fallback
+
+      if (fallback !== undefined) {
+        const promptLabel = this.getPromptLabel(name, options?.version)
+        console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}, using fallback:`, error)
+
+        return {
+          source: 'code_fallback',
+          prompt: fallback,
+          name: undefined,
+          version: undefined,
+        } satisfies PromptCodeFallbackResult
+      }
+
+      throw error
     }
   }
 
   /**
-   * Fetch a prompt by name from the PostHog API
-   *
-   * @param name - The name of the prompt to fetch
-   * @param options - Optional settings for caching and fallback
-   * @returns The prompt string
-   * @throws Error if the prompt cannot be fetched and no fallback is provided
+   * Internal method that handles cache + fetch logic, returning full metadata.
+   * Does NOT handle the string `fallback` option — callers handle that.
    */
-  async get(name: string, options?: GetPromptOptions): Promise<string> {
+  private async getInternal(name: string, options?: GetPromptOptions): Promise<PromptRemoteResult> {
     const cacheTtlSeconds = options?.cacheTtlSeconds ?? this.defaultCacheTtlSeconds
-    const fallback = options?.fallback
+    const version = options?.version
+    const promptLabel = this.getPromptLabel(name, version)
 
     // Check cache first
-    const cached = this.cache.get(name)
+    const cached = this.getPromptCache(name)?.get(version)
     const now = Date.now()
 
     if (cached) {
       const isFresh = now - cached.fetchedAt < cacheTtlSeconds * 1000
 
       if (isFresh) {
-        return cached.prompt
+        const { fetchedAt: _, ...cachedResult } = cached
+        return { source: 'cache', ...cachedResult }
       }
     }
 
     // Try to fetch from API
     try {
-      const prompt = await this.fetchPromptFromApi(name)
-      const fetchedAt = Date.now()
+      const fetched = await this.fetchPromptFromApi(name, version)
 
       // Update cache
-      this.cache.set(name, {
-        prompt,
-        fetchedAt,
-      })
+      this.getOrCreatePromptCache(name).set(version, { ...fetched, fetchedAt: Date.now() })
 
-      return prompt
+      return { source: 'api', ...fetched }
     } catch (error) {
-      // Fallback order:
-      // 1. Return stale cache (with warning)
+      // Return stale cache (with warning)
       if (cached) {
-        console.warn(`[PostHog Prompts] Failed to fetch prompt "${name}", using stale cache:`, error)
-        return cached.prompt
+        const { fetchedAt: _, ...cachedResult } = cached
+        console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}, using stale cache:`, error)
+        return { source: 'stale_cache', ...cachedResult }
       }
 
-      // 2. Return fallback (with warning)
-      if (fallback !== undefined) {
-        console.warn(`[PostHog Prompts] Failed to fetch prompt "${name}", using fallback:`, error)
-        return fallback
-      }
-
-      // 3. Throw error
       throw error
     }
   }
@@ -153,17 +211,33 @@ export class Prompts {
   /**
    * Clear the cache for a specific prompt or all prompts
    *
-   * @param name - Optional prompt name to clear. If not provided, clears all cached prompts.
+   * @param name - Optional prompt name to clear. If provided, clears all cached versions for that prompt unless a version is also provided.
+   * @param version - Optional prompt version to clear. Requires a prompt name.
    */
-  clearCache(name?: string): void {
-    if (name !== undefined) {
-      this.cache.delete(name)
-    } else {
+  clearCache(name?: string, version?: number): void {
+    if (version !== undefined && name === undefined) {
+      throw new Error("'version' requires 'name' to be provided")
+    }
+
+    if (name === undefined) {
       this.cache.clear()
+      return
+    }
+
+    if (version === undefined) {
+      this.cache.delete(name)
+      return
+    }
+
+    const promptVersions = this.getPromptCache(name)
+    promptVersions?.delete(version)
+
+    if (promptVersions?.size === 0) {
+      this.cache.delete(name)
     }
   }
 
-  private async fetchPromptFromApi(name: string): Promise<string> {
+  private async fetchPromptFromApi(name: string, version?: number): Promise<Omit<PromptRemoteResult, 'source'>> {
     if (!this.personalApiKey) {
       throw new Error(
         '[PostHog Prompts] personalApiKey is required to fetch prompts. ' +
@@ -179,7 +253,9 @@ export class Prompts {
 
     const encodedPromptName = encodeURIComponent(name)
     const encodedProjectApiKey = encodeURIComponent(this.projectApiKey)
-    const url = `${this.host}/api/environments/@current/llm_prompts/name/${encodedPromptName}/?token=${encodedProjectApiKey}`
+    const versionQuery = version === undefined ? '' : `&version=${encodeURIComponent(String(version))}`
+    const promptLabel = this.getPromptLabel(name, version)
+    const url = `${this.host}/api/environments/@current/llm_prompts/name/${encodedPromptName}/?token=${encodedProjectApiKey}${versionQuery}`
 
     const response = await fetch(url, {
       method: 'GET',
@@ -190,25 +266,25 @@ export class Prompts {
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error(`[PostHog Prompts] Prompt "${name}" not found`)
+        throw new Error(`[PostHog Prompts] Prompt ${promptLabel} not found`)
       }
 
       if (response.status === 403) {
         throw new Error(
-          `[PostHog Prompts] Access denied for prompt "${name}". ` +
+          `[PostHog Prompts] Access denied for prompt ${promptLabel}. ` +
             'Check that your personalApiKey has the correct permissions and the LLM prompts feature is enabled.'
         )
       }
 
-      throw new Error(`[PostHog Prompts] Failed to fetch prompt "${name}": HTTP ${response.status}`)
+      throw new Error(`[PostHog Prompts] Failed to fetch prompt ${promptLabel}: HTTP ${response.status}`)
     }
 
     const data: unknown = await response.json()
 
     if (!isPromptApiResponse(data)) {
-      throw new Error(`[PostHog Prompts] Invalid response format for prompt "${name}"`)
+      throw new Error(`[PostHog Prompts] Invalid response format for prompt ${promptLabel}`)
     }
 
-    return data.prompt
+    return { prompt: data.prompt, name: data.name, version: data.version }
   }
 }

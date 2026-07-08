@@ -1,34 +1,111 @@
 export type PostHogCoreOptions = {
-  /** PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com' */
+  /**
+   * PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com'
+   *
+   * @default 'https://us.i.posthog.com'
+   */
   host?: string
-  /** The number of events to queue before sending to PostHog (flushing) */
+  /**
+   * The number of events to queue before sending to PostHog (flushing)
+   *
+   * @default 20
+   */
   flushAt?: number
-  /** The interval in milliseconds between periodic flushes */
+  /**
+   * The interval in milliseconds between periodic flushes
+   *
+   * @default 10000
+   */
   flushInterval?: number
-  /** The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`) */
+  /**
+   * The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`)
+   *
+   * @default 100
+   */
   maxBatchSize?: number
-  /** The maximum number of cached messages either in memory or on the local storage.
-   * Defaults to 1000, (must be higher than `flushAt`)
+  /**
+   * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
+   *
+   * @default 1000
    */
   maxQueueSize?: number
-  /** If set to true the SDK is essentially disabled (useful for local environments where you don't want to track anything) */
+  /**
+   * If set to true the SDK is essentially disabled (useful for local environments where you don't want to track anything)
+   *
+   * @default false
+   */
   disabled?: boolean
-  /** If set to false the SDK will not track until the `optIn` function is called. */
+  /**
+   * If set to false the SDK will not track until the `optIn` function is called.
+   *
+   * @default true
+   */
   defaultOptIn?: boolean
-  /** Whether to track that `getFeatureFlag` was called (used by Experiments) */
+  /**
+   * Whether to strip URL fragments (`#...`) from automatically captured URL fields.
+   * Disabled by default for backwards compatibility. Set to `true` to strip hashes from:
+   *
+   * - `$current_url` on automatically captured browser events, including `$pageview`
+   * - `$initial_current_url`
+   * - `$session_entry_url`
+   * - `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture
+   * - Next.js Pages Router `$pageview` `$current_url`
+   * - web vitals `$current_url`
+   * - logs `url.full`
+   * - conversations `current_url` and `request_url`
+   * - session replay rrweb meta/custom-event `href` URLs
+   * - heatmap data URLs
+   *
+   * If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.
+   * If you want to capture hashes selectively, leave this as `false` and use `before_send` to remove
+   * sensitive hash values before events are sent.
+   *
+   * @default false
+   */
+  disable_capture_url_hashes?: boolean
+  /**
+   * Whether to track that `getFeatureFlag` was called (used by Experiments)
+   *
+   * @default true
+   */
   sendFeatureFlagEvent?: boolean
-  /** Whether to load feature flags when initialized or not */
+  /**
+   * Whether to load feature flags when initialized or not
+   *
+   * @default true
+   */
   preloadFeatureFlags?: boolean
   /**
+   * Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely.
+   *
+   * When set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`,
+   * `group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request
+   * to the flags endpoint that still goes out (e.g. to fetch remote config or surveys)
+   * carries `disable_flags: true` so the server skips flag evaluation. Flag values must be
+   * supplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and
+   * related methods keep working against those values. Until `updateFlags()` runs, reads
+   * return their not-loaded defaults, so use `bootstrap` for any flags needed at startup.
+   * Equivalent to the web SDK's `advanced_disable_feature_flags`.
+   *
+   * Note: surveys gated on feature flags will not evaluate unless the survey targeting
+   * flags are also provided via `updateFlags()`. This option cannot be toggled at runtime.
+   * `posthog-node` inherits this option but does not implement it (no-op).
+   *
+   * @default false
+   */
+  disableRemoteFeatureFlags?: boolean
+  /**
    * Whether to load remote config when initialized or not
-   * Experimental support
-   * Default: false - Remote config is loaded by default
+   *
+   * @deprecated Remote config is now always loaded and this option is a no-op. It will be removed in a future version.
+   * @default false
    */
   disableRemoteConfig?: boolean
   /**
    * Whether to load surveys when initialized or not
-   * Experimental support
-   * Default: false - Surveys are loaded by default, but requires the `PostHogSurveyProvider` to be used
+   * Requires the `PostHogSurveyProvider` to be used
+   *
+   * @default false
    */
   disableSurveys?: boolean
   /** Option to bootstrap the library with given distinctId and feature flags */
@@ -38,22 +115,66 @@ export type PostHogCoreOptions = {
     featureFlags?: Record<string, FeatureFlagValue>
     featureFlagPayloads?: Record<string, JsonType>
   }
-  /** How many times we will retry HTTP requests. Defaults to 3. */
+  /**
+   * How many times we will retry HTTP requests
+   *
+   * @default 3
+   */
   fetchRetryCount?: number
-  /** The delay between HTTP request retries, Defaults to 3 seconds. */
+  /**
+   * The delay between HTTP request retries in milliseconds
+   *
+   * @default 3000
+   */
   fetchRetryDelay?: number
-  /** Timeout in milliseconds for any calls. Defaults to 10 seconds. */
+  /**
+   * Timeout in milliseconds for any calls
+   *
+   * @default 10000
+   */
   requestTimeout?: number
-  /** Timeout in milliseconds for feature flag calls. Defaults to 10 seconds for stateful clients, and 3 seconds for stateless. */
+  /**
+   * Timeout in milliseconds for feature flag calls
+   *
+   * @default 10000 for stateful clients, 3000 for stateless
+   */
   featureFlagsRequestTimeoutMs?: number
-  /** Timeout in milliseconds for remote config calls. Defaults to 3 seconds. */
+  /**
+   * How many times feature flag requests retry after a transient network error.
+   * Set to 0 to disable feature flag request retries.
+   *
+   * @default 1
+   */
+  featureFlagsRequestMaxRetries?: number
+  /**
+   * Timeout in milliseconds for remote config calls
+   *
+   * @default 3000
+   */
   remoteConfigRequestTimeoutMs?: number
-  /** For Session Analysis how long before we expire a session (defaults to 30 mins) */
+  /**
+   * For Session Analysis how long before we expire a session in seconds
+   *
+   * @default 1800
+   */
   sessionExpirationTimeSeconds?: number
-  /** Whether to disable GZIP compression */
+  /**
+   * Whether to disable GZIP compression
+   *
+   * @default false
+   */
   disableCompression?: boolean
+  /**
+   * Whether to disable GeoIP lookups
+   *
+   * @default false
+   */
   disableGeoip?: boolean
-  /** Special flag to indicate ingested data is for a historical migration. */
+  /**
+   * Special flag to indicate ingested data is for a historical migration
+   *
+   * @default false
+   */
   historicalMigration?: boolean
   /**
    * Evaluation contexts for feature flags.
@@ -117,6 +238,19 @@ export type PostHogCoreOptions = {
    * If a function returns null, the event will be dropped.
    */
   before_send?: BeforeSendFn | BeforeSendFn[]
+
+  /**
+   * A list of hostnames for which to inject PostHog tracing headers
+   * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests.
+   *
+   * Use this to link requests made from your app to session replays and LLM traces
+   * in PostHog. When set, the global `fetch` is patched on initialization and the
+   * headers are added to requests whose hostname matches one of the entries.
+   *
+   * Requires the SDK to wire up `patchFetchForTracingHeaders` against this option
+   * (currently supported in posthog-react-native).
+   */
+  addTracingHeaders?: string[]
 }
 
 export enum PostHogPersistedProperty {
@@ -133,6 +267,9 @@ export enum PostHogPersistedProperty {
   BootstrapFeatureFlagPayloads = 'bootstrap_feature_flag_payloads',
   OverrideFeatureFlags = 'override_feature_flags',
   Queue = 'queue',
+  // Logs queue. Individual SDKs may route this key to an isolated storage
+  // instance if they want to separate logs write volume from main state.
+  LogsQueue = 'logs_queue',
   OptedOut = 'opted_out',
   SessionId = 'session_id',
   SessionStartTimestamp = 'session_start_timestamp',
@@ -142,11 +279,14 @@ export enum PostHogPersistedProperty {
   InstalledAppBuild = 'installed_app_build', // only used by posthog-react-native
   InstalledAppVersion = 'installed_app_version', // only used by posthog-react-native
   SessionReplay = 'session_replay', // only used by posthog-react-native
+  // Session id for which an event trigger has activated session replay. only used by posthog-react-native
+  SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native
   SurveysSeen = 'surveys_seen', // only used by posthog-react-native
   Surveys = 'surveys', // only used by posthog-react-native
   RemoteConfig = 'remote_config',
   FlagsEndpointWasHit = 'flags_endpoint_was_hit', // only used by posthog-react-native
+  DeviceId = 'device_id', // only used by posthog-react-native
 }
 
 export type PostHogFetchOptions = {
@@ -160,7 +300,7 @@ export type PostHogFetchOptions = {
 
 // Check out posthog-js for these additional options and try to keep them in sync
 export type PostHogCaptureOptions = {
-  /** If provided overrides the auto-generated event ID */
+  /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
   /** If provided overrides the auto-generated timestamp */
   timestamp?: Date
@@ -180,11 +320,12 @@ export type PostHogFetchResponse = {
   headers?: {
     get(name: string): string | null
   }
+  body?: ReadableStream<Uint8Array> | null
 }
 
 export type PostHogQueueItem = {
-  message: any
-  callback?: (err: any) => void
+  message?: PostHogEventProperties
+  callback?: (err: unknown) => void
 }
 
 export type PostHogEventProperties = {
@@ -249,6 +390,18 @@ export type PostHogRemoteConfig = {
    * When a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely.
    */
   capturePerformance?:
+    | boolean
+    | {
+        [key: string]: JsonType
+      }
+
+  /**
+   * Logs feature remote config. When a map, `captureConsoleLogs` (boolean)
+   * is the local opt-in flag for `console.*` autocapture (read by the JS
+   * SDK's `PostHogLogs` extension to decide whether to load the autocapture
+   * bundle).
+   */
+  logs?:
     | boolean
     | {
         [key: string]: JsonType
@@ -464,6 +617,10 @@ export type SurveyAppearance = {
   placeholder?: string
   shuffleQuestions?: boolean
   surveyPopupDelaySeconds?: number
+  // Show a "Back" button on questions after the first, allowing respondents to return to a previously visited question. Defaults to false.
+  allowGoBack?: boolean
+  // Optional override for the back button label.
+  backButtonText?: string
   // widget options
   widgetType?: SurveyWidgetType
   widgetSelector?: string
@@ -515,16 +672,36 @@ export interface SurveyValidationRule {
   errorMessage?: string
 }
 
+export interface SurveyTranslation {
+  name?: string
+  thankYouMessageHeader?: string
+  thankYouMessageDescription?: string
+  thankYouMessageCloseButtonText?: string
+  submitButtonText?: string
+  backButtonText?: string
+}
+
+export interface SurveyQuestionTranslation {
+  question?: string
+  description?: string | null
+  buttonText?: string
+  link?: string | null
+  lowerBoundLabel?: string
+  upperBoundLabel?: string
+  choices?: string[]
+}
+
 type SurveyQuestionBase = {
   question: string
   id: string
-  description?: string
+  description?: string | null
   descriptionContentType?: SurveyQuestionDescriptionContentType
   optional?: boolean
   buttonText?: string
   originalQuestionIndex: number
   branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
   validation?: SurveyValidationRule[]
+  translations?: Record<string, SurveyQuestionTranslation>
 }
 
 export type BasicSurveyQuestion = SurveyQuestionBase & {
@@ -533,7 +710,7 @@ export type BasicSurveyQuestion = SurveyQuestionBase & {
 
 export type LinkSurveyQuestion = SurveyQuestionBase & {
   type: SurveyQuestionType.Link
-  link?: string
+  link?: string | null
 }
 
 export type RatingSurveyQuestion = SurveyQuestionBase & {
@@ -595,6 +772,10 @@ export type SurveyResponse = {
   surveys: Survey[]
 }
 
+export type SurveyResponseValue = string | number | string[] | null
+
+export type SurveyResponses = Record<string, SurveyResponseValue>
+
 export type SurveyCallback = (surveys: Survey[]) => void
 
 export enum SurveyMatchType {
@@ -637,6 +818,7 @@ export type Survey = {
   name: string
   description?: string
   type: SurveyType
+  translations?: Record<string, SurveyTranslation>
   feature_flag_keys?: {
     key: string
     value?: string
@@ -699,6 +881,7 @@ export type ActionStepType = {
 }
 
 export type Logger = {
+  debug: (...args: any[]) => void
   info: (...args: any[]) => void
   warn: (...args: any[]) => void
   error: (...args: any[]) => void
@@ -731,12 +914,23 @@ export const knownUnsafeEditableEvent = [
  */
 export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
+export const knownUnsafeEditableEventProperty = ['token'] as const
+
+/**
+ * These event properties can be edited by the `before_send` function
+ * but are required for the event to be ingested. For example `token` carries
+ * the project api_key, and ingest rejects any event that arrives without it.
+ *
+ * If a `before_send` function removes one of these, the event is dropped.
+ */
+export type KnownUnsafeEditableEventProperty = (typeof knownUnsafeEditableEventProperty)[number]
+
 /**
  * Represents an event before it's sent to PostHog.
  * This is the interface exposed to the `before_send` hook, matching the web SDK's `CaptureResult`.
  */
 export type CaptureEvent = {
-  /** UUID for the event (optional to allow compatibility with Node SDK's EventMessage) */
+  /** UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. */
   uuid?: string
   /** The name of the event */
   event: string

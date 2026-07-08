@@ -1,5 +1,6 @@
 import {
   FeatureFlagDetail,
+  FeatureFlagResult,
   FeatureFlagValue,
   JsonType,
   PostHogFlagsResponse,
@@ -102,35 +103,6 @@ export const getPayloadsFromFlags = (
   )
 }
 
-/**
- * Get the flag details from the legacy v1 flags and payloads. As such, it will lack the reason, id, version, and description.
- * @param flagsResponse - The flags response
- * @returns The flag details
- */
-export const getFlagDetailsFromFlagsAndPayloads = (
-  flagsResponse: PostHogFeatureFlagsResponse
-): PostHogFlagsResponse['flags'] => {
-  const flags = flagsResponse.featureFlags ?? {}
-  const payloads = flagsResponse.featureFlagPayloads ?? {}
-  return Object.fromEntries(
-    Object.entries(flags).map(([key, value]) => [
-      key,
-      {
-        key: key,
-        enabled: typeof value === 'string' ? true : value,
-        variant: typeof value === 'string' ? value : undefined,
-        reason: undefined,
-        metadata: {
-          id: undefined,
-          version: undefined,
-          payload: payloads?.[key] ? JSON.stringify(payloads[key]) : undefined,
-          description: undefined,
-        },
-      },
-    ])
-  )
-}
-
 export const getFeatureFlagValue = (detail: FeatureFlagDetail | undefined): FeatureFlagValue | undefined => {
   return detail === undefined ? undefined : (detail.variant ?? detail.enabled)
 }
@@ -189,4 +161,17 @@ export function getEnabledFromValue(value: FeatureFlagValue): boolean {
 
 export function getVariantFromValue(value: FeatureFlagValue): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDetail>): FeatureFlagResult[] => {
+  return Object.values(flagDetails).map((detail) => {
+    const value = detail.variant ?? detail.enabled
+    const rawPayload = detail.metadata?.payload
+    return {
+      key: detail.key,
+      enabled: getEnabledFromValue(value),
+      variant: getVariantFromValue(value),
+      payload: rawPayload !== undefined ? parsePayload(rawPayload) : null,
+    }
+  })
 }

@@ -1,5 +1,6 @@
 import { render, JSX } from 'preact'
 
+import { PostHog } from '../../posthog-core'
 import { ProductTourStep, ProductTourAppearance } from '../../posthog-product-tours-types'
 import { document as _document } from '../../utils/globals'
 import { ProductTourBanner } from './components/ProductTourBanner'
@@ -16,6 +17,7 @@ export interface RenderProductTourPreviewOptions {
     stepIndex?: number
     totalSteps?: number
     style?: JSX.CSSProperties
+    posthog?: PostHog
 }
 
 export function renderProductTourPreview({
@@ -25,6 +27,7 @@ export function renderProductTourPreview({
     stepIndex = 0,
     totalSteps = 1,
     style,
+    posthog,
 }: RenderProductTourPreviewOptions): void {
     parentElement.innerHTML = ''
 
@@ -33,7 +36,7 @@ export function renderProductTourPreview({
     parentElement.appendChild(shadowHost)
     const shadow = shadowHost.attachShadow({ mode: 'open' })
 
-    const stylesheet = getProductTourStylesheet()
+    const stylesheet = getProductTourStylesheet(posthog)
     if (stylesheet) {
         shadow.appendChild(stylesheet)
     }

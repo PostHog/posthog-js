@@ -31,7 +31,7 @@ module.exports = {
                 verifyDepsBeforeRun: true,
                 nodeLinker: 'isolated',
                 minimumReleaseAge: 4320,
-                minimumReleaseAgeExclude: ['node-forge@1.3.2'],
+                minimumReleaseAgeExclude: ['node-forge@1.3.2', 'dompurify@3.3.2'],
                 onlyBuiltDependencies: ['@posthog/cli'],
             })
         },

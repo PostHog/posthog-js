@@ -12,16 +12,28 @@
                 ".babelrc",
                 "babel.config.js",
                 "rollup.config.mjs",
-                "rslib.config.mjs"
+                "rslib.config.mjs",
+                "vite.config.ts",
+                "vite.config.js"
             ],
             "outputs": ["dist/**", "lib/**", "react/**"],
             "env": ["WRITE_MANGLED_PROPERTIES"]
+        },
+        "prepublish": {
+            "dependsOn": ["^prepublish"],
+            "outputs": ["dist/**", "lib/**"]
+        },
+        "check-types": {
+            "dependsOn": ["^prepublish", "^build"]
         },
         "package": {
             "cache": false,
             "dependsOn": ["^package", "build"],
             "inputs": ["dist/**", "package.json"],
             "env": ["PACKAGE_DEST"]
+        },
+        "@posthog/next#build": {
+            "dependsOn": ["^build", "@posthog/react#build"]
         },
         "posthog-js#package": {
             "dependsOn": ["@posthog/react#build"],
@@ -36,6 +48,7 @@
             "dependsOn": []
         },
         "test:unit": {
+            "dependsOn": ["^build"],
             "cache": false
         },
         "test:functional": {},
@@ -49,7 +62,8 @@
         },
         "generate-references": {
             "dependsOn": ["build"],
-            "cache": false
+            "cache": false,
+            "env": ["GENERATE_VERSIONED_REFERENCES"]
         }
     }
 }

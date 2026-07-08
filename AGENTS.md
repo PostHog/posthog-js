@@ -35,7 +35,10 @@ The repository contains the following SDK packages in `./packages/`:
 | `react/`         | `@posthog/react`         | React components and hooks                      |
 | `react-native/`  | `posthog-react-native`   | React Native mobile SDK                         |
 | `nuxt/`          | `@posthog/nuxt`          | Nuxt framework module                           |
+| `next/`          | `@posthog/next`          | Next.js framework module                        |
 | `nextjs-config/` | `@posthog/nextjs-config` | Next.js configuration helper                    |
+| `openfeature-web-provider/`  | `@posthog/openfeature-web-provider`  | OpenFeature web provider (posthog-js)        |
+| `plugin-utils/`  | `@posthog/plugin-utils`  | Shared CLI and sourcemap utilities for plugins  |
 | `types/`         | `@posthog/types`         | TypeScript type definitions for the SDK         |
 
 ## Workspace
@@ -187,12 +190,12 @@ This will:
 
 ### Publishing
 
-1. Add the `release` label to your PR
-2. When the PR is merged to `main`, the `release.yml` GitHub Action will:
-    - Update package versions
-    - Update CHANGELOG files
-    - Publish to npm
-    - Create GitHub releases
+When a PR containing a changeset is merged to `main`, the `release.yml` GitHub Action will:
+
+- Update package versions
+- Update CHANGELOG files
+- Publish to npm
+- Create GitHub releases
 
 ## CI/CD
 

@@ -1,7 +1,11 @@
 {
     "name": "@posthog/webpack-plugin",
-    "version": "1.2.24",
+    "version": "1.5.26",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
     "description": "Webpack plugin for Posthog 🦔",
+    "license": "MIT",
     "repository": {
         "type": "git",
         "url": "https://github.com/PostHog/posthog-js.git",
@@ -9,7 +13,7 @@
     },
     "author": {
         "name": "PostHog",
-        "email": "hey@posthog.com",
+        "email": "engineering@posthog.com",
         "url": "https://posthog.com"
     },
     "main": "./dist/index.js",
@@ -17,11 +21,13 @@
     "types": "./dist/index.d.ts",
     "dependencies": {
         "@posthog/cli": "catalog:",
-        "@posthog/core": "workspace:*"
+        "@posthog/core": "workspace:^",
+        "@posthog/plugin-utils": "workspace:^"
     },
     "files": [
         "dist",
-        "src"
+        "src",
+        "!src/**/*.spec.ts"
     ],
     "peerDependencies": {
         "webpack": "^5"
@@ -30,6 +36,7 @@
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "jest": "catalog:",
+        "ts-jest": "catalog:",
         "webpack": "^5"
     },
     "scripts": {

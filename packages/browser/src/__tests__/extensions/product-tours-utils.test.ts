@@ -4,9 +4,79 @@ import {
     renderTipTapContent,
     normalizeUrl,
     resolveStepTranslation,
+    hasTourWaitPeriodPassed,
+    getProductTourStylesheet,
 } from '../../extensions/product-tours/product-tours-utils'
+import { PostHog } from '../../posthog-core'
 import { ProductTourStep } from '../../posthog-product-tours-types'
 import { doesTourActivateByEvent, doesTourActivateByAction } from '../../utils/product-tour-utils'
+import { LAST_SEEN_TOUR_DATE_KEY_PREFIX } from '../../extensions/product-tours/constants'
+
+describe('getProductTourStylesheet', () => {
+    it.each([
+        {
+            name: 'no posthog instance passed',
+            setup: () => ({}),
+            expectedHookCalls: 0,
+            expectedNonce: null,
+            expectedStylesheet: true,
+        },
+        {
+            name: 'posthog without prepare_external_dependency_stylesheet configured',
+            setup: () => ({ posthog: { config: {} } as unknown as PostHog }),
+            expectedHookCalls: 0,
+            expectedNonce: null,
+            expectedStylesheet: true,
+        },
+        {
+            name: 'runs the stylesheet through prepare_external_dependency_stylesheet',
+            setup: () => {
+                const prepareExternalDependencyStylesheet = jest.fn((stylesheet: HTMLStyleElement) => {
+                    stylesheet.setAttribute('nonce', 'test-nonce')
+                    return stylesheet
+                })
+                return {
+                    posthog: {
+                        config: { prepare_external_dependency_stylesheet: prepareExternalDependencyStylesheet },
+                    } as unknown as PostHog,
+                    prepareExternalDependencyStylesheet,
+                }
+            },
+            expectedHookCalls: 1,
+            expectedNonce: 'test-nonce',
+            expectedStylesheet: true,
+        },
+        {
+            name: 'returns null when prepare_external_dependency_stylesheet returns null',
+            setup: () => {
+                const prepareExternalDependencyStylesheet = jest.fn(() => null)
+                return {
+                    posthog: {
+                        config: { prepare_external_dependency_stylesheet: prepareExternalDependencyStylesheet },
+                    } as unknown as PostHog,
+                    prepareExternalDependencyStylesheet,
+                }
+            },
+            expectedHookCalls: 1,
+            expectedNonce: null,
+            expectedStylesheet: false,
+        },
+    ])('$name', ({ setup, expectedHookCalls, expectedNonce, expectedStylesheet }) => {
+        const { posthog, prepareExternalDependencyStylesheet } = setup() as {
+            posthog?: PostHog
+            prepareExternalDependencyStylesheet?: jest.Mock
+        }
+
+        const stylesheet = getProductTourStylesheet(posthog)
+
+        if (prepareExternalDependencyStylesheet) {
+            expect(prepareExternalDependencyStylesheet).toHaveBeenCalledTimes(expectedHookCalls)
+        }
+        expect(!!stylesheet).toBe(expectedStylesheet)
+        expect(stylesheet?.getAttribute('nonce') ?? null).toBe(expectedNonce)
+        expect(stylesheet?.getAttribute('data-ph-product-tour-style') ?? null).toBe(expectedStylesheet ? 'true' : null)
+    })
+})
 
 describe('calculateTooltipPosition', () => {
     const mockWindow = {
@@ -321,5 +391,45 @@ describe('doesTourActivateByAction', () => {
     it('returns false when no conditions', () => {
         const tour = {}
         expect(doesTourActivateByAction(tour)).toBe(false)
+    })
+})
+
+describe('hasTourWaitPeriodPassed', () => {
+    beforeEach(() => localStorage.clear())
+
+    const setLastSeen = (type: string, daysAgo: number) => {
+        const date = new Date()
+        date.setDate(date.getDate() - daysAgo)
+        localStorage.setItem(`${LAST_SEEN_TOUR_DATE_KEY_PREFIX}${type}`, JSON.stringify(date.toISOString()))
+    }
+
+    it.each([
+        ['no config', undefined, true],
+        ['days is 0', { days: 0, types: ['tour' as const] }, true],
+        ['empty types', { days: 7, types: [] }, true],
+        ['no stored date', { days: 7, types: ['tour' as const] }, true],
+    ])('returns true when %s', (_desc, config, expected) => {
+        expect(hasTourWaitPeriodPassed(config)).toBe(expected)
+    })
+
+    it('returns false when within the wait period', () => {
+        setLastSeen('tour', 0)
+        expect(hasTourWaitPeriodPassed({ days: 7, types: ['tour'] })).toBe(false)
+    })
+
+    it('returns true when past the wait period', () => {
+        setLastSeen('tour', 10)
+        expect(hasTourWaitPeriodPassed({ days: 7, types: ['tour'] })).toBe(true)
+    })
+
+    it('ignores types not in the config', () => {
+        setLastSeen('announcement', 0)
+        expect(hasTourWaitPeriodPassed({ days: 7, types: ['tour'] })).toBe(true)
+    })
+
+    it('uses the most recent date across multiple types', () => {
+        setLastSeen('tour', 10)
+        setLastSeen('announcement', 0)
+        expect(hasTourWaitPeriodPassed({ days: 7, types: ['tour', 'announcement'] })).toBe(false)
     })
 })

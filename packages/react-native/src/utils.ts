@@ -1,5 +1,7 @@
-import { JsonType } from '@posthog/core'
 import { Platform } from 'react-native'
+
+// Re-export remote config utilities from core
+export { getRemoteConfigBool, getRemoteConfigNumber, isValidSampleRate } from '@posthog/core'
 
 type ReactNativeGlobal = {
   HermesInternal?: {
@@ -25,47 +27,27 @@ const _globalThis: typeof globalThis | undefined = typeof globalThis !== 'undefi
 
 export const GLOBAL_OBJ = (_globalThis ?? _global) as unknown as ReactNativeGlobal
 
+export function getPlatformOS(): string | undefined {
+  try {
+    return Platform?.OS
+  } catch {
+    return undefined
+  }
+}
+
 /** Checks if the current platform is web */
 export function isWeb(): boolean {
-  return Platform.OS === 'web'
+  return getPlatformOS() === 'web'
 }
 
 /** Checks if the current platform is macOS */
 export function isMacOS(): boolean {
-  return Platform.OS === 'macos'
+  return getPlatformOS() === 'macos'
 }
 
 /** Checks if the current platform is Windows */
 export function isWindows(): boolean {
-  return Platform.OS === 'windows'
+  return getPlatformOS() === 'windows'
 }
 
 export const isHermes = () => !!GLOBAL_OBJ.HermesInternal
-
-/**
- * Reads a boolean value from a remote config field.
- *
- * Remote config fields follow a pattern: they are either a boolean (false = disabled),
- * an object with specific keys, or absent/undefined.
- *
- * @param field The remote config field (e.g., `response.errorTracking`, `response.capturePerformance`)
- * @param key The key to read from the object form (e.g., `'autocaptureExceptions'`, `'network_timing'`)
- * @param defaultValue Value to return when the field is absent/undefined (defaults to `true` — don't block locally enabled capture)
- */
-export function getRemoteConfigBool(
-  field: boolean | { [key: string]: JsonType } | undefined,
-  key: string,
-  defaultValue: boolean = true
-): boolean {
-  if (field == null) {
-    return defaultValue
-  }
-  if (typeof field === 'boolean') {
-    return field
-  }
-  if (typeof field === 'object') {
-    const value = field[key]
-    return typeof value === 'boolean' ? value : defaultValue
-  }
-  return defaultValue
-}

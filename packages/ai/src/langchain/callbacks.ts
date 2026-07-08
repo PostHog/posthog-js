@@ -10,6 +10,8 @@ import type { DocumentInterface } from '@langchain/core/documents'
 import { ToolCall } from '@langchain/core/messages/tool'
 import { BaseMessage } from '@langchain/core/messages'
 import { sanitizeLangChain } from '../sanitization'
+import { stringifyError } from '../serializeError'
+import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -100,8 +102,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     tags?: string[],
     _kwargs?: { inputs?: Record<string, unknown> }
   ): void {
-    this._logDebugEvent('on_chain_end', runId, parentRunId, { outputs, tags })
-    this._popRunAndCaptureTraceOrSpan(runId, parentRunId, outputs)
+    this._logAndPopTraceOrSpan('on_chain_end', runId, parentRunId, { outputs, tags }, outputs)
   }
 
   public handleChainError(
@@ -111,8 +112,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     tags?: string[],
     _kwargs?: { inputs?: Record<string, unknown> }
   ): void {
-    this._logDebugEvent('on_chain_error', runId, parentRunId, { error, tags })
-    this._popRunAndCaptureTraceOrSpan(runId, parentRunId, error)
+    this._logAndPopTraceOrSpan('on_chain_error', runId, parentRunId, { error, tags }, error)
   }
 
   public handleChatModelStart(
@@ -154,8 +154,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     tags?: string[],
     _extraParams?: Record<string, unknown>
   ): void {
-    this._logDebugEvent('on_llm_end', runId, parentRunId, { output, tags })
-    this._popRunAndCaptureGeneration(runId, parentRunId, output)
+    this._logAndPopGeneration('on_llm_end', runId, parentRunId, { output, tags }, output)
   }
 
   public handleLLMError(
@@ -165,8 +164,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     tags?: string[],
     _extraParams?: Record<string, unknown>
   ): void {
-    this._logDebugEvent('on_llm_error', runId, parentRunId, { err, tags })
-    this._popRunAndCaptureGeneration(runId, parentRunId, err)
+    this._logAndPopGeneration('on_llm_error', runId, parentRunId, { err, tags }, err)
   }
 
   public handleToolStart(
@@ -178,19 +176,25 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     metadata?: Record<string, unknown>,
     runName?: string
   ): void {
-    this._logDebugEvent('on_tool_start', runId, parentRunId, { input, tags })
-    this._setParentOfRun(runId, parentRunId)
-    this._setTraceOrSpanMetadata(tool, input, runId, parentRunId, metadata, tags, runName)
+    this._logAndSetTraceOrSpan(
+      'on_tool_start',
+      tool,
+      input,
+      runId,
+      parentRunId,
+      { input, tags },
+      tags,
+      metadata,
+      runName
+    )
   }
 
   public handleToolEnd(output: any, runId: string, parentRunId?: string, tags?: string[]): void {
-    this._logDebugEvent('on_tool_end', runId, parentRunId, { output, tags })
-    this._popRunAndCaptureTraceOrSpan(runId, parentRunId, output)
+    this._logAndPopTraceOrSpan('on_tool_end', runId, parentRunId, { output, tags }, output)
   }
 
   public handleToolError(err: Error, runId: string, parentRunId?: string, tags?: string[]): void {
-    this._logDebugEvent('on_tool_error', runId, parentRunId, { err, tags })
-    this._popRunAndCaptureTraceOrSpan(runId, parentRunId, err)
+    this._logAndPopTraceOrSpan('on_tool_error', runId, parentRunId, { err, tags }, err)
   }
 
   public handleRetrieverStart(
@@ -202,9 +206,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     metadata?: Record<string, unknown>,
     name?: string
   ): void {
-    this._logDebugEvent('on_retriever_start', runId, parentRunId, { query, tags })
-    this._setParentOfRun(runId, parentRunId)
-    this._setTraceOrSpanMetadata(retriever, query, runId, parentRunId, metadata, tags, name)
+    this._logAndSetTraceOrSpan(
+      'on_retriever_start',
+      retriever,
+      query,
+      runId,
+      parentRunId,
+      { query, tags },
+      tags,
+      metadata,
+      name
+    )
   }
 
   public handleRetrieverEnd(
@@ -213,13 +225,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     parentRunId?: string,
     tags?: string[]
   ): void {
-    this._logDebugEvent('on_retriever_end', runId, parentRunId, { documents, tags })
-    this._popRunAndCaptureTraceOrSpan(runId, parentRunId, documents)
+    this._logAndPopTraceOrSpan('on_retriever_end', runId, parentRunId, { documents, tags }, documents)
   }
 
   public handleRetrieverError(err: Error, runId: string, parentRunId?: string, tags?: string[]): void {
-    this._logDebugEvent('on_retriever_error', runId, parentRunId, { err, tags })
-    this._popRunAndCaptureTraceOrSpan(runId, parentRunId, err)
+    this._logAndPopTraceOrSpan('on_retriever_error', runId, parentRunId, { err, tags }, err)
   }
 
   public handleAgentAction(action: AgentAction, runId: string, parentRunId?: string, tags?: string[]): void {
@@ -234,6 +244,44 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   }
 
   // ===== PRIVATE HELPERS =====
+
+  private _logAndSetTraceOrSpan(
+    eventName: string,
+    serialized: Serialized,
+    input: any,
+    runId: string,
+    parentRunId: string | undefined,
+    debugPayload: Record<string, unknown>,
+    tags?: string[],
+    metadata?: Record<string, unknown>,
+    runName?: string
+  ): void {
+    this._logDebugEvent(eventName, runId, parentRunId, debugPayload)
+    this._setParentOfRun(runId, parentRunId)
+    this._setTraceOrSpanMetadata(serialized, input, runId, parentRunId, metadata, tags, runName)
+  }
+
+  private _logAndPopTraceOrSpan(
+    eventName: string,
+    runId: string,
+    parentRunId: string | undefined,
+    debugPayload: Record<string, unknown>,
+    result: any
+  ): void {
+    this._logDebugEvent(eventName, runId, parentRunId, debugPayload)
+    this._popRunAndCaptureTraceOrSpan(runId, parentRunId, result)
+  }
+
+  private _logAndPopGeneration(
+    eventName: string,
+    runId: string,
+    parentRunId: string | undefined,
+    debugPayload: Record<string, unknown>,
+    result: LLMResult | Error
+  ): void {
+    this._logDebugEvent(eventName, runId, parentRunId, debugPayload)
+    this._popRunAndCaptureGeneration(runId, parentRunId, result)
+  }
 
   private _setParentOfRun(runId: string, parentRunId?: string): void {
     if (parentRunId) {
@@ -376,7 +424,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
     if (outputs instanceof Error) {
-      eventProperties['$ai_error'] = outputs.toString()
+      eventProperties['$ai_error'] = stringifyError(outputs)
       eventProperties['$ai_is_error'] = true
     } else if (outputs !== undefined) {
       eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, outputs)
@@ -413,6 +461,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     parentRunId?: string
   ): void {
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
+    warnIfPostHogAiGateway(run.baseUrl)
     const eventProperties: Record<string, any> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
@@ -436,7 +485,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
     if (output instanceof Error) {
       eventProperties['$ai_http_status'] = (output as any).status || 500
-      eventProperties['$ai_error'] = output.toString()
+      eventProperties['$ai_error'] = stringifyError(output)
       eventProperties['$ai_is_error'] = true
     } else {
       // Handle token usage
@@ -456,6 +505,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       }
       if (additionalTokenData.webSearchCount !== undefined) {
         eventProperties['$ai_web_search_count'] = additionalTokenData.webSearchCount
+      }
+
+      // Extract stop reason from generation info
+      const stopReason = this._extractStopReason(output)
+      if (stopReason) {
+        eventProperties['$ai_stop_reason'] = stopReason
       }
 
       // Handle generations/completions
@@ -586,6 +641,39 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
     // Sanitize the message content to redact base64 images
     return sanitizeLangChain(messageDict) as Record<string, any>
+  }
+
+  private _extractStopReason(output: LLMResult): string | undefined {
+    if (!output.generations || !Array.isArray(output.generations)) {
+      return undefined
+    }
+    const lastGeneration = output.generations[output.generations.length - 1]
+    if (!Array.isArray(lastGeneration) || lastGeneration.length === 0) {
+      return undefined
+    }
+    const gen = lastGeneration[0]
+
+    // Check generationInfo for finish_reason (OpenAI format)
+    if (gen.generationInfo?.finish_reason) {
+      return String(gen.generationInfo.finish_reason)
+    }
+
+    // Check generationInfo for response_metadata.stop_reason (Anthropic format)
+    if (gen.generationInfo?.response_metadata?.stop_reason) {
+      return String(gen.generationInfo.response_metadata.stop_reason)
+    }
+
+    // Check message response_metadata for finish_reason (common LangChain format)
+    if (gen.generationInfo?.response_metadata?.finish_reason) {
+      return String(gen.generationInfo.response_metadata.finish_reason)
+    }
+
+    // Check for stop_reason directly in generationInfo
+    if (gen.generationInfo?.stop_reason) {
+      return String(gen.generationInfo.stop_reason)
+    }
+
+    return undefined
   }
 
   private _parseUsageModel(usage: any, provider?: string, model?: string): [number, number, Record<string, any>] {

@@ -21,6 +21,7 @@ import {
     getProductTourStylesheet,
     getStepImageUrls,
     hasElementTarget,
+    hasTourWaitPeriodPassed,
     normalizeUrl,
     resolveStepTranslation,
 } from './product-tours-utils'
@@ -32,11 +33,13 @@ import { localStore, sessionStore } from '../../storage'
 import { addEventListener } from '../../utils'
 import { isNull, isUndefined, SurveyMatchType } from '@posthog/core'
 import { propertyComparisons } from '../../utils/property-utils'
+import { getTargetingUrl } from '../../utils/url-targeting-utils'
 import {
     TOUR_SHOWN_KEY_PREFIX,
     TOUR_COMPLETED_KEY_PREFIX,
     TOUR_DISMISSED_KEY_PREFIX,
     ACTIVE_TOUR_SESSION_KEY,
+    LAST_SEEN_TOUR_DATE_KEY_PREFIX,
 } from './constants'
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
 import { TOOLBAR_ID } from '../../constants'
@@ -49,26 +52,43 @@ const logger = createLogger('[Product Tours]')
 const document = _document as Document
 const window = _window as Window & typeof globalThis
 
-// Tour condition checking - reuses the same URL matching logic as surveys
-function doesTourUrlMatch(tour: ProductTour): boolean {
+// cache the last-checked URL to avoid unnecessary repeated checks on every tick
+let _lastUrlMatchHref: string | undefined
+const _urlMatchCache = new Map<string, boolean>() // tour ID : match result
+
+export function doesTourUrlMatch(tour: ProductTour, instance: PostHog): boolean {
     const conditions = tour.conditions
     if (!conditions?.url) {
         return true
     }
 
-    const href = window?.location?.href
+    const href = getTargetingUrl(instance)
     if (!href) {
         return false
     }
 
-    const matchType = conditions.urlMatchType || SurveyMatchType.Icontains
-
-    if (matchType === SurveyMatchType.Exact) {
-        return normalizeUrl(href) === normalizeUrl(conditions.url)
+    if (href !== _lastUrlMatchHref) {
+        _urlMatchCache.clear()
+        _lastUrlMatchHref = href
     }
 
-    const targets = [conditions.url]
-    return propertyComparisons[matchType](targets, [href])
+    const cached = _urlMatchCache.get(tour.id)
+    if (!isUndefined(cached)) {
+        return cached
+    }
+
+    const matchType = conditions.urlMatchType || SurveyMatchType.Icontains
+    let result: boolean
+
+    if (matchType === SurveyMatchType.Exact) {
+        result = normalizeUrl(href) === normalizeUrl(conditions.url)
+    } else {
+        const targets = [conditions.url]
+        result = propertyComparisons[matchType](targets, [href])
+    }
+
+    _urlMatchCache.set(tour.id, result)
+    return result
 }
 
 function isTourInDateRange(tour: ProductTour): boolean {
@@ -91,8 +111,10 @@ function isTourInDateRange(tour: ProductTour): boolean {
     return true
 }
 
-function checkTourConditions(tour: ProductTour): boolean {
-    return isTourInDateRange(tour) && doesTourUrlMatch(tour) && doesDeviceTypeMatch(tour.conditions?.deviceTypes)
+function checkTourConditions(tour: ProductTour, instance: PostHog): boolean {
+    return (
+        isTourInDateRange(tour) && doesTourUrlMatch(tour, instance) && doesDeviceTypeMatch(tour.conditions?.deviceTypes)
+    )
 }
 
 const CONTAINER_CLASS = 'ph-product-tour-container'
@@ -105,7 +127,7 @@ interface TriggerListenerData {
     tour: ProductTour
 }
 
-function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCreated: boolean } {
+function retrieveTourShadow(tour: ProductTour, posthog: PostHog): { shadow: ShadowRoot; isNewlyCreated: boolean } {
     const containerClass = `${CONTAINER_CLASS}-${tour.id}`
     const existingDiv = document.querySelector(`.${containerClass}`)
 
@@ -123,7 +145,7 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
 
     const shadow = div.attachShadow({ mode: 'open' })
 
-    const stylesheet = getProductTourStylesheet()
+    const stylesheet = getProductTourStylesheet(posthog)
     if (stylesheet) {
         shadow.appendChild(stylesheet)
     }
@@ -138,6 +160,7 @@ function retrieveTourShadow(tour: ProductTour): { shadow: ShadowRoot; isNewlyCre
 
 function retrieveBannerShadow(
     tour: ProductTour,
+    posthog: PostHog,
     bannerConfig?: ProductTourBannerConfig
 ): { shadow: ShadowRoot; isNewlyCreated: boolean } | null {
     const containerClass = `${CONTAINER_CLASS}-${tour.id}`
@@ -161,7 +184,7 @@ function retrieveBannerShadow(
 
     const shadow = div.attachShadow({ mode: 'open' })
 
-    const stylesheet = getProductTourStylesheet()
+    const stylesheet = getProductTourStylesheet(posthog)
     if (stylesheet) {
         shadow.appendChild(stylesheet)
     }
@@ -426,7 +449,7 @@ export class ProductTourManager {
     }
 
     private _isTourEligible(tour: ProductTour): boolean {
-        if (!checkTourConditions(tour)) {
+        if (!checkTourConditions(tour, this._instance)) {
             logger.info(`Tour ${tour.id} failed conditions check`)
             return false
         }
@@ -454,6 +477,13 @@ export class ProductTourManager {
             case 'always':
             default:
                 break
+        }
+
+        if (!hasTourWaitPeriodPassed(tour.conditions?.seenTourWaitPeriod)) {
+            logger.info(
+                `Cannot show tour ${tour.id}: user has seen a ${tour.conditions?.seenTourWaitPeriod?.types} tour within the last ${tour.conditions?.seenTourWaitPeriod?.days} days.`
+            )
+            return false
         }
 
         if (!this._isProductToursFeatureFlagEnabled({ flagKey: tour.internal_targeting_flag_key })) {
@@ -490,10 +520,12 @@ export class ProductTourManager {
                 [ProductTourEventProperties.TOUR_NAME]: tour.name,
                 [ProductTourEventProperties.TOUR_ITERATION]: tour.current_iteration || 1,
                 [ProductTourEventProperties.TOUR_RENDER_REASON]: renderReason,
+                [ProductTourEventProperties.TOUR_TYPE]: tour.tour_type,
             })
 
             if (!this._isPreviewMode) {
                 localStore._set(`${TOUR_SHOWN_KEY_PREFIX}${tour.id}`, true)
+                localStore._set(`${LAST_SEEN_TOUR_DATE_KEY_PREFIX}${tour.tour_type}`, new Date().toISOString())
 
                 this._instance.capture('$set', {
                     $set: { [`$product_tour_shown/${tour.id}`]: true },
@@ -813,7 +845,7 @@ export class ProductTourManager {
             return
         }
 
-        const { shadow } = retrieveTourShadow(this._activeTour)
+        const { shadow } = retrieveTourShadow(this._activeTour, this._instance)
 
         render(
             <ProductTourTooltip
@@ -842,7 +874,7 @@ export class ProductTourManager {
             return
         }
 
-        const result = retrieveBannerShadow(this._activeTour, step.bannerConfig)
+        const result = retrieveBannerShadow(this._activeTour, this._instance, step.bannerConfig)
 
         if (!result) {
             this._captureEvent(ProductTourEventName.BANNER_CONTAINER_SELECTOR_FAILED, {
@@ -940,12 +972,12 @@ export class ProductTourManager {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._instance.featureFlags.isFeatureEnabled(flagKey, {
+        const isFeatureEnabled = !!this._instance.featureFlags?.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(PRODUCT_TOUR_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._instance.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = this._instance.featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
@@ -1106,7 +1138,8 @@ export class ProductTourManager {
             if (
                 key?.startsWith(TOUR_SHOWN_KEY_PREFIX) ||
                 key?.startsWith(TOUR_COMPLETED_KEY_PREFIX) ||
-                key?.startsWith(TOUR_DISMISSED_KEY_PREFIX)
+                key?.startsWith(TOUR_DISMISSED_KEY_PREFIX) ||
+                key?.startsWith(LAST_SEEN_TOUR_DATE_KEY_PREFIX)
             ) {
                 keysToRemove.push(key)
             }

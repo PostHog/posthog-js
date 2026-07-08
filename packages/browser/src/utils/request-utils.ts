@@ -2,7 +2,7 @@ import { each } from './'
 
 import { isArray, isFile, isUndefined } from '@posthog/core'
 import { logger } from './logger'
-import { document } from './globals'
+import { document, isBrowserOnline } from './globals'
 
 const localDomains = ['localhost', '127.0.0.1']
 
@@ -41,7 +41,6 @@ export const formDataToQuery = function (formdata: Record<string, any> | FormDat
     return tph_arr.join(arg_separator)
 }
 
-// NOTE: Once we get rid of IE11/op_mini we can start using URLSearchParams
 export const getQueryParam = function (url: string, param: string): string {
     const withoutHash: string = url.split('#')[0] || ''
 
@@ -126,4 +125,31 @@ export const _getHashParam = function (hash: string, param: string): string | nu
 
 export const isLocalhost = (): boolean => {
     return localDomains.includes(location.hostname)
+}
+
+export const isStatusZeroFailureCircuitBreakerTripped = (
+    consecutiveStatusZeroFailures: number,
+    maxConsecutiveStatusZeroFailures: number
+): boolean => {
+    return consecutiveStatusZeroFailures >= maxConsecutiveStatusZeroFailures && isBrowserOnline()
+}
+
+export const updateStatusZeroFailureCount = (
+    statusCode: number,
+    consecutiveStatusZeroFailures: number,
+    maxConsecutiveStatusZeroFailures: number,
+    onCircuitBreakerTripped: () => void
+): number => {
+    if (statusCode === 0) {
+        if (isBrowserOnline()) {
+            const updatedConsecutiveStatusZeroFailures = consecutiveStatusZeroFailures + 1
+            if (updatedConsecutiveStatusZeroFailures === maxConsecutiveStatusZeroFailures) {
+                onCircuitBreakerTripped()
+            }
+            return updatedConsecutiveStatusZeroFailures
+        }
+        return consecutiveStatusZeroFailures
+    }
+
+    return 0
 }

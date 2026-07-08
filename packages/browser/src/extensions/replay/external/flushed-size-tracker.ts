@@ -1,10 +1,18 @@
+import { isNumber, isObject, isString } from '@posthog/core'
+import { SESSION_RECORDING_FLUSHED_SIZE } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
-import { Property } from '../../../types'
 
-const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
+interface FlushedSize {
+    sessionId: string
+    size: number
+}
+
+function isFlushedSize(value: unknown): value is FlushedSize {
+    return isObject(value) && isString((value as FlushedSize).sessionId) && isNumber((value as FlushedSize).size)
+}
 
 export class FlushedSizeTracker {
-    private readonly _getProperty: (property_name: string) => Property | undefined
+    private readonly _getProperty: (property_name: string) => unknown
     private readonly _setProperty: (prop: string, to: any) => void
 
     constructor(posthog: PostHog) {
@@ -16,17 +24,15 @@ export class FlushedSizeTracker {
         this._setProperty = posthog.persistence.set_property.bind(posthog.persistence)
     }
 
-    trackSize(size: number) {
-        const currentFlushed = Number(this._getProperty(SESSION_RECORDING_FLUSHED_SIZE)) || 0
-        const newValue = currentFlushed + size
-        this._setProperty(SESSION_RECORDING_FLUSHED_SIZE, newValue)
+    trackSize(sessionId: string, size: number) {
+        this._setProperty(SESSION_RECORDING_FLUSHED_SIZE, {
+            sessionId,
+            size: this.currentTrackedSize(sessionId) + size,
+        })
     }
 
-    reset() {
-        return this._setProperty(SESSION_RECORDING_FLUSHED_SIZE, 0)
-    }
-
-    get currentTrackedSize(): number {
-        return Number(this._getProperty(SESSION_RECORDING_FLUSHED_SIZE)) || 0
+    currentTrackedSize(sessionId: string): number {
+        const stored = this._getProperty(SESSION_RECORDING_FLUSHED_SIZE)
+        return isFlushedSize(stored) && stored.sessionId === sessionId ? stored.size : 0
     }
 }

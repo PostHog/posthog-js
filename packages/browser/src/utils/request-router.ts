@@ -6,15 +6,17 @@ import { PostHog } from '../posthog-core'
  * on the type of request (events, replays, flags, etc.) and handle overrides that may come from configs or the flags endpoint
  */
 
-export enum RequestRouterRegion {
-    US = 'us',
-    EU = 'eu',
-    CUSTOM = 'custom',
-}
+export const RequestRouterRegion = {
+    US: 'us',
+    EU: 'eu',
+    CUSTOM: 'custom',
+} as const
+export type RequestRouterRegion = (typeof RequestRouterRegion)[keyof typeof RequestRouterRegion]
 
 export type RequestRouterTarget = 'api' | 'ui' | 'assets' | 'flags'
 
 const ingestionDomain = 'i.posthog.com'
+const staticAssetPath = /^\/static\//
 
 export class RequestRouter {
     instance: PostHog
@@ -71,6 +73,20 @@ export class RequestRouter {
         return this._regionCache[this.apiHost]
     }
 
+    private _staticAssetHostOverride(path: string): string | undefined {
+        if (!staticAssetPath.test(path)) {
+            return undefined
+        }
+
+        const override = this.instance.config.asset_host
+        if (typeof override !== 'string') {
+            return undefined
+        }
+
+        const normalizedOverride = override.trim().replace(/\/$/, '')
+        return normalizedOverride || undefined
+    }
+
     endpointFor(target: RequestRouterTarget, path: string = ''): string {
         if (path) {
             path = path[0] === '/' ? path : `/${path}`
@@ -82,6 +98,13 @@ export class RequestRouter {
 
         if (target === 'flags') {
             return this.flagsApiHost + path
+        }
+
+        if (target === 'assets') {
+            const assetHostOverride = this._staticAssetHostOverride(path)
+            if (assetHostOverride) {
+                return `${assetHostOverride}${path}`
+            }
         }
 
         if (this.region === RequestRouterRegion.CUSTOM) {

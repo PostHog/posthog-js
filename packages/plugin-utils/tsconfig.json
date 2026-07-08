@@ -1,0 +1,16 @@
+{
+  "extends": "@posthog-tooling/tsconfig-base",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "dist",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "isolatedModules": true,
+    "composite": false,
+    "declaration": true,
+    "declarationMap": true,
+    "target": "ES2022",
+    "lib": ["ES2022"]
+  },
+  "include": ["src/**/*"]
+}

@@ -1,11 +1,11 @@
 import {
   getFlagValuesFromFlags,
   getPayloadsFromFlags,
-  getFlagDetailsFromFlagsAndPayloads,
   getFeatureFlagValue,
   normalizeFlagsResponse,
+  flagDetailsToResults,
 } from '@/featureFlagUtils'
-import { PostHogFlagsResponse, FeatureFlagDetail } from '@/types'
+import { PostHogFlagsResponse, FeatureFlagDetail, FeatureFlagResult } from '@/types'
 
 describe('featureFlagUtils', () => {
   describe('getFeatureFlagValue', () => {
@@ -162,73 +162,37 @@ describe('featureFlagUtils', () => {
     })
   })
 
-  describe('getFlagDetailsFromFlagsAndPayloads', () => {
-    it('should convert v1 flags and payloads to flag details', () => {
-      const flagsResponse: PostHogFlagsResponse = {
-        featureFlags: {
-          'flag-1': true,
-          'flag-2': 'variant-1',
-          'flag-3': false,
-        },
-        featureFlagPayloads: {
-          'flag-1': { key: 'value1' },
-          'flag-2': { key: 'value2' },
-        },
-        flags: {},
-        errorsWhileComputingFlags: false,
-      }
-
-      const result = getFlagDetailsFromFlagsAndPayloads(flagsResponse)
-
-      expect(result).toEqual({
-        'flag-1': {
-          key: 'flag-1',
-          enabled: true,
-          variant: undefined,
-          reason: undefined,
-          metadata: {
-            id: undefined,
-            version: undefined,
-            payload: '{"key":"value1"}',
-            description: undefined,
-          },
-        },
-        'flag-2': {
-          key: 'flag-2',
-          enabled: true,
-          variant: 'variant-1',
-          reason: undefined,
-          metadata: {
-            id: undefined,
-            version: undefined,
-            payload: '{"key":"value2"}',
-            description: undefined,
-          },
-        },
-        'flag-3': {
-          key: 'flag-3',
-          enabled: false,
-          variant: undefined,
-          reason: undefined,
-          metadata: {
-            id: undefined,
-            version: undefined,
-            payload: undefined,
-            description: undefined,
-          },
-        },
-      })
+  describe('flagDetailsToResults', () => {
+    const detail = (
+      key: string,
+      enabled: boolean,
+      variant: string | undefined,
+      payload: string | undefined
+    ): FeatureFlagDetail => ({
+      key,
+      enabled,
+      variant,
+      reason: undefined,
+      metadata: { id: 1, version: undefined, description: undefined, payload },
     })
 
-    it('should handle empty flags and payloads', () => {
-      const flagsResponse: PostHogFlagsResponse = {
-        featureFlags: {},
-        featureFlagPayloads: {},
-        flags: {},
-        errorsWhileComputingFlags: false,
-      }
-
-      expect(getFlagDetailsFromFlagsAndPayloads(flagsResponse)).toEqual({})
+    it.each<[string, Record<string, FeatureFlagDetail>, FeatureFlagResult[]]>([
+      [
+        'projects details into results and decodes payloads',
+        { bool: detail('bool', true, undefined, '{"color":"blue"}'), variant: detail('variant', true, 'v1', '[5]') },
+        [
+          { key: 'bool', enabled: true, variant: undefined, payload: { color: 'blue' } },
+          { key: 'variant', enabled: true, variant: 'v1', payload: [5] },
+        ],
+      ],
+      [
+        'includes disabled flags as enabled: false with a null payload',
+        { off: detail('off', false, undefined, undefined) },
+        [{ key: 'off', enabled: false, variant: undefined, payload: null }],
+      ],
+      ['returns an empty array for no flags', {}, []],
+    ])('%s', (_name, flags, expected) => {
+      expect(flagDetailsToResults(flags)).toEqual(expected)
     })
   })
 

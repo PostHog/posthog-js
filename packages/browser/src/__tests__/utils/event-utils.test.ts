@@ -1,4 +1,5 @@
 import {
+    getBrowserDetectionHints,
     getBrowserLanguage,
     getBrowserLanguagePrefix,
     getEventProperties,
@@ -6,6 +7,7 @@ import {
     getTimezoneOffset,
 } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
+import { isUndefined } from '@posthog/core'
 
 describe(`event-utils`, () => {
     describe('properties', () => {
@@ -49,10 +51,185 @@ describe(`event-utils`, () => {
             expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=<masked>')
         })
 
+        it.each([
+            ['by default', undefined, 'https://www.example.com/path?gclid=12345#section'],
+            ['when disable_capture_url_hashes is false', false, 'https://www.example.com/path?gclid=12345#section'],
+            ['when disable_capture_url_hashes is true', true, 'https://www.example.com/path?gclid=12345'],
+        ])('should handle hash in current URL %s', (_description, disableCaptureUrlHashes, expectedUrl) => {
+            // @ts-expect-error ok to set global in test
+            globals.location = { href: 'https://www.example.com/path?gclid=12345#section' }
+            const properties = getEventProperties(false, undefined, undefined, disableCaptureUrlHashes)
+            expect(properties['$current_url']).toEqual(expectedUrl)
+        })
+
         it('should have timezone and timezone offset', () => {
             const properties = getEventProperties()
             expect(properties).toHaveProperty('$timezone')
             expect(properties).toHaveProperty('$timezone_offset')
+        })
+    })
+
+    describe('tablet detection via supplementary signals', () => {
+        const androidTabletDesktopUA =
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+        const originalUserAgentData = Object.getOwnPropertyDescriptor(window.navigator, 'userAgentData')
+        const originalMaxTouchPoints = Object.getOwnPropertyDescriptor(window.navigator, 'maxTouchPoints')
+        const originalScreenWidth = Object.getOwnPropertyDescriptor(window.screen, 'width')
+        const originalScreenHeight = Object.getOwnPropertyDescriptor(window.screen, 'height')
+        const originalDevicePixelRatio = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio')
+
+        function mockNavigator(userAgentData: any, maxTouchPoints: number) {
+            Object.defineProperty(window.navigator, 'userAgentData', {
+                value: userAgentData,
+                configurable: true,
+            })
+            Object.defineProperty(window.navigator, 'maxTouchPoints', {
+                value: maxTouchPoints,
+                configurable: true,
+            })
+        }
+
+        function mockScreen(width: number, height: number, devicePixelRatio?: number) {
+            Object.defineProperty(window.screen, 'width', { value: width, configurable: true })
+            Object.defineProperty(window.screen, 'height', { value: height, configurable: true })
+            if (!isUndefined(devicePixelRatio)) {
+                Object.defineProperty(window, 'devicePixelRatio', {
+                    value: devicePixelRatio,
+                    configurable: true,
+                })
+            }
+        }
+
+        beforeEach(() => {
+            // @ts-expect-error ok to set global in test
+            globals['userAgent'] = androidTabletDesktopUA
+        })
+
+        afterEach(() => {
+            if (originalUserAgentData) {
+                Object.defineProperty(window.navigator, 'userAgentData', originalUserAgentData)
+            } else {
+                delete (window.navigator as any).userAgentData
+            }
+            if (originalMaxTouchPoints) {
+                Object.defineProperty(window.navigator, 'maxTouchPoints', originalMaxTouchPoints)
+            }
+            if (originalScreenWidth) {
+                Object.defineProperty(window.screen, 'width', originalScreenWidth)
+            }
+            if (originalScreenHeight) {
+                Object.defineProperty(window.screen, 'height', originalScreenHeight)
+            }
+            if (originalDevicePixelRatio) {
+                Object.defineProperty(window, 'devicePixelRatio', originalDevicePixelRatio)
+            }
+        })
+
+        it('should detect Android tablet when UA reports desktop but Client Hints says Android', () => {
+            mockNavigator({ platform: 'Android' }, 5)
+            mockScreen(1280, 800)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Tablet')
+        })
+
+        it('should detect Android phone when screen short side is under 600px', () => {
+            mockNavigator({ platform: 'Android' }, 5)
+            mockScreen(412, 915)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Mobile')
+        })
+
+        it('should normalize screen size by devicePixelRatio for accurate dp classification', () => {
+            mockNavigator({ platform: 'Android' }, 5)
+            // 1200x800 physical pixels at 2x DPR = 600x400 dp, short side 400dp = phone
+            mockScreen(1200, 800, 2)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Mobile')
+        })
+
+        it('should remain Desktop when Client Hints platform is not Android', () => {
+            mockNavigator({ platform: 'Linux' }, 0)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Desktop')
+        })
+
+        it('should remain Desktop when maxTouchPoints is 0', () => {
+            mockNavigator({ platform: 'Android' }, 0)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Desktop')
+        })
+
+        it('should remain Desktop when userAgentData is unavailable', () => {
+            mockNavigator(undefined, 5)
+
+            const properties = getEventProperties()
+            expect(properties['$device_type']).toBe('Desktop')
+        })
+    })
+
+    describe('getBrowserDetectionHints', () => {
+        const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
+
+        afterEach(() => {
+            if (originalBrave) {
+                Object.defineProperty(window.navigator, 'brave', originalBrave)
+            } else {
+                delete (window.navigator as any).brave
+            }
+        })
+
+        it('returns empty hints when navigator.brave is absent', () => {
+            delete (window.navigator as any).brave
+            expect(getBrowserDetectionHints()).toEqual({})
+        })
+
+        it('flags brave when navigator.brave exists', () => {
+            Object.defineProperty(window.navigator, 'brave', {
+                value: { isBrave: () => Promise.resolve(true) },
+                configurable: true,
+            })
+            expect(getBrowserDetectionHints()).toEqual({ brave: true })
+        })
+    })
+
+    describe('Brave detection end-to-end', () => {
+        const chromeMacOsUA =
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
+
+        beforeEach(() => {
+            // @ts-expect-error ok to set global in test
+            globals['userAgent'] = chromeMacOsUA
+        })
+
+        afterEach(() => {
+            if (originalBrave) {
+                Object.defineProperty(window.navigator, 'brave', originalBrave)
+            } else {
+                delete (window.navigator as any).brave
+            }
+        })
+
+        it('reports $browser as Brave when navigator.brave exists, even on a Chrome UA', () => {
+            Object.defineProperty(window.navigator, 'brave', { value: {}, configurable: true })
+            const properties = getEventProperties()
+            expect(properties['$browser']).toBe('Brave')
+            // Desktop Brave has no UA version marker, so honest null beats a
+            // Chrome version stamped under `Brave`.
+            expect(properties['$browser_version']).toBeNull()
+        })
+
+        it('reports $browser as Chrome when navigator.brave is absent', () => {
+            delete (window.navigator as any).brave
+            const properties = getEventProperties()
+            expect(properties['$browser']).toBe('Chrome')
+            expect(properties['$browser_version']).toBe(120.0)
         })
     })
 

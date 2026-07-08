@@ -411,8 +411,19 @@ describe('PostHog Feature Flags v1', () => {
       it('should reload if groups are set', async () => {
         posthog.group('my-group', 'is-great')
         await waitForPromises()
-        expect(mocks.fetch).toHaveBeenCalledTimes(2)
-        expect(JSON.parse((mocks.fetch.mock.calls[1][1].body as string) || '')).toMatchObject({
+        // 3 calls: 1 for flags reload, 1 for $groupidentify batch, 1 for flags decide
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
+        // The flags reload call contains the group
+        const flagsCall = mocks.fetch.mock.calls.find((call) => {
+          try {
+            const body = JSON.parse((call[1].body as string) || '')
+            return body.groups?.['my-group'] === 'is-great'
+          } catch {
+            return false
+          }
+        })
+        expect(flagsCall).toBeDefined()
+        expect(JSON.parse((flagsCall![1].body as string) || '')).toMatchObject({
           groups: { 'my-group': 'is-great' },
         })
       })
@@ -433,7 +444,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -443,7 +453,7 @@ describe('PostHog Feature Flags v1', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(2)
       })
 
-      it('should capture $feature_flag_called again if new flags', async () => {
+      it('should not capture $feature_flag_called again if reloaded flags keep the same value', async () => {
         expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
         await waitForPromises()
         expect(mocks.fetch).toHaveBeenCalledTimes(2)
@@ -459,7 +469,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -468,23 +477,7 @@ describe('PostHog Feature Flags v1', () => {
         posthog.getFeatureFlag('feature-1')
 
         await waitForPromises()
-        expect(mocks.fetch).toHaveBeenCalledTimes(4)
-
-        expect(parseBody(mocks.fetch.mock.calls[3])).toMatchObject({
-          batch: [
-            {
-              event: '$feature_flag_called',
-              distinct_id: posthog.getDistinctId(),
-              properties: {
-                $feature_flag: 'feature-1',
-                $feature_flag_response: true,
-                '$feature/feature-1': true,
-                $used_bootstrap_value: false,
-              },
-              type: 'capture',
-            },
-          ],
-        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
       })
 
       it('should capture $feature_flag_called when called, but not add all cached flags', async () => {
@@ -503,7 +496,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -546,7 +538,6 @@ describe('PostHog Feature Flags v1', () => {
                 '$feature/json-payload': true,
                 '$feature/feature-variant': 'variant',
               },
-              type: 'capture',
             },
           ],
         })
@@ -714,7 +705,6 @@ describe('PostHog Feature Flags v1', () => {
               $feature_flag_bootstrapped_payload: { some: 'key' },
               $used_bootstrap_value: true,
             },
-            type: 'capture',
           },
         ],
       })
@@ -861,7 +851,6 @@ describe('PostHog Feature Flags v1', () => {
                 $feature_flag_bootstrapped_payload: { color: 'feature-1-bootstrap-color' },
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })

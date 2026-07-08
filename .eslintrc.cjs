@@ -12,6 +12,7 @@ const rules = {
     'no-console': 'error',
     'no-only-tests/no-only-tests': 'error',
     'posthog-js/no-external-replay-imports': 'error',
+    'posthog-js/no-unsafe-web-global': 'off',
     '@typescript-eslint/naming-convention': [
         'error',
         {
@@ -67,8 +68,10 @@ module.exports = {
         {
             files: [
                 'packages/core/**',
+                'packages/mcp/**',
                 'packages/nextjs-config/**',
                 'packages/nuxt/**',
+                'packages/openfeature-web-provider/**',
                 'packages/react-native/**',
                 'packages/node/**',
                 'packages/web/**',
@@ -94,6 +97,38 @@ module.exports = {
                 'compat/compat': 'off',
             },
         },
+        {
+            // @posthog/core is shared by browser and React Native — Web API globals
+            // like Event, ErrorEvent, etc. don't exist in Hermes/JSC and referencing
+            // them as values throws a ReferenceError at runtime.
+            files: ['packages/core/src/**'],
+            excludedFiles: ['**/*.spec.*', '**/*.test.*'],
+            rules: {
+                'posthog-js/no-unsafe-web-global': 'error',
+            },
+        },
+        {
+            files: [
+                'packages/core/src/**',
+                'packages/react-native/src/**',
+                'packages/node/src/**',
+                'packages/web/src/**',
+            ],
+            excludedFiles: ['**/*.spec.*', '**/*.test.*'],
+            rules: {
+                'no-restricted-syntax': [
+                    'error',
+                    {
+                        selector:
+                            "CallExpression[callee.object.name='Promise'][callee.property.name='allSettled']",
+                        message:
+                            'Use `allSettled` from @posthog/core (packages/core/src/utils) instead of Promise.allSettled — Promise.allSettled can be broken by runtime Promise patching on some RN environments.',
+                    },
+                ],
+            },
+        },
     ],
     ignorePatterns: ['node_modules', 'dist', 'next-env.d.ts', '.next', 'packages/browser/playground/hydration/vendor'],
+
+
 }

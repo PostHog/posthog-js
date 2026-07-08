@@ -1,14 +1,21 @@
 name: ES5 support check
 
 on:
-  - pull_request
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ssr:
     name: Build and check ES5/ES6 support
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./.github/actions/setup
         with:

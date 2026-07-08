@@ -1,6 +1,9 @@
 {
     "name": "@posthog/types",
-    "version": "1.354.4",
+    "version": "1.392.1",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
     "description": "Type definitions for the PostHog JavaScript SDK",
     "license": "MIT",
     "main": "dist/index.js",

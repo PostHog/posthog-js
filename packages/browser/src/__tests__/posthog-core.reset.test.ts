@@ -44,6 +44,14 @@ describe('reset()', () => {
         expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
     })
 
+    it('resets the logs extension so buffered logs are dropped', () => {
+        const logsReset = jest.spyOn(instance.logs, 'reset')
+
+        instance.reset()
+
+        expect(logsReset).toHaveBeenCalled()
+    })
+
     it('does not reset the device id', () => {
         const initialDeviceId = instance.get_property('$device_id')
 
@@ -95,6 +103,25 @@ describe('reset()', () => {
         instance.featureFlags.onFeatureFlags(mockCallback)
 
         expect(mockCallback).not.toHaveBeenCalled()
+    })
+
+    it('reloads feature flags for the new anonymous user', async () => {
+        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+
+        instance.reset()
+        await new Promise((resolve) => setTimeout(resolve, 10))
+
+        expect(callFlags).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not reload twice in existing call sites which manually invoke reloadFeatureFlags', async () => {
+        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+
+        instance.reset()
+        instance.reloadFeatureFlags()
+        await new Promise((resolve) => setTimeout(resolve, 10))
+
+        expect(callFlags).toHaveBeenCalledTimes(1)
     })
 
     describe('when calling reset(true)', () => {

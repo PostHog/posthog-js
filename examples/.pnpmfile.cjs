@@ -6,7 +6,11 @@ module.exports = {
             function rewriteLocalDeps(deps) {
                 if (deps) {
                     for (const dep in deps) {
-                        if (['@posthog/cli', 'posthog-react-native-session-replay'].includes(dep)) {
+                        if (
+                            ['@posthog/cli', 'posthog-react-native-plugin', 'posthog-react-native-session-replay'].includes(
+                                dep
+                            )
+                        ) {
                             continue
                         }
                         if (dep.startsWith('posthog') || dep.startsWith('@posthog')) {
@@ -30,7 +34,7 @@ module.exports = {
                 preferFrozenLockfile: false,
                 verifyDepsBeforeRun: true,
                 minimumReleaseAge: 4320,
-                minimumReleaseAgeExclude: ['node-forge@1.3.2', '@posthog/cli'],
+                minimumReleaseAgeExclude: ['node-forge@1.3.2', 'dompurify@3.3.2', '@posthog/cli'],
                 onlyBuiltDependencies: ['@posthog/cli'],
             })
         },

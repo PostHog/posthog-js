@@ -4,6 +4,7 @@ import {
   matchProperty,
   InconclusiveMatchError,
   relativeDateParseForFeatureFlagMatching,
+  parseSemver,
 } from '@/extensions/feature-flags/feature-flags'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, waitForPromises } from './utils'
 
@@ -90,6 +91,155 @@ describe('local evaluation', () => {
     ).toEqual(false)
 
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+  })
+
+  it('locally evaluates person distinct_id conditions without sending it in remote person properties', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Distinct ID Feature',
+          key: 'distinct-id-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'distinct_id', type: 'person', value: 'some-distinct-id', operator: 'exact' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('distinct-id-flag', 'some-distinct-id')).toEqual(true)
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  describe('early exit', () => {
+    // First group's properties match but its rollout (0%) excludes everyone; the second group
+    // would otherwise match. Mirrors the server-side `OutOfRolloutBound` short-circuit.
+    const earlyExitFlag = (earlyExit?: boolean): any => ({
+      flags: [
+        {
+          id: 1,
+          name: 'Early Exit Feature',
+          key: 'early-exit-flag',
+          active: true,
+          filters: {
+            early_exit: earlyExit,
+            groups: [
+              {
+                properties: [{ key: 'region', operator: 'exact', value: ['USA'], type: 'person' }],
+                rollout_percentage: 0,
+              },
+              {
+                properties: [{ key: 'region', operator: 'exact', value: ['USA'], type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    })
+
+    const newPosthog = (): PostHog =>
+      new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+    it.each([
+      ['enabled', true, false],
+      ['not set', undefined, true],
+      ['explicitly disabled', false, true],
+    ])('returns correct result when early_exit is %s', async (_, earlyExit, expected) => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: earlyExitFlag(earlyExit as boolean | undefined) }))
+      posthog = newPosthog()
+
+      expect(
+        await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
+          personProperties: { region: 'USA' },
+        })
+      ).toEqual(expected)
+
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    })
+
+    it('early exits on a rollout-only group with no property filters', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                name: 'Early Exit Feature',
+                key: 'early-exit-flag',
+                active: true,
+                filters: {
+                  early_exit: true,
+                  groups: [{ rollout_percentage: 0 }, { rollout_percentage: 100 }],
+                },
+              },
+            ],
+          },
+        })
+      )
+      posthog = newPosthog()
+
+      expect(await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {})).toEqual(false)
+
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    })
+
+    it('does not early exit when a group fails on a property filter rather than rollout', async () => {
+      // First group fails on its property (region mismatch), not rollout — so even with early_exit
+      // enabled, evaluation must continue to the second group, which matches.
+      const flags: any = {
+        flags: [
+          {
+            id: 1,
+            name: 'Early Exit Feature',
+            key: 'early-exit-flag',
+            active: true,
+            filters: {
+              early_exit: true,
+              groups: [
+                {
+                  properties: [{ key: 'region', operator: 'exact', value: ['Canada'], type: 'person' }],
+                  rollout_percentage: 0,
+                },
+                {
+                  properties: [{ key: 'region', operator: 'exact', value: ['USA'], type: 'person' }],
+                  rollout_percentage: 100,
+                },
+              ],
+            },
+          },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+      posthog = newPosthog()
+
+      expect(
+        await posthog.getFeatureFlag('early-exit-flag', 'some-distinct-id', {
+          personProperties: { region: 'USA' },
+        })
+      ).toEqual(true)
+
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    })
   })
 
   it('evaluates person properties', async () => {
@@ -648,14 +798,13 @@ describe('local evaluation', () => {
       })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2&config=true',
+      'http://example.com/flags/?v=2',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',
           distinct_id: 'some-distinct-id_outside_rollout?',
           groups: {},
           person_properties: {
-            distinct_id: 'some-distinct-id_outside_rollout?',
             region: 'USA',
             email: 'a@b.com',
           },
@@ -672,13 +821,13 @@ describe('local evaluation', () => {
       await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', { personProperties: { doesnt_matter: '1' } })
     ).toEqual('flags-fallback-value')
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://example.com/flags/?v=2&config=true',
+      'http://example.com/flags/?v=2',
       expect.objectContaining({
         body: JSON.stringify({
           token: 'TEST_API_KEY',
           distinct_id: 'some-distinct-id',
           groups: {},
-          person_properties: { distinct_id: 'some-distinct-id', doesnt_matter: '1' },
+          person_properties: { doesnt_matter: '1' },
           group_properties: {},
           geoip_disable: true,
           flag_keys_to_evaluate: ['complex-flag'],
@@ -1634,6 +1783,89 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
+  it("computes 'not in' cohort conditions locally (negated cohort membership)", async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exclude Team',
+          key: 'exclude-team',
+          active: true,
+          rollout_percentage: 100,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, type: 'cohort', operator: 'not_in' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+        {
+          id: 2,
+          name: 'Include Team',
+          key: 'include-team',
+          active: true,
+          rollout_percentage: 100,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, type: 'cohort', operator: 'in' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '98': {
+          type: 'OR',
+          values: [{ key: 'email', operator: 'regex', value: '.*@example\\.com$', type: 'person' }],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: {},
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // In the cohort + `not_in` => excluded => OFF. (Pre-fix this incorrectly returned `true`.)
+    expect(
+      await posthog.getFeatureFlag('exclude-team', 'some-distinct-id', {
+        personProperties: { email: 'team@example.com' },
+      })
+    ).toEqual(false)
+    // Not in the cohort + `not_in` => ON.
+    expect(
+      await posthog.getFeatureFlag('exclude-team', 'some-distinct-id', {
+        personProperties: { email: 'outsider@example.org' },
+      })
+    ).toEqual(true)
+
+    // `in` keeps working: in the cohort => ON, not in the cohort => OFF.
+    expect(
+      await posthog.getFeatureFlag('include-team', 'some-distinct-id', {
+        personProperties: { email: 'team@example.com' },
+      })
+    ).toEqual(true)
+    expect(
+      await posthog.getFeatureFlag('include-team', 'some-distinct-id', {
+        personProperties: { email: 'outsider@example.org' },
+      })
+    ).toEqual(false)
+
+    // All evaluated locally; the /flags (decide) API must not be consulted.
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
   it('gets feature flag with variant overrides', async () => {
     const flags = {
       flags: [
@@ -2456,6 +2688,190 @@ describe('local evaluation', () => {
     // Should NOT have called the /flags API (only /decide for initial load)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
+
+  it('resolves is_not_set locally without forcing inconclusive', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Anonymous only',
+          key: 'only-anon',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'email', operator: 'is_not_set', value: '', type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {},
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Key absent → property is_not_set is true → flag matches.
+    expect(await posthog.getFeatureFlag('only-anon', 'some-distinct-id', { personProperties: {} })).toEqual(true)
+    // Key present → property IS set → flag does not match.
+    expect(
+      await posthog.getFeatureFlag('only-anon', 'some-distinct-id', { personProperties: { email: 'a@b.com' } })
+    ).toEqual(false)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('returns false for an inactive flag even when continuity is enabled', async () => {
+    // Inactive must short-circuit before the continuity check — otherwise a disabled flag with
+    // `ensure_experience_continuity: true` falls through to InconclusiveMatchError and resolves
+    // to undefined instead of the correct `false`.
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Off Continuity',
+          key: 'off-continuity',
+          active: false,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+      cohorts: {},
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('off-continuity', 'some-distinct-id')).toEqual(false)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('returns undefined when a cohort references a flag dependency we cannot evaluate', async () => {
+    // Cohort property groups can contain flag-type properties. When the flag prop carries no
+    // `dependency_chain` (or the dependency is otherwise unresolvable), the evaluator throws
+    // InconclusiveMatchError rather than silently granting cohort membership, and the flag
+    // resolves to undefined.
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Cohort flag dep',
+          key: 'cohort-flag-dep',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 1, type: 'cohort' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '1': {
+          type: 'AND',
+          values: [
+            { key: 'plan', value: 'pro', operator: 'exact', type: 'person' },
+            { key: 'other-flag', value: true, type: 'flag' },
+          ],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
+        personProperties: { plan: 'pro' },
+        onlyEvaluateLocally: true,
+      })
+    ).toBeUndefined()
+  })
+
+  it('resolves a cohort referencing a flag dependency locally when dependency_chain is present', async () => {
+    // When the cohort's flag property carries a valid `dependency_chain`, the cohort path now
+    // evaluates it via `evaluateFlagDependency` instead of marking the group inconclusive. The
+    // dependent flag must be active and locally evaluable; its result feeds the cohort match.
+    const flags = {
+      flags: [
+        {
+          id: 2,
+          name: 'Other flag',
+          key: 'other-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+        {
+          id: 1,
+          name: 'Cohort flag dep',
+          key: 'cohort-flag-dep',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 1, type: 'cohort' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '1': {
+          type: 'AND',
+          values: [
+            { key: 'plan', value: 'pro', operator: 'exact', type: 'person' },
+            { key: 'other-flag', value: true, type: 'flag', dependency_chain: ['other-flag'] },
+          ],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
+        personProperties: { plan: 'pro' },
+        onlyEvaluateLocally: true,
+      })
+    ).toBe(true)
+
+    expect(
+      await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
+        personProperties: { plan: 'free' },
+        onlyEvaluateLocally: true,
+      })
+    ).toBe(false)
+  })
 })
 
 describe('getFeatureFlag', () => {
@@ -2518,13 +2934,10 @@ describe('getFeatureFlag', () => {
     expect(capturedMessage).toMatchObject({
       distinct_id: 'some-distinct-id',
       event: '$feature_flag_called',
-      library: posthog.getLibraryId(),
-      library_version: posthog.getLibraryVersion(),
       properties: {
         '$feature/complex-flag': true,
         $feature_flag: 'complex-flag',
         $feature_flag_response: true,
-        $groups: undefined,
         $lib: posthog.getLibraryId(),
         $lib_version: posthog.getLibraryVersion(),
         locally_evaluated: true,
@@ -2638,7 +3051,8 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'value' })).toBe(true)
     expect(matchProperty(property_a, { key: 'value2' })).toBe(true)
     expect(matchProperty(property_a, { key: '' })).toBe(true)
-    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    // # `is_set` is about key presence — an explicitly-set undefined value still counts.
+    expect(matchProperty(property_a, { key: undefined })).toBe(true)
 
     expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
     expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
@@ -2753,15 +3167,15 @@ describe('match properties', () => {
     const property_e = { key: 'key', value: '30', operator: 'lt' }
     expect(matchProperty(property_e, { key: '29' })).toBe(true)
 
-    // # depending on the type of override, we adjust type comparison
-    expect(matchProperty(property_e, { key: '100' })).toBe(true)
+    // # When both sides parse as numbers, comparison is numeric regardless of override type.
+    expect(matchProperty(property_e, { key: '100' })).toBe(false)
     expect(matchProperty(property_e, { key: 100 })).toBe(false)
 
     const property_f = { key: 'key', value: '123aloha', operator: 'gt' }
     expect(matchProperty(property_f, { key: '123' })).toBe(false)
     expect(matchProperty(property_f, { key: 122 })).toBe(false)
 
-    // # this turns into a string comparison
+    // # `parseFloat('123aloha') === 123`, so 129 > 123 numerically.
     expect(matchProperty(property_f, { key: 129 })).toBe(true)
   })
 
@@ -2879,8 +3293,9 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
     const property_b = { key: 'key', value: 'null', operator: 'is_set' }
-    expect(matchProperty(property_b, { key: null })).toBe(false)
-    expect(matchProperty(property_b, { key: undefined })).toBe(false)
+    // # `is_set` is about key presence, not value — a key explicitly set to null/undefined still counts.
+    expect(matchProperty(property_b, { key: null })).toBe(true)
+    expect(matchProperty(property_b, { key: undefined })).toBe(true)
     expect(matchProperty(property_b, { key: 'null' })).toBe(true)
 
     const property_c = { key: 'key', value: 'undefined', operator: 'icontains' }
@@ -2932,8 +3347,9 @@ describe('match properties', () => {
     expect(matchProperty(property_a, { key: 'nul' })).toBe(true)
 
     const property_b = { key: 'key', value: 'null', operator: 'is_set' }
-    expect(matchProperty(property_b, { key: null })).toBe(false)
-    expect(matchProperty(property_b, { key: undefined })).toBe(false)
+    // # `is_set` is about key presence, not value — a key explicitly set to null/undefined still counts.
+    expect(matchProperty(property_b, { key: null })).toBe(true)
+    expect(matchProperty(property_b, { key: undefined })).toBe(true)
     expect(matchProperty(property_b, { key: 'null' })).toBe(true)
 
     const property_c = { key: 'key', value: 'app.posthog.com', operator: 'icontains' }
@@ -2990,6 +3406,526 @@ describe('match properties', () => {
     expect(() => matchProperty(property_a, { key: 'random' })).toThrow(
       new InconclusiveMatchError('Unknown operator: is_unknown')
     )
+  })
+
+  describe('numeric comparison edge cases', () => {
+    // Pre-fix, `parseFloat` was wrapped in a try/catch (it returns NaN rather than throwing)
+    // and a string override fell into `compare(overrideValue, String(value), operator)` —
+    // a lexicographic comparison. These cases lock in the numeric-when-numeric behavior.
+    it.each([
+      // string override vs numeric value — must compare numerically, not lexicographically.
+      { op: 'gt', value: 9, override: '10', expected: true },
+      { op: 'gt', value: 100, override: '90', expected: false },
+      { op: 'gte', value: 10, override: '10', expected: true },
+      { op: 'lt', value: 9, override: '10', expected: false },
+      { op: 'lte', value: 10, override: '10', expected: true },
+      // number override vs string value
+      { op: 'gt', value: '9', override: 10, expected: true },
+      { op: 'lt', value: '10', override: 9, expected: true },
+      // number-on-number sanity
+      { op: 'gt', value: 5, override: 6, expected: true },
+      { op: 'lt', value: 5, override: 6, expected: false },
+    ])('$op $value vs $override -> $expected', ({ op, value, override, expected }) => {
+      expect(matchProperty({ key: 'k', value, operator: op }, { k: override })).toBe(expected)
+    })
+
+    it('falls back to lexicographic comparison when neither side is numeric', () => {
+      expect(matchProperty({ key: 'k', value: 'b', operator: 'gt' }, { k: 'c' })).toBe(true)
+      expect(matchProperty({ key: 'k', value: 'b', operator: 'lt' }, { k: 'a' })).toBe(true)
+    })
+
+    it('does not leak NaN comparisons when value is a non-numeric string', () => {
+      // Pre-fix: `parseFloat('abc') = NaN`, `NaN != null` was true, comparisons silently returned
+      // false. Now we fall back to lexicographic comparison so the result is meaningful.
+      expect(matchProperty({ key: 'k', value: 'abc', operator: 'gt' }, { k: 'abd' })).toBe(true)
+      expect(matchProperty({ key: 'k', value: 'abc', operator: 'lt' }, { k: 'abb' })).toBe(true)
+    })
+  })
+
+  describe('is_not_set', () => {
+    it('returns true when the property is absent', () => {
+      expect(matchProperty({ key: 'missing', value: 'whatever', operator: 'is_not_set' }, {})).toBe(true)
+    })
+
+    it('returns false when the property is present', () => {
+      expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: 'pro' })).toBe(false)
+    })
+
+    it('treats a null-valued property as still set (returns false)', () => {
+      // `null` counts as present in propertyValues; only genuinely missing keys read as "not set".
+      expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: null })).toBe(false)
+    })
+
+    it('still throws InconclusiveMatchError when key is absent for other operators', () => {
+      expect(() => matchProperty({ key: 'k', value: 'x', operator: 'exact' }, {})).toThrow(InconclusiveMatchError)
+    })
+  })
+
+  describe('is_set with null/undefined values', () => {
+    // Pre-fix, `NULL_VALUES_ALLOWED_OPERATORS = ['is_not']` excluded `is_set`, so the null guard
+    // returned false (and warned) before the switch could reach the `case 'is_set'` branch.
+    // `is_set` is about key presence, not value.
+    it('returns true when the property value is null', () => {
+      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: null })).toBe(true)
+    })
+
+    it('returns true when the property value is undefined but the key is present', () => {
+      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: undefined })).toBe(true)
+    })
+
+    it('returns true for a normal value', () => {
+      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: 'pro' })).toBe(true)
+    })
+
+    it('throws InconclusiveMatchError when the key is absent', () => {
+      // Key not in propertyValues — we cant tell locally whether the server has it.
+      expect(() => matchProperty({ key: 'plan', value: '', operator: 'is_set' }, {})).toThrow(InconclusiveMatchError)
+    })
+  })
+})
+
+describe('semver parsing', () => {
+  it('parses basic semver strings', () => {
+    expect(parseSemver('1.2.3')).toEqual([1, 2, 3])
+    expect(parseSemver('0.0.0')).toEqual([0, 0, 0])
+    expect(parseSemver('10.20.30')).toEqual([10, 20, 30])
+  })
+
+  it('strips v prefix', () => {
+    expect(parseSemver('v1.2.3')).toEqual([1, 2, 3])
+    expect(parseSemver('V1.2.3')).toEqual([1, 2, 3])
+  })
+
+  it('strips leading and trailing whitespace', () => {
+    expect(parseSemver('  1.2.3  ')).toEqual([1, 2, 3])
+    expect(parseSemver('\t1.2.3\n')).toEqual([1, 2, 3])
+  })
+
+  it('strips pre-release and build metadata', () => {
+    expect(parseSemver('1.2.3-alpha')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3-alpha.1')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3+build')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3-alpha+build')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3-rc.1+build.123')).toEqual([1, 2, 3])
+  })
+
+  it('defaults missing components to 0', () => {
+    expect(parseSemver('1.2')).toEqual([1, 2, 0])
+    expect(parseSemver('1')).toEqual([1, 0, 0])
+  })
+
+  it('ignores extra components beyond third', () => {
+    expect(parseSemver('1.2.3.4')).toEqual([1, 2, 3])
+    expect(parseSemver('1.2.3.4.5.6')).toEqual([1, 2, 3])
+  })
+
+  it('rejects leading zeros per semver 2.0.0 §2', () => {
+    expect(() => parseSemver('01.02.03')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1.07.3')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('001.2.3')).toThrow(InconclusiveMatchError)
+    // Literal "0" components remain valid.
+    expect(parseSemver('0.1.0')).toEqual([0, 1, 0])
+    expect(parseSemver('1.0.0')).toEqual([1, 0, 0])
+    expect(parseSemver('0.0.0')).toEqual([0, 0, 0])
+  })
+
+  it('throws on invalid input', () => {
+    expect(() => parseSemver('')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('.1.2')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('abc')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('a.b.c')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1.2.three')).toThrow(InconclusiveMatchError)
+  })
+
+  it('throws on malformed version with trailing non-numeric characters', () => {
+    // parseInt('3alpha', 10) returns 3, but we should reject this
+    expect(() => parseSemver('1.2.3alpha')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1.2alpha.3')).toThrow(InconclusiveMatchError)
+    expect(() => parseSemver('1alpha.2.3')).toThrow(InconclusiveMatchError)
+  })
+})
+
+describe('semver operators', () => {
+  describe('semver_eq', () => {
+    it('matches equal versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '0.0.0', operator: 'semver_eq' }, { version: '0.0.0' })).toBe(true)
+    })
+
+    it('matches with v prefix', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: 'v1.2.3' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: 'v1.2.3', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(true)
+    })
+
+    it('matches with pre-release stripped', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.2.3-alpha' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3-alpha', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
+        true
+      )
+    })
+
+    it('matches partial versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2', operator: 'semver_eq' }, { version: '1.2.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1', operator: 'semver_eq' }, { version: '1.0.0' })).toBe(true)
+    })
+
+    it('does not match different versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.2.4' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.3.3' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '2.2.3' })).toBe(false)
+    })
+  })
+
+  describe('semver_neq', () => {
+    it('matches different versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_neq' }, { version: '1.2.4' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_neq' }, { version: '2.0.0' })).toBe(true)
+    })
+
+    it('does not match equal versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_neq' }, { version: '1.2.3' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_neq' }, { version: 'v1.2.3' })).toBe(
+        false
+      )
+    })
+  })
+
+  describe('semver_gt', () => {
+    it('matches greater versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '1.2.4' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '1.3.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '2.0.0' })).toBe(true)
+    })
+
+    it('does not match equal or lesser versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '1.2.3' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '1.2.2' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: '0.9.9' })).toBe(false)
+    })
+  })
+
+  describe('semver_gte', () => {
+    it('matches greater or equal versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '1.2.3' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '1.2.4' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '2.0.0' })).toBe(true)
+    })
+
+    it('does not match lesser versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '1.2.2' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gte' }, { version: '0.9.9' })).toBe(
+        false
+      )
+    })
+  })
+
+  describe('semver_lt', () => {
+    it('matches lesser versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '1.2.2' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '1.1.9' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '0.9.9' })).toBe(true)
+    })
+
+    it('does not match equal or greater versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '1.2.3' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '1.2.4' })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lt' }, { version: '2.0.0' })).toBe(false)
+    })
+  })
+
+  describe('semver_lte', () => {
+    it('matches lesser or equal versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '1.2.3' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '1.2.2' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '0.9.9' })).toBe(true)
+    })
+
+    it('does not match greater versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '1.2.4' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_lte' }, { version: '2.0.0' })).toBe(
+        false
+      )
+    })
+  })
+
+  describe('semver_tilde', () => {
+    // ~1.2.3 means >=1.2.3 and <1.3.0
+    it('matches versions in tilde range', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.2.3' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.2.4' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.2.99' })).toBe(
+        true
+      )
+    })
+
+    it('does not match versions outside tilde range', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.2.2' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '1.3.0' })).toBe(
+        false
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: '2.0.0' })).toBe(
+        false
+      )
+    })
+
+    it('handles edge cases at boundaries', () => {
+      // Lower bound is inclusive
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_tilde' }, { version: '1.0.0' })).toBe(
+        true
+      )
+      // Upper bound is exclusive
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_tilde' }, { version: '1.1.0' })).toBe(
+        false
+      )
+    })
+  })
+
+  describe('semver_caret', () => {
+    // ^1.2.3 means >=1.2.3 <2.0.0 (major > 0)
+    describe('when major > 0', () => {
+      it('matches versions in caret range', () => {
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.2.3' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.2.4' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.9.9' })).toBe(
+          true
+        )
+        expect(
+          matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.99.99' })
+        ).toBe(true)
+      })
+
+      it('does not match versions outside caret range', () => {
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '1.2.2' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '2.0.0' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: '0.9.9' })).toBe(
+          false
+        )
+      })
+    })
+
+    // ^0.2.3 means >=0.2.3 <0.3.0 (major = 0, minor > 0)
+    describe('when major = 0 and minor > 0', () => {
+      it('matches versions in caret range', () => {
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.2.3' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.2.4' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.2.99' })).toBe(
+          true
+        )
+      })
+
+      it('does not match versions outside caret range', () => {
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.2.2' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '0.3.0' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '0.2.3', operator: 'semver_caret' }, { version: '1.0.0' })).toBe(
+          false
+        )
+      })
+    })
+
+    // ^0.0.3 means >=0.0.3 <0.0.4 (major = 0, minor = 0)
+    describe('when major = 0 and minor = 0', () => {
+      it('matches exact patch version only', () => {
+        expect(matchProperty({ key: 'version', value: '0.0.3', operator: 'semver_caret' }, { version: '0.0.3' })).toBe(
+          true
+        )
+      })
+
+      it('does not match different patch versions', () => {
+        expect(matchProperty({ key: 'version', value: '0.0.3', operator: 'semver_caret' }, { version: '0.0.2' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '0.0.3', operator: 'semver_caret' }, { version: '0.0.4' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '0.0.3', operator: 'semver_caret' }, { version: '0.1.0' })).toBe(
+          false
+        )
+      })
+    })
+  })
+
+  describe('semver_wildcard', () => {
+    // 1.* means >=1.0.0 <2.0.0
+    describe('major wildcard (X.*)', () => {
+      it('matches versions in range', () => {
+        expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '1.0.0' })).toBe(
+          true
+        )
+        expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '1.5.5' })).toBe(
+          true
+        )
+        expect(
+          matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '1.99.99' })
+        ).toBe(true)
+      })
+
+      it('does not match versions outside range', () => {
+        expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '0.9.9' })).toBe(
+          false
+        )
+        expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: '2.0.0' })).toBe(
+          false
+        )
+      })
+    })
+
+    // 1.2.* means >=1.2.0 <1.3.0
+    describe('minor wildcard (X.Y.*)', () => {
+      it('matches versions in range', () => {
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.2.0' })
+        ).toBe(true)
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.2.5' })
+        ).toBe(true)
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.2.99' })
+        ).toBe(true)
+      })
+
+      it('does not match versions outside range', () => {
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.1.9' })
+        ).toBe(false)
+        expect(
+          matchProperty({ key: 'version', value: '1.2.*', operator: 'semver_wildcard' }, { version: '1.3.0' })
+        ).toBe(false)
+      })
+    })
+  })
+
+  describe('error handling', () => {
+    it('throws InconclusiveMatchError for missing property key', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { other_key: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+    })
+
+    it('returns false for null property value', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: null })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_gt' }, { version: null })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_tilde' }, { version: null })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_caret' }, { version: null })).toBe(false)
+      expect(matchProperty({ key: 'version', value: '1.*', operator: 'semver_wildcard' }, { version: null })).toBe(
+        false
+      )
+    })
+
+    it('returns false for undefined property value', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: undefined })).toBe(
+        false
+      )
+    })
+
+    it('throws InconclusiveMatchError for invalid override value', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: 'not-a-version' })
+      ).toThrow(InconclusiveMatchError)
+      expect(() => matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '' })).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
+    it('throws InconclusiveMatchError for invalid flag value', () => {
+      expect(() =>
+        matchProperty({ key: 'version', value: 'not-a-version', operator: 'semver_eq' }, { version: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+    })
+  })
+
+  describe('edge cases', () => {
+    it('handles whitespace in values', () => {
+      expect(matchProperty({ key: 'version', value: '  1.2.3  ', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '  1.2.3  ' })).toBe(
+        true
+      )
+    })
+
+    // Per semver 2.0.0 §2, numeric identifiers MUST NOT include leading zeros.
+    it.each(['01.2.3', '1.02.3', '1.2.03', '1.07.3', '001.2.3'])('rejects leading-zero override value %p', (bad) => {
+      expect(() => matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: bad })).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
+    it.each<[string]>([
+      ['semver_eq'],
+      ['semver_neq'],
+      ['semver_gt'],
+      ['semver_gte'],
+      ['semver_lt'],
+      ['semver_lte'],
+      ['semver_tilde'],
+      ['semver_caret'],
+    ])('rejects leading-zero flag value for %s', (operator) => {
+      expect(() => matchProperty({ key: 'version', value: '1.07.3', operator }, { version: '1.8.0' })).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
+    it.each(['01.*', '1.07.*'])('rejects leading-zero wildcard pattern %p', (pattern) => {
+      expect(() =>
+        matchProperty({ key: 'version', value: pattern, operator: 'semver_wildcard' }, { version: '1.2.3' })
+      ).toThrow(InconclusiveMatchError)
+    })
+
+    it('still accepts literal zero components', () => {
+      expect(matchProperty({ key: 'version', value: '0.1.0', operator: 'semver_eq' }, { version: '0.1.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_eq' }, { version: '1.0.0' })).toBe(true)
+      expect(matchProperty({ key: 'version', value: '0.0.0', operator: 'semver_eq' }, { version: '0.0.0' })).toBe(true)
+    })
+
+    it('handles 4-part versions', () => {
+      expect(matchProperty({ key: 'version', value: '1.2.3.4', operator: 'semver_eq' }, { version: '1.2.3' })).toBe(
+        true
+      )
+      expect(matchProperty({ key: 'version', value: '1.2.3', operator: 'semver_eq' }, { version: '1.2.3.4' })).toBe(
+        true
+      )
+    })
+
+    it('handles numeric property values', () => {
+      // Numbers get converted to strings
+      expect(matchProperty({ key: 'version', value: '1.0.0', operator: 'semver_eq' }, { version: 1 })).toBe(true)
+    })
+
+    it('pre-release suffixes are stripped on both sides', () => {
+      expect(
+        matchProperty({ key: 'version', value: '1.2.3-beta.1', operator: 'semver_eq' }, { version: '1.2.3-alpha.2' })
+      ).toBe(true)
+    })
   })
 })
 
@@ -5245,7 +6181,9 @@ describe('ETag support for local evaluation polling', () => {
   jest.useFakeTimers()
 
   afterEach(async () => {
+    jest.useRealTimers()
     await posthog.shutdown()
+    jest.useFakeTimers()
   })
 
   it('stores ETag from response and sends it on subsequent requests', async () => {
@@ -5276,15 +6214,14 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial load
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call should not have If-None-Match header
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Trigger a reload
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // Second call should have If-None-Match header with the ETag
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"abc123"')
@@ -5342,26 +6279,23 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial load
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call should not have If-None-Match header
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
-    // Verify flags were loaded
-    const flag1 = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag1).toBe(true)
+    // Verify flags were loaded locally
+    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
 
     // Trigger a reload (should get 304)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // Verify the request that triggered 304 included the If-None-Match header
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"test-etag"')
 
-    // Verify flags are still available after 304
-    const flag2 = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag2).toBe(true)
+    // Verify flags are still available locally after 304
+    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
 
     // Verify fetch was called twice
     expect(mockFetch).toHaveBeenCalledTimes(2)
@@ -5399,19 +6333,18 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call - no ETag
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Second call
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
 
     // Third call
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
   })
 
@@ -5448,16 +6381,15 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // Second call should have the ETag from first response
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"initial-etag"')
 
     // Third call should not have ETag (server stopped sending it)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBeUndefined()
   })
 
@@ -5509,19 +6441,17 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // Multiple 304 responses should not cause any issues
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     expect(mockFetch).toHaveBeenCalledTimes(3)
 
-    // Flags should still work
-    const flag = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag).toBe(true)
+    // Flags should still work locally
+    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
   })
 
   it('updates ETag when server sends new ETag with 304 response', async () => {
@@ -5575,19 +6505,18 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call has no ETag
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Second call uses initial ETag
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
 
     // Third call should use the updated ETag from the 304 response
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
   })
 })
@@ -5598,7 +6527,9 @@ describe('error handling and backoff', () => {
   jest.useFakeTimers()
 
   afterEach(async () => {
-    await posthog.shutdown()
+    jest.useRealTimers()
+    await posthog.shutdown(100).catch(() => undefined)
+    jest.useFakeTimers()
   })
 
   /**
@@ -5608,7 +6539,7 @@ describe('error handling and backoff', () => {
   function createMockFetch(statusCode: number, onFlagFetch?: () => void): jest.Mock & { callCount: number } {
     let callCount = 0
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         callCount++
         onFlagFetch?.()
         return Promise.resolve({
@@ -5647,16 +6578,13 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-3')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-3', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
@@ -5672,14 +6600,12 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
@@ -5695,14 +6621,12 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
@@ -5718,7 +6642,7 @@ describe('error handling and backoff', () => {
     Date.now = () => mockTime
 
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         // Always return 401 to keep triggering backoff
         return Promise.resolve({
@@ -5745,12 +6669,11 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial fetch with a short delay
-    await new Promise((r) => setTimeout(r, 50))
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1)
 
     // On-demand fetch should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(1)
 
     // Advance mock time past the exponential backoff period
@@ -5758,7 +6681,7 @@ describe('error handling and backoff', () => {
     mockTime += 2001
 
     // Now on-demand fetch should be allowed (backoff expired based on Date.now())
-    await posthog.getFeatureFlag('test-flag', 'user-2')
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     // fetchCallCount should be 2 (on-demand fetch was allowed after backoff expired)
     expect(fetchCallCount).toBe(2)
@@ -5779,7 +6702,7 @@ describe('error handling and backoff', () => {
     Date.now = () => mockTime
 
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         return Promise.resolve({
           status: 401,
@@ -5799,32 +6722,32 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await new Promise((r) => setTimeout(r, 50))
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1) // Initial fetch, backoff = 2s
 
     // Advance past 2s backoff, trigger second error
     mockTime += 2001
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // backoff now = 4s
 
     // 2s is NOT enough anymore
     mockTime += 2001
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // Still blocked
 
     // 4s total is enough
     mockTime += 2000
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(3) // backoff now = 8s
 
     // 4s is NOT enough anymore
     mockTime += 4001
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(3) // Still blocked
 
     // 8s total is enough
     mockTime += 4000
-    await posthog.getFeatureFlag('test', 'user')
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(4) // Exponential backoff verified!
 
     Date.now = originalDateNow
@@ -5834,7 +6757,7 @@ describe('error handling and backoff', () => {
   it('should clear backoff after successful response', async () => {
     let fetchCallCount = 0
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         if (fetchCallCount === 1) {
           // First fetch: return 401 to trigger backoff
@@ -5877,17 +6800,15 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1) // Initial 401
 
     // Use reloadFeatureFlags to trigger a retry (uses forceReload=true, bypasses backoff)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCallCount).toBe(2) // Retry succeeded with 200
 
     // Now on-demand fetch should work immediately (backoff cleared by 200 response)
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
 
     // The getFeatureFlag call should not trigger another fetch because
     // loadedSuccessfullyOnce is now true (flags loaded successfully)
@@ -5898,7 +6819,7 @@ describe('error handling and backoff', () => {
   it('should allow reloadFeatureFlags() to bypass backoff', async () => {
     let fetchCallCount = 0
     const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('api/feature_flag/local_evaluation')) {
+      if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         // Always return 401 to keep backoff active
         return Promise.resolve({
@@ -5925,24 +6846,21 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1) // Initial fetch
 
     // On-demand fetch should be blocked
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(1) // Still blocked
 
     // reloadFeatureFlags uses forceReload=true internally, should bypass backoff
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // reloadFeatureFlags should have bypassed backoff and made a new fetch
     expect(fetchCallCount).toBe(2)
 
     // On-demand fetch should still be blocked (new backoff started after 401)
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // Still blocked
   })
 })
@@ -6200,5 +7118,250 @@ describe('strictLocalEvaluation option', () => {
     // Should have made a /flags call since we explicitly set onlyEvaluateLocally: false
     expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
     expect(result).toBe(true)
+  })
+
+  it('includes local evaluation timestamps functionality', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 42,
+          name: 'Simple Flag',
+          key: 'simple-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Wait for flags to load
+    await jest.runOnlyPendingTimersAsync()
+
+    // Verify flag definitions loaded timestamp is available
+    const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
+    expect(flagDefinitionsLoadedAt).toBeDefined()
+    expect(typeof flagDefinitionsLoadedAt).toBe('number')
+    expect(flagDefinitionsLoadedAt).toBeGreaterThan(0)
+
+    // Test that locally evaluated flags include evaluation timestamps
+    const capturedEvents: any[] = []
+    posthog.capture = jest.fn().mockImplementation((event) => {
+      capturedEvents.push(event)
+    })
+
+    // Call getFeatureFlag which should trigger local evaluation and send a $feature_flag_called event
+    const beforeCall = Date.now()
+    const result = await posthog.getFeatureFlag('simple-flag', 'user-123')
+    const afterCall = Date.now()
+
+    expect(result).toBe(true)
+    expect(capturedEvents).toHaveLength(1)
+
+    const event = capturedEvents[0]
+    expect(event.event).toBe('$feature_flag_called')
+    expect(event.properties.locally_evaluated).toBe(true)
+    expect(event.properties.$feature_flag_definitions_loaded_at).toBe(flagDefinitionsLoadedAt)
+    expect(event.properties.$feature_flag_evaluated_at).toBeGreaterThanOrEqual(beforeCall)
+    expect(event.properties.$feature_flag_evaluated_at).toBeLessThanOrEqual(afterCall)
+  })
+
+  it('tracks flag definitions loaded timestamp', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Test Flag',
+          key: 'test-flag',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      sendFeatureFlagEvent: true, // Explicitly enable feature flag events
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Wait for flags to load
+    await jest.runOnlyPendingTimersAsync()
+
+    // Check that flag definitions loaded timestamp is available
+    const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
+    expect(flagDefinitionsLoadedAt).toBeDefined()
+    expect(typeof flagDefinitionsLoadedAt).toBe('number')
+    expect(flagDefinitionsLoadedAt).toBeGreaterThan(0)
+  })
+})
+
+describe('mixed targeting local evaluation', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  const mixedFlag = {
+    id: 1,
+    name: 'Mixed Flag',
+    key: 'mixed-flag',
+    active: true,
+    filters: {
+      aggregation_group_type_index: null,
+      groups: [
+        {
+          aggregation_group_type_index: 0,
+          properties: [{ key: 'plan', operator: 'exact', value: ['enterprise'], type: 'group', group_type_index: 0 }],
+          rollout_percentage: 100,
+        },
+        {
+          aggregation_group_type_index: null,
+          properties: [{ key: 'email', operator: 'exact', value: ['test@example.com'], type: 'person' }],
+          rollout_percentage: 100,
+        },
+      ],
+    },
+  }
+
+  const mixedFlagLocalResponse = {
+    flags: [mixedFlag],
+    group_type_mapping: { '0': 'company' },
+  }
+
+  const onlyGroupFlag = {
+    ...mixedFlag,
+    key: 'only-group-flag',
+    filters: {
+      aggregation_group_type_index: null,
+      groups: [
+        {
+          aggregation_group_type_index: 0,
+          properties: [{ key: 'plan', operator: 'exact', value: ['enterprise'], type: 'group', group_type_index: 0 }],
+          rollout_percentage: 100,
+        },
+      ],
+    },
+  }
+
+  it.each([
+    {
+      name: 'person condition matches when no groups passed',
+      flagKey: 'mixed-flag',
+      distinctId: 'user-1',
+      options: { personProperties: { email: 'test@example.com' } },
+      expected: true,
+    },
+    {
+      name: 'group condition matches when group props match',
+      flagKey: 'mixed-flag',
+      distinctId: 'user-2',
+      options: {
+        groups: { company: 'acme' },
+        groupProperties: { company: { plan: 'enterprise' } },
+        personProperties: { email: 'nope@example.com' },
+      },
+      expected: true,
+    },
+    {
+      name: 'no match when both person and group fail',
+      flagKey: 'mixed-flag',
+      distinctId: 'user-3',
+      options: {
+        groups: { company: 'acme' },
+        groupProperties: { company: { plan: 'free' } },
+        personProperties: { email: 'nope@example.com' },
+      },
+      expected: false,
+    },
+    {
+      name: 'only group conditions, no groups passed: returns false without /flags fallback',
+      flagKey: 'only-group-flag',
+      distinctId: 'user-1',
+      options: {},
+      expected: false,
+      localFlags: { flags: [onlyGroupFlag], group_type_mapping: { '0': 'company' } },
+      decideFlags: { 'only-group-flag': 'server-fallback' },
+    },
+  ])('$name', async ({ flagKey, distinctId, options, expected, localFlags, decideFlags }) => {
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: localFlags ?? mixedFlagLocalResponse,
+        decideFlags,
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag(flagKey, distinctId, options)).toEqual(expected)
+    // No fallback to /flags — mixed targeting must resolve locally.
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  it('rollout uses group bucketing for group conditions and distinct_id for person conditions', async () => {
+    // A group condition with low rollout on one group key and high rollout on a person condition.
+    // The group condition should hash on the group key, not the distinct_id.
+    const flag = {
+      id: 1,
+      name: 'Rollout Flag',
+      key: 'rollout-flag',
+      active: true,
+      filters: {
+        aggregation_group_type_index: null,
+        groups: [
+          {
+            aggregation_group_type_index: 0,
+            properties: [],
+            rollout_percentage: 100,
+          },
+        ],
+      },
+    }
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: { flags: [flag], group_type_mapping: { '0': 'company' } },
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // With rollout 100%, matches deterministically regardless of hashing — but calling with the group
+    // passed should resolve locally, proving the group bucketing path is taken.
+    expect(
+      await posthog.getFeatureFlag('rollout-flag', 'any-distinct-id', {
+        groups: { company: 'acme' },
+        groupProperties: { company: {} },
+      })
+    ).toEqual(true)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 })

@@ -104,6 +104,37 @@ describe('feature flag hooks', () => {
     })
 
     it.each([
+        ['enabled_flag', true],
+        ['disabled_flag', false],
+        ['multivariate_flag', true],
+    ])('should report bootstrap feature flag %s active status as %s', (flag, expected) => {
+        const client = {
+            onFeatureFlags: () => () => {},
+            config: {
+                bootstrap: {
+                    featureFlags: {
+                        enabled_flag: true,
+                        disabled_flag: false,
+                        multivariate_flag: 'variant-a',
+                    },
+                },
+            },
+            featureFlags: {
+                getFlags: () => [],
+                hasLoadedFlags: false,
+            } as unknown as PostHog['featureFlags'],
+        } as unknown as PostHog
+
+        // eslint-disable-next-line react/display-name
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+            <PostHogProvider client={client}>{children}</PostHogProvider>
+        )
+
+        const { result } = renderHook(() => useActiveFeatureFlags(), { wrapper })
+        expect(result.current.includes(flag)).toBe(expected)
+    })
+
+    it.each([
         ['example_feature_true', true],
         ['example_feature_false', false],
         ['missing', undefined],
@@ -113,6 +144,67 @@ describe('feature flag hooks', () => {
             wrapper: renderProvider,
         })
         expect(result.current).toEqual(expected)
+    })
+
+    describe('useFeatureFlagEnabled defaultValue', () => {
+        // A client whose flags have loaded but where isFeatureEnabled returns undefined,
+        // i.e. the flag is absent from the payload. The default beforeEach mock coerces
+        // every result with `!!`, so it can never produce the undefined we need here.
+        function renderWithUnknownFlag() {
+            const client = {
+                isFeatureEnabled: () => undefined,
+                onFeatureFlags: () => () => {},
+                featureFlags: {
+                    hasLoadedFlags: true,
+                } as unknown as PostHog['featureFlags'],
+            } as unknown as PostHog
+
+            // eslint-disable-next-line react/display-name
+            return ({ children }: { children: React.ReactNode }) => (
+                <PostHogProvider client={client}>{children}</PostHogProvider>
+            )
+        }
+
+        it.each([
+            [false as boolean | undefined, false],
+            [true as boolean | undefined, true],
+            [undefined, undefined],
+        ])('returns %s for an unknown flag when defaultValue is %s', (defaultValue, expected) => {
+            const { result } = renderHook(() => useFeatureFlagEnabled('missing', defaultValue as boolean), {
+                wrapper: renderWithUnknownFlag(),
+            })
+            expect(result.current).toBe(expected)
+        })
+
+        it('prefers the real flag value over the default', () => {
+            const { result } = renderHook(() => useFeatureFlagEnabled('example_feature_false', true), {
+                wrapper: renderProvider,
+            })
+            expect(result.current).toBe(false)
+        })
+
+        it('applies the default in the bootstrap branch when the flag is absent', () => {
+            const client = {
+                isFeatureEnabled: () => undefined,
+                onFeatureFlags: () => () => {},
+                config: {
+                    bootstrap: {
+                        featureFlags: { other_flag: true },
+                    },
+                },
+                featureFlags: {
+                    hasLoadedFlags: false,
+                } as unknown as PostHog['featureFlags'],
+            } as unknown as PostHog
+
+            // eslint-disable-next-line react/display-name
+            const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+                <PostHogProvider client={client}>{children}</PostHogProvider>
+            )
+
+            const { result } = renderHook(() => useFeatureFlagEnabled('my_flag', false), { wrapper })
+            expect(result.current).toBe(false)
+        })
     })
 
     describe('useFeatureFlagResult', () => {

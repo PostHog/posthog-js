@@ -8,6 +8,11 @@
  * @module
  */
 
+import type * as aiSdk_manualCapture from "../aiSdk/manualCapture.js";
+import type * as aiSdk_openTelemetry from "../aiSdk/openTelemetry.js";
+import type * as convexAgent_manualCapture from "../convexAgent/manualCapture.js";
+import type * as convexAgent_openTelemetry from "../convexAgent/openTelemetry.js";
+import type * as crons from "../crons.js";
 import type * as example from "../example.js";
 import type * as posthog from "../posthog.js";
 
@@ -18,6 +23,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "aiSdk/manualCapture": typeof aiSdk_manualCapture;
+  "aiSdk/openTelemetry": typeof aiSdk_openTelemetry;
+  "convexAgent/manualCapture": typeof convexAgent_manualCapture;
+  "convexAgent/openTelemetry": typeof convexAgent_openTelemetry;
+  crons: typeof crons;
   example: typeof example;
   posthog: typeof posthog;
 }>;
@@ -49,172 +59,6 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  posthog: {
-    lib: {
-      alias: FunctionReference<
-        "action",
-        "internal",
-        {
-          alias: string;
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          host: string;
-        },
-        any
-      >;
-      capture: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          event: string;
-          groups?: any;
-          host: string;
-          properties?: any;
-          sendFeatureFlags?: boolean;
-          timestamp?: number;
-          uuid?: string;
-        },
-        any
-      >;
-      captureException: FunctionReference<
-        "action",
-        "internal",
-        {
-          additionalProperties?: any;
-          apiKey: string;
-          distinctId?: string;
-          errorMessage: string;
-          errorName?: string;
-          errorStack?: string;
-          host: string;
-        },
-        any
-      >;
-      getAllFlags: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          flagKeys?: Array<string>;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          personProperties?: any;
-        },
-        any
-      >;
-      getAllFlagsAndPayloads: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          flagKeys?: Array<string>;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          personProperties?: any;
-        },
-        any
-      >;
-      getFeatureFlag: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          key: string;
-          personProperties?: any;
-          sendFeatureFlagEvents?: boolean;
-        },
-        any
-      >;
-      getFeatureFlagPayload: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          key: string;
-          matchValue?: string | boolean;
-          personProperties?: any;
-          sendFeatureFlagEvents?: boolean;
-        },
-        any
-      >;
-      getFeatureFlagResult: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          key: string;
-          personProperties?: any;
-          sendFeatureFlagEvents?: boolean;
-        },
-        any
-      >;
-      groupIdentify: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId?: string;
-          groupKey: string;
-          groupType: string;
-          host: string;
-          properties?: any;
-        },
-        any
-      >;
-      identify: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          host: string;
-          properties?: any;
-        },
-        any
-      >;
-      isFeatureEnabled: FunctionReference<
-        "action",
-        "internal",
-        {
-          apiKey: string;
-          disableGeoip?: boolean;
-          distinctId: string;
-          groupProperties?: any;
-          groups?: any;
-          host: string;
-          key: string;
-          personProperties?: any;
-          sendFeatureFlagEvents?: boolean;
-        },
-        any
-      >;
-    };
-  };
+  posthog: import("@posthog/convex/_generated/component.js").ComponentApi<"posthog">;
+  agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
 };

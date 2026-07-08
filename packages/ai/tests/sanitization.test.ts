@@ -25,11 +25,14 @@ const sanitize = (data: unknown, provider: string): unknown => {
 describe('Base64 image redaction', () => {
   const sampleBase64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
   const sampleBase64Png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA...'
+  const sampleBase64Video = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...'
+  // Long enough (>= STRONG_CONTEXT_MIN_LENGTH) for the redactor to trip on raw base64 with context.
+  const longBase64Body = 'iVBORw0KGgoAAAANSUhEUgAAAAUA' + 'A'.repeat(50)
 
   describe('redactBase64DataUrl', () => {
     it('should redact base64 data URLs', () => {
-      expect(redactBase64DataUrl(sampleBase64Image)).toBe('[base64 image redacted]')
-      expect(redactBase64DataUrl(sampleBase64Png)).toBe('[base64 image redacted]')
+      expect(redactBase64DataUrl(sampleBase64Image)).toBe('[base64 image/jpeg redacted]')
+      expect(redactBase64DataUrl(sampleBase64Png)).toBe('[base64 image/png redacted]')
     })
 
     it('should preserve regular URLs', () => {
@@ -44,19 +47,20 @@ describe('Base64 image redaction', () => {
     })
 
     it('should handle raw base64 edge cases', () => {
-      // Exactly 20 characters - should not be redacted (at boundary)
-      const exactly20Chars = 'A'.repeat(20)
-      expect(redactBase64DataUrl(exactly20Chars)).toBe(exactly20Chars)
+      // Just under the weak-context threshold (1024) — preserved.
+      const justUnderThreshold = 'A'.repeat(1023)
+      expect(redactBase64DataUrl(justUnderThreshold)).toBe(justUnderThreshold)
 
-      // 21 characters of valid base64 - should be redacted
-      const twentyOneChars = 'A'.repeat(21)
-      expect(redactBase64DataUrl(twentyOneChars)).toBe('[base64 image redacted]')
+      // At/above the threshold — redacted. No surrounding context so the placeholder
+      // is the generic '[base64 redacted]' (the redactor cannot infer a media type).
+      const aboveThreshold = 'A'.repeat(1024)
+      expect(redactBase64DataUrl(aboveThreshold)).toBe('[base64 redacted]')
 
-      // Raw base64 with padding - longer than 20 chars
-      const rawBase64WithPadding = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUl=='
-      expect(redactBase64DataUrl(rawBase64WithPadding)).toBe('[base64 image redacted]')
+      // Raw base64 with padding above the threshold.
+      const rawBase64WithPadding = 'A'.repeat(2000) + '=='
+      expect(redactBase64DataUrl(rawBase64WithPadding)).toBe('[base64 redacted]')
 
-      // Short base64-like string - should not be redacted (under 20 chars)
+      // Short base64-like string — preserved.
       const shortBase64 = 'SGVsbG8='
       expect(redactBase64DataUrl(shortBase64)).toBe(shortBase64)
 
@@ -126,7 +130,7 @@ describe('Base64 image redaction', () => {
         type: 'text',
         text: 'What is in this image?',
       })
-      expect(result[0].content[1].image_url.url).toBe('[base64 image redacted]')
+      expect(result[0].content[1].image_url.url).toBe('[base64 image/jpeg redacted]')
       expect(result[0].content[1].image_url.detail).toBe('high')
     })
 
@@ -147,6 +151,48 @@ describe('Base64 image redaction', () => {
 
       const result = sanitize(input, 'openai-chat-completions') as any
       expect(result[0].content[0].image_url.url).toBe('https://example.com/image.jpg')
+    })
+
+    it('should redact base64 videos in OpenAI message format', () => {
+      const input = [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Describe this video',
+            },
+            {
+              type: 'video_url',
+              video_url: {
+                url: sampleBase64Video,
+              },
+            },
+          ],
+        },
+      ]
+
+      const result = sanitize(input, 'openai-chat-completions') as any
+      expect(result[0].content[1].video_url.url).toBe('[base64 video/mp4 redacted]')
+    })
+
+    it('should preserve regular video URLs in OpenAI format', () => {
+      const input = [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'video_url',
+              video_url: {
+                url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+              },
+            },
+          ],
+        },
+      ]
+
+      const result = sanitize(input, 'openai-chat-completions') as any
+      expect(result[0].content[0].video_url.url).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
     })
 
     it('should handle messages without content arrays', () => {
@@ -181,7 +227,7 @@ describe('Base64 image redaction', () => {
       }
 
       const result = sanitize(input, 'openai-chat-completions') as any
-      expect(result.content[0].image_url.url).toBe('[base64 image redacted]')
+      expect(result.content[0].image_url.url).toBe('[base64 image/jpeg redacted]')
     })
 
     it('should handle content as single object with image_url', () => {
@@ -196,7 +242,7 @@ describe('Base64 image redaction', () => {
       }
 
       const result = sanitize(input, 'openai-chat-completions') as any
-      expect(result.content.image_url.url).toBe('[base64 image redacted]')
+      expect(result.content.image_url.url).toBe('[base64 image/jpeg redacted]')
     })
 
     it('should not affect single object content without image_url type', () => {
@@ -228,7 +274,7 @@ describe('Base64 image redaction', () => {
         },
       ]
       const arrayResult = sanitize(arrayInput, 'openai-response') as any
-      expect(arrayResult[0].content[0].image_url).toBe('[base64 image redacted]')
+      expect(arrayResult[0].content[0].image_url).toBe('[base64 image/png redacted]')
 
       // Test single message object
       const singleInput = {
@@ -241,7 +287,7 @@ describe('Base64 image redaction', () => {
         ],
       }
       const singleResult = sanitize(singleInput, 'openai-response') as any
-      expect(singleResult.content[0].image_url).toBe('[base64 image redacted]')
+      expect(singleResult.content[0].image_url).toBe('[base64 image/jpeg redacted]')
     })
 
     it('should handle content as single object with input_image', () => {
@@ -254,7 +300,7 @@ describe('Base64 image redaction', () => {
       }
 
       const result = sanitize(input, 'openai-response') as any
-      expect(result.content.image_url).toBe('[base64 image redacted]')
+      expect(result.content.image_url).toBe('[base64 image/jpeg redacted]')
     })
   })
 
@@ -273,7 +319,7 @@ describe('Base64 image redaction', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/jpeg',
-                data: 'iVBORw0KGgoAAAANSUhEUgAAAAUA...',
+                data: longBase64Body,
               },
             },
           ],
@@ -286,7 +332,7 @@ describe('Base64 image redaction', () => {
         type: 'text',
         text: 'Describe this image',
       })
-      expect(result[0].content[1].source.data).toBe('[base64 image redacted]')
+      expect(result[0].content[1].source.data).toBe('[base64 image/jpeg redacted]')
       expect(result[0].content[1].source.type).toBe('base64')
       expect(result[0].content[1].source.media_type).toBe('image/jpeg')
     })
@@ -318,14 +364,14 @@ describe('Base64 image redaction', () => {
             source: {
               type: 'base64',
               media_type: 'image/png',
-              data: 'iVBORw0KGgoAAAANSUhEUgAAAAUA...',
+              data: longBase64Body,
             },
           },
         ],
       }
 
       const result = sanitize(input, 'anthropic') as any
-      expect(result.content[0].source.data).toBe('[base64 image redacted]')
+      expect(result.content[0].source.data).toBe('[base64 image/png redacted]')
     })
 
     it('should handle content as single object with image', () => {
@@ -336,13 +382,13 @@ describe('Base64 image redaction', () => {
           source: {
             type: 'base64',
             media_type: 'image/jpeg',
-            data: 'base64data',
+            data: longBase64Body,
           },
         },
       }
 
       const result = sanitize(input, 'anthropic') as any
-      expect(result.content.source.data).toBe('[base64 image redacted]')
+      expect(result.content.source.data).toBe('[base64 image/jpeg redacted]')
     })
   })
 
@@ -357,7 +403,7 @@ describe('Base64 image redaction', () => {
             {
               inlineData: {
                 mimeType: 'image/jpeg',
-                data: '/9j/4AAQSkZJRgABAQAAAQ...',
+                data: longBase64Body,
               },
             },
           ],
@@ -372,7 +418,7 @@ describe('Base64 image redaction', () => {
       expect(result[0].parts[1]).toEqual({
         inlineData: {
           mimeType: 'image/jpeg',
-          data: '[base64 image redacted]',
+          data: '[base64 image/jpeg redacted]',
         },
       })
     })
@@ -400,14 +446,14 @@ describe('Base64 image redaction', () => {
           {
             inlineData: {
               mimeType: 'image/png',
-              data: 'base64imagedata',
+              data: longBase64Body,
             },
           },
         ],
       }
 
       const result = sanitize(input, 'gemini') as any
-      expect(result.parts[0].inlineData.data).toBe('[base64 image redacted]')
+      expect(result.parts[0].inlineData.data).toBe('[base64 image/png redacted]')
     })
 
     it('should handle parts as single object with inlineData', () => {
@@ -415,13 +461,13 @@ describe('Base64 image redaction', () => {
         parts: {
           inlineData: {
             mimeType: 'image/jpeg',
-            data: 'base64data',
+            data: longBase64Body,
           },
         },
       }
 
       const result = sanitize(input, 'gemini') as any
-      expect(result.parts.inlineData.data).toBe('[base64 image redacted]')
+      expect(result.parts.inlineData.data).toBe('[base64 image/jpeg redacted]')
     })
   })
 
@@ -445,7 +491,7 @@ describe('Base64 image redaction', () => {
 
       const result = sanitize(input, 'langchain') as any
       expect(result.content[0].text).toBe('What is in this image?')
-      expect(result.content[1].image_url.url).toBe('[base64 image redacted]')
+      expect(result.content[1].image_url.url).toBe('[base64 image/jpeg redacted]')
     })
 
     it('should redact base64 images in direct image format', () => {
@@ -466,7 +512,7 @@ describe('Base64 image redaction', () => {
       ]
 
       const result = sanitize(input, 'langchain') as any
-      expect(result[0].content[1].data).toBe('[base64 image redacted]')
+      expect(result[0].content[1].data).toBe('[base64 image/jpeg redacted]')
     })
 
     it('should redact base64 images in Anthropic source format', () => {
@@ -484,7 +530,7 @@ describe('Base64 image redaction', () => {
       }
 
       const result = sanitize(input, 'langchain') as any
-      expect(result.content[0].source.data).toBe('[base64 image redacted]')
+      expect(result.content[0].source.data).toBe('[base64 image/png redacted]')
     })
 
     it('should redact base64 images in Google media format', () => {
@@ -502,7 +548,7 @@ describe('Base64 image redaction', () => {
       ]
 
       const result = sanitize(input, 'langchain') as any
-      expect(result[0].content[0].data).toBe('[base64 image redacted]')
+      expect(result[0].content[0].data).toBe('[base64 image/jpeg redacted]')
     })
 
     it('should preserve text content in messages', () => {
@@ -532,7 +578,7 @@ describe('Base64 image redaction', () => {
       expect(result[0].content).toBe('Hello')
       expect(result[1].content).toBe('Hi there!')
       expect(result[2].content[0].text).toBe('Check this')
-      expect(result[2].content[1].image_url.url).toBe('[base64 image redacted]')
+      expect(result[2].content[1].image_url.url).toBe('[base64 image/jpeg redacted]')
     })
 
     it('should handle edge cases', () => {
@@ -574,7 +620,7 @@ describe('Base64 image redaction', () => {
       it('should redact images when _INTERNAL_LLMA_MULTIMODAL is not set', () => {
         const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
         const result = redactBase64DataUrl(base64Image)
-        expect(result).toBe('[base64 image redacted]')
+        expect(result).toBe('[base64 image/jpeg redacted]')
       })
 
       it('should preserve images when _INTERNAL_LLMA_MULTIMODAL is "true"', () => {
@@ -602,7 +648,7 @@ describe('Base64 image redaction', () => {
         process.env._INTERNAL_LLMA_MULTIMODAL = 'false'
         const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
         const result = redactBase64DataUrl(base64Image)
-        expect(result).toBe('[base64 image redacted]')
+        expect(result).toBe('[base64 image/jpeg redacted]')
       })
     })
 
@@ -625,17 +671,35 @@ describe('Base64 image redaction', () => {
         expect(result[0].content[0].image_url.url).toBe('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...')
       })
 
+      it('should preserve videos when flag is enabled', () => {
+        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+        const input = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'video_url',
+                video_url: { url: 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...' },
+              },
+            ],
+          },
+        ]
+
+        const result = sanitize(input, 'openai-chat-completions') as any
+        expect(result[0].content[0].video_url.url).toBe('data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...')
+      })
+
       it('should redact audio when flag is disabled', () => {
         delete process.env._INTERNAL_LLMA_MULTIMODAL
         const input = [
           {
             role: 'assistant',
-            content: [{ type: 'audio', data: 'base64audiodata', id: 'audio_123' }],
+            content: [{ type: 'audio', data: longBase64Body, id: 'audio_123' }],
           },
         ]
 
         const result = sanitize(input, 'openai-chat-completions') as any
-        expect(result[0].content[0].data).toBe('[base64 image redacted]')
+        expect(result[0].content[0].data).toBe('[base64 audio redacted]')
         expect(result[0].content[0].id).toBe('audio_123')
       })
 
@@ -709,7 +773,7 @@ describe('Base64 image redaction', () => {
                 source: {
                   type: 'base64',
                   media_type: 'application/pdf',
-                  data: 'base64pdfdata',
+                  data: longBase64Body,
                 },
               },
             ],
@@ -717,7 +781,7 @@ describe('Base64 image redaction', () => {
         ]
 
         const result = sanitize(input, 'anthropic') as any
-        expect(result[0].content[0].source.data).toBe('[base64 image redacted]')
+        expect(result[0].content[0].source.data).toBe('[base64 application/pdf redacted]')
       })
     })
 
@@ -738,7 +802,7 @@ describe('Base64 image redaction', () => {
               {
                 inlineData: {
                   mimeType: 'audio/L16;codec=pcm;rate=24000',
-                  data: 'base64audiodata',
+                  data: longBase64Body,
                 },
               },
             ],
@@ -746,7 +810,7 @@ describe('Base64 image redaction', () => {
         ]
 
         const result = sanitize(input, 'gemini') as any
-        expect(result[0].parts[0].inlineData.data).toBe('[base64 image redacted]')
+        expect(result[0].parts[0].inlineData.data).toBe('[base64 audio/L16;codec=pcm;rate=24000 redacted]')
       })
 
       it('should preserve audio when flag is enabled', () => {
@@ -803,7 +867,7 @@ describe('Base64 image redaction', () => {
         ]
 
         const result = sanitize(input, 'langchain') as any
-        expect(result[0].content[0].source.data).toBe('[base64 image redacted]')
+        expect(result[0].content[0].source.data).toBe('[base64 image/jpeg redacted]')
       })
     })
   })

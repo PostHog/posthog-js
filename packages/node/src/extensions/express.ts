@@ -1,7 +1,10 @@
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
+import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import type { Request, Response } from 'express'
+import type { ContextData } from './context/types'
 
 type ExpressMiddleware = (req: Request, res: Response, next: () => void) => void
 
@@ -21,6 +24,52 @@ interface MiddlewareError extends Error {
   }
 }
 
+function getClientIp(req: Request): string | undefined {
+  const forwarded = getFirstHeaderValue(req.headers['x-forwarded-for'])
+  if (forwarded) {
+    const ip = forwarded.split(',')[0].trim()
+    if (ip) return ip
+  }
+  return req.socket?.remoteAddress
+}
+
+function buildRequestContextData(posthog: PostHogBackendClient, req: Request): Partial<ContextData> {
+  const { sessionId, distinctId } = getPostHogTracingHeaderValues(req.headers)
+  const properties: Record<string, any> = {}
+  const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
+
+  addProperty(
+    properties,
+    '$current_url',
+    normalizeRequestCurrentUrl(req.originalUrl || req.url, disableCaptureUrlHashes)
+  )
+  addProperty(properties, '$request_method', req.method)
+  addProperty(properties, '$request_path', normalizeRequestPath(req.path, disableCaptureUrlHashes))
+  addProperty(properties, '$user_agent', getFirstHeaderValue(req.headers['user-agent']))
+  addProperty(properties, '$ip', getClientIp(req))
+
+  return {
+    ...(sessionId !== undefined ? { sessionId } : {}),
+    ...(distinctId !== undefined ? { distinctId } : {}),
+    properties,
+  }
+}
+
+export function setupExpressRequestContext(
+  _posthog: PostHogBackendClient,
+  app: {
+    use: (middleware: ExpressMiddleware) => unknown
+  }
+): void {
+  app.use(posthogRequestContext(_posthog))
+}
+
+function posthogRequestContext(posthog: PostHogBackendClient): ExpressMiddleware {
+  return (req, _res, next): void => {
+    posthog.withContext(buildRequestContextData(posthog, req), () => next())
+  }
+}
+
 export function setupExpressErrorHandler(
   _posthog: PostHogBackendClient,
   app: {
@@ -37,22 +86,24 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
       return
     }
 
-    const sessionId: string | undefined = req.headers['x-posthog-session-id'] as string | undefined
-    const distinctId: string | undefined = req.headers['x-posthog-distinct-id'] as string | undefined
+    const contextData = buildRequestContextData(posthog, req)
     const syntheticException = new Error('Synthetic exception')
     const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false }, syntheticException }
+    const additionalProperties: Record<string, any> = {
+      ...(contextData.sessionId !== undefined ? { $session_id: contextData.sessionId } : {}),
+      ...(contextData.properties || {}),
+      $response_status_code: res.statusCode,
+    }
 
     posthog.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, hint, distinctId, {
-        $session_id: sessionId,
-        $current_url: req.url,
-        $request_method: req.method,
-        $request_path: req.path,
-        $user_agent: req.headers['user-agent'],
-        $response_status_code: res.statusCode,
-        $ip: req.headers['x-forwarded-for'] || req?.socket?.remoteAddress,
-      }).then((msg) => {
-        posthog.capture(msg)
+      ErrorTracking.buildEventMessage(
+        posthog.getErrorPropertiesBuilder(),
+        error,
+        hint,
+        contextData.distinctId,
+        additionalProperties
+      ).then((msg) => {
+        return posthog._capturePreparedEvent(msg, false)
       })
     )
 

@@ -5,7 +5,9 @@ inputs:
   node_version:
     description: "Node.js version to use"
     required: false
-    default: "22"
+    # TODO: Keep this in sync with .nvmrc until pnpm/setup can read it via
+    # https://github.com/jasongin/nvs/pull/315.
+    default: "24"
   install:
     description: "Whether to install dependencies"
     required: false
@@ -18,32 +20,18 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install pnpm
-      uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin v4.2.0
-
-    - name: Get pnpm cache directory path
-      id: pnpm-cache-dir
-      shell: bash
-      run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - name: Setup pnpm and Node.js
+      uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
       with:
-        node-version: ${{ inputs.node_version }}
-        registry-url: https://registry.npmjs.org
-        cache: "pnpm"
+        # TODO: pnpm/setup does not read .nvmrc yet; use the input default above for now.
+        runtime: node@${{ inputs.node_version }}
+        cache: false
+        install: false
 
     # Ensure latest npm with OIDC support (npm 11.5.1+)
     - name: Ensure modern npm (OIDC support)
       shell: bash
       run: npm install -g npm@11.6.4
-
-    - uses: actions/cache@v4
-      id: pnpm-cache
-      with:
-        path: ${{ steps.pnpm-cache-dir.outputs.PNPM_STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
-        restore-keys: ${{ runner.os }}-pnpm-
 
     - name: Install package.json dependencies with pnpm
       if: ${{ inputs.install == 'true' }}

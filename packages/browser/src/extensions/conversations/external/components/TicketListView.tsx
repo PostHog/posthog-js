@@ -3,6 +3,7 @@ import { h, FunctionComponent } from 'preact'
 import { Ticket } from '../../../../posthog-conversations-types'
 import { getStyles } from './styles'
 import { TicketListItem } from './TicketListItem'
+import { NewConversationButton } from './NewConversationButton'
 
 interface TicketListViewProps {
     tickets: Ticket[]
@@ -115,30 +116,7 @@ export const TicketListView: FunctionComponent<TicketListViewProps> = ({
             </div>
 
             {/* New conversation button at bottom */}
-            <button
-                style={styles.newConversationButton}
-                onClick={onNewConversation}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.opacity = '0.9'
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.opacity = '1'
-                }}
-            >
-                <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    style={{ marginRight: '8px' }}
-                >
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                New conversation
-            </button>
+            <NewConversationButton styles={styles} onClick={onNewConversation} />
         </div>
     )
 }

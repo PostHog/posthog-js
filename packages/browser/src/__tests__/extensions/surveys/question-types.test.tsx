@@ -73,7 +73,22 @@ describe('MultipleChoiceQuestion', () => {
             expect(baseProps.onSubmit).toHaveBeenCalledWith('Purple')
         })
 
-        it('focuses on open-ended input when selecting the option', () => {
+        it('submits open-ended choice on Enter key', () => {
+            const onSubmit = jest.fn()
+            const { getByText, container } = render(
+                <MultipleChoiceQuestion {...baseProps} onSubmit={onSubmit} question={singleChoiceQuestion} />
+            )
+
+            fireEvent.click(getByText('Other:'))
+
+            const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
+            fireEvent.input(openInput, { target: { value: 'Purple' } })
+            fireEvent.keyDown(openInput, { key: 'Enter' })
+
+            expect(onSubmit).toHaveBeenCalledWith('Purple')
+        })
+
+        it('focuses on open-ended input when selecting the option', async () => {
             const { container, getByText } = render(
                 <MultipleChoiceQuestion {...baseProps} question={singleChoiceQuestion} />
             )
@@ -85,10 +100,8 @@ describe('MultipleChoiceQuestion', () => {
             // Get the input element using its specific id
             const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
 
-            // Use a small timeout to allow for the focus to be set
-            setTimeout(() => {
-                expect(document.activeElement).toBe(openInput)
-            }, 0)
+            // Focus is set on a short timeout to allow for the animation
+            await waitFor(() => expect(document.activeElement).toBe(openInput))
         })
     })
 
@@ -201,7 +214,7 @@ describe('MultipleChoiceQuestion', () => {
             expect(baseProps.onSubmit).toHaveBeenCalledWith(['Red', 'Purple'])
         })
 
-        it('focuses on open-ended input when selecting the option', () => {
+        it('focuses on open-ended input when selecting the option', async () => {
             const { container, getByText } = render(
                 <MultipleChoiceQuestion {...baseProps} question={multipleChoiceQuestion} />
             )
@@ -213,10 +226,8 @@ describe('MultipleChoiceQuestion', () => {
             // Get the input element using its specific id
             const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
 
-            // Use a small timeout to allow for the focus to be set
-            setTimeout(() => {
-                expect(document.activeElement).toBe(openInput)
-            }, 0)
+            // Focus is set on a short timeout to allow for the animation
+            await waitFor(() => expect(document.activeElement).toBe(openInput))
         })
 
         it('does not propagate keydown events from open choice input', () => {
@@ -287,7 +298,79 @@ describe('OpenTextQuestion', () => {
         expect(parentKeyDownHandler).not.toHaveBeenCalled()
     })
 
-    // Add other tests for OpenTextQuestion if needed...
+    it('does not submit on plain Enter (textarea inserts newline)', () => {
+        const onSubmit = jest.fn()
+        const { container } = render(
+            <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={{ ...openTextQuestion, optional: true }} />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        fireEvent.input(textarea, { target: { value: 'Hello world' } })
+        fireEvent.keyDown(textarea, { key: 'Enter' })
+
+        expect(onSubmit).not.toHaveBeenCalled()
+    })
+
+    it.each([
+        ['metaKey', { metaKey: true }],
+        ['ctrlKey', { ctrlKey: true }],
+    ])('submits on Enter+%s when input is valid', (_label, modifier) => {
+        const onSubmit = jest.fn()
+        const { container } = render(
+            <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={{ ...openTextQuestion, optional: true }} />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        fireEvent.input(textarea, { target: { value: 'Hello world' } })
+        fireEvent.keyDown(textarea, { key: 'Enter', ...modifier })
+
+        expect(onSubmit).toHaveBeenCalledWith('Hello world')
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not submit on Cmd/Ctrl+Enter when validation fails', () => {
+        const onSubmit = jest.fn()
+        const { container } = render(
+            <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={openTextQuestion} />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        // Required question, empty input → invalid.
+        fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+        expect(onSubmit).not.toHaveBeenCalled()
+    })
+
+    it('autofocuses the input by default', async () => {
+        const { container } = render(<OpenTextQuestion {...baseProps} question={openTextQuestion} />)
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        await waitFor(() => expect(document.activeElement).toBe(textarea))
+    })
+
+    it('does not autofocus when appearance.disableAutofocus is true', async () => {
+        const { container } = render(
+            <OpenTextQuestion
+                {...baseProps}
+                appearance={{ ...mockAppearance, disableAutofocus: true }}
+                question={openTextQuestion}
+            />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        // Give the (skipped) focus timeout time to fire, then assert focus never moved.
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        expect(document.activeElement).not.toBe(textarea)
+    })
 })
 
 describe('RatingQuestion', () => {

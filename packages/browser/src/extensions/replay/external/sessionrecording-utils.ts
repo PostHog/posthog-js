@@ -1,7 +1,7 @@
 import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
 
-import { isObject } from '@posthog/core'
-import { SnapshotBuffer } from './lazy-loaded-session-recorder'
+import { isArray, isNull, isObject, isUndefined } from '@posthog/core'
+import type { SnapshotBuffer } from './lazy-loaded-session-recorder'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
 export function circularReferenceReplacer() {
@@ -24,8 +24,60 @@ export function circularReferenceReplacer() {
     }
 }
 
+function estimateStringBytes(data: string): number {
+    return new Blob([data]).size
+}
+
 export function estimateSize(sizeable: unknown): number {
-    return JSON.stringify(sizeable, circularReferenceReplacer())?.length || 0
+    const stringifiedData = JSON.stringify(sizeable, circularReferenceReplacer())
+    return stringifiedData ? estimateStringBytes(stringifiedData) : 0
+}
+
+// Lightweight size estimate for compressed events without allocating a JSON string.
+// Intentionally loose: does not account for JSON escaping of strings or keys.
+// This is fine because compressed event strings are base64 gzip output (safe alphabet)
+// and keys are known-safe identifiers. Used only for buffer threshold checks (~1MB)
+// and split-buffer decisions (~7MB) where a few bytes of drift don't matter.
+export function estimateCompressedEventSize(value: unknown): number {
+    if (isNull(value)) {
+        return 4
+    }
+    if (isUndefined(value)) {
+        return 0
+    }
+    switch (typeof value) {
+        case 'string':
+            return value.length + 2
+        case 'number':
+            return String(value).length
+        case 'boolean':
+            return value ? 4 : 5
+        case 'object': {
+            if (isArray(value)) {
+                let size = 2
+                for (let i = 0; i < value.length; i++) {
+                    if (i > 0) size += 1
+                    const el = value[i]
+                    size += isUndefined(el) || isNull(el) ? 4 : estimateCompressedEventSize(el)
+                }
+                return size
+            }
+            const obj = value as Record<string, unknown>
+            let size = 2
+            let first = true
+            for (const key in obj) {
+                if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
+                const val = obj[key]
+                if (isUndefined(val)) continue
+                if (!first) size += 1
+                first = false
+                size += key.length + 3 + estimateCompressedEventSize(val)
+            }
+            return size
+        }
+        default:
+            return 0
+    }
 }
 
 export const replacementImageURI =
@@ -52,13 +104,15 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
     // but we're assuming most of the size is from a data uri which
     // is unlikely to be compressed further
 
-    if (stringifiedData.length > MAX_MESSAGE_SIZE) {
+    let size = estimateStringBytes(stringifiedData)
+    if (size > MAX_MESSAGE_SIZE) {
         // Regex that matches the pattern for a dataURI with the shape 'data:{mime type};{encoding},{data}'. It:
         // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
         // 2) Extracts the mime type of the data uri in the first group
         // 3) Determines when the data URI ends.Depending on if it's used in the src tag or css, it can end with a ) or "
         const dataURIRegex = /data:([\w/\-.]+);(\w+),([^)"]*)/gim
         const matches = stringifiedData.matchAll(dataURIRegex)
+        const unfilteredStringifiedData = stringifiedData
         for (const match of matches) {
             if (match[1].toLocaleLowerCase().slice(0, 6) === 'image/') {
                 stringifiedData = stringifiedData.replace(match[0], replacementImageURI)
@@ -66,8 +120,11 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
                 stringifiedData = stringifiedData.replace(match[0], '')
             }
         }
+        if (stringifiedData !== unfilteredStringifiedData) {
+            size = estimateStringBytes(stringifiedData)
+        }
     }
-    return { event: JSON.parse(stringifiedData), size: stringifiedData.length }
+    return { event: JSON.parse(stringifiedData), size }
 }
 
 export const CONSOLE_LOG_PLUGIN_NAME = 'rrweb/console@1' // The name of the rr-web plugin that emits console logs
@@ -119,18 +176,20 @@ export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle r
 export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
     if (buffer.size >= sizeLimit && buffer.data.length > 1) {
         const half = Math.floor(buffer.data.length / 2)
-        const firstHalf = buffer.data.slice(0, half)
-        const secondHalf = buffer.data.slice(half)
+        const firstHalfSizes = buffer.sizes.slice(0, half)
+        const secondHalfSizes = buffer.sizes.slice(half)
         return [
             splitBuffer({
-                size: estimateSize(firstHalf),
-                data: firstHalf,
+                size: firstHalfSizes.reduce((a, b) => a + b, 0),
+                data: buffer.data.slice(0, half),
+                sizes: firstHalfSizes,
                 sessionId: buffer.sessionId,
                 windowId: buffer.windowId,
             }),
             splitBuffer({
-                size: estimateSize(secondHalf),
-                data: secondHalf,
+                size: secondHalfSizes.reduce((a, b) => a + b, 0),
+                data: buffer.data.slice(half),
+                sizes: secondHalfSizes,
                 sessionId: buffer.sessionId,
                 windowId: buffer.windowId,
             }),

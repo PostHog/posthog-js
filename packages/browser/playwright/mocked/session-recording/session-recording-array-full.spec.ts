@@ -1,5 +1,5 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForSessionRecordingToStart } from '../utils/setup'
 
 const startOptions = {
     options: {
@@ -21,6 +21,7 @@ const startOptions = {
 test.describe('session recording in array.full.js', () => {
     test('captures session events', async ({ page, context }) => {
         await start(startOptions, page, context)
+        await waitForSessionRecordingToStart(page)
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
@@ -46,8 +47,9 @@ test.describe('session recording in array.full.js', () => {
         expect(snapshotData[2].type).toEqual(5) // custom event with remote config
         expect(snapshotData[3].type).toEqual(5) // custom event with options
         expect(snapshotData[4].type).toEqual(5) // custom event with posthog config
+        expect(snapshotData[5].type).toEqual(5) // custom event with recording_started
         // Making a set from the rest should all be 3 - incremental snapshots
-        const incrementalSnapshots = snapshotData.slice(5)
+        const incrementalSnapshots = snapshotData.slice(6)
         expect(Array.from(new Set(incrementalSnapshots.map((s: any) => s.type)))).toStrictEqual([3])
 
         expect(capturedEvents[2]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')

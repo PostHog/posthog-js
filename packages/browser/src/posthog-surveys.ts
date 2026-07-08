@@ -1,5 +1,15 @@
-import { SURVEYS } from './constants'
+import {
+    LOAD_EXT_NOT_FOUND,
+    SURVEYS,
+    SURVEYS_CACHE_TTL_MS,
+    SURVEYS_LOADED_AT,
+    SURVEYS_REFRESH_BACKOFF_MS,
+} from './constants'
+
+const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
+const SURVEY_DISABLED = 'Disabled. Not loading surveys.'
 import { SurveyManager } from './extensions/surveys'
+import type { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import {
     DisplaySurveyOptions,
@@ -16,13 +26,14 @@ import {
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
     isSurveyRunning,
+    setSurveySeenOnLocalStorage,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
-import { isNullish, isUndefined, isArray } from '@posthog/core'
+import { isNullish, isUndefined, isArray, isNumber } from '@posthog/core'
 
-export class PostHogSurveys {
+export class PostHogSurveys implements Extension {
     // this is set to undefined until the remote config is loaded
     // then it's set to true if there are surveys to load
     // or false if there are no surveys to load
@@ -37,6 +48,13 @@ export class PostHogSurveys {
         surveys: Survey[]
         context: { isLoaded: boolean; error?: string }
     }> | null = null
+    // Backs off the stale-cache refresh for one TTL after a failure, so a surveys-API outage can't
+    // turn the ~1s display poll into a per-poll request storm.
+    private _lastSurveyRefreshFailedAt: number | null = null
+
+    private get _config() {
+        return this._instance.config
+    }
 
     constructor(private readonly _instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -44,9 +62,13 @@ export class PostHogSurveys {
         this._surveyEventReceiver = null
     }
 
+    initialize() {
+        this.loadIfEnabled()
+    }
+
     onRemoteConfig(response: RemoteConfig) {
         // only load surveys if they are enabled and there are surveys to load
-        if (this._instance.config.disable_surveys) {
+        if (this._config.disable_surveys) {
             return
         }
 
@@ -61,16 +83,24 @@ export class PostHogSurveys {
     }
 
     reset(): void {
-        localStorage.removeItem('lastSeenSurveyDate')
-        const surveyKeys = []
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
-                surveyKeys.push(key)
+        try {
+            // Drop in-memory event/action activations too; they aren't in persistence (which
+            // reset() has already cleared), so without this an armed-but-unshown survey would
+            // survive a logout/account switch that doesn't reload the page.
+            this._surveyEventReceiver?.reset()
+            localStorage.removeItem('lastSeenSurveyDate')
+            const surveyKeys = []
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i)
+                if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
+                    surveyKeys.push(key)
+                }
             }
-        }
 
-        surveyKeys.forEach((key) => localStorage.removeItem(key))
+            surveyKeys.forEach((key) => localStorage.removeItem(key))
+        } catch {
+            // localStorage is not always available (e.g. in cross-origin iframes); resetting survey state is best-effort.
+        }
     }
 
     loadIfEnabled() {
@@ -82,11 +112,11 @@ export class PostHogSurveys {
             logger.info('Already initializing surveys, skipping...')
             return
         }
-        if (this._instance.config.disable_surveys) {
-            logger.info('Disabled. Not loading surveys.')
+        if (this._config.disable_surveys) {
+            logger.info(SURVEY_DISABLED)
             return
         }
-        if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
+        if (this._config.cookieless_mode && this._instance.consent.isOptedOut()) {
             logger.info('Not loading surveys in cookieless mode without consent.')
             return
         }
@@ -99,11 +129,11 @@ export class PostHogSurveys {
 
         // waiting for remote config to load
         // if surveys is forced enable (like external surveys), ignore the remote config and load surveys
-        if (isUndefined(this._isSurveysEnabled) && !this._instance.config.advanced_enable_surveys) {
+        if (isUndefined(this._isSurveysEnabled) && !this._config.advanced_enable_surveys) {
             return
         }
 
-        const isSurveysEnabled = this._isSurveysEnabled || this._instance.config.advanced_enable_surveys
+        const isSurveysEnabled = this._isSurveysEnabled || this._config.advanced_enable_surveys
 
         this._isInitializingSurveys = true
 
@@ -119,7 +149,7 @@ export class PostHogSurveys {
             const loadExternalDependency = phExtensions.loadExternalDependency
             if (!loadExternalDependency) {
                 // Cannot load surveys code
-                this._handleSurveyLoadError('PostHog loadExternalDependency extension not found.')
+                this._handleSurveyLoadError(LOAD_EXT_NOT_FOUND)
                 return
             }
 
@@ -195,16 +225,25 @@ export class PostHogSurveys {
     getSurveys(callback: SurveyCallback, forceReload = false) {
         // In case we manage to load the surveys script, but config says not to load surveys
         // then we shouldn't return survey data
-        if (this._instance.config.disable_surveys) {
-            logger.info('Disabled. Not loading surveys.')
+        if (this._config.disable_surveys) {
+            logger.info(SURVEY_DISABLED)
             return callback([])
         }
 
         const existingSurveys = this._instance.get_property(SURVEYS)
         if (existingSurveys && !forceReload) {
-            return callback(existingSurveys, {
+            // Serve the cached definitions synchronously so callers that rely on a synchronous
+            // callback (e.g. _getSurveyById) keep working.
+            callback(existingSurveys, {
                 isLoaded: true,
             })
+            // If the cache has aged past its TTL, kick off a background refresh so server-side
+            // changes (e.g. a survey switched from popover to API) reach a long-lived tab. The
+            // next poll then evaluates the refreshed definitions.
+            if (this._shouldBackgroundRefreshSurveys()) {
+                this.getSurveys(() => {}, true)
+            }
+            return
         }
 
         // If a fetch is already in progress and Promise is available, reuse that promise
@@ -225,9 +264,9 @@ export class PostHogSurveys {
         }
 
         this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._instance.config.token}`),
+            url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._config.token}`),
             method: 'GET',
-            timeout: this._instance.config.surveys_request_timeout_ms,
+            timeout: this._config.surveys_request_timeout_ms,
             callback: (response) => {
                 this._getSurveysInFlightPromise = null
 
@@ -235,11 +274,13 @@ export class PostHogSurveys {
                 if (statusCode !== 200 || !response.json) {
                     const error = `Surveys API could not be loaded, status: ${statusCode}`
                     logger.error(error)
+                    this._lastSurveyRefreshFailedAt = Date.now()
                     const context = { isLoaded: false, error }
                     callback([], context)
                     resolvePromise?.({ surveys: [], context })
                     return
                 }
+                this._lastSurveyRefreshFailedAt = null
                 const surveys = response.json.surveys || []
 
                 const eventOrActionBasedSurveys = surveys.filter(
@@ -252,12 +293,63 @@ export class PostHogSurveys {
                     this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
                 }
 
-                this._instance.persistence?.register({ [SURVEYS]: surveys })
+                // Stamp when these definitions were fetched so the split-storage
+                // loader can tell a fresher main-blob write-back from a stale
+                // `__surveys` entry (the survey analogue of $feature_flag_evaluated_at).
+                this._instance.persistence?.register({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
                 const context = { isLoaded: true }
                 callback(surveys, context)
                 resolvePromise?.({ surveys, context })
             },
         })
+    }
+
+    /**
+     * Whether to kick off a background refresh of the cached definitions: the cache is stale, no
+     * fetch is already in flight, and we're not backing off after a recent failure.
+     */
+    private _shouldBackgroundRefreshSurveys(): boolean {
+        return this._isSurveyCacheStale() && !this._getSurveysInFlightPromise && !this._isSurveyRefreshBackingOff()
+    }
+
+    /**
+     * Whether the cached `$surveys` definitions have aged past their TTL. Returns false when no
+     * timestamp is recorded (e.g. surveys injected directly in tests) so the cache stays valid.
+     */
+    private _isSurveyCacheStale(): boolean {
+        const surveysLoadedAt = this._instance.get_property(SURVEYS_LOADED_AT)
+        return isNumber(surveysLoadedAt) && Date.now() - surveysLoadedAt > SURVEYS_CACHE_TTL_MS
+    }
+
+    private _isSurveyRefreshBackingOff(): boolean {
+        return (
+            isNumber(this._lastSurveyRefreshFailedAt) &&
+            Date.now() - this._lastSurveyRefreshFailedAt < SURVEYS_REFRESH_BACKOFF_MS
+        )
+    }
+
+    /**
+     * Marks a survey as seen for the current device, mirroring the local state the SDK records
+     * when it shows or sends a survey itself.
+     *
+     * Use this when you display surveys through your own backend/integration (so the SDK never
+     * captures the `survey shown`/`sent`/`dismissed` events) and still want PostHog's display
+     * logic to honour the "already seen" and wait-period checks on subsequent page loads.
+     *
+     * Note: surveys configured to repeat (`schedule: 'always'` or event `repeatedActivation`)
+     * intentionally bypass the seen check, so marking them as seen will not stop them showing.
+     *
+     * @param surveyId The ID of the survey to mark as seen.
+     * @param options Optional settings. `iteration` is the survey's current iteration number, if any.
+     */
+    markSurveyAsSeen(surveyId: string, options?: { iteration?: number | null }): void {
+        const survey = { id: surveyId, current_iteration: options?.iteration ?? null }
+        setSurveySeenOnLocalStorage(survey)
+        try {
+            localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+        } catch {
+            // localStorage is not always available (e.g. in cross-origin iframes); best-effort only.
+        }
     }
 
     /** Helper method to notify all registered callbacks */
@@ -292,7 +384,7 @@ export class PostHogSurveys {
 
     private _checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
         if (isNullish(this._surveyManager)) {
-            return { eligible: false, reason: 'SDK is not enabled or survey functionality is not yet loaded' }
+            return { eligible: false, reason: SURVEY_NOT_LOADED }
         }
         const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
         if (!survey) {
@@ -304,7 +396,7 @@ export class PostHogSurveys {
     canRenderSurvey(surveyId: string | Survey): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
-            return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
+            return { visible: false, disabledReason: SURVEY_NOT_LOADED }
         }
         const eligibility = this._checkSurveyEligibility(surveyId)
 
@@ -318,7 +410,7 @@ export class PostHogSurveys {
             logger.warn('init was not called')
             return Promise.resolve({
                 visible: false,
-                disabledReason: 'SDK is not enabled or survey functionality is not yet loaded',
+                disabledReason: SURVEY_NOT_LOADED,
             })
         }
 

@@ -7,9 +7,10 @@ import {
     TOUR_COMPLETED_KEY_PREFIX,
     TOUR_DISMISSED_KEY_PREFIX,
     ACTIVE_TOUR_SESSION_KEY,
+    LAST_SEEN_TOUR_DATE_KEY_PREFIX,
 } from '@/extensions/product-tours/constants'
 
-export { ACTIVE_TOUR_SESSION_KEY }
+export { ACTIVE_TOUR_SESSION_KEY, LAST_SEEN_TOUR_DATE_KEY_PREFIX }
 
 export const tourShownKey = (tourId: string) => `${TOUR_SHOWN_KEY_PREFIX}${tourId}`
 export const tourCompletedKey = (tourId: string) => `${TOUR_COMPLETED_KEY_PREFIX}${tourId}`
@@ -42,7 +43,7 @@ export function createTour(overrides: Partial<ProductTour> = {}): ProductTour {
     return {
         id,
         name: `Test Tour ${id}`,
-        type: 'product_tour',
+        tour_type: 'tour',
         auto_launch: true,
         start_date: '2021-01-01T00:00:00Z',
         end_date: null,

@@ -1,11 +1,16 @@
 import { RequestRouter, RequestRouterTarget } from '../../utils/request-router'
 
 describe('request-router', () => {
-    const router = (api_host = 'https://app.posthog.com', ui_host?: string) => {
+    const router = (
+        api_host = 'https://app.posthog.com',
+        ui_host?: string,
+        configOverrides: Record<string, unknown> = {}
+    ) => {
         return new RequestRouter({
             config: {
                 api_host,
                 ui_host,
+                ...configOverrides,
             },
         } as any)
     }
@@ -79,6 +84,69 @@ describe('request-router', () => {
 
         mockPostHog.config.api_host = 'https://eu.posthog.com'
         expect(router.endpointFor('api')).toEqual('https://eu.i.posthog.com')
+    })
+
+    describe('asset_host configuration', () => {
+        it.each([
+            [
+                'keeps exact semver asset paths on the normal US asset host when asset_host is not configured',
+                'https://app.posthog.com',
+                undefined,
+                '/static/1.370.0/recorder.js',
+                'https://us-assets.i.posthog.com/static/1.370.0/recorder.js',
+            ],
+            [
+                'keeps exact semver asset paths on the normal EU asset host when asset_host is not configured',
+                'https://eu.posthog.com',
+                undefined,
+                '/static/1.370.0/recorder.js',
+                'https://eu-assets.i.posthog.com/static/1.370.0/recorder.js',
+            ],
+            [
+                'accepts asset_host for exact semver asset paths',
+                'https://app.posthog.com',
+                'https://cdn-preview.example.com/',
+                '/static/1.370.0/recorder.js',
+                'https://cdn-preview.example.com/static/1.370.0/recorder.js',
+            ],
+            [
+                'accepts asset_host for compatibility asset paths',
+                'https://app.posthog.com',
+                'https://cdn-preview.example.com/',
+                '/static/recorder.js?v=1.370.0',
+                'https://cdn-preview.example.com/static/recorder.js?v=1.370.0',
+            ],
+            [
+                'lets asset_host win even when api_host is custom',
+                'https://my-proxy.example.com',
+                'https://cdn-preview.example.com',
+                '/static/1.370.0/recorder.js',
+                'https://cdn-preview.example.com/static/1.370.0/recorder.js',
+            ],
+            [
+                'keeps custom asset hosts unchanged when asset_host is not configured',
+                'https://my-proxy.example.com',
+                undefined,
+                '/static/1.370.0/recorder.js',
+                'https://my-proxy.example.com/static/1.370.0/recorder.js',
+            ],
+        ])('%s', (_, apiHost, assetHost, path, expected) => {
+            expect(
+                router(apiHost, undefined, {
+                    asset_host: assetHost,
+                }).endpointFor('assets', path)
+            ).toEqual(expected)
+        })
+
+        it('keeps non-static asset paths on the normal asset host even when asset_host is configured', () => {
+            const assetHostRouter = router('https://app.posthog.com', undefined, {
+                asset_host: 'https://cdn-preview.example.com/',
+            })
+
+            expect(assetHostRouter.endpointFor('assets', '/array/test-token/config.js')).toEqual(
+                'https://us-assets.i.posthog.com/array/test-token/config.js'
+            )
+        })
     })
 
     describe('flags_api_host configuration', () => {

@@ -3,17 +3,23 @@ import { mockLogger } from './helpers/mock-logger'
 import * as globals from '../utils/globals'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
-import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
+import { isUndefined } from '@posthog/core'
+import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
-import { PostHog } from '../posthog-core'
+import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
 
-let mockGetProperties: jest.Mock
+// `var` so the hoisted jest.mock factory below can assign to it without TDZ.
+// Previously masked by babel-jest transpiling `let` -> `var` because IE 11
+// was in package.json#browserslist. `jest.hoisted()` would be the modern
+// fix but needs babel-plugin-jest-hoist 30 (jest 30 catalog bump).
+// eslint-disable-next-line no-var
+var mockGetProperties: jest.Mock
 
 jest.mock('../utils/event-utils', () => {
     const originalEventUtils = jest.requireActual('../utils/event-utils')
@@ -55,6 +61,23 @@ describe('posthog core', () => {
         jest.useRealTimers()
     })
 
+    describe('configRenames()', () => {
+        it.each([
+            [
+                'maps deprecated preview beacon option to the stable config name',
+                { __preview_disable_beacon: true },
+                { disable_beacon: true },
+            ],
+            [
+                'prioritizes stable beacon option name over deprecated preview name',
+                { disable_beacon: false, __preview_disable_beacon: true },
+                { disable_beacon: false },
+            ],
+        ] as [string, Partial<PostHogConfig>, Partial<PostHogConfig>][])('%s', (_description, input, expected) => {
+            expect(configRenames(input)).toMatchObject(expected)
+        })
+    })
+
     describe('capture()', () => {
         it('adds a UUID to each message', () => {
             const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})
@@ -69,14 +92,20 @@ describe('posthog core', () => {
             expect(captureData.timestamp).toEqual(baseUTCDateTime)
         })
 
-        it('captures when time is overriden by caller', () => {
+        it.each([
+            { field: 'timestamp', value: new Date(2020, 0, 2, 12, 34) },
+            { field: 'uuid', value: '0190e0a0-0000-7000-8000-000000000000' },
+        ] as const)('captures when $field is overridden by caller', ({ field, value }) => {
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, { [field]: value })
+            expect(captureData[field]).toEqual(value)
+        })
+
+        it('records override-tracking properties when timestamp is overridden', () => {
             const captureData = posthogWith(defaultConfig, defaultOverrides).capture(
                 eventName,
                 {},
                 { timestamp: new Date(2020, 0, 2, 12, 34) }
             )
-            expect(captureData).toHaveProperty('timestamp')
-            expect(captureData.timestamp).toEqual(new Date(2020, 0, 2, 12, 34))
             expect(captureData.properties['$event_time_override_provided']).toEqual(true)
             expect(captureData.properties['$event_time_override_system_time']).toEqual(baseUTCDateTime)
         })
@@ -344,6 +373,21 @@ describe('posthog core', () => {
             )
         })
 
+        it.each(['XHR', 'fetch', 'sendBeacon'] as const)(
+            'passes the %s transport override to the request',
+            (transport) => {
+                const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+                posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
+
+                expect(posthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        transport,
+                    })
+                )
+            }
+        )
+
         it('does not allow you to set complex current url', () => {
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             const captureResult = posthog.capture('event-name', { $current_url: new URL('https://app.posthog.com/s/') })
@@ -467,7 +511,7 @@ describe('posthog core', () => {
                 $session_entry_referring_domain: 'https://referrer.example.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'lazy_loading',
+                $recording_status: 'disabled',
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
@@ -493,7 +537,7 @@ describe('posthog core', () => {
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'lazy_loading',
+                $recording_status: 'disabled',
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
@@ -567,6 +611,58 @@ describe('posthog core', () => {
                 initial: 'prop',
                 session: 'prop',
                 key: 'prop',
+            })
+        })
+
+        describe('initial person props and $identify interaction', () => {
+            const setupPosthogWithInitialProps = () => {
+                posthog = posthogWith(
+                    {
+                        api_host: 'https://custom.posthog.com',
+                    },
+                    overrides
+                )
+
+                posthog.persistence.get_initial_props = () => ({
+                    $initial_current_url: 'https://posthog.com',
+                })
+                posthog.sessionPropsManager.getSetOnceProps = () => ({})
+                posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true
+                return posthog
+            }
+
+            it('$identify as first event includes initial props and marks as sent', () => {
+                const posthog = setupPosthogWithInitialProps()
+                expect(posthog._personProcessingSetOncePropertiesSent).toBe(false)
+
+                const result = posthog._calculate_set_once_properties(undefined, true, true)
+                expect(result).toEqual({ $initial_current_url: 'https://posthog.com' })
+                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+            })
+
+            it('$identify after another event has already sent props still includes initial props', () => {
+                const posthog = setupPosthogWithInitialProps()
+
+                // First normal event sends and marks initial props
+                const firstResult = posthog._calculate_set_once_properties(undefined, true, false)
+                expect(firstResult).toEqual({ $initial_current_url: 'https://posthog.com' })
+                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+
+                // $identify still includes them even though they've been sent
+                const identifyResult = posthog._calculate_set_once_properties(undefined, true, true)
+                expect(identifyResult).toEqual({ $initial_current_url: 'https://posthog.com' })
+            })
+
+            it('normal event after initial props have been sent does not include them', () => {
+                const posthog = setupPosthogWithInitialProps()
+
+                // First event sends initial props
+                posthog._calculate_set_once_properties(undefined, true, false)
+                expect(posthog._personProcessingSetOncePropertiesSent).toBe(true)
+
+                // Second normal event should NOT include initial props
+                const result = posthog._calculate_set_once_properties(undefined, true, false)
+                expect(result).toBeUndefined()
             })
         })
 
@@ -693,6 +789,56 @@ describe('posthog core', () => {
             expect(posthog._requestQueue.unload).toHaveBeenCalledTimes(1)
         })
 
+        it('drains logs via a sendBeacon flush', () => {
+            const flushLogs = jest.fn()
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { logs: { flushLogs } as unknown as PostHog['logs'] }
+            )
+
+            posthog._handle_unload()
+
+            expect(flushLogs).toHaveBeenCalledWith('sendBeacon')
+        })
+
+        it('calls surveys.handlePageUnload when present', () => {
+            const handlePageUnload = jest.fn()
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { surveys: { handlePageUnload } as unknown as PostHog['surveys'] }
+            )
+
+            posthog._handle_unload()
+
+            expect(handlePageUnload).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not throw when a stale surveys instance is missing handlePageUnload', () => {
+            // Version skew: a cached older lazy-loaded surveys chunk can yield a truthy
+            // surveys instance whose prototype lacks handlePageUnload. Optional chaining alone
+            // would still throw "handlePageUnload is not a function" here.
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { capture: jest.fn(), surveys: {} as unknown as PostHog['surveys'] }
+            )
+
+            expect(() => posthog._handle_unload()).not.toThrow()
+            // the rest of the unload path still runs
+            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+        })
+
         describe('without batching', () => {
             it('captures $pageleave', () => {
                 const posthog = posthogWith(
@@ -742,6 +888,7 @@ describe('posthog core', () => {
         it('sets the right distinctID', () => {
             const posthog = posthogWith(
                 {
+                    token: 'bootstrap-distinctid-' + uuidv7(),
                     bootstrap: {
                         distinctID: 'abcd',
                     },
@@ -768,6 +915,7 @@ describe('posthog core', () => {
         it('treats identified distinctIDs appropriately', () => {
             const posthog = posthogWith(
                 {
+                    token: 'bootstrap-identified-' + uuidv7(),
                     bootstrap: {
                         distinctID: 'abcd',
                         isIdentifiedID: true,
@@ -890,6 +1038,141 @@ describe('posthog core', () => {
             posthog.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(false)
         })
+
+        describe('auto-identify on bootstrap', () => {
+            afterEach(() => {
+                jest.restoreAllMocks()
+            })
+
+            it('calls identify when bootstrap has identified distinctID that differs from persisted anonymous ID', () => {
+                const token = 'auto-identify-test-' + uuidv7()
+
+                // First instance creates an anonymous user in persistence
+                const first = posthogWith({ token })
+                expect(first.get_distinct_id()).toBeTruthy()
+                expect(first.persistence.get_property(USER_STATE)).toBe('anonymous')
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+                const captureSpy = jest.spyOn(PostHog.prototype, 'capture')
+
+                // Second instance bootstraps with an identified user
+                const second = posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'user-123',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(identifySpy).toHaveBeenCalledWith('user-123')
+                expect(second.get_distinct_id()).toBe('user-123')
+                expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+
+                // Verify the $identify event includes the anonymous-to-identified mapping
+                const captureCall = captureSpy.mock.calls.find((call) => call[0] === '$identify')
+                expect(captureCall).toBeDefined()
+                expect(captureCall![1]).toMatchObject({
+                    distinct_id: 'user-123',
+                    $anon_distinct_id: expect.any(String),
+                })
+
+                // Subsequent identify with the same ID should be a no-op
+                identifySpy.mockClear()
+                second.identify('user-123')
+                // identify is called but since distinct_id matches, no $identify event fires
+                expect(second.get_distinct_id()).toBe('user-123')
+            })
+
+            it('does not call identify when bootstrap distinctID matches persisted ID', () => {
+                const token = 'auto-identify-same-' + uuidv7()
+
+                // First instance creates an anonymous user
+                const first = posthogWith({ token })
+                const anonId = first.get_distinct_id()
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+
+                // Second instance bootstraps with the same anonymous ID
+                posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: anonId,
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(identifySpy).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                { isIdentifiedID: false, description: 'false' },
+                { isIdentifiedID: undefined, description: 'omitted' },
+            ])('does not call identify when isIdentifiedID is $description', ({ isIdentifiedID }) => {
+                const token = 'auto-identify-non-true-' + uuidv7()
+
+                // First instance creates an anonymous user
+                posthogWith({ token })
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+
+                // Second instance bootstraps with isIdentifiedID that is not true
+                posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'user-456',
+                        ...(!isUndefined(isIdentifiedID) && { isIdentifiedID }),
+                    },
+                })
+
+                expect(identifySpy).not.toHaveBeenCalled()
+            })
+
+            it('does not call identify when there is no existing persisted ID (first visit)', () => {
+                const token = 'auto-identify-first-visit-' + uuidv7()
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+
+                // First visit with bootstrap - no prior persistence
+                const posthog = posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'user-789',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(identifySpy).not.toHaveBeenCalled()
+                expect(posthog.get_distinct_id()).toBe('user-789')
+                expect(posthog.persistence.get_property(USER_STATE)).toBe('identified')
+            })
+
+            it('does not call identify when existing user is already identified', () => {
+                const token = 'auto-identify-already-id-' + uuidv7()
+
+                // First instance: create and identify a user
+                const first = posthogWith({ token }, { capture: jest.fn() })
+                first.identify('existing-user')
+                expect(first.persistence.get_property(USER_STATE)).toBe('identified')
+
+                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+
+                // Second instance bootstraps with a different identified user
+                const second = posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'new-user',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                // Should NOT auto-identify because user was already identified
+                expect(identifySpy).not.toHaveBeenCalled()
+
+                // Existing identity should be preserved (bootstrap should NOT silently switch identities)
+                expect(second.get_distinct_id()).toBe('existing-user')
+                expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+            })
+        })
     })
 
     describe('init()', () => {
@@ -1006,6 +1289,39 @@ describe('posthog core', () => {
         })
     })
 
+    describe('person properties for flags', () => {
+        let posthog: PostHog
+
+        beforeEach(() => {
+            posthog = defaultPostHog().init(
+                'testtoken',
+                {
+                    persistence: 'memory',
+                },
+                uuidv7()
+            )!
+            posthog.persistence!.clear()
+            posthog.reloadFeatureFlags = jest.fn()
+        })
+
+        it.each([
+            [undefined, 1],
+            [false, 0],
+        ] as const)(
+            'resets person properties for flags (reloadFeatureFlags=%s)',
+            (reloadFeatureFlags, expectedCalls) => {
+                posthog.setPersonPropertiesForFlags({ plan: 'pro' }, false)
+
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual({ plan: 'pro' })
+
+                posthog.resetPersonPropertiesForFlags(reloadFeatureFlags)
+
+                expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
+                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
+            }
+        )
+    })
+
     describe('group()', () => {
         let posthog: PostHog
 
@@ -1068,7 +1384,19 @@ describe('posthog core', () => {
             expect(posthog.persistence!.props['$stored_group_properties']).toEqual(undefined)
         })
 
-        it('does not result in a capture call', () => {
+        it('sends $groupidentify for a new group even without properties', () => {
+            posthog.group('organization', 'org::5')
+
+            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
+                $group_type: 'organization',
+                $group_key: 'org::5',
+            })
+        })
+
+        it('does not send $groupidentify when group already exists with same key and no properties', () => {
+            posthog.group('organization', 'org::5')
+            jest.mocked(posthog.capture).mockClear()
+
             posthog.group('organization', 'org::5')
 
             expect(posthog.capture).not.toHaveBeenCalled()
@@ -1091,7 +1419,7 @@ describe('posthog core', () => {
             expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
         })
 
-        it('captures $groupidentify event', () => {
+        it('captures $groupidentify event with $group_set when properties provided', () => {
             posthog.group('organization', 'org::5', { group: 'property', foo: 5 })
 
             expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
@@ -1101,6 +1429,19 @@ describe('posthog core', () => {
                     group: 'property',
                     foo: 5,
                 },
+            })
+        })
+
+        it('sends $groupidentify with $group_set for an existing group when properties provided', () => {
+            posthog.group('organization', 'org::5')
+            jest.mocked(posthog.capture).mockClear()
+
+            posthog.group('organization', 'org::5', { name: 'PostHog' })
+
+            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
+                $group_type: 'organization',
+                $group_key: 'org::5',
+                $group_set: { name: 'PostHog' },
             })
         })
 
@@ -1126,9 +1467,10 @@ describe('posthog core', () => {
 
                 posthog.capture('some_event', { prop: 5 })
 
-                expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(1)
+                // 2 $groupidentify calls from group() + 1 some_event
+                expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(3)
 
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[0][0]
+                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[2][0]
                 // need to help TS know event payload data is not an array
                 // eslint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
@@ -1184,6 +1526,43 @@ describe('posthog core', () => {
 
                 expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
             })
+        })
+    })
+
+    describe('reset()', () => {
+        it('preserves session-recording remote config across reset()', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+            // Simulate the recording remote config landing in persistence,
+            // as RemoteConfigLoader would do after a /decide round trip.
+            const remoteConfig = {
+                cache_timestamp: Date.now(),
+                enabled: true,
+                endpoint: '/s/',
+                sampleRate: 0.5,
+                masking: { maskAllInputs: true },
+                canvasRecording: { enabled: true, fps: 4, quality: '0.6' },
+            }
+            posthog.persistence!.register({ [SESSION_RECORDING_REMOTE_CONFIG]: remoteConfig })
+
+            // And some user state that *should* be cleared.
+            posthog.persistence!.register({ some_user_prop: 'should-be-gone' })
+
+            posthog.reset()
+
+            // Recording remote config survives — without this, start('session_id_changed')
+            // bails on the next session rotation and the new session opens with no FullSnapshot.
+            expect(posthog.persistence!.props[SESSION_RECORDING_REMOTE_CONFIG]).toEqual(remoteConfig)
+
+            // User state is still cleared.
+            expect(posthog.persistence!.props['some_user_prop']).toBeUndefined()
+        })
+
+        it('does not crash when no recording remote config has been stored', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+            expect(() => posthog.reset()).not.toThrow()
+            expect(posthog.persistence!.props[SESSION_RECORDING_REMOTE_CONFIG]).toBeUndefined()
         })
     })
 
@@ -1362,5 +1741,15 @@ describe('posthog core', () => {
         const posthog = await createPosthogInstance(uuidv7())
         expect(posthog.webPerformance._forceAllowLocalhost).toBe(false)
         expect(() => posthog.webPerformance._forceAllowLocalhost).not.toThrow()
+    })
+})
+
+describe('_send_request', () => {
+    it('does not add an ip query param', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+
+        const eventRequest = { url: 'http://localhost/e/' }
+        posthog._send_request(eventRequest)
+        expect(eventRequest.url).toBe('http://localhost/e/')
     })
 })

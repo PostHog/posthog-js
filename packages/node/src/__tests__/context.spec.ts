@@ -459,4 +459,47 @@ describe('PostHog Context', () => {
       expect(body.distinct_id).toBe('explicit-user')
     })
   })
+
+  it.each([
+    {
+      label: 'no distinctId and no context → personless',
+      contextDistinctId: undefined,
+      explicitDistinctId: undefined,
+      expectedDistinctId: (id: string) => expect(typeof id).toBe('string'),
+      expectedProcessPersonProfile: false,
+    },
+    {
+      label: 'context distinctId only → uses context',
+      contextDistinctId: 'context-user',
+      explicitDistinctId: undefined,
+      expectedDistinctId: (id: string) => expect(id).toBe('context-user'),
+      expectedProcessPersonProfile: undefined,
+    },
+    {
+      label: 'explicit distinctId overrides context',
+      contextDistinctId: 'context-user',
+      explicitDistinctId: 'explicit-user',
+      expectedDistinctId: (id: string) => expect(id).toBe('explicit-user'),
+      expectedProcessPersonProfile: undefined,
+    },
+  ])(
+    'captureException $label',
+    async ({ contextDistinctId, explicitDistinctId, expectedDistinctId, expectedProcessPersonProfile }) => {
+      const run = () => posthog.captureException(new Error('test error'), explicitDistinctId)
+      contextDistinctId ? posthog.withContext({ distinctId: contextDistinctId }, run) : run()
+
+      // captureException uses addPendingPromise around an async buildEventMessage that
+      // performs fs I/O for source-context lines. A fixed setTimeout-based wait races
+      // that I/O on slow CI runners. Drain the promise queue deterministically so the
+      // build → capture → flush chain has fully resolved before we assert.
+      await (posthog as any).promiseQueue.join()
+      await waitForFlush()
+
+      const events = getLastBatchEvents()
+      expect(events).toHaveLength(1)
+      expect(events?.[0].event).toBe('$exception')
+      expectedDistinctId(events?.[0].distinct_id)
+      expect(events?.[0].properties.$process_person_profile).toBe(expectedProcessPersonProfile)
+    }
+  )
 })

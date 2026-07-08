@@ -104,6 +104,42 @@ describe('PostHog Core', () => {
       posthog.setPersonPropertiesForFlags(props)
       expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual(props)
     })
+
+    it('set_once properties skip keys that already exist in the cache', () => {
+      posthog.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01', plan: 'free' } })
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        first_date: '2025-01-01',
+        plan: 'free',
+      })
+
+      // Calling again with set_once should NOT overwrite existing keys
+      posthog.setPersonPropertiesForFlags({ $set_once: { first_date: '2026-03-30', new_key: 'hello' } })
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        first_date: '2025-01-01',
+        plan: 'free',
+        new_key: 'hello',
+      })
+    })
+
+    it('set properties overwrite existing keys even when set_once does not', () => {
+      posthog.setPersonPropertiesForFlags({ $set_once: { first_date: '2025-01-01' } })
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        first_date: '2025-01-01',
+      })
+
+      // $set should overwrite, $set_once should not
+      posthog.setPersonPropertiesForFlags({
+        $set: { first_date: 'overwritten' },
+        $set_once: { first_date: 'ignored-by-set-once' },
+      })
+
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        first_date: 'overwritten',
+      })
+    })
   })
 
   describe('setPersonProperties', () => {
@@ -182,6 +218,72 @@ describe('PostHog Core', () => {
 
       // Second call with same set but different set_once should send
       posthog.setPersonProperties(undefined, { signup_date: '2024-01-02' })
+      await waitForPromises()
+      const newCallCount = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/')).length
+
+      expect(newCallCount).toBe(callCount + 1)
+    })
+  })
+
+  describe('unsetPersonProperties', () => {
+    it.each([
+      ['single property', 'plan', ['plan']],
+      ['multiple properties', ['plan', 'email'], ['plan', 'email']],
+    ] as Array<[string, string | string[], string[]]>)(
+      'should send a $set event with a $unset array for %s',
+      async (_, propertyNames, expectedUnset) => {
+        posthog.unsetPersonProperties(propertyNames)
+        await waitForPromises()
+
+        const batchCall = mocks.fetch.mock.calls.find((call) => call[0].includes('/batch/'))
+        expect(batchCall).toBeDefined()
+        expect(parseBody(batchCall)).toMatchObject({
+          batch: [
+            {
+              event: '$set',
+              properties: {
+                $unset: expectedUnset,
+              },
+            },
+          ],
+        })
+      }
+    )
+
+    it('should remove the properties from the persisted flag person properties', () => {
+      posthog.setPersonPropertiesForFlags({ plan: 'free', email: 'test@example.com' }, false)
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        plan: 'free',
+        email: 'test@example.com',
+      })
+
+      posthog.unsetPersonProperties('plan')
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonProperties)).toEqual({
+        email: 'test@example.com',
+      })
+    })
+
+    it('should not send an event when given no valid property names', async () => {
+      const callCount = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/')).length
+
+      posthog.unsetPersonProperties([])
+      posthog.unsetPersonProperties('')
+      await waitForPromises()
+
+      const newCallCount = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/')).length
+      expect(newCallCount).toBe(callCount)
+    })
+
+    it('should let a previously-set property be re-sent after being unset', async () => {
+      posthog.setPersonProperties({ plan: 'free' })
+      await waitForPromises()
+
+      posthog.unsetPersonProperties('plan')
+      await waitForPromises()
+      const callCount = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/')).length
+
+      // Setting the same value again should not be deduped because the cache was invalidated
+      posthog.setPersonProperties({ plan: 'free' })
       await waitForPromises()
       const newCallCount = mocks.fetch.mock.calls.filter((call) => call[0].includes('/batch/')).length
 

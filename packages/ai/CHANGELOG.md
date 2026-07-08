@@ -1,5 +1,836 @@
 # posthog-ai
 
+## 8.3.0
+
+### Minor Changes
+
+- [#4084](https://github.com/PostHog/posthog-js/pull/4084) [`f4b453a`](https://github.com/PostHog/posthog-js/commit/f4b453ac477212816f3cc3df681d5de7494bd70e) Thanks [@marandaneto](https://github.com/marandaneto)! - Add optional error callback support to the OpenAI Agents tracing processor.
+  (2026-07-07)
+
+## 8.2.3
+
+### Patch Changes
+
+- [#4076](https://github.com/PostHog/posthog-js/pull/4076) [`68640de`](https://github.com/PostHog/posthog-js/commit/68640de9d7020b996489dd0ce582334f22c4bee5) Thanks [@bamtheboozle](https://github.com/bamtheboozle)! - fix: prevent unhandled promise rejection from crashing the host process when a streamed provider response errors mid-flight (OpenAI, Azure OpenAI, Anthropic wrappers)
+  (2026-07-06)
+
+## 8.2.2
+
+### Patch Changes
+
+- [#3966](https://github.com/PostHog/posthog-js/pull/3966) [`a277530`](https://github.com/PostHog/posthog-js/commit/a27753096392d34b6e359533198232e355c267b7) Thanks [@marandaneto](https://github.com/marandaneto)! - Skip capturing pending OpenAI background Responses without token usage.
+  (2026-06-25)
+
+## 8.2.1
+
+### Patch Changes
+
+- [#3754](https://github.com/PostHog/posthog-js/pull/3754) [`d8419d4`](https://github.com/PostHog/posthog-js/commit/d8419d4981a6fe9411a116b1545d12020ee920f7) Thanks [@archievi](https://github.com/archievi)! - Wrap the Azure OpenAI `responses` API in `PostHogAzureOpenAI` so `responses.create` calls are tracked, matching the non-Azure `PostHogOpenAI` client.
+  (2026-06-16)
+- Updated dependencies [[`b3ec845`](https://github.com/PostHog/posthog-js/commit/b3ec8453d3678bd7ab6737b25bae003e61117ef9), [`a0553b3`](https://github.com/PostHog/posthog-js/commit/a0553b305679f995e244cad7498c7521cb4c849d), [`c6c163a`](https://github.com/PostHog/posthog-js/commit/c6c163aefb093d5609977ae243b056f96a2d3b4e)]:
+  - @posthog/core@1.33.0
+  - posthog-node@5.38.0
+
+## 8.2.0
+
+### Minor Changes
+
+- [#3793](https://github.com/PostHog/posthog-js/pull/3793) [`b477c02`](https://github.com/PostHog/posthog-js/commit/b477c0281f3a7e1ad507ae44645914dac73967ea) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat: warn when a `base_url` points at the PostHog AI Gateway. The gateway emits its own `$ai_generation`, so routing through it double-captures (and, for billable products, double-bills) every call. Detection covers the provider wrappers (OpenAI, Azure, Anthropic, Gemini, Vercel), LangChain, OpenAI Agents, direct `captureAiGeneration` callers, and the OTel exporter/processor (via the span's `server.address` / `url.full`). The warning logs on every routed call; the event is left untouched, since it carries data the gateway never sees (groups, custom properties, trace hierarchy).
+  (2026-06-11)
+
+## 8.1.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.32.3
+  - posthog-node@5.36.17
+
+## 8.1.10
+
+### Patch Changes
+
+- Updated dependencies [[`25822ac`](https://github.com/PostHog/posthog-js/commit/25822acc0d16f9f1d6fbbd65da57b3e060c6c558)]:
+  - @posthog/core@1.32.2
+  - posthog-node@5.36.16
+
+## 8.1.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.32.1
+  - posthog-node@5.36.15
+
+## 8.1.8
+
+### Patch Changes
+
+- Updated dependencies [[`612f97a`](https://github.com/PostHog/posthog-js/commit/612f97adebd3d863602533180ac4bee3f3ed731d)]:
+  - @posthog/core@1.32.0
+  - posthog-node@5.36.14
+
+## 8.1.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.4
+  - posthog-node@5.36.13
+
+## 8.1.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.3
+  - posthog-node@5.36.12
+
+## 8.1.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.2
+  - posthog-node@5.36.11
+
+## 8.1.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.31.1
+  - posthog-node@5.36.10
+
+## 8.1.3
+
+### Patch Changes
+
+- Updated dependencies [[`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2)]:
+  - @posthog/core@1.31.0
+  - posthog-node@5.36.9
+
+## 8.1.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.14
+  - posthog-node@5.36.8
+
+## 8.1.1
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies [[`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6)]:
+  - posthog-node@5.36.7
+  - @posthog/core@1.30.13
+
+## 8.1.0
+
+### Minor Changes
+
+- [#3751](https://github.com/PostHog/posthog-js/pull/3751) [`9140a67`](https://github.com/PostHog/posthog-js/commit/9140a67d180c6dc2e0f20a9bf2fb006a14d14cd5) Thanks [@richardsolomou](https://github.com/richardsolomou)! - feat: populate `$ai_base_url` on the Vercel and OpenAI Agents instrumentation paths so gateway-routed `$ai_generation` events can be deduped on ingestion. The Vercel middleware recovers the base URL from the provider's internal `config` (`config.baseURL`, or the `config.url({ path })` closure used by `@ai-sdk/openai` / `openai-compatible`) instead of hardcoding an empty string. The OpenAI Agents processor emits it from `model_config.base_url` when the SDK exposes it (best-effort; the SDK omits it for Responses calls and for chat calls with model settings).
+  (2026-06-09)
+
+## 8.0.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.12
+  - posthog-node@5.36.6
+
+## 8.0.0
+
+### Major Changes
+
+- [#3771](https://github.com/PostHog/posthog-js/pull/3771) [`227c9b0`](https://github.com/PostHog/posthog-js/commit/227c9b03c19dcb93d9a15abb1ee6b9523d366767) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Major release: move provider SDKs to optional peer dependencies and clean up staged deprecations.
+
+  **Optional peer dependencies (#3610):** `openai`, `@anthropic-ai/sdk`, `@google/genai`, and `@langchain/core` are now optional peer dependencies, and the unused `langchain` dependency is dropped — you only install the SDK for the integration you use. Integration clients are no longer exported from the package root; import them from their subpaths:
+
+  ```diff
+  - import { OpenAI } from '@posthog/ai'
+  + import { OpenAI } from '@posthog/ai/openai'        // npm install openai
+  - import { AzureOpenAI } from '@posthog/ai'
+  + import { AzureOpenAI } from '@posthog/ai/openai'   // npm install openai
+  - import { Anthropic } from '@posthog/ai'
+  + import { Anthropic } from '@posthog/ai/anthropic'  // npm install @anthropic-ai/sdk
+  - import { GoogleGenAI } from '@posthog/ai'
+  + import { GoogleGenAI } from '@posthog/ai/gemini'   // npm install @google/genai
+  - import { LangChainCallbackHandler } from '@posthog/ai'
+  + import { LangChainCallbackHandler } from '@posthog/ai/langchain'  // npm install @langchain/core
+  ```
+
+  `withTracing` (Vercel AI SDK) and `captureAiGeneration` remain exported from the package root and need no provider SDK.
+
+  **Removed deprecations:**
+  - `Prompts.get()` now always returns a `PromptResult` object (`{ source, prompt, name, version }`) — the plain-string return and the `withMetadata` option are gone. Read the template from `result.prompt`:
+
+    ```diff
+    - const template = await prompts.get('my-prompt')
+    - const compiled = prompts.compile(template, vars)
+    + const result = await prompts.get('my-prompt')
+    + const compiled = prompts.compile(result.prompt, vars)
+    ```
+
+  - `PostHogTraceExporter` and `PostHogSpanProcessor` no longer accept the deprecated `apiKey` option — use `projectToken`:
+
+    ````diff
+    - new PostHogTraceExporter({ apiKey: 'phc_...' })
+    + new PostHogTraceExporter({ projectToken: 'phc_...' })
+    - new PostHogSpanProcessor({ apiKey: 'phc_...' })
+    + new PostHogSpanProcessor({ projectToken: 'phc_...' })
+    ``` (2026-06-08)
+    ````
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.11
+  - posthog-node@5.36.5
+
+## 7.21.0
+
+### Minor Changes
+
+- [#3762](https://github.com/PostHog/posthog-js/pull/3762) [`a6234bd`](https://github.com/PostHog/posthog-js/commit/a6234bd8dc70d5ad14368337c6a3ba748cef0198) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Redact base64/binary multimodal content from AI spans in the OTel `PostHogSpanProcessor` and `PostHogTraceExporter` before export, matching the redaction already applied by the direct provider wrappers. Content is redacted by value (data URLs and large base64 blobs) across span attributes and span events, so it works regardless of which GenAI semantic convention produced the span.
+  (2026-06-08)
+
+## 7.20.14
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.10
+  - posthog-node@5.36.4
+
+## 7.20.13
+
+### Patch Changes
+
+- [#3624](https://github.com/PostHog/posthog-js/pull/3624) [`be7c3c7`](https://github.com/PostHog/posthog-js/commit/be7c3c788ac149fe7f026e03532c8dcabcd2c298) Thanks [@pntech20](https://github.com/pntech20)! - Preserve OpenAI APIPromise response helpers on instrumented OpenAI wrapper calls.
+  (2026-06-05)
+
+## 7.20.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.9
+  - posthog-node@5.36.3
+
+## 7.20.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.8
+  - posthog-node@5.36.2
+
+## 7.20.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.7
+  - posthog-node@5.36.1
+
+## 7.20.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.6
+  - posthog-node@5.35.15
+
+## 7.20.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.5
+  - posthog-node@5.35.14
+
+## 7.20.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.4
+  - posthog-node@5.35.13
+
+## 7.20.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.3
+  - posthog-node@5.35.12
+
+## 7.20.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.2
+  - posthog-node@5.35.11
+
+## 7.20.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.30.1
+  - posthog-node@5.35.10
+
+## 7.20.3
+
+### Patch Changes
+
+- [#3703](https://github.com/PostHog/posthog-js/pull/3703) [`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45) Thanks [@marandaneto](https://github.com/marandaneto)! - Disable/no-op initialization paths instead of throwing or sending requests when PostHog project tokens are missing or blank.
+  (2026-06-01)
+- Updated dependencies [[`f3cc6fa`](https://github.com/PostHog/posthog-js/commit/f3cc6fa8278547e8ea75c0b87d79cffa10158e45), [`3d4a76f`](https://github.com/PostHog/posthog-js/commit/3d4a76f323ac789df91448fdb05d356dc91bb87f)]:
+  - posthog-node@5.35.9
+  - @posthog/core@1.30.0
+
+## 7.20.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.15
+  - posthog-node@5.35.8
+
+## 7.20.1
+
+### Patch Changes
+
+- Updated dependencies [[`d9ad199`](https://github.com/PostHog/posthog-js/commit/d9ad1993d320ffc899dd57ce2f1cf1787e9c6635)]:
+  - @posthog/core@1.29.14
+  - posthog-node@5.35.7
+
+## 7.20.0
+
+### Minor Changes
+
+- [#3306](https://github.com/PostHog/posthog-js/pull/3306) [`1a2f8a8`](https://github.com/PostHog/posthog-js/commit/1a2f8a88ae6ea30cbbc6456d72fae0dca59efbff) Thanks [@johnsykim](https://github.com/johnsykim)! - Add `$ai_completion_id` and `$ai_provider_metadata` to `$ai_generation` events for the OpenAI and Azure OpenAI wrappers. `$ai_completion_id` is the provider's response ID (e.g. `chatcmpl-…` / `resp_…`); `$ai_provider_metadata` carries OpenAI-specific fields (`system_fingerprint`, `request_id`). Together they enable correlating PostHog events with OpenAI's Logs dashboard (`platform.openai.com/logs/{completion_id}`). The same options (`completionId`, `providerMetadata`) are now accepted by the public `captureAiGeneration` primitive so other provider wrappers can follow the same pattern.
+  (2026-05-29)
+
+## 7.19.7
+
+### Patch Changes
+
+- Updated dependencies [[`7b84b75`](https://github.com/PostHog/posthog-js/commit/7b84b7599d076c9c3c86f923f7d56cf937ad9874)]:
+  - @posthog/core@1.29.13
+  - posthog-node@5.35.6
+
+## 7.19.6
+
+### Patch Changes
+
+- [#3668](https://github.com/PostHog/posthog-js/pull/3668) [`7c80b2e`](https://github.com/PostHog/posthog-js/commit/7c80b2efbfd61936c1786cdd69d917e4ed657dea) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Expose `projectToken` in addition to `apiKey` for `PostHogTraceExporter`
+
+  We're moving towards a place where we're calling this `projectToken` everywhere. Let's release this as a patch version because it's a tiny change and we still support the old usage. This might be dropped in the next packages/ai major version. (2026-05-28)
+
+## 7.19.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.12
+  - posthog-node@5.35.5
+
+## 7.19.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.11
+  - posthog-node@5.35.4
+
+## 7.19.3
+
+### Patch Changes
+
+- Updated dependencies [[`5568f12`](https://github.com/PostHog/posthog-js/commit/5568f12f46b4ebb7539f261edddda2f695ba03a2)]:
+  - @posthog/core@1.29.10
+  - posthog-node@5.35.3
+
+## 7.19.2
+
+### Patch Changes
+
+- Updated dependencies [[`c806cca`](https://github.com/PostHog/posthog-js/commit/c806ccafdcc39b38e9554f8a17a8c2fbd3361dda)]:
+  - @posthog/core@1.29.9
+  - posthog-node@5.35.1
+
+## 7.19.1
+
+### Patch Changes
+
+- Updated dependencies [[`18ea8b5`](https://github.com/PostHog/posthog-js/commit/18ea8b53f608607075c93bc18b29be8dfd41eb3f)]:
+  - posthog-node@5.35.0
+  - @posthog/core@1.29.8
+
+## 7.19.0
+
+### Minor Changes
+
+- [#3605](https://github.com/PostHog/posthog-js/pull/3605) [`82fa498`](https://github.com/PostHog/posthog-js/commit/82fa498f4129e84030105c60724fc85591505004) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Improved error serialization to capture cause, message and stack
+  (2026-05-21)
+
+## 7.18.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.7
+  - posthog-node@5.34.9
+
+## 7.18.11
+
+### Patch Changes
+
+- Updated dependencies [[`a880dbc`](https://github.com/PostHog/posthog-js/commit/a880dbcbbfd01bbef939c627f3b541744e3c3587)]:
+  - @posthog/core@1.29.6
+  - posthog-node@5.34.7
+
+## 7.18.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.5
+  - posthog-node@5.34.5
+
+## 7.18.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.4
+  - posthog-node@5.34.4
+
+## 7.18.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.3
+  - posthog-node@5.34.3
+
+## 7.18.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.29.2
+  - posthog-node@5.34.2
+
+## 7.18.6
+
+### Patch Changes
+
+- Updated dependencies [[`4b895bf`](https://github.com/PostHog/posthog-js/commit/4b895bf0151f24c0b72e8ce4cae47906795b29b8)]:
+  - @posthog/core@1.29.1
+  - posthog-node@5.34.1
+
+## 7.18.5
+
+### Patch Changes
+
+- Updated dependencies [[`ad60818`](https://github.com/PostHog/posthog-js/commit/ad60818222252f1b65bb8778b12862c287168422)]:
+  - @posthog/core@1.29.0
+  - posthog-node@5.34.0
+
+## 7.18.4
+
+### Patch Changes
+
+- Updated dependencies [[`223d925`](https://github.com/PostHog/posthog-js/commit/223d9255e3dfb02af099b7529292cb56854daa77)]:
+  - @posthog/core@1.28.7
+  - posthog-node@5.33.7
+
+## 7.18.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.6
+  - posthog-node@5.33.6
+
+## 7.18.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.5
+  - posthog-node@5.33.5
+
+## 7.18.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.4
+  - posthog-node@5.33.4
+
+## 7.18.0
+
+### Minor Changes
+
+- [#3539](https://github.com/PostHog/posthog-js/pull/3539) [`6b23fd3`](https://github.com/PostHog/posthog-js/commit/6b23fd39d0c6458be72c861fa704bc7b8ec3bc23) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Added a new generic binary payload sanitizer to catch more edge cases
+  (2026-05-07)
+
+## 7.17.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.28.3
+  - posthog-node@5.33.3
+
+## 7.17.4
+
+### Patch Changes
+
+- Updated dependencies [[`220cd61`](https://github.com/PostHog/posthog-js/commit/220cd61e332ca4982c7bc3b6f740d797ef9e4e7f), [`255b273`](https://github.com/PostHog/posthog-js/commit/255b27380658b450d1427d4a478e4d7a4bf773f1)]:
+  - @posthog/core@1.28.2
+  - posthog-node@5.33.2
+
+## 7.17.3
+
+### Patch Changes
+
+- Updated dependencies [[`8aee3d5`](https://github.com/PostHog/posthog-js/commit/8aee3d55f8e2bf7a14a534c940327d8e08ba64f6)]:
+  - @posthog/core@1.28.1
+  - posthog-node@5.33.1
+
+## 7.17.2
+
+### Patch Changes
+
+- Updated dependencies [[`cf56753`](https://github.com/PostHog/posthog-js/commit/cf56753d775225df2751dee2de7987d4a47fef8c), [`04db756`](https://github.com/PostHog/posthog-js/commit/04db75663208251d1b09c80b09e5d00188e897fd)]:
+  - @posthog/core@1.28.0
+  - posthog-node@5.32.1
+
+## 7.17.1
+
+### Patch Changes
+
+- [#3507](https://github.com/PostHog/posthog-js/pull/3507) [`38e85c9`](https://github.com/PostHog/posthog-js/commit/38e85c9eaa4dc633c612334e842df5cb41ecbfd8) Thanks [@richardsolomou](https://github.com/richardsolomou)! - perf(vercel): drop O(N²) prompt trim and reuse TextEncoder/TextDecoder in `mapVercelPrompt`/`truncate` so long conversations no longer block the main thread for hundreds of milliseconds in `withTracing`'s stream flush
+  (2026-04-30)
+
+## 7.17.0
+
+### Minor Changes
+
+- [#3499](https://github.com/PostHog/posthog-js/pull/3499) [`0601162`](https://github.com/PostHog/posthog-js/commit/06011623a5d0c98d23c80a5cc2b15e0968769128) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Add `captureAiGeneration`, a generic primitive for emitting `$ai_generation` events from LLM calls that don't go through one of the wrapped clients (Cloudflare Workers AI, TanStack AI, custom HTTP, etc.). All built-in wrappers (`withTracing`, `OpenAI`, `Anthropic`, `GoogleGenAI`) now funnel through the same primitive, so external events are indistinguishable from SDK-wrapped ones.
+  (2026-04-30)
+
+## 7.16.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.9
+  - posthog-node@5.30.8
+
+## 7.16.14
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.8
+  - posthog-node@5.30.7
+
+## 7.16.13
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.7
+  - posthog-node@5.30.6
+
+## 7.16.12
+
+### Patch Changes
+
+- [#3487](https://github.com/PostHog/posthog-js/pull/3487) [`09b4b3d`](https://github.com/PostHog/posthog-js/commit/09b4b3d7eced37b3297e21f6d5d145cdf121fa2d) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Widen the `@opentelemetry/exporter-trace-otlp-http` peer dependency range from `^0.200.0` (which only matched `0.200.x`) to `>=0.200.0 <1.0.0`, so newer 0.x releases brought in by other OpenTelemetry-aware packages no longer trigger ERESOLVE failures or require `--legacy-peer-deps`.
+  (2026-04-27)
+
+## 7.16.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.6
+  - posthog-node@5.30.5
+
+## 7.16.10
+
+### Patch Changes
+
+- Updated dependencies [[`70508df`](https://github.com/PostHog/posthog-js/commit/70508dfd7dd1201dd9c61c126a3c27ad39311c6a)]:
+  - @posthog/core@1.27.5
+  - posthog-node@5.30.4
+
+## 7.16.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.4
+  - posthog-node@5.30.3
+
+## 7.16.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/core@1.27.3
+  - posthog-node@5.30.2
+
+## 7.16.7
+
+### Patch Changes
+
+- Updated dependencies [[`daf028d`](https://github.com/PostHog/posthog-js/commit/daf028d553f756b9f58c01b848ad2d431239458b)]:
+  - @posthog/core@1.27.2
+  - posthog-node@5.30.1
+
+## 7.16.6
+
+### Patch Changes
+
+- Updated dependencies [[`96f19b7`](https://github.com/PostHog/posthog-js/commit/96f19b79d563937ed8f98e12796eee541a2dae7f)]:
+  - @posthog/core@1.27.1
+  - posthog-node@5.29.7
+
+## 7.16.5
+
+### Patch Changes
+
+- Updated dependencies [[`1a8b727`](https://github.com/PostHog/posthog-js/commit/1a8b7277c50a42bbb3f736afd530ff1c3389a7de)]:
+  - @posthog/core@1.27.0
+  - posthog-node@5.29.6
+
+## 7.16.4
+
+### Patch Changes
+
+- Updated dependencies [[`922a1c1`](https://github.com/PostHog/posthog-js/commit/922a1c1838a5ed2ad37f59dade5fc3cc81bb4246)]:
+  - @posthog/core@1.26.0
+  - posthog-node@5.29.5
+
+## 7.16.3
+
+### Patch Changes
+
+- [#3433](https://github.com/PostHog/posthog-js/pull/3433) [`6e7d4ce`](https://github.com/PostHog/posthog-js/commit/6e7d4cebb633f1bf8aed0f3548fe2927b9093be5) Thanks [@richardsolomou](https://github.com/richardsolomou)! - fix(ai): adjust V3 cache tokens for Claude on any host (including Bedrock)
+  (2026-04-22)
+
+## 7.16.2
+
+### Patch Changes
+
+- [#3431](https://github.com/PostHog/posthog-js/pull/3431) [`ea2cc33`](https://github.com/PostHog/posthog-js/commit/ea2cc33ec7d39406302e6c0334e530637b258cbd) Thanks [@richardsolomou](https://github.com/richardsolomou)! - fix(ai): read tool-call input field in vercel non-streaming output
+  (2026-04-21)
+
+## 7.16.1
+
+### Patch Changes
+
+- [#3426](https://github.com/PostHog/posthog-js/pull/3426) [`1a0b58d`](https://github.com/PostHog/posthog-js/commit/1a0b58d1d07c61662169d3bc56eed8cfd8855d65) Thanks [@marandaneto](https://github.com/marandaneto)! - Trim surrounding whitespace from user-provided API keys, personal API keys, and host config values before using them.
+  (2026-04-21)
+- Updated dependencies [[`1a0b58d`](https://github.com/PostHog/posthog-js/commit/1a0b58d1d07c61662169d3bc56eed8cfd8855d65)]:
+  - @posthog/core@1.25.3
+  - posthog-node@5.29.3
+
+## 7.16.0
+
+### Minor Changes
+
+- [#3387](https://github.com/PostHog/posthog-js/pull/3387) [`7ea6e26`](https://github.com/PostHog/posthog-js/commit/7ea6e26e7f89ea0a0eaf061a279541449219ca61) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - `Prompts.get()` now accepts `{ withMetadata: true }` and returns a `PromptResult` object containing `source` (`api`, `cache`, `stale_cache`, or `code_fallback`), `name`, and `version` alongside the prompt text. The previous plain-string return is deprecated and will be removed in a future major version.
+  (2026-04-15)
+
+## 7.15.0
+
+### Minor Changes
+
+- [#3358](https://github.com/PostHog/posthog-js/pull/3358) [`85d3bd1`](https://github.com/PostHog/posthog-js/commit/85d3bd134dce1ae7b9287b73f2311c938bb42761) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Add `PostHogSpanProcessor` as a self-contained OpenTelemetry `SpanProcessor` that handles batching and export internally. Both `PostHogSpanProcessor` and `PostHogTraceExporter` now automatically filter to AI-related spans only (`gen_ai.*`, `llm.*`, `ai.*`, `traceloop.*`).
+  (2026-04-14)
+
+- [#3377](https://github.com/PostHog/posthog-js/pull/3377) [`b90b54e`](https://github.com/PostHog/posthog-js/commit/b90b54e222ea27e7ba8113e617c5f1a924a2fc7a) Thanks [@andrewm4894](https://github.com/andrewm4894)! - Add OpenAI Agents SDK tracing support via `@posthog/ai/openai-agents`. Implements `PostHogTracingProcessor` that captures agent traces, spans, and LLM generations as PostHog LLM analytics events. Supports all span types including generation, response, function/tool, agent, handoff, guardrail, custom, audio, and MCP.
+  (2026-04-14)
+
+## 7.14.0
+
+### Minor Changes
+
+- [#3368](https://github.com/PostHog/posthog-js/pull/3368) [`c1f2c32`](https://github.com/PostHog/posthog-js/commit/c1f2c32218dabefde1b3c9ea2e272dbe9b117e28) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add `$ai_stop_reason` property capturing the LLM's reason for stopping generation across all providers
+  (2026-04-10)
+
+- [#3369](https://github.com/PostHog/posthog-js/pull/3369) [`cf69f96`](https://github.com/PostHog/posthog-js/commit/cf69f96a75ce3831a948cd5cc7173830085c5e45) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add Gemini `embedContent` tracking support
+  (2026-04-10)
+
+## 7.13.2
+
+### Patch Changes
+
+- Updated dependencies [[`c735b08`](https://github.com/PostHog/posthog-js/commit/c735b08577f8fa85935dcec5bc5814870ac4ed56)]:
+  - @posthog/core@1.25.2
+  - posthog-node@5.29.2
+
+## 7.13.1
+
+### Patch Changes
+
+- Updated dependencies [[`57ee5b2`](https://github.com/PostHog/posthog-js/commit/57ee5b25fd2c97f334f52b4eba28ea925033d6ed)]:
+  - @posthog/core@1.25.1
+  - posthog-node@5.29.1
+
+## 7.13.0
+
+### Minor Changes
+
+- [#3302](https://github.com/PostHog/posthog-js/pull/3302) [`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11) Thanks [@dmarticus](https://github.com/dmarticus)! - preserve $set_once semantics in local flag evaluation cache
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
+  - @posthog/core@1.25.0
+  - posthog-node@5.29.0
+
+## 7.12.8
+
+### Patch Changes
+
+- Updated dependencies [[`a01a3d5`](https://github.com/PostHog/posthog-js/commit/a01a3d55dc134b1b269be58c7922ce3780c57fc5)]:
+  - @posthog/core@1.24.6
+  - posthog-node@5.28.11
+
+## 7.12.7
+
+### Patch Changes
+
+- [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
+  (2026-04-01)
+- Updated dependencies [[`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371)]:
+  - @posthog/core@1.24.5
+  - posthog-node@5.28.10
+
+## 7.12.6
+
+### Patch Changes
+
+- [#3299](https://github.com/PostHog/posthog-js/pull/3299) [`4561c25`](https://github.com/PostHog/posthog-js/commit/4561c250dee55e5d045692cd4ea77c15da02b9f5) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Remove PostHogTraceExporter from the main entry point to avoid crashing when @opentelemetry/exporter-trace-otlp-http is not installed. Use `@posthog/ai/otel` to import it instead.
+  (2026-03-31)
+
+## 7.12.5
+
+### Patch Changes
+
+- Updated dependencies [[`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c)]:
+  - @posthog/core@1.24.4
+  - posthog-node@5.28.9
+
+## 7.12.4
+
+### Patch Changes
+
+- Updated dependencies [[`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f)]:
+  - @posthog/core@1.24.3
+  - posthog-node@5.28.8
+
+## 7.12.3
+
+### Patch Changes
+
+- Updated dependencies [[`8d34289`](https://github.com/PostHog/posthog-js/commit/8d34289f7cf91945223eed4366b11fb187a63a40)]:
+  - @posthog/core@1.24.2
+  - posthog-node@5.28.7
+
+## 7.12.2
+
+### Patch Changes
+
+- [#3264](https://github.com/PostHog/posthog-js/pull/3264) [`d5b84c4`](https://github.com/PostHog/posthog-js/commit/d5b84c44848066f8005ce5462349e5ca46715b24) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Fix crash in Vercel AI middleware when model returns only tool calls with no text content
+  (2026-03-20)
+- Updated dependencies [[`314120a`](https://github.com/PostHog/posthog-js/commit/314120aa2377b3c8031dd774833fe9082ecdbd39)]:
+  - @posthog/core@1.24.1
+  - posthog-node@5.28.5
+
+## 7.12.1
+
+### Patch Changes
+
+- Updated dependencies [[`9cd2313`](https://github.com/PostHog/posthog-js/commit/9cd23138343e1020811f85853d6016cc985bb24f)]:
+  - @posthog/core@1.24.0
+  - posthog-node@5.28.4
+
+## 7.12.0
+
+### Minor Changes
+
+- [#3232](https://github.com/PostHog/posthog-js/pull/3232) [`476a823`](https://github.com/PostHog/posthog-js/commit/476a82369b61dcb21f204509d917e64a51736a19) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Replace otel client-side span mapping with PostHogTraceExporter. PostHog now converts gen_ai.\* spans into $ai_generation events server-side, so the client-side mapper pipeline (PostHogSpanProcessor, captureSpan, aiSdkSpanMapper) has been replaced with a simple OTLPTraceExporter wrapper.
+  (2026-03-18)
+
+### Patch Changes
+
+- Updated dependencies [[`697e423`](https://github.com/PostHog/posthog-js/commit/697e4237ca945caa33b26f35872951ad0e7530d4)]:
+  - posthog-node@5.28.3
+
+## 7.11.2
+
+### Patch Changes
+
+- Updated dependencies [[`bc30c2d`](https://github.com/PostHog/posthog-js/commit/bc30c2d988bb307e811d97711f208c125eefba3a), [`bc30c2d`](https://github.com/PostHog/posthog-js/commit/bc30c2d988bb307e811d97711f208c125eefba3a), [`bc30c2d`](https://github.com/PostHog/posthog-js/commit/bc30c2d988bb307e811d97711f208c125eefba3a)]:
+  - @posthog/core@1.23.4
+  - posthog-node@5.28.2
+
+## 7.11.1
+
+### Patch Changes
+
+- Updated dependencies [[`4009c15`](https://github.com/PostHog/posthog-js/commit/4009c15c85c96b5cf99fdbcda448b9893c95541e)]:
+  - @posthog/core@1.23.3
+  - posthog-node@5.28.1
+
+## 7.11.0
+
+### Minor Changes
+
+- [#3210](https://github.com/PostHog/posthog-js/pull/3210) [`2d9eb60`](https://github.com/PostHog/posthog-js/commit/2d9eb60f6e85aba5abb08d86fc74531b85fefe70) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add version-specific `Prompts.clearCache(name, version)` support and switch prompt caching to structured name/version entries instead of string-encoded cache keys.
+  (2026-03-09)
+
+## 7.10.0
+
+### Minor Changes
+
+- [#3206](https://github.com/PostHog/posthog-js/pull/3206) [`43a81c5`](https://github.com/PostHog/posthog-js/commit/43a81c52e50230c63e69070fd370bf52c0d32457) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Add version-aware prompt fetching to the Prompts SDK so callers can request a specific published prompt version without colliding with the latest prompt cache entry.
+  (2026-03-09)
+
+## 7.9.5
+
+### Patch Changes
+
+- [#3194](https://github.com/PostHog/posthog-js/pull/3194) [`eccec25`](https://github.com/PostHog/posthog-js/commit/eccec25c613387d7fbf44cd4eae2de9a9b630e39) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Sanitize inline base64 video_url's in chat completions calls, which is supported by OpenRouter for video understanding models
+  (2026-03-03)
+
+## 7.9.4
+
+### Patch Changes
+
+- [#3180](https://github.com/PostHog/posthog-js/pull/3180) [`42b4223`](https://github.com/PostHog/posthog-js/commit/42b4223a89e4e1a1e14cdda83773117033870579) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`@google/genai@^1.43.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.43.0) (from `^1.42.0`, in `dependencies`) - Updated dependency [`@langchain/core@^1.1.29` ↗︎](https://www.npmjs.com/package/@langchain/core/v/1.1.29) (from `^1.1.27`, in `dependencies`) - Updated dependency [`langchain@^1.2.28` ↗︎](https://www.npmjs.com/package/langchain/v/1.2.28) (from `^1.2.25`, in `dependencies`) - Updated dependency [`openai@^6.25.0` ↗︎](https://www.npmjs.com/package/openai/v/6.25.0) (from `^6.22.0`, in `dependencies`) (2026-03-02)
+- Updated dependencies [[`5e8d5fc`](https://github.com/PostHog/posthog-js/commit/5e8d5fc9c12e5545e015c9c5556167b9fb279347)]:
+  - @posthog/core@1.23.2
+  - posthog-node@5.26.2
+
 ## 7.9.3
 
 ### Patch Changes

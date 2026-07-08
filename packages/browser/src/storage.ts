@@ -132,7 +132,7 @@ export const cookieStore: PersistentStore = {
 
     _set: function (name, value, days, cross_subdomain, is_secure) {
         if (!document) {
-            return
+            return false
         }
         try {
             let expires = '',
@@ -165,9 +165,9 @@ export const cookieStore: PersistentStore = {
             }
 
             document.cookie = new_cookie_val
-            return new_cookie_val
+            return true
         } catch {
-            return
+            return false
         }
     },
 
@@ -243,9 +243,11 @@ export const localStore: PersistentStore = {
     _set: function (name, value) {
         try {
             window?.localStorage.setItem(name, JSON.stringify(value))
+            return true
         } catch (err) {
             localStore._error(err)
         }
+        return false
     },
 
     _remove: function (name) {
@@ -271,9 +273,18 @@ const COOKIE_PERSISTED_PROPERTIES = [
 ]
 
 /**
- * Creates a localPlusCookieStore instance with custom cookie-persisted properties
+ * Creates a localPlusCookieStore instance with custom cookie-persisted properties.
+ *
+ * When `preferCookieOnConflict` is true, the cookie's values win over localStorage on
+ * merge for any key both stores carry. Null/empty cookie values are filtered out
+ * before the merge so a malformed legacy cookie cannot override valid localStorage
+ * data. localStorage-only keys are unaffected. See the docs for
+ * `__preview_cookie_wins_on_conflict` for context.
  */
-export const createLocalPlusCookieStore = (customCookieProperties: readonly string[] = []): PersistentStore => {
+export const createLocalPlusCookieStore = (
+    customCookieProperties: readonly string[] = [],
+    preferCookieOnConflict: boolean = false
+): PersistentStore => {
     const cookiePropertiesToPersist = [...COOKIE_PERSISTED_PROPERTIES, ...customCookieProperties]
 
     return {
@@ -285,7 +296,22 @@ export const createLocalPlusCookieStore = (customCookieProperties: readonly stri
                     // See if there's a cookie stored with data.
                     cookieProperties = cookieStore._parse(name) || {}
                 } catch {}
-                const value = extend(cookieProperties, JSON.parse(localStore._get(name) || '{}'))
+                const localStorageData: Properties = JSON.parse(localStore._get(name) || '{}')
+                let value: Properties
+                if (preferCookieOnConflict) {
+                    // Defensive: skip null / empty-string cookie values so a malformed
+                    // legacy cookie cannot wipe out valid localStorage data.
+                    const safeCookieProperties: Properties = {}
+                    for (const key in cookieProperties) {
+                        const v = cookieProperties[key]
+                        if (!isNull(v) && v !== '') {
+                            safeCookieProperties[key] = v
+                        }
+                    }
+                    value = extend(localStorageData, safeCookieProperties)
+                } else {
+                    value = extend(cookieProperties, localStorageData)
+                }
                 localStore._set(name, value)
                 return value
             } catch {
@@ -295,8 +321,13 @@ export const createLocalPlusCookieStore = (customCookieProperties: readonly stri
         },
 
         _set: function (name, value, days, cross_subdomain, is_secure, debug) {
+            // The localStorage write is the durable one and reports its own
+            // success. The cookie mirror is best-effort: a cookie failure must
+            // not flip an already-landed localStorage write to `false`, or the
+            // caller would treat the durable entry as un-persisted and re-write
+            // it on every later save.
+            const stored = localStore._set(name, value, undefined, undefined, debug)
             try {
-                localStore._set(name, value, undefined, undefined, debug)
                 const cookiePersistedProperties: Record<string, any> = {}
                 cookiePropertiesToPersist.forEach((key) => {
                     if (value[key]) {
@@ -310,6 +341,7 @@ export const createLocalPlusCookieStore = (customCookieProperties: readonly stri
             } catch (err) {
                 localStore._error(err)
             }
+            return stored
         },
 
         _remove: function (name, cross_subdomain) {
@@ -345,6 +377,7 @@ export const memoryStore: PersistentStore = {
 
     _set: function (name, value) {
         memoryStorage[name] = value
+        return true
     },
 
     _remove: function (name) {
@@ -406,9 +439,11 @@ export const sessionStore: PersistentStore = {
     _set: function (name, value) {
         try {
             window?.sessionStorage.setItem(name, JSON.stringify(value))
+            return true
         } catch (err) {
             sessionStore._error(err)
         }
+        return false
     },
 
     _remove: function (name) {

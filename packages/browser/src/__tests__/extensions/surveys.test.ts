@@ -388,6 +388,83 @@ describe('SurveyManager', () => {
         expect(addSurveyToFocusSpy).toHaveBeenCalledTimes(1)
     })
 
+    describe('re-validates eligibility when the popover delay elapses', () => {
+        const INTERNAL_FLAG = 'enabled-internal-targeting-flag-key'
+
+        const makeDelayedSurvey = (id: string): Survey => ({
+            ...mockSurveys[0],
+            id,
+            internal_targeting_flag_key: INTERNAL_FLAG,
+            appearance: { surveyPopupDelaySeconds: 30 },
+        })
+
+        const setInternalFlagEnabled = (enabled: boolean): void => {
+            mockPostHog.featureFlags.isFeatureEnabled = jest
+                .fn()
+                .mockImplementation((key: string) =>
+                    key === INTERNAL_FLAG ? enabled : (flagsResponse.featureFlags as Record<string, boolean>)[key]
+                )
+        }
+
+        afterEach(() => {
+            jest.useRealTimers()
+        })
+
+        it('does not display a survey that became ineligible during the delay (delay re-check)', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('delayed-survey-recheck')
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            setInternalFlagEnabled(true)
+
+            // queued while eligible: focus claimed, timer pending, not yet shown
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+
+            // identify() during the delay reloads flags; the internal targeting flag is now false
+            setInternalFlagEnabled(false)
+
+            jest.advanceTimersByTime(30000)
+
+            // the survey is dropped instead of shown: focus released, timer cleared
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+        })
+
+        it('still displays a survey that stays eligible through the delay (regression guard)', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('delayed-survey-eligible')
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            setInternalFlagEnabled(true)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+
+            jest.advanceTimersByTime(30000)
+
+            // shown: focus is retained (released only on dismiss/close), pending timer consumed
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+        })
+
+        it('cancels a pending survey when a later evaluation cycle finds it ineligible', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('delayed-survey-cancel')
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            setInternalFlagEnabled(true)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+
+            // flag flips, then the 1s evaluation cycle runs again before the delay elapses
+            setInternalFlagEnabled(false)
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
+        })
+    })
+
     test('callSurveysAndEvaluateDisplayLogic should handle popup surveys correctly', () => {
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
@@ -597,6 +674,53 @@ describe('SurveyManager', () => {
             expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
+        })
+
+        it('exposes the current question index on .survey-box for embedders', () => {
+            // Embedders rendering surveys via the API (e.g. the standalone hosted survey page)
+            // need a reliable way to know which question is currently displayed so they can drive
+            // their own progress UI. Reading data-question-index works for every question type,
+            // including link questions which render no input/rating element.
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(mockSurvey, surveyDiv)
+            const surveyBox = surveyDiv.querySelector('.survey-box')
+            expect(surveyBox).not.toBeNull()
+            expect(surveyBox?.getAttribute('data-question-index')).toBe('0')
+        })
+
+        it('updates data-question-index when navigating to the next question', async () => {
+            const multiQuestionSurvey = {
+                ...mockSurvey,
+                questions: [
+                    {
+                        id: 'q1',
+                        question: 'Question 1',
+                        type: SurveyQuestionType.Open,
+                        optional: true,
+                    },
+                    {
+                        id: 'q2',
+                        question: 'Question 2',
+                        type: SurveyQuestionType.Open,
+                        optional: true,
+                    },
+                ],
+            } as unknown as Survey
+
+            const surveyDiv = document.createElement('div')
+            document.body.appendChild(surveyDiv)
+            surveyManager.renderSurvey(multiQuestionSurvey, surveyDiv)
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            const submitButton = surveyDiv.querySelector<HTMLButtonElement>('.form-submit')
+            await act(async () => {
+                fireEvent.click(submitButton!)
+            })
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('1')
+
+            document.body.removeChild(surveyDiv)
         })
     })
 

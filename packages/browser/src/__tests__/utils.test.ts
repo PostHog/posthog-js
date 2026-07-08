@@ -7,7 +7,7 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, isCrossDomainCookie, migrateConfigField } from '../utils'
+import { _copyAndTruncateStrings, extend, isCrossDomainCookie, migrateConfigField } from '../utils'
 import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
 import { expect } from '@jest/globals'
 
@@ -52,10 +52,6 @@ describe('utils', () => {
             target.foo = 'bar'
 
             expect(copy).not.toEqual(target)
-        })
-
-        it('does not truncate when passed null', () => {
-            expect(_copyAndTruncateStrings(target, null)).toEqual(target)
         })
 
         it('handles recursive objects', () => {
@@ -483,6 +479,45 @@ describe('utils', () => {
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining("Config field 'oldField' is deprecated")
             )
+        })
+    })
+
+    describe('extend', () => {
+        // Pins the merge semantics that the localStorage+cookie persistence merge depends on.
+        // Later args override earlier args for any defined value (undefined is skipped, but
+        // null, '', 0, false ARE applied). Code paths that need stricter behaviour (e.g.
+        // createLocalPlusCookieStore with __preview_cookie_wins_on_conflict) must filter
+        // before calling extend rather than relying on it to skip falsy values.
+
+        it('later args override earlier args for defined values', () => {
+            expect(extend({ a: 1 }, { a: 2 })).toEqual({ a: 2 })
+        })
+
+        it('skips undefined source values', () => {
+            expect(extend({ a: 1 }, { a: undefined })).toEqual({ a: 1 })
+        })
+
+        it('applies null source values (does not skip)', () => {
+            expect(extend({ a: 1 }, { a: null })).toEqual({ a: null })
+        })
+
+        it('applies empty-string source values (does not skip)', () => {
+            expect(extend({ a: 'valid' }, { a: '' })).toEqual({ a: '' })
+        })
+
+        it('applies 0 and false (does not skip falsy)', () => {
+            expect(extend({ a: 1, b: true }, { a: 0, b: false })).toEqual({ a: 0, b: false })
+        })
+
+        it('preserves keys that are absent from later args', () => {
+            expect(extend({ a: 1, b: 2 }, { b: 3 })).toEqual({ a: 1, b: 3 })
+        })
+
+        it('mutates the first argument and returns it', () => {
+            const target: Record<string, any> = { a: 1 }
+            const result = extend(target, { b: 2 })
+            expect(result).toBe(target)
+            expect(target).toEqual({ a: 1, b: 2 })
         })
     })
 })

@@ -12,4 +12,4 @@ run:
 	yarn macos
 
 build:
-	xcodebuild -workspace macos/example_rn_macos.xcworkspace -configuration Debug -scheme example_rn_macos-macOS
+	set -o pipefail && xcrun xcodebuild -workspace macos/example_rn_macos.xcworkspace -configuration Debug -scheme example_rn_macos-macOS | xcpretty

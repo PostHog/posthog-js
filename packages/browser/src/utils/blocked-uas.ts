@@ -12,6 +12,8 @@ export interface NavigatorUAData {
         brand: string
         version: string
     }[]
+    platform?: string
+    getHighEntropyValues?: (hints: string[]) => Promise<{ model?: string }>
 }
 declare global {
     interface Navigator {
@@ -48,8 +50,8 @@ export const isLikelyBot = function (navigator: Navigator | undefined, customBlo
     // open, which will detect some bots that are trying to mask themselves and might get past the checks above.
     // However, this would give false positives for actual humans who have dev tools open.
 
-    // We could also use the data in navigator.userAgentData.getHighEntropyValues() to detect bots, but we should wait
-    // until this stops being experimental. The MDN docs imply that this might eventually require user permission.
+    // We could also use navigator.userAgentData.getHighEntropyValues() to detect bots — it doesn't
+    // prompt; access is gated by the `ch-ua-high-entropy-values` Permissions-Policy and a blocked
+    // call rejects with NotAllowedError.
     // See https://developer.mozilla.org/en-US/docs/Web/API/NavigatorUAData/getHighEntropyValues
-    // It would be very bad if posthog-js caused a permission prompt to appear on every page load.
 }

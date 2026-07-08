@@ -35,6 +35,10 @@ export class PostHogCoreTestClient extends PostHogCore {
     return super.getFlags(distinctId, groups, personProperties, groupProperties, extraPayload)
   }
 
+  public flushWithPendingPromises(): Promise<void> {
+    return super.flushWithPendingPromises()
+  }
+
   getPersistedProperty<T>(key: string): T {
     return this.mocks.storage.getItem(key)
   }

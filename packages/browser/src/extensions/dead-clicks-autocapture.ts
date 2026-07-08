@@ -4,6 +4,7 @@ import { isBoolean, isObject } from '@posthog/core'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
+import type { Extension } from './types'
 
 const logger = createLogger('[Dead Clicks]')
 
@@ -22,7 +23,7 @@ export const isDeadClicksEnabledForAutocapture = (instance: DeadClicksAutocaptur
     return isRemoteEnabled
 }
 
-export class DeadClicksAutocapture {
+export class DeadClicksAutocapture implements Extension {
     get lazyLoadedDeadClicksAutocapture(): LazyLoadedDeadClicksAutocaptureInterface | undefined {
         return this._lazyLoadedDeadClicksAutocapture
     }
@@ -64,6 +65,7 @@ export class DeadClicksAutocapture {
         if (assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture) {
             // already loaded
             cb()
+            return
         }
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
             this.instance,

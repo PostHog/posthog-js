@@ -6,6 +6,7 @@ const { HOG_REF } = require('../../../scripts/docs/constants');
 // Read package.json to get version
 const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
 const version = packageJson.version;
+const shouldWriteVersionedReferences = process.env.GENERATE_VERSIONED_REFERENCES === '1';
 
 // React Native-specific configuration
 const REACT_NATIVE_SPEC_INFO = {
@@ -52,13 +53,16 @@ if (!fs.existsSync(referencesDir)) {
     fs.mkdirSync(referencesDir, { recursive: true });
 }
 
-// Generate versioned file
 const output = generateApiSpecs(config);
+const latestOutput = { ...output, info: { ...output.info, version: '<version>' } };
 
-// Write versioned file
-const versionedPath = path.resolve(__dirname, `../references/posthog-react-native-references-${version}.json`);
-fs.writeFileSync(versionedPath, JSON.stringify(output, null, 2));
-
-// Copy to latest file
+// Always update the rolling public API reference used by CI and docs previews.
 const latestPath = path.resolve(__dirname, '../references/posthog-react-native-references-latest.json');
-fs.writeFileSync(latestPath, JSON.stringify(output, null, 2));
+fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2));
+
+// Versioned references are release artifacts. Avoid writing them during normal generation
+// so PRs don't accidentally commit package-version-specific reference files.
+if (shouldWriteVersionedReferences) {
+    const versionedPath = path.resolve(__dirname, `../references/posthog-react-native-references-${version}.json`);
+    fs.writeFileSync(versionedPath, JSON.stringify(output, null, 2));
+}

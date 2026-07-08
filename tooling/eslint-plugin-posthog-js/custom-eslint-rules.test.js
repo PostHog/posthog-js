@@ -8,6 +8,7 @@ const noDirectDateCheck = require('./no-direct-date-check')
 const noDirectNumberCheck = require('./no-direct-number-check')
 const noDirectBooleanCheck = require('./no-direct-boolean-check')
 const noAddEventListener = require('./no-add-event-listener')
+const noUnsafeWebGlobal = require('./no-unsafe-web-global')
 
 const { RuleTester } = require('eslint')
 
@@ -128,6 +129,61 @@ ruleTester.run('no-direct-boolean-check', noDirectBooleanCheck, {
         {
             code: `typeof x === 'boolean'`,
             errors: [{ message: 'Use isBoolean instead of direct boolean checks.' }],
+        },
+    ],
+})
+
+const tsRuleTester = new RuleTester({
+    parser: require.resolve('@typescript-eslint/parser'),
+    parserOptions: {
+        ecmaVersion: 2015,
+        sourceType: 'module',
+    },
+})
+
+tsRuleTester.run('no-unsafe-web-global', noUnsafeWebGlobal, {
+    valid: [
+        // typeof guard is safe
+        { code: `typeof Event !== 'undefined'` },
+        // guarded by typeof via short-circuit &&
+        { code: `typeof Event !== 'undefined' && isInstanceOf(candidate, Event)` },
+        // type annotation
+        { code: `function foo(e: Event) {}` },
+        // type predicate
+        { code: `function foo(e: unknown): e is Event { return true }` },
+        // property access
+        { code: `obj.Event` },
+        // non-web-global identifier
+        { code: `const x = SomeOtherThing` },
+    ],
+    invalid: [
+        // direct value reference
+        {
+            code: `const x = Event`,
+            errors: [{ messageId: 'unsafeWebGlobal' }],
+        },
+        // new expression
+        {
+            code: `new Event('test')`,
+            errors: [{ messageId: 'unsafeWebGlobal' }],
+        },
+        // instanceof without typeof guard
+        {
+            code: `candidate instanceof Event`,
+            errors: [{ messageId: 'unsafeWebGlobal' }],
+        },
+        // isUndefined(Event) — the original bug pattern
+        {
+            code: `!isUndefined(Event) && isInstanceOf(candidate, Event)`,
+            errors: [
+                { messageId: 'unsafeWebGlobal' },
+                { messageId: 'unsafeWebGlobal' },
+            ],
+        },
+        // other web globals
+        {
+            code: `new MutationObserver(() => {})`,
+            errors: [{ messageId: 'unsafeWebGlobal' }],
         },
     ],
 })

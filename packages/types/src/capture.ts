@@ -46,6 +46,7 @@ export interface CaptureResult {
     properties: Properties
     $set?: Properties
     $set_once?: Properties
+    $unset?: string[]
     timestamp?: Date
 }
 
@@ -61,6 +62,11 @@ export interface CaptureOptions {
      * Will set person properties but only once, it will NOT override previous values
      */
     $set_once?: Properties
+
+    /**
+     * Used to unset person properties
+     */
+    $unset?: string[]
 
     /**
      * Used to override the desired endpoint for the captured event
@@ -96,6 +102,15 @@ export interface CaptureOptions {
      * If set, overrides the current timestamp
      */
     timestamp?: Date
+
+    /**
+     * If set, overrides the auto-generated event uuid. The value must be a valid UUID;
+     * invalid values are ignored and a new UUID is generated. Useful for cross-source
+     * idempotency (e.g. a server webhook and a browser success page both firing for the
+     * same business transaction): emit both events with the same deterministic uuid so
+     * PostHog can dedupe them.
+     */
+    uuid?: string
 
     /**
      * Internal flag set by captureException() / sendExceptionEvent() to indicate this $exception

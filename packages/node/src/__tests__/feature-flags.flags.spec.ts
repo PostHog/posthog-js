@@ -9,6 +9,7 @@ const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
+  featureFlagsRequestMaxRetries: 0,
 }
 
 describe('flags v2', () => {
@@ -34,21 +35,18 @@ describe('flags v2', () => {
       const result = await posthog.getFeatureFlag('non-existent-flag', 'some-distinct-id')
 
       expect(result).toBe(undefined)
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
       await waitForPromises()
       expect(capturedMessage).toMatchObject({
         distinct_id: 'some-distinct-id',
         event: '$feature_flag_called',
-        library: posthog.getLibraryId(),
-        library_version: posthog.getLibraryVersion(),
         properties: {
           '$feature/non-existent-flag': undefined,
           $feature_flag: 'non-existent-flag',
           $feature_flag_response: undefined,
           $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
           $feature_flag_evaluated_at: expect.any(Number),
-          $groups: undefined,
           $lib: posthog.getLibraryId(),
           $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: false,
@@ -150,14 +148,12 @@ describe('flags v2', () => {
         const result = await posthog.getFeatureFlag(key, 'some-distinct-id')
 
         expect(result).toBe(expectedResponse)
-        expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+        expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
         await waitForPromises()
         expect(capturedMessage).toMatchObject({
           distinct_id: 'some-distinct-id',
           event: '$feature_flag_called',
-          library: posthog.getLibraryId(),
-          library_version: posthog.getLibraryVersion(),
           properties: {
             [`$feature/${key}`]: expectedResponse,
             $feature_flag: key,
@@ -167,7 +163,6 @@ describe('flags v2', () => {
             $feature_flag_reason: expectedReason,
             $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
             $feature_flag_evaluated_at: expect.any(Number),
-            $groups: undefined,
             $lib: posthog.getLibraryId(),
             $lib_version: posthog.getLibraryVersion(),
             locally_evaluated: false,
@@ -214,7 +209,7 @@ describe('flags v2', () => {
         const result = await posthog.getFeatureFlagPayload('flag-with-payload', 'some-distinct-id')
 
         expect(result).toEqual([0, 1, 2])
-        expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+        expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
         await waitForPromises()
         expect(capturedMessage).toBeUndefined()
@@ -329,19 +324,16 @@ describe('flags v1', () => {
       const result = await posthog.getFeatureFlag('non-existent-flag', 'some-distinct-id')
 
       expect(result).toBe(undefined)
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
       await waitForPromises()
       expect(capturedMessage).toMatchObject({
         distinct_id: 'some-distinct-id',
         event: '$feature_flag_called',
-        library: posthog.getLibraryId(),
-        library_version: posthog.getLibraryVersion(),
         properties: {
           '$feature/non-existent-flag': undefined,
           $feature_flag: 'non-existent-flag',
           $feature_flag_response: undefined,
-          $groups: undefined,
           $lib: posthog.getLibraryId(),
           $lib_version: posthog.getLibraryVersion(),
           locally_evaluated: false,
@@ -375,7 +367,7 @@ describe('flags v1', () => {
       const result = await posthog.getFeatureFlagPayload('flag-with-payload', 'some-distinct-id')
 
       expect(result).toEqual([0, 1, 2])
-      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
+      expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2', expect.any(Object))
 
       await waitForPromises()
       expect(capturedMessage).toBeUndefined()

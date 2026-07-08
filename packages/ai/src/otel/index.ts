@@ -1,11 +1,5 @@
-export { captureSpan } from './capture'
-export { PostHogSpanProcessor, createPostHogSpanProcessor } from './processor'
-export { aiSdkSpanMapper } from './mappers'
-export type {
-  PostHogTelemetryOptions,
-  PostHogReadableSpan,
-  PostHogTelemetrySpanProcessor,
-  PostHogSpanMapper,
-  PostHogSpanMapperResult,
-  ShouldExportSpan,
-} from './types'
+export { PostHogTraceExporter } from './exporter'
+export type { PostHogTraceExporterOptions } from './exporter'
+
+export { PostHogSpanProcessor } from './processor'
+export type { PostHogSpanProcessorOptions } from './processor'

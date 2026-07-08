@@ -1,5 +1,76 @@
 # @posthog/react
 
+## 1.10.3
+
+### Patch Changes
+
+- [#3905](https://github.com/PostHog/posthog-js/pull/3905) [`870cfa4`](https://github.com/PostHog/posthog-js/commit/870cfa42229079e2154a4044e7485b0670425d41) Thanks [@marandaneto](https://github.com/marandaneto)! - Filter disabled bootstrap feature flags from useActiveFeatureFlags.
+  (2026-06-22)
+- Updated dependencies [[`1fce04f`](https://github.com/PostHog/posthog-js/commit/1fce04f79240971dc2776e4d9381dadeb0aff1c3)]:
+    - posthog-js@1.391.8
+
+## 1.10.2
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad), [`d3a9462`](https://github.com/PostHog/posthog-js/commit/d3a9462b8b21994764bdd2802973d82ffe472294)]:
+    - posthog-js@1.386.7
+
+## 1.10.1
+
+### Patch Changes
+
+- [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
+  (2026-06-09)
+- Updated dependencies [[`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6)]:
+    - posthog-js@1.383.2
+
+## 1.10.0
+
+### Minor Changes
+
+- [#3718](https://github.com/PostHog/posthog-js/pull/3718) [`3aff16e`](https://github.com/PostHog/posthog-js/commit/3aff16e98540e659be4158a784fe38ef755f878e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add an optional `defaultValue` argument to `useFeatureFlagEnabled`. When supplied, the hook returns that value instead of `undefined` while flags are loading or when the flag is absent, and the return type narrows to `boolean`. Omitting the argument keeps the existing `boolean | undefined` behavior.
+  (2026-06-02)
+
+## 1.9.1
+
+### Patch Changes
+
+- [#3646](https://github.com/PostHog/posthog-js/pull/3646) [`4f87827`](https://github.com/PostHog/posthog-js/commit/4f87827dda9c102a6deded986f2afd9fdddfb2e5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid throwing or initializing PostHogProvider when no API key or client is provided
+  (2026-05-21)
+- Updated dependencies [[`87e2145`](https://github.com/PostHog/posthog-js/commit/87e2145b5d09ed8a24df1fc337dad5c3c90c1b8a), [`4f87827`](https://github.com/PostHog/posthog-js/commit/4f87827dda9c102a6deded986f2afd9fdddfb2e5), [`280832b`](https://github.com/PostHog/posthog-js/commit/280832b50b4c058e010436c4aab861cb143577c1)]:
+    - posthog-js@1.374.4
+
+## 1.9.0
+
+### Minor Changes
+
+- [#3302](https://github.com/PostHog/posthog-js/pull/3302) [`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11) Thanks [@dmarticus](https://github.com/dmarticus)! - preserve $set_once semantics in local flag evaluation cache
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
+    - posthog-js@1.365.0
+
+## 1.8.3
+
+### Patch Changes
+
+- [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
+  (2026-04-01)
+- Updated dependencies [[`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371), [`c5feb5c`](https://github.com/PostHog/posthog-js/commit/c5feb5c35eefe0a459facc3b72752ab7d6696c1c), [`7b944fc`](https://github.com/PostHog/posthog-js/commit/7b944fc2a6099c0dfa4aa28f55872bd226b17b37)]:
+    - posthog-js@1.364.5
+
+## 1.8.2
+
+### Patch Changes
+
+- [#3182](https://github.com/PostHog/posthog-js/pull/3182) [`2304af0`](https://github.com/PostHog/posthog-js/commit/2304af092b4da4d5480f40f1fb8f748ce89e8c25) Thanks [@marandaneto](https://github.com/marandaneto)! - refactor: use `getFeatureFlagResult` instead of deprecated `getFeatureFlagPayload` internally
+  (2026-03-02)
+
 ## 1.8.1
 
 ### Patch Changes

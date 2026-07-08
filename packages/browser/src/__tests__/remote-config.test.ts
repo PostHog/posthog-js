@@ -30,8 +30,8 @@ describe('RemoteConfigLoader', () => {
                 posthog.config.advanced_disable_flags || posthog.config.advanced_disable_decide || false,
             featureFlags: {
                 ensureFlagsLoaded: jest.fn(),
-                reloadFeatureFlags: jest.fn(),
             },
+            reloadFeatureFlags: jest.fn(),
             requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
         })
     })
@@ -165,7 +165,7 @@ describe('RemoteConfigLoader', () => {
             const loader = new RemoteConfigLoader(posthog)
             loader.refresh()
 
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalled()
             expect(posthog._send_request).not.toHaveBeenCalled()
             expect(posthog._onRemoteConfig).not.toHaveBeenCalled()
         })
@@ -176,7 +176,7 @@ describe('RemoteConfigLoader', () => {
             const loader = new RemoteConfigLoader(posthog)
             loader.refresh()
 
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
         })
     })
 
@@ -193,13 +193,13 @@ describe('RemoteConfigLoader', () => {
             loader.load()
 
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
 
             jest.advanceTimersByTime(5 * 60 * 1000)
             // Should not be called again after stop
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
         })
     })
 
@@ -221,7 +221,7 @@ describe('RemoteConfigLoader', () => {
 
             // Interval fires while hidden — should be a no-op
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             loader.stop()
             Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
@@ -236,14 +236,92 @@ describe('RemoteConfigLoader', () => {
 
             // Interval fires while hidden — no refresh
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
 
             // Tab becomes visible
             Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
 
             // Next interval fires while visible — should refresh
             jest.advanceTimersByTime(5 * 60 * 1000)
-            expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            loader.stop()
+        })
+
+        it('skips refresh when no document is available', async () => {
+            try {
+                await jest.isolateModulesAsync(async () => {
+                    jest.doMock('../utils/globals', () => ({
+                        ...jest.requireActual('../utils/globals'),
+                        document: undefined,
+                    }))
+
+                    // Re-import with no globals document to simulate browser extension background contexts.
+                    const { RemoteConfigLoader: NoDocumentRemoteConfigLoader } = await import('../remote-config')
+                    const reloadFeatureFlags = jest.fn()
+
+                    new NoDocumentRemoteConfigLoader({
+                        _shouldDisableFlags: () => false,
+                        reloadFeatureFlags,
+                    } as any).refresh()
+
+                    expect(reloadFeatureFlags).not.toHaveBeenCalled()
+                })
+            } finally {
+                jest.dontMock('../utils/globals')
+            }
+        })
+    })
+
+    describe('configurable refresh interval', () => {
+        const config = { surveys: true } as RemoteConfig
+
+        beforeEach(() => {
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: { config, siteApps: [] },
+            }
+        })
+
+        it('uses custom refresh interval when configured', () => {
+            const customInterval = 10 * 60 * 1000 // 10 minutes
+            posthog.config.remote_config_refresh_interval_ms = customInterval
+
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            // Default interval (5 min) should not trigger refresh
+            jest.advanceTimersByTime(5 * 60 * 1000)
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
+
+            // Custom interval (10 min) should trigger refresh
+            jest.advanceTimersByTime(5 * 60 * 1000) // total: 10 minutes
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            loader.stop()
+        })
+
+        it('disables periodic refresh when interval is 0', () => {
+            posthog.config.remote_config_refresh_interval_ms = 0
+
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            // Even after a long time, no refresh should occur
+            jest.advanceTimersByTime(30 * 60 * 1000) // 30 minutes
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
+
+            loader.stop()
+        })
+
+        it('uses default interval when config is undefined', () => {
+            posthog.config.remote_config_refresh_interval_ms = undefined
+
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            // Should use default 5 minute interval
+            jest.advanceTimersByTime(5 * 60 * 1000)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             loader.stop()
         })

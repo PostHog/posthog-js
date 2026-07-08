@@ -1,14 +1,13 @@
 import { PostHog } from './posthog-core'
 import { ProductTour, ProductTourCallback } from './posthog-product-tours-types'
-import { PRODUCT_TOURS_ENABLED_SERVER_SIDE } from './constants'
+import { PRODUCT_TOURS, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from './constants'
 import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { isArray, isNullish } from '@posthog/core'
 import { assignableWindow } from './utils/globals'
+import { Extension } from './extensions/types'
 
 const logger = createLogger('[Product Tours]')
-
-const PRODUCT_TOURS_STORAGE_KEY = 'ph_product_tours'
 
 interface ProductTourManagerInterface {
     start: () => void
@@ -31,13 +30,21 @@ const isProductToursEnabled = (instance: PostHog): boolean => {
     return !!instance.persistence?.get_property(PRODUCT_TOURS_ENABLED_SERVER_SIDE)
 }
 
-export class PostHogProductTours {
+export class PostHogProductTours implements Extension {
     private _instance: PostHog
     private _productTourManager: ProductTourManagerInterface | null = null
     private _cachedTours: ProductTour[] | null = null
 
+    private get _persistence() {
+        return this._instance.persistence
+    }
+
     constructor(instance: PostHog) {
         this._instance = instance
+    }
+
+    initialize() {
+        this.loadIfEnabled()
     }
 
     onRemoteConfig(response: RemoteConfig): void {
@@ -45,10 +52,23 @@ export class PostHogProductTours {
             return
         }
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this._persistence) {
+            this._persistence.register({
                 [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: !!response.productTours,
             })
+        }
+        if (!isProductToursEnabled(this._instance)) {
+            if (this._productTourManager || !isNullish(this._persistence?.props[PRODUCT_TOURS])) {
+                logger.info('product tours disabled; stopping and clearing cached tours')
+            }
+            // a manager started from the previously-persisted enabled flag keeps
+            // serving tours until told to stop
+            this._productTourManager?.stop()
+            this._productTourManager = null
+            // tours cached while enabled would otherwise ride along in the main
+            // persistence blob (and every cross-tab storage broadcast) forever
+            this.clearCache()
+            return
         }
         this.loadIfEnabled()
     }
@@ -87,9 +107,9 @@ export class PostHogProductTours {
             return
         }
 
-        const persistence = this._instance.persistence
+        const persistence = this._persistence
         if (persistence) {
-            const storedTours = persistence.props[PRODUCT_TOURS_STORAGE_KEY]
+            const storedTours = persistence.props[PRODUCT_TOURS]
             if (isArray(storedTours) && !forceReload) {
                 this._cachedTours = storedTours
                 callback(storedTours, { isLoaded: true })
@@ -104,6 +124,12 @@ export class PostHogProductTours {
             ),
             method: 'GET',
             callback: (response) => {
+                if (!isProductToursEnabled(this._instance)) {
+                    // a disable can land while this request is in flight; honouring
+                    // the response would re-create the cache the disable just cleared
+                    callback([], { isLoaded: true })
+                    return
+                }
                 const statusCode = response.statusCode
                 if (statusCode !== 200 || !response.json) {
                     const error = `Product Tours API could not be loaded, status: ${statusCode}`
@@ -116,7 +142,7 @@ export class PostHogProductTours {
                 this._cachedTours = tours
 
                 if (persistence) {
-                    persistence.register({ [PRODUCT_TOURS_STORAGE_KEY]: tours })
+                    persistence.register({ [PRODUCT_TOURS]: tours })
                 }
 
                 callback(tours, { isLoaded: true })
@@ -164,7 +190,7 @@ export class PostHogProductTours {
 
     clearCache(): void {
         this._cachedTours = null
-        this._instance.persistence?.unregister(PRODUCT_TOURS_STORAGE_KEY)
+        this._persistence?.unregister(PRODUCT_TOURS)
     }
 
     resetTour(tourId: string): void {

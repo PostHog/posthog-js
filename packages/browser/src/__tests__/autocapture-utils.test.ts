@@ -17,11 +17,13 @@ import {
 } from '../autocapture-utils'
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
-import { AutocaptureConfig } from '../types'
+import { createMockPostHog } from './helpers/posthog-instance'
+import { AutocaptureConfig, PostHogConfig } from '../types'
 
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
         document!.getElementsByTagName('html')[0].innerHTML = ''
+        jest.restoreAllMocks()
     })
 
     describe(`getSafeText`, () => {
@@ -210,12 +212,69 @@ describe(`Autocapture utility functions`, () => {
             expect(shouldCaptureDomEvent(`div` as unknown as Element, makeMouseEvent({}))).toBe(false)
         })
 
+        it(`does not throw when getComputedStyle throws for a cross-realm element`, () => {
+            jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+                throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
+            })
+
+            const el = document!.createElement(`div`)
+            const parent = document!.createElement(`div`)
+            parent.appendChild(el)
+
+            expect(() => shouldCaptureDomEvent(el, makeMouseEvent({}))).not.toThrow()
+        })
+
         it(`should NOT capture "click" events on <form> elements`, () => {
             expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
 
         it.each([`html`, 'body'])(`should NOT capture "click" events on <%s> elements`, (tagName) => {
             expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
+        })
+
+        describe('get_current_url override for url_allowlist/url_ignorelist', () => {
+            const setWindowLocation = (href: string) => {
+                Object.defineProperty(window, 'location', { value: { href }, writable: true, configurable: true })
+            }
+            const posthogWith = (getCurrentUrl?: (defaultUrl: string) => string) =>
+                createMockPostHog({ config: { get_current_url: getCurrentUrl } as PostHogConfig })
+
+            it('matches url_allowlist against the overridden URL', () => {
+                // raw browser URL is not in the allow list
+                setWindowLocation('https://generated-host.skin/x')
+                const config = { url_allowlist: [/app\.example\.com/] } as AutocaptureConfig
+                const link = document!.createElement('a')
+
+                expect(shouldCaptureDomEvent(link, makeMouseEvent({}), config)).toBe(false)
+                expect(
+                    shouldCaptureDomEvent(
+                        link,
+                        makeMouseEvent({}),
+                        config,
+                        undefined,
+                        undefined,
+                        posthogWith(() => 'https://app.example.com/page')
+                    )
+                ).toBe(true)
+            })
+
+            it('matches url_ignorelist against the overridden URL', () => {
+                setWindowLocation('https://app.example.com/page')
+                const config = { url_ignorelist: [/internal-admin/] } as AutocaptureConfig
+                const link = document!.createElement('a')
+
+                expect(shouldCaptureDomEvent(link, makeMouseEvent({}), config)).toBe(true)
+                expect(
+                    shouldCaptureDomEvent(
+                        link,
+                        makeMouseEvent({}),
+                        config,
+                        undefined,
+                        undefined,
+                        posthogWith(() => 'https://app.example.com/internal-admin')
+                    )
+                ).toBe(false)
+            })
         })
 
         describe('css selector allowlist', () => {

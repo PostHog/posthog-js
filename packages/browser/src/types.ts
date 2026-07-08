@@ -1,3 +1,7 @@
+// Portions of this file are derived from getsentry/sentry-javascript
+// Copyright (c) 2012 Functional Software, Inc. dba Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
+
 import { PostHog } from './posthog-core'
 import { Survey } from './posthog-surveys-types'
 import { ConversationsRemoteConfig } from './posthog-conversations-types'
@@ -7,6 +11,7 @@ import { ConversationsRemoteConfig } from './posthog-conversations-types'
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 
 // Extension class types for __extensionClasses (type-only, no bundle impact)
+import type { ExtensionConstructor } from './extensions/types'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -18,8 +23,13 @@ import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
 import type { FeedbackRecording } from './extensions/feedback-recording'
-
-type Extension<T> = new (...args: any[]) => T
+import type { PostHogSurveys } from './posthog-surveys'
+import type { Toolbar } from './extensions/toolbar'
+import type { PostHogExceptions } from './posthog-exceptions'
+import type { WebExperiments } from './web-experiments'
+import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
+import type { PostHogFeatureFlags } from './posthog-featureflags'
+import type { PostHogLogs } from './posthog-logs'
 
 // ============================================================================
 // Re-export public types from @posthog/types
@@ -81,6 +91,7 @@ export type {
     PerformanceCaptureConfig,
     DeadClickCandidate,
     ExceptionAutoCaptureConfig,
+    ExceptionStepsConfig,
     DeadClicksAutoCaptureConfig,
     HeatmapConfig,
     ConfigDefaults,
@@ -94,6 +105,22 @@ export type {
 
 // Toolbar types
 export type { ToolbarUserIntent, ToolbarSource, ToolbarVersion, ToolbarParams } from '@posthog/types'
+
+// Log capture types
+export type {
+    LogSeverityLevel,
+    OtlpSeverityText,
+    OtlpSeverityEntry,
+    LogAttributeValue,
+    LogAttributes,
+    CaptureLogOptions,
+    Logger,
+    OtlpAnyValue,
+    OtlpKeyValue,
+    OtlpLogRecord,
+    OtlpLogsPayload,
+} from '@posthog/types'
+export type { LogSdkContext } from '@posthog/core'
 
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
 export type { KnownUnsafeEditableEvent } from '@posthog/core'
@@ -124,7 +151,12 @@ import type {
  * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
  * using the proper `loaded` function signature.
  */
-export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init'>
+export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'> & {
+    // re-declared (rather than kept from the base interface) so they use the
+    // browser-specific `PostHogConfig` below, matching the class implementation
+    config: PostHogConfig
+    set_config(config: Partial<PostHogConfig>): void
+}
 
 /*
  * Specify that `loaded` should be using the PostHog instance type
@@ -134,23 +166,46 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
     loaded: (posthog: PostHogInterface) => void
 
     /**
+     * Disables capturing the `$device_model` super-property.
+     *
+     * When capturing is enabled (the default), PostHog resolves the hardware model once during init
+     * via `navigator.userAgentData.getHighEntropyValues(['model'])` and registers it as the raw OEM
+     * code (e.g. `Pixel 7`). This is Chromium-only and only meaningful on Android — it resolves to
+     * `undefined` on Safari/Firefox and to an empty string on desktop, in which cases nothing is
+     * registered.
+     *
+     * This opt-out is offered because `getHighEntropyValues` is still experimental and Chromium-only
+     * (not yet a cross-browser standard); set it to `true` to skip the call entirely.
+     *
+     * @default false
+     */
+    disableDeviceModel?: boolean
+
+    /**
      * Internal: Extension class overrides for tree-shaking support.
      * When provided, these classes are used instead of the default imports.
      * This enables entrypoints to control which extensions are bundled.
      * @internal
      */
     __extensionClasses?: {
-        historyAutocapture?: Extension<HistoryAutocapture>
-        tracingHeaders?: Extension<TracingHeaders>
-        siteApps?: Extension<SiteApps>
-        sessionRecording?: Extension<SessionRecording>
-        autocapture?: Extension<Autocapture>
-        productTours?: Extension<PostHogProductTours>
-        heatmaps?: Extension<Heatmaps>
-        webVitalsAutocapture?: Extension<WebVitalsAutocapture>
-        exceptionObserver?: Extension<ExceptionObserver>
-        deadClicksAutocapture?: Extension<DeadClicksAutocapture>
-        feedbackRecording?: Extension<FeedbackRecording>
+        exceptions?: ExtensionConstructor<PostHogExceptions>
+        historyAutocapture?: ExtensionConstructor<HistoryAutocapture>
+        tracingHeaders?: ExtensionConstructor<TracingHeaders>
+        siteApps?: ExtensionConstructor<SiteApps>
+        sessionRecording?: ExtensionConstructor<SessionRecording>
+        autocapture?: ExtensionConstructor<Autocapture>
+        productTours?: ExtensionConstructor<PostHogProductTours>
+        heatmaps?: ExtensionConstructor<Heatmaps>
+        webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>
+        exceptionObserver?: ExtensionConstructor<ExceptionObserver>
+        deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>
+        feedbackRecording?: ExtensionConstructor<FeedbackRecording>
+        surveys?: ExtensionConstructor<PostHogSurveys>
+        toolbar?: ExtensionConstructor<Toolbar>
+        experiments?: ExtensionConstructor<WebExperiments>
+        conversations?: ExtensionConstructor<PostHogConversations>
+        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>
+        logs?: ExtensionConstructor<PostHogLogs>
     }
 }
 
@@ -169,12 +224,19 @@ export interface RequestWithOptions {
     timeout?: number
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
-    disableXHRCredentials?: boolean
     compression?: Compression | 'best-available'
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions
     }
+    /**
+     * When set, `_send_request` invokes `callback` with a synthetic response
+     * on the paths that otherwise drop a request without notifying the caller
+     * (client not loaded, server rate limit). Opt-in so existing callers keep
+     * their current behavior; the logs pipeline uses it to keep records for a
+     * later retry instead of losing them silently.
+     */
+    fireCallbackOnDrop?: boolean
 }
 
 // Queued request types - the same as a request but with additional queueing information
@@ -242,6 +304,16 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
      * which nobody wanted, now the default is all
      */
     triggerMatchType?: 'any' | 'all'
+    /**
+     * Config version - defaults to 1 (legacy)
+     * When version is 2, triggerGroups is used instead of individual trigger fields
+     */
+    version?: 1 | 2
+    /**
+     * V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates
+     * Only used when version === 2
+     */
+    triggerGroups?: SessionRecordingTriggerGroup[]
 }
 
 /**
@@ -427,6 +499,11 @@ export interface PersistentStore {
     _error: (error: any) => void
     _parse: (name: string) => any
     _get: (name: string) => any
+    // Returns whether the write was accepted without throwing. Backends that
+    // swallow quota/serialization errors return false so callers can avoid
+    // caching a write that never landed. This is best-effort, not a durable
+    // -persistence guarantee — e.g. Safari private mode has historically
+    // reported success on a write that did not persist.
     _set: (
         name: string,
         value: any,
@@ -434,12 +511,10 @@ export interface PersistentStore {
         cross_subdomain?: boolean,
         secure?: boolean,
         debug?: boolean
-    ) => void
+    ) => boolean
     _remove: (name: string, cross_subdomain?: boolean) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
@@ -463,6 +538,13 @@ export type NetworkRecordOptions = {
      * NB this will be at most 1MB even if set larger
      */
     payloadSizeLimitBytes: number
+    /**
+     * when true, read bodies through a streaming reader that stops at payloadSizeLimitBytes
+     * instead of buffering the whole body and then enforcing the limit. Reads only a clone of
+     * the body, so it never consumes the stream the page itself reads.
+     * @default false
+     */
+    streamNetworkBody?: boolean
     /**
      * some domains we should never record the payload
      * for example other companies session replay ingestion payloads aren't super useful but are gigantic
@@ -489,6 +571,39 @@ export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debu
 export interface SessionRecordingUrlTrigger {
     url: string
     matching: 'regex'
+}
+
+/**
+ * V2 event trigger - always an object with name, optionally with property filters.
+ * The server normalizes bare event name strings to this shape before sending.
+ */
+export interface SessionRecordingEventTrigger {
+    name: string
+    properties?: SessionRecordingTriggerPropertyFilter[]
+}
+
+export interface SessionRecordingTriggerPropertyFilter {
+    key: string
+    type: 'event' | 'person'
+    operator?: 'exact' | 'is_not' | 'icontains' | 'not_icontains' | 'regex' | 'not_regex' | 'gt' | 'lt'
+    value?: string | number | boolean | string[]
+}
+
+/**
+ * V2 Trigger Group - represents a single trigger group with its own conditions and sample rate
+ */
+export interface SessionRecordingTriggerGroup {
+    id: string
+    name: string
+    sampleRate: number
+    minDurationMs?: number
+    conditions: {
+        matchType: 'any' | 'all'
+        events?: SessionRecordingEventTrigger[]
+        urls?: SessionRecordingUrlTrigger[]
+        flag?: string | FlagVariant
+        properties?: SessionRecordingTriggerPropertyFilter[]
+    }
 }
 
 export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
@@ -522,7 +637,8 @@ export type OverrideConfig = {
     event_trigger: boolean
 }
 
-export enum Compression {
-    GZipJS = 'gzip-js',
-    Base64 = 'base64',
-}
+export const Compression = {
+    GZipJS: 'gzip-js',
+    Base64: 'base64',
+} as const
+export type Compression = (typeof Compression)[keyof typeof Compression]

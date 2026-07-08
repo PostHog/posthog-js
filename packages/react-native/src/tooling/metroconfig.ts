@@ -1,4 +1,6 @@
-// copied from https://github.com/getsentry/sentry-react-native/blob/73f2455090a375857fe115ed135e524c70324cdd/packages/core/src/js/tools/metroconfig.ts
+// Portions of this file are derived from getsentry/sentry-react-native
+// Copyright (c) 2017 Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
 import type { MetroConfig, MixedOutput, Module, ReadOnlyGraph } from 'metro'
 import { unstableBeforeAssetSerializationDebugIdPlugin } from './posthogMetroSerializer'

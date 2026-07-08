@@ -22,6 +22,10 @@ export class ScrollManager {
 
     constructor(private _instance: PostHog) {}
 
+    private get _scrollRoot() {
+        return this._instance.config.scroll_root_selector
+    }
+
     getContext(): ScrollContext | undefined {
         return this._context
     }
@@ -67,10 +71,8 @@ export class ScrollManager {
     }
 
     public scrollElement(): Element | undefined {
-        if (this._instance.config.scroll_root_selector) {
-            const selectors = isArray(this._instance.config.scroll_root_selector)
-                ? this._instance.config.scroll_root_selector
-                : [this._instance.config.scroll_root_selector]
+        if (this._scrollRoot) {
+            const selectors = isArray(this._scrollRoot) ? this._scrollRoot : [this._scrollRoot]
             for (const selector of selectors) {
                 const element = window?.document.querySelector(selector)
                 if (element) {
@@ -83,21 +85,26 @@ export class ScrollManager {
         }
     }
 
-    public scrollY(): number {
-        if (this._instance.config.scroll_root_selector) {
+    private _scrollPosition(axis: 'x' | 'y'): number {
+        const elementKey = axis === 'y' ? 'scrollTop' : 'scrollLeft'
+        if (this._scrollRoot) {
             const element = this.scrollElement()
-            return (element && element.scrollTop) || 0
-        } else {
-            return window ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0 : 0
+            return (element && element[elementKey]) || 0
         }
+
+        if (!window) {
+            return 0
+        }
+        return axis === 'y'
+            ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0
+            : window.scrollX || window.pageXOffset || window.document.documentElement.scrollLeft || 0
+    }
+
+    public scrollY(): number {
+        return this._scrollPosition('y')
     }
 
     public scrollX(): number {
-        if (this._instance.config.scroll_root_selector) {
-            const element = this.scrollElement()
-            return (element && element.scrollLeft) || 0
-        } else {
-            return window ? window.scrollX || window.pageXOffset || window.document.documentElement.scrollLeft || 0 : 0
-        }
+        return this._scrollPosition('x')
     }
 }

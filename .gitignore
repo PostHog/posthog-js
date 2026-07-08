@@ -26,6 +26,11 @@ test-result.json
 yarn-error.log
 stats.html
 bundle-stats*.html
+*-bundle-analysis.html
+
+# vite temp files
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
 .eslintcache
 cypress/downloads/downloads.html
 /test-results/
@@ -41,6 +46,8 @@ tsconfig.tsbuildinfo
 target
 
 .cursor/mcp.json
+# Ignore Cursor plans
+.cursor/**/*.plan.md
 
 .next
 next-env.d.ts

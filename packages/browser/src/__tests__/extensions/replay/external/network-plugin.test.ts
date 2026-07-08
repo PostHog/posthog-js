@@ -1,7 +1,15 @@
 /// <reference lib="dom" />
 
 import { expect } from '@jest/globals'
-import { shouldRecordBody } from '../../../../extensions/replay/external/network-plugin'
+import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
+import { NetworkRecordOptions } from '../../../../types'
+import {
+    _contentLengthExceedsLimit,
+    _readBody,
+    _tryReadBodyStreaming,
+    NEVER_RECORD_BODY_CONTENT_TYPES,
+    shouldRecordBody,
+} from '../../../../extensions/replay/external/network-plugin'
 
 // Mock Request class since jsdom might not provide it
 class MockRequest {
@@ -216,6 +224,48 @@ describe('network plugin', () => {
             })
         })
 
+        describe('binary content types are never recorded', () => {
+            const neverRecordCases: [string, boolean][] = NEVER_RECORD_BODY_CONTENT_TYPES.map((prefix) => [
+                prefix.endsWith('/') ? `${prefix}example` : prefix,
+                false,
+            ])
+            const alwaysRecordCases: [string, boolean][] = [
+                ['application/json', true],
+                ['text/plain', true],
+            ]
+            it.each([...neverRecordCases, ...alwaysRecordCases])(
+                'recordBody:true with content-type %s should record=%s',
+                (contentType, expected) => {
+                    const result = shouldRecordBody({
+                        type: 'response',
+                        headers: { 'content-type': contentType } as unknown as Headers,
+                        url: 'https://example.com/asset',
+                        recordBody: true,
+                    })
+                    expect(result).toBe(expected)
+                }
+            )
+
+            it('should ignore content-type casing (RFC 9110)', () => {
+                expect(
+                    shouldRecordBody({
+                        type: 'response',
+                        headers: { 'content-type': 'Image/WebP' } as unknown as Headers,
+                        url: 'https://example.com/asset',
+                        recordBody: true,
+                    })
+                ).toBe(false)
+                expect(
+                    shouldRecordBody({
+                        type: 'response',
+                        headers: { 'content-type': 'APPLICATION/PDF' } as unknown as Headers,
+                        url: 'https://example.com/asset',
+                        recordBody: true,
+                    })
+                ).toBe(false)
+            })
+        })
+
         describe('edge cases', () => {
             edgeCaseTestCases.forEach(({ recordBody, headers = {}, url = 'https://example.com', expected }, index) => {
                 it(`should handle edge case ${index + 1}: ${JSON.stringify({ recordBody, headers, url })}`, () => {
@@ -379,6 +429,283 @@ describe('network plugin', () => {
                     expect(testXhr.getListenerCount('timeout')).toBe(0)
                 })
             })
+        })
+
+        describe('instrumentation failures degrade gracefully', () => {
+            // instrumentation runs before we delegate to the host's open/fetch, so if it throws we must
+            // not let the exception escape and misattribute a failure to session replay
+            const OriginalRequest = global.Request
+
+            afterEach(() => {
+                global.Request = OriginalRequest
+            })
+
+            it('XHR open still delegates to the host when Request construction throws', () => {
+                jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const { mockWindow } = createMockWindow()
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                    const openCalls: any[] = []
+                    mockWindow.XMLHttpRequest.prototype.open = function (...args: any[]) {
+                        openCalls.push(args)
+                    }
+
+                    global.Request = class {
+                        constructor() {
+                            throw new Error('InvalidMethod')
+                        }
+                    } as any
+
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                    const xhr = new mockWindow.XMLHttpRequest()
+                    expect(() => xhr.open('GET', 'https://example.com')).not.toThrow()
+
+                    // the host's original open still ran with the original arguments
+                    expect(openCalls).toHaveLength(1)
+                    expect(openCalls[0][0]).toBe('GET')
+                    expect(openCalls[0][1]).toBe('https://example.com')
+                })
+            })
+
+            it('fetch still delegates to the host when Request construction throws', async () => {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                let fetchCallCount = 0
+                const sentinelResponse = { sentinel: true }
+                mockWindow.fetch = async () => {
+                    fetchCallCount++
+                    return sentinelResponse
+                }
+
+                let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
+                jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const plugin = getRecordNetworkPlugin({ recordBody: true })
+                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+                    patchedFetch = mockWindow.fetch
+                })
+
+                global.Request = class {
+                    constructor() {
+                        throw new Error('InvalidMethod')
+                    }
+                } as any
+
+                // the wrapper must not throw and the host's original fetch must still run
+                await expect(patchedFetch('https://example.com')).resolves.toBe(sentinelResponse)
+                expect(fetchCallCount).toBe(1)
+            })
+
+            it('fetch still delegates to the host when request recording throws', async () => {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                let fetchCallCount = 0
+                const sentinelResponse = { status: 204, headers: { forEach: () => {} } }
+                mockWindow.fetch = async () => {
+                    fetchCallCount++
+                    return sentinelResponse
+                }
+
+                global.Request = class {
+                    url: string
+                    method = 'GET'
+                    headers = {
+                        forEach: () => {
+                            throw new Error('HeaderReadFailed')
+                        },
+                    }
+
+                    constructor(url: string) {
+                        this.url = url
+                    }
+                } as any
+
+                let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
+                jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                    const plugin = getRecordNetworkPlugin({ recordBody: { request: true, response: false } })
+                    plugin.observer(() => {}, mockWindow, { recordBody: { request: true, response: false } })
+                    patchedFetch = mockWindow.fetch
+                })
+
+                // request header/body recording must not throw or block the host's original fetch
+                await expect(patchedFetch('https://example.com')).resolves.toBe(sentinelResponse)
+                expect(fetchCallCount).toBe(1)
+            })
+        })
+    })
+
+    describe('_tryReadBodyStreaming', () => {
+        // jsdom omits TextEncoder/TextDecoder; every browser that supports fetch + streams has them,
+        // so shim them here to exercise the real streaming path (the function falls back to text()
+        // when TextDecoder is absent, which is covered by the no-stream case).
+        const originalTextEncoder = (global as any).TextEncoder
+        const originalTextDecoder = (global as any).TextDecoder
+        beforeAll(() => {
+            ;(global as any).TextEncoder = (global as any).TextEncoder ?? NodeTextEncoder
+            ;(global as any).TextDecoder = (global as any).TextDecoder ?? NodeTextDecoder
+        })
+        afterAll(() => {
+            ;(global as any).TextEncoder = originalTextEncoder
+            ;(global as any).TextDecoder = originalTextDecoder
+        })
+
+        const encode = (s: string): Uint8Array => new TextEncoder().encode(s)
+
+        function fakeStreamingBody(
+            chunks: Uint8Array[],
+            opts: {
+                readRejects?: boolean
+                cloneThrows?: boolean
+                noStream?: boolean
+                textFallback?: string
+                readNeverResolves?: boolean
+                cancel?: () => Promise<void>
+            } = {}
+        ): Request | Response {
+            let i = 0
+            const reader = {
+                read: () =>
+                    opts.readNeverResolves
+                        ? new Promise(() => {})
+                        : opts.readRejects
+                          ? Promise.reject(new Error('boom'))
+                          : Promise.resolve(
+                                i < chunks.length
+                                    ? { done: false, value: chunks[i++] }
+                                    : { done: true, value: undefined }
+                            ),
+                cancel: opts.cancel ?? (() => Promise.resolve()),
+            }
+            const clone = {
+                body: opts.noStream ? null : { getReader: () => reader, tee: () => [] },
+                text: () => Promise.resolve(opts.textFallback ?? ''),
+            }
+            return {
+                clone: () => {
+                    if (opts.cloneThrows) {
+                        throw new Error('cannot clone')
+                    }
+                    return clone
+                },
+            } as unknown as Response
+        }
+
+        it('returns the full body when under the limit', async () => {
+            const r = fakeStreamingBody([encode('hello '), encode('world')])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('hello world')
+        })
+
+        it('stops at the limit and returns a placeholder, without buffering past it', async () => {
+            const r = fakeStreamingBody([encode('a'.repeat(8)), encode('b'.repeat(8))])
+            await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe(
+                '[SessionReplay] Body too large to record (> 10 bytes)'
+            )
+        })
+
+        it('records a body that exactly fills the limit', async () => {
+            const r = fakeStreamingBody([encode('1234567890')])
+            await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe('1234567890')
+        })
+
+        it('decodes a multi-byte character split across chunk boundaries', async () => {
+            const bytes = encode('😀')
+            const r = fakeStreamingBody([bytes.slice(0, 2), bytes.slice(2)])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('😀')
+        })
+
+        it('decodes an empty body to an empty string', async () => {
+            const r = fakeStreamingBody([])
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('')
+        })
+
+        it('falls back to text() when there is no readable stream', async () => {
+            const r = fakeStreamingBody([], { noStream: true, textFallback: 'plain text body' })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('plain text body')
+        })
+
+        it('resolves with a failure placeholder when the clone cannot be read', async () => {
+            const r = fakeStreamingBody([], { cloneThrows: true })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('[SessionReplay] Failed to read body')
+        })
+
+        it('resolves (never rejects) when the reader errors mid-stream', async () => {
+            const r = fakeStreamingBody([encode('partial')], { readRejects: true })
+            await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe(
+                '[SessionReplay] Failed to read body: Error: boom'
+            )
+        })
+
+        it('times out a hung stream and cancels the reader so it stops being read', async () => {
+            jest.useFakeTimers()
+            try {
+                const cancel = jest.fn(() => Promise.resolve())
+                const r = fakeStreamingBody([], { readNeverResolves: true, cancel })
+                const result = _tryReadBodyStreaming(r, 1000)
+                jest.advanceTimersByTime(500)
+                await expect(result).resolves.toBe('[SessionReplay] Timeout while trying to read body')
+                expect(cancel).toHaveBeenCalled()
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+    })
+
+    describe('content-length pre-check', () => {
+        function fakeRequestWith(contentLength: string | null): {
+            r: Request | Response
+            wasCloned: () => boolean
+        } {
+            let cloned = false
+            const r = {
+                headers: {
+                    get: (name: string) => (name.toLowerCase() === 'content-length' ? contentLength : null),
+                },
+                clone: () => {
+                    cloned = true
+                    return { body: null, text: () => Promise.resolve('') }
+                },
+            } as unknown as Response
+            return { r, wasCloned: () => cloned }
+        }
+
+        it.each([
+            ['over the limit', '2000', 1000, true],
+            ['equal to the limit', '1000', 1000, false],
+            ['under the limit', '500', 1000, false],
+            ['absent', null, 1000, false],
+            ['not a number', 'banana', 1000, false],
+        ])('_contentLengthExceedsLimit: content-length %s', (_label, header, limit, expected) => {
+            const { r } = fakeRequestWith(header as string | null)
+            expect(_contentLengthExceedsLimit(r, limit as number)).toBe(expected)
+        })
+
+        it('skips reading the body when content-length is over the limit (flag on)', async () => {
+            const { r, wasCloned } = fakeRequestWith('2000')
+            await expect(
+                _readBody(r, { streamNetworkBody: true, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            ).resolves.toBe('[SessionReplay] Body too large to record (> 1000 bytes)')
+            expect(wasCloned()).toBe(false)
+        })
+
+        it('still reads the body when content-length is under the limit (flag on)', async () => {
+            const { r, wasCloned } = fakeRequestWith('10')
+            await _readBody(r, { streamNetworkBody: true, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            expect(wasCloned()).toBe(true)
+        })
+
+        it('ignores the content-length pre-check when the flag is off', async () => {
+            const { r, wasCloned } = fakeRequestWith('2000')
+            await _readBody(r, { streamNetworkBody: false, payloadSizeLimitBytes: 1000 } as NetworkRecordOptions)
+            expect(wasCloned()).toBe(true)
         })
     })
 })

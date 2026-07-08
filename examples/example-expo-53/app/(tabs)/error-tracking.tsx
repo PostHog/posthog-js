@@ -5,6 +5,7 @@ import ParallaxScrollView from '@/components/ParallaxScrollView'
 import { ThemedText } from '@/components/ThemedText'
 import { ThemedView } from '@/components/ThemedView'
 import { IconSymbol } from '@/components/ui/IconSymbol'
+import { crashNative } from '@/modules/native-crash'
 import { usePostHog, PostHogErrorBoundary } from 'posthog-react-native'
 
 function BuggyComponent({ shouldThrow }: { shouldThrow: boolean }) {
@@ -27,9 +28,19 @@ function ErrorFallback({ error, componentStack }: { error: unknown; componentSta
     )
 }
 
+// Breadcrumb-style steps to record before capturing an exception. Properties ride along under their own keys.
+const EXCEPTION_STEPS: { label: string; message: string; properties?: Record<string, string | number> }[] = [
+    { label: 'Goku powers up', message: 'Goku powers up' },
+    { label: 'Kamehameha {ki, form}', message: 'Goku fired a Kamehameha', properties: { ki: 9001, form: 'Super Saiyan' } },
+    { label: 'Dragon Ball found {star}', message: 'Collected a Dragon Ball', properties: { star: 4, location: 'Kame House' } },
+    { label: 'Summon Shenron {wish}', message: 'Summoned Shenron', properties: { wish: 'immortality', status: 'granted' } },
+]
+
 export default function ErrorTrackingScreen() {
     const posthog = usePostHog()
     const [shouldThrow, setShouldThrow] = useState(false)
+    const [stepsRecorded, setStepsRecorded] = useState(0)
+    const [lastStepAction, setLastStepAction] = useState('')
 
     return (
         <ParallaxScrollView
@@ -93,6 +104,45 @@ export default function ErrorTrackingScreen() {
                     }}
                     title="Capture console warn"
                 />
+            </ThemedView>
+
+            <ThemedView style={styles.sectionContainer}>
+                <ThemedText type="subtitle">Exception Steps</ThemedText>
+                <ThemedText>
+                    Record breadcrumb-style steps with addExceptionStep. Buffered steps attach to every captured
+                    $exception as $exception_steps — including the manual captures above and the native crash below.
+                </ThemedText>
+                {EXCEPTION_STEPS.map(({ label, message, properties }) => (
+                    <Button
+                        key={label}
+                        title={`Record: ${label}`}
+                        onPress={() => {
+                            posthog.addExceptionStep(message, properties)
+                            setStepsRecorded((count) => count + 1)
+                            setLastStepAction(`Recorded: ${label}`)
+                        }}
+                    />
+                ))}
+                <Button
+                    title="Capture exception (attaches steps)"
+                    onPress={() => {
+                        posthog.captureException(new Error("It's over 9000! Vegeta's scouter exploded"))
+                        setLastStepAction('captureException() — steps attached')
+                    }}
+                />
+                <ThemedText>Steps recorded this session: {stepsRecorded}</ThemedText>
+                {lastStepAction ? <ThemedText>Last action: {lastStepAction}</ThemedText> : null}
+            </ThemedView>
+
+            <ThemedView style={styles.sectionContainer}>
+                <ThemedText type="subtitle">Native Crash</ThemedText>
+                <ThemedText>
+                    Triggers a real native iOS/Android crash via a local Expo module. The app will terminate; PostHog
+                    reports the crash on the next launch. Requires `@posthog/react-native-plugin`,
+                    `errorTracking.autocapture.nativeCrashes`, and (for readable stack traces) a release build with
+                    uploaded symbols.
+                </ThemedText>
+                <Button color="#c62828" onPress={() => crashNative()} title="Trigger native crash (iOS/Android)" />
             </ThemedView>
         </ParallaxScrollView>
     )

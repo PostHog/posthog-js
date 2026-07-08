@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "1.354.4",
+    "version": "<version>",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -17,16 +17,16 @@
       "functions": [
         {
           "category": "",
-          "description": "Constructs a new instance of the `PostHog` class",
-          "details": null,
+          "description": "Creates an uninitialized PostHog instance.",
+          "details": "Most browser applications should use the default exported singleton and call `posthog.init()`. Construct a new instance only when you need to manage a separate SDK instance manually.",
           "id": "PostHog",
           "showDocs": true,
           "title": "PostHog",
           "examples": [
             {
-              "id": "posthog",
-              "name": "Generated example for PostHog",
-              "code": "// Generated example for PostHog\nposthog.PostHog();"
+              "id": "",
+              "name": "",
+              "code": "\n\nconst instance = new PostHog()\ninstance.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -34,6 +34,41 @@
           "returnType": {
             "id": "any",
             "name": "any"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
+          "category": "Error tracking",
+          "description": "Add a breadcrumb-like step that will be attached to the next captured exception.",
+          "details": null,
+          "id": "addExceptionStep",
+          "showDocs": true,
+          "title": "addExceptionStep",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nposthog.addExceptionStep('Checkout button clicked', {\n  checkout_id: 'ch_123',\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The step message.",
+              "isOptional": false,
+              "type": "string",
+              "name": "message"
+            },
+            {
+              "description": "Additional context for this step.",
+              "isOptional": true,
+              "type": "Properties",
+              "name": "properties"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
           },
           "path": "lib/src/posthog-core.d.ts"
         },
@@ -94,7 +129,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "",
+              "description": "The survey ID whose pending display should be cancelled.",
               "isOptional": false,
               "type": "string",
               "name": "surveyId"
@@ -233,13 +268,13 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "The error to capture",
+              "description": "The error or exception-like value to capture.",
               "isOptional": false,
               "type": "unknown",
               "name": "error"
             },
             {
-              "description": "Any additional properties to add to the error event",
+              "description": "Any additional properties to add to the error event.",
               "isOptional": true,
               "type": "Properties",
               "name": "additionalProperties"
@@ -248,6 +283,35 @@
           "returnType": {
             "id": "CaptureResult | undefined",
             "name": "CaptureResult | undefined"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
+          "category": "Logs",
+          "description": "Capture a log entry and send it to the PostHog logs endpoint.",
+          "details": null,
+          "id": "captureLog",
+          "showDocs": true,
+          "title": "captureLog",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nposthog.captureLog({\n  body: 'checkout completed',\n  level: 'info',\n  attributes: { order_id: 'ord_789', amount_cents: 4999 },\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The log entry options",
+              "isOptional": false,
+              "type": "CaptureLogOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
           },
           "path": "lib/src/posthog-core.d.ts"
         },
@@ -350,6 +414,28 @@
           "path": "lib/src/posthog-core.d.ts"
         },
         {
+          "category": "",
+          "description": "Clear HMAC-based identity verification, reverting to anonymous mode.",
+          "details": null,
+          "id": "clearIdentity",
+          "showDocs": true,
+          "title": "clearIdentity",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nposthog.clearIdentity()\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
           "category": "Identification",
           "description": "Creates a person profile for the current user, if they don't already have one and config.person_profiles is set to 'identified_only'. Produces a warning and does not create a profile if config.person_profiles is set to 'never'. Learn more about [person profiles](/docs/product-analytics/identify)",
           "details": null,
@@ -421,7 +507,7 @@
             {
               "id": "display_inline_in_a_specific_element",
               "name": "Display inline in a specific element",
-              "code": "\n\n// Display inline in a specific element\nposthog.displaySurvey('survey-id-123', {\n  displayType: DisplaySurveyType.Inline,\n  selector: '#survey-container'\n})\n\n\n"
+              "code": "\n\n// Display inline in a specific element\nposthog.displaySurvey('survey-id-123', {\n  displayType: DisplaySurveyType.Inline,\n  ignoreConditions: false,\n  ignoreDelay: false,\n  selector: '#survey-container'\n})\n\n\n"
             },
             {
               "id": "force_display_ignoring_conditions_and_delays",
@@ -432,13 +518,13 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "The survey ID to display",
+              "description": "The survey ID to display.",
               "isOptional": false,
               "type": "string",
               "name": "surveyId"
             },
             {
-              "description": "Display configuration",
+              "description": "Display configuration. Defaults to a popover that respects dashboard conditions and delays.",
               "isOptional": true,
               "type": "DisplaySurveyOptions",
               "name": "options"
@@ -561,13 +647,23 @@
             {
               "id": "basic_usage",
               "name": "basic usage",
-              "code": "\n\n// basic usage\nposthog.get_session_replay_url()\n\n@example\n\njs // timestamp posthog.get_session_replay_url({ withTimestamp: true })\n\n\n@example\n\njs // timestamp and lookback posthog.get_session_replay_url({ withTimestamp: true, timestampLookBack: 30 // look back 30 seconds }) ```\n\n\n\n"
+              "code": "\n\n// basic usage\nposthog.get_session_replay_url()\n\n\n"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "code": "\n\n// timestamp\nposthog.get_session_replay_url({ withTimestamp: true })\n\n\n"
+            },
+            {
+              "id": "timestamp_and_lookback",
+              "name": "timestamp and lookback",
+              "code": "\n\n// timestamp and lookback\nposthog.get_session_replay_url({\n  withTimestamp: true,\n  timestampLookBack: 30 // look back 30 seconds\n})\n\n\n\n"
             }
           ],
           "releaseTag": "public",
           "params": [
             {
-              "description": "Options for the url",
+              "description": "Options for the URL.",
               "isOptional": true,
               "type": "{\n        withTimestamp?: boolean;\n        timestampLookBack?: number;\n    }",
               "name": "options"
@@ -611,6 +707,28 @@
           "returnType": {
             "id": "void",
             "name": "void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
+          "category": "",
+          "description": "Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh. Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.",
+          "details": null,
+          "id": "getAllFeatureFlags",
+          "showDocs": true,
+          "title": "getAllFeatureFlags",
+          "examples": [
+            {
+              "id": "getallfeatureflags",
+              "name": "Generated example for getAllFeatureFlags",
+              "code": "// Generated example for getAllFeatureFlags\nposthog.getAllFeatureFlags();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "FeatureFlagResult[]",
+            "name": "FeatureFlagResult[]"
           },
           "path": "lib/src/posthog-core.d.ts"
         },
@@ -677,13 +795,13 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "",
+              "description": "Key of the feature flag.",
               "isOptional": false,
               "type": "string",
               "name": "key"
             },
             {
-              "description": "(optional) If send_event: false, we won't send an $feature_flag_call event to PostHog. If fresh: true, we won't return cached values from localStorage - only values loaded from the server.",
+              "description": "Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.",
               "isOptional": true,
               "type": "FeatureFlagOptions",
               "name": "options"
@@ -706,13 +824,13 @@
             {
               "id": "",
               "name": "",
-              "code": "\n\nif(posthog.getFeatureFlag('beta-feature') === 'some-value') {\n     const someValue = posthog.getFeatureFlagPayload('beta-feature')\n     // do something\n}\n\n\n\n"
+              "code": "\n\nconst betaFeature = posthog.getFeatureFlagResult('beta-feature')\nif (betaFeature?.variant === 'some-value') {\n     const someValue = betaFeature?.payload\n     // do something\n}\n\n\n\n"
             }
           ],
           "releaseTag": "deprecated",
           "params": [
             {
-              "description": "",
+              "description": "Key of the feature flag.",
               "isOptional": false,
               "type": "string",
               "name": "key"
@@ -854,13 +972,13 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Function that receives the array of surveys",
+              "description": "Function that receives the array of surveys.",
               "isOptional": false,
               "type": "SurveyCallback",
               "name": "callback"
             },
             {
-              "description": "Optional boolean to force an API call for updated surveys",
+              "description": "Optional boolean to force an API call for updated surveys.",
               "isOptional": true,
               "type": "boolean",
               "name": "forceReload"
@@ -1016,7 +1134,7 @@
         {
           "category": "Initialization",
           "description": "Initializes a new instance of the PostHog capturing object.",
-          "details": "All new instances are added to the main posthog object as sub properties (such as `posthog.library_name`) and also returned by this function. [Learn more about configuration options](https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91)",
+          "details": "All new instances are added to the main posthog object as sub properties (such as `posthog.library_name`) and also returned by this function. [Learn more about configuration options](https://posthog.com/docs/libraries/js/config)",
           "id": "init",
           "showDocs": true,
           "title": "init",
@@ -1061,7 +1179,7 @@
         },
         {
           "category": "Privacy",
-          "description": "Checks whether the PostHog library is currently capturing events.\nUsually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by some config options.\nAdditionally, if the cookieless_mode is set to 'on_reject', we will capture events in cookieless mode if the user has explicitly opted out.",
+          "description": "Checks whether the PostHog library is currently capturing events.\nUsually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by some config options.\nAdditionally, if the cookieless_mode is set to `'on_reject'`, we will capture events in cookieless mode if the user has opted out or been defaulted to opt-out.",
           "details": null,
           "id": "is_capturing",
           "showDocs": true,
@@ -1097,19 +1215,19 @@
             {
               "id": "disable_event_tracking",
               "name": "disable event tracking",
-              "code": "\n\n// disable event tracking\nif (posthog.isFeatureEnabled('feature', { send_event: false })) {\n    // flag checked without sending $feature_flag_call event\n}\n\n\n\n"
+              "code": "\n\n// disable event tracking\nif (posthog.isFeatureEnabled('feature', { send_event: false })) {\n    // flag checked without sending $feature_flag_called event\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
           "params": [
             {
-              "description": "",
+              "description": "Key of the feature flag.",
               "isOptional": false,
               "type": "string",
               "name": "key"
             },
             {
-              "description": "(optional) If send_event: false, we won't send an $feature_flag_call event to PostHog. If fresh: true, we won't return cached values from localStorage - only values loaded from the server.",
+              "description": "Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.",
               "isOptional": true,
               "type": "FeatureFlagOptions",
               "name": "options"
@@ -1138,7 +1256,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "",
+              "description": "Toolbar parameters.",
               "isOptional": false,
               "type": "ToolbarParams",
               "name": "params"
@@ -1304,7 +1422,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "",
+              "description": "A dictionary of opt-in options.",
               "isOptional": true,
               "type": "{\n        captureEventName?: EventName | null | false; /** event name to be used for capturing the opt-in action */\n        captureProperties?: Properties; /** set of properties to be captured along with the opt-in action */\n    }",
               "name": "options"
@@ -1355,7 +1473,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "A [function_name, args...] array to be executed",
+              "description": "A `[function_name, ...args]` array to be executed.",
               "isOptional": false,
               "type": "SnippetArrayItem",
               "name": "item"
@@ -1571,7 +1689,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "",
+              "description": "Whether to generate a new device ID as well as a new distinct ID.",
               "isOptional": true,
               "type": "boolean",
               "name": "reset_device_id"
@@ -1600,7 +1718,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "",
+              "description": "Optional group type to reset. If omitted, all group properties are reset.",
               "isOptional": true,
               "type": "string",
               "name": "group_type"
@@ -1645,11 +1763,23 @@
             {
               "id": "",
               "name": "",
-              "code": "\n\nposthog.resetPersonPropertiesForFlags()\n\n\n\n"
+              "code": "\n\nposthog.resetPersonPropertiesForFlags()\n\n\n"
+            },
+            {
+              "id": "reset_properties_without_reloading",
+              "name": "Reset properties without reloading",
+              "code": "\n\n// Reset properties without reloading\nposthog.resetPersonPropertiesForFlags(false)\n\n\n\n"
             }
           ],
           "releaseTag": "public",
-          "params": [],
+          "params": [
+            {
+              "description": "Whether to reload feature flags.",
+              "isOptional": true,
+              "type": "boolean",
+              "name": "reloadFeatureFlags"
+            }
+          ],
           "returnType": {
             "id": "void",
             "name": "void"
@@ -1739,6 +1869,41 @@
               "isOptional": true,
               "type": "boolean",
               "name": "reloadFeatureFlags"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
+          "category": "",
+          "description": "Set HMAC-based identity verification.",
+          "details": "When set, products like conversations use server-verified identity (distinct_id + HMAC hash) instead of anonymous session identifiers. The hash should be computed server-side as HMAC-SHA256 of the distinct_id using the project's API secret.",
+          "id": "setIdentity",
+          "showDocs": true,
+          "title": "setIdentity",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nposthog.setIdentity('user_123', 'a1b2c3d4e5f6...')\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The verified user distinct_id",
+              "isOptional": false,
+              "type": "string",
+              "name": "distinctId"
+            },
+            {
+              "description": "HMAC-SHA256 of distinctId using the project API secret",
+              "isOptional": false,
+              "type": "string",
+              "name": "hash"
             }
           ],
           "returnType": {
@@ -1846,6 +2011,35 @@
           "returnType": {
             "id": "void",
             "name": "void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
+          "category": "Lifecycle",
+          "description": "Flushes any queued events and resolves once teardown is complete.",
+          "details": "This exists primarily for parity with the server-side [Node.js SDK](/docs/libraries/node), whose `shutdown()` you call once before a process exits. In the browser there is no process to exit — the SDK already flushes pending events on `pagehide`/`unload` — so this method is mostly a graceful no-op that best-effort flushes the request queues and always resolves.\nIt is safe to call in isomorphic teardown code (for example a Nuxt/Next module that calls `shutdown()` on both the server and the client) so the same symmetric cleanup works in either environment without throwing.",
+          "id": "shutdown",
+          "showDocs": true,
+          "title": "shutdown",
+          "examples": [
+            {
+              "id": "symmetric_teardown_that_runs_on_both_server_and_client",
+              "name": "symmetric teardown that runs on both server and client",
+              "code": "\n\n// symmetric teardown that runs on both server and client\nawait posthog.shutdown()\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "Accepted for call-site parity with the Node.js SDK. The browser flush is synchronous, so this is ignored.",
+              "isOptional": true,
+              "type": "number",
+              "name": "_shutdownTimeoutMs"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
           },
           "path": "lib/src/posthog-core.d.ts"
         },
@@ -2020,6 +2214,40 @@
           "path": "lib/src/posthog-core.d.ts"
         },
         {
+          "category": "Identification",
+          "description": "Removes properties from the person profile associated with the current `distinct_id`. Learn more about [identifying users](/docs/product-analytics/identify)",
+          "details": "Deletes the given person properties from the person profile in PostHog. This is the counterpart to  — instead of hand-passing `$unset` inside a `capture()` call, you can remove properties with a dedicated method. If `person_profiles` is set to `never`, this call is ignored.",
+          "id": "unsetPersonProperties",
+          "showDocs": true,
+          "title": "unsetPersonProperties",
+          "examples": [
+            {
+              "id": "remove_a_single_property",
+              "name": "remove a single property",
+              "code": "\n\n// remove a single property\nposthog.unsetPersonProperties('plan')\n\n\n"
+            },
+            {
+              "id": "remove_multiple_properties",
+              "name": "remove multiple properties",
+              "code": "\n\n// remove multiple properties\nposthog.unsetPersonProperties(['plan', 'email'])\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The name (or names) of the person properties to remove.",
+              "isOptional": false,
+              "type": "string | string[]",
+              "name": "propertyNames"
+            }
+          ],
+          "returnType": {
+            "id": "void",
+            "name": "void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Opt the user in or out of an early access feature. [Learn more in the docs](/docs/feature-flags/early-access-feature-management#option-2-custom-implementation)",
           "details": null,
@@ -2174,33 +2402,18 @@
       "name": "BasicSurveyQuestion",
       "properties": [
         {
-          "type": "SurveyQuestionType.Open",
+          "type": "typeof SurveyQuestionType.Open",
           "name": "type"
         }
       ],
       "path": "lib/src/posthog-surveys-types.d.ts"
     },
     {
-      "id": "Breaker",
-      "name": "Breaker",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "{}"
-    },
-    {
       "id": "Compression",
       "name": "Compression",
-      "properties": [
-        {
-          "type": "\"base64\"",
-          "name": "Base64"
-        },
-        {
-          "type": "\"gzip-js\"",
-          "name": "GZipJS"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
+      "properties": [],
+      "path": "lib/src/types.d.ts",
+      "example": "(typeof Compression)[keyof typeof Compression]"
     },
     {
       "id": "ConversationsRemoteConfig",
@@ -2303,21 +2516,21 @@
       "name": "DisplaySurveyPopoverOptions",
       "properties": [
         {
-          "type": "DisplaySurveyType.Popover",
+          "type": "typeof DisplaySurveyType.Popover",
           "name": "displayType"
         },
         {
-          "description": "Override the survey's configured position",
+          "description": "Override the survey's configured position.",
           "type": "SurveyPosition",
           "name": "position"
         },
         {
-          "description": "CSS selector for the element to position the survey next to (when position is NextToTrigger)",
+          "description": "CSS selector for the element to position the survey next to (when position is NextToTrigger).",
           "type": "string",
           "name": "selector"
         },
         {
-          "description": "When true, `survey shown` events will not be emitted automatically",
+          "description": "When true, `survey shown` events will not be emitted automatically.",
           "type": "boolean",
           "name": "skipShownEvent"
         }
@@ -2327,17 +2540,9 @@
     {
       "id": "DisplaySurveyType",
       "name": "DisplaySurveyType",
-      "properties": [
-        {
-          "type": "\"inline\"",
-          "name": "Inline"
-        },
-        {
-          "type": "\"popover\"",
-          "name": "Popover"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof DisplaySurveyType)[keyof typeof DisplaySurveyType]"
     },
     {
       "id": "ErrorEventArgs",
@@ -2536,7 +2741,7 @@
           "name": "link"
         },
         {
-          "type": "SurveyQuestionType.Link",
+          "type": "typeof SurveyQuestionType.Link",
           "name": "type"
         }
       ],
@@ -2629,7 +2834,7 @@
           "name": "skipSubmitButton"
         },
         {
-          "type": "SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice",
+          "type": "typeof SurveyQuestionType.SingleChoice | typeof SurveyQuestionType.MultipleChoice",
           "name": "type"
         }
       ],
@@ -2640,7 +2845,7 @@
       "name": "NetworkRecordOptions",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "{\n    initiatorTypes?: InitiatorType[];\n    maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined;\n    recordHeaders?: boolean | {\n        request: boolean;\n        response: boolean;\n    };\n    recordBody?: boolean | string[] | {\n        request: boolean | string[];\n        response: boolean | string[];\n    };\n    recordInitialRequests?: boolean;\n    recordPerformance?: boolean;\n    performanceEntryTypeToObserve: string[];\n    payloadSizeLimitBytes: number;\n    payloadHostDenyList?: string[];\n}"
+      "example": "{\n    initiatorTypes?: InitiatorType[];\n    maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined;\n    recordHeaders?: boolean | {\n        request: boolean;\n        response: boolean;\n    };\n    recordBody?: boolean | string[] | {\n        request: boolean | string[];\n        response: boolean | string[];\n    };\n    recordInitialRequests?: boolean;\n    recordPerformance?: boolean;\n    performanceEntryTypeToObserve: string[];\n    payloadSizeLimitBytes: number;\n    streamNetworkBody?: boolean;\n    payloadHostDenyList?: string[];\n}"
     },
     {
       "id": "OverrideConfig",
@@ -2674,7 +2879,7 @@
           "name": "_remove"
         },
         {
-          "type": "(name: string, value: any, expire_days?: number | null, cross_subdomain?: boolean, secure?: boolean, debug?: boolean) => void",
+          "type": "(name: string, value: any, expire_days?: number | null, cross_subdomain?: boolean, secure?: boolean, debug?: boolean) => boolean",
           "name": "_set"
         }
       ],
@@ -2685,14 +2890,14 @@
       "name": "PostHogConfig",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n    __extensionClasses?: {\n        historyAutocapture?: Extension<HistoryAutocapture>;\n        tracingHeaders?: Extension<TracingHeaders>;\n        siteApps?: Extension<SiteApps>;\n        sessionRecording?: Extension<SessionRecording>;\n        autocapture?: Extension<Autocapture>;\n        productTours?: Extension<PostHogProductTours>;\n        heatmaps?: Extension<Heatmaps>;\n        webVitalsAutocapture?: Extension<WebVitalsAutocapture>;\n        exceptionObserver?: Extension<ExceptionObserver>;\n        deadClicksAutocapture?: Extension<DeadClicksAutocapture>;\n    };\n}"
+      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n    disableDeviceModel?: boolean;\n    __extensionClasses?: {\n        exceptions?: ExtensionConstructor<PostHogExceptions>;\n        historyAutocapture?: ExtensionConstructor<HistoryAutocapture>;\n        tracingHeaders?: ExtensionConstructor<TracingHeaders>;\n        siteApps?: ExtensionConstructor<SiteApps>;\n        sessionRecording?: ExtensionConstructor<SessionRecording>;\n        autocapture?: ExtensionConstructor<Autocapture>;\n        productTours?: ExtensionConstructor<PostHogProductTours>;\n        heatmaps?: ExtensionConstructor<Heatmaps>;\n        webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>;\n        exceptionObserver?: ExtensionConstructor<ExceptionObserver>;\n        deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>;\n        surveys?: ExtensionConstructor<PostHogSurveys>;\n        toolbar?: ExtensionConstructor<Toolbar>;\n        experiments?: ExtensionConstructor<WebExperiments>;\n        conversations?: ExtensionConstructor<PostHogConversations>;\n        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>;\n        logs?: ExtensionConstructor<PostHogLogs>;\n    };\n}"
     },
     {
       "id": "PostHogInterface",
       "name": "PostHogInterface",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "\"config\" | \"init\""
+      "example": "Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'> & {\n    config: PostHogConfig;\n    set_config(config: Partial<PostHogConfig>): void;\n}"
     },
     {
       "id": "ProductTour",
@@ -2755,8 +2960,8 @@
           "name": "steps"
         },
         {
-          "type": "'product_tour'",
-          "name": "type"
+          "type": "ProductTourType",
+          "name": "tour_type"
         }
       ],
       "path": "lib/src/posthog-product-tours-types.d.ts"
@@ -2883,6 +3088,10 @@
           "name": "linkedFlagVariant"
         },
         {
+          "type": "ProductTourWaitPeriod",
+          "name": "seenTourWaitPeriod"
+        },
+        {
           "type": "string",
           "name": "selector"
         },
@@ -2914,164 +3123,16 @@
     {
       "id": "ProductTourEventName",
       "name": "ProductTourEventName",
-      "properties": [
-        {
-          "type": "\"product tour banner action clicked\"",
-          "name": "BANNER_ACTION_CLICKED"
-        },
-        {
-          "type": "\"product tour banner container selector failed\"",
-          "name": "BANNER_CONTAINER_SELECTOR_FAILED"
-        },
-        {
-          "type": "\"product tour button clicked\"",
-          "name": "BUTTON_CLICKED"
-        },
-        {
-          "type": "\"product tour completed\"",
-          "name": "COMPLETED"
-        },
-        {
-          "type": "\"product tour dismissed\"",
-          "name": "DISMISSED"
-        },
-        {
-          "type": "\"product tour shown\"",
-          "name": "SHOWN"
-        },
-        {
-          "type": "\"product tour step completed\"",
-          "name": "STEP_COMPLETED"
-        },
-        {
-          "type": "\"product tour step selector failed\"",
-          "name": "STEP_SELECTOR_FAILED"
-        },
-        {
-          "type": "\"product tour step shown\"",
-          "name": "STEP_SHOWN"
-        }
-      ],
-      "path": "lib/src/posthog-product-tours-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "(typeof ProductTourEventName)[keyof typeof ProductTourEventName]"
     },
     {
       "id": "ProductTourEventProperties",
       "name": "ProductTourEventProperties",
-      "properties": [
-        {
-          "type": "\"$inference_data_present\"",
-          "name": "INFERENCE_DATA_PRESENT"
-        },
-        {
-          "type": "\"$product_tour_banner_selector\"",
-          "name": "TOUR_BANNER_SELECTOR"
-        },
-        {
-          "type": "\"$product_tour_button_action\"",
-          "name": "TOUR_BUTTON_ACTION"
-        },
-        {
-          "type": "\"$product_tour_button_link\"",
-          "name": "TOUR_BUTTON_LINK"
-        },
-        {
-          "type": "\"$product_tour_button_text\"",
-          "name": "TOUR_BUTTON_TEXT"
-        },
-        {
-          "type": "\"$product_tour_button_tour_id\"",
-          "name": "TOUR_BUTTON_TOUR_ID"
-        },
-        {
-          "type": "\"$product_tour_dismiss_reason\"",
-          "name": "TOUR_DISMISS_REASON"
-        },
-        {
-          "type": "\"$product_tour_error\"",
-          "name": "TOUR_ERROR"
-        },
-        {
-          "type": "\"$product_tour_failure_phase\"",
-          "name": "TOUR_FAILURE_PHASE"
-        },
-        {
-          "type": "\"$product_tour_id\"",
-          "name": "TOUR_ID"
-        },
-        {
-          "type": "\"$product_tour_iteration\"",
-          "name": "TOUR_ITERATION"
-        },
-        {
-          "type": "\"$product_tour_linked_survey_id\"",
-          "name": "TOUR_LINKED_SURVEY_ID"
-        },
-        {
-          "type": "\"$product_tour_matches_count\"",
-          "name": "TOUR_MATCHES_COUNT"
-        },
-        {
-          "type": "\"$product_tour_name\"",
-          "name": "TOUR_NAME"
-        },
-        {
-          "type": "\"$product_tour_render_reason\"",
-          "name": "TOUR_RENDER_REASON"
-        },
-        {
-          "type": "\"$product_tour_step_element_classes\"",
-          "name": "TOUR_STEP_ELEMENT_CLASSES"
-        },
-        {
-          "type": "\"$product_tour_step_element_id\"",
-          "name": "TOUR_STEP_ELEMENT_ID"
-        },
-        {
-          "type": "\"$product_tour_step_element_tag\"",
-          "name": "TOUR_STEP_ELEMENT_TAG"
-        },
-        {
-          "type": "\"$product_tour_step_element_text\"",
-          "name": "TOUR_STEP_ELEMENT_TEXT"
-        },
-        {
-          "type": "\"$product_tour_step_id\"",
-          "name": "TOUR_STEP_ID"
-        },
-        {
-          "type": "\"$product_tour_step_order\"",
-          "name": "TOUR_STEP_ORDER"
-        },
-        {
-          "type": "\"$product_tour_step_selector\"",
-          "name": "TOUR_STEP_SELECTOR"
-        },
-        {
-          "type": "\"$product_tour_step_selector_found\"",
-          "name": "TOUR_STEP_SELECTOR_FOUND"
-        },
-        {
-          "type": "\"$product_tour_step_type\"",
-          "name": "TOUR_STEP_TYPE"
-        },
-        {
-          "type": "\"$product_tour_steps_count\"",
-          "name": "TOUR_STEPS_COUNT"
-        },
-        {
-          "type": "\"$product_tour_wait_duration_ms\"",
-          "name": "TOUR_WAIT_DURATION_MS"
-        },
-        {
-          "type": "\"$product_tour_waited_for_element\"",
-          "name": "TOUR_WAITED_FOR_ELEMENT"
-        },
-        {
-          "type": "\"$use_manual_selector\"",
-          "name": "USE_MANUAL_SELECTOR"
-        }
-      ],
-      "path": "lib/src/posthog-product-tours-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "(typeof ProductTourEventProperties)[keyof typeof ProductTourEventProperties]"
     },
     {
       "id": "ProductTourRenderReason",
@@ -3290,6 +3351,28 @@
       "example": "\"open\" | \"rating\""
     },
     {
+      "id": "ProductTourType",
+      "name": "ProductTourType",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"tour\" | \"announcement\" | \"banner\""
+    },
+    {
+      "id": "ProductTourWaitPeriod",
+      "name": "ProductTourWaitPeriod",
+      "properties": [
+        {
+          "type": "number",
+          "name": "days"
+        },
+        {
+          "type": "ProductTourType[]",
+          "name": "types"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
       "id": "PropertyFilters",
       "name": "PropertyFilters",
       "properties": [],
@@ -3343,7 +3426,7 @@
           "name": "skipSubmitButton"
         },
         {
-          "type": "SurveyQuestionType.Rating",
+          "type": "typeof SurveyQuestionType.Rating",
           "name": "type"
         },
         {
@@ -3512,12 +3595,13 @@
           "name": "disableTransport"
         },
         {
-          "type": "boolean",
-          "name": "disableXHRCredentials"
-        },
-        {
           "type": "{\n        cache?: RequestInit['cache'];\n        next?: NextOptions;\n    }",
           "name": "fetchOptions"
+        },
+        {
+          "description": "When set, `_send_request` invokes `callback` with a synthetic response on the paths that otherwise drop a request without notifying the caller (client not loaded, server rate limit). Opt-in so existing callers keep their current behavior; the logs pipeline uses it to keep records for a later retry instead of losing them silently.",
+          "type": "boolean",
+          "name": "fireCallbackOnDrop"
         },
         {
           "type": "Record<string, any>",
@@ -3632,6 +3716,16 @@
           "name": "distinct_id"
         },
         {
+          "description": "Verified distinct_id for HMAC identity mode (requires identity_hash)",
+          "type": "string",
+          "name": "identity_distinct_id"
+        },
+        {
+          "description": "HMAC-SHA256 of identity_distinct_id using team secret_api_token",
+          "type": "string",
+          "name": "identity_hash"
+        },
+        {
           "description": "The message content to send",
           "type": "string",
           "name": "message"
@@ -3714,6 +3808,21 @@
       "path": "lib/src/posthog-conversations-types.d.ts"
     },
     {
+      "id": "SessionRecordingEventTrigger",
+      "name": "SessionRecordingEventTrigger",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "SessionRecordingTriggerPropertyFilter[]",
+          "name": "properties"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
+    },
+    {
       "id": "SessionRecordingPersistedConfig",
       "name": "SessionRecordingPersistedConfig",
       "properties": [],
@@ -3725,7 +3834,57 @@
       "name": "SessionRecordingRemoteConfig",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "SessionRecordingCanvasOptions & {\n    endpoint?: string;\n    consoleLogRecordingEnabled?: boolean;\n    sampleRate?: string | null;\n    minimumDurationMilliseconds?: number;\n    linkedFlag?: string | FlagVariant | null;\n    networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>;\n    masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>;\n    urlTriggers?: SessionRecordingUrlTrigger[];\n    scriptConfig?: {\n        script?: string | undefined;\n    };\n    urlBlocklist?: SessionRecordingUrlTrigger[];\n    eventTriggers?: string[];\n    triggerMatchType?: 'any' | 'all';\n}"
+      "example": "SessionRecordingCanvasOptions & {\n    endpoint?: string;\n    consoleLogRecordingEnabled?: boolean;\n    sampleRate?: string | null;\n    minimumDurationMilliseconds?: number;\n    linkedFlag?: string | FlagVariant | null;\n    networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>;\n    masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>;\n    urlTriggers?: SessionRecordingUrlTrigger[];\n    scriptConfig?: {\n        script?: string | undefined;\n    };\n    urlBlocklist?: SessionRecordingUrlTrigger[];\n    eventTriggers?: string[];\n    triggerMatchType?: 'any' | 'all';\n    version?: 1 | 2;\n    triggerGroups?: SessionRecordingTriggerGroup[];\n}"
+    },
+    {
+      "id": "SessionRecordingTriggerGroup",
+      "name": "SessionRecordingTriggerGroup",
+      "properties": [
+        {
+          "type": "{\n        matchType: 'any' | 'all';\n        events?: SessionRecordingEventTrigger[];\n        urls?: SessionRecordingUrlTrigger[];\n        flag?: string | FlagVariant;\n        properties?: SessionRecordingTriggerPropertyFilter[];\n    }",
+          "name": "conditions"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "number",
+          "name": "minDurationMs"
+        },
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "number",
+          "name": "sampleRate"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
+    },
+    {
+      "id": "SessionRecordingTriggerPropertyFilter",
+      "name": "SessionRecordingTriggerPropertyFilter",
+      "properties": [
+        {
+          "type": "string",
+          "name": "key"
+        },
+        {
+          "type": "'exact' | 'is_not' | 'icontains' | 'not_icontains' | 'regex' | 'not_regex' | 'gt' | 'lt'",
+          "name": "operator"
+        },
+        {
+          "type": "'event' | 'person'",
+          "name": "type"
+        },
+        {
+          "type": "string | number | boolean | string[]",
+          "name": "value"
+        }
+      ],
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "SessionRecordingUrlTrigger",
@@ -3861,6 +4020,10 @@
           "name": "targeting_flag_key"
         },
         {
+          "type": "Record<string, SurveyTranslation>",
+          "name": "translations"
+        },
+        {
           "type": "SurveyType",
           "name": "type"
         }
@@ -3900,6 +4063,10 @@
           "name": "descriptionTextColor"
         },
         {
+          "type": "boolean",
+          "name": "disableAutofocus"
+        },
+        {
           "type": "string",
           "name": "disabledButtonOpacity"
         },
@@ -3937,6 +4104,10 @@
           "name": "whiteLabel"
         },
         {
+          "type": "SurveyWidgetType",
+          "name": "widgetType"
+        },
+        {
           "type": "string",
           "name": "zIndex"
         }
@@ -3965,6 +4136,7 @@
           "name": "autoSubmitIfComplete"
         },
         {
+          "description": "Prefill survey responses from matching URL parameters.\nundefined",
           "type": "boolean",
           "name": "prefillFromUrl"
         }
@@ -4029,91 +4201,23 @@
     {
       "id": "SurveyEventName",
       "name": "SurveyEventName",
-      "properties": [
-        {
-          "type": "\"survey abandoned\"",
-          "name": "ABANDONED"
-        },
-        {
-          "type": "\"survey dismissed\"",
-          "name": "DISMISSED"
-        },
-        {
-          "type": "\"survey sent\"",
-          "name": "SENT"
-        },
-        {
-          "type": "\"survey shown\"",
-          "name": "SHOWN"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyEventName)[keyof typeof SurveyEventName]"
     },
     {
       "id": "SurveyEventProperties",
       "name": "SurveyEventProperties",
-      "properties": [
-        {
-          "type": "\"$product_tour_id\"",
-          "name": "PRODUCT_TOUR_ID"
-        },
-        {
-          "type": "\"$survey_completed\"",
-          "name": "SURVEY_COMPLETED"
-        },
-        {
-          "type": "\"$survey_id\"",
-          "name": "SURVEY_ID"
-        },
-        {
-          "type": "\"$survey_iteration\"",
-          "name": "SURVEY_ITERATION"
-        },
-        {
-          "type": "\"$survey_iteration_start_date\"",
-          "name": "SURVEY_ITERATION_START_DATE"
-        },
-        {
-          "type": "\"$survey_last_seen_date\"",
-          "name": "SURVEY_LAST_SEEN_DATE"
-        },
-        {
-          "type": "\"$survey_name\"",
-          "name": "SURVEY_NAME"
-        },
-        {
-          "type": "\"$survey_partially_completed\"",
-          "name": "SURVEY_PARTIALLY_COMPLETED"
-        },
-        {
-          "type": "\"$survey_questions\"",
-          "name": "SURVEY_QUESTIONS"
-        },
-        {
-          "type": "\"$survey_response\"",
-          "name": "SURVEY_RESPONSE"
-        },
-        {
-          "type": "\"$survey_submission_id\"",
-          "name": "SURVEY_SUBMISSION_ID"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]"
     },
     {
       "id": "SurveyEventType",
       "name": "SurveyEventType",
-      "properties": [
-        {
-          "type": "\"events\"",
-          "name": "Activation"
-        },
-        {
-          "type": "\"cancelEvents\"",
-          "name": "Cancellation"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyEventType)[keyof typeof SurveyEventType]"
     },
     {
       "id": "SurveyEventWithFilters",
@@ -4133,49 +4237,9 @@
     {
       "id": "SurveyPosition",
       "name": "SurveyPosition",
-      "properties": [
-        {
-          "type": "\"center\"",
-          "name": "Center"
-        },
-        {
-          "type": "\"left\"",
-          "name": "Left"
-        },
-        {
-          "type": "\"middle_center\"",
-          "name": "MiddleCenter"
-        },
-        {
-          "type": "\"middle_left\"",
-          "name": "MiddleLeft"
-        },
-        {
-          "type": "\"middle_right\"",
-          "name": "MiddleRight"
-        },
-        {
-          "type": "\"next_to_trigger\"",
-          "name": "NextToTrigger"
-        },
-        {
-          "type": "\"right\"",
-          "name": "Right"
-        },
-        {
-          "type": "\"top_center\"",
-          "name": "TopCenter"
-        },
-        {
-          "type": "\"top_left\"",
-          "name": "TopLeft"
-        },
-        {
-          "type": "\"top_right\"",
-          "name": "TopRight"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
     },
     {
       "id": "SurveyQuestion",
@@ -4187,25 +4251,9 @@
     {
       "id": "SurveyQuestionBranchingType",
       "name": "SurveyQuestionBranchingType",
-      "properties": [
-        {
-          "type": "\"end\"",
-          "name": "End"
-        },
-        {
-          "type": "\"next_question\"",
-          "name": "NextQuestion"
-        },
-        {
-          "type": "\"response_based\"",
-          "name": "ResponseBased"
-        },
-        {
-          "type": "\"specific_question\"",
-          "name": "SpecificQuestion"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
     },
     {
       "id": "SurveyQuestionDescriptionContentType",
@@ -4217,120 +4265,43 @@
     {
       "id": "SurveyQuestionType",
       "name": "SurveyQuestionType",
-      "properties": [
-        {
-          "type": "\"link\"",
-          "name": "Link"
-        },
-        {
-          "type": "\"multiple_choice\"",
-          "name": "MultipleChoice"
-        },
-        {
-          "type": "\"open\"",
-          "name": "Open"
-        },
-        {
-          "type": "\"rating\"",
-          "name": "Rating"
-        },
-        {
-          "type": "\"single_choice\"",
-          "name": "SingleChoice"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
     },
     {
       "id": "SurveyResponseValue",
       "name": "SurveyResponseValue",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "string | number | string[] | null"
+      "path": "lib/src/posthog-surveys-types.d.ts"
     },
     {
       "id": "SurveySchedule",
       "name": "SurveySchedule",
-      "properties": [
-        {
-          "type": "\"always\"",
-          "name": "Always"
-        },
-        {
-          "type": "\"once\"",
-          "name": "Once"
-        },
-        {
-          "type": "\"recurring\"",
-          "name": "Recurring"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
     },
     {
       "id": "SurveyTabPosition",
       "name": "SurveyTabPosition",
-      "properties": [
-        {
-          "type": "\"bottom\"",
-          "name": "Bottom"
-        },
-        {
-          "type": "\"left\"",
-          "name": "Left"
-        },
-        {
-          "type": "\"right\"",
-          "name": "Right"
-        },
-        {
-          "type": "\"top\"",
-          "name": "Top"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyTabPosition)[keyof typeof SurveyTabPosition]"
     },
     {
       "id": "SurveyType",
       "name": "SurveyType",
-      "properties": [
-        {
-          "type": "\"api\"",
-          "name": "API"
-        },
-        {
-          "type": "\"external_survey\"",
-          "name": "ExternalSurvey"
-        },
-        {
-          "type": "\"popover\"",
-          "name": "Popover"
-        },
-        {
-          "type": "\"widget\"",
-          "name": "Widget"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyType)[keyof typeof SurveyType]"
     },
     {
       "id": "SurveyWidgetType",
       "name": "SurveyWidgetType",
-      "properties": [
-        {
-          "type": "\"button\"",
-          "name": "Button"
-        },
-        {
-          "type": "\"selector\"",
-          "name": "Selector"
-        },
-        {
-          "type": "\"tab\"",
-          "name": "Tab"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "properties": [],
+      "path": "lib/src/posthog-surveys-types.d.ts",
+      "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
       "id": "SurveyWithTypeAndAppearance",
@@ -4477,12 +4448,14 @@
     "Initialization",
     "Identification",
     "Capture",
-    "Surveys",
     "Error tracking",
+    "Surveys",
+    "Logs",
     "LLM analytics",
     "Privacy",
     "Session replay",
     "Feature flags",
-    "Toolbar"
+    "Toolbar",
+    "Lifecycle"
   ]
 }

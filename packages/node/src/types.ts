@@ -8,12 +8,24 @@ import type {
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
+import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
   distinctId: string
   properties?: Record<string | number, any>
   disableGeoip?: boolean
+}
+
+export type SetPersonPropertiesMessage = {
+  distinctId: string
+  properties?: Record<string | number, any>
+  propertiesOnce?: Record<string | number, any>
+}
+
+export type UnsetPersonPropertiesMessage = {
+  distinctId: string
+  properties: string | string[]
 }
 
 export type SendFeatureFlagsOptions = {
@@ -27,8 +39,20 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
   distinctId?: string // Optional - can be provided via context
   event: string
   groups?: Record<string, string | number> // Mapping of group type to group id
+  /**
+   * Attach feature flag values evaluated via `posthog.evaluateFlags()` to this event.
+   * Prefer this over `sendFeatureFlags` — it guarantees the event carries the exact
+   * values the code branched on and avoids a hidden `/flags` request on every capture.
+   */
+  flags?: FeatureFlagEvaluations
+  /**
+   * @deprecated Use the `flags` option with a `FeatureFlagEvaluations` object obtained
+   * from `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags`
+   * request on capture and may return different values than the ones the code branched on.
+   */
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
   timestamp?: Date
+  /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
   /**
    * Internal flag set by captureException() to indicate this $exception
@@ -112,6 +136,7 @@ export type FeatureFlagCondition = {
   properties: FlagProperty[]
   rollout_percentage?: number
   variant?: string
+  aggregation_group_type_index?: number | null
 }
 
 export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | null
@@ -120,6 +145,23 @@ export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   persistence?: 'memory'
+  /**
+   * Credential that enables local feature flag evaluation and remote config.
+   *
+   * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).
+   * When provided, the client can evaluate feature flags locally and decrypt remote
+   * config payloads via `getRemoteConfigPayload`. Prefer this over the deprecated
+   * `personalApiKey` option; when both are set, `secretKey` takes precedence.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { secretKey: 'phs_...' })
+   * ```
+   */
+  secretKey?: string
+  /**
+   * @deprecated Use `secretKey` instead.
+   */
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
@@ -128,12 +170,10 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   // Maximum size of cache that deduplicates $feature_flag_called calls per user.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
-  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when personalApiKey is provided.
-  // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
+  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when secretKey is provided.
+  // We recommend setting this to false if you are only using the secretKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
-   * @experimental This API is experimental and may change in minor versions.
-   *
    * Optional cache provider for feature flag definitions.
    *
    * Allows custom caching strategies (Redis, database, etc.) for flag definitions
@@ -144,7 +184,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    *
    * @example
    * ```typescript
-   * import { FlagDefinitionCacheProvider } from 'posthog-node/experimental'
+   * import type { FlagDefinitionCacheProvider } from 'posthog-node'
    *
    * class RedisCacheProvider implements FlagDefinitionCacheProvider {
    *   // ... implementation
@@ -215,6 +255,60 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * @default false
    */
   strictLocalEvaluation?: boolean
+  /**
+   * Controls whether `FeatureFlagEvaluations` filter helpers (`onlyAccessed()` and
+   * `only()`) log warnings when their input is unexpected — for example, calling
+   * `onlyAccessed()` before accessing any flags, or passing unknown keys to `only()`.
+   *
+   * @default true
+   */
+  featureFlagsLogWarnings?: boolean
+  /**
+   * Provides the API to extend the lifetime of a serverless invocation until
+   * background work (like flushing analytics events) completes after the response
+   * is sent.
+   *
+   * @experimental Subject to change in a minor release.
+   *
+   * @example
+   * // Vercel
+   * import { waitUntil } from '@vercel/functions'
+   * new PostHog('key', { waitUntil })
+   */
+  waitUntil?: (promise: Promise<unknown>) => void
+  /**
+   * Debounce interval in milliseconds for the `waitUntil`-based flush.
+   * After the last event is enqueued, the SDK waits this long before flushing.
+   *
+   * @experimental Subject to change in a minor release.
+   * @default 50
+   */
+  waitUntilDebounceMs?: number
+  /**
+   * Maximum time in milliseconds to debounce before forcing a flush.
+   * Prevents starvation from rapid concurrent captures.
+   *
+   * @experimental Subject to change in a minor release.
+   * @default 500
+   */
+  waitUntilMaxWaitMs?: number
+  /**
+   * Whether to attach the `$is_server: true` property to every captured event.
+   *
+   * @remarks
+   * Defaults to `true` because this SDK is intended for server-side use, where
+   * the property lets PostHog distinguish server events from browser and
+   * react-native events. Set this to `false` when running the SDK as a
+   * client/CLI so the event is attributed to the device OS normally instead of
+   * being marked as a server event. When `false`, the `$is_server` property is
+   * omitted entirely.
+   *
+   * @default true
+   * @example
+   * // CLI usage: don't mark events as server-side
+   * new PostHog('key', { isServer: false })
+   */
+  isServer?: boolean
 }
 
 export type PostHogFeatureFlag = {
@@ -232,6 +326,10 @@ export type PostHogFeatureFlag = {
       }[]
     }
     payloads?: Record<string, string>
+    // Flag-level toggle: when true, condition evaluation stops and returns false as soon as a
+    // group's property filters match but the rollout percentage excludes the user, rather than
+    // continuing to evaluate later groups.
+    early_exit?: boolean
   }
   deleted: boolean
   active: boolean
@@ -282,9 +380,10 @@ export interface IPostHog {
    * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
    * @param properties OPTIONAL | which can be a object with any information you'd like to add
    * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
-   * @param sendFeatureFlags OPTIONAL | Used with experiments. Determines whether to send feature flag values with the event.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
    */
-  capture({ distinctId, event, properties, groups, sendFeatureFlags }: EventMessage): void
+  capture({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): void
 
   /**
    * @description Capture an event immediately. Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
@@ -292,9 +391,10 @@ export interface IPostHog {
    * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
    * @param properties OPTIONAL | which can be a object with any information you'd like to add
    * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
-   * @param sendFeatureFlags OPTIONAL | Used with experiments. Determines whether to send feature flag values with the event.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
    */
-  captureImmediate({ distinctId, event, properties, groups, sendFeatureFlags }: EventMessage): Promise<void>
+  captureImmediate({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): Promise<void>
 
   /**
    * @description Identify lets you add metadata on your users so you can more easily identify who they are in PostHog,
@@ -312,6 +412,21 @@ export interface IPostHog {
    * @param properties with a dict with any key: value pairs
    */
   identifyImmediate({ distinctId, properties }: IdentifyMessage): Promise<void>
+
+  /**
+   * @description Set properties on a person profile.
+   * @param distinctId which uniquely identifies your user
+   * @param properties properties to set on the person profile
+   * @param propertiesOnce properties to set once on the person profile
+   */
+  setPersonProperties({ distinctId, properties, propertiesOnce }: SetPersonPropertiesMessage): void
+
+  /**
+   * @description Remove properties from a person profile.
+   * @param distinctId which uniquely identifies your user
+   * @param properties property name or property names to unset
+   */
+  unsetPersonProperties({ distinctId, properties }: UnsetPersonPropertiesMessage): void
 
   /**
    * @description To marry up whatever a user does before they sign up or log in with what they do after you need to make an alias call.
@@ -349,6 +464,9 @@ export interface IPostHog {
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
    * @returns true if the flag is on, false if the flag is off, undefined if there was an error.
+   *
+   * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.isEnabled(key)` on the
+   *   returned snapshot. Will be removed in the next major version.
    */
   isFeatureEnabled(
     key: string,
@@ -377,6 +495,9 @@ export interface IPostHog {
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
    * @returns true or string(for multivariates) if the flag is on, false if the flag is off, undefined if there was an error.
+   *
+   * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.getFlag(key)` on the
+   *   returned snapshot. Will be removed in the next major version.
    */
   getFeatureFlag(
     key: string,
@@ -415,6 +536,9 @@ export interface IPostHog {
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    *
    * @returns payload of a json type object
+   *
+   * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.getFlagPayload(key)` on
+   *   the returned snapshot. Will be removed in the next major version.
    */
   getFeatureFlagPayload(
     key: string,
@@ -484,6 +608,36 @@ export interface IPostHog {
   ): Promise<FeatureFlagResult | undefined>
 
   /**
+   * @description Evaluate all feature flags for a user in a single call and return a
+   * {@link FeatureFlagEvaluations} snapshot. Branch on `.isEnabled()` / `.getFlag()`,
+   * then pass the same snapshot to `capture()` via the `flags` option so events carry
+   * the exact flag values the code branched on.
+   *
+   * Prefer this over calling `isFeatureEnabled()` / `getFeatureFlag()` repeatedly and
+   * over `capture({ sendFeatureFlags: true })` — it avoids multiple `/flags` requests
+   * per incoming request.
+   *
+   * @example
+   * ```ts
+   * const flags = await posthog.evaluateFlags('user_123', { personProperties: { plan: 'enterprise' } })
+   * if (flags.isEnabled('new-dashboard')) {
+   *   renderNewDashboard()
+   * }
+   * posthog.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
+   * ```
+   *
+   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   */
+  evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
+  /**
+   * @description Evaluate all feature flags for a specific user.
+   *
+   * @param distinctId - The user's distinct ID
+   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   */
+  evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
+
+  /**
    * @description Sets a groups properties, which allows asking questions like "Who are the most active companies"
    * using my product in PostHog.
    *
@@ -492,6 +646,16 @@ export interface IPostHog {
    * @param properties OPTIONAL | which can be a object with any information you'd like to add
    */
   groupIdentify({ groupType, groupKey, properties }: GroupIdentifyMessage): void
+
+  /**
+   * @description Sets a group's properties immediately. Useful for edge environments where the usual queue-based
+   * sending is not preferable. Do not mix immediate and non-immediate calls.
+   *
+   * @param groupType Type of group (ex: 'company'). Limited to 5 per project
+   * @param groupKey Unique identifier for that type of group (ex: 'id:5')
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   */
+  groupIdentifyImmediate({ groupType, groupKey, properties }: GroupIdentifyMessage): Promise<void>
 
   /**
    * @description Force an immediate reload of the polled feature flags. Please note that they are

@@ -8,6 +8,10 @@ on:
   schedule:
     - cron: '19 2 * * 3'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
@@ -36,6 +40,12 @@ jobs:
           build-mode: none
         - language: javascript-typescript
           build-mode: none
+          # AlertSuppression.ql makes CodeQL emit the SARIF `suppressions[]`
+          # field for any `// codeql[<rule-id>]` comment in the source, which
+          # the `Dismiss alerts` step below converts into dismissed Code
+          # Scanning alerts. Only loaded for languages that actually use
+          # suppression comments.
+          query: codeql/javascript-queries:AlertSuppression.ql
         # CodeQL supports the following values keywords for 'language': 'actions', 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'rust', 'swift'
         # Use `c-cpp` to analyze code written in C, C++ or both
         # Use 'java-kotlin' to analyze code written in Java, Kotlin or both
@@ -46,7 +56,7 @@ jobs:
         # your codebase is analyzed, see https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/codeql-code-scanning-for-compiled-languages
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     # Add any setup steps before running the `github/codeql-action/init` action.
     # This includes steps like installing compilers or runtimes (`actions/setup-node`
@@ -56,7 +66,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
+      uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
       with:
         # If you wish to specify custom queries, you can do so here or in a config file.
         # By default, queries listed here will override any specified in a config file.
@@ -66,6 +76,7 @@ jobs:
         # queries: security-extended,security-and-quality
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
+        packs: ${{ matrix.query }}
         
 
     # If the analyze step fails for one of the languages you are analyzing with
@@ -86,6 +97,36 @@ jobs:
     #     exit 1
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
+      id: analyze
+      uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
       with:
         category: "/language:${{matrix.language}}"
+        output: sarif-results
+
+    # Dismiss code-scanning alerts whose source has a matching
+    # `// codeql[<rule-id>]` comment (populated into SARIF
+    # `suppressions[]` by AlertSuppression.ql above). Runs only on the
+    # default branch — see https://github.com/advanced-security/dismiss-alerts
+    # ("dismissal status of an alert is a global property") — and only for
+    # languages that opted in via `matrix.query`.
+    # Only runs when the SARIF file was actually written by the analyze step.
+    # The file can be absent when the CodeQL analysis is cancelled or the
+    # runner exits early, which would otherwise fail this non-critical step.
+    - name: Check SARIF file exists
+      id: sarif-check
+      if: github.ref == 'refs/heads/main' && matrix.query != ''
+      run: |
+        if [ -f "sarif-results/${{ matrix.language }}.sarif" ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Dismiss alerts
+      if: github.ref == 'refs/heads/main' && matrix.query != '' && steps.sarif-check.outputs.exists == 'true'
+      uses: advanced-security/dismiss-alerts@046d6b48d2e43cf563f96f67332c47c432eff83e # v2.0.2
+      with:
+        sarif-id: ${{ steps.analyze.outputs.sarif-id }}
+        sarif-file: sarif-results/${{ matrix.language }}.sarif
+      env:
+        GITHUB_TOKEN: ${{ github.token }}

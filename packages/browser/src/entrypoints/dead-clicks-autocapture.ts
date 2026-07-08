@@ -1,7 +1,7 @@
-import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
+import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
-import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
+import { getEventTarget, shouldCaptureDeadClick, shouldSkipDeadClick } from '../autocapture-utils'
 import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
@@ -32,9 +32,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
+    private _lastVisibilityChange: number | undefined
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
-    private _config: Required<DeadClicksAutoCaptureConfig>
+    private _config: Required<Omit<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>> &
+        Pick<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>
     private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
 
     private _defaultConfig = (defaultOnCapture: (click: DeadClickCandidate, properties: Properties) => void) => ({
@@ -46,7 +48,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         __onCapture: defaultOnCapture,
     })
 
-    private _asRequiredConfig(providedConfig?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
+    private _asRequiredConfig(
+        providedConfig?: DeadClicksAutoCaptureConfig
+    ): Required<Omit<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>> &
+        Pick<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'> {
         const defaultConfig = this._defaultConfig(providedConfig?.__onCapture || this._captureDeadClick.bind(this))
         return {
             element_attribute_ignorelist:
@@ -57,6 +62,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? defaultConfig.mutation_threshold_ms,
             capture_clicks_with_modifier_keys:
                 providedConfig?.capture_clicks_with_modifier_keys ?? defaultConfig.capture_clicks_with_modifier_keys,
+            css_selector_ignorelist: providedConfig?.css_selector_ignorelist,
             __onCapture: defaultConfig.__onCapture,
         }
     }
@@ -73,6 +79,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._startClickObserver()
         this._startScrollObserver()
         this._startSelectionChangedObserver()
+        this._startVisibilityChangeObserver()
         this._startMutationObserver(observerTarget)
     }
 
@@ -97,6 +104,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         assignableWindow.removeEventListener('click', this._onClick)
         assignableWindow.removeEventListener('scroll', this._onScroll, { capture: true })
         assignableWindow.removeEventListener('selectionchange', this._onSelectionChange)
+        document?.removeEventListener('visibilitychange', this._onVisibilityChange)
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -156,6 +164,16 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._lastSelectionChanged = Date.now()
     }
 
+    private _startVisibilityChangeObserver() {
+        addEventListener(document, 'visibilitychange', this._onVisibilityChange)
+    }
+
+    private _onVisibilityChange = (): void => {
+        if (document?.visibilityState === 'visible') {
+            this._lastVisibilityChange = Date.now()
+        }
+    }
+
     private _ignoreClick(click: DeadClickCandidate | null): boolean {
         if (!click) {
             return true
@@ -177,11 +195,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             return true
         }
 
-        if (
-            isTag(click.node, 'html') ||
-            !isElementNode(click.node) ||
-            autocaptureCompatibleElements.includes(click.node.tagName.toLowerCase())
-        ) {
+        if (isTag(click.node, 'html') || !isElementNode(click.node) || shouldSkipDeadClick(click.node)) {
+            return true
+        }
+
+        if (!shouldCaptureDeadClick(click.node, { css_selector_ignorelist: this._config.css_selector_ignorelist })) {
             return true
         }
 
@@ -210,6 +228,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
                     ? this._lastSelectionChanged - click.timestamp
                     : undefined
+            click.visibilityChangedDelayMs = this._lastVisibilityChange
+                ? Math.abs(click.timestamp - this._lastVisibilityChange)
+                : undefined
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
             const selectionChangedTimeout = checkTimeout(
@@ -227,13 +248,26 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             const hadSelectionChange =
                 isNumber(click.selectionChangedDelayMs) &&
                 click.selectionChangedDelayMs < this._config.selection_change_threshold_ms
+            const hadVisibilityChange =
+                isNumber(click.visibilityChangedDelayMs) &&
+                click.visibilityChangedDelayMs < this._config.selection_change_threshold_ms
 
-            if (hadScroll || hadMutation || hadSelectionChange) {
-                // ignore clicks that had a scroll or mutation
+            if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange) {
                 continue
             }
 
-            if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
+            const visibilityChangedTimeout = checkTimeout(
+                click.visibilityChangedDelayMs,
+                this._config.selection_change_threshold_ms
+            )
+
+            if (
+                scrollTimeout ||
+                mutationTimeout ||
+                absoluteTimeout ||
+                selectionChangedTimeout ||
+                visibilityChangedTimeout
+            ) {
                 this._onCapture(click, {
                     $dead_click_last_mutation_timestamp: this._lastMutation,
                     $dead_click_event_timestamp: click.timestamp,
@@ -241,6 +275,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     $dead_click_mutation_timeout: mutationTimeout,
                     $dead_click_absolute_timeout: absoluteTimeout,
                     $dead_click_selection_changed_timeout: selectionChangedTimeout,
+                    $dead_click_visibility_changed_timeout: visibilityChangedTimeout,
                 })
             } else if (click.absoluteDelayMs < this._config.mutation_threshold_ms) {
                 // keep waiting until next check
@@ -269,11 +304,13 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                     // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
                     elementsChainAsString: false,
+                    disableCaptureUrlHashes: this.instance.config.disable_capture_url_hashes,
                 }).props,
                 $dead_click_scroll_delay_ms: click.scrollDelayMs,
                 $dead_click_mutation_delay_ms: click.mutationDelayMs,
                 $dead_click_absolute_delay_ms: click.absoluteDelayMs,
                 $dead_click_selection_changed_delay_ms: click.selectionChangedDelayMs,
+                $dead_click_visibility_changed_delay_ms: click.visibilityChangedDelayMs,
             },
             {
                 timestamp: new Date(click.timestamp),

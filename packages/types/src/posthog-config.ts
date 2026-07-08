@@ -3,6 +3,7 @@
  */
 
 import type { JsonType, Properties } from './common'
+import type { LogAttributes, BeforeSendLogFn } from './capture-log'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
 import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
@@ -68,6 +69,21 @@ export interface AutocaptureConfig {
     css_selector_allowlist?: string[]
 
     /**
+     * List of CSS selectors to ignore autocapture on
+     * e.g. ['[data-ph-no-autocapture]']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * and ignore list config `['[id]']`
+     * we will ignore the click if the click-target or its parents has any id
+     *
+     * Nothing is ignored when there's an empty ignorelist, e.g. []
+     * If no ignorelist is set, we default to ignoring .ph-no-autocapture and [data-ph-no-autocapture]
+     * Note: providing any custom list fully replaces the defaults — include .ph-no-autocapture
+     * and [data-ph-no-autocapture] explicitly if you still want them honoured.
+     */
+    css_selector_ignorelist?: string[]
+
+    /**
      * Exclude certain element attributes from autocapture
      * E.g. ['aria-label'] or [data-attr-pii]
      */
@@ -96,14 +112,28 @@ export interface RageclickConfig {
     /**
      * Controls automatic exclusion of elements by text content from rageclick detection.
      * Useful for pagination buttons, loading spinners, and other repeatedly-clicked UI elements.
-     * - `true` (default): Use default keywords ['next', 'previous', 'prev', '>', '<']
+     * - `true`: Use default keywords ['next', 'previous', 'prev', '>', '<']
      * - `false`: Disable content-based exclusion
      * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
      *
-     * Checks if element text content or aria-label contains any of the keywords (case-insensitive)
-     * @default true
+     * Checks if element text content or aria-label matches any of the keywords (case-insensitive).
+     * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
+     * so they don't suppress text like "sign-up", "5 > 3", or "C++".
+     *
+     * @default undefined
+     * (`true` when `defaults` is `'2025-11-30'` or later;
+     * `['next', 'previous', 'prev', '>', '<', '+', '-', '−', '–']` when `defaults` is `'2026-05-30'` or later)
      */
     content_ignorelist?: boolean | string[]
+
+    /**
+     * Excludes text-editing surfaces (textarea, text-like inputs, and contenteditable elements)
+     * from rageclick detection, since rapid repeated clicks there are double/triple-click text
+     * selection rather than rage.
+     * Enabled by default from the 2026-05-30 config defaults onwards.
+     * @default false
+     */
+    ignore_text_selection?: boolean
 
     /**
      * Maximum pixel distance between clicks to still be considered a rage click.
@@ -125,9 +155,24 @@ export interface RageclickConfig {
 }
 
 export interface BootstrapConfig {
+    /**
+     * Distinct ID to use before the SDK has loaded persisted identity.
+     */
     distinctID?: string
+
+    /**
+     * Whether `distinctID` already identifies a known person profile.
+     */
     isIdentifiedID?: boolean
+
+    /**
+     * Feature flag values to use immediately until the SDK fetches fresh values.
+     */
     featureFlags?: Record<string, boolean | string>
+
+    /**
+     * Feature flag payloads to use together with bootstrapped `featureFlags`.
+     */
     featureFlagPayloads?: Record<string, JsonType>
 
     /**
@@ -150,6 +195,10 @@ export interface PerformanceCaptureConfig {
 
     /**
      * Use chrome's web vitals library to wrap fetch and capture web vitals
+     *
+     * When `cookieless_mode` is active, there is no client-side SessionIdManager; vitals are still
+     * captured. Nested `$web_vitals_*_event` payloads omit `$session_id` / `$window_id`; PostHog ingestion assigns
+     * `$session_id` server-side for cookieless traffic when project cookieless settings are enabled (same as other events).
      */
     web_vitals?: boolean
 
@@ -204,8 +253,32 @@ export interface DeadClickCandidate {
     mutationDelayMs?: number
     // time between click and the most recent selection changed event
     selectionChangedDelayMs?: number
+    // time between click and the most recent visibility change event
+    visibilityChangedDelayMs?: number
     // if neither scroll nor mutation seen before threshold passed
     absoluteDelayMs?: number
+}
+
+/**
+ * Controls buffering and payload limits for exception steps added via `addExceptionStep`.
+ *
+ * NOTE: This type is also defined in `@posthog/core` (exception-steps.ts). Keep both in sync.
+ */
+export type ExceptionStepsConfig = {
+    /**
+     * Determines whether PostHog should collect exception steps and attach them to the next captured exception.
+     *
+     * @default true
+     */
+    enabled?: boolean
+
+    /**
+     * The maximum UTF-8 byte budget for exception steps buffered in memory.
+     * Oldest steps are evicted when the budget is exceeded.
+     *
+     * @default 32768 (~32KB)
+     */
+    max_bytes?: number
 }
 
 export type ExceptionAutoCaptureConfig = {
@@ -214,21 +287,21 @@ export type ExceptionAutoCaptureConfig = {
      *
      * @default true
      */
-    capture_unhandled_errors: boolean
+    capture_unhandled_errors?: boolean
 
     /**
      * Determines whether PostHog should capture unhandled promise rejections.
      *
      * @default true
      */
-    capture_unhandled_rejections: boolean
+    capture_unhandled_rejections?: boolean
 
     /**
      * Determines whether PostHog should capture console errors.
      *
      * @default false
      */
-    capture_console_errors: boolean
+    capture_console_errors?: boolean
 }
 
 export type DeadClicksAutoCaptureConfig = {
@@ -264,6 +337,20 @@ export type DeadClicksAutoCaptureConfig = {
     capture_clicks_with_modifier_keys?: boolean
 
     /**
+     * List of CSS selectors to ignore dead clicks on
+     * e.g. ['.my-download-link']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > a > svg
+     * and ignore list config `['[download]']`
+     * we will ignore the dead click if the click-target or its parents has any download attribute
+     *
+     * Nothing is ignored when there's an empty ignorelist, e.g. []
+     * If no ignorelist is set, we default to ignoring .ph-no-deadclick and .ph-no-capture
+     * A custom ignorelist fully replaces the default — include .ph-no-capture if you want it to suppress dead-click capture as well
+     */
+    css_selector_ignorelist?: string[]
+
+    /**
      * Allows setting behavior for when a dead click is captured.
      * For e.g. to support capture to heatmaps
      *
@@ -284,7 +371,11 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
-export type ConfigDefaults = '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+/**
+ * Configuration defaults snapshot used by `PostHogConfig.defaults`.
+ * Later dates include all earlier default changes.
+ */
+export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -320,6 +411,11 @@ export interface ErrorTrackingOptions {
      * @default 10
      */
     __exceptionRateLimiterBucketSize?: number
+
+    /**
+     * Controls buffering and payload limits for exception steps added via `addExceptionStep`.
+     */
+    exception_steps?: ExceptionStepsConfig
 }
 
 /**
@@ -463,9 +559,33 @@ export interface SessionRecordingOptions {
     recordBody?: boolean
 
     /**
+     * When recording network bodies, read them through a streaming reader that stops at the
+     * payload size limit instead of buffering the whole body and then discarding it. Bounds the
+     * memory and pre-request latency of capturing a very large body. Reads only a clone of the
+     * body, never the stream the page consumes.
+     * @default false
+     */
+    streamNetworkBody?: boolean
+
+    /**
      * Allows local config to override remote canvas recording settings from the flags response
      */
     captureCanvas?: SessionRecordingCanvasOptions
+
+    /**
+     * Tune how canvas frames are captured for replay. Only has any effect when canvas recording
+     * is enabled.
+     *
+     * - `resolutionScale`: capture canvas frames at a fraction of their display resolution. A
+     *   number in `(0, 1]`; `1` is full-resolution capture (the default) and, e.g., `0.6` captures
+     *   at 60%. Out-of-range or non-finite values are clamped into `(0, 1]`. Aspect ratio is
+     *   preserved and replay upscales the frame back to the original display size, so playback
+     *   dimensions are unchanged, just softer. Resolution is the highest-leverage lever for canvas
+     *   byte size, since bytes scale with pixel area.
+     */
+    canvasCapture?: {
+        resolutionScale?: number
+    }
 
     /**
      * Modify the network request before it is captured. Returning null or undefined stops it being captured
@@ -494,8 +614,15 @@ export interface SessionRecordingOptions {
     compress_events?: boolean
 
     /**
-     * ADVANCED: alters the threshold before a recording considers a user has become idle.
-     * Normally only altered alongside changes to session_idle_timeout_ms.
+     * ADVANCED: Controls when session recording considers the user idle.
+     *
+     * If no replay user interaction occurs for this many milliseconds, the recorder marks the recording idle,
+     * emits a `sessionIdle` replay marker, flushes buffered replay events, and drops most subsequent replay
+     * events until user activity resumes. If activity resumes before `session_idle_timeout_seconds`, recording
+     * continues under the same `$session_id`.
+     *
+     * This does not control `$session_id` rotation. Session rotation is controlled by `session_idle_timeout_seconds`,
+     * so this value should be lower than `session_idle_timeout_seconds * 1000`.
      *
      * @default 1000 * 60 * 5 (5 minutes)
      */
@@ -527,6 +654,17 @@ export interface SessionRecordingOptions {
      * @default false
      */
     strictMinimumDuration?: boolean
+
+    /**
+     * The sample rate for session recordings, a number between 0 and 1.
+     * For example, 0.5 means roughly 50% of sessions will be recorded.
+     *
+     * When `undefined`, falls back to the remote config setting.
+     * When set, takes precedence over the remote config.
+     *
+     * @default undefined
+     */
+    sampleRate?: number
 }
 
 // we used to call a request that was sent to the queue with options attached `RequestQueueOptions`
@@ -552,9 +690,78 @@ export interface SurveyConfig {
 }
 
 /**
+ * Options for the captureLog API and posthog.logger convenience methods.
+ */
+export interface LogCaptureOptions {
+    /**
+     * The service name for log records.
+     * Maps to the OTel resource attribute 'service.name'.
+     *
+     * @default 'unknown_service'
+     */
+    serviceName?: string
+    /**
+     * The deployment environment for log records (e.g. 'production', 'staging').
+     * Maps to the OTel resource attribute 'deployment.environment'.
+     */
+    environment?: string
+    /**
+     * The service version for log records (e.g. '1.2.3').
+     * Maps to the OTel resource attribute 'service.version'.
+     */
+    serviceVersion?: string
+    /**
+     * Additional resource attributes applied to all log records.
+     * These describe the service/deployment, not individual log entries.
+     * Named fields (serviceName, environment, serviceVersion) are set first;
+     * resourceAttributes can override them.
+     *
+     * @example { 'host.name': 'web-01', 'cloud.region': 'us-east-1' }
+     */
+    resourceAttributes?: LogAttributes
+    /**
+     * Flush interval in milliseconds for batched log records.
+     *
+     * @default 3000
+     */
+    flushIntervalMs?: number
+    /**
+     * Maximum number of log records to buffer before forcing a flush. The queue
+     * may grow beyond this while a flush is in flight (e.g. during a synchronous
+     * burst) and is bounded separately by the per-interval rate cap.
+     *
+     * @default 100
+     */
+    maxBufferSize?: number
+    /**
+     * Maximum number of log records accepted per flush interval. Subsequent calls
+     * within the same window are dropped with a single warning, protecting
+     * against runaway loggers flooding the network. Also sizes the in-memory
+     * buffer's eviction backstop, so a window's worth of records is held while a
+     * flush is in flight; raising it raises the worst-case in-memory footprint.
+     *
+     * @default 1000
+     */
+    maxLogsPerInterval?: number
+    /**
+     * Pre-send filter for log records, as a single function or a left-to-right
+     * chain. Each function inspects, mutates, or drops a record (return `null`
+     * to drop) before it enters the rate cap or the buffer.
+     */
+    beforeSend?: BeforeSendLogFn | BeforeSendLogFn[]
+}
+
+/**
  * Logs configuration options
  */
-export interface LogsConfig {
+export interface LogsConfig extends LogCaptureOptions {
+    /**
+     * Automatically capture `console.*` calls as structured log records.
+     * Review console output before enabling, as messages can include sensitive values
+     * written by your code or by third-party libraries.
+     *
+     * @default undefined
+     */
     captureConsoleLogs?: boolean
 }
 
@@ -623,7 +830,10 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture rage clicks.
      *
-     * by default rageclicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` css class on the element or a parent
+     * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.
+     * When `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`.
+     * When `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.
+     *
      * @default true
      */
     rageclick: boolean | RageclickConfig
@@ -673,6 +883,30 @@ export interface PostHogConfig {
      * @param posthog_instance - The PostHog instance that has been loaded.
      */
     loaded: (posthog_instance: PostHog) => void
+
+    /**
+     * Determines whether PostHog should strip URL fragments (`#...`) from automatically captured URL fields.
+     * Disabled by default for backwards compatibility, and enabled automatically when `config.defaults` is
+     * `'2026-06-25'` or later. Set to `true` to strip hashes from:
+     *
+     * - `$current_url` on automatically captured browser events, including `$pageview`
+     * - `$initial_current_url`
+     * - `$session_entry_url`
+     * - `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture
+     * - Next.js Pages Router `$pageview` `$current_url`
+     * - web vitals `$current_url`
+     * - logs `url.full`
+     * - conversations `current_url` and `request_url`
+     * - session replay rrweb meta/custom-event `href` URLs
+     * - heatmap data URLs
+     *
+     * If your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.
+     * If you want to capture hashes selectively, leave this disabled and use `before_send` to remove
+     * sensitive hash values before events are sent.
+     *
+     * @default false when `config.defaults` is unset or earlier than `'2026-06-25'`, otherwise `true`
+     */
+    disable_capture_url_hashes: boolean
 
     /**
      * Determines whether PostHog should save referrer information.
@@ -728,9 +962,9 @@ export interface PostHogConfig {
      * Can be:
      * - `true`: Capture regular pageviews (default)
      * - `false`: Don't capture any pageviews
-     * - `'history_change'`: Only capture pageviews on history API changes (pushState, replaceState, popstate)
+     * - `'history_change'`: Capture pageviews on the initial page load and on history API changes (pushState, replaceState, popstate)
      *
-     * @default true
+     * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
     capture_pageview: boolean | 'history_change'
 
@@ -778,6 +1012,57 @@ export interface PostHogConfig {
     disable_cookie?: boolean
 
     /**
+     * Coalesce rapid `Persistence.save()` calls into a single write.
+     *
+     * Set to a positive number (milliseconds) to debounce writes to localStorage / cookie
+     * by that window. The in-memory `props` object is always updated synchronously so
+     * within-tab reads see the latest values immediately. Cross-tab `storage` events
+     * (which carry the full persistence value as a payload) are reduced proportionally
+     * to the debounce window.
+     *
+     * Pending writes are flushed on `beforeunload` and `pagehide` so no state is lost
+     * on tab close. The cross-tab visibility delay is bounded by the configured window.
+     *
+     * Defaults to `0` (no debouncing, write synchronously) for backwards compatibility.
+     * On pages that capture many events per second, `250` is a reasonable starting point
+     * to reduce localStorage write pressure and cross-tab IPC traffic. The `2026-05-30`
+     * config default opts into `250` automatically.
+     *
+     * @default 0
+     */
+    persistence_save_debounce_ms?: number
+
+    /**
+     * Store the feature-flag config cluster and survey config in their own
+     * localStorage entries (`<name>__flags`, `<name>__surveys`) instead of the
+     * single main persistence blob. These payloads are large and change rarely,
+     * so keeping them out of the main blob stops them riding on every
+     * high-frequency main-blob write and broadcasting cross-tab `storage` events.
+     *
+     * Only applies when persistence resolves to `localStorage` / `localStorage+cookie`
+     * (the split is pointless for `memory` / `sessionStorage` and impossible for `cookie`).
+     * On load the old main-blob location is read once and migrated forward, so
+     * upgrades never miss a cached flag. The `2026-05-30` config default opts in.
+     *
+     * @default false
+     */
+    split_storage?: boolean
+
+    /**
+     * Detect the Google Search App (GSA) as its own `$browser` value instead of
+     * the underlying webview it embeds — Mobile Safari on iOS, Chrome on Android.
+     * Detection keys off the `GSA/` marker present in the UA on every platform.
+     *
+     * Off by default for backwards-compatibility: enabling it reattributes
+     * existing GSA traffic away from Mobile Safari / Chrome, which would
+     * otherwise look like those browsers suddenly losing share. The `2026-05-30`
+     * config default opts in.
+     *
+     * @default false
+     */
+    detect_google_search_app?: boolean
+
+    /**
      * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false
@@ -794,7 +1079,7 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should disable all product tours functionality.
      *
-     * @default true (disabled until feature is ready for GA)
+     * @default false
      */
     disable_product_tours: boolean
 
@@ -827,6 +1112,30 @@ export interface PostHogConfig {
     disable_conversations: boolean
 
     /**
+     * Verified distinct_id for HMAC-based identity verification.
+     * When both `identity_distinct_id` and `identity_hash` are provided,
+     * products like conversations use server-verified identity instead of
+     * anonymous session identifiers.
+     *
+     * Can be set at init time or later via `posthog.setIdentity()`.
+     *
+     * @example
+     * ```js
+     * posthog.init('phc_...', {
+     *     identity_distinct_id: 'user_123',
+     *     identity_hash: 'a1b2c3d4e5f6...',
+     * })
+     * ```
+     */
+    identity_distinct_id?: string
+
+    /**
+     * HMAC-SHA256 of `identity_distinct_id` using the project's API secret.
+     * Must be provided together with `identity_distinct_id`.
+     */
+    identity_hash?: string
+
+    /**
      * Determines whether PostHog should disable web experiments.
      *
      * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.
@@ -842,6 +1151,25 @@ export interface PostHogConfig {
      * @default false
      */
     disable_external_dependency_loading: boolean
+
+    /**
+     * Determines whether PostHog should load external dependency scripts from
+     * semver-qualified asset paths such as /static/1.370.0/recorder.js instead
+     * of the legacy /static/recorder.js?v=1.370.0 form.
+     *
+     * @default false
+     */
+    strict_script_versioning: boolean
+
+    /**
+     * Optional host override for static assets loaded by PostHog, such as
+     * recorder.js, surveys.js, or toolbar.js. Only applies to /static/* asset
+     * paths; dynamic assets like remote config continue to use the regular
+     * asset host derived from api_host.
+     *
+     * @default null
+     */
+    asset_host: string | null
 
     /**
      * A function to be called when a script is being loaded.
@@ -874,6 +1202,9 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should enable recording console logs.
+     *
+     * This is related to the Session Recording feature. For more session recording
+     * settings, see the `session_recording` and `capture_performance` configuration option.
      * When undefined, it falls back to the remote config setting.
      *
      * @default undefined
@@ -1001,6 +1332,8 @@ export interface PostHogConfig {
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      * - `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
+     * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
+     * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
      *
      * @default 'unset'
      */
@@ -1022,7 +1355,21 @@ export interface PostHogConfig {
     __preview_deferred_init_extensions: boolean
 
     /**
+     * In `'localStorage+cookie'` persistence mode, prefer cookie values over localStorage
+     * when both stores carry the same key. Fixes cross-subdomain identify and session
+     * disconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.
+     * Read at SDK init; has no effect when toggled via `set_config` or for other persistence modes.
+     *
+     * @default false
+     * @experimental
+     */
+    __preview_cookie_wins_on_conflict: boolean
+
+    /**
      * Determines the session recording options.
+     *
+     * For more session recording settings, see the `enable_recording_console_log` and `capture_performance` configuration option.
+     * When `defaults` is `'2025-11-30'` or later, `strictMinimumDuration` defaults to `true`.
      *
      * @see `SessionRecordingOptions`
      * @default {}
@@ -1039,7 +1386,15 @@ export interface PostHogConfig {
 
     /**
      * Determines the session idle timeout in seconds.
-     * Any new event that's happened after this timeout will create a new session.
+     *
+     * If no events are captured for this many seconds, the next event starts a
+     * new session with a new `$session_id` (and `$window_id`). The SDK may also proactively reset the stored session
+     * after the timeout while the page is idle, so the next event creates a new session.
+     *
+     * Session recording has a separate idle threshold: `session_recording.session_idle_threshold_ms`. That setting
+     * only controls when the user is considered idle, it does not rotate `$session_id`.
+     *
+     * Must be between 60 seconds and 10 hours. Values outside this range are clamped.
      *
      * @default 30 * 60 -- 30 minutes
      */
@@ -1149,6 +1504,19 @@ export interface PostHogConfig {
      * @default undefined
      */
     evaluation_contexts?: readonly string[]
+
+    /**
+     * List of feature flag keys to remotely evaluate for this SDK instance.
+     * When set, only these flags are evaluated by `/flags`; omitted flags are not remotely evaluated.
+     * Dependencies of the requested flags may still be evaluated internally by PostHog.
+     * If unset, all eligible flags are evaluated.
+     *
+     * Examples: ['checkout-redesign', 'new-onboarding']
+     *
+     * @default undefined
+     */
+    flag_keys?: readonly string[]
+
     /**
      * Evaluation environments for feature flags.
      * @deprecated Use evaluation_contexts instead. This property will be removed in a future version.
@@ -1188,11 +1556,60 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
 
     /**
+     * Sets the maximum age (in milliseconds) for cached feature flag values.
+     * When the cache is older than this value:
+     * - `getFeatureFlag()` will return `undefined` instead of stale cached values
+     * - `$feature/` properties will not be attached to events
+     * - A background refresh will be triggered automatically
+     *
+     * This prevents stale feature flag values from being used when the `/flags` request
+     * fails (e.g., due to ad blockers or network issues).
+     *
+     * When not set or set to `0`, cache expiration is disabled (cached values never expire).
+     *
+     * @default 0
+     */
+    feature_flag_cache_ttl_ms?: number
+
+    /**
+     * When enabled, `$feature_flag_called` event deduplication is scoped to the current session.
+     *
+     * By default, the SDK deduplicates `$feature_flag_called` events globally and only re-emits
+     * them when `identify` (with a new distinct ID) or `reset` is called. This can be problematic
+     * for experiments: if a flag is checked before an experiment starts, the event is cached and
+     * won't fire again for that user until identify/reset, meaning the experiment never sees the event.
+     *
+     * When this option is `true`, the deduplication cache is keyed on the session ID, so each new
+     * session will re-emit `$feature_flag_called` for every flag that is checked.
+     *
+     * @default false
+     */
+    advanced_feature_flags_dedup_per_session: boolean
+
+    /**
      * Sets timeout for fetching surveys
      *
      * @default 10000
      */
     surveys_request_timeout_ms: number
+
+    /**
+     * Controls how often feature flags are automatically refreshed in long-running sessions after remote configuration has loaded.
+     *
+     * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
+     * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
+     *
+     * **Tradeoffs:**
+     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
+     * - **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.
+     * - **Disabled (0)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
+     *   Use this if you control flag updates manually or have infrequent flag changes.
+     *
+     * Note: Refreshes are automatically skipped when the browser tab is hidden or no document is available.
+     *
+     * @default 300000 (5 minutes)
+     */
+    remote_config_refresh_interval_ms?: number
 
     /**
      * Function to get the device ID.
@@ -1213,6 +1630,23 @@ export interface PostHogConfig {
      */
     before_send?: BeforeSendFn | BeforeSendFn[]
 
+    /**
+     * Overrides the URL used for client-side URL targeting: session replay URL triggers, the
+     * session replay URL blocklist, survey URL display conditions, product tour URL conditions,
+     * web experiment URL conditions, and autocapture URL allow/ignore lists.
+     *
+     * These features match against `window.location.href` directly, which does not reflect
+     * any `$current_url` you rewrite in `before_send`. In environments where the browser URL
+     * is not meaningful for targeting — e.g. Electron/desktop apps served from a generated
+     * host — return the logical URL you want these features to match against. This does not
+     * change the `$current_url` property captured on events (use `before_send` for that).
+     *
+     * @param defaultUrl - the URL PostHog would otherwise use (`window.location.href`)
+     * @returns the URL to use for client-side URL matching
+     * @default undefined (uses `window.location.href`)
+     */
+    get_current_url?: (defaultUrl: string) => string
+
     /** @deprecated - use `before_send` instead */
     sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
 
@@ -1221,7 +1655,10 @@ export interface PostHogConfig {
 
     /**
      * Determines whether to capture performance metrics.
-     * These include Network Timing and Web Vitals.
+     * These include Network Timing for Session Replay and Web Vitals.
+     *
+     * The `network_timing` option is only used by the Session Replay feature.
+     * For more session recording settings, see the `session_recording` and `enable_recording_console_log` configuration option.
      *
      * When `undefined`, fallback to the remote configuration.
      * If `false`, neither network timing nor web vitals will work.
@@ -1273,11 +1710,13 @@ export interface PostHogConfig {
      */
     capture_heatmaps?: boolean | HeatmapConfig
 
-    /* @deprecated - use `capture_heatmaps` instead */
+    /** @deprecated Use `capture_heatmaps` instead. */
     enable_heatmaps?: boolean
 
     /**
      * Determines whether to capture dead clicks.
+     *
+     * by default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent
      *
      * @see {DeadClicksAutoCaptureConfig}
      * @default undefined
@@ -1311,7 +1750,7 @@ export interface PostHogConfig {
      * There are three options:
      * - `person_profiles: 'always'` - we will process persons data for all events
      * - `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`.
-     * - `person_profiles: 'identified_only'` _(default)_ - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.
+     * - `person_profiles: 'identified_only'` _(default)_ - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.unsetPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.
      *
      * @default 'identified_only'
      */
@@ -1365,6 +1804,10 @@ export interface PostHogConfig {
     /**
      * Enables cookieless mode. In this mode, PostHog will not set any cookies, or use session or local storage. User
      * identity is handled by generating a privacy-preserving hash on PostHog's servers.
+     *
+     * Web Vitals (`capture_performance.web_vitals`) are supported: metrics are sent without client session IDs;
+     * ingestion assigns `$session_id` when cookieless mode is enabled for the project.
+     *
      * - 'always' - enable cookieless mode immediately on startup, use this if you do not intend to show a cookie banner
      * - 'on_reject' - enable cookieless mode only if the user rejects cookies, use this if you want to show a cookie banner. If the user accepts cookies, cookieless mode will not be used, and PostHog will use cookies and local storage as usual.
      *
@@ -1407,39 +1850,58 @@ export interface PostHogConfig {
      */
     override_display_language?: string | null
 
+    /**
+     * A list of hostnames for which to inject PostHog tracing headers to all requests
+     * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID). Used to link
+     * frontend sessions to backend traces (see https://posthog.com/docs/llm-analytics/link-session-replay).
+     */
+    tracing_headers?: string[]
+
+    /**
+     * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
+     */
+    addTracingHeaders?: string[]
+
     // ------- PREVIEW CONFIGS -------
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * A list of hostnames for which to inject PostHog tracing headers to all requests
-     * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID)
-     * */
+     * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
+     */
     __add_tracing_headers?: string[]
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Whether to use the new /flags/ endpoint
+     * @deprecated This option is a no-op. The browser SDK already uses the `/flags/?v=2` endpoint.
      * */
     __preview_flags_v2?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - ONLY USE WHEN TALKING TO POSTHOG SUPPORT
-     * Enables deprecated eager loading of session recording code, not just rrweb and network plugin
-     * we are switching the default to lazy loading because the bundle will ultimately be 18% smaller then
-     * keeping this around for a few days in case there are unexpected consequences that testing did not uncover
+     * @deprecated This option is a no-op. Session replay is lazy-loaded by default.
      * */
     __preview_eager_load_replay?: boolean
 
     /**
      * Prevents posthog-js from using the `navigator.sendBeacon` API to send events.
-     * Enabling this option may hurt the reliability of sending $pageleave events
+     * Enabling this option may hurt the reliability of sending $pageleave events.
+     */
+    disable_beacon?: boolean
+
+    /**
+     * @deprecated Use `disable_beacon` instead.
      */
     __preview_disable_beacon?: boolean
 
     /**
-     * Disables sending credentials when using XHR requests.
+     * @deprecated This option is a no-op. The browser SDK no longer sets `XMLHttpRequest.withCredentials`.
      */
     __preview_disable_xhr_credentials?: boolean
+
+    /**
+     * @deprecated Use {@link strict_script_versioning} and {@link asset_host} instead.
+     * When set to true, this is equivalent to strict_script_versioning: true.
+     * When set to a string, this is equivalent to strict_script_versioning: true
+     * and asset_host set to that string.
+     */
+    __preview_external_dependency_versioned_paths?: boolean | string
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION

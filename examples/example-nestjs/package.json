@@ -1,0 +1,26 @@
+{
+    "name": "example-nestjs",
+    "version": "1.0.0",
+    "engines": {
+        "node": ">=22.22"
+    },
+    "main": "src/main.ts",
+    "license": "MIT",
+    "packageManager": "pnpm@10.15.0",
+    "scripts": {
+        "start": "ts-node -r reflect-metadata src/main.ts"
+    },
+    "dependencies": {
+        "@nestjs/common": "^10.0.0",
+        "@nestjs/core": "^10.0.0",
+        "@nestjs/platform-express": "^10.0.0",
+        "posthog-node": "*",
+        "reflect-metadata": "^0.2.0",
+        "rxjs": "^7.8.0"
+    },
+    "devDependencies": {
+        "@types/node": "20.19.7",
+        "ts-node": "^10.8.2",
+        "typescript": "^5.0.0"
+    }
+}

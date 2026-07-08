@@ -120,6 +120,45 @@ test.describe('Dead clicks', () => {
         expect(deadClicks.length).toBe(1)
     })
 
+    test('does not capture dead click when visibility changes to visible after click', async ({ page, context }) => {
+        await start(startOptions, page, context)
+
+        await page.resetCapturedEvents()
+
+        await page.locator('[data-cy-not-an-order-button]').click()
+
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true })
+            document.dispatchEvent(new Event('visibilitychange'))
+        })
+
+        await page.waitForTimeout(3500)
+
+        const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+        expect(deadClicks.length).toBe(0)
+    })
+
+    test('does not capture dead click when visibility changes to visible just before click', async ({
+        page,
+        context,
+    }) => {
+        await start(startOptions, page, context)
+
+        await page.resetCapturedEvents()
+
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true })
+            document.dispatchEvent(new Event('visibilitychange'))
+        })
+
+        await page.locator('[data-cy-not-an-order-button]').click()
+
+        await page.waitForTimeout(3500)
+
+        const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+        expect(deadClicks.length).toBe(0)
+    })
+
     test('does not capture dead click for selected text', async ({ page, context }) => {
         await start(startOptions, page, context)
 

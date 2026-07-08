@@ -1,7 +1,8 @@
 import React from 'react'
-import { StyleSheet, TouchableOpacity } from 'react-native'
+import { TouchableOpacity } from 'react-native'
 import { CancelSVG } from '../icons'
 
+import { createSafeStyleSheet } from '../safeStyleSheet'
 import { SurveyAppearanceTheme } from '../surveys-utils'
 
 export function Cancel({
@@ -18,7 +19,7 @@ export function Cancel({
   )
 }
 
-const styles = StyleSheet.create({
+const styles = createSafeStyleSheet({
   cancelBtnWrapper: {
     width: 40,
     height: 40,

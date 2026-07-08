@@ -1,11 +1,19 @@
 # Contributing
 
-## Running sample app with Expo
+This guide covers package-specific development for `posthog-react-native`.
 
-See [Example Expo 53](../examples/example-expo-53/README.md)
+For repository-wide setup, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
-## Running tests
+## Running the sample app with Expo
+
+See [Example Expo 53](../../examples/example-expo-53/README.md).
+
+## CI-aligned checks
+
+Run these commands from the repository root:
 
 ```sh
-yarn test:rn
+pnpm --filter=posthog-react-native lint
+pnpm --filter=posthog-react-native test
+pnpm --filter=posthog-react-native build
 ```

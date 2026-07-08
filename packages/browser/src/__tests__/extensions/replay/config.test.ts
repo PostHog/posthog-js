@@ -67,6 +67,34 @@ describe('config', () => {
                 })
             })
 
+            it('redacts denied request and response headers, including credential-shaped custom names', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        'x-gist-encoded-user-token': 'abc',
+                        'content-type': 'application/json',
+                    },
+                    responseHeaders: {
+                        'set-cookie': 'session=secret',
+                        'x-session-id': 'xyz',
+                        'content-type': 'application/json',
+                    },
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'x-gist-encoded-user-token': 'redacted',
+                        'content-type': 'application/json',
+                    },
+                    responseHeaders: {
+                        'set-cookie': 'redacted',
+                        'x-session-id': 'redacted',
+                        'content-type': 'application/json',
+                    },
+                })
+            })
+
             it.each([
                 [
                     {
@@ -79,21 +107,21 @@ describe('config', () => {
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/s/?ip=0&ver=123',
+                        name: 'https://app.posthog.com/s/?ver=123',
                     },
                     undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/e/?ip=0&ver=123',
+                        name: 'https://app.posthog.com/e/?ver=123',
                     },
                     undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/i/v0/e/?ip=0&ver=123',
+                        name: 'https://app.posthog.com/i/v0/e/?ver=123',
                     },
                     undefined,
                     undefined,
@@ -101,7 +129,7 @@ describe('config', () => {
                 [
                     {
                         // even an imaginary future world of rust session replay capture
-                        name: 'https://app.posthog.com/i/v0/s/?ip=0&ver=123',
+                        name: 'https://app.posthog.com/i/v0/s/?ver=123',
                     },
                     undefined,
                     undefined,
@@ -109,7 +137,7 @@ describe('config', () => {
                 [
                     {
                         // using a relative path as a reverse proxy api host
-                        name: 'https://app.posthog.com/ingest/s/?ip=0&ver=123',
+                        name: 'https://app.posthog.com/ingest/s/?ver=123',
                     },
                     undefined,
                     '/ingest',
@@ -117,7 +145,7 @@ describe('config', () => {
                 [
                     {
                         // using a reverse proxy with a path
-                        name: 'https://app.posthog.com/ingest/s/?ip=0&ver=123',
+                        name: 'https://app.posthog.com/ingest/s/?ver=123',
                     },
                     undefined,
                     'https://app.posthog.com/ingest',
@@ -214,8 +242,19 @@ describe('config', () => {
                     '.lr-ingest.io',
                     '.ingest.sentry.io',
                     '.clarity.ms',
+                    'google-analytics.com',
                     'analytics.google.com',
-                    'bam.nr-data.net',
+                    'nr-data.net',
+                    'datadoghq.com',
+                    'datadoghq.eu',
+                    'ddog-gov.com',
+                    'segment.io',
+                    'rudderstack.com',
+                    'amplitude.com',
+                    'mixpanel.com',
+                    'hotjar.com',
+                    'hotjar.io',
+                    'fullstory.com',
                 ])
             })
 
@@ -229,9 +268,39 @@ describe('config', () => {
                     '.lr-ingest.io',
                     '.ingest.sentry.io',
                     '.clarity.ms',
+                    'google-analytics.com',
                     'analytics.google.com',
-                    'bam.nr-data.net',
+                    'nr-data.net',
+                    'datadoghq.com',
+                    'datadoghq.eu',
+                    'ddog-gov.com',
+                    'segment.io',
+                    'rudderstack.com',
+                    'amplitude.com',
+                    'mixpanel.com',
+                    'hotjar.com',
+                    'hotjar.io',
+                    'fullstory.com',
                 ])
+            })
+        })
+
+        describe('streamNetworkBody', () => {
+            it('defaults to false when no defaults date and no explicit config', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                expect(networkOptions.streamNetworkBody).toBe(false)
+            })
+
+            it('is true when session_recording.streamNetworkBody is set explicitly', () => {
+                const posthogConfig = defaultConfig()
+                posthogConfig.session_recording.streamNetworkBody = true
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+                expect(networkOptions.streamNetworkBody).toBe(true)
+            })
+
+            it('is true when the 2026-06-25 defaults are applied', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig('2026-06-25'), {})
+                expect(networkOptions.streamNetworkBody).toBe(true)
             })
         })
     })

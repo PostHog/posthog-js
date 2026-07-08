@@ -29,8 +29,8 @@ export interface FormattedFunctionCall {
 export interface FormattedImageContent {
   type: 'image'
   image?: string
-  inlineData?: {
-    mimeType: string
+  inline_data?: {
+    mime_type: string
     data: string
   }
 }
@@ -52,7 +52,11 @@ export interface FormattedAudioContent {
  */
 export interface FormattedDocumentContent {
   type: 'document'
-  source: {
+  inline_data?: {
+    mime_type: string
+    data: string
+  }
+  source?: {
     type: 'base64'
     media_type: string
     data: string
@@ -101,6 +105,7 @@ export interface TokenUsage {
 export interface GetPromptOptions {
   cacheTtlSeconds?: number
   fallback?: string
+  version?: number
 }
 
 /**
@@ -108,6 +113,8 @@ export interface GetPromptOptions {
  */
 export interface CachedPrompt {
   prompt: string
+  name: string
+  version: number
   fetchedAt: number
 }
 
@@ -124,6 +131,36 @@ export interface PromptApiResponse {
   updated_at: string
   deleted: boolean
 }
+
+/**
+ * Result from the Prompts API or local cache — carries real metadata.
+ */
+export interface PromptRemoteResult {
+  source: 'api' | 'cache' | 'stale_cache'
+  prompt: string
+  name: string
+  version: number
+}
+
+/**
+ * Result when the fetch failed and no cache was available — fell back to the
+ * hardcoded fallback string. name and version are undefined so they remain
+ * accessible on the PromptResult union without a type guard.
+ */
+export interface PromptCodeFallbackResult {
+  source: 'code_fallback'
+  prompt: string
+  name: undefined
+  version: undefined
+}
+
+/**
+ * Discriminated union returned by `Prompts.get()`.
+ *
+ * Narrow on `source` to guarantee metadata, or access `result.name` /
+ * `result.version` directly as `string | undefined` / `number | undefined`.
+ */
+export type PromptResult = PromptRemoteResult | PromptCodeFallbackResult
 
 /**
  * Variables for prompt compilation

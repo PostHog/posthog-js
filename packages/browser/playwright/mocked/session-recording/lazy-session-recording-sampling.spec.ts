@@ -1,5 +1,5 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForSessionRecordingToStart } from '../utils/setup'
 
 const startOptions = {
     options: {
@@ -11,7 +11,6 @@ const startOptions = {
         },
         capturePerformance: true,
         autocapture_opt_out: true,
-        __preview_eager_load_replay: false,
     },
     url: './playground/cypress/index.html',
 }
@@ -34,6 +33,7 @@ test.describe('Session recording - sampling', () => {
                 await start(startOptions, page, context)
             },
         })
+        await waitForSessionRecordingToStart(page)
 
         await page.expectCapturedEventsToBe(['$pageview'])
         await page.resetCapturedEvents()

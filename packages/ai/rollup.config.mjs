@@ -3,7 +3,10 @@ import packageJson from './package.json' with { type: 'json' }
 
 const configs = []
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
-const externalDeps = external(packageJson)
+
+// Externalize dependency subpaths (e.g. '@langchain/core/messages') as well as bare specifiers
+const externalNames = external(packageJson)
+const externalDeps = (id) => externalNames.includes(id) || externalNames.some((name) => id.startsWith(name + '/'))
 
 configs.push({
   input: `./src/index.ts`,
@@ -33,7 +36,7 @@ configs.push({
 })
 
 // Add submodule builds for posthog-ai
-const providers = ['anthropic', 'openai', 'vercel', 'langchain', 'gemini', 'otel']
+const providers = ['anthropic', 'openai', 'vercel', 'langchain', 'gemini', 'otel', 'openai-agents']
 
 providers.forEach((provider) => {
   configs.push({

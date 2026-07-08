@@ -11,26 +11,32 @@ import { WEB_EXPERIMENTS } from './constants'
 import { isNullish, isString } from '@posthog/core'
 import { getQueryParam } from './utils/request-utils'
 import { isMatchingRegex } from './utils/regex-utils'
+import { applyUrlTargetingOverride } from './utils/url-targeting-utils'
 import { logger } from './utils/logger'
 import { isLikelyBot } from './utils/blocked-uas'
 import { getCampaignParams } from './utils/event-utils'
+import { Extension } from './extensions/types'
+
+const BOT_REFUSE_MSG = 'Refusing to render web experiment since the viewer is a likely bot'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
-    (conditionsUrl: string, location: Location) => boolean
+    (conditionsUrl: string, href: string) => boolean
 > = {
-    icontains: (conditionsUrl, location) =>
-        !!window && location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
-    not_icontains: (conditionsUrl, location) =>
-        !!window && location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) === -1,
-    regex: (conditionsUrl, location) => !!window && isMatchingRegex(location.href, conditionsUrl),
-    not_regex: (conditionsUrl, location) => !!window && !isMatchingRegex(location.href, conditionsUrl),
-    exact: (conditionsUrl, location) => location.href === conditionsUrl,
-    is_not: (conditionsUrl, location) => location.href !== conditionsUrl,
+    icontains: (conditionsUrl, href) => href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
+    not_icontains: (conditionsUrl, href) => href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) === -1,
+    regex: (conditionsUrl, href) => isMatchingRegex(href, conditionsUrl),
+    not_regex: (conditionsUrl, href) => !isMatchingRegex(href, conditionsUrl),
+    exact: (conditionsUrl, href) => href === conditionsUrl,
+    is_not: (conditionsUrl, href) => href !== conditionsUrl,
 }
 
-export class WebExperiments {
+export class WebExperiments implements Extension {
     private _flagToExperiments?: Map<string, WebExperiment>
+
+    private get _config() {
+        return this._instance.config
+    }
 
     constructor(private _instance: PostHog) {
         this._instance.onFeatureFlags((flags: string[]) => {
@@ -38,13 +44,16 @@ export class WebExperiments {
         })
     }
 
+    // No-op: activation is driven by the onFeatureFlags callback registered in the constructor
+    initialize() {}
+
     onFeatureFlags(flags: string[]) {
         if (this._is_bot()) {
-            WebExperiments._logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            WebExperiments._logInfo(BOT_REFUSE_MSG)
             return
         }
 
-        if (this._instance.config.disable_web_experiments) {
+        if (this._config.disable_web_experiments) {
             return
         }
 
@@ -91,7 +100,7 @@ export class WebExperiments {
     }
 
     loadIfEnabled() {
-        if (this._instance.config.disable_web_experiments) {
+        if (this._config.disable_web_experiments) {
             return
         }
 
@@ -126,7 +135,7 @@ export class WebExperiments {
                 } else if (webExperiment.variants) {
                     for (const variant in webExperiment.variants) {
                         const testVariant = webExperiment.variants[variant]
-                        const matchTest = WebExperiments._matchesTestVariant(testVariant)
+                        const matchTest = WebExperiments._matchesTestVariant(testVariant, this._instance)
                         if (matchTest) {
                             this._applyTransforms(webExperiment.name, variant, testVariant.transforms)
                         }
@@ -137,7 +146,7 @@ export class WebExperiments {
     }
 
     public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean, previewing?: boolean) {
-        if (this._instance.config.disable_web_experiments && !previewing) {
+        if (this._config.disable_web_experiments && !previewing) {
             return callback([])
         }
 
@@ -147,10 +156,7 @@ export class WebExperiments {
         }
 
         this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor(
-                'api',
-                `/api/web_experiments/?token=${this._instance.config.token}`
-            ),
+            url: this._instance.requestRouter.endpointFor('api', `/api/web_experiments/?token=${this._config.token}`),
             method: 'GET',
             callback: (response) => {
                 if (response.statusCode !== 200 || !response.json) {
@@ -175,24 +181,28 @@ export class WebExperiments {
             )
         }
     }
-    private static _matchesTestVariant(testVariant: WebExperimentVariant) {
+    private static _matchesTestVariant(testVariant: WebExperimentVariant, instance: PostHog) {
         if (isNullish(testVariant.conditions)) {
             return false
         }
-        return WebExperiments._matchUrlConditions(testVariant) && WebExperiments._matchUTMConditions(testVariant)
+        return (
+            WebExperiments._matchUrlConditions(testVariant, instance) && WebExperiments._matchUTMConditions(testVariant)
+        )
     }
 
-    private static _matchUrlConditions(testVariant: WebExperimentVariant): boolean {
+    private static _matchUrlConditions(testVariant: WebExperimentVariant, instance: PostHog): boolean {
         if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.url)) {
             return true
         }
 
         const location = WebExperiments.getWindowLocation()
         if (location) {
+            // honors the `get_current_url` config hook so apps that rewrite their URL can target experiments correctly
+            const href = applyUrlTargetingOverride(instance, location.href)
             const urlCheck = testVariant.conditions?.url
                 ? webExperimentUrlValidationMap[testVariant.conditions?.urlMatchType ?? 'icontains'](
                       testVariant.conditions.url,
-                      location
+                      href
                   )
                 : true
             return urlCheck
@@ -240,7 +250,7 @@ export class WebExperiments {
 
     private _applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
         if (this._is_bot()) {
-            WebExperiments._logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            WebExperiments._logInfo(BOT_REFUSE_MSG)
             return
         }
 
@@ -274,7 +284,7 @@ export class WebExperiments {
 
     _is_bot(): boolean | undefined {
         if (navigator && this._instance) {
-            return isLikelyBot(navigator, this._instance.config.custom_blocked_useragents)
+            return isLikelyBot(navigator, this._config.custom_blocked_useragents)
         } else {
             return undefined
         }

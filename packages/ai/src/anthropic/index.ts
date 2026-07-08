@@ -4,11 +4,11 @@ import {
   formatResponseAnthropic,
   mergeSystemPrompt,
   MonitoringParams,
-  sendEventToPosthog,
   extractAvailableToolCalls,
   extractPosthogParams,
-  sendEventWithErrorToPosthog,
+  getModelParams,
 } from '../utils'
+import { captureAiGeneration } from '../captureAiGeneration'
 import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
 
 type MessageCreateParamsNonStreaming = AnthropicOriginal.Messages.MessageCreateParamsNonStreaming
@@ -79,6 +79,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         const toolsInProgress: Map<string, ToolInProgress> = new Map()
         let currentTextBlock: FormattedTextContent | null = null
         let firstTokenTime: number | undefined
+        let stopReason: string | undefined
 
         const usage: {
           inputTokens: number
@@ -202,6 +203,13 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                     usage.webSearchCount = chunk.usage.server_tool_use.web_search_requests
                   }
                 }
+
+                if (chunk.type === 'message_delta' && 'delta' in chunk) {
+                  const delta = chunk.delta
+                  if ('stop_reason' in delta && typeof delta.stop_reason === 'string' && delta.stop_reason) {
+                    stopReason = delta.stop_reason
+                  }
+                }
               }
               usage.rawUsage = lastRawUsage
 
@@ -226,8 +234,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                       },
                     ]
 
-              await sendEventToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
@@ -236,14 +243,14 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 httpStatus: 200,
                 usage,
+                stopReason,
                 tools: availableTools,
               })
             } catch (error: unknown) {
-              const enrichedError = await sendEventWithErrorToPosthog({
-                client: this.phClient,
+              await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
@@ -251,16 +258,19 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
-                params: body,
+                modelParameters: getModelParams(body),
                 usage: {
                   inputTokens: 0,
                   outputTokens: 0,
                 },
                 error: error,
               })
-              throw enrichedError
+              throw error
             }
-          })()
+          })().catch(() => {
+            // Swallow: analytics must never crash the host process. The caller
+            // already receives this error via their own tee of the stream.
+          })
 
           // Return the other stream to the user
           return stream2
@@ -275,8 +285,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
             const availableTools = extractAvailableToolCalls('anthropic', anthropicParams)
 
-            await sendEventToPosthog({
-              client: this.phClient,
+            await captureAiGeneration(this.phClient, {
               ...posthogParams,
               model: anthropicParams.model,
               provider: 'anthropic',
@@ -284,7 +293,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               output: formatResponseAnthropic(result),
               latency,
               baseURL: this.baseURL,
-              params: body,
+              modelParameters: getModelParams(body),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage.input_tokens ?? 0,
@@ -294,14 +303,14 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 webSearchCount: result.usage.server_tool_use?.web_search_requests ?? 0,
                 rawUsage: result.usage,
               },
+              stopReason: result.stop_reason ?? undefined,
               tools: availableTools,
             })
           }
           return result
         },
         async (error: any) => {
-          await sendEventToPosthog({
-            client: this.phClient,
+          await captureAiGeneration(this.phClient, {
             ...posthogParams,
             model: anthropicParams.model,
             provider: 'anthropic',
@@ -309,13 +318,13 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             output: [],
             latency: 0,
             baseURL: this.baseURL,
-            params: body,
+            modelParameters: getModelParams(body),
             httpStatus: error?.status ? error.status : 500,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
             },
-            error: JSON.stringify(error),
+            error: error,
           })
           throw error
         }

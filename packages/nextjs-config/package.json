@@ -1,6 +1,9 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.8.18",
+  "version": "1.9.68",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
   "description": "NextJS configuration helper for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -9,7 +12,7 @@
   },
   "author": {
     "name": "PostHog",
-    "email": "hey@posthog.com",
+    "email": "engineering@posthog.com",
     "url": "https://posthog.com"
   },
   "main": "./dist/index.js",
@@ -43,9 +46,9 @@
   "license": "MIT",
   "dependencies": {
     "@posthog/cli": "catalog:",
-    "semver": "^7.7.2",
-    "@posthog/core": "workspace:*",
-    "@posthog/webpack-plugin": "workspace:*"
+    "@posthog/plugin-utils": "workspace:^",
+    "@posthog/webpack-plugin": "workspace:^",
+    "semver": "^7.8.5"
   },
   "keywords": [
     "posthog",
@@ -55,9 +58,9 @@
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
-    "@types/node": "^22.15.23",
-    "@types/semver": "^7.7.0",
     "@types/jest": "catalog:",
+    "@types/node": "^22.15.23",
+    "@types/semver": "^7.7.1",
     "jest": "catalog:",
     "next": "^15.5.7",
     "ts-jest": "catalog:"

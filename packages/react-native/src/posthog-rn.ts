@@ -1,6 +1,8 @@
-import { AppState, Dimensions, Linking, Platform } from 'react-native'
+import { AppState, type AppStateStatus, Dimensions, Linking, Platform } from 'react-native'
 
 import {
+  CaptureLogOptions,
+  CaptureLogger,
   JsonType,
   PostHogCaptureOptions,
   PostHogCore,
@@ -8,55 +10,99 @@ import {
   PostHogEventProperties,
   PostHogFetchOptions,
   PostHogFetchResponse,
+  PostHogLogs,
+  PostHogLogsConfig,
   PostHogPersistedProperty,
   PostHogRemoteConfig,
   Survey,
   SurveyResponse,
+  allSettled,
   logFlushError,
   maybeAdd,
+  patchFetchForTracingHeaders,
+  safeSetTimeout,
   FeatureFlagValue,
+  FeatureFlagResultOptions,
+  ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
-import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
+import { Properties } from '@posthog/types'
+import {
+  PostHogRNStorage,
+  createEventsStorage,
+  createLogsStorage,
+  createEventsMemoryStorage,
+  createLogsMemoryStorage,
+} from './storage'
+import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
-import { buildOptimisiticAsyncStorage, getAppProperties } from './native-deps'
+import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool } from './utils'
+import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isValidSampleRate } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
-import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
+import { OptionalReactNativePlugin } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 
 export { PostHogPersistedProperty }
 
+/**
+ * Collapses RN's broader AppState status set into the OTLP `app.state`
+ * enum (foreground|background). 'inactive' (iOS transition) and 'extension'
+ * are treated as foreground — the app is still running JS, just not the
+ * primary scene. 'unknown' returns undefined so the attribute is omitted
+ * rather than guessed.
+ */
+function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | 'background' | undefined {
+  if (state === 'background') {
+    return 'background'
+  }
+  if (!state || state === 'unknown') {
+    return undefined
+  }
+  return 'foreground'
+}
+
 export interface PostHogOptions extends PostHogCoreOptions {
-  /** Allows you to provide the storage type. By default 'file'.
+  /**
+   * Allows you to provide the storage type.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
+   *
+   * @default 'file'
    */
   persistence?: 'memory' | 'file'
   /** Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated */
   customAppProperties?:
     | PostHogCustomAppProperties
     | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
-  /** Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
+  /**
+   * Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
    * If not provided, PostHog will attempt to use the best available storage via optional peer dependencies (async-storage, expo-file-system).
    * If `persistence` is set to 'memory', this option will be ignored.
    */
   customStorage?: PostHogCustomStorage
 
-  /** Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
-   * By default is false.
+  /**
+   * A list of headers that should be sent with requests to the PostHog API.
+   */
+  requestHeaders?: { [header_name: string]: string }
+
+  /**
+   * Captures app lifecycle events such as Application Installed, Application Updated, Application Opened, Application Became Active and Application Backgrounded.
    * Application Installed and Application Updated events are not supported with persistence set to 'memory'.
+   *
+   * @default true
    */
   captureAppLifecycleEvents?: boolean
 
   /**
    * Enable Recording of Session Replays for Android and iOS
    * Requires Record user sessions to be enabled in the PostHog Project Settings
-   * Defaults to false
+   *
+   * @default false
    */
   enableSessionReplay?: boolean
 
@@ -69,7 +115,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * If enabled, the session id ($session_id) will be persisted across app restarts.
    * This is an option for back compatibility, so your current data isn't skewed with the new version of the SDK.
    * If this is false, the session id will be always reset on app restart.
-   * Defaults to false
+   *
+   * @default false
    */
   enablePersistSessionIdAcrossRestart?: boolean
 
@@ -97,22 +144,83 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * @default true
    */
   setDefaultPersonProperties?: boolean
+
+  /**
+   * Logs feature configuration. Enables structured log capture via
+   * `posthog.captureLog(...)` or `posthog.logger.info(...)`. Records ship to
+   * PostHog's logs product (`/i/v1/logs`) in OTLP format, batched on a timer,
+   * AppState change, buffer fill, or manual `flushLogs()`.
+   *
+   * Capture is **unconditional** — calling the API ships records as long as
+   * the SDK is initialized and the user hasn't opted out. The only blockers
+   * are `optedOut`, missing/empty `body`, and missing API key.
+   *
+   * All fields below are optional; per-SDK defaults apply (mobile defaults
+   * are tuned for cellular bandwidth and battery, ~50 logs/sec ceiling).
+   *
+   * @example Minimal — just service tagging, defaults for everything else
+   * ```ts
+   * new PostHog(key, {
+   *   logs: { serviceName: 'my-app', environment: 'production' }
+   * })
+   * ```
+   *
+   * @example Tune for higher-volume logging
+   * ```ts
+   * new PostHog(key, {
+   *   logs: {
+   *     serviceName: 'my-app',
+   *     rateCap: { maxLogs: 5000, windowMs: 60000 },
+   *     maxBufferSize: 500,
+   *     beforeSend: (r) => r.body.includes('secret') ? null : r,
+   *   }
+   * })
+   * ```
+   */
+  logs?: PostHogLogsConfig
+
+  /**
+   * Overrides the language used when rendering translated survey copy.
+   * When unset, the SDK falls back to the persisted person property `language`
+   * and then the device locale.
+   */
+  overrideDisplayLanguage?: string | null
 }
 
 export class PostHog extends PostHogCore {
   private _persistence: PostHogOptions['persistence']
-  private _storage: PostHogRNStorage
+  private _eventsStorage: PostHogRNStorage
+  private _logsStorage: PostHogRNStorage
   private _appProperties: PostHogCustomAppProperties = {}
   private _currentSessionId?: string | undefined
   private _enableSessionReplay?: boolean
   private _sessionReplayNativeInitialized: boolean = false
+  private _nativeErrorTrackingInitialized: boolean = false
+  // Last applied recording state; the native bridge is only crossed on a change.
+  private _sessionReplayRecordingActive?: boolean
+  // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
+  private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
   private _sessionReplayOptions?: PostHogOptions
+  // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
+  // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
+  private _sessionReplayEventTriggers: string[] = []
   private _disableSurveys: boolean
-  private _disableRemoteConfig: boolean
   private _errorTracking: ErrorTracking
+  private _logs: PostHogLogs
+  // Resolved logs config — kept around so lifecycle handlers (AppState
+  // background, _shutdown) can read the configured flush-time budgets without
+  // reaching back into the user's options object.
+  private _resolvedLogsConfig: ReturnType<typeof resolveLogsConfig>
+  // Cached, foreground/background view of the app's lifecycle. Read on the
+  // log-capture hot path (per record) so we tag every log with whether it
+  // happened in foreground or background. Updated by the AppState listener
+  // and seeded from `AppState.currentState` at construction.
+  private _currentAppState?: 'foreground' | 'background'
   private _surveysReadyPromise: Promise<void> | null = null
   private _surveysReady: boolean = false
   private _setDefaultPersonProperties: boolean
+  private _overrideDisplayLanguage: string | null
+  private _requestHeaders: { [header_name: string]: string } = {}
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -149,13 +257,19 @@ export class PostHog extends PostHogCore {
    * @param options - PostHog configuration options
    */
   constructor(apiKey: string, options?: PostHogOptions) {
-    super(apiKey, options)
+    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
+    if (!normalizedApiKey) {
+      console.error("You must pass your PostHog project's api key. The client will be disabled.")
+    }
+
+    super(normalizedApiKey, options)
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
-    this._disableRemoteConfig = options?.disableRemoteConfig ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
+    this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
+    this._requestHeaders = options?.requestHeaders ?? {}
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -163,41 +277,124 @@ export class PostHog extends PostHogCore {
         ? options.customAppProperties(getAppProperties())
         : options?.customAppProperties || getAppProperties()
 
+    // Resolve storage and construct the logs module BEFORE registering the
+    // AppState listener — the listener body references `this._logs` and
+    // `this._eventsStorage`, and while AppState.addEventListener('change')
+    // only fires on changes (not at registration), the dependency direction
+    // should be explicit: dependencies first, callbacks that use them second.
+    let storagePromise: Promise<void> | undefined
+
+    let theStorage: PostHogCustomStorage | undefined
+    if (this._persistence === 'file') {
+      theStorage = options?.customStorage ?? buildOptimisticAsyncStorage()
+    }
+
+    if (theStorage) {
+      this._eventsStorage = createEventsStorage(theStorage)
+      this._logsStorage = createLogsStorage(theStorage)
+      // `allSettled` so one pipeline's preload failure doesn't block the other — the failing side
+      // degrades to memory-only via PostHogRNStorage.persist()'s internal catch.
+      const preloads: Array<['events' | 'logs', Promise<void>]> = []
+      if (this._eventsStorage.preloadPromise) {
+        preloads.push(['events', this._eventsStorage.preloadPromise])
+      }
+      if (this._logsStorage.preloadPromise) {
+        preloads.push(['logs', this._logsStorage.preloadPromise])
+      }
+      if (preloads.length > 0) {
+        storagePromise = allSettled(preloads.map(([, p]) => p)).then((results) => {
+          results.forEach((r, i) => {
+            if (r.status === 'rejected') {
+              this._logger.error(`PostHog ${preloads[i][0]} storage preload failed:`, r.reason)
+            }
+          })
+        })
+      }
+    } else {
+      this._eventsStorage = createEventsMemoryStorage()
+      this._logsStorage = createLogsMemoryStorage()
+    }
+
+    // Seed from sync `AppState.currentState` so the very first capture (which
+    // can happen before any 'change' event fires) is already tagged. Maps
+    // RN's broader status set into the OTLP `app.state` enum's
+    // foreground/background dichotomy.
+    this._currentAppState = mapAppStateForLogs(AppState.currentState)
+
+    this._resolvedLogsConfig = resolveLogsConfig(options?.logs)
+    this._logs = new PostHogLogs(
+      this,
+      this._resolvedLogsConfig,
+      this._logger,
+      () => {
+        // Pulled at capture time so each tag reflects state at the moment
+        // the log was fired, not at flush.
+        const flags = this.getFeatureFlags()
+        const flagKeys = flags ? Object.keys(flags) : undefined
+        return {
+          distinctId: this.getDistinctId() || undefined,
+          sessionId: this.getSessionId() || undefined,
+          screenName: (this.sessionProps?.$screen_name as string | undefined) || undefined,
+          appState: this._currentAppState,
+          activeFeatureFlags: flagKeys && flagKeys.length > 0 ? flagKeys : undefined,
+        }
+      },
+      (fn) => this.wrap(fn),
+      // Block between batches on the logs-storage disk write so a crash can't
+      // replay an already-sent batch. Events do the equivalent via
+      // `flushStorage()` (events-storage side). Mirror per-pipeline so one
+      // pipeline's slow disk doesn't stall the other.
+      () => this._logsStorage.waitForPersist()
+    )
+
+    // NOTE: this listener is registered for the lifetime of the PostHog
+    // instance and is never explicitly removed. RN apps typically construct
+    // a single long-lived PostHog and keep it until process exit, so a leak
+    // doesn't matter in practice; just be aware that constructing many
+    // instances (e.g. in tests without an explicit teardown) would
+    // accumulate listeners.
     AppState.addEventListener('change', (state) => {
       // ignore unknown state (usually initial state, the app might not be ready yet)
       if (state === 'unknown') {
         return
       }
 
+      // Update before kicking off the flush — captures that race the flush
+      // (e.g. fired in a `componentWillUnmount` triggered by backgrounding)
+      // should already see the new state.
+      const mapped = mapAppStateForLogs(state)
+      if (mapped) {
+        this._currentAppState = mapped
+      }
+
+      // Flush on every transition, including foreground→active. Foreground
+      // flush is technically redundant (the timer would catch up shortly),
+      // but it's cheap and keeps the lifecycle handler symmetric — no
+      // special-casing of which transitions should drain.
       void this.flush().catch(async (err) => {
         await logFlushError(err)
       })
+      // Flush buffered logs alongside events — OS may suspend or terminate the
+      // process next, and anything left in the queue won't get a second chance
+      // until the app is next foregrounded. On background, race the flush
+      // against `backgroundFlushBudgetMs` so a slow network can't run past
+      // the OS-imposed background window (~30s on iOS). Foreground/active
+      // transitions don't need a budget — the app is staying alive.
+      const isBackgrounding = mapped === 'background'
+      const logsFlushPromise = isBackgrounding
+        ? this._logs.flushWithTimeout(this._resolvedLogsConfig.backgroundFlushBudgetMs)
+        : this._logs.flush()
+      void logsFlushPromise.catch(async (err) => {
+        await logFlushError(err)
+      })
+      // Persist pending writes before the OS may suspend the process.
+      void this._eventsStorage.waitForPersist()
+      void this._logsStorage.waitForPersist()
 
       if (state === 'active') {
-        // rotate session id if needed (expired either 30 minutes inactive or max duration 24 hours)
         this.getSessionId()
       }
     })
-
-    let storagePromise: Promise<void> | undefined
-
-    let theStorage: PostHogCustomStorage | undefined
-    if (this._persistence === 'file') {
-      theStorage = options?.customStorage ?? buildOptimisiticAsyncStorage()
-    }
-
-    if (theStorage) {
-      this._storage = new PostHogRNStorage(theStorage)
-      storagePromise = this._storage.preloadPromise
-    } else {
-      this._storage = new PostHogRNSyncMemoryStorage()
-    }
-
-    if (storagePromise) {
-      storagePromise.catch((error) => {
-        console.error('PostHog storage initialization failed:', error)
-      })
-    }
 
     const initAfterStorage = (): void => {
       // reset session id on app restart
@@ -210,12 +407,26 @@ export class PostHog extends PostHogCore {
 
       this.setupBootstrap(options)
 
+      // Seed device_id from the anonymous id at init time so existing installs
+      // get a stable device-level identifier; once set, it survives identify()
+      // and reset() independently of anonymous_id.
+      if (!this.getPersistedProperty(PostHogPersistedProperty.DeviceId)) {
+        const anonId = this.getAnonymousId()
+        if (anonId) {
+          this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        }
+      }
+
       // Set default person properties for flags if enabled
       if (this._setDefaultPersonProperties) {
         this._setDefaultPersonPropertiesForFlags(false)
       }
 
       this._isInitialized = true
+
+      if (this.isDisabled) {
+        return
+      }
 
       // Preload error tracking state from cached remote config.
       // This gates error tracking autocapture before the fresh remote config is fetched.
@@ -226,53 +437,39 @@ export class PostHog extends PostHogCore {
         this._errorTracking.onRemoteConfig(cachedRemoteConfig.errorTracking)
       }
 
-      if (this._disableRemoteConfig === false) {
-        this.reloadRemoteConfigAsync()
-          .then((response) => {
-            if (response) {
-              this._handleSurveysFromRemoteConfig(response)
-            }
-          })
-          .catch((error) => {
-            this._logger.error('Error loading remote config:', error)
-          })
-          .finally(() => {
-            this._notifySurveysReady()
-          })
-      } else {
-        this._logger.info('Remote config is disabled.')
+      this.reloadRemoteConfigAsync()
+        .then((response) => {
+          if (response) {
+            this._handleSurveysFromRemoteConfig(response)
+          }
+        })
+        .catch((error) => {
+          this._logger.error('Error loading remote config:', error)
+        })
+        .finally(() => {
+          this._notifySurveysReady()
+        })
 
-        if (options?.preloadFeatureFlags !== false) {
-          this._logger.info('Feature flags will be preloaded from Flags API.')
-          // Preload flags (and parse surveys as well since we are calling with config=true already)
-          this._flagsAsyncWithSurveys()
-            .catch((error) => {
-              this._logger.error('Error loading flags with surveys:', error)
-            })
-            .finally(() => {
-              this._notifySurveysReady()
-            })
-        } else {
-          this._logger.info('preloadFeatureFlags is disabled, loading surveys from API.')
-          // Load surveys directly from API since both remote config and preloading feature flags are disabled
-          // Note: if flags are not loaded/cached then surveys will not be displayed until reloadFeatureFlags() is called, since surveys depend on internal flags
-          this._loadSurveysFromAPI()
-            .catch((error) => {
-              this._logger.error('Error loading surveys from API:', error)
-            })
-            .finally(() => {
-              this._notifySurveysReady()
-            })
-        }
-      }
-
-      if (options?.captureAppLifecycleEvents) {
+      // captureAppLifecycleEvents defaults to true; only skip if explicitly set to false
+      if (options?.captureAppLifecycleEvents !== false) {
         void this.captureAppLifecycleEvents()
       }
 
       void this.persistAppVersion()
 
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
+
+      // Re-evaluate session replay on every flags load/reload so the linked flag
+      // gates recording without an app restart.
+      if (options?.enableSessionReplay) {
+        this.onFeatureFlags(() => {
+          void this._evaluateAndStartSessionReplay()
+        })
+      }
+
+      if (options?.addTracingHeaders && options.addTracingHeaders.length > 0) {
+        patchFetchForTracingHeaders(this, options.addTracingHeaders)
+      }
     }
 
     // For async storage, we wait for the storage to be ready before we start the SDK
@@ -298,7 +495,7 @@ export class PostHog extends PostHogCore {
    * Called when remote config has been loaded (from either the remote config endpoint or the flags endpoint).
    * Gates error tracking autocapture based on the remote config response.
    *
-   * Session replay config (consoleLogRecordingEnabled, capturePerformance.network_timing) is already
+   * Session replay config (consoleLogRecordingEnabled, sampleRate, capturePerformance.network_timing) is already
    * cached via PostHogPersistedProperty.RemoteConfig and applied at startup in startSessionReplay().
    *
    * @internal
@@ -307,12 +504,24 @@ export class PostHog extends PostHogCore {
     this._errorTracking.onRemoteConfig(response.errorTracking)
   }
 
+  /**
+   * Resolves the storage instance for a given persisted-property key.
+   * `LogsQueue` routes to `_logsStorage` (dedicated `.posthog-rn-logs.json`
+   * file); every other key routes to `_eventsStorage`. Single source of
+   * truth for routing — extending to new logs-scoped keys is a one-line
+   * edit here.
+   */
+  private _storageForKey(key: PostHogPersistedProperty): PostHogRNStorage {
+    return key === PostHogPersistedProperty.LogsQueue ? this._logsStorage : this._eventsStorage
+  }
+
   getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined {
-    return this._storage.getItem(key) as T | undefined
+    return this._storageForKey(key).getItem(key) as T | undefined
   }
 
   setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
-    return value !== null ? this._storage.setItem(key, value) : this._storage.removeItem(key)
+    const storage = this._storageForKey(key)
+    return value !== null ? storage.setItem(key, value) : storage.removeItem(key)
   }
 
   /**
@@ -321,7 +530,40 @@ export class PostHog extends PostHogCore {
    * considering events as sent, preventing duplicate events on app crash/restart.
    */
   protected async flushStorage(): Promise<void> {
-    await this._storage.waitForPersist()
+    await this._eventsStorage.waitForPersist()
+  }
+
+  /**
+   * Drain both pipelines on shutdown. Run in parallel so the logs final
+   * flush + timer teardown doesn't serialize behind events (and vice-versa).
+   * `_logs.shutdown()` swallows its own errors — a transient logs failure
+   * must not break events shutdown.
+   *
+   * Logs use the smaller of `terminationFlushBudgetMs` and the caller's
+   * `shutdownTimeoutMs` so a final flush can never run past the caller's
+   * shutdown SLA, while still respecting the configured logs-specific
+   * termination budget when it's tighter.
+   *
+   * After the flushes, drain any debounced storage writes that weren't already
+   * persisted via the queue-advance path — `setPersistedProperty` calls for
+   * distinctId, sessionId, deviceId, feature flag overrides, etc. only arm a
+   * debounced write. The drain runs in `finally` so a timed-out flush still
+   * persists them, and its await is bounded by the time left in the shutdown
+   * SLA so a hung storage backend can't run past it.
+   */
+  async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    this._errorTracking.clearExceptionSteps()
+    const start = Date.now()
+    const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
+    try {
+      await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
+    } finally {
+      // Sync drain runs inside waitForPersist before the race below; the race
+      // only bounds the await for in-flight async writes.
+      const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
+      const drain = Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
+      await Promise.race([drain, new Promise<void>((resolve) => safeSetTimeout(resolve, remainingMs))])
+    }
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
@@ -343,6 +585,10 @@ export class PostHog extends PostHogCore {
     return `${this.getLibraryId()}/${this.getLibraryVersion()}`
   }
 
+  protected getCustomHeaders(): { [key: string]: string } {
+    return { ...super.getCustomHeaders(), ...this._requestHeaders }
+  }
+
   getCommonEventProperties(): PostHogEventProperties {
     return {
       ...super.getCommonEventProperties(),
@@ -350,6 +596,10 @@ export class PostHog extends PostHogCore {
       $screen_height: Dimensions.get('screen').height,
       $screen_width: Dimensions.get('screen').width,
     }
+  }
+
+  getSurveyDisplayLanguageOverride(): string | null {
+    return this._overrideDisplayLanguage
   }
 
   /**
@@ -404,26 +654,70 @@ export class PostHog extends PostHogCore {
    * To reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out.
    * This also clears all stored super properties and more.
    *
+   * By default (when `propertiesToKeep` is not provided), the app lifecycle properties
+   * (`InstalledAppBuild` and `InstalledAppVersion`) are automatically preserved to prevent
+   * duplicate "Application Installed" events on the next app launch.
+   *
+   * If you pass `propertiesToKeep` explicitly, only the properties you specify will be preserved.
+   * To keep the default app lifecycle behavior, include `PostHogPersistedProperty.InstalledAppBuild`
+   * and `PostHogPersistedProperty.InstalledAppVersion` in your array.
+   *
+   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+   * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless of
+   * what is passed in `propertiesToKeep`, to ensure in-flight data is not lost.
+   *
+   * The project-level remote config (`PostHogPersistedProperty.RemoteConfig`,
+   * `PostHogPersistedProperty.SessionReplay`, `PostHogPersistedProperty.Surveys`) is also
+   * always preserved — it is not user data — so session replay and surveys keep working
+   * after an identity change. The user-specific survey state (`SurveysSeen`,
+   * `SurveyLastSeenDate`) is still cleared.
+   *
    * {@label Identification}
    *
    * @example
    * ```js
-   * // reset after logout
+   * // reset after logout (preserves app lifecycle properties by default)
    * posthog.reset()
    * ```
    *
    * @example
    * ```js
-   * // reset but keep feature flag overrides
-   * posthog.reset([PostHogPersistedProperty.OverrideFeatureFlags])
+   * // reset but keep feature flag overrides and app lifecycle properties
+   * posthog.reset([
+   *   PostHogPersistedProperty.OverrideFeatureFlags,
+   *   PostHogPersistedProperty.InstalledAppBuild,
+   *   PostHogPersistedProperty.InstalledAppVersion,
+   * ])
    * ```
    *
-   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset
+   * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
+   *   When not provided, app lifecycle and device bucketing properties are automatically preserved.
+   *   When provided, only the specified properties are preserved.
+   *   The event queue and logs queue are always preserved regardless.
    *
    * @public
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
-    super.reset(propertiesToKeep)
+    // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
+    // properties and device_id to prevent duplicate "Application Installed" events and
+    // to maintain stable feature flag bucketing across identity changes.
+    const effectivePropertiesToKeep = propertiesToKeep ?? [
+      PostHogPersistedProperty.InstalledAppBuild,
+      PostHogPersistedProperty.InstalledAppVersion,
+      PostHogPersistedProperty.DeviceId,
+    ]
+
+    // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
+    // always preserve them so replay can re-arm against the new user's flags. The
+    // user-specific survey state (SurveysSeen, SurveyLastSeenDate) is still cleared.
+    // Do NOT keep SessionReplayEventTriggerActivatedSession: it is user-session state, so the
+    // base reset() must clear it to stop one user's activation leaking into the next.
+    super.reset([
+      PostHogPersistedProperty.RemoteConfig,
+      PostHogPersistedProperty.SessionReplay,
+      PostHogPersistedProperty.Surveys,
+      ...effectivePropertiesToKeep,
+    ])
 
     if (this._setDefaultPersonProperties) {
       // Reset reloads flags asyncrhonously, but doesn't wait for it.
@@ -431,6 +725,9 @@ export class PostHog extends PostHogCore {
       // reloading, and allow the super.reset() call to reload the flags.
       this._setDefaultPersonPropertiesForFlags(false)
     }
+
+    // Logout must be durable so a crash in the debounce window can't resurface the previous user.
+    void this._eventsStorage.waitForPersist()
   }
 
   /**
@@ -441,7 +738,7 @@ export class PostHog extends PostHogCore {
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
   private _setDefaultPersonPropertiesForFlags(reloadFeatureFlags = true): void {
-    const defaultProps: Record<string, string> = {}
+    const defaultProps: Record<string, JsonType> = {}
     const relevantKeys = [
       '$app_version',
       '$app_build',
@@ -454,16 +751,16 @@ export class PostHog extends PostHogCore {
     relevantKeys.forEach((key) => {
       const value = this._appProperties[key]
       if (value !== null && value !== undefined) {
-        defaultProps[key] = String(value)
+        defaultProps[key] = value
       }
     })
 
     const commonProps = this.getCommonEventProperties()
     if (commonProps.$lib) {
-      defaultProps.$lib = String(commonProps.$lib)
+      defaultProps.$lib = commonProps.$lib
     }
     if (commonProps.$lib_version) {
-      defaultProps.$lib_version = String(commonProps.$lib_version)
+      defaultProps.$lib_version = commonProps.$lib_version
     }
 
     if (Object.keys(defaultProps).length > 0) {
@@ -478,6 +775,9 @@ export class PostHog extends PostHogCore {
    * Setting this to 1 will send events immediately and will use more battery. This is set to 20 by default.
    * You can also manually flush the queue. If a flush is already in progress it returns a promise for the existing flush.
    *
+   * Note: this drains the **events** pipeline only. Logs are flushed via
+   * {@link flushLogs}, and {@link shutdown} drains both before terminating.
+   *
    * {@label Capture}
    *
    * @example
@@ -486,12 +786,114 @@ export class PostHog extends PostHogCore {
    * await posthog.flush()
    * ```
    *
+   * @see flushLogs
    * @public
    *
    * @returns Promise that resolves when the flush is complete
    */
   flush(): Promise<void> {
     return super.flush()
+  }
+
+  /**
+   * Captures a structured log record and sends it to PostHog's logs product
+   * (`/i/v1/logs`). Low-level primitive — most callers will prefer
+   * `posthog.logger.info(...)` / `.warn(...)` / `.error(...)` etc., which
+   * wrap this with a level pre-set.
+   *
+   * Records are buffered per-session, rate-limited, batched into OTLP
+   * payloads, and flushed on a timer, on AppState change, or when the
+   * buffer reaches capacity. Configure flush cadence, rate cap, and a
+   * `beforeSend` filter via the `logs` option on `new PostHog(...)`.
+   *
+   * Note — naming collision: `posthog.captureLog()` (this method) is the
+   * **logs product** API. There is also a separate, pre-existing
+   * `sessionReplayConfig.captureLog` boolean that controls whether
+   * **session replay** records the device's `console.*` output. The two
+   * are unrelated: this method emits structured records to the logs
+   * pipeline regardless of whether session replay is on.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * posthog.captureLog({
+   *   body: 'checkout completed',
+   *   level: 'info',
+   *   attributes: { order_id: 'ord_789', amount_cents: 4999 },
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param options Log record. `body` is required; `level` defaults to
+   *   `'info'`. `attributes` are attached as OTLP key-value attributes
+   *   and will override auto-populated ones (distinctId, sessionId) on
+   *   key conflict.
+   */
+  captureLog(options: CaptureLogOptions): void {
+    this._logs.captureLog(options)
+  }
+
+  /**
+   * Manually flushes the logs queue.
+   *
+   * Logs flush automatically on a timer, when the buffer fills, or on
+   * AppState change — most apps never need to call this. Use it when you
+   * want a synchronous-style hand-off (e.g. before navigating away from a
+   * critical screen, in a custom crash handler, or while testing locally).
+   *
+   * If a flush is already in progress, both callers join the same in-flight
+   * promise — no double-send.
+   *
+   * Note: this drains the **logs** pipeline only. Events are flushed via
+   * {@link flush}, and {@link shutdown} drains both before terminating.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * await posthog.flushLogs()
+   * ```
+   *
+   * @see flush
+   * @public
+   *
+   * @returns Promise that resolves when the flush is complete.
+   */
+  flushLogs(): Promise<void> {
+    return this._logs.flush()
+  }
+
+  private _captureLogger?: CaptureLogger
+
+  /**
+   * Convenience per-level logger. Each method is shorthand for
+   * `posthog.captureLog({ body, level, attributes })`. Lazily constructed
+   * on first access, then reused.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```ts
+   * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+   * posthog.logger.error('payment failed', { code: 'E001' })
+   * ```
+   *
+   * @public
+   */
+  get logger(): CaptureLogger {
+    if (!this._captureLogger) {
+      this._captureLogger = {
+        trace: (body, attributes) => this.captureLog({ body, level: 'trace', attributes }),
+        debug: (body, attributes) => this.captureLog({ body, level: 'debug', attributes }),
+        info: (body, attributes) => this.captureLog({ body, level: 'info', attributes }),
+        warn: (body, attributes) => this.captureLog({ body, level: 'warn', attributes }),
+        error: (body, attributes) => this.captureLog({ body, level: 'error', attributes }),
+        fatal: (body, attributes) => this.captureLog({ body, level: 'fatal', attributes }),
+      }
+    }
+    return this._captureLogger
   }
 
   /**
@@ -511,7 +913,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optIn(): Promise<void> {
-    return super.optIn()
+    // Consent must be durable. See reset()/identify().
+    const result = super.optIn()
+    void this._eventsStorage.waitForPersist()
+    return result
   }
 
   /**
@@ -530,7 +935,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optOut(): Promise<void> {
-    return super.optOut()
+    // Consent must be durable. See reset()/identify().
+    const result = super.optOut()
+    void this._eventsStorage.waitForPersist()
+    return result
   }
 
   /**
@@ -549,10 +957,11 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param key The feature flag key
+   * @param options Optional per-call settings
    * @returns True if enabled, false if disabled, undefined if not loaded
    */
-  isFeatureEnabled(key: string): boolean | undefined {
-    return super.isFeatureEnabled(key)
+  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
+    return super.isFeatureEnabled(key, options)
   }
 
   /**
@@ -572,10 +981,11 @@ export class PostHog extends PostHogCore {
    * @public
    *
    * @param key The feature flag key
+   * @param options Optional per-call settings
    * @returns The feature flag value or undefined if not loaded
    */
-  getFeatureFlag(key: string): boolean | string | undefined {
-    return super.getFeatureFlag(key)
+  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): boolean | string | undefined {
+    return super.getFeatureFlag(key, options)
   }
 
   /**
@@ -585,10 +995,12 @@ export class PostHog extends PostHogCore {
    *
    * {@label Feature flags}
    *
+   * @deprecated Use `getFeatureFlagResult()` instead, which returns the flag value and payload from a single evaluation.
+   *
    * @example
    * ```js
    * // get feature flag payload
-   * const payload = posthog.getFeatureFlagPayload('key-for-your-multivariate-flag')
+   * const payload = posthog.getFeatureFlagResult('key-for-your-multivariate-flag')?.payload
    * ```
    *
    * @public
@@ -607,6 +1019,10 @@ export class PostHog extends PostHogCore {
    * If you want to manually trigger a refresh, you can call this method.
    *
    * {@label Feature flags}
+   *
+   * @remarks
+   * When the `disableRemoteFeatureFlags` option is set, this method is a no-op; supply
+   * flag values via `updateFlags()` instead.
    *
    * @example
    * ```js
@@ -636,10 +1052,61 @@ export class PostHog extends PostHogCore {
    *
    * @public
    *
+   * @remarks
+   * When the `disableRemoteFeatureFlags` option is set, no request is made and the
+   * promise resolves with the currently stored flags (from `bootstrap` or `updateFlags()`).
+   *
    * @returns Promise that resolves with the refreshed flags
    */
   reloadFeatureFlagsAsync(): Promise<Record<string, boolean | string> | undefined> {
     return super.reloadFeatureFlagsAsync()
+  }
+
+  /**
+   * Replaces (or merges into) the stored feature flags and payloads with locally supplied
+   * values, exactly as if they had been returned by the flags endpoint: the values are
+   * persisted, `getFeatureFlag()`/`getFeatureFlagPayload()` read them back, and
+   * `onFeatureFlags` listeners fire. Makes no network request.
+   *
+   * Intended for apps that evaluate flags outside the SDK (e.g. server-side local
+   * evaluation) and push the results in at runtime, typically together with the
+   * `disableRemoteFeatureFlags` option so the SDK never fetches flags itself.
+   *
+   * {@label Feature flags}
+   *
+   * @remarks
+   * The values are cleared by `reset()`, so push them again after an identity change.
+   *
+   * @example
+   * ```js
+   * // replace all stored flags with locally evaluated ones
+   * posthog.updateFlags({ 'my-flag': true, 'multivariate-flag': 'variant-1' })
+   * ```
+   *
+   * @example
+   * ```js
+   * // include payloads
+   * posthog.updateFlags({ 'my-flag': true }, { 'my-flag': { color: 'blue' } })
+   * ```
+   *
+   * @example
+   * ```js
+   * // merge into the stored flags instead of replacing them
+   * posthog.updateFlags({ 'my-flag': false }, undefined, { merge: true })
+   * ```
+   *
+   * @public
+   *
+   * @param flags - Flag keys mapped to their values (boolean, or a variant string)
+   * @param payloads - Optional flag keys mapped to their JSON payloads
+   * @param options - Set `merge: true` to merge with the currently stored flags instead of replacing them
+   */
+  updateFlags(
+    flags: Record<string, boolean | string>,
+    payloads?: Record<string, JsonType>,
+    options?: { merge?: boolean }
+  ): void {
+    super.updateFlags(flags, payloads, options)
   }
 
   /**
@@ -676,11 +1143,11 @@ export class PostHog extends PostHogCore {
 
     // Automatically cache group properties for feature flag evaluation
     if (properties && Object.keys(properties).length > 0) {
-      const propsToCache: Record<string, string> = {}
+      const propsToCache: Record<string, JsonType> = {}
       Object.keys(properties).forEach((key) => {
         const value = properties[key]
         if (value !== null && value !== undefined) {
-          propsToCache[key] = String(value)
+          propsToCache[key] = value
         }
       })
       if (Object.keys(propsToCache).length > 0) {
@@ -733,6 +1200,27 @@ export class PostHog extends PostHogCore {
    */
   getDistinctId(): string {
     return super.getDistinctId()
+  }
+
+  /**
+   * Returns the stable device identifier used for device-level feature flag bucketing.
+   * This ID persists across identify() and reset() calls, only changing on a fresh
+   * app install, manual cache clearing, or OS-initiated storage cleanup.
+   *
+   * @returns The device ID, or an empty string if not yet initialized
+   */
+  getDeviceId(): string {
+    const deviceId = this.getPersistedProperty<string>(PostHogPersistedProperty.DeviceId)
+    if (!deviceId) {
+      // Lazy init for upgrades: existing installs won't have a device_id yet
+      const anonId = this.getAnonymousId()
+      if (anonId) {
+        this.setPersistedProperty(PostHogPersistedProperty.DeviceId, anonId)
+        return anonId
+      }
+      return ''
+    }
+    return deviceId
   }
 
   /**
@@ -802,7 +1290,7 @@ export class PostHog extends PostHogCore {
    * @param properties The group properties to set for flag evaluation
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  setGroupPropertiesForFlags(properties: Record<string, Record<string, string>>, reloadFeatureFlags = true): void {
+  setGroupPropertiesForFlags(properties: Record<string, Record<string, JsonType>>, reloadFeatureFlags = true): void {
     super.setGroupPropertiesForFlags(properties)
 
     if (reloadFeatureFlags) {
@@ -884,10 +1372,7 @@ export class PostHog extends PostHogCore {
     return !this.isDisabled && (this._enableSessionReplay ?? false)
   }
 
-  _resetSessionId(
-    reactNativeSessionReplay: typeof OptionalReactNativeSessionReplay | undefined,
-    sessionId: string
-  ): void {
+  _resetSessionId(reactNativeSessionReplay: typeof OptionalReactNativePlugin | undefined, sessionId: string): void {
     // _resetSessionId is only called if reactNativeSessionReplay not undefined, but the linter wasn't happy
     if (reactNativeSessionReplay) {
       reactNativeSessionReplay.endSession()
@@ -898,21 +1383,27 @@ export class PostHog extends PostHogCore {
   getSessionId(): string {
     const sessionId = super.getSessionId()
 
-    if (!this._isEnableSessionReplay()) {
+    if (!this._isEnableSessionReplay() && !this._isNativePluginInitialized()) {
       return sessionId
     }
 
     // only rotate if there is a new sessionId and it is different from the current one
     if (sessionId.length > 0 && this._currentSessionId && sessionId !== this._currentSessionId) {
-      if (OptionalReactNativeSessionReplay) {
+      if (OptionalReactNativePlugin) {
         try {
-          this._resetSessionId(OptionalReactNativeSessionReplay, String(sessionId))
+          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
           this._logger.info(`sessionId rotated from ${this._currentSessionId} to ${sessionId}.`)
         } catch (e) {
           this._logger.error(`Failed to rotate sessionId: ${e}.`)
         }
       }
       this._currentSessionId = sessionId
+
+      // Event triggers are armed per session: the previous activation no longer matches the new
+      // session id, so re-evaluate to stop recording until a fresh matching event fires.
+      if (this._sessionReplayEventTriggers.length > 0) {
+        void this._evaluateAndStartSessionReplay()
+      }
     } else {
       this._logger.info(`sessionId not rotated, sessionId ${sessionId} and currentSessionId ${this._currentSessionId}.`)
     }
@@ -922,12 +1413,12 @@ export class PostHog extends PostHogCore {
 
   resetSessionId(): void {
     super.resetSessionId()
-    if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {
+    if ((this._isEnableSessionReplay() || this._isNativePluginInitialized()) && OptionalReactNativePlugin) {
       try {
-        OptionalReactNativeSessionReplay.endSession()
-        this._logger.info(`Session replay ended.`)
+        OptionalReactNativePlugin.endSession()
+        this._logger.info(`Native PostHog session ended.`)
       } catch (e) {
-        this._logger.error(`Session replay failed to end: ${e}.`)
+        this._logger.error(`Native PostHog session failed to end: ${e}.`)
       }
     }
   }
@@ -959,32 +1450,39 @@ export class PostHog extends PostHogCore {
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
+    await this._startSessionRecording(resumeCurrent)
+  }
+
+  // Same as startSessionRecording, but reports success so callers can react to failures.
+  private async _startSessionRecording(resumeCurrent: boolean): Promise<boolean> {
     await this._initPromise
 
     if (this.isDisabled) {
-      return
+      return false
     }
 
-    if (!OptionalReactNativeSessionReplay) {
+    if (!OptionalReactNativePlugin) {
       // Web/macOS - silently return
-      return
+      return false
     }
 
     try {
       // Check if the plugin supports startRecording
-      if (!OptionalReactNativeSessionReplay.startRecording) {
-        this._logger.warn('startRecording is not available. Please update posthog-react-native-session-replay.')
-        return
+      if (!OptionalReactNativePlugin.startRecording) {
+        this._logger.warn(
+          'startRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
+        )
+        return false
       }
 
-      // Lazily initialize native SDK if not already initialized
-      // This handles the case where enableSessionReplay = false in config but user wants to start manually
+      // If only error tracking is active, add replay to the existing native instance
+      // rather than re-initializing.
       if (!this._sessionReplayNativeInitialized) {
         this._logger.info('Native session replay SDK not initialized, initializing now...')
-        const initialized = await this.initializeSessionReplayNative(this._sessionReplayOptions)
+        const initialized = await this.initializeNativePlugin(this._sessionReplayOptions, undefined, true)
         if (!initialized) {
           this._logger.error('Failed to initialize native session replay SDK.')
-          return
+          return false
         }
       }
 
@@ -993,14 +1491,16 @@ export class PostHog extends PostHogCore {
         super.resetSessionId()
         const newSessionId = super.getSessionId()
         // sync native + rn sessionId
-        this._resetSessionId(OptionalReactNativeSessionReplay, String(newSessionId))
+        this._resetSessionId(OptionalReactNativePlugin, String(newSessionId))
         this._currentSessionId = newSessionId
       }
 
-      await OptionalReactNativeSessionReplay.startRecording(resumeCurrent)
+      await OptionalReactNativePlugin.startRecording(resumeCurrent)
       this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
+      return true
     } catch (e) {
       this._logger.error(`Failed to start session recording: ${e}`)
+      return false
     }
   }
 
@@ -1020,29 +1520,37 @@ export class PostHog extends PostHogCore {
    * @public
    */
   async stopSessionRecording(): Promise<void> {
+    await this._stopSessionRecording()
+  }
+
+  // Same as stopSessionRecording, but reports success so callers can react to failures.
+  private async _stopSessionRecording(): Promise<boolean> {
     await this._initPromise
 
     if (this.isDisabled) {
-      return
+      return false
     }
 
-    if (!OptionalReactNativeSessionReplay) {
+    if (!OptionalReactNativePlugin) {
       // Web/macOS - silently return
-      return
+      return false
     }
 
     try {
       // Check if the plugin supports stopRecording
-      if (!OptionalReactNativeSessionReplay.stopRecording) {
-        this._logger.warn('stopRecording is not available. Please update posthog-react-native-session-replay.')
-        return
+      if (!OptionalReactNativePlugin.stopRecording) {
+        this._logger.warn(
+          'stopRecording is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
+        )
+        return false
       }
 
-      await OptionalReactNativeSessionReplay.stopRecording()
-      // this._enableSessionReplay = false
+      await OptionalReactNativePlugin.stopRecording()
       this._logger.info('Session recording stopped.')
+      return true
     } catch (e) {
       this._logger.error(`Failed to stop session recording: ${e}`)
+      return false
     }
   }
 
@@ -1069,13 +1577,13 @@ export class PostHog extends PostHogCore {
       return false
     }
 
-    if (!OptionalReactNativeSessionReplay) {
+    if (!OptionalReactNativePlugin) {
       // Web/macOS - always return false
       return false
     }
 
     try {
-      return await OptionalReactNativeSessionReplay.isEnabled()
+      return await OptionalReactNativePlugin.isEnabled()
     } catch (e) {
       this._logger.error(`Failed to check session replay status: ${e}`)
       return false
@@ -1118,37 +1626,60 @@ export class PostHog extends PostHogCore {
    */
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     const previousDistinctId = this.getDistinctId()
+
+    // Extract $set_once before super.identify() because core deletes it from the properties object
+    const userProps = properties?.$set || properties
+    const userPropsOnce = properties?.$set_once
+
     super.identify(distinctId, properties, options)
 
     // Automatically cache person properties for feature flag evaluation
-    // Use $set if provided, otherwise use top-level properties
-    const userProps = properties?.$set || properties
-    if (userProps && Object.keys(userProps).length > 0) {
-      const propsToCache: Record<string, string> = {}
+
+    const propsToCache: Record<string, JsonType> = {}
+    if (userProps && typeof userProps === 'object' && !Array.isArray(userProps)) {
       Object.entries(userProps).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
-          propsToCache[key] = String(value)
+          propsToCache[key] = value
         }
       })
-      if (Object.keys(propsToCache).length > 0) {
-        // super.identify() already handles reloading flags in all cases:
-        // - When distinctId changes: it calls reloadFeatureFlags() directly
-        // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
-        // So we only need to set the properties here without triggering another reload.
-        this.setPersonPropertiesForFlags(propsToCache, false)
-      }
     }
 
-    if (this._isEnableSessionReplay() && OptionalReactNativeSessionReplay) {
+    const propsOnceToCache: Record<string, JsonType> = {}
+    if (userPropsOnce && typeof userPropsOnce === 'object' && !Array.isArray(userPropsOnce)) {
+      Object.entries(userPropsOnce).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          propsOnceToCache[key] = value
+        }
+      })
+    }
+
+    if (Object.keys(propsToCache).length > 0 || Object.keys(propsOnceToCache).length > 0) {
+      // super.identify() already handles reloading flags in all cases:
+      // - When distinctId changes: it calls reloadFeatureFlags() directly
+      // - When distinctId is the same but properties change: it calls setPersonProperties() which reloads flags
+      // So we only need to set the properties here without triggering another reload.
+      this.setPersonPropertiesForFlags(
+        {
+          $set: propsToCache,
+          ...(Object.keys(propsOnceToCache).length > 0 ? { $set_once: propsOnceToCache } : {}),
+        },
+        false
+      )
+    }
+
+    if ((this._isEnableSessionReplay() || this._isNativePluginInitialized()) && OptionalReactNativePlugin) {
       try {
         distinctId = distinctId || previousDistinctId
         const anonymousId = this.getAnonymousId()
-        OptionalReactNativeSessionReplay.identify(String(distinctId), String(anonymousId))
-        this._logger.info(`Session replay identified with distinctId ${distinctId} and anonymousId ${anonymousId}.`)
+        OptionalReactNativePlugin.identify(String(distinctId), String(anonymousId))
+        this._logger.info(`Native PostHog identified with distinctId ${distinctId} and anonymousId ${anonymousId}.`)
       } catch (e) {
-        this._logger.error(`Session replay failed to identify: ${e}.`)
+        this._logger.error(`Native PostHog failed to identify: ${e}.`)
       }
     }
+
+    // Account-switch safety — same as reset().
+    void this._eventsStorage.waitForPersist()
   }
 
   /**
@@ -1182,15 +1713,65 @@ export class PostHog extends PostHogCore {
    * @param {Object} [additionalProperties] Any additional properties to add to the error event
    * @returns {void}
    */
-  captureException(error: Error | unknown, additionalProperties: PostHogEventProperties = {}): void {
-    const syntheticException = new Error('Synthetic Error')
-    this._errorTracking.captureException(error, additionalProperties, {
-      mechanism: {
-        handled: true,
-        type: 'generic',
-      },
-      syntheticException,
-    })
+  captureException(
+    error: Error | unknown,
+    additionalProperties: PostHogEventProperties = {},
+    hint?: CoreErrorTracking.EventHint
+  ): void {
+    const resolvedHint: CoreErrorTracking.EventHint = hint ?? {
+      mechanism: { handled: true, type: 'generic' },
+      syntheticException: new Error('Synthetic Error'),
+    }
+
+    // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
+    additionalProperties = this._errorTracking.attachExceptionSteps(additionalProperties)
+
+    super.captureException(error, additionalProperties, resolvedHint)
+
+    // On a fatal crash, persist the exception + recent logs before the app may die.
+    if (additionalProperties?.$exception_level === 'fatal') {
+      void this._eventsStorage.waitForPersist()
+      void this._logsStorage.waitForPersist()
+    }
+  }
+
+  /**
+   * Records a breadcrumb-style exception step. Steps accumulate in a rolling, byte-bounded buffer
+   * and are attached to every captured `$exception` as `$exception_steps`, giving the error tracking
+   * UI a timeline of recent activity before each error.
+   *
+   * The `$timestamp` is captured at call time. The reserved keys `$message` and `$timestamp` are
+   * stripped from `properties` — the SDK sets the canonical values. This method never throws.
+   *
+   * @example
+   * ```js
+   * posthog.addExceptionStep('User tapped Checkout', { screen: 'cart' })
+   * ```
+   *
+   * @param {string} message A non-empty description of the step
+   * @param {Object} [properties] Optional additional context to attach to the step
+   * @returns {void}
+   */
+  addExceptionStep(message: string, properties?: Properties): void {
+    this._errorTracking.addExceptionStep(message, properties)
+  }
+
+  protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
+    return new CoreErrorTracking.ErrorPropertiesBuilder(
+      [
+        new CoreErrorTracking.PromiseRejectionEventCoercer(),
+        new CoreErrorTracking.ErrorCoercer(),
+        new CoreErrorTracking.ErrorEventCoercer(),
+        new CoreErrorTracking.ObjectCoercer(),
+        new CoreErrorTracking.StringCoercer(),
+        new CoreErrorTracking.PrimitiveCoercer(),
+      ],
+      CoreErrorTracking.createStackParser(
+        isHermes() ? 'hermes' : 'web:javascript',
+        CoreErrorTracking.chromeStackLineParser,
+        CoreErrorTracking.geckoStackLineParser
+      )
+    )
   }
 
   initReactNativeNavigation(options: PostHogAutocaptureOptions): boolean {
@@ -1269,6 +1850,21 @@ export class PostHog extends PostHogCore {
     reloadFeatureFlags = true
   ): void {
     super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags)
+  }
+
+  /**
+   * Removes properties from the person profile associated with the current `distinct_id`.
+   * Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @public
+   *
+   * @param propertyNames - The name (or names) of the person properties to remove.
+   * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   */
+  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
+    super.unsetPersonProperties(propertyNames, reloadFeatureFlags)
   }
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
@@ -1358,62 +1954,14 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  /**
-   * Load flags AND handle surveys from the flags response (only when remote config is disabled)
-   */
-  private async _flagsAsyncWithSurveys(): Promise<void> {
-    try {
-      const flagsResponse = await this.flagsAsync({
-        sendAnonDistinctId: true,
-        fetchConfig: true,
-        triggerOnRemoteConfig: true,
-      })
-
-      // Only handle surveys from flags if remote config is disabled and surveys are enabled
-      // When remote config is enabled, surveys will come from there instead
-      if (this._disableRemoteConfig === true) {
-        if (this._disableSurveys === true) {
-          this._logger.info('Loading surveys skipped, disabled.')
-          this._cacheSurveys(null, 'flags (disabled)')
-          return
-        }
-
-        // Handle surveys from the response (surveys key is included when config=true)
-        const surveys = flagsResponse?.surveys
-
-        // If surveys is not an array, it means there are no surveys (its a boolean)
-        if (Array.isArray(surveys) && surveys.length > 0) {
-          this._cacheSurveys(surveys as Survey[], 'flags endpoint')
-        } else {
-          this._logger.info('No surveys in flags response')
-          this._cacheSurveys(null, 'flags endpoint')
-        }
-      }
-    } catch (error) {
-      this._logger.error('Error in _flagsAsyncWithSurveys:', error)
-    }
+  private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {
+    const autocapture = options?.errorTracking?.autocapture
+    const nativeCrashes = typeof autocapture === 'object' && autocapture.nativeCrashes === true
+    return !this.isDisabled && nativeCrashes
   }
 
-  /**
-   * Internal method to load surveys from API (when remote config is disabled)
-   */
-  private async _loadSurveysFromAPI(): Promise<void> {
-    if (this._disableSurveys === true) {
-      this._logger.info('Loading surveys skipped, disabled.')
-      this._cacheSurveys(null, 'API (disabled)')
-      return
-    }
-
-    try {
-      const surveysFromApi = await super.getSurveysStateless()
-      if (surveysFromApi && surveysFromApi.length > 0) {
-        this._cacheSurveys(surveysFromApi, 'API')
-      } else {
-        this._cacheSurveys(null, 'API')
-      }
-    } catch (error) {
-      this._logger.error('Error loading surveys from API:', error)
-    }
+  private _isNativePluginInitialized(): boolean {
+    return this._sessionReplayNativeInitialized || this._nativeErrorTrackingInitialized
   }
 
   /**
@@ -1426,18 +1974,48 @@ export class PostHog extends PostHogCore {
     options?: PostHogOptions,
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
   ): Promise<boolean> {
-    if (!OptionalReactNativeSessionReplay) {
-      this._logger.warn('Session replay enabled but not installed.')
+    return this.initializeNativePlugin(options, cachedRemoteConfig, true)
+  }
+
+  private async initializeNativePlugin(
+    options?: PostHogOptions,
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
+    enableSessionReplay: boolean = this._isEnableSessionReplay()
+  ): Promise<boolean> {
+    let enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+
+    if (!enableSessionReplay && !enableNativeErrorTracking) {
+      return true
+    }
+
+    if (!OptionalReactNativePlugin) {
+      this._logger.warn(
+        enableSessionReplay
+          ? 'Session replay enabled but not installed.'
+          : 'Native error tracking enabled but not installed.'
+      )
       return false
     }
 
-    if (this._sessionReplayNativeInitialized) {
+    if (
+      (!enableSessionReplay || this._sessionReplayNativeInitialized) &&
+      (!enableNativeErrorTracking || this._nativeErrorTrackingInitialized)
+    ) {
+      return true
+    }
+
+    // The native SDKs can't be re-initialized — a second setup() would reset the running
+    // instance. If error tracking is already running, skip setup() and start replay on the
+    // existing native instance instead (setup() is what would otherwise start it).
+    if (this._isNativePluginInitialized() && enableSessionReplay && !this._sessionReplayNativeInitialized) {
+      this._sessionReplayNativeInitialized = true
+      await OptionalReactNativePlugin.startRecording?.(true)
       return true
     }
 
     const sessionId = this.getSessionId()
     if (sessionId.length === 0) {
-      this._logger.warn(`Session replay enabled but no sessionId found.`)
+      this._logger.warn(`Native PostHog plugin enabled but no sessionId found.`)
       return false
     }
 
@@ -1449,6 +2027,8 @@ export class PostHog extends PostHogCore {
       maskAllSandboxedViews = true,
       captureLog: localCaptureLog = true,
       captureNetworkTelemetry: localCaptureNetworkTelemetry = true,
+      screenshotModeBackgroundCapture = false,
+      sampleRate: localSampleRate,
       iOSdebouncerDelayMs = defaultThrottleDelayMs,
       androidDebouncerDelayMs = defaultThrottleDelayMs,
     } = options?.sessionReplayConfig ?? {}
@@ -1476,15 +2056,41 @@ export class PostHog extends PostHogCore {
       'network_timing',
       true
     )
+    const remoteSampleRateRaw = getRemoteConfigNumber(cachedRemoteConfig?.sessionRecording, 'sampleRate')
 
     const captureLog = localCaptureLog && remoteConsoleLogEnabled
     const captureNetworkTelemetry = localCaptureNetworkTelemetry && remoteNetworkTimingEnabled
+
+    const localSampleRateValid =
+      localSampleRate === undefined ? undefined : isValidSampleRate(localSampleRate) ? localSampleRate : undefined
+    const remoteSampleRateValid =
+      remoteSampleRateRaw === undefined
+        ? undefined
+        : isValidSampleRate(remoteSampleRateRaw)
+          ? remoteSampleRateRaw
+          : undefined
+
+    const sampleRate = localSampleRateValid ?? remoteSampleRateValid
 
     if (localCaptureLog && !remoteConsoleLogEnabled) {
       this._logger.info('captureLog disabled by remote config (consoleLogRecordingEnabled=false).')
     }
     if (localCaptureNetworkTelemetry && !remoteNetworkTimingEnabled) {
       this._logger.info('captureNetworkTelemetry disabled by remote config (capturePerformance.network_timing=false).')
+    }
+    if (localSampleRate !== undefined && localSampleRateValid === undefined) {
+      this._logger.warn(
+        `Ignoring invalid sessionReplayConfig.sampleRate '${localSampleRate}'. Expected a number between 0 and 1.`
+      )
+    }
+    if (remoteSampleRateRaw !== undefined && remoteSampleRateValid === undefined) {
+      this._logger.warn(
+        `Ignoring invalid remote config sessionRecording.sampleRate '${remoteSampleRateRaw}'. Expected a number between 0 and 1.`
+      )
+    }
+    if (typeof sampleRate === 'number') {
+      const source = localSampleRateValid !== undefined ? 'local config' : 'remote config'
+      this._logger.info(`sampleRate set from ${source} (${sampleRate}).`)
     }
 
     const sdkReplayConfig = {
@@ -1493,12 +2099,14 @@ export class PostHog extends PostHogCore {
       maskAllSandboxedViews,
       captureLog,
       captureNetworkTelemetry,
+      screenshotModeBackgroundCapture,
+      sampleRate,
       iOSdebouncerDelayMs,
       androidDebouncerDelayMs,
       throttleDelayMs,
     }
 
-    this._logger.info(`Session replay SDK config: ${JSON.stringify(sdkReplayConfig)}`)
+    this._logger.info(`Native PostHog plugin replay config: ${JSON.stringify(sdkReplayConfig)}`)
 
     // if Flags API has not returned yet, we will start session replay with default config.
     const sessionReplay = this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}
@@ -1516,29 +2124,73 @@ export class PostHog extends PostHogCore {
       anonymousId: this.getAnonymousId(),
       sdkVersion: this.getLibraryVersion(),
       flushAt: this.flushAt,
+      // Native-sent requests (session replay, crash uploads) bypass the JS request path,
+      // so the configured headers are passed through to the native plugin as well.
+      requestHeaders: this._requestHeaders,
     }
 
-    this._logger.info(`Session replay sdk options: ${JSON.stringify(sdkOptions)}`)
+    // Log header names only: requestHeaders values can carry secrets (e.g. an Authorization token).
+    const loggableSdkOptions = { ...sdkOptions, requestHeaders: Object.keys(this._requestHeaders) }
+    this._logger.info(`Native PostHog plugin sdk options: ${JSON.stringify(loggableSdkOptions)}`)
 
     try {
-      if (!(await OptionalReactNativeSessionReplay.isEnabled())) {
-        await OptionalReactNativeSessionReplay.start(
-          String(sessionId),
-          sdkOptions,
-          sdkReplayConfig,
-          cachedSessionReplayConfig
-        )
-        this._logger.info(`Session replay started with sessionId ${sessionId}.`)
+      const wasSessionReplayEnabled = enableSessionReplay
+        ? await OptionalReactNativePlugin.isEnabled().catch(() => false)
+        : false
+
+      if (OptionalReactNativePlugin.setup) {
+        const pluginConfig = {
+          sessionReplay: {
+            enabled: enableSessionReplay,
+            sdkReplayConfig,
+            decideReplayConfig: cachedSessionReplayConfig,
+          },
+          errorTracking: {
+            nativeAutocapture: enableNativeErrorTracking,
+            exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
+          },
+        }
+        await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
+        if (wasSessionReplayEnabled) {
+          // if somehow the SDK is already enabled with a different sessionId, we reset it
+          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
+        }
       } else {
-        // if somehow the SDK is already enabled with a different sessionId, we reset it
-        this._resetSessionId(OptionalReactNativeSessionReplay, String(sessionId))
-        this._logger.info(`Session replay already started with sessionId ${sessionId}.`)
+        if (enableNativeErrorTracking) {
+          this._logger.warn(
+            'Native error tracking is not available. Please update @posthog/react-native-plugin or posthog-react-native-session-replay.'
+          )
+          // The legacy plugin can't do native crash capture, so don't mark it initialized below.
+          enableNativeErrorTracking = false
+        }
+        if (!enableSessionReplay) {
+          return false
+        }
+        if (!(await OptionalReactNativePlugin.isEnabled())) {
+          await OptionalReactNativePlugin.start(
+            String(sessionId),
+            sdkOptions,
+            sdkReplayConfig,
+            cachedSessionReplayConfig
+          )
+        } else {
+          // if somehow the SDK is already enabled with a different sessionId, we reset it
+          this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
+        }
       }
       this._currentSessionId = sessionId
-      this._sessionReplayNativeInitialized = true
+      if (enableSessionReplay) {
+        this._sessionReplayNativeInitialized = true
+        this._logger.info(`Session replay started with sessionId ${sessionId}.`)
+      }
+      if (enableNativeErrorTracking) {
+        this._nativeErrorTrackingInitialized = true
+        this._errorTracking.onNativeErrorTrackingReady()
+        this._logger.info('Native error tracking started.')
+      }
       return true
     } catch (e) {
-      this._logger.error(`Session replay failed to start: ${e}.`)
+      this._logger.error(`Native PostHog plugin failed to start: ${e}.`)
       return false
     }
   }
@@ -1550,8 +2202,50 @@ export class PostHog extends PostHogCore {
     this._enableSessionReplay = options?.enableSessionReplay
     this._sessionReplayOptions = options
 
+    await this._evaluateAndStartSessionReplay(cachedRemoteConfig)
+  }
+
+  /**
+   * Decides whether session replay should be recording (replay enabled AND the linked
+   * flag, if any, on for the current user) and arms or pauses the native recorder to match.
+   *
+   * Runs at startup and on every feature flags load/reload (identify(), reset(),
+   * reloadFeatureFlags()), so recording starts, resumes, or pauses on identity changes
+   * without an app restart. `_sessionReplayRecordingActive` dedups repeated answers, and
+   * the init guards prevent double-starts. When replay is off, the native plugin is still
+   * initialized for native error tracking (both share one native instance).
+   *
+   * Pausing requires a real "flag off": core keeps the previous flag values across
+   * quota-limited/failed reloads, so a transient error never pauses a recording. Right
+   * after reset() the flags are genuinely unknown and pausing is the intended outcome.
+   *
+   * Evaluations are serialized so concurrent flags reloads run one at a time.
+   */
+  private _evaluateAndStartSessionReplay(cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>): Promise<void> {
+    this._sessionReplayEvalChain = this._sessionReplayEvalChain
+      .catch(() => {})
+      .then(() => this._evaluateAndStartSessionReplayInternal(cachedRemoteConfig))
+    return this._sessionReplayEvalChain
+  }
+
+  private async _evaluateAndStartSessionReplayInternal(
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
+  ): Promise<void> {
+    const options = this._sessionReplayOptions
+    const enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+    // On the re-arm path (flags reloaded after identify/reset) cachedRemoteConfig
+    // isn't passed in, so fall back to the persisted remote config for capture gating.
+    const remoteConfig =
+      cachedRemoteConfig ??
+      this.getPersistedProperty<Omit<PostHogRemoteConfig, 'surveys'>>(PostHogPersistedProperty.RemoteConfig)
+
     if (!this._isEnableSessionReplay()) {
       this._logger.info('Session replay is not enabled.')
+      // Replay off — disarm event triggers so the capture hook stays inert.
+      this._sessionReplayEventTriggers = []
+      if (enableNativeErrorTracking) {
+        await this.initializeNativePlugin(options, remoteConfig, false)
+      }
       return
     }
 
@@ -1599,11 +2293,103 @@ export class PostHog extends PostHogCore {
       this._logger.info(`Session replay has no cached linkedFlag.`)
     }
 
+    // Event triggers: replay records only once the client captures an event whose name matches a
+    // configured trigger, and stays active for the rest of that session. Cache the armed triggers in
+    // memory for the capture hot path (processBeforeEnqueue), then AND the activation into the gate —
+    // an unfired trigger blocks recording exactly like an unsatisfied linked flag (restrictive AND).
+    const eventTriggers = this._parseEventTriggers(cachedSessionReplayConfig['eventTriggers'])
+    this._sessionReplayEventTriggers = eventTriggers
+
+    if (eventTriggers.length > 0) {
+      const activated = this._isEventTriggerActivatedForSession(super.getSessionId())
+      if (!activated) {
+        recordingActive = false
+      }
+      this._logger.info(`Session replay event triggers configured (${eventTriggers.length}); activated: ${activated}.`)
+    }
+
     if (recordingActive) {
-      await this.initializeSessionReplayNative(options, cachedRemoteConfig)
+      if (this._sessionReplayRecordingActive === true) {
+        // Already recording — nothing to do.
+        return
+      }
+      // Record the actual outcome; on failure it stays false so the next reload retries.
+      // (Already initialized means replay was paused by an earlier flag-off, so resume it.)
+      this._sessionReplayRecordingActive = this._sessionReplayNativeInitialized
+        ? await this._startSessionRecording(true)
+        : await this.initializeNativePlugin(options, remoteConfig, true)
     } else {
       this._logger.info('Session replay disabled.')
+
+      if (this._sessionReplayRecordingActive === true) {
+        // Linked flag turned off — pause so a gated-off user isn't recorded. Keep the flag
+        // set if the native stop fails, so the next reload retries instead of giving up.
+        this._sessionReplayRecordingActive = !(await this._stopSessionRecording())
+      } else {
+        this._sessionReplayRecordingActive = false
+      }
+
+      if (enableNativeErrorTracking) {
+        await this.initializeNativePlugin(options, remoteConfig, false)
+      }
     }
+  }
+
+  /**
+   * Capture chokepoint for session-replay event triggers. Every captured event (capture, $screen,
+   * autocapture, lifecycle) passes through here. Chains to super first so `before_send` still runs;
+   * when a surviving event's name matches an armed trigger and the session hasn't activated yet, it
+   * activates replay for the session and kicks a re-evaluation that starts native recording. The
+   * trigger check never drops an event or throws into the capture path.
+   */
+  protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    const processed = super.processBeforeEnqueue(message)
+    try {
+      this._maybeActivateEventTrigger(processed?.['event'])
+    } catch (e) {
+      this._logger.error(`Session replay event trigger check failed: ${e}.`)
+    }
+    return processed
+  }
+
+  private _maybeActivateEventTrigger(eventName: unknown): void {
+    if (this._sessionReplayEventTriggers.length === 0 || typeof eventName !== 'string') {
+      return
+    }
+    if (!this._sessionReplayEventTriggers.includes(eventName)) {
+      return
+    }
+    // Use super.getSessionId() (not this.getSessionId()) deliberately: the capture path already ran the
+    // overriding getSessionId() during enrichProperties, so rotation handling has fired and the id is
+    // synced. Calling the override again here would re-enter rotation logic from inside capture.
+    const sessionId = super.getSessionId()
+    if (!sessionId) {
+      return
+    }
+    // Already activated AND the native recorder is confirmed running — nothing to do. If activation
+    // was persisted but a prior start failed (recording still inactive), fall through to re-kick the
+    // evaluation so a later matching event retries the native start instead of staying stuck.
+    if (this._isEventTriggerActivatedForSession(sessionId) && this._sessionReplayRecordingActive === true) {
+      return
+    }
+    if (!this._isEventTriggerActivatedForSession(sessionId)) {
+      this.setPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession, sessionId)
+      this._logger.info(`Session replay event trigger '${eventName}' activated for session ${sessionId}.`)
+    }
+    // Re-evaluate so the native recorder starts; fire-and-forget keeps the capture path synchronous.
+    // Serialized through _sessionReplayEvalChain, so this never races a concurrent evaluation.
+    void this._evaluateAndStartSessionReplay()
+  }
+
+  private _parseEventTriggers(value: JsonType | undefined): string[] {
+    if (!Array.isArray(value)) {
+      return []
+    }
+    return value.filter((entry): entry is string => typeof entry === 'string')
+  }
+
+  private _isEventTriggerActivatedForSession(sessionId: string): boolean {
+    return this.getPersistedProperty(PostHogPersistedProperty.SessionReplayEventTriggerActivatedSession) === sessionId
   }
 
   private async captureAppLifecycleEvents(): Promise<void> {

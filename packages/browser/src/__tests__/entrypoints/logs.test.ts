@@ -1,46 +1,11 @@
 import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 
-// Mock external OpenTelemetry dependencies
-jest.mock('@opentelemetry/api-logs', () => ({
-    logs: {
-        setGlobalLoggerProvider: jest.fn(),
-        getLogger: jest.fn(() => ({
-            emit: jest.fn(),
-        })),
-    },
-}))
-
-jest.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
-    OTLPLogExporter: jest.fn().mockImplementation(() => ({
-        export: jest.fn(),
-        shutdown: jest.fn(),
-    })),
-}))
-
-jest.mock('@opentelemetry/sdk-logs', () => ({
-    LoggerProvider: jest.fn().mockImplementation(() => ({
-        getLogger: jest.fn(() => ({
-            emit: jest.fn(),
-        })),
-        shutdown: jest.fn(),
-    })),
-    BatchLogRecordProcessor: jest.fn().mockImplementation(() => ({
-        onEmit: jest.fn(),
-        shutdown: jest.fn(),
-    })),
-}))
-
-jest.mock('@opentelemetry/resources', () => ({
-    resourceFromAttributes: jest.fn((attrs) => ({
-        attributes: attrs,
-    })),
-}))
-
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
-    let mockLogger: any
+    // Console capture now routes through the core pipeline via
+    // `posthog.logs._captureConsoleLog`; assert against that seam.
     let mockEmit: jest.Mock
 
     beforeEach(() => {
@@ -50,13 +15,8 @@ describe('logs entrypoint', () => {
         // Store original console
         originalConsole = { ...console }
 
-        // Set up mock logger
+        // Set up capture spy
         mockEmit = jest.fn()
-        mockLogger = { emit: mockEmit }
-
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { logs } = require('@opentelemetry/api-logs')
-        logs.getLogger.mockReturnValue(mockLogger)
 
         // Mock PostHog instance
         mockPostHog = {
@@ -73,6 +33,8 @@ describe('logs entrypoint', () => {
                 })),
             },
             get_distinct_id: jest.fn(() => 'user-123'),
+            is_capturing: jest.fn(() => true),
+            logs: { _captureConsoleLog: mockEmit },
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -104,51 +66,64 @@ describe('logs entrypoint', () => {
         Object.assign(console, originalConsole)
     })
 
-    describe('configuration handling', () => {
+    describe('core capture routing', () => {
         beforeEach(() => {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
-        it('should use PostHog config for exporter URL', () => {
-            const customPostHog = {
-                ...mockPostHog,
-                config: {
-                    api_host: 'https://custom.example.com',
-                    token: 'custom-token-123',
-                },
-            }
-
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http')
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(customPostHog)
-
-            expect(OTLPLogExporter).toHaveBeenCalledWith({
-                url: 'https://custom.example.com/i/v1/logs?token=custom-token-123',
-                headers: {
-                    'Content-Type': 'text/plain',
-                },
-            })
-        })
-
-        it('should use current location host in resource attributes', () => {
-            Object.defineProperty(assignableWindow, 'location', {
-                value: { host: 'different.example.com', href: 'https://different.example.com' },
-                writable: true,
-            })
-
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const { resourceFromAttributes } = require('@opentelemetry/resources')
+        it('routes console capture through posthog.logs._captureConsoleLog with the mapped level', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
-            expect(resourceFromAttributes).toHaveBeenCalledWith(
+            assignableWindow.console.warn('uh oh')
+
+            expect(mockEmit).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    host: 'different.example.com',
+                    level: 'warn',
+                    body: '"uh oh"',
+                    attributes: expect.objectContaining({
+                        'log.source': 'console.warn',
+                    }),
                 })
             )
         })
+
+        it('does not set distinct_id or location.href — core adds posthogDistinctId/url.full downstream', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('hello')
+
+            const attributes = mockEmit.mock.calls[0][0].attributes
+            expect(attributes).not.toHaveProperty('distinct_id')
+            expect(attributes).not.toHaveProperty('location.href')
+        })
+
+        it('sets host on the captured record', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('hello')
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    attributes: expect.objectContaining({ host: 'example.com' }),
+                })
+            )
+        })
+
+        it.each(['window.id', 'sessionStartTimestamp', 'lastActivityTimestamp'])(
+            'does not set %s — core adds session attributes from the SDK context downstream',
+            (attribute) => {
+                const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+                initializeLogs(mockPostHog)
+
+                assignableWindow.console.log('hello')
+
+                expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty(attribute)
+            }
+        )
     })
 
     describe('log truncation features', () => {
@@ -177,6 +152,56 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should preserve bounded attributes when the log body is truncated', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log({
+                code: 'E_TOO_LARGE',
+                userId: 'user-123',
+                payload: 'x'.repeat(10001),
+            })
+
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'),
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                        code: 'E_TOO_LARGE',
+                        userId: 'user-123',
+                    }),
+                })
+            )
+        })
+
+        it('should not read object properties after the body size limit is reached', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const getterAfterLimit = jest.fn(() => {
+                throw new Error('should not be read')
+            })
+            const objectWithUnreadPropertyAfterLimit: any = {
+                largeKey: 'x'.repeat(10001),
+            }
+            Object.defineProperty(objectWithUnreadPropertyAfterLimit, 'unreadAfterLimit', {
+                enumerable: true,
+                get: getterAfterLimit,
+            })
+
+            expect(() => assignableWindow.console.log(objectWithUnreadPropertyAfterLimit)).not.toThrow()
+
+            expect(getterAfterLimit).not.toHaveBeenCalled()
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: expect.stringContaining('...'),
+                    attributes: expect.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
         it('should not truncate log body when within size limit', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -193,6 +218,43 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+        })
+
+        it('should not leak body truncation state to subsequent logs', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('x'.repeat(10001))
+            assignableWindow.console.log('small message')
+
+            expect(mockEmit.mock.calls[0][0].attributes).toEqual(
+                expect.objectContaining({
+                    body_truncated: 'true',
+                })
+            )
+            expect(mockEmit.mock.calls[1][0]).toEqual(
+                expect.objectContaining({
+                    body: '"small message"',
+                    attributes: expect.not.objectContaining({
+                        body_truncated: 'true',
+                    }),
+                })
+            )
+        })
+
+        it('should not corrupt truncated strings with escaped characters', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('\\'.repeat(9998))
+
+            const emitted = mockEmit.mock.calls[0][0]
+            expect(emitted.attributes).toEqual(
+                expect.objectContaining({
+                    body_truncated: 'true',
+                })
+            )
+            expect(() => JSON.parse(emitted.body.slice(0, -3))).not.toThrow()
         })
 
         it('should handle large objects in body without crashing', () => {
@@ -295,6 +357,168 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('should omit unreadable properties when logging', () => {
+            const originalConsoleLog = assignableWindow.console.log as jest.Mock
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const objectWithUnreadableProperties: any = {}
+            Object.defineProperty(objectWithUnreadableProperties, 'toJSON', {
+                get() {
+                    throw new Error('SecurityError')
+                },
+            })
+            Object.defineProperty(objectWithUnreadableProperties, 'unreadable', {
+                enumerable: true,
+                get() {
+                    throw new Error('SecurityError')
+                },
+            })
+            objectWithUnreadableProperties.readable = 'value'
+
+            expect(() => assignableWindow.console.log(objectWithUnreadableProperties)).not.toThrow()
+
+            expect(originalConsoleLog).toHaveBeenCalledWith(objectWithUnreadableProperties)
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: '{"readable":"value"}',
+                    attributes: expect.objectContaining({
+                        readable: 'value',
+                    }),
+                })
+            )
+            expect(mockEmit.mock.calls[0][0].attributes).not.toHaveProperty('unreadable')
+        })
+
+        it('should serialize representative objects without corrupting body or attributes', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload: any = {
+                message: 'hello "quoted"\nline',
+                nested: {
+                    enabled: true,
+                    count: 2,
+                    empty: null,
+                },
+                list: ['first', undefined, () => 'ignored', Symbol('ignored'), null],
+                createdAt: new Date('2023-01-02T03:04:05.000Z'),
+            }
+            payload.self = payload
+
+            assignableWindow.console.log(payload)
+
+            const emitted = mockEmit.mock.calls[0][0]
+            expect(JSON.parse(emitted.body)).toEqual({
+                message: 'hello "quoted"\nline',
+                nested: {
+                    enabled: true,
+                    count: 2,
+                    empty: null,
+                },
+                list: ['first', null, null, null, null],
+                createdAt: '2023-01-02T03:04:05.000Z',
+                self: '[Circular]',
+            })
+            expect(emitted.attributes).toEqual(
+                expect.objectContaining({
+                    message: 'hello "quoted"\nline',
+                    'nested.enabled': true,
+                    'nested.count': 2,
+                    'nested.empty': null,
+                    self: '[Circular]',
+                })
+            )
+        })
+
+        it('should serialize Error objects with their details intact', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const error = new Error('boom') as Error & { code?: string }
+            error.name = 'CustomError'
+            error.stack = 'CustomError: boom\n    at test'
+            error.code = 'E_BOOM'
+
+            assignableWindow.console.error(error)
+
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({
+                code: 'E_BOOM',
+                name: 'CustomError',
+                message: 'boom',
+                stack: 'CustomError: boom\n    at test',
+            })
+            expect(mockEmit.mock.calls[0][0].attributes).toEqual(
+                expect.objectContaining({
+                    'log.source': 'console.error',
+                    code: 'E_BOOM',
+                    name: 'CustomError',
+                    message: 'boom',
+                    stack: 'CustomError: boom\n    at test',
+                })
+            )
+        })
+
+        it('should handle toJSON returning itself without recursing forever', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload = {
+                toJSON() {
+                    return this
+                },
+            }
+
+            expect(() => assignableWindow.console.log(payload)).not.toThrow()
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual('[Circular]')
+        })
+
+        it('should omit object properties whose toJSON returns non-serializable values', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log({
+                kept: 'value',
+                omitted: {
+                    toJSON() {
+                        return undefined
+                    },
+                },
+            })
+
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({
+                kept: 'value',
+            })
+        })
+
+        it('should serialize boxed primitives like JSON.stringify does', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log(new String('abc'), new Number(123), new Boolean(false))
+
+            expect(mockEmit.mock.calls[0][0].body).toEqual(
+                `${JSON.stringify(new String('abc'))} ${JSON.stringify(new Number(123))} ${JSON.stringify(
+                    new Boolean(false)
+                )}`
+            )
+        })
+
+        it('should fall back when Object.prototype.toString throws', () => {
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            const payload = { kept: 'value' }
+            Object.defineProperty(payload, Symbol.toStringTag, {
+                get() {
+                    throw new Error('cross-origin object tag')
+                },
+            })
+
+            expect(() => assignableWindow.console.log(payload)).not.toThrow()
+            expect(JSON.parse(mockEmit.mock.calls[0][0].body)).toEqual({ kept: 'value' })
+        })
+
         it('should not add attributes_truncated when within limits', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -354,6 +578,151 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+        })
+    })
+
+    describe('console output safety', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('still calls the original console method when capture throws', () => {
+            const originalConsoleLog = assignableWindow.console.log as jest.Mock
+            mockEmit.mockImplementation(() => {
+                throw new Error('capture blew up')
+            })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect(() => assignableWindow.console.log('user message')).not.toThrow()
+            expect(originalConsoleLog).toHaveBeenCalledWith('user message')
+        })
+    })
+
+    describe('re-entrancy protection', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('exposes the original console method via __rrweb_original__ so the internal logger does not re-enter capture', () => {
+            const originalConsoleLog = assignableWindow.console.log
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect((assignableWindow.console.log as any).__rrweb_original__).toBe(originalConsoleLog)
+        })
+
+        it('flattens an existing __rrweb_original__ marker while preserving the wrapper chain for user logs', () => {
+            const deepestOriginalConsoleLog = jest.fn()
+            const firstWrapper = jest.fn()
+            const secondWrapper = jest.fn()
+            ;(firstWrapper as any).__rrweb_original__ = deepestOriginalConsoleLog
+            ;(secondWrapper as any).__rrweb_original__ = firstWrapper
+            assignableWindow.console.log = secondWrapper as any
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect((assignableWindow.console.log as any).__rrweb_original__).toBe(deepestOriginalConsoleLog)
+
+            assignableWindow.console.log('user message')
+
+            expect(secondWrapper).toHaveBeenCalledWith('user message')
+        })
+
+        it('does not recurse when the capture path itself logs to the console', () => {
+            // Simulate the real fault: _captureConsoleLog logs to the (wrapped) console,
+            // as checkAndGetSessionAndWindowId does via PostHog's internal logger.
+            mockEmit.mockImplementation(() => {
+                assignableWindow.console.log('internal debug from capture path')
+            })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            expect(() => assignableWindow.console.log('user message')).not.toThrow()
+            // The user's log is captured once; the nested internal log is not re-captured.
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: '"user message"',
+                })
+            )
+        })
+
+        it('resumes capturing after a nested log completes', () => {
+            mockEmit.mockImplementationOnce(() => {
+                assignableWindow.console.log('internal debug from capture path')
+            })
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('first message')
+            assignableWindow.console.log('second message')
+
+            expect(mockEmit).toHaveBeenCalledTimes(2)
+            expect(mockEmit.mock.calls[0][0].body).toBe('"first message"')
+            expect(mockEmit.mock.calls[1][0].body).toBe('"second message"')
+        })
+    })
+
+    describe('consent / opt-out handling', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('should not emit logs when capturing is opted out', () => {
+            const originalConsoleLog = assignableWindow.console.log as jest.Mock
+            ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('should not be captured')
+
+            expect(mockEmit).not.toHaveBeenCalled()
+            // the original console method must still be called so local output isn't suppressed
+            expect(originalConsoleLog).toHaveBeenCalledWith('should not be captured')
+        })
+
+        it('should resume emitting once capturing is opted back in', () => {
+            const isCapturing = mockPostHog.is_capturing as jest.Mock
+            isCapturing.mockReturnValue(false)
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('while opted out')
+            expect(mockEmit).not.toHaveBeenCalled()
+
+            isCapturing.mockReturnValue(true)
+            assignableWindow.console.log('after opt back in')
+
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            expect(mockEmit).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    body: '"after opt back in"',
+                })
+            )
+        })
+
+        it('should check capturing status on every log, not just at init', () => {
+            const isCapturing = mockPostHog.is_capturing as jest.Mock
+
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('captured')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+
+            isCapturing.mockReturnValue(false)
+            assignableWindow.console.log('not captured')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
         })
     })
 

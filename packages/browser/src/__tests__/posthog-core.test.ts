@@ -2,6 +2,7 @@ import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
+import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
 
@@ -111,6 +112,16 @@ describe('posthog core', () => {
             expect(actual['persistent']).toBeUndefined()
             expect(actual['$is_identified']).toBeUndefined()
             expect(actual['token']).toBeUndefined()
+        })
+
+        it('passes $unset capture option through', () => {
+            const { posthog, beforeSendMock } = setup()
+
+            posthog.capture(eventName, eventProperties, { $unset: ['email'] })
+
+            expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
+                $unset: ['email'],
+            })
         })
 
         describe('rate limiting', () => {
@@ -376,6 +387,52 @@ describe('posthog core', () => {
         })
     })
 
+    describe('product tour capture()', () => {
+        const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
+            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
+            return { posthog, beforeSendMock }
+        }
+
+        it('sending product tour shown events with tour_type should set type-specific last seen date property', () => {
+            // arrange
+            const { posthog, beforeSendMock } = setup({ debug: false })
+
+            // act
+            posthog.capture(ProductTourEventName.SHOWN, {
+                [ProductTourEventProperties.TOUR_ID]: 'testTour1',
+                [ProductTourEventProperties.TOUR_NAME]: 'Test Tour',
+                [ProductTourEventProperties.TOUR_TYPE]: 'tour',
+            })
+
+            // assert
+            const capturedEvent = beforeSendMock.mock.calls[0][0]
+            expect(capturedEvent.$set).toBeDefined()
+            const typeSpecificKey = `${ProductTourEventProperties.TOUR_LAST_SEEN_DATE}/tour`
+            expect(capturedEvent.$set[typeSpecificKey]).toBeDefined()
+            // Verify it's a valid ISO date string
+            expect(new Date(capturedEvent.$set[typeSpecificKey]).toISOString()).toBe(
+                capturedEvent.$set[typeSpecificKey]
+            )
+        })
+
+        it('sending product tour shown events without tour_type should not set last seen date property', () => {
+            // arrange
+            const { posthog, beforeSendMock } = setup({ debug: false })
+
+            // act
+            posthog.capture(ProductTourEventName.SHOWN, {
+                [ProductTourEventProperties.TOUR_ID]: 'testTour1',
+                [ProductTourEventProperties.TOUR_NAME]: 'Test Tour',
+            })
+
+            // assert
+            const capturedEvent = beforeSendMock.mock.calls[0][0]
+            // No $set should be added when tour_type is missing
+            expect(capturedEvent.$set).toBeUndefined()
+        })
+    })
+
     describe('setInternalOrTestUser()', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
@@ -537,6 +594,23 @@ describe('posthog core', () => {
             expect(captureSpy).toHaveBeenCalledWith('test-event')
             registerSpy.mockRestore()
             captureSpy.mockRestore()
+        })
+
+        it('should not abort queued calls when one call throws', () => {
+            const posthog = defaultPostHog()
+            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+            ;(posthog as any).parseInvalidJson = (payload: string) => JSON.parse(payload)
+
+            expect(() => {
+                posthog._execute_array([
+                    ['parseInvalidJson', '{not json'],
+                    ['capture', 'test-event'],
+                ])
+            }).not.toThrow()
+
+            expect(captureSpy).toHaveBeenCalledWith('test-event')
+            captureSpy.mockRestore()
+            delete (posthog as any).parseInvalidJson
         })
     })
 })

@@ -5,5 +5,12 @@ onlyBuiltDependencies:
   - core-js
   - core-js-pure
 
+overrides:
+  node-forge: 1.3.2
+
 nodeLinker: hoisted
 pnpmfile: ../.pnpmfile.cjs
+minimumReleaseAge: 10080
+
+blockExoticSubdeps: true
+trustPolicy: no-downgrade

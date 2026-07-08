@@ -1,6 +1,9 @@
 {
   "name": "posthog-react-native",
-  "version": "4.36.0",
+  "version": "4.54.4",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -40,7 +43,8 @@
     "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
   },
   "dependencies": {
-    "@posthog/core": "workspace:*"
+    "@posthog/core": "workspace:^",
+    "@posthog/types": "workspace:^"
   },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
@@ -70,7 +74,8 @@
     "jest-expo": "catalog:",
     "metro": "0.83.1",
     "@expo/metro-config": "~0.20.0",
-    "posthog-react-native-session-replay": "^1.2.0",
+    "@posthog/react-native-plugin": "workspace:*",
+    "posthog-react-native-session-replay": "^1.6.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-native": "^0.69.1",
@@ -89,7 +94,8 @@
     "expo-device": ">= 4.0.0",
     "expo-file-system": ">= 13.0.0",
     "expo-localization": ">= 11.0.0",
-    "posthog-react-native-session-replay": ">= 1.3.0",
+    "@posthog/react-native-plugin": ">= 2.1.2",
+    "posthog-react-native-session-replay": ">= 1.6.0",
     "react-native-device-info": ">= 10.0.0",
     "react-native-localize": ">= 3.0.0",
     "react-native-navigation": ">= 6.0.0",
@@ -124,10 +130,16 @@
     "react-native-localize": {
       "optional": true
     },
+    "@posthog/react-native-plugin": {
+      "optional": true
+    },
     "posthog-react-native-session-replay": {
       "optional": true
     },
     "react-native-safe-area-context": {
+      "optional": true
+    },
+    "react-native-svg": {
       "optional": true
     }
   }

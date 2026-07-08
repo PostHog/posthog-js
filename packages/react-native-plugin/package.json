@@ -1,0 +1,116 @@
+{
+  "name": "@posthog/react-native-plugin",
+  "version": "2.1.2",
+  "description": "PostHog React Native plugin for iOS and Android integrations",
+  "source": "./src/index.tsx",
+  "main": "./lib/commonjs/index.js",
+  "module": "./lib/module/index.js",
+  "types": "./lib/typescript/module/src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./lib/typescript/module/src/index.d.ts",
+        "default": "./lib/module/index.js"
+      },
+      "require": {
+        "types": "./lib/typescript/commonjs/src/index.d.ts",
+        "default": "./lib/commonjs/index.js"
+      }
+    }
+  },
+  "files": [
+    "src",
+    "lib",
+    "android",
+    "ios",
+    "cpp",
+    "*.podspec",
+    "!ios/build",
+    "!android/build",
+    "!android/gradle",
+    "!android/gradlew",
+    "!android/gradlew.bat",
+    "!android/local.properties",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
+  "scripts": {
+    "clean": "del-cli android/build lib",
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "lint:fix": "eslint \"**/*.{js,ts,tsx}\" --fix",
+    "typecheck": "tsc",
+    "test:unit": "jest --passWithNoTests",
+    "test": "pnpm test:unit",
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "build": "bob build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/react-native-plugin"
+  },
+  "author": "PostHog <engineering@posthog.com> (https://github.com/PostHog)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js/issues"
+  },
+  "homepage": "https://github.com/PostHog/posthog-js/tree/main/packages/react-native-plugin#readme",
+  "devDependencies": {
+    "@react-native-community/cli": "20.0.0",
+    "@types/jest": "catalog:",
+    "@types/react": "^18.2.44",
+    "del-cli": "^5.1.0",
+    "jest": "catalog:",
+    "react": "18.3.1",
+    "react-native": "0.75.3",
+    "react-native-builder-bob": "^0.30.2",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "jest": {
+    "preset": "react-native",
+    "modulePathIgnorePatterns": [
+      "<rootDir>/lib/"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/lib/"
+    ]
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "commonjs",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json",
+          "esm": true
+        }
+      ]
+    ]
+  }
+}

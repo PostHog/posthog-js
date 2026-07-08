@@ -1,4 +1,5 @@
 'use client'
+import { useEffect } from 'react'
 import { usePostHog } from 'posthog-js/react'
 import { captureServerError } from './actions'
 
@@ -8,6 +9,31 @@ function randomID() {
 
 export default function Home() {
     const posthog = usePostHog()
+
+    useEffect(() => {
+        posthog.addExceptionStep('Viewed checkout page', {
+            flow: 'checkout',
+            step: 'pageview',
+            pathname: window.location.pathname,
+        })
+    }, [posthog])
+
+    const addCheckoutExceptionSteps = () => {
+        posthog.addExceptionStep('Opened checkout modal', {
+            flow: 'checkout',
+            step: 'open-modal',
+        })
+        posthog.addExceptionStep('Entered payment details', {
+            flow: 'checkout',
+            step: 'enter-payment-details',
+            provider: 'stripe',
+        })
+        posthog.addExceptionStep('Clicked "Pay now"', {
+            flow: 'checkout',
+            step: 'pay-now',
+        })
+    }
+
     return (
         <div>
             <main>
@@ -20,31 +46,46 @@ export default function Home() {
                         gap: '30px',
                     }}
                 >
-                    <button onClick={() => posthog.captureException(new Error('exception captured'))}>
+                    <button
+                        onClick={() => {
+                            addCheckoutExceptionSteps()
+                            posthog.captureException(new Error('Payment authorization failed'))
+                        }}
+                    >
                         Capture error manually
                     </button>
                     <button
                         onClick={() => {
-                            throw new Error('exception captured')
+                            addCheckoutExceptionSteps()
+                            throw new Error('Payment form crashed before submit')
                         }}
                     >
                         Capture error automatically
                     </button>
                     <button
                         onClick={() => {
-                            Promise.reject(new Error('promise rejection captured'))
+                            addCheckoutExceptionSteps()
+                            Promise.reject(new Error('Payment provider timed out'))
                         }}
                     >
                         Capture promise rejection automatically
                     </button>
                     <button onClick={() => posthog.capture('$exception')}>Capture exception via capture()</button>
-                    <button onClick={() => captureServerError()}>Create server exception!</button>
                     <button
-                        onClick={() =>
+                        onClick={() => {
+                            posthog.addExceptionStep('Submitted checkout to server')
+                            captureServerError()
+                        }}
+                    >
+                        Create server exception!
+                    </button>
+                    <button
+                        onClick={() => {
+                            addCheckoutExceptionSteps()
                             posthog.captureException(new Error('custom fingerprint'), {
                                 $exception_fingerprint: randomID(),
                             })
-                        }
+                        }}
                     >
                         Create custom fingerprint!
                     </button>

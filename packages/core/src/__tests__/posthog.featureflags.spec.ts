@@ -728,8 +728,19 @@ describe('PostHog Feature Flags v4', () => {
       it('should reload if groups are set', async () => {
         posthog.group('my-group', 'is-great')
         await waitForPromises()
-        expect(mocks.fetch).toHaveBeenCalledTimes(2)
-        expect(JSON.parse((mocks.fetch.mock.calls[1][1].body as string) || '')).toMatchObject({
+        // 3 calls: 1 for flags reload, 1 for $groupidentify batch, 1 for flags decide
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
+        // The flags reload call contains the group
+        const flagsCall = mocks.fetch.mock.calls.find((call) => {
+          try {
+            const body = JSON.parse((call[1].body as string) || '')
+            return body.groups?.['my-group'] === 'is-great'
+          } catch {
+            return false
+          }
+        })
+        expect(flagsCall).toBeDefined()
+        expect(JSON.parse((flagsCall![1].body as string) || '')).toMatchObject({
           groups: { 'my-group': 'is-great' },
         })
       })
@@ -786,7 +797,6 @@ describe('PostHog Feature Flags v4', () => {
                   $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
                   $feature_flag_evaluated_at: expect.any(Number),
                 },
-                type: 'capture',
               },
             ],
           })
@@ -797,7 +807,7 @@ describe('PostHog Feature Flags v4', () => {
         }
       )
 
-      it('should capture $feature_flag_called again if new flags', async () => {
+      it('should not capture $feature_flag_called again if reloaded flags keep the same value', async () => {
         expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
         await waitForPromises()
         expect(mocks.fetch).toHaveBeenCalledTimes(2)
@@ -815,7 +825,6 @@ describe('PostHog Feature Flags v4', () => {
                 $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
                 $feature_flag_evaluated_at: expect.any(Number),
               },
-              type: 'capture',
             },
           ],
         })
@@ -824,23 +833,7 @@ describe('PostHog Feature Flags v4', () => {
         posthog.getFeatureFlag('feature-1')
 
         await waitForPromises()
-        expect(mocks.fetch).toHaveBeenCalledTimes(4)
-
-        expect(parseBody(mocks.fetch.mock.calls[3])).toMatchObject({
-          batch: [
-            {
-              event: '$feature_flag_called',
-              distinct_id: posthog.getDistinctId(),
-              properties: {
-                $feature_flag: 'feature-1',
-                $feature_flag_response: true,
-                '$feature/feature-1': true,
-                $used_bootstrap_value: false,
-              },
-              type: 'capture',
-            },
-          ],
-        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
       })
 
       it('should capture $feature_flag_called when called, but not add all cached flags', async () => {
@@ -859,7 +852,6 @@ describe('PostHog Feature Flags v4', () => {
                 '$feature/feature-1': true,
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -903,7 +895,32 @@ describe('PostHog Feature Flags v4', () => {
                 '$feature/json-payload': true,
                 '$feature/feature-variant': 'variant',
               },
-              type: 'capture',
+            },
+          ],
+        })
+      })
+
+      it.each([
+        ['a string variant', 'server-value'],
+        ['boolean false (client-side disable)', false],
+        ['null', null],
+      ])('lets a caller-supplied $feature/* value (%s) override the cached value', async (_case, overrideValue) => {
+        posthog.capture('test-event', {
+          '$feature/feature-1': overrideValue,
+          $active_feature_flags: ['server-flag'],
+        })
+
+        await waitForPromises()
+
+        expect(parseBody(mocks.fetch.mock.calls[1])).toMatchObject({
+          batch: [
+            {
+              event: 'test-event',
+              properties: {
+                '$feature/feature-1': overrideValue,
+                $active_feature_flags: ['server-flag'],
+                '$feature/feature-2': true,
+              },
             },
           ],
         })
@@ -921,6 +938,76 @@ describe('PostHog Feature Flags v4', () => {
           'json-payload': true,
           'feature-1': true,
           'feature-variant': 'control',
+        })
+      })
+
+      describe('getAllFeatureFlags', () => {
+        it('returns all loaded flags as results', () => {
+          const results = posthog.getAllFeatureFlags()
+          expect(results).toHaveLength(4)
+          expect(results).toEqual(
+            expect.arrayContaining([
+              { key: 'feature-1', enabled: true, variant: undefined, payload: { color: 'blue' } },
+              { key: 'feature-2', enabled: true, variant: undefined, payload: null },
+              { key: 'feature-variant', enabled: true, variant: 'variant', payload: [5] },
+              { key: 'json-payload', enabled: true, variant: undefined, payload: { a: 'payload' } },
+            ])
+          )
+        })
+
+        it('returns an empty array when flags are not loaded', () => {
+          const [freshPosthog] = createTestClient('TEST_API_KEY', { flushAt: 1 })
+          expect(freshPosthog.getAllFeatureFlags()).toEqual([])
+        })
+
+        it('does not send a $feature_flag_called event', async () => {
+          posthog.getAllFeatureFlags()
+          await waitForPromises()
+          const calledEvents = mocks.fetch.mock.calls.filter((call) =>
+            JSON.stringify(call).includes('$feature_flag_called')
+          )
+          expect(calledEvents).toHaveLength(0)
+        })
+
+        it('includes disabled flags loaded from the server as enabled: false', async () => {
+          const [client] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/?v=2')) {
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: {
+                        'feature-1': createMockFeatureFlags()['feature-1'],
+                        'off-flag': {
+                          key: 'off-flag',
+                          enabled: false,
+                          variant: undefined,
+                          reason: undefined,
+                          metadata: { id: 9, version: 1, description: undefined, payload: undefined },
+                        },
+                      },
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          })
+
+          client.reloadFeatureFlags()
+          await waitForPromises()
+
+          expect(client.getAllFeatureFlags()).toEqual(
+            expect.arrayContaining([
+              { key: 'feature-1', enabled: true, variant: undefined, payload: { color: 'blue' } },
+              { key: 'off-flag', enabled: false, variant: undefined, payload: null },
+            ])
+          )
         })
       })
 
@@ -991,7 +1078,6 @@ describe('PostHog Feature Flags v4', () => {
                   $feature_flag_request_id: '0152a345-295f-4fba-adac-2e6ea9c91082',
                   $feature_flag_evaluated_at: 1640995200000,
                 },
-                type: 'capture',
               },
             ],
           })
@@ -999,6 +1085,16 @@ describe('PostHog Feature Flags v4', () => {
 
         it('should NOT send event when sendEvent: false', async () => {
           posthog.getFeatureFlagResult('feature-1', { sendEvent: false })
+          await waitForPromises()
+          // Only the flags fetch call, no event capture
+          expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        })
+
+        it.each([
+          ['getFeatureFlag', () => posthog.getFeatureFlag('feature-1', { sendEvent: false })],
+          ['isFeatureEnabled', () => posthog.isFeatureEnabled('feature-1', { sendEvent: false })],
+        ] as const)('should NOT send event from %s when sendEvent: false', async (_, callFn) => {
+          expect(callFn()).toEqual(true)
           await waitForPromises()
           // Only the flags fetch call, no event capture
           expect(mocks.fetch).toHaveBeenCalledTimes(1)
@@ -1015,7 +1111,7 @@ describe('PostHog Feature Flags v4', () => {
           expect(mocks.fetch).toHaveBeenCalledTimes(2)
         })
 
-        it('should send event again after reloadFeatureFlagsAsync', async () => {
+        it('should not send event again after reloadFeatureFlagsAsync if the value is unchanged', async () => {
           posthog.getFeatureFlagResult('feature-1')
           await waitForPromises()
           expect(mocks.fetch).toHaveBeenCalledTimes(2)
@@ -1023,8 +1119,8 @@ describe('PostHog Feature Flags v4', () => {
           await posthog.reloadFeatureFlagsAsync()
           posthog.getFeatureFlagResult('feature-1')
           await waitForPromises()
-          // flags reload + second event capture
-          expect(mocks.fetch).toHaveBeenCalledTimes(4)
+          // flags reload only, no second event for the same flag value
+          expect(mocks.fetch).toHaveBeenCalledTimes(3)
         })
 
         it('should respect instance-level sendFeatureFlagEvent: false', async () => {
@@ -1161,6 +1257,208 @@ describe('PostHog Feature Flags v4', () => {
       })
     })
 
+    describe('getFlags retry behavior', () => {
+      it.each([408, 429, 500, 503])('should not retry HTTP %i responses', async (status) => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 3, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.resolve({
+                  status,
+                  text: () => Promise.resolve('error'),
+                  json: () => Promise.resolve({ error: 'error' }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        await expect(posthog.getFlags('distinct-id')).resolves.toEqual({
+          success: false,
+          error: { type: 'api_error', statusCode: status },
+        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it.each([502, 504])('should retry HTTP %i responses and return the successful flags response', async (status) => {
+        let flagsRequestCount = 0
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                flagsRequestCount++
+                if (flagsRequestCount < 2) {
+                  return Promise.resolve({
+                    status,
+                    text: () => Promise.resolve('error'),
+                    json: () => Promise.resolve({ error: 'error' }),
+                  })
+                }
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: createMockFeatureFlags(),
+                      requestId: 'retry-success',
+                      evaluatedAt: 1640995200000,
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await jest.advanceTimersByTimeAsync(1)
+        const result = await resultPromise
+
+        expect(result.success).toBe(true)
+        if (result.success) {
+          expect(result.response.featureFlags).toEqual(expectedFeatureFlagResponses)
+        }
+        expect(mocks.fetch).toHaveBeenCalledTimes(2)
+      })
+
+      it.each([502, 504])('should return api_error after exhausting retries for HTTP %i responses', async (status) => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1, featureFlagsRequestMaxRetries: 2 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.resolve({
+                  status,
+                  text: () => Promise.resolve('error'),
+                  json: () => Promise.resolve({ error: 'error' }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await jest.advanceTimersByTimeAsync(1)
+        await jest.advanceTimersByTimeAsync(1)
+
+        await expect(resultPromise).resolves.toEqual({
+          success: false,
+          error: { type: 'api_error', statusCode: status },
+        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
+      })
+
+      it('should not retry when featureFlagsRequestMaxRetries is 0', async () => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(new TypeError('Failed to fetch'))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const result = await posthog.getFlags('distinct-id')
+
+        expect(result.success).toBe(false)
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('should not retry connection refused failures when the error code is available', async () => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(Object.assign(new TypeError('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const result = await posthog.getFlags('distinct-id')
+
+        expect(result.success).toBe(false)
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('should retry network failures and return the successful flags response', async () => {
+        let flagsRequestCount = 0
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                flagsRequestCount++
+                if (flagsRequestCount < 2) {
+                  return Promise.reject(new TypeError('Failed to fetch'))
+                }
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: createMockFeatureFlags(),
+                      requestId: 'retry-success',
+                      evaluatedAt: 1640995200000,
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await jest.advanceTimersByTimeAsync(1)
+        const result = await resultPromise
+
+        expect(result.success).toBe(true)
+        expect(mocks.fetch).toHaveBeenCalledTimes(2)
+      })
+    })
+
     describe('getFeatureFlagResult error scenarios', () => {
       it('should include ERRORS_WHILE_COMPUTING error', async () => {
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
@@ -1205,20 +1503,24 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include TIMEOUT error when request timed out', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
-          _mocks.fetch.mockImplementation((url) => {
-            if (url.includes('/flags/')) {
-              const abortError = new Error('The operation was aborted')
-              abortError.name = 'AbortError'
-              return Promise.reject(abortError)
-            }
-            return Promise.resolve({
-              status: 200,
-              text: () => Promise.resolve('ok'),
-              json: () => Promise.resolve({ status: 'ok' }),
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 0, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                const abortError = new Error('The operation was aborted')
+                abortError.name = 'AbortError'
+                return Promise.reject(abortError)
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
             })
-          })
-        })
+          }
+        )
         posthog.reloadFeatureFlags()
         await waitForPromises()
 
@@ -1275,18 +1577,22 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include CONNECTION_ERROR for network failures', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
-          _mocks.fetch.mockImplementation((url) => {
-            if (url.includes('/flags/')) {
-              return Promise.reject(new TypeError('Failed to fetch'))
-            }
-            return Promise.resolve({
-              status: 200,
-              text: () => Promise.resolve('ok'),
-              json: () => Promise.resolve({ status: 'ok' }),
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 0, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(new TypeError('Failed to fetch'))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
             })
-          })
-        })
+          }
+        )
         posthog.reloadFeatureFlags()
         await waitForPromises()
 
@@ -1393,7 +1699,6 @@ describe('PostHog Feature Flags v4', () => {
               $feature_flag_bootstrapped_payload: { some: 'key' },
               $used_bootstrap_value: true,
             },
-            type: 'capture',
           },
         ],
       })
@@ -1539,7 +1844,6 @@ describe('PostHog Feature Flags v4', () => {
                 $feature_flag_bootstrapped_payload: { color: 'feature-1-bootstrap-color' },
                 $used_bootstrap_value: false,
               },
-              type: 'capture',
             },
           ],
         })
@@ -1626,6 +1930,450 @@ describe('PostHog Feature Flags v4', () => {
     it('flag payloads should not be overwritten if already there', () => {
       expect(posthog.getFeatureFlagPayload('bootstrap-1')).toEqual({
         some: 'other-key',
+      })
+    })
+  })
+
+  describe('updateFlags', () => {
+    it('should replace stored flags and payloads by default', async () => {
+      await posthog.reloadFeatureFlagsAsync()
+      expect(posthog.getFeatureFlags()).toEqual(expectedFeatureFlagResponses)
+
+      posthog.updateFlags(
+        { 'local-flag': true, 'local-variant': 'variant-a' },
+        { 'local-flag': { color: 'blue' }, 'local-variant': 'string-payload' }
+      )
+
+      expect(posthog.getFeatureFlags()).toEqual({ 'local-flag': true, 'local-variant': 'variant-a' })
+      expect(posthog.getFeatureFlag('local-variant')).toEqual('variant-a')
+      expect(posthog.getFeatureFlagPayload('local-flag')).toEqual({ color: 'blue' })
+      expect(posthog.getFeatureFlagPayload('local-variant')).toEqual('string-payload')
+      // server-loaded flags were replaced (missing-flag default is null once flags are stored)
+      expect(posthog.getFeatureFlagPayload('json-payload')).toEqual(null)
+    })
+
+    it('should merge with stored flags and payloads when merge is true', async () => {
+      await posthog.reloadFeatureFlagsAsync()
+
+      posthog.updateFlags({ 'local-flag': true, 'feature-1': false }, { 'local-flag': [1, 2] }, { merge: true })
+
+      expect(posthog.getFeatureFlags()).toEqual({
+        ...expectedFeatureFlagResponses,
+        'feature-1': false,
+        'local-flag': true,
+      })
+      expect(posthog.getFeatureFlagPayload('json-payload')).toEqual({ a: 'payload' })
+      expect(posthog.getFeatureFlagPayload('local-flag')).toEqual([1, 2])
+    })
+
+    it('should preserve the payload of a disabled flag across an unrelated merge', () => {
+      posthog.updateFlags({ 'off-flag': false }, { 'off-flag': { a: 1 } })
+      expect(posthog.getFeatureFlagPayload('off-flag')).toEqual({ a: 1 })
+
+      posthog.updateFlags({ 'other-flag': true }, undefined, { merge: true })
+
+      expect(posthog.getFeatureFlag('off-flag')).toEqual(false)
+      expect(posthog.getFeatureFlagPayload('off-flag')).toEqual({ a: 1 })
+      expect(posthog.getFeatureFlag('other-flag')).toEqual(true)
+    })
+
+    it('should keep explicitly-false flags readable as false', () => {
+      posthog.updateFlags({ 'off-flag': false, 'on-flag': true })
+
+      expect(posthog.getFeatureFlags()).toEqual({ 'off-flag': false, 'on-flag': true })
+      expect(posthog.getFeatureFlag('off-flag')).toEqual(false)
+      expect(posthog.isFeatureEnabled('off-flag')).toEqual(false)
+      expect(posthog.isFeatureEnabled('on-flag')).toEqual(true)
+    })
+
+    it('should not throw when a payload cannot be serialized, and still apply the flag', () => {
+      const circular: Record<string, unknown> = {}
+      circular.self = circular
+
+      expect(() => posthog.updateFlags({ 'circular-flag': true }, { 'circular-flag': circular })).not.toThrow()
+
+      // the flag value is still applied; only the unserializable payload is dropped
+      expect(posthog.getFeatureFlag('circular-flag')).toEqual(true)
+      expect(posthog.getFeatureFlagPayload('circular-flag')).toBeNull()
+    })
+
+    it('should clear all stored flags when called with an empty object (no merge)', async () => {
+      await posthog.reloadFeatureFlagsAsync()
+      expect(posthog.getFeatureFlags()).toEqual(expectedFeatureFlagResponses)
+
+      posthog.updateFlags({})
+
+      expect(posthog.getFeatureFlags()).toEqual({})
+      expect(posthog.getFeatureFlag('feature-1')).toEqual(undefined)
+    })
+
+    it.each([
+      { name: 'object', payload: { color: 'blue' } },
+      { name: 'array', payload: [1, 2, 3] },
+      { name: 'number', payload: 7 },
+      { name: 'zero', payload: 0 },
+      { name: 'boolean', payload: false },
+      { name: 'null', payload: null },
+      { name: 'json-looking string', payload: '123' },
+      { name: 'plain string', payload: 'hello' },
+    ])('should round-trip a $name payload through updateFlags', ({ payload }) => {
+      posthog.updateFlags({ 'p-flag': true }, { 'p-flag': payload as any })
+
+      expect(posthog.getFeatureFlagPayload('p-flag')).toEqual(payload)
+    })
+
+    it('should not attach a payload when none is provided', () => {
+      posthog.updateFlags({ 'no-payload': true })
+
+      expect(posthog.getFeatureFlag('no-payload')).toEqual(true)
+      expect(posthog.getFeatureFlagPayload('no-payload')).toEqual(null)
+    })
+
+    it('should fire onFeatureFlags listeners without any network request', async () => {
+      const receivedFlags: Record<string, string | boolean>[] = []
+      posthog.onFeatureFlags((flags) => receivedFlags.push(flags))
+
+      posthog.updateFlags({ 'local-flag': true })
+      await waitForPromises()
+
+      expect(receivedFlags).toEqual([{ 'local-flag': true }])
+      const flagsCalls = mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))
+      expect(flagsCalls).toHaveLength(0)
+    })
+
+    it('merge reads the override-applied values (web parity), so an active override is folded in', async () => {
+      // Web's updateFlags merge seeds from getFlagVariants(), which includes overrides; core mirrors
+      // that via getFeatureFlags(). This documents that an active override is captured by a merge.
+      posthog.updateFlags({ 'base-flag': true })
+      await posthog.overrideFeatureFlag({ 'base-flag': 'forced' })
+
+      posthog.updateFlags({ 'other-flag': true }, undefined, { merge: true })
+
+      expect(posthog.getFeatureFlag('base-flag')).toEqual('forced')
+      expect(posthog.getFeatureFlag('other-flag')).toEqual(true)
+    })
+
+    it('should still apply overrideFeatureFlag on top of updated flags', async () => {
+      posthog.updateFlags({ 'local-flag': true })
+      await posthog.overrideFeatureFlag({ 'local-flag': 'overridden' })
+
+      expect(posthog.getFeatureFlag('local-flag')).toEqual('overridden')
+    })
+
+    it('should not bake an active override into the base when merging', async () => {
+      posthog.updateFlags({ 'base-flag': 'control' })
+      await posthog.overrideFeatureFlag({ 'base-flag': 'test' })
+      expect(posthog.getFeatureFlag('base-flag')).toEqual('test')
+
+      // Merge an unrelated flag — the override must not leak into stored flags.
+      posthog.updateFlags({ 'other-flag': true }, undefined, { merge: true })
+
+      // Clearing the override reveals the original value, not the override.
+      await posthog.overrideFeatureFlag(null)
+      expect(posthog.getFeatureFlag('base-flag')).toEqual('control')
+      expect(posthog.getFeatureFlag('other-flag')).toEqual(true)
+    })
+
+    it('should capture $feature_flag_called after updateFlags changes to a new value', async () => {
+      await posthog.reloadFeatureFlagsAsync()
+      expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
+      await waitForPromises()
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
+
+      posthog.updateFlags({ 'feature-1': false })
+      expect(posthog.getFeatureFlag('feature-1')).toEqual(false)
+      await waitForPromises()
+
+      expect(mocks.fetch).toHaveBeenCalledTimes(3)
+      const flagCalledProps = parseBody(mocks.fetch.mock.calls[2]).batch[0].properties
+      expect(flagCalledProps).toMatchObject({
+        $feature_flag: 'feature-1',
+        $feature_flag_response: false,
+      })
+      // Locally supplied flags have no server id, so no $feature_flag_id is emitted
+      expect(flagCalledProps).not.toHaveProperty('$feature_flag_id')
+    })
+
+    it('should not capture $feature_flag_called after updateFlags cycles back to a previously seen value', async () => {
+      await posthog.reloadFeatureFlagsAsync()
+      expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
+      await waitForPromises()
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
+
+      posthog.updateFlags({ 'feature-1': false })
+      expect(posthog.getFeatureFlag('feature-1')).toEqual(false)
+      await waitForPromises()
+      expect(mocks.fetch).toHaveBeenCalledTimes(3)
+
+      posthog.updateFlags({ 'feature-1': true })
+      expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
+      await waitForPromises()
+      expect(mocks.fetch).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  describe('disableRemoteFeatureFlags', () => {
+    beforeEach(() => {
+      ;[posthog, mocks] = createTestClient(
+        'TEST_API_KEY',
+        { flushAt: 1, disableRemoteFeatureFlags: true },
+        (_mocks) => {
+          _mocks.fetch.mockImplementation((url) => {
+            if (url.includes('/flags/?v=2')) {
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () =>
+                  Promise.resolve({
+                    flags: createMockFeatureFlags(),
+                    requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+                    evaluatedAt: 1640995200000,
+                    sessionRecording: { endpoint: '/s/' },
+                  }),
+              })
+            }
+
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ status: 'ok' }),
+            })
+          })
+        }
+      )
+    })
+
+    it('should not fetch flags from reloads or flag-affecting methods', async () => {
+      posthog.reloadFeatureFlags()
+      await posthog.reloadFeatureFlagsAsync()
+      posthog.identify('new-distinct-id')
+      posthog.alias('alias-for-user')
+      posthog.group('company', 'company-id')
+      posthog.setPersonPropertiesForFlags({ plan: 'pro' })
+      posthog.reset()
+      await waitForPromises()
+
+      const flagsCalls = mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))
+      expect(flagsCalls).toHaveLength(0)
+    })
+
+    it('reset() clears flags and still notifies onFeatureFlags listeners (no reload runs to emit it)', async () => {
+      posthog.updateFlags({ 'local-flag': true })
+      const received: Record<string, string | boolean>[] = []
+      posthog.onFeatureFlags((flags) => received.push(flags))
+
+      posthog.reset()
+      await waitForPromises()
+
+      // The cleared state is emitted directly (no /flags fetch), so listeners re-evaluate.
+      expect(received).toEqual([{}])
+      expect(posthog.getFeatureFlags()).toEqual({})
+      expect(mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))).toHaveLength(0)
+    })
+
+    it('reset() keeping FeatureFlagDetails preserves the flags and emits nothing', async () => {
+      posthog.updateFlags({ 'local-flag': true })
+      const received: Record<string, string | boolean>[] = []
+      posthog.onFeatureFlags((flags) => received.push(flags))
+
+      posthog.reset([PostHogPersistedProperty.FeatureFlagDetails])
+      await waitForPromises()
+
+      // The kept flags stay intact, so there's no cleared state to emit.
+      expect(posthog.getFeatureFlags()).toEqual({ 'local-flag': true })
+      expect(received).toEqual([])
+      expect(mocks.fetch.mock.calls.filter(([url]) => url.includes('/flags/'))).toHaveLength(0)
+    })
+
+    it('a fully disabled SDK still returns undefined from reloadFeatureFlagsAsync (not stale stored flags)', async () => {
+      const storageCache = {
+        feature_flag_details: { flags: { 'stale-flag': { key: 'stale-flag', enabled: true } } },
+      }
+      const [disabledPosthog] = createTestClient(
+        'TEST_API_KEY',
+        { flushAt: 1, disabled: true, disableRemoteFeatureFlags: true },
+        undefined,
+        storageCache
+      )
+
+      expect(await disabledPosthog.reloadFeatureFlagsAsync()).toEqual(undefined)
+    })
+
+    it('reloadFeatureFlagsAsync should resolve with the locally supplied flags', async () => {
+      posthog.updateFlags({ 'local-flag': true })
+
+      const flags = await posthog.reloadFeatureFlagsAsync()
+
+      expect(flags).toEqual({ 'local-flag': true })
+    })
+
+    it('reloadFeatureFlags should answer the callback with the locally supplied flags', async () => {
+      posthog.updateFlags({ 'local-flag': true })
+
+      let cbFlags: Record<string, string | boolean> | undefined
+      posthog.reloadFeatureFlags({ cb: (_err, flags) => (cbFlags = flags) })
+      await waitForPromises()
+
+      expect(cbFlags).toEqual({ 'local-flag': true })
+    })
+
+    it('updateFlags should still work and fire listeners', async () => {
+      const receivedFlags: Record<string, string | boolean>[] = []
+      posthog.onFeatureFlags((flags) => receivedFlags.push(flags))
+
+      posthog.updateFlags({ 'local-flag': 'variant-b' }, { 'local-flag': { a: 1 } })
+      await waitForPromises()
+
+      expect(posthog.getFeatureFlag('local-flag')).toEqual('variant-b')
+      expect(posthog.getFeatureFlagPayload('local-flag')).toEqual({ a: 1 })
+      expect(receivedFlags).toEqual([{ 'local-flag': 'variant-b' }])
+    })
+
+    it('updateFlags merge keeps bootstrap flags (the primary documented workflow)', async () => {
+      const [bootstrapped] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        disableRemoteFeatureFlags: true,
+        bootstrap: {
+          featureFlags: { 'boot-flag': true },
+          featureFlagPayloads: { 'boot-flag': { from: 'bootstrap' } },
+        },
+      })
+      await waitForPromises()
+
+      bootstrapped.updateFlags({ 'runtime-flag': 'variant-x' }, undefined, { merge: true })
+
+      expect(bootstrapped.getFeatureFlag('boot-flag')).toEqual(true)
+      expect(bootstrapped.getFeatureFlagPayload('boot-flag')).toEqual({ from: 'bootstrap' })
+      expect(bootstrapped.getFeatureFlag('runtime-flag')).toEqual('variant-x')
+
+      await bootstrapped.shutdown()
+    })
+
+    describe('config-fetching flags requests', () => {
+      // Exposes the protected flagsAsync to drive the config-piggyback request
+      // (in the SDKs this path is hit when remote config is disabled, e.g. RN's
+      // _flagsAsyncWithSurveys)
+      class TestClientExposingFlagsAsync extends PostHogCoreTestClient {
+        public async flagsConfigAsync(): Promise<void> {
+          await this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true })
+        }
+      }
+
+      let exposedPosthog: TestClientExposingFlagsAsync
+
+      beforeEach(() => {
+        exposedPosthog = new TestClientExposingFlagsAsync(mocks, 'TEST_API_KEY', {
+          disableCompression: true,
+          flushAt: 1,
+          disableRemoteFeatureFlags: true,
+        })
+      })
+
+      it('should send disable_flags: true and not store the returned flags', async () => {
+        exposedPosthog.updateFlags({ 'local-flag': true })
+        const receivedFlags: Record<string, string | boolean>[] = []
+        exposedPosthog.onFeatureFlags((flags) => receivedFlags.push(flags))
+
+        await exposedPosthog.flagsConfigAsync()
+        await waitForPromises()
+
+        const flagsCall = mocks.fetch.mock.calls.find(([url]) => url.includes('/flags/'))
+        expect(flagsCall).toBeDefined()
+        expect(JSON.parse((flagsCall![1].body as string) || '')).toMatchObject({ disable_flags: true })
+
+        // The mocked response contains flags, but they must not overwrite the local ones
+        // and must not be emitted to onFeatureFlags listeners.
+        expect(exposedPosthog.getFeatureFlags()).toEqual({ 'local-flag': true })
+        expect(receivedFlags).toEqual([])
+        expect(exposedPosthog.getPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit)).toBeFalsy()
+        // The remote config side effects still apply
+        expect(exposedPosthog.getPersistedProperty(PostHogPersistedProperty.SessionReplay)).toEqual({
+          endpoint: '/s/',
+        })
+      })
+
+      it('updateFlags applied while a config request is in flight is not overwritten when it resolves', async () => {
+        let resolveFetch: () => void = () => {}
+        mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/flags/')) {
+            return new Promise((resolve) => {
+              resolveFetch = () =>
+                resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () => Promise.resolve({ featureFlags: { 'server-flag': true } }),
+                })
+            })
+          }
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ status: 'ok' }),
+          })
+        })
+
+        // Start the config request, push local flags, then let the request resolve. The
+        // waitForPromises lets the request reach the (mocked) fetch so it is genuinely in flight.
+        const inFlight = exposedPosthog.flagsConfigAsync()
+        exposedPosthog.updateFlags({ 'local-flag': true })
+        await waitForPromises()
+        resolveFetch()
+        await inFlight
+        await waitForPromises()
+
+        // The disabled config response never writes flags, so the local ones survive.
+        expect(exposedPosthog.getFeatureFlags()).toEqual({ 'local-flag': true })
+      })
+
+      it('should not stamp quota state onto local flags when the request is quota limited', async () => {
+        mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/flags/')) {
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ quotaLimited: ['feature_flags'] }),
+            })
+          }
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ status: 'ok' }),
+          })
+        })
+
+        exposedPosthog.updateFlags({ 'local-flag': true })
+        const receivedFlags: Record<string, string | boolean>[] = []
+        exposedPosthog.onFeatureFlags((flags) => receivedFlags.push(flags))
+
+        await exposedPosthog.flagsConfigAsync()
+        await waitForPromises()
+
+        expect(receivedFlags).toEqual([])
+        expect(exposedPosthog.getFeatureFlags()).toEqual({ 'local-flag': true })
+        expect(exposedPosthog.getFeatureFlagPayload('local-flag')).toEqual(null)
+      })
+
+      it('should not emit featureflags or store error state when the request fails', async () => {
+        mocks.fetch.mockImplementation((url) => {
+          if (url.includes('/flags/')) {
+            return errorAPIResponse
+          }
+          return Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ status: 'ok' }),
+          })
+        })
+
+        exposedPosthog.updateFlags({ 'local-flag': true })
+        const receivedFlags: Record<string, string | boolean>[] = []
+        exposedPosthog.onFeatureFlags((flags) => receivedFlags.push(flags))
+
+        await exposedPosthog.flagsConfigAsync()
+        await waitForPromises()
+
+        expect(receivedFlags).toEqual([])
+        expect(exposedPosthog.getFeatureFlags()).toEqual({ 'local-flag': true })
       })
     })
   })

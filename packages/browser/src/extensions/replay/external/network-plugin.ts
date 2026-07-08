@@ -1,3 +1,7 @@
+// Portions of this file are derived from getsentry/sentry-javascript
+// Copyright (c) 2012 Functional Software, Inc. dba Sentry
+// Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
+
 /// <reference lib="dom" />
 
 // rrweb/network@1 code starts
@@ -11,13 +15,23 @@
 
 import type { IWindow, listenerHandler, RecordPlugin } from '../types/rrweb-types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
-import { isArray, isBoolean, isFormData, isNull, isNullish, isString, isUndefined, isObject } from '@posthog/core'
+import {
+    isArray,
+    isBoolean,
+    isFormData,
+    isFunction,
+    isNull,
+    isNullish,
+    isString,
+    isUndefined,
+    isObject,
+} from '@posthog/core'
 import { isDocument } from '../../../utils/type-utils'
 import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions } from './config'
+import { defaultNetworkOptions, effectivePayloadLimitBytes } from './config'
 
 const logger = createLogger('[Recorder]')
 
@@ -108,6 +122,33 @@ function shouldRecordHeaders(type: 'request' | 'response', recordHeaders: Networ
     return !!recordHeaders && (isBoolean(recordHeaders) || recordHeaders[type])
 }
 
+function isRequest(value: unknown): value is Request {
+    if (typeof Request === 'undefined') {
+        return false
+    }
+    if (value instanceof Request) {
+        return true
+    }
+    try {
+        return Object.prototype.toString.call(value) === '[object Request]'
+    } catch {
+        return false
+    }
+}
+
+// binary/asset bodies are large and useless for replay debugging (and capturing an image body
+// duplicates what the recording already shows), so we never record them even when recordBody is on
+export const NEVER_RECORD_BODY_CONTENT_TYPES = [
+    'image/',
+    'video/',
+    'audio/',
+    'font/',
+    'application/octet-stream',
+    'application/pdf',
+    'application/zip',
+    'application/wasm',
+]
+
 export function shouldRecordBody({
     type,
     recordBody,
@@ -122,7 +163,7 @@ export function shouldRecordBody({
     function matchesContentType(contentTypes: string[]) {
         const contentTypeHeader = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type')
         const contentType = contentTypeHeader && headers[contentTypeHeader]
-        return contentTypes.some((ct) => contentType?.includes(ct))
+        return contentTypes.some((ct) => contentType?.toLowerCase().includes(ct))
     }
 
     /**
@@ -139,7 +180,7 @@ export function shouldRecordBody({
             if (url instanceof URL) {
                 return url.protocol === 'blob:'
             }
-            if (url instanceof Request) {
+            if (isRequest(url)) {
                 return isBlobURL(url.url)
             }
             return false
@@ -149,6 +190,8 @@ export function shouldRecordBody({
     }
     if (!recordBody) return false
     if (isBlobURL(url)) return false
+    // never record binary/asset bodies, regardless of the recordBody setting
+    if (matchesContentType(NEVER_RECORD_BODY_CONTENT_TYPES)) return false
     if (isBoolean(recordBody)) return true
     if (isArray(recordBody)) return matchesContentType(recordBody)
     const recordBodyType = recordBody[type]
@@ -259,110 +302,119 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 
-                // check IE earlier than this, we only initialize if Request is present
-                // eslint-disable-next-line compat/compat
-                const req = new Request(url)
-                const networkRequest: Partial<CapturedNetworkRequest> = {}
-                let start: number | undefined
-                let end: number | undefined
+                // All of the capture instrumentation below runs _before_ we delegate to the original
+                // `open`. If any of it throws (e.g. `new Request(url)` rejecting a URL/method the host
+                // application would have handled), we must not let that exception escape into the host's
+                // `xhr.open()` call and misattribute a failure to session replay. Wrap it so that if
+                // instrumentation fails we degrade gracefully and the original request still proceeds.
+                try {
+                    // check IE earlier than this, we only initialize if Request is present
+                    // eslint-disable-next-line compat/compat
+                    const req = new Request(url)
+                    const networkRequest: Partial<CapturedNetworkRequest> = {}
+                    let start: number | undefined
+                    let end: number | undefined
 
-                const requestHeaders: Headers = {}
-                const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
-                xhr.setRequestHeader = (header: string, value: string) => {
-                    requestHeaders[header] = value
-                    return originalSetRequestHeader(header, value)
-                }
-                if (recordRequestHeaders) {
-                    networkRequest.requestHeaders = requestHeaders
-                }
-
-                const originalSend = xhr.send.bind(xhr)
-                xhr.send = (body) => {
-                    if (
-                        shouldRecordBody({
-                            type: 'request',
-                            headers: requestHeaders,
-                            url,
-                            recordBody: options.recordBody,
-                        })
-                    ) {
-                        networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
+                    const requestHeaders: Headers = {}
+                    const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
+                    xhr.setRequestHeader = (header: string, value: string) => {
+                        requestHeaders[header] = value
+                        return originalSetRequestHeader(header, value)
                     }
-                    start = win.performance.now()
-                    return originalSend(body)
-                }
-
-                // Cleanup function to remove all event listeners and prevent memory leaks
-                const cleanup = () => {
-                    xhr.removeEventListener('readystatechange', readyStateListener)
-                    xhr.removeEventListener('error', cleanup)
-                    xhr.removeEventListener('abort', cleanup)
-                    xhr.removeEventListener('timeout', cleanup)
-                }
-
-                const readyStateListener = () => {
-                    if (xhr.readyState !== xhr.DONE) {
-                        return
+                    if (recordRequestHeaders) {
+                        networkRequest.requestHeaders = requestHeaders
                     }
 
-                    // Clean up all listeners immediately when done to prevent memory leaks
-                    cleanup()
-
-                    end = win.performance.now()
-                    const responseHeaders: Headers = {}
-                    const rawHeaders = xhr.getAllResponseHeaders()
-                    const headers = rawHeaders.trim().split(/[\r\n]+/)
-                    headers.forEach((line) => {
-                        const parts = line.split(': ')
-                        const header = parts.shift()
-                        const value = parts.join(': ')
-                        if (header) {
-                            responseHeaders[header] = value
-                        }
-                    })
-                    if (recordResponseHeaders) {
-                        networkRequest.responseHeaders = responseHeaders
-                    }
-                    if (
-                        shouldRecordBody({
-                            type: 'response',
-                            headers: responseHeaders,
-                            url,
-                            recordBody: options.recordBody,
-                        })
-                    ) {
-                        networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
-                    }
-                    getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
-                        .then((entry) => {
-                            const requests = prepareRequest({
-                                entry,
-                                method: method,
-                                status: xhr?.status,
-                                networkRequest,
-                                start,
-                                end,
-                                url: url.toString(),
-                                initiatorType: 'xmlhttprequest',
+                    const originalSend = xhr.send.bind(xhr)
+                    xhr.send = (body) => {
+                        if (
+                            shouldRecordBody({
+                                type: 'request',
+                                headers: requestHeaders,
+                                url,
+                                recordBody: options.recordBody,
                             })
-                            cb({ requests })
-                        })
-                        .catch(() => {
-                            //
-                        })
-                }
+                        ) {
+                            networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
+                        }
+                        start = win.performance.now()
+                        return originalSend(body)
+                    }
 
-                // This is very tricky code, and making it passive won't bring many performance benefits,
-                // so let's ignore the rule here.
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('readystatechange', readyStateListener)
-                // Also clean up on error, abort, and timeout to prevent memory leaks
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('error', cleanup)
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('abort', cleanup)
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('timeout', cleanup)
+                    // Cleanup function to remove all event listeners and prevent memory leaks
+                    const cleanup = () => {
+                        xhr.removeEventListener('readystatechange', readyStateListener)
+                        xhr.removeEventListener('error', cleanup)
+                        xhr.removeEventListener('abort', cleanup)
+                        xhr.removeEventListener('timeout', cleanup)
+                    }
+
+                    const readyStateListener = () => {
+                        if (xhr.readyState !== xhr.DONE) {
+                            return
+                        }
+
+                        // Clean up all listeners immediately when done to prevent memory leaks
+                        cleanup()
+
+                        end = win.performance.now()
+                        const responseHeaders: Headers = {}
+                        const rawHeaders = xhr.getAllResponseHeaders()
+                        const headers = rawHeaders.trim().split(/[\r\n]+/)
+                        headers.forEach((line) => {
+                            const parts = line.split(': ')
+                            const header = parts.shift()
+                            const value = parts.join(': ')
+                            if (header) {
+                                responseHeaders[header] = value
+                            }
+                        })
+                        if (recordResponseHeaders) {
+                            networkRequest.responseHeaders = responseHeaders
+                        }
+                        if (
+                            shouldRecordBody({
+                                type: 'response',
+                                headers: responseHeaders,
+                                url,
+                                recordBody: options.recordBody,
+                            })
+                        ) {
+                            networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
+                        }
+                        getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
+                            .then((entry) => {
+                                const requests = prepareRequest({
+                                    entry,
+                                    method: method,
+                                    status: xhr?.status,
+                                    networkRequest,
+                                    start,
+                                    end,
+                                    url: url.toString(),
+                                    initiatorType: 'xmlhttprequest',
+                                })
+                                cb({ requests })
+                            })
+                            .catch(() => {
+                                //
+                            })
+                    }
+
+                    // This is very tricky code, and making it passive won't bring many performance benefits,
+                    // so let's ignore the rule here.
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('readystatechange', readyStateListener)
+                    // Also clean up on error, abort, and timeout to prevent memory leaks
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('error', cleanup)
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('abort', cleanup)
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('timeout', cleanup)
+                } catch (e) {
+                    logger.error('Failed to instrument XHR for network capture', e)
+                }
 
                 originalOpen.call(xhr, method, url.toString(), async, username, password)
             }
@@ -489,23 +541,176 @@ function _checkForCannotReadResponseBody({
     return null
 }
 
+function isReadableStreamBody(body: unknown): body is ReadableStream<Uint8Array> {
+    return isObject(body) && isFunction(body.getReader) && isFunction(body.tee)
+}
+
+// reading a body must never hold up the page's request for long, so we cap every read attempt
+const BODY_READ_TIMEOUT_MS = 500
+const BODY_READ_TIMEOUT_MESSAGE = '[SessionReplay] Timeout while trying to read body'
+const BODY_READ_FAILED_MESSAGE = '[SessionReplay] Failed to read body'
+
+function bodyReadFailedMessage(reason: unknown): string {
+    return `${BODY_READ_FAILED_MESSAGE}: ${reason}`
+}
+
+function bodyTooLargeMessage(limitBytes: number): string {
+    return `[SessionReplay] Body too large to record (> ${limitBytes} bytes)`
+}
+
+// when the body declares a content-length over the limit we can skip reading it entirely.
+// this trusts content-length the same way config.ts enforcePayloadSizeLimit does.
+// known accepted risk: for a compressed response content-length is the compressed size while the
+// streaming reader counts decoded bytes, so a body that is over the limit compressed but under it
+// decoded is dropped to the placeholder rather than recorded. it never breaks the page, so we accept it.
+export function _contentLengthExceedsLimit(r: Request | Response, limitBytes: number): boolean {
+    try {
+        const headerValue = r.headers?.get?.('content-length')
+        if (!headerValue) {
+            return false
+        }
+        const contentLength = parseInt(headerValue, 10)
+        return Number.isFinite(contentLength) && contentLength > limitBytes
+    } catch {
+        return false
+    }
+}
+
+export function _readBody(r: Request | Response, options: NetworkRecordOptions): Promise<string> {
+    if (!options.streamNetworkBody) {
+        return _tryReadBody(r)
+    }
+    const limitBytes = effectivePayloadLimitBytes(options)
+    // skip the read for bodies the headers already tell us are over the limit
+    if (_contentLengthExceedsLimit(r, limitBytes)) {
+        return Promise.resolve(bodyTooLargeMessage(limitBytes))
+    }
+    return _tryReadBodyStreaming(r, limitBytes)
+}
+
 function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
-    return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read body'), 500)
+    return new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(BODY_READ_TIMEOUT_MESSAGE), BODY_READ_TIMEOUT_MS)
         try {
             r.clone()
                 .text()
                 .then(
                     (txt) => resolve(txt),
-                    (reason) => reject(reason)
+                    (reason) => resolve(bodyReadFailedMessage(reason))
                 )
                 .finally(() => clearTimeout(timeout))
         } catch {
             clearTimeout(timeout)
-            resolve('[SessionReplay] Failed to read body')
+            resolve(BODY_READ_FAILED_MESSAGE)
         }
+    })
+}
+
+function concatChunks(chunks: Uint8Array[], totalBytes: number): Uint8Array {
+    const merged = new Uint8Array(totalBytes)
+    let offset = 0
+    for (const chunk of chunks) {
+        merged.set(chunk, offset)
+        offset += chunk.byteLength
+    }
+    return merged
+}
+
+// Reads a clone of the body chunk by chunk, stopping as soon as the running total exceeds the
+// limit, so a very large body is never fully buffered. Like _tryReadBody it only ever reads a
+// clone (never the stream the page consumes) and is guaranteed to resolve, never reject.
+export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number): Promise<string> {
+    // eslint-disable-next-line compat/compat
+    return new Promise((resolve) => {
+        let settled = false
+        let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+
+        function cancel(): void {
+            try {
+                void reader?.cancel()
+            } catch {
+                // the reader may already be released; nothing to clean up
+            }
+        }
+
+        // resolving always releases the reader, so a slow/hung stream stops being pulled (and stops
+        // buffering the clone) the moment we settle — whether via success, the cap, an error, or the timeout
+        function done(value: string): void {
+            if (settled) {
+                return
+            }
+            settled = true
+            clearTimeout(timeout)
+            cancel()
+            resolve(value)
+        }
+
+        const timeout = setTimeout(() => done(BODY_READ_TIMEOUT_MESSAGE), BODY_READ_TIMEOUT_MS)
+
+        let clone: Request | Response
+        try {
+            clone = r.clone()
+        } catch {
+            done(BODY_READ_FAILED_MESSAGE)
+            return
+        }
+
+        const body = clone.body
+        // no readable stream (or no TextDecoder) available — fall back to the buffered read of the clone
+        if (!isReadableStreamBody(body) || typeof TextDecoder === 'undefined') {
+            try {
+                clone.text().then(
+                    (txt) => done(txt),
+                    (reason) => done(bodyReadFailedMessage(reason))
+                )
+            } catch {
+                done(BODY_READ_FAILED_MESSAGE)
+            }
+            return
+        }
+
+        try {
+            reader = body.getReader()
+        } catch {
+            done(BODY_READ_FAILED_MESSAGE)
+            return
+        }
+
+        const chunks: Uint8Array[] = []
+        let received = 0
+
+        function pump(): void {
+            reader!.read().then(
+                ({ done: streamDone, value }) => {
+                    // already resolved (e.g. the timeout fired) — stop reading and release the stream
+                    if (settled) {
+                        cancel()
+                        return
+                    }
+
+                    if (streamDone) {
+                        done(new TextDecoder().decode(concatChunks(chunks, received)))
+                        return
+                    }
+
+                    if (value) {
+                        if (received + value.byteLength > limitBytes) {
+                            done(bodyTooLargeMessage(limitBytes))
+                            return
+                        }
+                        received += value.byteLength
+                        chunks.push(value)
+                    }
+
+                    pump()
+                },
+                (reason) => done(bodyReadFailedMessage(reason))
+            )
+        }
+
+        pump()
     })
 }
 
@@ -523,7 +728,7 @@ async function _tryReadRequestBody({
         return Promise.resolve(hostname + ' is in deny list')
     }
 
-    return _tryReadBody(r)
+    return _readBody(r, options)
 }
 
 async function _tryReadResponseBody({
@@ -540,7 +745,7 @@ async function _tryReadResponseBody({
         return Promise.resolve(cannotReadBodyReason)
     }
 
-    return _tryReadBody(r)
+    return _readBody(r, options)
 }
 
 function initFetchObserver(
@@ -560,35 +765,59 @@ function initFetchObserver(
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
         return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
-            // check IE earlier than this, we only initialize if Request is present
-            // eslint-disable-next-line compat/compat
-            const req = new Request(url, init)
+            // Constructing the capture Request happens _before_ we delegate to the original fetch, so
+            // if it throws (e.g. a URL/method the host application would have handled) we must not let
+            // that exception escape and misattribute a failure to session replay. Degrade gracefully and
+            // let the original request still proceed.
+            let req: Request
+            try {
+                // check IE earlier than this, we only initialize if Request is present
+                // eslint-disable-next-line compat/compat
+                req = new Request(url, init)
+            } catch (e) {
+                logger.error('Failed to instrument fetch for network capture', e)
+                return originalFetch(url, init)
+            }
             let res: Response | undefined
             const networkRequest: Partial<CapturedNetworkRequest> = {}
             let start: number | undefined
             let end: number | undefined
 
             try {
-                const requestHeaders: Headers = {}
-                req.headers.forEach((value: string, header: string | number) => {
-                    requestHeaders[header] = value
-                })
-                if (recordRequestHeaders) {
-                    networkRequest.requestHeaders = requestHeaders
-                }
-                if (
-                    shouldRecordBody({
-                        type: 'request',
-                        headers: requestHeaders,
-                        url,
-                        recordBody: options.recordBody,
+                // Recording the request headers/body must never prevent the host's fetch from running,
+                // so failures here are swallowed and we fall through to the original request below.
+                try {
+                    const requestHeaders: Headers = {}
+                    req.headers.forEach((value: string, header: string | number) => {
+                        requestHeaders[header] = value
                     })
-                ) {
-                    networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
+                    if (recordRequestHeaders) {
+                        networkRequest.requestHeaders = requestHeaders
+                    }
+                    // Check the caller-supplied body, not req.body: Request normalizes all non-null bodies
+                    // to a ReadableStream, but only an original ReadableStream would be locked by req.clone().text().
+                    const requestBodyIsReadableStream = isReadableStreamBody(init?.body)
+                    if (
+                        !requestBodyIsReadableStream &&
+                        shouldRecordBody({
+                            type: 'request',
+                            headers: requestHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
+                    }
+                } catch (e) {
+                    logger.error('Failed to record fetch request for network capture', e)
                 }
 
                 start = win.performance.now()
-                res = await originalFetch(req)
+                // Use `req` for recording metadata/body only. For fetch(url, init), do not pass this internally-created
+                // Request downstream: it exposes request.body as a ReadableStream, and wrappers that forward that body
+                // can trigger Safari's "ReadableStream uploading is not supported" error. For fetch(Request), we must
+                // pass the cloned Request because constructing `req` may consume the original Request body.
+                res = isRequest(url) ? await originalFetch(req) : await originalFetch(url, init)
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}

@@ -1,10 +1,6 @@
 export class SimpleEventEmitter {
     private _events: { [key: string]: ((...args: any[]) => void)[] } = {}
 
-    constructor() {
-        this._events = {}
-    }
-
     on(event: string, listener: (...args: any[]) => void): () => void {
         if (!this._events[event]) {
             this._events[event] = []

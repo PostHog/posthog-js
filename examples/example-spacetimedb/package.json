@@ -1,0 +1,32 @@
+{
+    "name": "example-spacetimedb",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@10.23.0",
+    "scripts": {
+        "dev": "vite",
+        "sidecar": "tsx watch --env-file-if-exists=.env.local instrumentation/index.ts",
+        "build": "tsc --noEmit && vite build",
+        "typecheck": "tsc --noEmit",
+        "module:publish": "spacetime publish --module-path spacetimedb --server local posthog-spacetimedb",
+        "module:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb"
+    },
+    "dependencies": {
+        "@posthog/react": "*",
+        "posthog-js": "*",
+        "posthog-node": "*",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "spacetimedb": "2.6.*"
+    },
+    "devDependencies": {
+        "@types/node": "^22.19.1",
+        "@types/react": "^18.3.18",
+        "@types/react-dom": "^18.3.5",
+        "@vitejs/plugin-react": "^5.0.2",
+        "tsx": "^4.19.2",
+        "typescript": "~5.6.2",
+        "vite": "^7.1.5"
+    }
+}

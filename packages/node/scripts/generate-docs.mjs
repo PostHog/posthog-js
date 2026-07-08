@@ -4,8 +4,9 @@ import { generateApiSpecs } from '../../../scripts/docs/parser.js'
 import { HOG_REF } from '../../../scripts/docs/constants.js'
 
 // Read package.json to get version
-const packageJson = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8'));
-const version = packageJson.version;
+const packageJson = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8'))
+const version = packageJson.version
+const shouldWriteVersionedReferences = process.env.GENERATE_VERSIONED_REFERENCES === '1'
 
 // Node-specific configuration
 const NODE_SPEC_INFO = {
@@ -34,12 +35,10 @@ const NODE_TYPE_EXAMPLES = {
 "user@example.com" | { name: "John", age: 25 }`,
 }
 
-const __dirname = import.meta.dirname
-
 const config = {
-  packageDir: path.resolve(__dirname, '..'), // packages/node
-  apiJsonPath: path.resolve(__dirname, '../docs/posthog-node.api.json'),
-  outputPath: path.resolve(__dirname, `../references/posthog-node-references-${version}.json`),
+  packageDir: path.resolve(import.meta.dirname, '..'), // packages/node
+  apiJsonPath: path.resolve(import.meta.dirname, '../docs/posthog-node.api.json'),
+  outputPath: path.resolve(import.meta.dirname, `../references/posthog-node-references-${version}.json`),
   version: version,
   id: NODE_SPEC_INFO.id,
   hogRef: HOG_REF,
@@ -49,18 +48,21 @@ const config = {
 }
 
 // Ensure references directory exists
-const referencesDir = path.resolve(__dirname, '../references');
+const referencesDir = path.resolve(import.meta.dirname, '../references')
 if (!fs.existsSync(referencesDir)) {
-    fs.mkdirSync(referencesDir, { recursive: true });
+  fs.mkdirSync(referencesDir, { recursive: true })
 }
 
-// Generate versioned file
 const output = generateApiSpecs(config)
+const latestOutput = { ...output, info: { ...output.info, version: '<version>' } }
 
-// Write versioned file
-const versionedPath = path.resolve(__dirname, `../references/posthog-node-references-${version}.json`);
-fs.writeFileSync(versionedPath, JSON.stringify(output, null, 2));
+// Always update the rolling public API reference used by CI and docs previews.
+const latestPath = path.resolve(import.meta.dirname, '../references/posthog-node-references-latest.json')
+fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2))
 
-// Copy to latest file
-const latestPath = path.resolve(__dirname, '../references/posthog-node-references-latest.json');
-fs.writeFileSync(latestPath, JSON.stringify(output, null, 2));
+// Versioned references are release artifacts. Avoid writing them during normal generation
+// so PRs don't accidentally commit package-version-specific reference files.
+if (shouldWriteVersionedReferences) {
+  const versionedPath = path.resolve(import.meta.dirname, `../references/posthog-node-references-${version}.json`)
+  fs.writeFileSync(versionedPath, JSON.stringify(output, null, 2))
+}

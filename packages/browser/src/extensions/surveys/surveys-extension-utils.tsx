@@ -21,9 +21,12 @@ import {
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
 } from '../../utils/survey-utils'
-import { isArray, isNullish } from '@posthog/core'
+import { isNullish, type SurveyResponses } from '@posthog/core'
+import { buildSurveyResponseProperties, getSurveyResponseKey, surveyHasResponses } from '@posthog/core/surveys'
 
 import { propertyComparisons } from '../../utils/property-utils'
+import { getTargetingUrl } from '../../utils/url-targeting-utils'
+import { localStore } from '../../storage'
 import { Properties, PropertyMatchType } from '../../types'
 import { Z_INDEX_SURVEYS } from '../../constants'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
@@ -32,7 +35,7 @@ const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
 import { useContext } from 'preact/hooks'
-import { doesDeviceTypeMatch } from '../utils/matcher-utils'
+import { doesDeviceTypeMatch, hasPeriodPassed } from '../utils/matcher-utils'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -44,9 +47,7 @@ export function getFontFamily(fontFamily?: string): string {
     return fontFamily ? `${fontFamily}, ${defaultFontStack}` : `-apple-system, ${defaultFontStack}`
 }
 
-export function getSurveyResponseKey(questionId: string) {
-    return `$survey_response_${questionId}`
-}
+export { getSurveyResponseKey }
 
 const BLACK_TEXT_COLOR = '#020617' // Maps out to text-slate-950 from tailwind colors. Intended for text use outside interactive elements like buttons
 
@@ -84,6 +85,12 @@ export const defaultSurveyAppearance = {
     scrollbarTrackColor: 'var(--ph-survey-background-color)',
 } as const
 
+const BOTTOM_BORDER_SURVEY_POSITIONS: SurveyPosition[] = [
+    SurveyPosition.Center,
+    SurveyPosition.Left,
+    SurveyPosition.Right,
+]
+
 export const addSurveyCSSVariablesToElement = (
     element: HTMLElement,
     type: SurveyType,
@@ -93,7 +100,7 @@ export const addSurveyCSSVariablesToElement = (
     const hostStyle = element.style
 
     const surveyHasBottomBorder =
-        ![SurveyPosition.Center, SurveyPosition.Left, SurveyPosition.Right].includes(effectiveAppearance.position) ||
+        !BOTTOM_BORDER_SURVEY_POSITIONS.includes(effectiveAppearance.position) ||
         (type === SurveyType.Widget && appearance?.widgetType === SurveyWidgetType.Tab)
 
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
@@ -395,24 +402,15 @@ export const retrieveSurveyShadow = (
 }
 
 interface SendSurveyEventArgs {
-    responses: Record<string, string | number | string[] | null>
+    responses: SurveyResponses
     survey: Survey
     surveySubmissionId: string
     isSurveyCompleted: boolean
     posthog?: PostHog
     /** Additional properties to include in the survey event */
     properties?: Properties
-}
-
-const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
-    if (!questionId) {
-        return null
-    }
-    const response = responses[getSurveyResponseKey(questionId)]
-    if (isArray(response)) {
-        return [...response]
-    }
-    return response
+    /** The language that was applied to the survey. */
+    surveyLanguage?: string | null
 }
 
 export const sendSurveyEvent = ({
@@ -422,6 +420,7 @@ export const sendSurveyEvent = ({
     posthog,
     isSurveyCompleted,
     properties,
+    surveyLanguage,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
@@ -433,15 +432,11 @@ export const sendSurveyEvent = ({
         [SurveyEventProperties.SURVEY_ID]: survey.id,
         [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
         [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-        [SurveyEventProperties.SURVEY_QUESTIONS]: survey.questions.map((question) => ({
-            id: question.id,
-            question: question.question,
-            response: getSurveyResponseValue(responses, question.id),
-        })),
         [SurveyEventProperties.SURVEY_SUBMISSION_ID]: surveySubmissionId,
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
+        ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...responses,
+        ...buildSurveyResponseProperties(responses, survey),
         ...properties,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
@@ -454,10 +449,6 @@ export const sendSurveyEvent = ({
     }
 }
 
-const _surveyHasResponses = (inProgressSurvey: InProgressSurveyState | null) => {
-    return Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0
-}
-
 const _buildSurveyEventProperties = (
     survey: Survey,
     inProgressSurvey: InProgressSurveyState | null,
@@ -467,18 +458,21 @@ const _buildSurveyEventProperties = (
     [SurveyEventProperties.SURVEY_ID]: survey.id,
     [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
     [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-    [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: _surveyHasResponses(inProgressSurvey),
+    [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: surveyHasResponses(inProgressSurvey?.responses),
+    ...(inProgressSurvey?.surveyLanguage && {
+        [SurveyEventProperties.SURVEY_LANGUAGE]: inProgressSurvey.surveyLanguage,
+    }),
     sessionRecordingUrl: posthog.get_session_replay_url?.(),
-    ...inProgressSurvey?.responses,
     [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
-    [SurveyEventProperties.SURVEY_QUESTIONS]: survey.questions.map((question) => ({
-        id: question.id,
-        question: question.question,
-        response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
-    })),
+    ...buildSurveyResponseProperties(inProgressSurvey?.responses, survey),
 })
 
-export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
+export const dismissedSurveyEvent = (
+    survey: Survey,
+    posthog?: PostHog,
+    readOnly?: boolean,
+    surveyLanguage?: string | null
+) => {
     if (!posthog) {
         logger.error('[survey dismissed] event not captured, PostHog instance not found.')
         return
@@ -490,6 +484,7 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
     const inProgressSurvey = getInProgressSurveyState(survey)
     posthog.capture(SurveyEventName.DISMISSED, {
         ..._buildSurveyEventProperties(survey, inProgressSurvey, posthog),
+        ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
@@ -598,7 +593,7 @@ export const canActivateRepeatedly = (
  * @param survey
  */
 export const getSurveySeen = (survey: Survey): boolean => {
-    const surveySeen = localStorage.getItem(getSurveySeenKey(survey))
+    const surveySeen = localStore._get(getSurveySeenKey(survey))
     if (surveySeen) {
         // if a survey has already been seen,
         // we will override it with the event repeated activation value.
@@ -611,15 +606,8 @@ export const getSurveySeen = (survey: Survey): boolean => {
 const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
 
 export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined): boolean => {
-    const lastSeenSurveyDate = localStorage.getItem(LAST_SEEN_SURVEY_DATE_KEY)
-    if (!waitPeriodInDays || !lastSeenSurveyDate) {
-        return true
-    }
-
-    const today = new Date()
-    const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
-    const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-    return diffDaysFromToday > waitPeriodInDays
+    const lastSeenSurveyDate = localStore._get(LAST_SEEN_SURVEY_DATE_KEY)
+    return hasPeriodPassed(waitPeriodInDays, lastSeenSurveyDate)
 }
 
 interface SurveyContextProps {
@@ -628,9 +616,12 @@ interface SurveyContextProps {
     onPopupSurveyDismissed: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
+    onPreviewBack: () => void
     surveySubmissionId: string
     /** Additional properties to include in all survey events */
     properties?: Properties
+    /** The language that was applied to the survey. */
+    surveyLanguage?: string | null
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -639,8 +630,10 @@ export const SurveyContext = createContext<SurveyContextProps>({
     onPopupSurveyDismissed: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
+    onPreviewBack: () => {},
     surveySubmissionId: '',
     properties: undefined,
+    surveyLanguage: null,
 })
 
 export const useSurveyContext = () => {
@@ -671,13 +664,14 @@ function defaultMatchType(matchType?: PropertyMatchType): PropertyMatchType {
 }
 
 // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
-export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean {
+export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>, posthog?: PostHog): boolean {
     if (!survey.conditions?.url) {
         return true
     }
-    // if we dont know the url, assume it is not a match
-    const href = window?.location?.href
+    // honors the `get_current_url` config hook so apps that rewrite their URL can target surveys correctly
+    const href = getTargetingUrl(posthog)
     if (!href) {
+        // if we dont know the url, assume it is not a match
         return false
     }
     const targets = [survey.conditions.url]
@@ -699,7 +693,11 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
 interface InProgressSurveyState {
     surveySubmissionId: string
     lastQuestionIndex: number
-    responses: Record<string, string | number | string[] | null>
+    // Indices the respondent has visited, in order, excluding the current one. Pushed on next, popped on back.
+    // Optional for backwards compat with state persisted before the back-navigation feature.
+    visitedIndices?: number[]
+    responses: SurveyResponses
+    surveyLanguage?: string | null
 }
 
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {

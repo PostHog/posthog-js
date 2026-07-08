@@ -1,5 +1,585 @@
 # @posthog/nextjs-config
 
+## 1.9.68
+
+### Patch Changes
+
+- [#3764](https://github.com/PostHog/posthog-js/pull/3764) [`5b125c1`](https://github.com/PostHog/posthog-js/commit/5b125c1bd2e2afa8aaef2d77b81c3c46b3651f9d) Thanks [@emmayusufu](https://github.com/emmayusufu)! - Strip dangling `//# sourceMappingURL=` comments from Turbopack browser chunks when `deleteAfterUpload` is set, so deleted source maps are no longer referenced (and 404) in production.
+  (2026-06-16)
+
+## 1.9.67
+
+### Patch Changes
+
+- [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
+  (2026-06-15)
+- Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad)]:
+  - @posthog/plugin-utils@1.1.2
+  - @posthog/webpack-plugin@1.5.23
+
+## 1.9.66
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.22
+
+## 1.9.65
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.21
+
+## 1.9.64
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.20
+
+## 1.9.63
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.19
+
+## 1.9.62
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.18
+
+## 1.9.61
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.17
+
+## 1.9.60
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.16
+
+## 1.9.59
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.15
+
+## 1.9.58
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.14
+
+## 1.9.57
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.13
+
+## 1.9.56
+
+### Patch Changes
+
+- [#3775](https://github.com/PostHog/posthog-js/pull/3775) [`018001c`](https://github.com/PostHog/posthog-js/commit/018001cb2e1417aae9a38bdc9338afce2e0d2c25) Thanks [@hpouillot](https://github.com/hpouillot)! - upgrade @posthog/cli version
+  (2026-06-09)
+- Updated dependencies [[`018001c`](https://github.com/PostHog/posthog-js/commit/018001cb2e1417aae9a38bdc9338afce2e0d2c25)]:
+  - @posthog/webpack-plugin@1.5.12
+
+## 1.9.55
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.11
+
+## 1.9.54
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.10
+
+## 1.9.53
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.9
+
+## 1.9.52
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.8
+
+## 1.9.51
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.7
+
+## 1.9.50
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.6
+
+## 1.9.49
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.5
+
+## 1.9.48
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.4
+
+## 1.9.47
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.3
+
+## 1.9.46
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.2
+
+## 1.9.45
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.5.1
+
+## 1.9.44
+
+### Patch Changes
+
+- Updated dependencies [[`3889f02`](https://github.com/PostHog/posthog-js/commit/3889f024e6e27c2ca8444cde95fb3df6eb8a9574)]:
+  - @posthog/webpack-plugin@1.5.0
+
+## 1.9.43
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.43
+
+## 1.9.42
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.42
+
+## 1.9.41
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.41
+
+## 1.9.40
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.40
+
+## 1.9.39
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.39
+
+## 1.9.38
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.38
+
+## 1.9.37
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.37
+
+## 1.9.36
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.36
+
+## 1.9.35
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.35
+
+## 1.9.34
+
+### Patch Changes
+
+- [#3661](https://github.com/PostHog/posthog-js/pull/3661) [`f12ee73`](https://github.com/PostHog/posthog-js/commit/f12ee73362545c2fe946a566d76bb14b7d5aa746) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Bump `@posthog/cli` to `~0.7.13`, which drops several unused runtime dependencies (`axios`, `axios-proxy-builder`, `console.table`, `rimraf`).
+  (2026-05-22)
+- Updated dependencies [[`f12ee73`](https://github.com/PostHog/posthog-js/commit/f12ee73362545c2fe946a566d76bb14b7d5aa746)]:
+  - @posthog/webpack-plugin@1.4.34
+
+## 1.9.33
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.33
+
+## 1.9.32
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.32
+
+## 1.9.31
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.31
+
+## 1.9.30
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.30
+
+## 1.9.29
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.29
+
+## 1.9.28
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.28
+
+## 1.9.27
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.27
+
+## 1.9.26
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.26
+
+## 1.9.25
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.25
+
+## 1.9.24
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.24
+
+## 1.9.23
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.23
+
+## 1.9.22
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.22
+
+## 1.9.21
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.21
+
+## 1.9.20
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.20
+
+## 1.9.19
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.19
+
+## 1.9.18
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.18
+
+## 1.9.17
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.17
+
+## 1.9.16
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.16
+
+## 1.9.15
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.15
+
+## 1.9.14
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.14
+
+## 1.9.13
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.13
+
+## 1.9.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.12
+
+## 1.9.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.11
+
+## 1.9.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.10
+
+## 1.9.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.9
+
+## 1.9.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.8
+
+## 1.9.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.7
+
+## 1.9.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.6
+
+## 1.9.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.5
+
+## 1.9.4
+
+### Patch Changes
+
+- Updated dependencies [[`1a0b58d`](https://github.com/PostHog/posthog-js/commit/1a0b58d1d07c61662169d3bc56eed8cfd8855d65)]:
+  - @posthog/plugin-utils@1.1.1
+  - @posthog/webpack-plugin@1.4.4
+
+## 1.9.3
+
+### Patch Changes
+
+- Updated dependencies [[`04d276c`](https://github.com/PostHog/posthog-js/commit/04d276c340d97ee557d62d5df3ad1335fefda652)]:
+  - @posthog/plugin-utils@1.1.0
+  - @posthog/webpack-plugin@1.4.3
+
+## 1.9.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.2
+
+## 1.9.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.4.1
+
+## 1.9.0
+
+### Minor Changes
+
+- [#3302](https://github.com/PostHog/posthog-js/pull/3302) [`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11) Thanks [@dmarticus](https://github.com/dmarticus)! - preserve $set_once semantics in local flag evaluation cache
+  (2026-04-07)
+
+### Patch Changes
+
+- Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
+  - @posthog/webpack-plugin@1.4.0
+
+## 1.8.28
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @posthog/webpack-plugin@1.3.6
+
+## 1.8.27
+
+### Patch Changes
+
+- [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
+  (2026-04-01)
+- Updated dependencies [[`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371)]:
+  - @posthog/plugin-utils@1.0.1
+  - @posthog/webpack-plugin@1.3.5
+
+## 1.8.26
+
+### Patch Changes
+
+- Updated dependencies [[`a863914`](https://github.com/PostHog/posthog-js/commit/a863914bca09643f2aef7ca029b96de9cbfbc24c)]:
+  - @posthog/core@1.24.4
+  - @posthog/webpack-plugin@1.3.4
+
+## 1.8.25
+
+### Patch Changes
+
+- Updated dependencies [[`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f)]:
+  - @posthog/core@1.24.3
+  - @posthog/webpack-plugin@1.3.3
+
+## 1.8.24
+
+### Patch Changes
+
+- Updated dependencies [[`8d34289`](https://github.com/PostHog/posthog-js/commit/8d34289f7cf91945223eed4366b11fb187a63a40)]:
+  - @posthog/core@1.24.2
+  - @posthog/webpack-plugin@1.3.2
+
+## 1.8.23
+
+### Patch Changes
+
+- [#3265](https://github.com/PostHog/posthog-js/pull/3265) [`314120a`](https://github.com/PostHog/posthog-js/commit/314120aa2377b3c8031dd774833fe9082ecdbd39) Thanks [@hpouillot](https://github.com/hpouillot)! - fix sourcemap upload with stdin, clean config
+  (2026-03-20)
+- Updated dependencies [[`314120a`](https://github.com/PostHog/posthog-js/commit/314120aa2377b3c8031dd774833fe9082ecdbd39)]:
+  - @posthog/webpack-plugin@1.3.1
+  - @posthog/core@1.24.1
+
+## 1.8.22
+
+### Patch Changes
+
+- Updated dependencies [[`9cd2313`](https://github.com/PostHog/posthog-js/commit/9cd23138343e1020811f85853d6016cc985bb24f)]:
+  - @posthog/webpack-plugin@1.3.0
+  - @posthog/core@1.24.0
+
+## 1.8.21
+
+### Patch Changes
+
+- Updated dependencies [[`bc30c2d`](https://github.com/PostHog/posthog-js/commit/bc30c2d988bb307e811d97711f208c125eefba3a), [`bc30c2d`](https://github.com/PostHog/posthog-js/commit/bc30c2d988bb307e811d97711f208c125eefba3a)]:
+  - @posthog/core@1.23.4
+  - @posthog/webpack-plugin@1.2.27
+
+## 1.8.20
+
+### Patch Changes
+
+- Updated dependencies [[`4009c15`](https://github.com/PostHog/posthog-js/commit/4009c15c85c96b5cf99fdbcda448b9893c95541e)]:
+  - @posthog/core@1.23.3
+  - @posthog/webpack-plugin@1.2.26
+
+## 1.8.19
+
+### Patch Changes
+
+- Updated dependencies [[`5e8d5fc`](https://github.com/PostHog/posthog-js/commit/5e8d5fc9c12e5545e015c9c5556167b9fb279347)]:
+  - @posthog/core@1.23.2
+  - @posthog/webpack-plugin@1.2.25
+
 ## 1.8.18
 
 ### Patch Changes

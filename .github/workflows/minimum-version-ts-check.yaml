@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   unit:
     name: Check minimum TS version
@@ -19,12 +23,12 @@ jobs:
           - version: "5.9.2"
             extra-flags: "--moduleResolution node"
           - version: "latest"
-            extra-flags: "--moduleResolution node"
+            extra-flags: "--moduleResolution node --ignoreConfig --ignoreDeprecations 6.0"
           - version: "6.0.0-dev.20251204"
             extra-flags: "--ignoreConfig"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./.github/actions/setup
         with:

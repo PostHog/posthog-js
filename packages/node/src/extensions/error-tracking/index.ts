@@ -1,6 +1,6 @@
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
 import { PostHogBackendClient } from '@/client'
-import { isObject, uuidv7 } from '@posthog/core'
+import { isObject } from '@posthog/core'
 import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
 import { BucketedRateLimiter } from '@posthog/core'
@@ -13,8 +13,6 @@ export default class ErrorTracking {
   private _exceptionAutocaptureEnabled: boolean
   private _rateLimiter: BucketedRateLimiter<string>
   private _logger: Logger
-
-  static errorPropertiesBuilder: CoreErrorTracking.ErrorPropertiesBuilder
 
   constructor(client: PostHogBackendClient, options: PostHogOptions, _logger: Logger) {
     this.client = client
@@ -39,6 +37,7 @@ export default class ErrorTracking {
   }
 
   static async buildEventMessage(
+    builder: CoreErrorTracking.ErrorPropertiesBuilder,
     error: unknown,
     hint: CoreErrorTracking.EventHint,
     distinctId?: string,
@@ -46,20 +45,14 @@ export default class ErrorTracking {
   ): Promise<EventMessage> {
     const properties: EventMessage['properties'] = { ...additionalProperties }
 
-    // Given stateless nature of Node SDK we capture exceptions using personless processing when no
-    // user can be determined because a distinct_id is not provided e.g. exception autocapture
-    if (!distinctId) {
-      properties.$process_person_profile = false
-    }
-
-    const exceptionProperties = this.errorPropertiesBuilder.buildFromUnknown(error, hint)
-    exceptionProperties.$exception_list = await this.errorPropertiesBuilder.modifyFrames(
-      exceptionProperties.$exception_list
-    )
+    const exceptionProperties = builder.buildFromUnknown(error, hint)
+    exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
 
     return {
       event: '$exception',
-      distinctId: distinctId || uuidv7(),
+      // Leave distinctId resolution to prepareEventMessage which checks request context
+      // and falls back to a random UUID with $process_person_profile = false
+      distinctId: distinctId,
       properties: {
         ...exceptionProperties,
         ...properties,
@@ -79,7 +72,11 @@ export default class ErrorTracking {
     this.client.addPendingPromise(
       (async () => {
         if (!ErrorTracking.isPreviouslyCapturedError(exception)) {
-          const eventMessage = await ErrorTracking.buildEventMessage(exception, hint)
+          const eventMessage = await ErrorTracking.buildEventMessage(
+            this.client.getErrorPropertiesBuilder(),
+            exception,
+            hint
+          )
           const exceptionProperties = eventMessage.properties
           const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
           const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
@@ -89,7 +86,7 @@ export default class ErrorTracking {
             })
             return
           }
-          return this.client.capture(eventMessage)
+          return this.client._capturePreparedEvent(eventMessage, false)
         }
       })()
     )

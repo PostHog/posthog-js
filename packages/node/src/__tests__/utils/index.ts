@@ -8,7 +8,7 @@ type ErrorResponse = {
 
 export const apiImplementationV4 = (flagsResponse: PostHogV2FlagsResponse | ErrorResponse) => {
   return (url: any): Promise<any> => {
-    if ((url as any).includes('/flags/?v=2&config=true')) {
+    if ((url as any).includes('/flags/?v=2')) {
       // Check if the response is a flags response or an error response
       return 'flags' in flagsResponse
         ? Promise.resolve({
@@ -21,6 +21,17 @@ export const apiImplementationV4 = (flagsResponse: PostHogV2FlagsResponse | Erro
             text: () => Promise.resolve('not-ok'),
             json: flagsResponse.json,
           })
+    }
+
+    if ((url as any).includes('batch/')) {
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () =>
+          Promise.resolve({
+            status: 'ok',
+          }),
+      }) as any
     }
 
     return Promise.resolve({
@@ -59,7 +70,7 @@ export const apiImplementation = ({
   localFlagsEtag?: string
 }) => {
   return (url: any): Promise<any> => {
-    if ((url as any).includes('/flags/')) {
+    if ((url as any).includes('/flags/?')) {
       return Promise.resolve({
         status: flagsStatus,
         text: () => Promise.resolve('ok'),
@@ -79,7 +90,7 @@ export const apiImplementation = ({
       }) as any
     }
 
-    if ((url as any).includes('api/feature_flag/local_evaluation?token=TEST_API_KEY&send_cohorts')) {
+    if ((url as any).includes('flags/definitions?token=TEST_API_KEY&send_cohorts')) {
       const headers = localFlagsEtag ? createMockHeaders({ ETag: localFlagsEtag }) : createMockHeaders()
       return Promise.resolve({
         status: localFlagsStatus,
@@ -112,10 +123,10 @@ export const apiImplementation = ({
 }
 
 export const anyLocalEvalCall = [
-  'http://example.com/api/feature_flag/local_evaluation?token=TEST_API_KEY&send_cohorts',
+  'http://example.com/flags/definitions?token=TEST_API_KEY&send_cohorts',
   expect.any(Object),
 ]
-export const anyFlagsCall = ['http://example.com/flags/?v=2&config=true', expect.any(Object)]
+export const anyFlagsCall = ['http://example.com/flags/?v=2', expect.any(Object)]
 
 export const isPending = (promise: Promise<any>): boolean => {
   return util.inspect(promise).includes('pending')

@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "7.9.3",
+  "version": "8.3.0",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -23,8 +23,17 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.8",
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/genai": "^1.43.0",
+    "@langchain/core": "^1.1.29",
+    "openai": "^6.25.0",
+    "@openai/agents": "^0.8.0",
+    "@openai/agents-core": "^0.8.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/core": "^2.0.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
+    "@opentelemetry/otlp-exporter-base": "^0.200.0",
+    "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/rollup-utils": "workspace:*",
@@ -32,7 +41,7 @@
     "@types/jest": "catalog:",
     "jest": "catalog:",
     "node-fetch": "^3.3.2",
-    "posthog-node": "workspace:*"
+    "posthog-node": "workspace:^"
   },
   "keywords": [
     "posthog",
@@ -41,35 +50,55 @@
     "anthropic",
     "gemini",
     "llm",
-    "observability"
+    "observability",
+    "agents"
   ],
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@google/genai": "^1.42.0",
-    "@langchain/core": "^1.1.27",
-    "@posthog/core": "workspace:*",
-    "langchain": "^1.2.25",
-    "openai": "^6.22.0",
+    "@posthog/core": "workspace:^",
     "uuid": "^11.1.0",
     "zod": "^4.1.13"
   },
   "peerDependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/genai": "^1.43.0",
+    "@langchain/core": "^1.1.29",
+    "openai": "^6.25.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0 <1.0.0",
+    "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@ai-sdk/provider": "^2.0.0 || ^3.0.0",
+    "@openai/agents": "^0.8.0",
     "posthog-node": "^5.0.0"
   },
   "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@google/genai": {
+      "optional": true
+    },
+    "@langchain/core": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    },
     "@opentelemetry/api": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-trace-otlp-http": {
       "optional": true
     },
     "@opentelemetry/sdk-trace-base": {
       "optional": true
     },
     "@ai-sdk/provider": {
+      "optional": true
+    },
+    "@openai/agents": {
       "optional": true
     }
   },
@@ -111,6 +140,11 @@
       "require": "./dist/langchain/index.cjs",
       "import": "./dist/langchain/index.mjs",
       "types": "./dist/langchain/index.d.ts"
+    },
+    "./openai-agents": {
+      "require": "./dist/openai-agents/index.cjs",
+      "import": "./dist/openai-agents/index.mjs",
+      "types": "./dist/openai-agents/index.d.ts"
     }
   },
   "directories": {

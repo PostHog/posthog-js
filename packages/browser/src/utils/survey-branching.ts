@@ -50,7 +50,7 @@ export function getNextSurveyStep(
     survey: Survey,
     currentQuestionIndex: number,
     response: string | string[] | number | null
-): number | SurveyQuestionBranchingType.End {
+): number | typeof SurveyQuestionBranchingType.End {
     const question = survey.questions[currentQuestionIndex]
     const nextQuestionIndex = currentQuestionIndex + 1
 

@@ -69,6 +69,7 @@ import {
     calculatePrefillStartIndex,
 } from '../utils/survey-url-prefill'
 import { getNextSurveyStep } from '../utils/survey-branching'
+import { applySurveyTranslationForUser } from '../utils/survey-translations'
 
 // Re-export for surveys-preview entrypoint
 export { getNextSurveyStep }
@@ -180,25 +181,27 @@ export class SurveyManager {
     }
 
     public handlePopoverSurvey = (surveyParam: Survey, options?: DisplaySurveyPopoverOptions): void => {
+        const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(surveyParam)
+
         // apply overrides for position / selector (needed for thumb surveys)
         const survey =
             options?.position || options?.selector
                 ? {
-                      ...surveyParam,
+                      ...translatedSurvey,
                       appearance: {
-                          ...surveyParam.appearance,
+                          ...translatedSurvey.appearance,
                           ...(options.position && { position: options.position }),
                           ...(options.selector && { widgetSelector: options.selector }),
                       },
                   }
-                : surveyParam
+                : translatedSurvey
 
         this._clearSurveyTimeout(survey.id)
 
         const { properties, initialResponses } = options ?? {}
         const hasPrefillData = initialResponses && Object.keys(initialResponses).length > 0
         const isSurveyCompleted = hasPrefillData
-            ? this._handleInitialResponses(survey, initialResponses, properties)
+            ? this._handleInitialResponses(survey, initialResponses, properties, surveyLanguage)
             : false
 
         // if the survey is done (from prefill) and there is no thank-you, we can break early
@@ -232,6 +235,7 @@ export class SurveyManager {
             style: positionStyle,
             isSurveyCompleted: isSurveyCompleted,
             skipShownEvent: options?.skipShownEvent,
+            surveyLanguage,
         }
 
         if (delaySeconds <= 0) {
@@ -241,7 +245,12 @@ export class SurveyManager {
             // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
             this._surveyTimeouts.delete(survey.id)
 
-            if (!doesSurveyUrlMatch(survey)) {
+            // Re-check the full display predicate, not just the URL: eligibility can change
+            // during the delay (e.g. identify() reloads flags and the internal targeting flag
+            // flips to false), and we must not show a survey that is no longer eligible by the
+            // time the delay elapses.
+            if (!this._shouldDisplaySurvey(survey)) {
+                logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
                 return this._removeSurveyFromFocus(survey)
             }
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
@@ -263,15 +272,24 @@ export class SurveyManager {
     }
 
     private _handleWidget = (survey: Survey): void => {
+        const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         // Ensure widget container exists if it doesn't
-        const { shadow, isNewlyCreated } = retrieveSurveyShadow(survey, this._posthog)
+        const { shadow, isNewlyCreated } = retrieveSurveyShadow(translatedSurvey, this._posthog)
 
         // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
         if (!isNewlyCreated) {
             return
         }
 
-        render(<FeedbackWidget posthog={this._posthog} survey={survey} key={survey.id} />, shadow)
+        render(
+            <FeedbackWidget
+                posthog={this._posthog}
+                survey={translatedSurvey}
+                surveyLanguage={surveyLanguage}
+                key={survey.id}
+            />,
+            shadow
+        )
     }
 
     private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
@@ -368,33 +386,47 @@ export class SurveyManager {
     }
 
     public renderPopover = (survey: Survey): void => {
-        const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+        const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
+        const { shadow } = retrieveSurveyShadow(translatedSurvey, this._posthog)
         render(
-            <SurveyPopup posthog={this._posthog} survey={survey} removeSurveyFromFocus={this._removeSurveyFromFocus} />,
+            <SurveyPopup
+                posthog={this._posthog}
+                survey={translatedSurvey}
+                removeSurveyFromFocus={this._removeSurveyFromFocus}
+                surveyLanguage={surveyLanguage}
+            />,
             shadow
         )
     }
 
     public renderSurvey = (survey: Survey, selector: Element, properties?: Properties): void => {
+        const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         let isSurveyCompleted = false
         if (this._posthog.config?.surveys?.prefillFromUrl) {
-            isSurveyCompleted = this._handleUrlPrefill(survey)
+            isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage)
         }
 
         render(
             <SurveyPopup
                 posthog={this._posthog}
-                survey={survey}
+                survey={translatedSurvey}
                 removeSurveyFromFocus={this._removeSurveyFromFocus}
                 isPopup={false}
                 properties={properties}
                 isSurveyCompleted={isSurveyCompleted}
+                surveyLanguage={surveyLanguage}
             />,
             selector
         )
     }
 
-    private _handleUrlPrefill(survey: Survey): boolean {
+    private _translateSurveyForRendering(survey: Survey): { survey: Survey; language: string | null } {
+        // Rendering entry points accept the raw API survey. The translation helper is idempotent,
+        // but keeping this central avoids each entry point growing its own language rules.
+        return applySurveyTranslationForUser(survey, this._posthog)
+    }
+
+    private _handleUrlPrefill(survey: Survey, surveyLanguage?: string | null): boolean {
         // Only handle prefill once per survey session to avoid overwriting in-progress responses
         if (this._prefillHandledSurveys.has(survey.id)) {
             return false
@@ -408,7 +440,7 @@ export class SurveyManager {
 
         logger.info('[Survey Prefill] Detected URL prefill parameters')
 
-        const result = this._processPrefillData(survey, params)
+        const result = this._processPrefillData(survey, params, surveyLanguage)
         if (!result) {
             return false
         }
@@ -428,6 +460,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 posthog: this._posthog,
                 isSurveyCompleted,
+                surveyLanguage,
             })
         }
 
@@ -445,7 +478,8 @@ export class SurveyManager {
     private _handleInitialResponses(
         survey: Survey,
         initialResponses: Record<number, SurveyResponseValue>,
-        properties?: Properties
+        properties?: Properties,
+        surveyLanguage?: string | null
     ): boolean {
         const prefillParams: { [key: number]: string[] } = {}
         for (const [indexStr, value] of Object.entries(initialResponses)) {
@@ -455,7 +489,7 @@ export class SurveyManager {
 
         logger.info('[Survey] Processing initial responses')
 
-        const result = this._processPrefillData(survey, prefillParams)
+        const result = this._processPrefillData(survey, prefillParams, surveyLanguage)
         if (!result) {
             return false
         }
@@ -470,6 +504,7 @@ export class SurveyManager {
             posthog: this._posthog,
             isSurveyCompleted,
             properties,
+            surveyLanguage,
         })
 
         return isSurveyCompleted
@@ -477,7 +512,8 @@ export class SurveyManager {
 
     private _processPrefillData(
         survey: Survey,
-        prefillParams: Record<number, string[]>
+        prefillParams: Record<number, string[]>,
+        surveyLanguage?: string | null
     ): {
         responses: Record<string, any>
         submissionId: string
@@ -508,6 +544,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                surveyLanguage,
             })
 
             logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
@@ -523,12 +560,12 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._posthog.featureFlags.isFeatureEnabled(flagKey, {
+        const isFeatureEnabled = !!this._posthog.featureFlags?.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._posthog.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = this._posthog.featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
@@ -538,7 +575,11 @@ export class SurveyManager {
         if (!survey.conditions) {
             return true
         }
-        return doesSurveyUrlMatch(survey) && doesSurveyDeviceTypesMatch(survey) && doesSurveyMatchSelector(survey)
+        return (
+            doesSurveyUrlMatch(survey, this._posthog) &&
+            doesSurveyDeviceTypesMatch(survey) &&
+            doesSurveyMatchSelector(survey)
+        )
     }
 
     private _internalFlagCheckSatisfied(survey: Survey): boolean {
@@ -614,7 +655,7 @@ export class SurveyManager {
             return true
         }
         const surveysActivatedByEventsOrActions: string[] | undefined =
-            this._posthog.surveys._surveyEventReceiver?.getSurveys()
+            this._posthog.surveys?._surveyEventReceiver?.getSurveys()
         return !!surveysActivatedByEventsOrActions?.includes(survey.id)
     }
 
@@ -631,18 +672,28 @@ export class SurveyManager {
         })
     }
 
-    public getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false): void => {
-        this._posthog?.surveys.getSurveys((surveys) => {
-            const targetingMatchedSurveys = surveys.filter((survey) => {
-                const eligibility = this.checkSurveyEligibility(survey)
-                return (
-                    eligibility.eligible &&
-                    this._isSurveyConditionMatched(survey) &&
-                    this._hasActionOrEventTriggeredSurvey(survey) &&
-                    this._checkFlags(survey)
-                )
-            })
+    /**
+     * The full predicate for "should this survey display right now": eligibility (running,
+     * type, linked/targeting/internal flags, wait period, already-seen) plus the URL/device/
+     * selector conditions, the event/action trigger, and any feature-flag dependencies.
+     *
+     * Shared by the display loop and re-checked when a popover's delay timer fires, so a
+     * survey that became ineligible *during* the delay (e.g. an identify() reloaded flags and
+     * the internal targeting flag is now false) is not shown. Note this is purely an AND gate:
+     * adding it can only ever suppress a display, never cause an extra one.
+     */
+    private _shouldDisplaySurvey(survey: Survey): boolean {
+        return (
+            this.checkSurveyEligibility(survey).eligible &&
+            this._isSurveyConditionMatched(survey) &&
+            this._hasActionOrEventTriggeredSurvey(survey) &&
+            this._checkFlags(survey)
+        )
+    }
 
+    public getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false): void => {
+        this._posthog?.surveys?.getSurveys((surveys) => {
+            const targetingMatchedSurveys = surveys.filter((survey) => this._shouldDisplaySurvey(survey))
             callback(targetingMatchedSurveys)
         }, forceReload)
     }
@@ -652,6 +703,17 @@ export class SurveyManager {
             const inAppSurveysWithDisplayLogic = surveys.filter(
                 (survey) => survey.type === SurveyType.Popover || survey.type === SurveyType.Widget
             )
+
+            // Cancel any pending (delayed, not-yet-shown) survey whose eligibility changed since
+            // it was queued — e.g. an identify() during the delay flipped its targeting flag.
+            // This frees the popover focus promptly instead of waiting for a now-stale timer to
+            // fire. Safe for already-shown surveys: their timer is gone, so cancelSurvey no-ops.
+            const matchingIds = new Set(inAppSurveysWithDisplayLogic.map((survey) => survey.id))
+            for (const pendingSurveyId of Array.from(this._surveyTimeouts.keys())) {
+                if (!matchingIds.has(pendingSurveyId)) {
+                    this.cancelSurvey(pendingSurveyId)
+                }
+            }
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.
@@ -753,6 +815,7 @@ export const renderSurveysPreview = ({
     previewPageIndex,
     forceDisableHtml,
     onPreviewSubmit,
+    onPreviewBack,
     positionStyles = DEFAULT_PREVIEW_POSITION_STYLES,
 }: {
     survey: Survey
@@ -760,6 +823,7 @@ export const renderSurveysPreview = ({
     previewPageIndex: number
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    onPreviewBack?: () => void
     posthog?: PostHog
     positionStyles?: JSX.CSSProperties
 }) => {
@@ -778,6 +842,7 @@ export const renderSurveysPreview = ({
             forceDisableHtml={forceDisableHtml}
             style={positionStyles}
             onPreviewSubmit={onPreviewSubmit}
+            onPreviewBack={onPreviewBack}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
         />,
@@ -862,6 +927,7 @@ type UseHideSurveyOnURLChangeProps = {
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     setSurveyVisible: (visible: boolean) => void
     isPreviewMode?: boolean
+    posthog?: PostHog
 }
 
 /**
@@ -879,6 +945,7 @@ export function useHideSurveyOnURLChange({
     removeSurveyFromFocus = () => {},
     setSurveyVisible,
     isPreviewMode = false,
+    posthog,
 }: UseHideSurveyOnURLChangeProps) {
     useEffect(() => {
         if (isPreviewMode || !survey.conditions?.url) {
@@ -887,7 +954,7 @@ export function useHideSurveyOnURLChange({
 
         const checkUrlMatch = () => {
             const isSurveyTypeWidget = survey.type === SurveyType.Widget
-            const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey)
+            const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey, posthog)
             const isSurveyWidgetTypeTab = survey.appearance?.widgetType === SurveyWidgetType.Tab && isSurveyTypeWidget
 
             if (doesSurveyMatchUrlCondition) {
@@ -929,7 +996,7 @@ export function useHideSurveyOnURLChange({
             window.history.pushState = originalPushState
             window.history.replaceState = originalReplaceState
         }
-    }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible])
+    }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible, posthog])
 }
 
 export function usePopupVisibility(
@@ -940,7 +1007,8 @@ export function usePopupVisibility(
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     isPopup: boolean,
     surveyContainerRef?: RefObject<HTMLDivElement>,
-    skipShownEvent?: boolean
+    skipShownEvent?: boolean,
+    surveyLanguage?: string | null
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(
         isPreviewMode || millisecondDelay === 0 || survey.type === SurveyType.ExternalSurvey
@@ -1004,7 +1072,7 @@ export function usePopupVisibility(
 
         const showSurvey = () => {
             // check if the url is still matching, necessary for delayed surveys, as the URL may have changed
-            if (!doesSurveyUrlMatch(survey)) {
+            if (!doesSurveyUrlMatch(survey, posthog)) {
                 return
             }
             setIsPopupVisible(true)
@@ -1015,10 +1083,15 @@ export function usePopupVisibility(
                     [SurveyEventProperties.SURVEY_ID]: survey.id,
                     [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
                     [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
+                    ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
             }
-            localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            try {
+                localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            } catch {
+                // localStorage is not always available (e.g. in cross-origin iframes).
+            }
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
@@ -1048,6 +1121,7 @@ export function usePopupVisibility(
         removeSurveyFromFocus,
         setSurveyVisible: setIsPopupVisible,
         isPreviewMode,
+        posthog,
     })
 
     return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithViewTransition }
@@ -1062,6 +1136,7 @@ interface SurveyPopupProps {
     removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    onPreviewBack?: () => void
     onPopupSurveyDismissed?: () => void
     onCloseConfirmationMessage?: () => void
     /** Additional properties to include in all survey events */
@@ -1070,6 +1145,8 @@ interface SurveyPopupProps {
     isSurveyCompleted?: boolean
     /** When true, `survey shown` events will not be emitted automatically */
     skipShownEvent?: boolean
+    /** The language that was applied to the survey. */
+    surveyLanguage?: string | null
 }
 
 function getTabPositionStyles(position: SurveyTabPosition = SurveyTabPosition.Right): JSX.CSSProperties {
@@ -1101,11 +1178,13 @@ export function SurveyPopup({
     removeSurveyFromFocus = () => {},
     isPopup = true,
     onPreviewSubmit = () => {},
+    onPreviewBack = () => {},
     onPopupSurveyDismissed = () => {},
     onCloseConfirmationMessage = () => {},
     properties,
     isSurveyCompleted,
     skipShownEvent,
+    surveyLanguage,
 }: SurveyPopupProps) {
     const surveyContainerRef = useRef<HTMLDivElement>(null)
     const isPreviewMode = Number.isInteger(previewPageIndex)
@@ -1121,7 +1200,8 @@ export function SurveyPopup({
         removeSurveyFromFocus,
         isPopup,
         surveyContainerRef,
-        skipShownEvent
+        skipShownEvent,
+        surveyLanguage
     )
 
     /**
@@ -1135,20 +1215,38 @@ export function SurveyPopup({
 
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)
+        const surveySubmissionId = getInProgressSurvey?.surveySubmissionId || uuidv7()
         return {
             isPreviewMode,
             previewPageIndex: previewPageIndex,
             onPopupSurveyDismissed: () => {
-                dismissedSurveyEvent(survey, posthog, isPreviewMode)
+                if (surveyLanguage) {
+                    dismissedSurveyEvent(survey, posthog, isPreviewMode, surveyLanguage)
+                } else {
+                    dismissedSurveyEvent(survey, posthog, isPreviewMode)
+                }
                 onPopupSurveyDismissed()
             },
             isPopup: isPopup || false,
-            surveySubmissionId: getInProgressSurvey?.surveySubmissionId || uuidv7(),
+            surveySubmissionId,
             onPreviewSubmit,
+            onPreviewBack,
             posthog,
             properties,
+            surveyLanguage,
         }
-    }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit, properties])
+    }, [
+        isPreviewMode,
+        previewPageIndex,
+        isPopup,
+        posthog,
+        survey,
+        onPopupSurveyDismissed,
+        onPreviewSubmit,
+        onPreviewBack,
+        properties,
+        surveyLanguage,
+    ])
 
     if (!isPopupVisible) {
         return null
@@ -1206,13 +1304,19 @@ export function Questions({
         onPopupSurveyDismissed,
         isPopup,
         onPreviewSubmit,
+        onPreviewBack,
         surveySubmissionId,
         isPreviewMode,
         properties,
+        surveyLanguage,
     } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey)
         return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
+    })
+    const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        return inProgressSurveyData?.visitedIndices ?? []
     })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -1249,29 +1353,70 @@ export function Questions({
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
+        const newVisitedIndices = [...visitedIndices, displayQuestionIndex]
 
         if (!isSurveyCompleted) {
+            setVisitedIndices(newVisitedIndices)
             setCurrentQuestionIndex(nextStep)
             setInProgressSurveyState(survey, {
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
                 lastQuestionIndex: nextStep,
+                visitedIndices: newVisitedIndices,
+                surveyLanguage,
             })
         }
 
         // If partial responses are enabled, send the survey sent event with with the responses,
         // otherwise only send the event when the survey is completed
         if (survey.enable_partial_responses || isSurveyCompleted) {
+            // Only emit responses for questions actually on the path the user took. This prunes
+            // ghost answers from branches the user abandoned by backing up and choosing differently.
+            const visitedResponseKeys = new Set(
+                newVisitedIndices
+                    .map((i) => surveyQuestions[i]?.id)
+                    .filter((id): id is string => !!id)
+                    .map((id) => getSurveyResponseKey(id))
+            )
+            const responsesOnPath = Object.fromEntries(
+                Object.entries(newResponses).filter(([key]) => visitedResponseKeys.has(key))
+            )
             sendSurveyEvent({
-                responses: newResponses,
+                responses: responsesOnPath,
                 survey,
                 surveySubmissionId,
                 isSurveyCompleted,
                 posthog,
                 properties,
+                surveyLanguage,
             })
         }
     }
+
+    const onBackButtonClick = () => {
+        // In preview mode the parent owns navigation (via previewPageIndex), so delegate to it.
+        if (isPreviewMode) {
+            onPreviewBack()
+            return
+        }
+        if (visitedIndices.length === 0) {
+            return
+        }
+        const previousIndex = visitedIndices[visitedIndices.length - 1]
+        const newVisitedIndices = visitedIndices.slice(0, -1)
+        setVisitedIndices(newVisitedIndices)
+        setCurrentQuestionIndex(previousIndex)
+        setInProgressSurveyState(survey, {
+            surveySubmissionId,
+            responses: questionsResponses,
+            lastQuestionIndex: previousIndex,
+            visitedIndices: newVisitedIndices,
+            surveyLanguage,
+        })
+    }
+
+    const canGoBack =
+        !!survey.appearance?.allowGoBack && (isPreviewMode ? (previewPageIndex ?? 0) > 0 : visitedIndices.length > 0)
 
     const currentQuestion = surveyQuestions.at(currentQuestionIndex)
 
@@ -1290,7 +1435,7 @@ export function Questions({
                     }}
                 />
             )}
-            <div className="survey-box">
+            <div className="survey-box" data-question-index={currentQuestionIndex}>
                 {getQuestionComponent({
                     question: currentQuestion,
                     forceDisableHtml,
@@ -1306,6 +1451,8 @@ export function Questions({
                     initialValue: currentQuestion.id
                         ? questionsResponses[getSurveyResponseKey(currentQuestion.id)]
                         : undefined,
+                    canGoBack,
+                    onBack: onBackButtonClick,
                 })}
             </div>
         </form>
@@ -1317,11 +1464,13 @@ export function FeedbackWidget({
     forceDisableHtml,
     posthog,
     readOnly,
+    surveyLanguage,
 }: {
     survey: Survey
     forceDisableHtml?: boolean
     posthog?: PostHog
     readOnly?: boolean
+    surveyLanguage?: string | null
 }): JSX.Element | null {
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
@@ -1374,6 +1523,7 @@ export function FeedbackWidget({
     useHideSurveyOnURLChange({
         survey,
         setSurveyVisible: setIsFeedbackButtonVisible,
+        posthog,
     })
 
     if (!isFeedbackButtonVisible) {
@@ -1411,6 +1561,7 @@ export function FeedbackWidget({
                     style={styleOverrides}
                     onPopupSurveyDismissed={resetShowSurvey}
                     onCloseConfirmationMessage={resetShowSurvey}
+                    surveyLanguage={surveyLanguage}
                 />
             )}
         </Fragment>
@@ -1430,6 +1581,8 @@ const getQuestionComponent = ({
     onSubmit,
     onPreviewSubmit,
     initialValue,
+    canGoBack,
+    onBack,
 }: GetQuestionComponentProps): JSX.Element | null => {
     const baseProps = {
         forceDisableHtml,
@@ -1442,6 +1595,8 @@ const getQuestionComponent = ({
         },
         initialValue,
         displayQuestionIndex,
+        canGoBack,
+        onBack,
     }
 
     switch (question.type) {

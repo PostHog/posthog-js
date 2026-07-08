@@ -43,6 +43,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "undefined",
         "string[]"
       ],
+      "css_selector_ignorelist": [
+        "undefined",
+        "string[]"
+      ],
       "element_attribute_ignorelist": [
         "undefined",
         "string[]"
@@ -67,6 +71,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "false",
         "true",
         "string[]"
+      ],
+      "ignore_text_selection": [
+        "undefined",
+        "false",
+        "true"
       ],
       "threshold_px": [
         "undefined",
@@ -103,6 +112,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "readonly string[]"
   ],
   "loaded": "(posthog_instance: PostHog) => void",
+  "disable_capture_url_hashes": [
+    "false",
+    "true"
+  ],
   "save_referrer": [
     "false",
     "true"
@@ -155,6 +168,20 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "persistence_save_debounce_ms": [
+    "undefined",
+    "number"
+  ],
+  "split_storage": [
+    "undefined",
+    "false",
+    "true"
+  ],
+  "detect_google_search_app": [
+    "undefined",
+    "false",
+    "true"
+  ],
   "disable_surveys": [
     "false",
     "true"
@@ -197,12 +224,53 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "undefined",
         "false",
         "true"
+      ],
+      "serviceName": [
+        "undefined",
+        "string"
+      ],
+      "environment": [
+        "undefined",
+        "string"
+      ],
+      "serviceVersion": [
+        "undefined",
+        "string"
+      ],
+      "resourceAttributes": [
+        "undefined",
+        "LogAttributes"
+      ],
+      "flushIntervalMs": [
+        "undefined",
+        "number"
+      ],
+      "maxBufferSize": [
+        "undefined",
+        "number"
+      ],
+      "maxLogsPerInterval": [
+        "undefined",
+        "number"
+      ],
+      "beforeSend": [
+        "undefined",
+        "BeforeSendLogFn",
+        "BeforeSendLogFn[]"
       ]
     }
   ],
   "disable_conversations": [
     "false",
     "true"
+  ],
+  "identity_distinct_id": [
+    "undefined",
+    "string"
+  ],
+  "identity_hash": [
+    "undefined",
+    "string"
   ],
   "disable_web_experiments": [
     "false",
@@ -211,6 +279,14 @@ exports[`config snapshot for PostHogConfig 1`] = `
   "disable_external_dependency_loading": [
     "false",
     "true"
+  ],
+  "strict_script_versioning": [
+    "false",
+    "true"
+  ],
+  "asset_host": [
+    "null",
+    "string"
   ],
   "prepare_external_dependency_script": [
     "undefined",
@@ -291,12 +367,18 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "properties_string_max_length": "number",
   "defaults": [
+    "\\"2026-06-25\\"",
+    "\\"2026-05-30\\"",
     "\\"2026-01-30\\"",
     "\\"2025-11-30\\"",
     "\\"2025-05-24\\"",
     "\\"unset\\""
   ],
   "__preview_deferred_init_extensions": [
+    "false",
+    "true"
+  ],
+  "__preview_cookie_wins_on_conflict": [
     "false",
     "true"
   ],
@@ -376,9 +458,18 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
+    "streamNetworkBody": [
+      "undefined",
+      "false",
+      "true"
+    ],
     "captureCanvas": [
       "undefined",
       "SessionRecordingCanvasOptions"
+    ],
+    "canvasCapture": [
+      "undefined",
+      "{ resolutionScale?: number | undefined; }"
     ],
     "maskCapturedNetworkRequestFn": [
       "undefined",
@@ -415,6 +506,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "false",
       "true"
+    ],
+    "sampleRate": [
+      "undefined",
+      "number"
     ]
   },
   "error_tracking": {
@@ -435,6 +530,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "__exceptionRateLimiterBucketSize": [
       "undefined",
       "number"
+    ],
+    "exception_steps": [
+      "undefined",
+      "ExceptionStepsConfig"
     ]
   },
   "session_idle_timeout_seconds": "number",
@@ -473,6 +572,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "undefined",
     "readonly string[]"
   ],
+  "flag_keys": [
+    "undefined",
+    "readonly string[]"
+  ],
   "evaluation_environments": [
     "undefined",
     "readonly string[]"
@@ -490,12 +593,28 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "true"
   ],
   "feature_flag_request_timeout_ms": "number",
+  "feature_flag_cache_ttl_ms": [
+    "undefined",
+    "number"
+  ],
+  "advanced_feature_flags_dedup_per_session": [
+    "false",
+    "true"
+  ],
   "surveys_request_timeout_ms": "number",
+  "remote_config_refresh_interval_ms": [
+    "undefined",
+    "number"
+  ],
   "get_device_id": "(uuid: string) => string",
   "before_send": [
     "undefined",
     "BeforeSendFn",
     "BeforeSendFn[]"
+  ],
+  "get_current_url": [
+    "undefined",
+    "(defaultUrl: string) => string"
   ],
   "sanitize_properties": [
     "null",
@@ -585,7 +704,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true",
     [
-      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; capture_clicks_with_modifier_keys?: boolean | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }",
+      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; capture_clicks_with_modifier_keys?: boolean | undefined; css_selector_ignorelist?: string[] | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => vo...",
       "Pick<AutocaptureConfig, \\"element_attribute_ignorelist\\">"
     ]
   ],
@@ -654,6 +773,14 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "null",
     "string"
   ],
+  "tracing_headers": [
+    "undefined",
+    "string[]"
+  ],
+  "addTracingHeaders": [
+    "undefined",
+    "string[]"
+  ],
   "__add_tracing_headers": [
     "undefined",
     "string[]"
@@ -668,6 +795,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true"
   ],
+  "disable_beacon": [
+    "undefined",
+    "false",
+    "true"
+  ],
   "__preview_disable_beacon": [
     "undefined",
     "false",
@@ -675,6 +807,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "__preview_disable_xhr_credentials": [
     "undefined",
+    "false",
+    "true"
+  ],
+  "__preview_external_dependency_versioned_paths": [
+    "undefined",
+    "string",
     "false",
     "true"
   ],

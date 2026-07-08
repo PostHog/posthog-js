@@ -1,5 +1,8 @@
 import {
+    COOKIELESS_ALWAYS,
+    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
     SESSION_RECORDING_OVERRIDE_LINKED_FLAG,
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
@@ -11,7 +14,7 @@ import { RemoteConfigLoader } from '../../remote-config'
 import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isNullish, isUndefined } from '@posthog/core'
+import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '../../utils/logger'
 import {
     assignableWindow,
@@ -20,16 +23,31 @@ import {
     window,
 } from '../../utils/globals'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
-import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './external/triggerMatching'
+import {
+    AWAITING_CONFIG,
+    DISABLED,
+    LAZY_LOADING,
+    MISSING_CONFIG,
+    SessionRecordingStatus,
+    TriggerType,
+} from './external/triggerMatching'
+import type { Extension } from '../types'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
-export class SessionRecording {
+export class SessionRecording implements Extension {
     _forceAllowLocalhostNetworkCapture: boolean = false
 
-    private _receivedFlags: boolean = false
-    private _hasRequestedConfigRefresh: boolean = false
+    private _recordingStatus: SessionRecordingStatus = DISABLED
+
+    private get _config() {
+        return this._instance.config
+    }
+
+    private get _persistence() {
+        return this._instance.persistence
+    }
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
@@ -38,20 +56,11 @@ export class SessionRecording {
         return !!this._lazyLoadedSessionRecording?.isStarted
     }
 
-    /**
-     * defaults to buffering mode until a flags response is received
-     * once a flags response is received status can be disabled, active or sampled
-     */
     get status(): SessionRecordingStatus {
-        if (this._lazyLoadedSessionRecording) {
-            return this._lazyLoadedSessionRecording.status
+        if (this._recordingStatus === AWAITING_CONFIG || this._recordingStatus === MISSING_CONFIG) {
+            return this._recordingStatus
         }
-
-        if (this._receivedFlags && !this._isRecordingEnabled) {
-            return DISABLED
-        }
-
-        return LAZY_LOADING
+        return this._lazyLoadedSessionRecording?.status ?? this._recordingStatus
     }
 
     constructor(private readonly _instance: PostHog) {
@@ -60,15 +69,19 @@ export class SessionRecording {
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
-        if (this._instance.config.cookieless_mode === 'always') {
+        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
     }
 
+    initialize() {
+        this.startIfEnabledOrStop()
+    }
+
     private get _isRecordingEnabled() {
         const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
-        const enabled_client_side = !this._instance.config.disable_session_recording
-        const isDisabled = this._instance.config.disable_session_recording || this._instance.consent.isOptedOut()
+        const enabled_client_side = !this._config.disable_session_recording
+        const isDisabled = this._config.disable_session_recording || this._instance.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
@@ -89,6 +102,7 @@ export class SessionRecording {
             this._lazyLoadAndStart(startReason)
             logger.info('starting')
         } else {
+            this._recordingStatus = DISABLED
             this.stopRecording()
         }
     }
@@ -105,6 +119,10 @@ export class SessionRecording {
         // replay waits for both local and remote config before starting
         if (!this._isRecordingEnabled) {
             return
+        }
+
+        if (this._recordingStatus !== AWAITING_CONFIG && this._recordingStatus !== MISSING_CONFIG) {
+            this._recordingStatus = LAZY_LOADING
         }
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
@@ -134,21 +152,46 @@ export class SessionRecording {
         this._lazyLoadedSessionRecording?.stop()
     }
 
+    private _discardRecording() {
+        this._persistFlagsOnSessionListener?.()
+        this._persistFlagsOnSessionListener = undefined
+        this._lazyLoadedSessionRecording?.discard()
+    }
+
     private _resetSampling() {
-        this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+        this._persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
+    }
+
+    private _validateSampleRate(rate: unknown, source: string): number | null {
+        if (isNullish(rate)) {
+            return null
+        }
+        const parsed = isNumber(rate) ? rate : parseFloat(rate as string)
+        if (!isValidSampleRate(parsed)) {
+            logger.warn(`${source} must be between 0 and 1. Ignoring invalid value:`, rate)
+            return null
+        }
+        return parsed
     }
 
     private _persistRemoteConfig(response: RemoteConfig): void {
-        if (this._instance.persistence) {
-            const persistence = this._instance.persistence
+        if (this._persistence) {
+            const persistence = this._persistence
 
             const persistResponse = () => {
                 const sessionRecordingConfigResponse =
                     response.sessionRecording === false ? undefined : response.sessionRecording
 
-                const receivedSampleRate = sessionRecordingConfigResponse?.sampleRate
-
-                const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+                const localSampleRate = this._validateSampleRate(
+                    this._config.session_recording?.sampleRate,
+                    'session_recording.sampleRate'
+                )
+                const remoteSampleRate = this._validateSampleRate(
+                    sessionRecordingConfigResponse?.sampleRate,
+                    'remote config sampleRate'
+                )
+                const parsedSampleRate = localSampleRate ?? remoteSampleRate
                 if (isNullish(parsedSampleRate)) {
                     this._resetSampling()
                 }
@@ -177,6 +220,9 @@ export class SessionRecording {
                         triggerMatchType: sessionRecordingConfigResponse?.triggerMatchType,
                         masking: sessionRecordingConfigResponse?.masking,
                         urlTriggers: sessionRecordingConfigResponse?.urlTriggers,
+                        // V2 fields - will be undefined for V1 configs
+                        version: sessionRecordingConfigResponse?.version,
+                        triggerGroups: sessionRecordingConfigResponse?.triggerGroups,
                     } satisfies SessionRecordingPersistedConfig,
                 })
             }
@@ -192,19 +238,20 @@ export class SessionRecording {
 
     onRemoteConfig(response: RemoteConfig) {
         if (!('sessionRecording' in response)) {
-            // if sessionRecording is not in the response, we do nothing
-            logger.info('skipping remote config with no sessionRecording', response)
+            if (this._recordingStatus === AWAITING_CONFIG) {
+                this._recordingStatus = MISSING_CONFIG
+                logger.warn('config refresh failed, recording will not start until page reload')
+            }
+            this.startIfEnabledOrStop()
             return
         }
         if (response.sessionRecording === false) {
-            // remotely disabled
-            this._receivedFlags = true
+            this._persistRemoteConfig(response)
+            this._discardRecording()
             return
         }
 
-        this._hasRequestedConfigRefresh = false
         this._persistRemoteConfig(response)
-        this._receivedFlags = true
         this.startIfEnabledOrStop()
     }
 
@@ -228,14 +275,30 @@ export class SessionRecording {
         if (!persistedConfig) {
             return false
         }
-        const config = typeof persistedConfig === 'object' ? persistedConfig : JSON.parse(persistedConfig)
+        let config: SessionRecordingPersistedConfig
+        try {
+            config = typeof persistedConfig === 'object' ? persistedConfig : JSON.parse(persistedConfig)
+        } catch (e) {
+            // Do not unregister here: the SDK only registers structured configs, and this read path should
+            // ignore corrupt legacy/external values without mutating persistence.
+            logger.warn('persisted remote config for session recording is invalid and will be ignored', e)
+            return false
+        }
+        // default to now so that configs persisted by older SDK versions
+        // (which never set cache_timestamp) are treated as fresh
         const cacheTimestamp = config.cache_timestamp ?? Date.now()
         return Date.now() - cacheTimestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
-            throw Error('Called on script loaded before session recording is available')
+            logger.warn(
+                'Called on script loaded before session recording is available. This can be caused by adblockers.'
+            )
+            this._instance.register_for_session({
+                [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
+            })
+            return
         }
 
         if (!this._lazyLoadedSessionRecording) {
@@ -247,14 +310,16 @@ export class SessionRecording {
         }
 
         if (!this._isRemoteConfigFresh()) {
-            if (!this._hasRequestedConfigRefresh) {
-                this._hasRequestedConfigRefresh = true
-                logger.info('persisted remote config is stale, requesting fresh config before starting')
-                new RemoteConfigLoader(this._instance).load()
+            if (this._recordingStatus === MISSING_CONFIG || this._recordingStatus === AWAITING_CONFIG) {
+                return
             }
+            this._recordingStatus = AWAITING_CONFIG
+            logger.info('persisted remote config is stale, requesting fresh config before starting')
+            new RemoteConfigLoader(this._instance).load()
             return
         }
 
+        this._recordingStatus = LAZY_LOADING
         this._lazyLoadedSessionRecording.start(startReason)
     }
 
@@ -275,7 +340,7 @@ export class SessionRecording {
      * */
     public overrideLinkedFlag() {
         if (!this._lazyLoadedSessionRecording) {
-            this._instance.persistence?.register({
+            this._persistence?.register({
                 [SESSION_RECORDING_OVERRIDE_LINKED_FLAG]: true,
             })
         }
@@ -291,7 +356,7 @@ export class SessionRecording {
      * */
     public overrideSampling() {
         if (!this._lazyLoadedSessionRecording) {
-            this._instance.persistence?.register({
+            this._persistence?.register({
                 [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
             })
         }
@@ -307,7 +372,7 @@ export class SessionRecording {
      * */
     public overrideTrigger(triggerType: TriggerType) {
         if (!this._lazyLoadedSessionRecording) {
-            this._instance.persistence?.register({
+            this._persistence?.register({
                 [triggerType === 'url'
                     ? SESSION_RECORDING_OVERRIDE_URL_TRIGGER
                     : SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: true,

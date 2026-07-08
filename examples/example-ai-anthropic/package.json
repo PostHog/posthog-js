@@ -1,0 +1,21 @@
+{
+  "name": "example-ai-anthropic",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "chat": "tsx chat.ts",
+    "chat:stream": "tsx streaming.ts"
+  },
+  "dependencies": {
+    "@posthog/ai": "*",
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@opentelemetry/sdk-node": "^0.200.0",
+    "@opentelemetry/resources": "^2.0.0",
+    "@traceloop/instrumentation-anthropic": "^0.16.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

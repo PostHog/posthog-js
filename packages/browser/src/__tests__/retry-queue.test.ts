@@ -15,6 +15,7 @@ describe('RetryQueue', () => {
 
         jest.useFakeTimers()
         jest.setSystemTime(now)
+        assignableWindow.POSTHOG_DEBUG = false
         jest.spyOn(assignableWindow.console, 'warn').mockImplementation()
     })
 
@@ -164,6 +165,39 @@ describe('RetryQueue', () => {
         })
 
         expect(retryQueue.length).toEqual(0)
+    })
+
+    it.each([
+        { retriesPerformedSoFar: 2, expectedQueueLength: 1, expectedNextRetries: 3 },
+        { retriesPerformedSoFar: 3, expectedQueueLength: 0, expectedLogRetries: 3 },
+        { retriesPerformedSoFar: 5, expectedQueueLength: 0, expectedLogRetries: 5 },
+    ])('handles statusCode 0 requests after $retriesPerformedSoFar retries', (testCase) => {
+        assignableWindow.POSTHOG_DEBUG = !!testCase.expectedLogRetries
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 0 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'status-0-retry', timestamp: now },
+            callback: cb,
+            retriesPerformedSoFar: testCase.retriesPerformedSoFar,
+        })
+
+        expect(retryQueue.length).toEqual(testCase.expectedQueueLength)
+
+        if (testCase.expectedNextRetries) {
+            expect(retryQueue['_queue'][0].requestOptions.retriesPerformedSoFar).toEqual(testCase.expectedNextRetries)
+            expect(cb).not.toHaveBeenCalled()
+            expect(assignableWindow.console.warn).not.toHaveBeenCalled()
+        } else {
+            expect(cb).toHaveBeenCalledWith({ statusCode: 0 })
+            expect(assignableWindow.console.warn).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                `Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after ${testCase.expectedLogRetries} retries.`
+            )
+        }
     })
 
     it('only calls the callback when successful', () => {

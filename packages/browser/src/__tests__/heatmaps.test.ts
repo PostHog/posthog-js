@@ -8,6 +8,7 @@ import { isObject } from '@posthog/core'
 import { beforeEach, expect } from '@jest/globals'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { Heatmaps } from '../heatmaps'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '../autocapture-utils'
 
 jest.useFakeTimers()
 
@@ -55,6 +56,10 @@ describe('heatmaps', () => {
         expect(posthog.heatmaps!.getAndClearBuffer()).toBeUndefined()
 
         posthog.register({ $current_test_name: expect.getState().currentTestName })
+    })
+
+    afterEach(() => {
+        jest.restoreAllMocks()
     })
 
     it('should send generated heatmap data', async () => {
@@ -112,6 +117,41 @@ describe('heatmaps', () => {
         expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
     })
 
+    it('does not crash when getComputedStyle throws for a cross-realm element', async () => {
+        jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+            throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
+        })
+
+        const el = document.createElement('div')
+        document.body.appendChild(el)
+
+        expect(() => posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: el }))).not.toThrow()
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/'][0].target_fixed).toBe(false)
+    })
+
+    it('does not crash on mousemove when getComputedStyle throws for a cross-realm element', async () => {
+        jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+            throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
+        })
+
+        const el = document.createElement('div')
+        document.body.appendChild(el)
+
+        posthog.heatmaps?.['_onMouseMove']?.(createMockMouseEvent({ target: el }))
+
+        expect(() => jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)).not.toThrow()
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/'][0]).toMatchObject({
+            type: 'mousemove',
+            target_fixed: false,
+        })
+    })
+
     it('should handle empty mouse moves', async () => {
         posthog.heatmaps?.['_onMouseMove']?.(new Event('mousemove'))
 
@@ -133,6 +173,29 @@ describe('heatmaps', () => {
         expect(heatmapData).toBeDefined()
         expect(heatmapData['http://replaced/']).toHaveLength(4)
         expect(heatmapData['http://replaced/'].map((x) => x.type)).toEqual(['click', 'click', 'rageclick', 'click'])
+    })
+
+    it('should downgrade rageclick to click for suppressed targets', async () => {
+        posthog.config.rageclick = { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS }
+
+        const stepperButton = document.createElement('button')
+        stepperButton.textContent = '+'
+
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: stepperButton }))
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: stepperButton }))
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: stepperButton }))
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        const heatmapData = beforeSendMock.mock.lastCall[0].properties.$heatmap_data
+        expect(heatmapData).toBeDefined()
+        expect(heatmapData['http://replaced/']).toHaveLength(3)
+        expect(heatmapData['http://replaced/'].map((x: { type: string }) => x.type)).toEqual([
+            'click',
+            'click',
+            'click',
+        ])
     })
 
     it('should clear the buffer after each call', async () => {

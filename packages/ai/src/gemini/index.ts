@@ -2,20 +2,25 @@ import {
   GoogleGenAI,
   GenerateContentResponse as GeminiResponse,
   GenerateContentParameters,
+  EmbedContentParameters,
+  EmbedContentResponse,
   Part,
   GenerateContentResponseUsageMetadata,
 } from '@google/genai'
 import type { GoogleGenAIOptions } from '@google/genai'
 import { PostHog } from 'posthog-node'
 import {
+  AIEvent,
   MonitoringParams,
-  sendEventToPosthog,
   extractAvailableToolCalls,
   formatResponseGemini,
   extractPosthogParams,
   toContentString,
-  sendEventWithErrorToPosthog,
+  withPrivacyMode,
+  buildInlineDataBlock,
+  getModelParams,
 } from '../utils'
+import { captureAiGeneration } from '../captureAiGeneration'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'
@@ -57,8 +62,8 @@ export class WrappedModels {
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
 
       const metadata = response.usageMetadata
-      await sendEventToPosthog({
-        client: this.phClient,
+      const finishReason = response.candidates?.[0]?.finishReason
+      await captureAiGeneration(this.phClient, {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
@@ -66,7 +71,7 @@ export class WrappedModels {
         output: formatResponseGemini(response),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
-        params: params as GenerateContentParameters & MonitoringParams,
+        modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
         httpStatus: 200,
         usage: {
           inputTokens: metadata?.promptTokenCount ?? 0,
@@ -78,14 +83,14 @@ export class WrappedModels {
           webSearchCount: calculateGoogleWebSearchCount(response),
           rawUsage: metadata,
         },
+        stopReason: finishReason ?? undefined,
         tools: availableTools,
       })
 
       return response
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      const enrichedError = await sendEventWithErrorToPosthog({
-        client: this.phClient,
+      await captureAiGeneration(this.phClient, {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
@@ -93,14 +98,14 @@ export class WrappedModels {
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
-        params: params as GenerateContentParameters & MonitoringParams,
+        modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
         usage: {
           inputTokens: 0,
           outputTokens: 0,
         },
-        error: error,
+        error,
       })
-      throw enrichedError
+      throw error
     }
   }
 
@@ -111,6 +116,7 @@ export class WrappedModels {
     const startTime = Date.now()
     const accumulatedContent: FormattedContent = []
     let firstTokenTime: number | undefined
+    let stopReason: string | undefined
     let usage: TokenUsage = {
       inputTokens: 0,
       outputTokens: 0,
@@ -147,6 +153,11 @@ export class WrappedModels {
           } else {
             accumulatedContent.push({ type: 'text', text: chunk.text })
           }
+        }
+
+        // Track finish reason from candidates
+        if (chunk.candidates?.[0]?.finishReason) {
+          stopReason = chunk.candidates[0].finishReason
         }
 
         // Handle function calls from candidates
@@ -200,8 +211,7 @@ export class WrappedModels {
       // Format output similar to formatResponseGemini
       const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
 
-      await sendEventToPosthog({
-        client: this.phClient,
+      await captureAiGeneration(this.phClient, {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
@@ -210,19 +220,19 @@ export class WrappedModels {
         latency,
         timeToFirstToken,
         baseURL: 'https://generativelanguage.googleapis.com',
-        params: params as GenerateContentParameters & MonitoringParams,
+        modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
         httpStatus: 200,
         usage: {
           ...usage,
           webSearchCount: usage.webSearchCount,
           rawUsage: usage.rawUsage,
         },
+        stopReason,
         tools: availableTools,
       })
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
-      const enrichedError = await sendEventWithErrorToPosthog({
-        client: this.phClient,
+      await captureAiGeneration(this.phClient, {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
@@ -230,14 +240,62 @@ export class WrappedModels {
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
-        params: params as GenerateContentParameters & MonitoringParams,
+        modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
         usage: {
           inputTokens: 0,
           outputTokens: 0,
         },
-        error: error,
+        error,
       })
-      throw enrichedError
+      throw error
+    }
+  }
+
+  public async embedContent(params: EmbedContentParameters & MonitoringParams): Promise<EmbedContentResponse> {
+    const { providerParams: geminiParams, posthogParams } = extractPosthogParams(params)
+    const startTime = Date.now()
+
+    try {
+      const response = await this.client.models.embedContent(geminiParams as EmbedContentParameters)
+      const latency = (Date.now() - startTime) / 1000
+
+      const inputTokens = extractEmbeddingTokenCount(response)
+
+      await captureAiGeneration(this.phClient, {
+        ...posthogParams,
+        eventType: AIEvent.Embedding,
+        model: geminiParams.model,
+        provider: 'gemini',
+        input: withPrivacyMode(this.phClient, posthogParams.privacyMode ?? false, geminiParams.contents),
+        output: null,
+        latency,
+        baseURL: 'https://generativelanguage.googleapis.com',
+        modelParameters: getModelParams(params as EmbedContentParameters & MonitoringParams),
+        httpStatus: 200,
+        usage: {
+          inputTokens,
+        },
+      })
+
+      return response
+    } catch (error: unknown) {
+      const latency = (Date.now() - startTime) / 1000
+      await captureAiGeneration(this.phClient, {
+        ...posthogParams,
+        eventType: AIEvent.Embedding,
+        model: geminiParams.model,
+        provider: 'gemini',
+        input: withPrivacyMode(this.phClient, posthogParams.privacyMode ?? false, geminiParams.contents),
+        output: null,
+        latency,
+        baseURL: 'https://generativelanguage.googleapis.com',
+        modelParameters: getModelParams(params as EmbedContentParameters & MonitoringParams),
+        usage: {
+          inputTokens: 0,
+        },
+        error,
+      })
+      throw error
     }
   }
 
@@ -256,16 +314,8 @@ export class WrappedModels {
       // Handle inlineData (images, audio, PDFs)
       else if (part && typeof part === 'object' && 'inlineData' in part) {
         const inlineData = (part as any).inlineData
-        const mimeType = inlineData.mimeType || inlineData.mime_type || ''
-        const contentType = mimeType.startsWith('image/') ? 'image' : 'document'
-
-        blocks.push({
-          type: contentType,
-          inline_data: {
-            data: inlineData.data,
-            mime_type: mimeType,
-          },
-        } as FormattedContentItem)
+        const mimeType = inlineData.mimeType || inlineData.mime_type || 'application/octet-stream'
+        blocks.push(buildInlineDataBlock(mimeType, inlineData.data))
       }
     }
 
@@ -384,6 +434,23 @@ export class WrappedModels {
 }
 
 /**
+ * Extract total token count from a Gemini embed_content response.
+ * Token counts are only available per-embedding via Vertex AI's statistics.tokenCount.
+ * Returns 0 if no token counts are available.
+ */
+function extractEmbeddingTokenCount(response: EmbedContentResponse): number {
+  let total = 0
+  if (response.embeddings) {
+    for (const embedding of response.embeddings) {
+      if (embedding.statistics?.tokenCount != null) {
+        total += embedding.statistics.tokenCount
+      }
+    }
+  }
+  return total
+}
+
+/**
  * Detect if Google Search grounding was used in the response.
  * Gemini bills per request that uses grounding, not per individual query.
  * Returns 1 if grounding was used, 0 otherwise.
@@ -463,3 +530,4 @@ function calculateGoogleWebSearchCount(response: unknown): number {
 
 export default PostHogGoogleGenAI
 export { PostHogGoogleGenAI as Gemini }
+export { PostHogGoogleGenAI as GoogleGenAI }

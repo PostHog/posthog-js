@@ -8,6 +8,7 @@
 import type { PostHogConfig } from './posthog-config'
 import type { Properties, JsonType } from './common'
 import type { CaptureResult, CaptureOptions } from './capture'
+import type { CaptureLogOptions, Logger } from './capture-log'
 import type {
     FeatureFlagsCallback,
     EarlyAccessFeatureCallback,
@@ -21,6 +22,7 @@ import type { RequestCallback } from './request'
 import type { SurveyRenderReason } from './survey'
 import type { ToolbarParams } from './toolbar'
 import type { ExceptionAutoCaptureConfig } from './posthog-config'
+import type { TreeShakeable } from './tree-shakeable'
 
 /**
  * The PostHog instance interface.
@@ -99,6 +101,32 @@ export interface PostHog {
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined
 
+    /**
+     * Adds a breadcrumb-like step that will be attached to the next captured exception as `$exception_steps`.
+     *
+     * @param message - The step message
+     * @param properties - Additional context for this step
+     */
+    addExceptionStep(message: string, properties?: Properties): void
+
+    /**
+     * Capture a log entry and send it to the PostHog logs endpoint.
+     *
+     * @param options - The log entry options (body, level, attributes, etc.)
+     */
+    captureLog(options: CaptureLogOptions): void
+
+    /**
+     * Logger with convenience methods for each severity level.
+     *
+     * @example
+     * ```js
+     * posthog.logger.info('checkout completed', { order_id: 'ord_789' })
+     * posthog.logger.error('payment failed', { error_code: 'E001' })
+     * ```
+     */
+    logger: Logger
+
     // ============================================================================
     // User Identification
     // ============================================================================
@@ -113,12 +141,32 @@ export interface PostHog {
     identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
 
     /**
+     * Set HMAC-based identity verification.
+     *
+     * @param distinctId - The verified user distinct_id
+     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     */
+    setIdentity(distinctId: string, hash: string): void
+
+    /**
+     * Clear HMAC-based identity verification, reverting to anonymous mode.
+     */
+    clearIdentity(): void
+
+    /**
      * Set properties on the current user.
      *
      * @param userPropertiesToSet - Properties to set on the user (using $set)
      * @param userPropertiesToSetOnce - Properties to set once on the user (using $set_once)
      */
     setPersonProperties(userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
+
+    /**
+     * Remove properties from the current user.
+     *
+     * @param propertyNames - The name (or names) of the person properties to remove (using $unset)
+     */
+    unsetPersonProperties(propertyNames: string | string[]): void
 
     /**
      * Create an alias for the current user.
@@ -138,9 +186,22 @@ export interface PostHog {
     /**
      * Reset the user's identity and start a new session.
      *
-     * @param reset_device_id - Whether to reset the device ID as well
+     * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
      */
     reset(reset_device_id?: boolean): void
+
+    /**
+     * Flush any queued events and gracefully tear down the SDK.
+     *
+     * @remarks
+     * Provided for parity with the server-side Node.js SDK. In the browser the SDK
+     * already flushes on page unload, so this best-effort flushes queued events and
+     * always resolves — it never throws — which makes isomorphic teardown safe.
+     *
+     * @param {number} [shutdownTimeoutMs] Accepted for parity with the Node.js SDK; unused in the browser.
+     * @returns {Promise<void>} Resolves once teardown is complete.
+     */
+    shutdown(shutdownTimeoutMs?: number): Promise<void>
 
     /**
      * Create a person profile for the current user.
@@ -202,7 +263,7 @@ export interface PostHog {
     /**
      * The feature flags instance. Provides access to feature flag override methods.
      */
-    featureFlags: {
+    featureFlags: TreeShakeable<{
         /**
          * Override feature flags on the client-side. Useful for testing/debugging.
          *
@@ -217,6 +278,9 @@ export interface PostHog {
          *     flags: {'beta-feature': 'variant'},
          *     payloads: { 'beta-feature': { someData: true } }
          * })
+         * posthog.featureFlags.overrideFeatureFlags({ // only override payloads
+         *     payloads: { 'beta-feature': { someData: true } }
+         * })
          * ```
          */
         overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void
@@ -225,7 +289,7 @@ export interface PostHog {
          * @deprecated Use `overrideFeatureFlags` instead. This will be removed in a future version.
          */
         override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning?: boolean): void
-    }
+    }>
 
     /**
      * Get the value of a feature flag.
@@ -307,8 +371,10 @@ export interface PostHog {
 
     /**
      * Reset person properties used for feature flag evaluation.
+     *
+     * @param reloadFeatureFlags - Whether to reload feature flags after resetting
      */
-    resetPersonPropertiesForFlags(): void
+    resetPersonPropertiesForFlags(reloadFeatureFlags?: boolean): void
 
     /**
      * Set group properties to be used for feature flag evaluation.
@@ -431,7 +497,9 @@ export interface PostHog {
     /**
      * Get the URL to view the current session recording.
      *
-     * @param options - Options for the URL
+     * @param {Object} [options] Options for the URL
+     * @param {boolean} [options.withTimestamp] Whether to include the timestamp in the URL
+     * @param {number} [options.timestampLookBack] How many seconds to look back for the timestamp
      * @returns The session replay URL
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string
@@ -587,8 +655,8 @@ export interface PostHog {
     /**
      * Register an event listener.
      *
-     * @param event - The event name (currently only 'eventCaptured' is supported)
-     * @param cb - The callback to call
+     * @param {'eventCaptured' | 'featureFlagsReloading'} event The event name to listen for
+     * @param {(...args: any[]) => void} cb The callback to call
      * @returns A function to unsubscribe
      */
     on(event: 'eventCaptured' | 'featureFlagsReloading', cb: (...args: any[]) => void): () => void

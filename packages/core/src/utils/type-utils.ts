@@ -1,4 +1,9 @@
-import { knownUnsafeEditableEvent, KnownUnsafeEditableEvent } from '../types'
+import {
+  knownUnsafeEditableEvent,
+  KnownUnsafeEditableEvent,
+  knownUnsafeEditableEventProperty,
+  KnownUnsafeEditableEventProperty,
+} from '../types'
 import { includes } from './string-utils'
 
 // eslint-disable-next-line posthog-js/no-direct-array-check
@@ -93,6 +98,10 @@ export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditable
   return includes(knownUnsafeEditableEvent as unknown as string[], x)
 }
 
+export const isKnownUnsafeEditableEventProperty = (x: unknown): x is KnownUnsafeEditableEventProperty => {
+  return includes(knownUnsafeEditableEventProperty as unknown as string[], x)
+}
+
 export function isPrimitive(value: unknown): boolean {
   return value === null || typeof value !== 'object'
 }
@@ -119,7 +128,7 @@ export function isErrorEvent(event: unknown): boolean {
 }
 
 export function isEvent(candidate: unknown): candidate is Event {
-  return !isUndefined(Event) && isInstanceOf(candidate, Event)
+  return typeof Event !== 'undefined' && isInstanceOf(candidate, Event)
 }
 
 export function isPlainObject(candidate: unknown): candidate is Record<string, unknown> {

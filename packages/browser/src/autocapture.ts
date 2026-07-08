@@ -21,12 +21,13 @@ import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { isBoolean, isFunction, isNull, isObject } from '@posthog/core'
+import { isBoolean, isFunction, isNull, isObject, stripUrlHash } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
-import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
 import { includes } from '@posthog/core'
+import type { Extension } from './extensions/types'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
@@ -82,7 +83,8 @@ export function getPropertiesFromElement(
     elem: Element,
     maskAllAttributes: boolean,
     maskText: boolean,
-    elementAttributeIgnorelist: string[] | undefined
+    elementAttributeIgnorelist: string[] | undefined,
+    disableCaptureUrlHashes: boolean = false
 ): Properties {
     const tag_name = elem.tagName.toLowerCase()
     const props: Properties = {
@@ -117,7 +119,10 @@ export function getPropertiesFromElement(
                 // so we strip them.
                 value = splitClassString(value).join(' ')
             }
-            props['attr__' + attr.name] = limitText(1024, value)
+            props['attr__' + attr.name] = limitText(
+                1024,
+                attr.name === 'href' && disableCaptureUrlHashes ? stripUrlHash(value) : value
+            )
         }
     })
 
@@ -145,24 +150,33 @@ export function autocapturePropertiesForElement(
         maskAllText,
         elementAttributeIgnoreList,
         elementsChainAsString,
+        disableCaptureUrlHashes,
     }: {
         e: Event
         maskAllElementAttributes: boolean
         maskAllText: boolean
         elementAttributeIgnoreList?: string[] | undefined
         elementsChainAsString: boolean
+        disableCaptureUrlHashes: boolean
     }
 ): { props: Properties; explicitNoCapture?: boolean } {
-    const targetElementList = [target]
-    let curEl = target
+    if (!isElementNode(target)) {
+        return { props: {} }
+    }
+
+    const targetElementList: Element[] = [target]
+    let curEl: Element = target
     while (curEl.parentNode && !isTag(curEl, 'body')) {
-        if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
+        if (isShadowRoot(curEl.parentNode)) {
+            targetElementList.push(curEl.parentNode.host)
+            curEl = curEl.parentNode.host
             continue
         }
-        targetElementList.push(curEl.parentNode as Element)
-        curEl = curEl.parentNode as Element
+        if (!isElementNode(curEl.parentNode)) {
+            break
+        }
+        targetElementList.push(curEl.parentNode)
+        curEl = curEl.parentNode
     }
 
     const elementsJson: Properties[] = []
@@ -175,9 +189,14 @@ export function autocapturePropertiesForElement(
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
-        if (el.tagName.toLowerCase() === 'a') {
-            href = el.getAttribute('href')
-            href = shouldCaptureEl && href && shouldCaptureValue(href) && href
+        if (isTag(el, 'a')) {
+            const hrefAttr = el.getAttribute('href')
+            href =
+                shouldCaptureEl && !!hrefAttr && shouldCaptureValue(hrefAttr)
+                    ? disableCaptureUrlHashes
+                        ? stripUrlHash(hrefAttr)
+                        : hrefAttr
+                    : false
         }
 
         // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
@@ -187,7 +206,13 @@ export function autocapturePropertiesForElement(
         }
 
         elementsJson.push(
-            getPropertiesFromElement(el, maskAllElementAttributes, maskAllText, elementAttributeIgnoreList)
+            getPropertiesFromElement(
+                el,
+                maskAllElementAttributes,
+                maskAllText,
+                elementAttributeIgnoreList,
+                disableCaptureUrlHashes
+            )
         )
 
         const augmentProperties = getAugmentPropertiesFromElement(el)
@@ -201,7 +226,7 @@ export function autocapturePropertiesForElement(
     if (!maskAllText) {
         // if the element is a button or anchor tag get the span text from any
         // children and include it as/with the text property on the parent element
-        if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
+        if (isTag(target, 'a') || isTag(target, 'button')) {
             elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target)
         } else {
             elementsJson[0]['$el_text'] = getSafeText(target)
@@ -232,7 +257,7 @@ export function autocapturePropertiesForElement(
     return { props }
 }
 
-export class Autocapture {
+export class Autocapture implements Extension {
     instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
@@ -244,6 +269,10 @@ export class Autocapture {
         this.instance = instance
         this.rageclicks = new RageClick(instance.config.rageclick)
         this._elementSelectors = null
+    }
+
+    initialize() {
+        this.startIfEnabled()
     }
 
     private get _config(): AutocaptureConfig {
@@ -280,7 +309,11 @@ export class Autocapture {
         if (this._config.capture_copied_text) {
             const copiedTextHandler = (e: Event) => {
                 e = e || window?.event
-                this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
+                try {
+                    this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
+                } catch (error) {
+                    logger.error('Failed to capture copy/cut event', error)
+                }
             }
 
             addEventListener(document, 'copy', copiedTextHandler, { capture: true })
@@ -385,7 +418,8 @@ export class Autocapture {
                 isCopyAutocapture,
                 // we also don't want to restrict copy checks to clicks,
                 // so we pass that knowledge in here, rather than add the logic inside the check
-                isCopyAutocapture ? ['copy', 'cut'] : undefined
+                isCopyAutocapture ? ['copy', 'cut'] : undefined,
+                this.instance
             )
         ) {
             const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
@@ -394,6 +428,7 @@ export class Autocapture {
                 maskAllText: this.instance.config.mask_all_text,
                 elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
+                disableCaptureUrlHashes: this.instance.config.disable_capture_url_hashes,
             })
 
             if (explicitNoCapture) {

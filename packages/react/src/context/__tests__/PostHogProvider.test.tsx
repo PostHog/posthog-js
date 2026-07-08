@@ -2,6 +2,7 @@ import * as React from 'react'
 import { render, act } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '..'
 import posthogJs from 'posthog-js'
+import { setDefaultPostHogInstance } from '../posthog-default'
 
 // Mock posthog-js
 jest.mock('posthog-js', () => ({
@@ -14,6 +15,14 @@ jest.mock('posthog-js', () => ({
 }))
 
 describe('PostHogProvider component', () => {
+    beforeEach(() => {
+        setDefaultPostHogInstance(posthogJs)
+    })
+
+    afterEach(() => {
+        setDefaultPostHogInstance(undefined)
+    })
+
     it('should render children components', () => {
         const posthog = {} as unknown as PostHog
         const { getByText } = render(
@@ -31,6 +40,23 @@ describe('PostHogProvider component', () => {
 
         beforeEach(() => {
             jest.clearAllMocks()
+        })
+
+        it('does not initialize when apiKey is missing', () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+            render(
+                <PostHogProvider apiKey={undefined as any} options={initialOptions}>
+                    <div>Test</div>
+                </PostHogProvider>
+            )
+
+            expect(posthogJs.init).not.toHaveBeenCalled()
+            expect(consoleSpy).toHaveBeenCalledWith(
+                '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
+            )
+
+            consoleSpy.mockRestore()
         })
 
         it('should call set_config when options change', () => {

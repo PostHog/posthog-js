@@ -1,13 +1,16 @@
 {
     "name": "@posthog/react",
-    "version": "1.8.1",
+    "version": "1.10.3",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
     "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/PostHog/posthog-js.git",
         "directory": "packages/react"
     },
-    "author": "hey@posthog.com",
+    "author": "engineering@posthog.com",
     "license": "MIT",
     "homepage": "https://posthog.com/docs/libraries/react",
     "packageManager": "pnpm@10.12.4",
@@ -27,7 +30,8 @@
     "files": [
         "dist",
         "src",
-        "surveys"
+        "surveys",
+        "slim"
     ],
     "peerDependencies": {
         "@types/react": ">=16.8.0",
@@ -54,7 +58,7 @@
         "cross-env": "^7.0.3",
         "jest": "catalog:",
         "jest-environment-jsdom": "catalog:",
-        "posthog-js": "workspace:*",
+        "posthog-js": "workspace:^",
         "react": "catalog:",
         "react-dom": "catalog:",
         "react-test-renderer": "catalog:",

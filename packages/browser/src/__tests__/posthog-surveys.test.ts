@@ -8,7 +8,7 @@ jest.mock('../utils/logger', () => ({
 }))
 jest.useFakeTimers()
 
-import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
+import { SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
 import { PostHog } from '../posthog-core'
 import { PostHogSurveys } from '../posthog-surveys'
@@ -149,6 +149,18 @@ describe('posthog-surveys', () => {
             // Clean up
             delete assignableWindow.__PosthogExtensions__
             localStorage.clear()
+        })
+
+        describe('reset', () => {
+            it('does not throw when localStorage access throws (e.g. cross-origin iframe)', () => {
+                const removeItemSpy = jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+                    throw new Error('storage unavailable')
+                })
+
+                expect(() => surveys.reset()).not.toThrow()
+
+                removeItemSpy.mockRestore()
+            })
         })
 
         describe('canRenderSurvey', () => {
@@ -677,7 +689,10 @@ describe('posthog-surveys', () => {
                 expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
                     isLoaded: true,
                 })
-                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: mockSurveys })
+                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({
+                    [SURVEYS]: mockSurveys,
+                    [SURVEYS_LOADED_AT]: expect.any(Number),
+                })
             })
 
             it('should clear promise after failed API call (non-200 status)', () => {
@@ -735,7 +750,10 @@ describe('posthog-surveys', () => {
                 expect(mockCallback).toHaveBeenCalledWith(delayedSurveys, {
                     isLoaded: true,
                 })
-                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: delayedSurveys })
+                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({
+                    [SURVEYS]: delayedSurveys,
+                    [SURVEYS_LOADED_AT]: expect.any(Number),
+                })
             })
 
             it('should set correct timeout value in request', () => {
@@ -754,6 +772,98 @@ describe('posthog-surveys', () => {
                 surveys.getSurveys(mockCallback, true)
 
                 expect(mockPostHog._send_request).toHaveBeenCalled()
+            })
+
+            it('should not refresh in the background when the cache is fresh', () => {
+                mockPostHog.get_property.mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return Date.now()
+                    return undefined
+                })
+
+                surveys.getSurveys(mockCallback)
+
+                expect(mockCallback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                expect(mockPostHog._send_request).not.toHaveBeenCalled()
+            })
+
+            it('should serve the cache then refresh in the background when the cache is stale', () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                const freshSurveys = [{ id: 'fresh-survey' }]
+                mockPostHog.get_property.mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    callback({ statusCode: 200, json: { surveys: freshSurveys } })
+                })
+
+                surveys.getSurveys(mockCallback)
+
+                // The stale cache is still served synchronously so callers aren't blocked.
+                expect(mockCallback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                // A background refresh is triggered so the next poll picks up the new definitions.
+                expect(mockPostHog._send_request).toHaveBeenCalled()
+                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({
+                    [SURVEYS]: freshSurveys,
+                    [SURVEYS_LOADED_AT]: expect.any(Number),
+                })
+            })
+
+            it('does not start a second background refresh while one is already in flight', () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                mockPostHog.get_property.mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                // Leave the refresh in flight: never invoke the request callback.
+                mockPostHog._send_request.mockImplementation(() => {})
+
+                surveys.getSurveys(mockCallback)
+                surveys.getSurveys(mockCallback)
+
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+            })
+
+            it('backs off further background refreshes after a failed refresh', () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                mockPostHog.get_property.mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    callback({ statusCode: 500, json: undefined })
+                })
+
+                surveys.getSurveys(mockCallback)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+
+                // A later stale poll within the back-off window must not re-hit the endpoint,
+                // otherwise a surveys-API outage becomes a per-poll request storm.
+                surveys.getSurveys(mockCallback)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+            })
+        })
+
+        describe('markSurveyAsSeen', () => {
+            beforeEach(() => {
+                localStorage.clear()
+            })
+
+            it('marks the survey as seen and records the last seen date', () => {
+                surveys.markSurveyAsSeen('abc-123')
+
+                expect(localStorage.getItem(`${SURVEY_SEEN_PREFIX}abc-123`)).toBe('true')
+                expect(localStorage.getItem('lastSeenSurveyDate')).not.toBeNull()
+            })
+
+            it('includes the iteration in the seen key when provided', () => {
+                surveys.markSurveyAsSeen('abc-123', { iteration: 2 })
+
+                expect(localStorage.getItem(`${SURVEY_SEEN_PREFIX}abc-123_2`)).toBe('true')
             })
         })
     })

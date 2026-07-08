@@ -122,6 +122,10 @@ describe('ConversationsManager', () => {
         // Setup mock PostHog instance
         // Note: callbacks are called synchronously to avoid issues with Jest fake timers
         mockPosthog = {
+            config: {
+                token: 'test-token',
+                api_host: 'https://test.posthog.com',
+            },
             _send_request: jest.fn((options) => {
                 // Call callback synchronously to avoid fake timer issues
                 const url = options.url as string
@@ -407,6 +411,50 @@ describe('ConversationsManager', () => {
 
             // Widget should be rendered but in closed state (not forced open)
             expect(manager.isVisible()).toBe(true)
+        })
+    })
+
+    describe('re-attach on SPA navigation', () => {
+        beforeEach(async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+        })
+
+        it.each([
+            {
+                // SPA framework (e.g. Turbo Drive) replacing document.body detaches
+                // our container without any teardown call — the watcher re-attaches it.
+                description: 'detaches container via DOM removal (SPA navigation)',
+                setup: () => document.getElementById('ph-conversations-widget-container')?.remove(),
+                expectInDocument: true,
+                expectVisible: true,
+            },
+            {
+                // An intentionally hidden widget must stay hidden after the interval.
+                description: 'intentionally hides the widget via hide()',
+                setup: () => manager.hide(),
+                expectInDocument: false,
+                expectVisible: false,
+            },
+        ])('should handle reattach correctly when $description', ({ setup, expectInDocument, expectVisible }) => {
+            expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+
+            act(() => {
+                setup()
+            })
+            expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+
+            // The re-attach watcher runs every second.
+            act(() => {
+                jest.advanceTimersByTime(1000)
+            })
+
+            if (expectInDocument) {
+                expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
+            } else {
+                expect(document.getElementById('ph-conversations-widget-container')).not.toBeInTheDocument()
+            }
+            expect(manager.isVisible()).toBe(expectVisible)
         })
     })
 
@@ -743,6 +791,96 @@ describe('ConversationsManager', () => {
             })
 
             expect(mockPosthog._send_request).not.toHaveBeenCalled()
+        })
+
+        describe('status 0 circuit breaker', () => {
+            let nextStatusCode = 200
+
+            const pollWith = async (statusCode: number) => {
+                nextStatusCode = statusCode
+                await act(async () => {
+                    await manager['_poll']()
+                })
+            }
+
+            const setOnline = (value: boolean) => {
+                Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
+            }
+
+            beforeEach(() => {
+                nextStatusCode = 200
+                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                    options.callback({
+                        statusCode: nextStatusCode,
+                        json: nextStatusCode === 200 ? createMockGetMessagesResponse() : null,
+                    })
+                })
+            })
+
+            afterEach(() => {
+                delete (window.navigator as any).onLine
+            })
+
+            it('stops polling after 3 consecutive online status-0 failures', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+            })
+
+            it('also gates direct polling entrypoints after the breaker trips', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+
+                await act(async () => {
+                    await manager['_pollMessages']()
+                    await manager['_pollTickets']()
+                })
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+            })
+
+            it('resets the polling status-0 budget after any HTTP response', async () => {
+                await pollWith(0)
+                await pollWith(0)
+                await pollWith(500)
+                await pollWith(0)
+                await pollWith(0)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(6)
+            })
+
+            it('does not count status-0 failures while the browser reports itself offline', async () => {
+                setOnline(false)
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                setOnline(true)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+            })
+
+            it('reopens polling on the online event', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                await pollWith(0)
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+
+                window.dispatchEvent(new Event('online'))
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+            })
         })
     })
 

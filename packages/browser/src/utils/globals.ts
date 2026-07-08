@@ -23,6 +23,7 @@ import type {
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
+import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
 import { eventWithTime } from '../extensions/replay/types/rrweb-types'
 import { ErrorTracking } from '@posthog/core'
 
@@ -183,6 +184,7 @@ export type PostHogExtensionKind =
 export interface LazyLoadedSessionRecordingInterface {
     start: (startReason?: SessionStartReason) => void
     stop: () => void
+    discard: () => void
     sessionId: string
     status: SessionRecordingStatus
     onRRwebEmit: (rawEvent: eventWithTime) => void
@@ -218,6 +220,10 @@ export interface LazyLoadedConversationsInterface {
 
     // Lifecycle
     reset: () => void
+
+    // Identity verification
+    setIdentity: () => void
+    clearIdentity: () => void
 
     // API methods
     sendMessage: (message: string, userTraits?: UserProvidedTraits, newTicket?: boolean) => Promise<SendMessageResponse>
@@ -265,8 +271,16 @@ interface PostHogExtensions {
      */
     loadWebVitalsCallbacks?: (useAttribution?: boolean) => PostHogExtensions['postHogWebVitalsCallbacks']
     tracingHeadersPatchFns?: {
-        _patchFetch: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
-        _patchXHR: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
+        _patchFetch: (
+            hostnames: TracingHeadersHostnames,
+            distinctId: TracingHeadersDistinctId,
+            sessionManager?: SessionIdManager
+        ) => () => void
+        _patchXHR: (
+            hostnames: TracingHeadersHostnames,
+            distinctId: TracingHeadersDistinctId,
+            sessionManager?: SessionIdManager
+        ) => () => void
     }
     initDeadClicksAutocapture?: (
         ph: PostHog,
@@ -290,10 +304,6 @@ if (typeof File === 'undefined') {
     ;(global as any).File = function () {}
 }
 
-export const ArrayProto = Array.prototype
-export const nativeForEach = ArrayProto.forEach
-export const nativeIndexOf = ArrayProto.indexOf
-
 export const navigator = global?.navigator
 export const document = global?.document
 export const location = global?.location
@@ -301,7 +311,12 @@ export const fetch = global?.fetch
 export const XMLHttpRequest =
     global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
 export const AbortController = global?.AbortController
+export const CompressionStream = global?.CompressionStream
 export const userAgent = navigator?.userAgent
 export const assignableWindow: AssignableWindow = win ?? ({} as any)
+
+export function isBrowserOnline(): boolean {
+    return !!(win && win.navigator.onLine !== false)
+}
 
 export { win as window }
