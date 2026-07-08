@@ -10,6 +10,7 @@ describe('capture v1 wiring (Node SDK)', () => {
   const harness = new V1WiringHarness()
   const mockedFetch = harness.fetch
   const makeClient = (options?: PostHogOptions): PostHog => harness.makeClient(options)
+  const makeV1Client = (options?: PostHogOptions): PostHog => harness.makeClient(options, 'v1')
   const callsTo = (fragment: string): [string, any][] => harness.callsTo(fragment)
   const eventsIn = (fragment: string): string[] => harness.eventsIn(fragment)
 
@@ -41,7 +42,7 @@ describe('capture v1 wiring (Node SDK)', () => {
 
   describe('v1 mode - batched path', () => {
     it('sends a normal event to the v1 endpoint with Bearer auth and the v1 envelope', async () => {
-      const posthog = makeClient({ captureMode: 'v1' })
+      const posthog = makeV1Client()
       posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
       await waitForFlushTimer()
 
@@ -59,7 +60,7 @@ describe('capture v1 wiring (Node SDK)', () => {
     })
 
     it('routes $ai_* events to the legacy /batch/ endpoint', async () => {
-      const posthog = makeClient({ captureMode: 'v1' })
+      const posthog = makeV1Client()
       posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
       await waitForFlushTimer()
 
@@ -68,7 +69,7 @@ describe('capture v1 wiring (Node SDK)', () => {
     })
 
     it('splits a mixed batch across both endpoints with no loss or duplication', async () => {
-      const posthog = makeClient({ captureMode: 'v1' })
+      const posthog = makeV1Client()
       posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
       posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
       await waitForFlushTimer()
@@ -80,7 +81,7 @@ describe('capture v1 wiring (Node SDK)', () => {
 
   describe('v1 mode - immediate path', () => {
     it('sends an immediate non-AI event to the v1 endpoint', async () => {
-      const posthog = makeClient({ captureMode: 'v1' })
+      const posthog = makeV1Client()
       await posthog.captureImmediate({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
 
       expect(callsTo('/batch/')).toHaveLength(0)
@@ -88,7 +89,7 @@ describe('capture v1 wiring (Node SDK)', () => {
     })
 
     it('sends an immediate $ai_* event to the legacy endpoint', async () => {
-      const posthog = makeClient({ captureMode: 'v1' })
+      const posthog = makeV1Client()
       await posthog.captureImmediate({ distinctId: 'u', event: '$ai_span', properties: { $ai_model: 'gpt' } })
 
       expect(callsTo('/i/v1/analytics/events')).toHaveLength(0)
@@ -96,7 +97,7 @@ describe('capture v1 wiring (Node SDK)', () => {
     })
 
     it('sends immediate identify/alias/groupIdentify (special non-AI events) to the v1 endpoint', async () => {
-      const posthog = makeClient({ captureMode: 'v1' })
+      const posthog = makeV1Client()
 
       await posthog.identifyImmediate({ distinctId: 'u', properties: { name: 'a' } })
       await posthog.aliasImmediate({ distinctId: 'u', alias: 'anon-1' })
@@ -109,8 +110,7 @@ describe('capture v1 wiring (Node SDK)', () => {
 
   describe('v1 mode - before_send interaction', () => {
     it('routes an event renamed into $ai_* by before_send to the legacy endpoint', async () => {
-      const posthog = makeClient({
-        captureMode: 'v1',
+      const posthog = makeV1Client({
         before_send: (event) => (event ? { ...event, event: '$ai_generation' } : event),
       })
       posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
@@ -121,8 +121,7 @@ describe('capture v1 wiring (Node SDK)', () => {
     })
 
     it('routes an event renamed out of $ai_* by before_send to the v1 endpoint', async () => {
-      const posthog = makeClient({
-        captureMode: 'v1',
+      const posthog = makeV1Client({
         before_send: (event) => (event ? { ...event, event: 'renamed' } : event),
       })
       posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
@@ -147,7 +146,7 @@ describe('capture v1 wiring (Node SDK)', () => {
         return Promise.resolve(v0Response())
       })
 
-      const posthog = makeClient({ captureMode: 'v1' })
+      const posthog = makeV1Client()
       const errors: Error[] = []
       posthog.on('error', (error) => errors.push(error))
 

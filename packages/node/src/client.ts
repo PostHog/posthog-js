@@ -191,7 +191,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(normalizedApiKey, normalizedOptions)
 
     this.options = normalizedOptions
-    this.captureMode = resolveCaptureMode(normalizedOptions.captureMode)
+    this.captureMode = resolveCaptureMode()
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =

@@ -6,7 +6,6 @@ import type {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
 } from '@posthog/core'
-import type { CaptureMode } from './capture-v1/config'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
@@ -310,21 +309,6 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
-  /**
-   * Capture submission mode.
-   *
-   * - `'v0'` (default): the legacy `/batch/` endpoint.
-   * - `'v1'`: the Capture V1 endpoint (`/i/v1/analytics/events`) with per-event
-   *   partial retry and typed event options.
-   *
-   * When unset, the `POSTHOG_CAPTURE_MODE` environment variable is consulted
-   * (guarded for edge / no-`process` runtimes), defaulting to `'v0'`.
-   *
-   * @experimental Subject to change while Capture V1 is rolled out. `$ai_*`
-   * events always use the legacy submitter for now, regardless of this setting.
-   * @default 'v0'
-   */
-  captureMode?: CaptureMode
 }
 
 export type PostHogFeatureFlag = {

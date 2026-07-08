@@ -11,33 +11,23 @@ describe('resolveCaptureMode', () => {
     }
   })
 
-  it('uses the explicit option when valid', () => {
-    expect(resolveCaptureMode('v1')).toBe('v1')
-    expect(resolveCaptureMode('v0')).toBe('v0')
-  })
-
-  it('defaults to v0 when nothing is set', () => {
+  it('defaults to v0 when the environment variable is unset', () => {
     delete process.env.POSTHOG_CAPTURE_MODE
-    expect(resolveCaptureMode(undefined)).toBe('v0')
+    expect(resolveCaptureMode()).toBe('v0')
   })
 
-  it('falls back to the environment variable when no option is given', () => {
+  it('resolves v1 from the environment variable', () => {
     process.env.POSTHOG_CAPTURE_MODE = 'v1'
-    expect(resolveCaptureMode(undefined)).toBe('v1')
+    expect(resolveCaptureMode()).toBe('v1')
   })
 
-  it('lets the explicit option win over the environment variable', () => {
-    process.env.POSTHOG_CAPTURE_MODE = 'v1'
-    expect(resolveCaptureMode('v0')).toBe('v0')
+  it('resolves v0 from the environment variable', () => {
+    process.env.POSTHOG_CAPTURE_MODE = 'v0'
+    expect(resolveCaptureMode()).toBe('v0')
   })
 
-  it('ignores an invalid environment value', () => {
+  it('ignores an invalid environment value and defaults to v0', () => {
     process.env.POSTHOG_CAPTURE_MODE = 'v2'
-    expect(resolveCaptureMode(undefined)).toBe('v0')
-  })
-
-  it('ignores an invalid option and falls through to the environment', () => {
-    process.env.POSTHOG_CAPTURE_MODE = 'v1'
-    expect(resolveCaptureMode('nonsense' as unknown as undefined)).toBe('v1')
+    expect(resolveCaptureMode()).toBe('v0')
   })
 })

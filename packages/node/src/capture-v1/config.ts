@@ -6,18 +6,13 @@ function isCaptureMode(value: unknown): value is CaptureMode {
 }
 
 /**
- * Resolve the effective capture mode. The explicit option wins; otherwise the
- * `POSTHOG_CAPTURE_MODE` environment variable is consulted (guarded for edge /
- * no-`process` runtimes); the default is `v0`, so existing users are unaffected
- * until they opt in.
+ * Resolve the effective capture mode from the `POSTHOG_CAPTURE_MODE` environment
+ * variable (guarded for edge / no-`process` runtimes). The default is `v0`, so
+ * existing users are unaffected unless they explicitly opt in. Capture V1 is
+ * intentionally env-var-only during the transition — there is no public option,
+ * so nothing on the API surface has to be removed when v1 becomes the default.
  */
-export function resolveCaptureMode(optionMode?: CaptureMode): CaptureMode {
-  if (isCaptureMode(optionMode)) {
-    return optionMode
-  }
+export function resolveCaptureMode(): CaptureMode {
   const envMode = typeof process !== 'undefined' ? process.env?.POSTHOG_CAPTURE_MODE : undefined
-  if (isCaptureMode(envMode)) {
-    return envMode
-  }
-  return 'v0'
+  return isCaptureMode(envMode) ? envMode : 'v0'
 }

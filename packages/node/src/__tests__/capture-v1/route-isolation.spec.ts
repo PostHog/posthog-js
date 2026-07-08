@@ -40,7 +40,7 @@ describe('capture v1 route isolation (Node SDK)', () => {
         : Promise.reject(new Error('network down'))
     )
 
-    const posthog = harness.makeClient({ captureMode: 'v1' })
+    const posthog = harness.makeClient({}, 'v1')
     posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
     posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: { $ai_model: 'gpt' } })
     await waitForFlushTimer()
@@ -64,7 +64,7 @@ describe('capture v1 route isolation (Node SDK)', () => {
   })
 
   it('flushes each route as its own homogeneous request (no mixed batch)', async () => {
-    const posthog = harness.makeClient({ captureMode: 'v1' })
+    const posthog = harness.makeClient({}, 'v1')
     posthog.capture({ distinctId: 'u', event: 'a', properties: {} })
     posthog.capture({ distinctId: 'u', event: '$ai_generation', properties: {} })
     posthog.capture({ distinctId: 'u', event: 'b', properties: {} })

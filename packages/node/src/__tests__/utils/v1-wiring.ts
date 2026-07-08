@@ -39,6 +39,7 @@ export function routeByUrl(url: string): any {
 export class V1WiringHarness {
   readonly fetch: jest.SpyInstance
   private readonly clients: PostHog[] = []
+  private readonly originalCaptureMode = process.env.POSTHOG_CAPTURE_MODE
 
   constructor() {
     this.fetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
@@ -49,15 +50,32 @@ export class V1WiringHarness {
     this.fetch.mockImplementation((url: any) => Promise.resolve(routeByUrl(url as string)))
   }
 
-  makeClient(options: PostHogOptions = {}): PostHog {
-    const client = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      fetchRetryCount: 0,
-      disableCompression: true,
-      ...options,
-    })
-    this.clients.push(client)
-    return client
+  /**
+   * Capture V1 is opt-in via the `POSTHOG_CAPTURE_MODE` env var only (no public option).
+   * The mode is resolved once, in the PostHog constructor, so toggling the env var around
+   * construction keeps each client hermetic even when v0 and v1 clients coexist in a suite.
+   */
+  makeClient(options: PostHogOptions = {}, captureMode?: 'v0' | 'v1'): PostHog {
+    const previous = process.env.POSTHOG_CAPTURE_MODE
+    if (captureMode !== undefined) {
+      process.env.POSTHOG_CAPTURE_MODE = captureMode
+    }
+    try {
+      const client = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        ...options,
+      })
+      this.clients.push(client)
+      return client
+    } finally {
+      if (previous === undefined) {
+        delete process.env.POSTHOG_CAPTURE_MODE
+      } else {
+        process.env.POSTHOG_CAPTURE_MODE = previous
+      }
+    }
   }
 
   /** All fetch calls whose URL contains `fragment`, as `[url, options]` tuples. */
@@ -73,6 +91,11 @@ export class V1WiringHarness {
   async cleanup(): Promise<void> {
     while (this.clients.length) {
       await this.clients.pop()?.shutdown()
+    }
+    if (this.originalCaptureMode === undefined) {
+      delete process.env.POSTHOG_CAPTURE_MODE
+    } else {
+      process.env.POSTHOG_CAPTURE_MODE = this.originalCaptureMode
     }
   }
 }
