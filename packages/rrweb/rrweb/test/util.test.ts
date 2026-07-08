@@ -7,6 +7,7 @@ import {
   inDom,
   shadowHostInDom,
   getShadowHost,
+  on,
 } from '../src/utils';
 
 describe('Utilities for other modules', () => {
@@ -79,6 +80,23 @@ describe('Utilities for other modules', () => {
       for (let s of styleList) expect(mirror.has(s)).toBeFalsy();
       for (let i = 0; i < 10; i++) expect(mirror.getStyle(i + 1)).toBeNull();
       expect(mirror.add(new CSSStyleSheet())).toBe(1);
+    });
+  });
+
+  describe('on()', () => {
+    it('should not throw when cleanup target cannot remove listeners', () => {
+      const target = {
+        addEventListener: vi.fn(),
+      } as unknown as Document;
+
+      const cleanup = on('click', vi.fn(), target);
+
+      expect(() => cleanup()).not.toThrow();
+      expect(target.addEventListener).toHaveBeenCalledWith(
+        'click',
+        expect.any(Function),
+        { capture: true, passive: true },
+      );
     });
   });
 

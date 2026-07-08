@@ -585,6 +585,41 @@ describe('memory leak prevention', () => {
       { method: 'destroy' as const },
       { method: 'removeIframeById' as const },
     ])(
+      '$method should not throw when contentWindow.removeEventListener is missing',
+      ({ method }) => {
+        const { iframeManager, mirror } = createIframeManager();
+        const manager = iframeManager as any;
+        const win = {} as unknown as Window;
+
+        manager.nestedIframeListeners.set(win, vi.fn());
+
+        if (method === 'destroy') {
+          expect(() => iframeManager.destroy()).not.toThrow();
+        } else {
+          const iframe = document.createElement('iframe');
+          document.body.appendChild(iframe);
+          const iframeId = 44;
+          mirror.add(iframe, {
+            type: 2,
+            tagName: 'iframe',
+            attributes: {},
+            childNodes: [],
+            id: iframeId,
+          });
+          Object.defineProperty(iframe, 'contentWindow', {
+            get: () => win,
+          });
+          manager.nestedIframeListeners.set(win, vi.fn());
+          expect(() => iframeManager.removeIframeById(iframeId)).not.toThrow();
+          document.body.removeChild(iframe);
+        }
+      },
+    );
+
+    it.each([
+      { method: 'destroy' as const },
+      { method: 'removeIframeById' as const },
+    ])(
       '$method should still throw non-SecurityError exceptions',
       ({ method }) => {
         const { iframeManager, mirror } = createIframeManager();
