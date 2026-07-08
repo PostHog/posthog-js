@@ -298,6 +298,38 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         )
     })
 
+    it('discards the prior session buffer instead of relabeling it when the flush is suppressed at rotation', async () => {
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+        })
+
+        // an old-session incremental sits in the buffer when a suppressed flush (e.g. buffering) meets a rotation
+        emit(createIncrementalSnapshot(50))
+        await lazyLoadedSessionRecording['_compressionQueue']
+        const strategy = lazyLoadedSessionRecording['_strategy']
+        const originalGetStatus = strategy.getStatus.bind(strategy)
+        strategy.getStatus = () => 'buffering'
+
+        lazyLoadedSessionRecording['_isIdle'] = 'unknown'
+        lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
+        emit(createFullSnapshot({ content: 'post-rotation snapshot' }))
+        await lazyLoadedSessionRecording['_compressionQueue']
+
+        strategy.getStatus = originalGetStatus
+        lazyLoadedSessionRecording['_flushBuffer']()
+
+        // only the new session's full snapshot ships; the undrained old-session event is discarded, not relabeled
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$snapshot',
+            expect.objectContaining({
+                $session_id: 'rotated-session-id',
+                $snapshot_data: [expect.objectContaining({ type: 2 })],
+            }),
+            expect.any(Object)
+        )
+    })
+
     it('requests a full snapshot when an incremental ships for a rotated session without one', async () => {
         const { emit, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
             gzipSupported: true,

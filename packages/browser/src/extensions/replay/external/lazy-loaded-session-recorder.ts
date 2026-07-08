@@ -1701,6 +1701,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
+            // A suppressed flush (e.g. buffering, paused, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
+            if (sessionChanged && this._buffer.data.length > 0) {
+                this._buffer = this._clearBuffer()
+            }
             // After flushing, update buffer to use the new target session/window IDs
             this._buffer.sessionId = targetSessionId
             this._buffer.windowId = properties.$window_id as string
