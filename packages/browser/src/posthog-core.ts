@@ -1094,6 +1094,10 @@ export class PostHog implements PostHogInterface {
         // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
         this.surveys?.handlePageUnload?.()
 
+        // Metrics are pre-aggregated client-side and don't ride the request
+        // queue, so the drain must not depend on `request_batching`.
+        void this.metrics?.flush('sendBeacon')
+
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
                 this.capture(EVENT_PAGELEAVE, null, { transport: 'sendBeacon' })
@@ -1106,7 +1110,6 @@ export class PostHog implements PostHogInterface {
         }
 
         this.logs?.flushLogs('sendBeacon')
-        void this.metrics?.flush('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
     }

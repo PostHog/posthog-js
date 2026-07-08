@@ -310,6 +310,23 @@ describe('PostHogMetrics', () => {
       expect(mockInstance._sendMetricsBatch).not.toHaveBeenCalled()
     })
 
+    it('retries a merged-back window on the next interval even with no new samples', async () => {
+      mockInstance._sendMetricsBatch
+        .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('offline') })
+        .mockResolvedValue({ kind: 'ok' })
+
+      const metrics = createMetrics({ flushIntervalMs: 5000 })
+      metrics.count('orders_created', 5)
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      // No new captures — the retained window must not be stranded until shutdown.
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+      const payload: OtlpMetricsPayload = mockInstance._sendMetricsBatch.mock.calls[1][0]
+      expect(payload.resourceMetrics[0].scopeMetrics[0].metrics[0].sum!.dataPoints[0].asDouble).toBe(5)
+    })
+
     it('drainWindow returns null when the window is empty', () => {
       const metrics = createMetrics()
       expect(metrics.drainWindow()).toBeNull()
@@ -373,6 +390,22 @@ describe('PostHogMetrics', () => {
         key: 'processed',
         value: { boolValue: true },
       })
+    })
+
+    it('snapshots attributes at capture time — later caller mutation cannot corrupt the series', async () => {
+      const metrics = createMetrics()
+      const attributes = { plan: 'free' }
+      metrics.count('api_calls', 1, { attributes })
+      attributes.plan = 'pro'
+      metrics.count('api_calls', 1, { attributes })
+      await metrics.flush()
+
+      const sent = sentMetrics()
+      expect(sent[0].sum!.dataPoints).toHaveLength(2)
+      const values = sent[0].sum!.dataPoints.map((dp) =>
+        dp.attributes.find((a) => a.key === 'plan')!.value.stringValue
+      )
+      expect(values.sort()).toEqual(['free', 'pro'])
     })
 
     it('warns once when a metric name is reused with a different type, but keeps both series', async () => {

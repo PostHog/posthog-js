@@ -191,7 +191,9 @@ export class PostHogMetrics {
         name: filtered.name,
         type: filtered.type,
         unit: filtered.unit,
-        attributes: filtered.attributes,
+        // Snapshot: the key was computed from these values, so a caller
+        // mutating the object after capture must not change the stored series.
+        attributes: filtered.attributes ? { ...filtered.attributes } : undefined,
         windowStartMs: Date.now(),
       }
       this._series.set(key, state)
@@ -289,8 +291,10 @@ export class PostHogMetrics {
         return
       case 'retry-later':
         // Transient failure: merge the unsent window back so the data rides
-        // the next flush instead of being lost.
+        // the next flush instead of being lost — and re-arm the timer, since
+        // with no new captures nothing else would schedule that flush.
         this._mergeWindowBack(window)
+        this._armFlushTimer()
         return
       case 'too-large':
         this._logger.warn('Metrics batch exceeded the server size limit and was dropped')
