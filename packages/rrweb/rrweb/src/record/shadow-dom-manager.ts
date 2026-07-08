@@ -56,10 +56,14 @@ export class ShadowDomManager {
     if (!isNativeShadowDom(shadowRoot)) return;
     if (this.shadowDoms.has(shadowRoot)) return;
     this.shadowDoms.add(shadowRoot);
+    // Derive the owning document from the host so a shadow root nested in an
+    // iframe is keyed to that iframe's document, not whatever the caller passed
+    // (takeFullSnapshot's onSerialize hands us the top-level document).
+    const ownerDoc = dom.host(shadowRoot)?.ownerDocument ?? doc;
     const { observer, buffer } = initMutationObserver(
       {
         ...this.bypassOptions,
-        doc,
+        doc: ownerDoc,
         mutationCb: this.mutationCb,
         mirror: this.mirror,
         shadowDomManager: this,
@@ -67,7 +71,7 @@ export class ShadowDomManager {
       shadowRoot,
     );
     this.restoreHandlers.push({
-      doc,
+      doc: ownerDoc,
       handler: () => {
         observer.disconnect();
         buffer.destroy();
@@ -80,7 +84,7 @@ export class ShadowDomManager {
       },
     });
     this.restoreHandlers.push({
-      doc,
+      doc: ownerDoc,
       handler: initScrollObserver({
         ...this.bypassOptions,
         scrollCb: this.scrollCb,
@@ -101,7 +105,7 @@ export class ShadowDomManager {
           this.mirror.getId(dom.host(shadowRoot)),
         );
       this.restoreHandlers.push({
-        doc,
+        doc: ownerDoc,
         handler: initAdoptedStyleSheetObserver(
           {
             mirror: this.mirror,
