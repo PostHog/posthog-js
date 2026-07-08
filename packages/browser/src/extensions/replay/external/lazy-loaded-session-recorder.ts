@@ -1279,7 +1279,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (
             // deliberately conservative: only heal after this recorder shipped a FullSnapshot to another session (the rotation signature), since on a fresh start rrweb's init snapshot is always ordered ahead of any incremental
-            this._lastFullSnapshotSessionId === undefined ||
+            isUndefined(this._lastFullSnapshotSessionId) ||
             this._lastFullSnapshotSessionId === targetSessionId ||
             this._fullSnapshotHealAttemptedFor === targetSessionId
         ) {
