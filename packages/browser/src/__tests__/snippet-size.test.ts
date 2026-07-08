@@ -1,38 +1,39 @@
 /* eslint-disable compat/compat */
 /**
- * Guards the snippet against accidental growth: it is pasted inline into
- * millions of pages, so every byte ships with every page view.
+ * Guards the snippet files against accidental growth: the classic snippet is
+ * pasted inline into millions of pages, so every byte ships with every page
+ * view; the opt-in unload fallback is shared with particular customers and
+ * should stay small enough to paste comfortably.
  */
 import * as fs from 'fs'
 import * as path from 'path'
 import { gzipSync, strToU8 } from 'fflate'
 import { minify } from 'terser'
 
-const snippetSource = fs.readFileSync(path.join(__dirname, '../../snippet/snippet.js'), 'utf8')
+const read = (file: string) => fs.readFileSync(path.join(__dirname, '../../snippet', file), 'utf8')
 
-const MINIFIED_BUDGET_BYTES = 3400
-const GZIPPED_BUDGET_BYTES = 1700
-
-const minifiedSnippet = async (): Promise<string> => {
-    const result = await minify(snippetSource, { ecma: 5, mangle: true, compress: { passes: 2 } })
+const minified = async (source: string): Promise<string> => {
+    const result = await minify(source, { ecma: 5, mangle: true, compress: { passes: 2 } })
     if (!result.code) {
-        throw new Error('terser produced no output for the snippet')
+        throw new Error('terser produced no output')
     }
     return result.code
 }
 
-describe('snippet size', () => {
-    it('stays within its byte budget when minified', async () => {
-        const code = await minifiedSnippet()
-        const gzipped = gzipSync(strToU8(code)).byteLength
+const gzippedSize = (code: string) => gzipSync(strToU8(code)).byteLength
 
-        expect(code.length).toBeLessThan(MINIFIED_BUDGET_BYTES)
-        expect(gzipped).toBeLessThan(GZIPPED_BUDGET_BYTES)
+describe('snippet size', () => {
+    it.each([
+        ['snippet.js', 1000, 600],
+        ['unload-fallback.js', 2800, 1450],
+    ])('%s stays within its byte budget when minified', async (file, minifiedBudget, gzippedBudget) => {
+        const code = await minified(read(file))
+
+        expect(code.length).toBeLessThan(minifiedBudget)
+        expect(gzippedSize(code)).toBeLessThan(gzippedBudget)
     })
 
     it('still beacons queued captures on pagehide after minification', async () => {
-        const code = await minifiedSnippet()
-
         ;(window as any).posthog = undefined
         localStorage.clear()
         const sendBeaconMock = jest.fn(() => true)
@@ -42,7 +43,8 @@ describe('snippet size', () => {
             writable: true,
         })
 
-        new Function(code)()
+        new Function(await minified(read('snippet.js')))()
+        new Function(await minified(read('unload-fallback.js')))()
         const posthog = (window as any).posthog
         posthog.init('minified_token', { api_host: 'https://app.example.com' })
         posthog.capture('minified-event')

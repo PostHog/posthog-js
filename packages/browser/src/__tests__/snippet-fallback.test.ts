@@ -1,11 +1,12 @@
 /* eslint-disable compat/compat */
 /**
- * Tests for the unload fallback in the snippet (snippet/snippet.js).
+ * Tests for the opt-in snippet unload fallback (snippet/unload-fallback.js),
+ * pasted alongside the classic snippet (snippet/snippet.js).
  *
- * The snippet is executed as-is in jsdom via `new Function`, so these tests
- * exercise the exact file that ships, not a re-implementation. Every listener
- * registered during a test is removed again afterwards, so each test observes
- * exactly the single pagehide listener a real page would have.
+ * Both files are executed as-is in jsdom via `new Function`, so these tests
+ * exercise the exact code shared with customers, not a re-implementation.
+ * Every listener registered during a test is removed again afterwards, so
+ * each test observes exactly the listeners a real page would have.
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -15,11 +16,17 @@ import { init_from_snippet } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 
 const snippetSource = fs.readFileSync(path.join(__dirname, '../../snippet/snippet.js'), 'utf8')
+const fallbackSource = fs.readFileSync(path.join(__dirname, '../../snippet/unload-fallback.js'), 'utf8')
 
 const TOKEN = 'test_token'
 const API_HOST = 'https://app.example.com'
 
-const runSnippet = () => new Function(snippetSource)()
+const runClassicSnippet = () => new Function(snippetSource)()
+const runFallback = () => new Function(fallbackSource)()
+const runSnippet = () => {
+    runClassicSnippet()
+    runFallback()
+}
 
 const snippetPosthog = (): any => (window as any).posthog
 
@@ -45,6 +52,8 @@ const clearCookies = () => {
 
 const queuedCaptures = (queue: any[] = snippetPosthog()): any[] => queue.filter((item) => item && item[0] === 'capture')
 
+const ORIGINAL_USER_AGENT = window.navigator.userAgent
+
 describe('snippet unload fallback', () => {
     let sendBeaconMock: jest.Mock
     let registeredListeners: [string, EventListenerOrEventListenerObject][]
@@ -69,6 +78,12 @@ describe('snippet unload fallback', () => {
             writable: true,
         })
         Object.defineProperty(window.navigator, 'doNotTrack', { value: undefined, configurable: true, writable: true })
+        Object.defineProperty(window.navigator, 'webdriver', { value: undefined, configurable: true, writable: true })
+        Object.defineProperty(window.navigator, 'userAgent', {
+            value: ORIGINAL_USER_AGENT,
+            configurable: true,
+            writable: true,
+        })
     })
 
     afterEach(() => {
@@ -88,6 +103,49 @@ describe('snippet unload fallback', () => {
         const json = Buffer.from(decodeURIComponent(body.slice('data='.length)), 'base64').toString('utf8')
         return { url, events: JSON.parse(json) }
     }
+
+    describe('the fallback is opt-in', () => {
+        it('the classic snippet alone never beacons on pagehide', () => {
+            runClassicSnippet()
+            snippetPosthog().init(TOKEN, { api_host: API_HOST })
+            snippetPosthog().capture('early-event')
+
+            firePagehide()
+
+            expect(sendBeaconMock).not.toHaveBeenCalled()
+            expect(queuedCaptures()).toHaveLength(1)
+        })
+
+        it('the fallback alone is a no-op without the snippet', () => {
+            runFallback()
+
+            expect(() => firePagehide()).not.toThrow()
+            expect(sendBeaconMock).not.toHaveBeenCalled()
+        })
+
+        it('works when pasted above the snippet', () => {
+            runFallback()
+            runClassicSnippet()
+            snippetPosthog().init(TOKEN, { api_host: API_HOST })
+            snippetPosthog().capture('early-event')
+
+            firePagehide()
+
+            expect(sendBeaconMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('pasting the fallback twice still sends each capture only once', () => {
+            runClassicSnippet()
+            runFallback()
+            runFallback()
+            snippetPosthog().init(TOKEN, { api_host: API_HOST })
+            snippetPosthog().capture('early-event')
+
+            firePagehide()
+
+            expect(sendBeaconMock).toHaveBeenCalledTimes(1)
+        })
+    })
 
     describe('loader script insertion', () => {
         it('appends the loader script to head even when the document has no script element', () => {
@@ -347,6 +405,40 @@ describe('snippet unload fallback', () => {
             ['cookieless_mode on_reject', { cookieless_mode: 'on_reject' }, () => {}],
             ['disable_beacon', { disable_beacon: true }, () => {}],
             ['__preview_disable_beacon', { __preview_disable_beacon: true }, () => {}],
+            // a customized event pipeline must not be bypassed
+            ['a before_send hook', { before_send: () => null }, () => {}],
+            ['a sanitize_properties hook', { sanitize_properties: (props: any) => props }, () => {}],
+            ['a property_blacklist', { property_blacklist: ['secret'] }, () => {}],
+            ['a property_denylist', { property_denylist: ['secret'] }, () => {}],
+            ['custom request_headers', { request_headers: { Authorization: 'Bearer x' } }, () => {}],
+            // the SDK's bot filtering never ran, so bot traffic is skipped
+            [
+                'an automated browser',
+                {},
+                () => {
+                    Object.defineProperty(window.navigator, 'webdriver', { value: true, configurable: true })
+                },
+            ],
+            [
+                'a bot user agent',
+                {},
+                () => {
+                    Object.defineProperty(window.navigator, 'userAgent', {
+                        value: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                        configurable: true,
+                    })
+                },
+            ],
+            [
+                'a headless browser user agent',
+                {},
+                () => {
+                    Object.defineProperty(window.navigator, 'userAgent', {
+                        value: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/136.0.0.0 Safari/537.36',
+                        configurable: true,
+                    })
+                },
+            ],
         ])('%s', (_name, config, seed) => {
             seed()
             runSnippet()
@@ -382,6 +474,117 @@ describe('snippet unload fallback', () => {
             firePagehide()
 
             expect(sendBeaconMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('sends from an automated browser when opt_out_useragent_filter is set, matching the SDK', () => {
+            Object.defineProperty(window.navigator, 'webdriver', { value: true, configurable: true })
+            runSnippet()
+            snippetPosthog().init(TOKEN, { api_host: API_HOST, opt_out_useragent_filter: true })
+            snippetPosthog().capture('early-event')
+
+            firePagehide()
+
+            expect(sendBeaconMock).toHaveBeenCalledTimes(1)
+        })
+    })
+
+    describe('queued consent calls', () => {
+        // the real drain replays consent calls before captures, so the last
+        // queued opt_in/opt_out call decides here too
+        const setup = (config: Record<string, any> = {}) => {
+            runSnippet()
+            snippetPosthog().init(TOKEN, { api_host: API_HOST, ...config })
+        }
+
+        it('respects a queued opt_out_capturing and leaves the whole queue for array.js', () => {
+            setup()
+            snippetPosthog().capture('early-event')
+            snippetPosthog().opt_out_capturing()
+
+            firePagehide()
+
+            expect(sendBeaconMock).not.toHaveBeenCalled()
+            const remaining = snippetPosthog()
+                .filter((item: any) => item)
+                .map((item: any) => item[0])
+            expect(remaining).toEqual(['capture', 'opt_out_capturing'])
+        })
+
+        it.each([
+            ['opt_out then opt_in sends', ['opt_out_capturing', 'opt_in_capturing'], 1],
+            ['opt_in then opt_out does not send', ['opt_in_capturing', 'opt_out_capturing'], 0],
+        ])('%s', (_name, calls, expectedBeacons) => {
+            setup()
+            snippetPosthog().capture('early-event')
+            for (const call of calls) {
+                snippetPosthog()[call]()
+            }
+
+            firePagehide()
+
+            expect(sendBeaconMock).toHaveBeenCalledTimes(expectedBeacons)
+        })
+
+        it('a queued opt_in_capturing overrides stored opt-out consent', () => {
+            localStorage.setItem(`__ph_opt_in_out_${TOKEN}`, '0')
+            setup()
+            snippetPosthog().capture('early-event')
+            snippetPosthog().opt_in_capturing()
+
+            firePagehide()
+
+            expect(sendBeaconMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('a queued opt_in_capturing overrides opt_out_capturing_by_default', () => {
+            setup({ opt_out_capturing_by_default: true })
+            snippetPosthog().capture('early-event')
+            snippetPosthog().opt_in_capturing()
+
+            firePagehide()
+
+            expect(sendBeaconMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('defers to array.js when a set_config call is queued', () => {
+            setup()
+            snippetPosthog().capture('early-event')
+            snippetPosthog().set_config({ opt_out_capturing_by_default: true })
+
+            firePagehide()
+
+            expect(sendBeaconMock).not.toHaveBeenCalled()
+            expect(queuedCaptures()).toHaveLength(1)
+        })
+    })
+
+    describe('payload bounds', () => {
+        it('sends at most 50 captures and leaves the remainder queued', async () => {
+            runSnippet()
+            snippetPosthog().init(TOKEN, { api_host: API_HOST })
+            for (let i = 0; i < 60; i++) {
+                snippetPosthog().capture(`event-${i}`)
+            }
+
+            firePagehide()
+
+            expect(sendBeaconMock).toHaveBeenCalledTimes(1)
+            const { events } = await decodeBeaconCall()
+            expect(events).toHaveLength(50)
+            expect(events[0].event).toBe('event-0')
+            expect(events[49].event).toBe('event-49')
+            expect(queuedCaptures()).toHaveLength(10)
+        })
+
+        it('leaves the queue intact when the encoded body would exceed the beacon limit', () => {
+            runSnippet()
+            snippetPosthog().init(TOKEN, { api_host: API_HOST })
+            snippetPosthog().capture('huge-event', { blob: 'x'.repeat(70 * 1024) })
+
+            firePagehide()
+
+            expect(sendBeaconMock).not.toHaveBeenCalled()
+            expect(queuedCaptures()).toHaveLength(1)
         })
     })
 
@@ -431,9 +634,8 @@ describe('snippet unload fallback', () => {
                 assignableWindow.posthog = undefined as any
             })
 
-            const quietConfig = (beforeSend: jest.Mock) => ({
+            const quietConfig = (): Record<string, any> => ({
                 api_host: API_HOST,
-                before_send: beforeSend,
                 autocapture: false,
                 capture_pageview: false,
                 disable_session_recording: true,
@@ -442,15 +644,21 @@ describe('snippet unload fallback', () => {
                 disable_compression: true,
             })
 
+            // the drain is observed via a before_send spy attached to the live
+            // config object only after pagehide - configuring it up front would
+            // (correctly) disable the fallback as a customized pipeline
+
             it('never delivers a beaconed capture to the drain', () => {
                 const beforeSend = jest.fn(() => null)
+                const config = quietConfig()
                 runSnippet()
-                snippetPosthog().init(TOKEN, quietConfig(beforeSend))
+                snippetPosthog().init(TOKEN, config)
                 snippetPosthog().capture('early-event')
 
                 firePagehide()
                 expect(sendBeaconMock).toHaveBeenCalledTimes(1)
 
+                config.before_send = beforeSend
                 init_from_snippet()
 
                 const drainedEvents = beforeSend.mock.calls.map(([event]: any[]) => event.event)
@@ -459,10 +667,12 @@ describe('snippet unload fallback', () => {
 
             it('control: without a pagehide the drain delivers the queued capture', () => {
                 const beforeSend = jest.fn(() => null)
+                const config = quietConfig()
                 runSnippet()
-                snippetPosthog().init(TOKEN, quietConfig(beforeSend))
+                snippetPosthog().init(TOKEN, config)
                 snippetPosthog().capture('early-event')
 
+                config.before_send = beforeSend
                 init_from_snippet()
 
                 const drainedEvents = beforeSend.mock.calls.map(([event]: any[]) => event.event)
