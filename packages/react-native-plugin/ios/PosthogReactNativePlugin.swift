@@ -126,8 +126,8 @@ class PosthogReactNativePlugin: NSObject {
             isReactNativeFatalJsError(event) ? nil : event
         }
 
-        // Session replay is iOS-only in posthog-ios; the config surface and the surveys flag
-        // don't exist on macOS. Error tracking (below) is the only supported feature there.
+        // Surveys and session replay are iOS-only in posthog-ios, so the APIs below
+        // don't exist on macOS. macOS gets error tracking only.
         #if os(iOS)
             if #available(iOS 15.0, *) {
                 config.surveys = false
