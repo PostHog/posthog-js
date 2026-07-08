@@ -1,7 +1,5 @@
-import type { GetServerSidePropsContext } from 'next'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { getRequestScopedPostHog } from './getPostHog.js'
-import { getServerSidePostHog } from '../pages/getServerSidePostHog.js'
 import type { PostHogDistinctIdResolver } from '../shared/identity.js'
 
 export interface CreatePostHogConfig {
@@ -16,9 +14,10 @@ export interface CreatePostHogConfig {
      * session/device/window linkage stays client-provided. Return nullish to
      * fall back to the client identity.
      *
-     * Runs once per `getPostHog()` call. In Pages Router, `getPostHog(ctx)`
-     * passes `ctx` to the resolver; in App Router it may call request-scoped
-     * auth helpers directly. Skipped for opted-out users.
+     * Runs once per `getPostHog()` call. In App Router it may call
+     * request-scoped auth helpers directly; in Pages Router
+     * (`@posthog/next/pages`) it receives the `GetServerSidePropsContext`
+     * passed to `getPostHog(ctx)`. Skipped for opted-out users.
      */
     getDistinctId?: PostHogDistinctIdResolver
 }
@@ -27,26 +26,27 @@ export interface CreatePostHogResult {
     /**
      * Returns a PostHog server client scoped to the current request.
      *
-     * In the App Router (server components, route handlers, server actions),
-     * call it with no arguments — it reads `cookies()` and `headers()`
-     * internally, which opts the route into dynamic rendering. In the Pages
-     * Router, pass the `GetServerSidePropsContext` so identity is read from
-     * the request.
+     * Call it from server components, route handlers, or server actions — it
+     * reads `cookies()` and `headers()` internally, which opts the route into
+     * dynamic rendering. In the Pages Router, use `createPostHog` from
+     * `@posthog/next/pages` instead.
      */
-    getPostHog: (ctx?: GetServerSidePropsContext) => Promise<IPostHog>
+    getPostHog: () => Promise<IPostHog>
 }
 
 /**
- * Creates the server-side PostHog entry points for your app, bound to your
- * configuration — most notably a server-side identity resolver, so events and
- * feature flags are attributed to the authenticated user regardless of the
- * client-provided distinct id, which is spoofable.
+ * Creates the server-side PostHog entry points for your App Router app, bound
+ * to your configuration — most notably a server-side identity resolver, so
+ * events and feature flags are attributed to the authenticated user regardless
+ * of the client-provided distinct id, which is spoofable.
  *
  * Define it once in a shared server module and import it everywhere you need
- * server-side PostHog. In App Router apps, mark that module `server-only` so
- * accidental client imports fail at build time.
+ * server-side PostHog. Mark that module `server-only` so accidental client
+ * imports fail at build time.
  *
- * @example App Router
+ * For the Pages Router, import `createPostHog` from `@posthog/next/pages`.
+ *
+ * @example
  * ```ts
  * // lib/posthog.ts
  * import 'server-only'
@@ -68,33 +68,9 @@ export interface CreatePostHogResult {
  *     posthog.capture({ event: 'checkout_started' })
  * }
  * ```
- *
- * @example Pages Router
- * Import from `@posthog/next/pages` in Pages Router server code and pass the
- * `GetServerSidePropsContext`; the resolver receives it so it can read the
- * session from the request:
- * ```ts
- * // lib/posthog.ts
- * import { createPostHog } from '@posthog/next/pages'
- *
- * export const { getPostHog } = createPostHog({
- *     getDistinctId: async (ctx) =>
- *         ctx ? (await getServerSession(ctx.req, ctx.res, authOptions))?.user?.id : undefined,
- * })
- *
- * // pages/index.tsx
- * export const getServerSideProps: GetServerSideProps = async (ctx) => {
- *     const posthog = await getPostHog(ctx)
- *     const flags = await posthog.getAllFlagsAndPayloads()
- *     return { props: { posthogBootstrap: flags } }
- * }
- * ```
  */
 export function createPostHog(config: CreatePostHogConfig = {}): CreatePostHogResult {
     return {
-        getPostHog: (ctx?: GetServerSidePropsContext) =>
-            ctx
-                ? getServerSidePostHog(ctx, config.apiKey, config.options, config.getDistinctId)
-                : getRequestScopedPostHog(config.apiKey, config.options, config.getDistinctId),
+        getPostHog: () => getRequestScopedPostHog(config.apiKey, config.options, config.getDistinctId),
     }
 }
