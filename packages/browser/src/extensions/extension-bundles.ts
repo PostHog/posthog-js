@@ -40,6 +40,7 @@ import { PostHogExceptions } from '../posthog-exceptions'
 import { WebExperiments } from '../web-experiments'
 import { PostHogConversations } from './conversations/posthog-conversations'
 import { PostHogLogs } from '../posthog-logs'
+import { PostHogMetrics } from '../posthog-metrics'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 
@@ -111,6 +112,11 @@ export const LogsExtensions = {
     logs: PostHogLogs,
 } as const satisfies ExtensionClasses
 
+/** The posthog.metrics API (count, gauge, histogram). */
+export const MetricsExtensions = {
+    metrics: PostHogMetrics,
+} as const satisfies ExtensionClasses
+
 /** All extensions — equivalent to the default `posthog-js` bundle. */
 export const AllExtensions = {
     ...FeatureFlagsExtensions,
@@ -125,4 +131,5 @@ export const AllExtensions = {
     ...ExperimentsExtensions,
     ...ConversationsExtensions,
     ...LogsExtensions,
+    ...MetricsExtensions,
 } as const satisfies ExtensionClasses
