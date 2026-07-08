@@ -207,19 +207,22 @@ describe('createPostHog', () => {
             warnSpy.mockRestore()
         })
 
-        it.each(['NEXT_REDIRECT;replace;/login;307;', 'NEXT_NOT_FOUND', 'NEXT_HTTP_ERROR_FALLBACK;404'])(
-            'rethrows Next.js control-flow errors with digest %s',
-            async (digest) => {
-                const { getPostHog } = createPostHog({
-                    apiKey: 'phc_test123',
-                    getDistinctId: async () => {
-                        throw Object.assign(new Error(digest), { digest })
-                    },
-                })
+        it.each([
+            'NEXT_REDIRECT;replace;/login;307;',
+            'NEXT_NOT_FOUND',
+            'NEXT_HTTP_ERROR_FALLBACK;404',
+            'DYNAMIC_SERVER_USAGE',
+            'BAILOUT_TO_CLIENT_SIDE_RENDERING',
+        ])('rethrows Next.js control-flow errors with digest %s', async (digest) => {
+            const { getPostHog } = createPostHog({
+                apiKey: 'phc_test123',
+                getDistinctId: async () => {
+                    throw Object.assign(new Error(digest), { digest })
+                },
+            })
 
-                await expect(getPostHog()).rejects.toMatchObject({ digest })
-            }
-        )
+            await expect(getPostHog()).rejects.toMatchObject({ digest })
+        })
 
         it('converts a numeric distinct id to a string with a warning', async () => {
             const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
@@ -303,6 +306,29 @@ describe('createPostHog', () => {
             client.capture({ event: 'two' })
 
             expect(getDistinctId).toHaveBeenCalledTimes(1)
+        })
+
+        it('keeps identities separate across interleaved requests on the shared client', async () => {
+            const sharedClient = { capture: mockCapture, withContext: mockWithContext, enterContext: mockEnterContext }
+            mockGetOrCreateNodeClient.mockReturnValue(sharedClient)
+
+            const factoryA = createPostHog({ apiKey: 'phc_test123', getDistinctId: async () => 'user-a' })
+            const factoryB = createPostHog({ apiKey: 'phc_test123', getDistinctId: async () => 'user-b' })
+
+            const [clientA, clientB] = await Promise.all([factoryA.getPostHog(), factoryB.getPostHog()])
+            clientA.capture({ event: 'from_a' })
+            clientB.capture({ event: 'from_b' })
+
+            expect(mockWithContext).toHaveBeenNthCalledWith(
+                1,
+                expect.objectContaining({ distinctId: 'user-a' }),
+                expect.any(Function)
+            )
+            expect(mockWithContext).toHaveBeenNthCalledWith(
+                2,
+                expect.objectContaining({ distinctId: 'user-b' }),
+                expect.any(Function)
+            )
         })
     })
 
