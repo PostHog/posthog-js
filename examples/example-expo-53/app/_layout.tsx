@@ -28,9 +28,6 @@ export default function RootLayout() {
                 captureScreens: false, // expo-router requires this to be false and capture screens manually
                 captureTouches: true,
                 customLabelProp: 'ph-my-label',
-                navigation: {
-                    ignoreScreenNames: ['about'], 
-                }
             }}
             debug={true}
         >

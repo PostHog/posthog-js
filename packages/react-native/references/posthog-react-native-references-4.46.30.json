@@ -2449,7 +2449,7 @@
       "name": "PostHogAutocaptureNavigationTrackerOptions",
       "properties": [],
       "path": "dist/types.d.ts",
-      "example": "{\n    routeToName?: (name: string, params: any) => string;\n    routeToProperties?: (name: string, params: any) => Record<string, any>;\n    ignoreScreenNames?: string[]\n}"
+      "example": "{\n    routeToName?: (name: string, params: any) => string;\n    routeToProperties?: (name: string, params: any) => Record<string, any>;\n}"
     },
     {
       "id": "PostHogAutocaptureOptions",
