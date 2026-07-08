@@ -13,6 +13,9 @@ describe('isLegacyOnlyEvent', () => {
   it.each([
     '$pageview',
     '$identify',
+    '$create_alias',
+    '$groupidentify',
+    '$exception',
     'custom_event',
     'my$ai_event',
     'prefixed_$ai_generation',

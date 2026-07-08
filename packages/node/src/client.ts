@@ -50,7 +50,7 @@ import ErrorTracking from './extensions/error-tracking'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
-import { isLegacyOnlyEvent } from './capture-v1/routing'
+import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
 import { V1CaptureSender } from './capture-v1/sender'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -403,38 +403,46 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Capture submission seam shared by the batched (`_flush`) and immediate
-   * (`sendImmediate`) paths. In `v0` mode this is the unchanged legacy `/batch/`
-   * send. In `v1` mode, `$ai_*` events are split off to the legacy submitter
-   * (they have no v1 form yet) and the rest go to the Capture V1 endpoint.
+   * Route an event to its queue. In v1 mode `$ai_*` events go to the isolated {@link AI_ROUTE}
+   * (legacy transport) and everything else to {@link ANALYTICS_ROUTE} (Capture V1); in v0 mode
+   * every event stays on {@link ANALYTICS_ROUTE}, which maps to the historical queue. Routing runs
+   * on the post-`before_send`, normalized event name (core calls this after `processBeforeEnqueue`).
+   */
+  protected getQueueRouteKey(message: PostHogEventProperties): string {
+    return this.captureMode === 'v1' && isLegacyOnlyEvent(message) ? AI_ROUTE : ANALYTICS_ROUTE
+  }
+
+  protected persistedQueueKeyForRoute(route: string): PostHogPersistedProperty {
+    return route === AI_ROUTE ? PostHogPersistedProperty.AiQueue : PostHogPersistedProperty.Queue
+  }
+
+  protected getActiveQueueRoutes(): string[] {
+    // Only surface the AI route in v1 mode — v0 mode never enqueues onto it, so keeping it out
+    // keeps v0's flush/shutdown identical to before (a single queue on ANALYTICS_ROUTE).
+    return this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
+  }
+
+  /**
+   * Capture submission seam shared by the batched (`_flush`) and immediate (`sendImmediate`)
+   * paths. Events are routed to homogeneous per-route queues at enqueue time, so a batch here is
+   * never mixed: the {@link AI_ROUTE} (and all of v0 mode) uses the legacy `/batch/` transport,
+   * which throws so `_flush` can shrink/persist/retry its own queue; the {@link ANALYTICS_ROUTE}
+   * in v1 mode uses the Capture V1 endpoint. Because the routes flush independently, a v0/AI leg
+   * failure can never re-send analytics events already accepted on the V1 leg.
    */
   protected async sendBatch(
     batchMessages: (PostHogEventProperties | undefined)[],
-    retryOptions?: Partial<RetriableOptions>
+    retryOptions?: Partial<RetriableOptions>,
+    route: string = ANALYTICS_ROUTE
   ): Promise<void> {
-    if (this.captureMode !== 'v1') {
-      return super.sendBatch(batchMessages, retryOptions)
+    if (this.captureMode !== 'v1' || route === AI_ROUTE) {
+      return super.sendBatch(batchMessages, retryOptions, route)
     }
 
-    const legacyOnly: (PostHogEventProperties | undefined)[] = []
-    const v1Eligible: PostHogEventProperties[] = []
-    for (const message of batchMessages) {
-      if (message !== undefined && !isLegacyOnlyEvent(message)) {
-        v1Eligible.push(message)
-      } else {
-        legacyOnly.push(message)
-      }
-    }
-
-    const sends: Promise<void>[] = []
-    if (legacyOnly.length > 0) {
-      // Keeps full v0 semantics (throws so `_flush` can shrink/persist/retry) for AI events.
-      sends.push(super.sendBatch(legacyOnly, retryOptions))
-    }
-    if (v1Eligible.length > 0) {
-      sends.push(this.getV1Sender().sendV1Batch(v1Eligible))
-    }
-    await Promise.all(sends)
+    // Analytics route in v1 mode: homogeneous (no `$ai_*`, routed away at enqueue) and never
+    // undefined for a freshly-enqueued event; drop any legacy undefined queue artifacts.
+    const v1Events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
+    await this.getV1Sender().sendV1Batch(v1Events)
   }
 
   private getV1Sender(): V1CaptureSender {

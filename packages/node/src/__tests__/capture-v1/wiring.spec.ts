@@ -1,79 +1,29 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { CaptureV1Error } from '@/capture-v1/errors'
-import { waitForPromises } from '../utils'
+import { V1_URL, V1WiringHarness, v0Response, v1Response, waitForFlushTimer } from '../utils/v1-wiring'
 
 jest.mock('../../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
-
-const V1_URL = 'http://example.com/i/v1/analytics/events'
-
-function v1Response(results: Record<string, unknown> = {}): any {
-  const body = JSON.stringify({ results })
-  return {
-    status: 200,
-    text: () => Promise.resolve(body),
-    json: () => Promise.resolve({ results }),
-    headers: { get: () => null },
-    body: null,
-  }
-}
-
-function v0Response(): any {
-  return {
-    status: 200,
-    text: () => Promise.resolve('ok'),
-    json: () => Promise.resolve({ status: 'ok' }),
-    headers: { get: () => null },
-    body: null,
-  }
-}
-
-function callsTo(fragment: string): [string, any][] {
-  return mockedFetch.mock.calls.filter((call) => (call[0] as string).includes(fragment)) as [string, any][]
-}
-
-function eventsIn(fragment: string): string[] {
-  return callsTo(fragment).flatMap((call) => JSON.parse(call[1].body).batch.map((event: any) => event.event))
-}
-
 describe('capture v1 wiring (Node SDK)', () => {
-  const clients: PostHog[] = []
-
   jest.useFakeTimers()
+
+  const harness = new V1WiringHarness()
+  const mockedFetch = harness.fetch
+  const makeClient = (options?: PostHogOptions): PostHog => harness.makeClient(options)
+  const callsTo = (fragment: string): [string, any][] => harness.callsTo(fragment)
+  const eventsIn = (fragment: string): string[] => harness.eventsIn(fragment)
 
   beforeEach(() => {
     jest.spyOn(console, 'warn').mockImplementation(() => {})
     jest.spyOn(console, 'error').mockImplementation(() => {})
     jest.spyOn(console, 'info').mockImplementation(() => {})
-    mockedFetch.mockImplementation((url) =>
-      Promise.resolve((url as string).includes('/i/v1/analytics/events') ? v1Response() : v0Response())
-    )
+    harness.useDefaultRouting()
   })
 
   afterEach(async () => {
-    while (clients.length) {
-      await clients.pop()?.shutdown()
-    }
+    await harness.cleanup()
     jest.clearAllMocks()
   })
-
-  function makeClient(options: PostHogOptions = {}): PostHog {
-    const client = new PostHog('TEST_API_KEY', {
-      host: 'http://example.com',
-      fetchRetryCount: 0,
-      disableCompression: true,
-      ...options,
-    })
-    clients.push(client)
-    return client
-  }
-
-  const waitForFlushTimer = async (): Promise<void> => {
-    await waitForPromises()
-    jest.runOnlyPendingTimers()
-    await waitForPromises()
-  }
 
   describe('v0 mode (default)', () => {
     it('sends every event to /batch/ and never touches the v1 endpoint', async () => {
@@ -143,6 +93,17 @@ describe('capture v1 wiring (Node SDK)', () => {
 
       expect(callsTo('/i/v1/analytics/events')).toHaveLength(0)
       expect(eventsIn('/batch/')).toContain('$ai_span')
+    })
+
+    it('sends immediate identify/alias/groupIdentify (special non-AI events) to the v1 endpoint', async () => {
+      const posthog = makeClient({ captureMode: 'v1' })
+
+      await posthog.identifyImmediate({ distinctId: 'u', properties: { name: 'a' } })
+      await posthog.aliasImmediate({ distinctId: 'u', alias: 'anon-1' })
+      await posthog.groupIdentifyImmediate({ groupType: 'company', groupKey: 'acme', properties: { plan: 'pro' } })
+
+      expect(callsTo('/batch/')).toHaveLength(0)
+      expect(eventsIn('/i/v1/analytics/events')).toEqual(['$identify', '$create_alias', '$groupidentify'])
     })
   })
 
