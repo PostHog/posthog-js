@@ -29,18 +29,13 @@ export function coerceBool(value: JsonType): boolean | undefined {
 }
 
 /**
- * Coerce a value to a string the way the capture server does, or return
- * `undefined` if it cannot be coerced. Accepts native strings and integer
- * numbers (rendered as a decimal string); floats/booleans/objects/arrays fail.
+ * Accept only a native string, else return `undefined` (the option is then
+ * omitted). The backend's `product_tour_id` is `Option<String>`, so numbers,
+ * booleans, objects, and arrays are dropped rather than coerced — matching
+ * posthog-go, posthog-rs, and posthog-python exactly.
  */
 export function coerceString(value: JsonType): string | undefined {
-  if (typeof value === 'string') {
-    return value
-  }
-  if (typeof value === 'number' && Number.isInteger(value)) {
-    return String(value)
-  }
-  return undefined
+  return typeof value === 'string' ? value : undefined
 }
 
 /** Legacy sentinel property -> typed `options` field, with its coercion. */

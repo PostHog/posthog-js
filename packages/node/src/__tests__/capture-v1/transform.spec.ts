@@ -45,15 +45,15 @@ describe('capture v1 transform', () => {
     it.each<[string, JsonType, string | undefined]>([
       ['native string', 'abc', 'abc'],
       ['empty string', '', ''],
-      ['integer -> decimal string', 42, '42'],
-      ['zero', 0, '0'],
-      ['negative integer', -7, '-7'],
-      ['float (uncoercible)', 1.5, undefined],
-      ['bool (uncoercible)', true, undefined],
-      ['null (uncoercible)', null, undefined],
-      ['array (uncoercible)', [], undefined],
-      ['object (uncoercible)', {}, undefined],
-    ])('coerces %s', (_label, input, expected) => {
+      ['integer (dropped)', 42, undefined],
+      ['zero (dropped)', 0, undefined],
+      ['negative integer (dropped)', -7, undefined],
+      ['float (dropped)', 1.5, undefined],
+      ['bool (dropped)', true, undefined],
+      ['null (dropped)', null, undefined],
+      ['array (dropped)', [], undefined],
+      ['object (dropped)', {}, undefined],
+    ])('accepts only strings: %s', (_label, input, expected) => {
       expect(coerceString(input)).toBe(expected)
     })
   })
@@ -72,9 +72,11 @@ describe('capture v1 transform', () => {
       expect(event.properties.keep).toBe('me')
     })
 
-    it('maps $product_tour_id integer to a decimal string', () => {
-      const event = buildV1Event(baseMessage({ properties: { $product_tour_id: 42 } }))
-      expect(event.options.product_tour_id).toBe('42')
+    it('drops a non-string $product_tour_id but still strips the sentinel', () => {
+      const event = buildV1Event(baseMessage({ properties: { $product_tour_id: 42, keep: 'me' } }))
+      expect(event.options).not.toHaveProperty('product_tour_id')
+      expect(event.properties).not.toHaveProperty('$product_tour_id')
+      expect(event.properties.keep).toBe('me')
     })
 
     it('omits an option that cannot be coerced but still strips the sentinel', () => {
