@@ -2952,6 +2952,10 @@
       "name": "PostHogPersistedProperty",
       "properties": [
         {
+          "type": "\"ai_queue\"",
+          "name": "AiQueue"
+        },
+        {
           "type": "\"anonymous_id\"",
           "name": "AnonymousId"
         },
