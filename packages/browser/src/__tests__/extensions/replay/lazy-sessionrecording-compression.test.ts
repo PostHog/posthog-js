@@ -12,6 +12,12 @@ const createFullSnapshot = (data: Record<string, unknown> = {}) => ({
     timestamp: 123,
 })
 
+const createIncrementalSnapshot = (timestamp: number) => ({
+    type: 3,
+    data: { source: 0, adds: [], attributes: [], removes: [], texts: [] },
+    timestamp,
+})
+
 const createCustomSnapshot = () => ({
     type: 5,
     data: {
@@ -266,5 +272,92 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         releaseCompression()
         await lazyLoadedSessionRecording['_compressionQueue']
         expect(posthog.capture).toHaveBeenCalledTimes(1)
+    })
+
+    it('ships a full snapshot under the new session id when the recorder restarts while idle', async () => {
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+        })
+
+        // an idle rotation adopts the new session id before any user interaction clears the idle state
+        lazyLoadedSessionRecording['_isIdle'] = 'unknown'
+        lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
+
+        emit(createFullSnapshot({ content: 'post-rotation snapshot' }))
+        await lazyLoadedSessionRecording['_compressionQueue']
+        lazyLoadedSessionRecording['_flushBuffer']()
+
+        // the full snapshot must be attributed to the rotated session, not the buffer's stale one
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$snapshot',
+            expect.objectContaining({
+                $session_id: 'rotated-session-id',
+                $snapshot_data: expect.arrayContaining([expect.objectContaining({ type: 2 })]),
+            }),
+            expect.any(Object)
+        )
+    })
+
+    it('discards the prior session buffer instead of relabeling it when the flush is suppressed at rotation', async () => {
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+        })
+
+        // an old-session incremental sits in the buffer when a suppressed flush (e.g. buffering) meets a rotation
+        emit(createIncrementalSnapshot(50))
+        await lazyLoadedSessionRecording['_compressionQueue']
+        const strategy = lazyLoadedSessionRecording['_strategy']
+        const originalGetStatus = strategy.getStatus.bind(strategy)
+        strategy.getStatus = () => 'buffering'
+
+        lazyLoadedSessionRecording['_isIdle'] = 'unknown'
+        lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
+        emit(createFullSnapshot({ content: 'post-rotation snapshot' }))
+        await lazyLoadedSessionRecording['_compressionQueue']
+
+        strategy.getStatus = originalGetStatus
+        lazyLoadedSessionRecording['_flushBuffer']()
+
+        // only the new session's full snapshot ships; the undrained old-session event is discarded, not relabeled
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$snapshot',
+            expect.objectContaining({
+                $session_id: 'rotated-session-id',
+                $snapshot_data: [expect.objectContaining({ type: 2 })],
+            }),
+            expect.any(Object)
+        )
+    })
+
+    it('requests a full snapshot when an incremental ships for a rotated session without one', async () => {
+        const { emit, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+        })
+        const { assignableWindow } = require('../../../utils/globals')
+        const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot
+
+        // the initial session ships its full snapshot as usual
+        emit(createFullSnapshot({ content: 'initial' }))
+        await lazyLoadedSessionRecording['_compressionQueue']
+        expect(takeFullSnapshot).not.toHaveBeenCalled()
+
+        // an idle rotation adopts the new session id whose full snapshot never ships (the rotation bug), so the next incremental must trigger a healing snapshot
+        lazyLoadedSessionRecording['_isIdle'] = 'unknown'
+        lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
+        emit(createIncrementalSnapshot(100))
+        await lazyLoadedSessionRecording['_compressionQueue']
+        expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+        // only healed once per session id, even if the requested snapshot has not landed yet
+        emit(createIncrementalSnapshot(200))
+        await lazyLoadedSessionRecording['_compressionQueue']
+        expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+        // once the healed full snapshot ships, incrementals stop triggering healing
+        emit(createFullSnapshot({ content: 'healed' }))
+        emit(createIncrementalSnapshot(300))
+        await lazyLoadedSessionRecording['_compressionQueue']
+        expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
     })
 })
