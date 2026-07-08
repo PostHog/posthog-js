@@ -1,0 +1,47 @@
+require 'pathname'
+
+ws_dir = Pathname.new(__dir__)
+ws_dir = ws_dir.parent until
+  File.exist?("#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb") ||
+  ws_dir.expand_path.to_s == '/'
+require "#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb"
+
+prepare_react_native_project!
+
+target 'PosthogReactNativePluginExample-macOS' do
+  platform :macos, '14.0'
+  use_native_modules!
+
+  # Flags change depending on the env values.
+  flags = get_default_flags()
+
+  use_react_native!(
+    :path => '../node_modules/react-native-macos',
+    :hermes_enabled => false,
+    :fabric_enabled => ENV['RCT_NEW_ARCH_ENABLED'] == '1',
+    # An absolute path to your application root.
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  post_install do |installer|
+    react_native_post_install(installer)
+
+    # Xcode 26.4+ Clang rejects fmt's FMT_STRING consteval. fmt's base.h
+    # redefines FMT_USE_CONSTEVAL based on compiler detection, so a -D flag
+    # is not enough — patch the header directly to force it off. Mirrors the
+    # same workaround in the iOS Podfile.
+    # Upstream:
+    #   https://github.com/fmtlib/fmt/issues/4740
+    #   https://github.com/facebook/react-native/issues/55601
+    fmt_base_h = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base_h)
+      contents = File.read(fmt_base_h)
+      patched = contents.gsub(/^(#\s*define FMT_USE_CONSTEVAL )1$/, '\10')
+      if patched != contents
+        File.chmod(0644, fmt_base_h)
+        File.write(fmt_base_h, patched)
+        Pod::UI.puts "Patched #{fmt_base_h} to disable FMT_USE_CONSTEVAL (Xcode 26.4 fix)"
+      end
+    end
+  end
+end
