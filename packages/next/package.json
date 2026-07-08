@@ -1,6 +1,6 @@
 {
     "name": "@posthog/next",
-    "version": "0.7.1",
+    "version": "0.7.2",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },

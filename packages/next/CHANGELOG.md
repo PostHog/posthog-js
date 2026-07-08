@@ -1,5 +1,12 @@
 # @posthog/next
 
+## 0.7.2
+
+### Patch Changes
+
+- [#4092](https://github.com/PostHog/posthog-js/pull/4092) [`335dd05`](https://github.com/PostHog/posthog-js/commit/335dd05f418c8d9127f12a8b8619b5b514d279b5) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix `@posthog/next/pages` in Pages Router server bundles so server APIs like `getServerSideProps` resolve correctly instead of importing the client entrypoint.
+  (2026-07-08)
+
 ## 0.7.1
 
 ### Patch Changes
