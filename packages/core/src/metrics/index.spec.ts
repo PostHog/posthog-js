@@ -297,6 +297,23 @@ describe('PostHogMetrics', () => {
       await jest.advanceTimersByTimeAsync(20000)
       expect(mockInstance._sendMetricsBatch).not.toHaveBeenCalled()
     })
+
+    it('drainWindow returns the built payload synchronously and resets the window', async () => {
+      const metrics = createMetrics()
+      metrics.count('orders_created', 3)
+
+      const payload = metrics.drainWindow()
+      expect(payload!.resourceMetrics[0].scopeMetrics[0].metrics[0].sum!.dataPoints[0].asDouble).toBe(3)
+
+      // The window was consumed: nothing left for the regular flush.
+      await metrics.flush()
+      expect(mockInstance._sendMetricsBatch).not.toHaveBeenCalled()
+    })
+
+    it('drainWindow returns null when the window is empty', () => {
+      const metrics = createMetrics()
+      expect(metrics.drainWindow()).toBeNull()
+    })
   })
 
   describe('guardrails and filtering', () => {
@@ -356,6 +373,15 @@ describe('PostHogMetrics', () => {
         key: 'processed',
         value: { boolValue: true },
       })
+    })
+
+    it('drops counts made negative by beforeSend', async () => {
+      const metrics = createMetrics({
+        beforeSend: (m) => ({ ...m, value: -5 }),
+      })
+      metrics.count('a', 1)
+      await metrics.flush()
+      expect(mockInstance._sendMetricsBatch).not.toHaveBeenCalled()
     })
 
     it('drops the sample when beforeSend throws', async () => {

@@ -5,6 +5,7 @@ import type {
   MetricType,
   OtlpHistogramDataPoint,
   OtlpMetric,
+  OtlpMetricsPayload,
   OtlpNumberDataPoint,
 } from '@posthog/types'
 import type { Logger } from '../types'
@@ -75,10 +76,6 @@ export class PostHogMetrics {
   ) {}
 
   count(name: string, value: number = 1, options?: CaptureMetricOptions): void {
-    if (value < 0) {
-      this._logger.warn(`Dropping count '${name}': counters are monotonic, value must be >= 0`)
-      return
-    }
     this._capture({ name, type: 'count', value, unit: options?.unit, attributes: options?.attributes })
   }
 
@@ -108,6 +105,23 @@ export class PostHogMetrics {
     return p
   }
 
+  /**
+   * Synchronously snapshots the current window into an OTLP payload and
+   * resets it, bypassing the flush serializer entirely — for unload-time
+   * drains where the host must hand the payload to a synchronous transport
+   * (sendBeacon) in the same tick. Returns `null` when there is nothing to
+   * send. The caller owns delivery; there is no retry for a drained window.
+   */
+  drainWindow(): OtlpMetricsPayload | null {
+    if (this._series.size === 0) {
+      return null
+    }
+    const window = this._series
+    this._series = new Map()
+    this._seriesCapWarned = false
+    return this._buildPayload(window)
+  }
+
   /** Clears the flush timer and drops the current window. */
   reset(): void {
     this._clearFlushTimer()
@@ -132,6 +146,11 @@ export class PostHogMetrics {
     }
     if (typeof filtered.value !== 'number' || !Number.isFinite(filtered.value)) {
       this._logger.warn(`Dropping metric '${filtered.name}': value must be a finite number`)
+      return
+    }
+    // Checked after beforeSend so a hook can't turn a count negative either.
+    if (filtered.type === 'count' && filtered.value < 0) {
+      this._logger.warn(`Dropping count '${filtered.name}': counters are monotonic, value must be >= 0`)
       return
     }
 
@@ -242,14 +261,7 @@ export class PostHogMetrics {
     this._series = new Map()
     this._seriesCapWarned = false
 
-    const payload = buildOtlpMetricsPayload(
-      this._buildMetrics(window),
-      buildMetricsResourceAttributes(this._config, this._instance.getLibraryId(), this._instance.getLibraryVersion()),
-      this._instance.getLibraryId(),
-      this._instance.getLibraryVersion()
-    )
-
-    const outcome = await this._instance._sendMetricsBatch(payload)
+    const outcome = await this._instance._sendMetricsBatch(this._buildPayload(window))
     switch (outcome.kind) {
       case 'ok':
         return
@@ -265,6 +277,15 @@ export class PostHogMetrics {
         this._logger.error('Failed to send metrics batch:', outcome.error)
         return
     }
+  }
+
+  private _buildPayload(window: Map<string, SeriesState>): OtlpMetricsPayload {
+    return buildOtlpMetricsPayload(
+      this._buildMetrics(window),
+      buildMetricsResourceAttributes(this._config, this._instance.getLibraryId(), this._instance.getLibraryVersion()),
+      this._instance.getLibraryId(),
+      this._instance.getLibraryVersion()
+    )
   }
 
   /**

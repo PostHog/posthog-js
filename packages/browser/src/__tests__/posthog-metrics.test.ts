@@ -112,6 +112,23 @@ describe('posthog-metrics', () => {
         expect(metric.histogram.dataPoints[0].count).toBe(1)
     })
 
+    it('drains synchronously over the given transport even while another flush is in flight', () => {
+        // First request hangs: its callback is never invoked, so the core's
+        // flush serializer keeps a pending promise (the pagehide race).
+        ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => {})
+        metrics.count('a', 1)
+        void metrics.flush()
+
+        metrics.histogram('api_latency', 187, { unit: 'ms' })
+        metrics.flush('sendBeacon')
+
+        const beacon = sentRequests().find((r) => r.transport === 'sendBeacon')
+        expect(beacon).toBeDefined()
+        const metric = beacon.data.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        expect(metric.name).toBe('api_latency')
+        expect(metric.histogram.dataPoints[0].count).toBe(1)
+    })
+
     it('rebuilds the aggregator when the metrics config object is swapped', async () => {
         metrics.count('a', 1)
         await metrics.flush()

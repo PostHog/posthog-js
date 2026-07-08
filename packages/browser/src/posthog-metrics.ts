@@ -31,8 +31,6 @@ export class PostHogMetrics implements Extension {
     private _core: CorePostHogMetrics | undefined
     // The `metrics` config the current `_core` was built from; a change rebuilds it.
     private _resolvedFrom: PostHog['config']['metrics']
-    // Set for the synchronous span of a transport-forced drain (pagehide).
-    private _transportOverride?: 'XHR' | 'fetch' | 'sendBeacon'
 
     constructor(private readonly _instance: PostHog) {}
 
@@ -71,22 +69,27 @@ export class PostHogMetrics implements Extension {
     }
 
     /**
-     * Sends the aggregated window now. With a transport, the send is forced
-     * over it — the pagehide drain uses `sendBeacon` so the batch survives
-     * the page going away. The payload build and request hand-off happen
-     * synchronously, so this is safe inside an unload handler.
+     * Sends the aggregated window now. With a transport, the window is
+     * drained synchronously — bypassing the flush serializer, which could be
+     * awaiting an in-flight send that will never finish during unload — and
+     * the payload is handed to that transport in the same tick, so the
+     * pagehide `sendBeacon` drain survives the page going away. A drained
+     * window is not retried; the page is gone either way.
      */
     flush(transport?: 'XHR' | 'fetch' | 'sendBeacon'): Promise<void> {
         if (!this._core) {
             // eslint-disable-next-line compat/compat
             return Promise.resolve()
         }
-        this._transportOverride = transport
-        try {
-            return this._core.flush().catch((err) => this._logger.error('PostHog metrics flush failed:', err))
-        } finally {
-            this._transportOverride = undefined
+        if (transport) {
+            const payload = this._core.drainWindow()
+            if (payload) {
+                void this._sendMetricsBatch(payload, transport)
+            }
+            // eslint-disable-next-line compat/compat
+            return Promise.resolve()
         }
+        return this._core.flush().catch((err) => this._logger.error('PostHog metrics flush failed:', err))
     }
 
     reset(): void {
@@ -112,7 +115,10 @@ export class PostHogMetrics implements Extension {
         }
     }
 
-    private _sendMetricsBatch(payload: OtlpMetricsPayload): Promise<SendMetricsBatchOutcome> {
+    private _sendMetricsBatch(
+        payload: OtlpMetricsPayload,
+        transport?: 'XHR' | 'fetch' | 'sendBeacon'
+    ): Promise<SendMetricsBatchOutcome> {
         // eslint-disable-next-line compat/compat
         return new Promise((resolve) => {
             let settled = false
@@ -138,7 +144,7 @@ export class PostHogMetrics implements Extension {
                 data: payload,
                 compression: 'best-available',
                 batchKey: 'metrics',
-                ...(this._transportOverride && { transport: this._transportOverride }),
+                ...(transport && { transport }),
                 // Notify on the drop paths (not loaded, rate limited) so they retry, not stall.
                 fireCallbackOnDrop: true,
                 callback: (response) => {
