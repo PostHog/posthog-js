@@ -41,6 +41,7 @@
             "worker": "./dist/pages.edge.js",
             "browser": "./dist/pages.client.js",
             "react-server": "./dist/pages.js",
+            "node": "./dist/pages.js",
             "default": "./dist/pages.client.js"
         }
     },
