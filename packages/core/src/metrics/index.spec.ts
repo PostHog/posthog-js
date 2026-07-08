@@ -375,6 +375,21 @@ describe('PostHogMetrics', () => {
       })
     })
 
+    it('warns once when a metric name is reused with a different type, but keeps both series', async () => {
+      const metrics = createMetrics()
+      metrics.count('throughput', 5)
+      metrics.gauge('throughput', 42)
+      metrics.gauge('throughput', 43)
+      await metrics.flush()
+
+      // Both series still ship — the warning is a dev-time hint, not a drop.
+      const sent = sentMetrics()
+      expect(sent.some((m) => m.sum)).toBe(true)
+      expect(sent.some((m) => m.gauge)).toBe(true)
+      const typeWarns = (logger.warn as jest.Mock).mock.calls.filter((c) => String(c[0]).includes('already used'))
+      expect(typeWarns).toHaveLength(1)
+    })
+
     it('drops counts made negative by beforeSend', async () => {
       const metrics = createMetrics({
         beforeSend: (m) => ({ ...m, value: -5 }),

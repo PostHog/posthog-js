@@ -68,6 +68,11 @@ export class PostHogMetrics {
   private _flushPromise: Promise<void> | null = null
   // One cardinality warning per window, however many series get dropped.
   private _seriesCapWarned = false
+  // Type seen per metric name this window; reusing a name with a different
+  // type gets a one-time dev hint. The read path queries by name, so mixing
+  // types under one name produces charts that blend both series.
+  private _typeByName = new Map<string, MetricType>()
+  private _typeCollisionWarned = new Set<string>()
 
   constructor(
     private readonly _instance: MetricsHost,
@@ -119,6 +124,8 @@ export class PostHogMetrics {
     const window = this._series
     this._series = new Map()
     this._seriesCapWarned = false
+    this._typeByName = new Map()
+    this._typeCollisionWarned = new Set()
     return this._buildPayload(window)
   }
 
@@ -128,6 +135,8 @@ export class PostHogMetrics {
     this._series = new Map()
     this._flushPromise = null
     this._seriesCapWarned = false
+    this._typeByName = new Map()
+    this._typeCollisionWarned = new Set()
   }
 
   private _capture(sample: MetricSample): void {
@@ -152,6 +161,17 @@ export class PostHogMetrics {
     if (filtered.type === 'count' && filtered.value < 0) {
       this._logger.warn(`Dropping count '${filtered.name}': counters are monotonic, value must be >= 0`)
       return
+    }
+
+    const seenType = this._typeByName.get(filtered.name)
+    if (seenType === undefined) {
+      this._typeByName.set(filtered.name, filtered.type)
+    } else if (seenType !== filtered.type && !this._typeCollisionWarned.has(filtered.name)) {
+      this._typeCollisionWarned.add(filtered.name)
+      this._logger.warn(
+        `Metric name '${filtered.name}' is already used as a ${seenType}; ` +
+          `recording it as a ${filtered.type} too will blend both series in charts. Use a distinct name.`
+      )
     }
 
     const key = seriesKey(filtered.type, filtered.name, filtered.unit, filtered.attributes)
@@ -260,6 +280,8 @@ export class PostHogMetrics {
     const window = this._series
     this._series = new Map()
     this._seriesCapWarned = false
+    this._typeByName = new Map()
+    this._typeCollisionWarned = new Set()
 
     const outcome = await this._instance._sendMetricsBatch(this._buildPayload(window))
     switch (outcome.kind) {
