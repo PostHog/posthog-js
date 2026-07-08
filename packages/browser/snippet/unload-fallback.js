@@ -10,198 +10,244 @@
  * late-arriving array.js can never send them twice. Pasting it twice is
  * harmless for the same reason.
  *
- * It stays out of the way of the SDK's own machinery - nothing is sent when:
- * - the visitor is opted out (stored consent, a queued opt_out_capturing
- *   call, opt_out_capturing_by_default with no opt-in, DNT, cookieless mode)
- * - the traffic looks like a bot (the SDK's bot filtering never ran)
- * - the site customizes the event pipeline (before_send,
- *   sanitize_properties, property_blacklist/denylist, request_headers, or a
- *   queued set_config) - bypassing redaction is worse than losing events
- * - sendBeacon is unavailable or rejects the payload
+ * This file is written to be read - paste it as-is, or minify it first with:
+ * terser snippet/unload-fallback.js -c passes=2 -m --ecma 5
  *
- * Events for visitors with no stored identity use a generated personless
- * distinct_id: they count in event analytics but never create person
- * profiles and will not join a person identified later in the session.
- *
- * Constraints: ES5 only, zero console output, must never throw into page
- * code. Minify with: terser snippet/unload-fallback.js -c passes=2 -m --ecma 5
+ * Constraints: ES5 only, zero console output, must never throw into page code.
  */
 ;(function () {
-    try {
-        window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', function () {
-            try {
-                var ph = window.posthog
-                // Once array.js has taken over, its own unload flush owns
-                // delivery. __loaded is checked before _i because a
-                // double-pasted snippet can re-stub _i onto the real
-                // instance, but never unsets __loaded.
-                if (!ph || ph.__loaded || !ph._i || !navigator.sendBeacon) {
-                    return
+    var MAX_EVENTS_PER_BEACON = 50
+    // sendBeacon rejects bodies over 64KB; stay safely under it
+    var MAX_BEACON_BODY_BYTES = 63 * 1024
+
+    function isYesLike(value) {
+        value = String(value)
+        return value === '1' || value === 'true' || value === 'yes'
+    }
+
+    function isNoLike(value) {
+        value = String(value)
+        return value === '0' || value === 'false' || value === 'no'
+    }
+
+    function readLocalStorage(key) {
+        try {
+            return localStorage.getItem(key)
+        } catch (error) {}
+    }
+
+    function readSessionStorage(key) {
+        try {
+            return sessionStorage.getItem(key)
+        } catch (error) {}
+    }
+
+    function readCookie(name) {
+        var parts = ('; ' + document.cookie).split('; ' + name + '=')
+        if (parts.length > 1) {
+            return decodeURIComponent(parts.pop().split(';')[0])
+        }
+    }
+
+    function parseJson(value) {
+        try {
+            return JSON.parse(value)
+        } catch (error) {}
+    }
+
+    function utf8ToBase64(text) {
+        return btoa(unescape(encodeURIComponent(text)))
+    }
+
+    function fallbackDisabledByConfig(config) {
+        // cookieless mode has a sentinel-id contract this block cannot replicate
+        return config.cookieless_mode || config.disable_beacon || config.__preview_disable_beacon
+    }
+
+    function looksLikeBot(config) {
+        // the SDK's bot filtering never ran, so approximate it, honoring the
+        // same opt-out config as the SDK
+        if (config.opt_out_useragent_filter) {
+            return false
+        }
+        return navigator.webdriver || /bot|crawl|spider|headless/i.test(navigator.userAgent)
+    }
+
+    function pipelineIsCustomized(config, queue) {
+        // sites using these hooks scrub or reroute events before they leave the
+        // browser; bypassing that would be worse than losing the events
+        if (
+            config.before_send ||
+            config.sanitize_properties ||
+            config.property_blacklist ||
+            config.property_denylist ||
+            config.request_headers
+        ) {
+            return true
+        }
+        // a queued set_config could change any of the above before the drain runs
+        for (var i = 0; i < queue.length; i++) {
+            if (queue[i] && queue[i][0] === 'set_config') {
+                return true
+            }
+        }
+        return false
+    }
+
+    function visitorHasOptedOut(config, token, queue) {
+        if (config.respect_dnt && (isYesLike(navigator.doNotTrack) || isYesLike(window.doNotTrack))) {
+            return true
+        }
+        // queued consent calls replay before captures in the real drain, so the
+        // last opt_in/opt_out call queued decides here too
+        var queuedDecision
+        for (var i = 0; i < queue.length; i++) {
+            var methodName = queue[i] && queue[i][0]
+            if (methodName === 'opt_out_capturing') {
+                queuedDecision = false
+            } else if (methodName === 'opt_in_capturing') {
+                queuedDecision = true
+            }
+        }
+        if (queuedDecision !== undefined) {
+            return !queuedDecision
+        }
+        // no queued decision: fall back to the consent the SDK persisted
+        var consentKey =
+            config.consent_persistence_name || (config.opt_out_capturing_cookie_prefix || '__ph_opt_in_out_') + token
+        var storedConsent = readLocalStorage(consentKey)
+        if (storedConsent == null) {
+            storedConsent = readCookie(consentKey)
+        }
+        if (isNoLike(storedConsent)) {
+            return true
+        }
+        return !isYesLike(storedConsent) && Boolean(config.opt_out_capturing_by_default)
+    }
+
+    function sanitizeTokenForStorageKey(token) {
+        return token.replace(/\+/g, 'PL').replace(/\//g, 'SL').replace(/=/g, 'EQ')
+    }
+
+    function resolveIdentity(config, token, queue) {
+        // a queued identify wins: the real drain applies identify before
+        // captures, so its id is the right id for every queued capture
+        var identifiedId
+        for (var i = 0; i < queue.length; i++) {
+            var call = queue[i]
+            if (call && call[0] === 'identify' && typeof call[1] === 'string') {
+                identifiedId = call[1]
+            }
+        }
+        if (identifiedId) {
+            return { distinctId: identifiedId, personProfiles: true }
+        }
+
+        var personProfiles = config.person_profiles === 'always'
+        var storageKey = 'ph_' + (config.persistence_name || sanitizeTokenForStorageKey(token) + '_posthog')
+        var storedProperties =
+            parseJson(readLocalStorage(storageKey)) ||
+            parseJson(readSessionStorage(storageKey)) ||
+            parseJson(readCookie(storageKey))
+        if (storedProperties && storedProperties.distinct_id) {
+            return {
+                distinctId: storedProperties.distinct_id,
+                personProfiles: personProfiles || storedProperties.$epp === true,
+            }
+        }
+
+        // throwaway personless id: better than losing the events, but it will
+        // never join a person identified later in the session
+        return {
+            distinctId: 'snippet-' + Date.now().toString(36) + Math.random().toString(36).slice(2),
+            personProfiles: personProfiles,
+        }
+    }
+
+    function collectQueuedCaptures(queue, token, identity) {
+        var events = []
+        var queueIndices = []
+        for (var i = 0; i < queue.length && events.length < MAX_EVENTS_PER_BEACON; i++) {
+            var call = queue[i] // ['capture', eventName, properties?, ...]
+            if (!call || call[0] !== 'capture' || typeof call[1] !== 'string') {
+                continue
+            }
+            var properties = { $lib: 'web-snippet', $current_url: location.href }
+            var userProperties = call[2]
+            if (userProperties && typeof userProperties === 'object') {
+                for (var key in userProperties) {
+                    properties[key] = userProperties[key]
                 }
-                function yes(v) {
-                    v = String(v)
-                    return v === '1' || v === 'true' || v === 'yes'
-                }
-                function local(k) {
-                    try {
-                        return localStorage.getItem(k)
-                    } catch (err) {}
-                }
-                function session(k) {
-                    try {
-                        return sessionStorage.getItem(k)
-                    } catch (err) {}
-                }
-                function cookie(k) {
-                    var parts = ('; ' + document.cookie).split('; ' + k + '=')
-                    if (parts.length > 1) {
-                        return decodeURIComponent(parts.pop().split(';')[0])
+            }
+            // reserved keys are set after user properties so they cannot be overridden
+            properties.token = token
+            properties.distinct_id = identity.distinctId
+            properties.$process_person_profile = identity.personProfiles
+            properties.$sent_by_snippet_fallback_on_unload = true
+            events.push({ event: call[1], properties: properties })
+            queueIndices.push(i)
+        }
+        return { events: events, queueIndices: queueIndices }
+    }
+
+    function sendByBeacon(config, events) {
+        var apiHost = String(config.api_host || 'https://us.i.posthog.com').replace(/\/$/, '')
+        // the SDK's base64 wire format: form-urlencoded is a CORS-safelisted
+        // content type, so the beacon needs no preflight during unload
+        var body = 'data=' + encodeURIComponent(utf8ToBase64(JSON.stringify(events)))
+        if (body.length > MAX_BEACON_BODY_BYTES) {
+            return false
+        }
+        return navigator.sendBeacon(
+            apiHost + '/e/?compression=base64',
+            new Blob([body], { type: 'application/x-www-form-urlencoded' })
+        )
+    }
+
+    function removeSentCalls(queue, queueIndices) {
+        // highest index first so the remaining indices stay valid
+        for (var i = queueIndices.length - 1; i >= 0; i--) {
+            queue.splice(queueIndices[i], 1)
+        }
+    }
+
+    function onPageHide() {
+        try {
+            var posthog = window.posthog
+            // Once array.js has taken over, its own unload flush owns delivery.
+            // __loaded is checked before _i because a double-pasted snippet can
+            // re-stub _i onto the real instance, but never unsets __loaded.
+            if (!posthog || posthog.__loaded || !posthog._i || !navigator.sendBeacon) {
+                return
+            }
+            for (var i = 0; i < posthog._i.length; i++) {
+                try {
+                    var initCall = posthog._i[i] // [token, config, name]
+                    var token = initCall[0]
+                    var config = initCall[1] || {}
+                    var queue = posthog[initCall[2]] || posthog
+                    if (
+                        !token ||
+                        fallbackDisabledByConfig(config) ||
+                        looksLikeBot(config) ||
+                        pipelineIsCustomized(config, queue) ||
+                        visitorHasOptedOut(config, token, queue)
+                    ) {
+                        continue
                     }
-                }
-                function json(v) {
-                    try {
-                        return JSON.parse(v)
-                    } catch (err) {}
-                }
-                for (var i = 0; i < ph._i.length; i++) {
-                    try {
-                        var init = ph._i[i] // [token, config, name]
-                        var token = init[0]
-                        var config = init[1] || {}
-                        var queue = ph[init[2]] || ph
-                        if (
-                            !token ||
-                            config.cookieless_mode ||
-                            config.disable_beacon ||
-                            config.__preview_disable_beacon
-                        ) {
-                            continue
-                        }
-                        if (
-                            config.before_send ||
-                            config.sanitize_properties ||
-                            config.property_blacklist ||
-                            config.property_denylist ||
-                            config.request_headers
-                        ) {
-                            continue
-                        }
-                        // the SDK's bot filtering never ran, so approximate it,
-                        // honoring the same opt-out config as the SDK
-                        if (
-                            !config.opt_out_useragent_filter &&
-                            (navigator.webdriver || /bot|crawl|spider|headless/i.test(navigator.userAgent))
-                        ) {
-                            continue
-                        }
-                        if (config.respect_dnt && (yes(navigator.doNotTrack) || yes(window.doNotTrack))) {
-                            continue
-                        }
-                        // queued consent calls replay before captures in the real
-                        // drain, so the last one queued wins here too; a queued
-                        // set_config could change anything, so defer to array.js
-                        var queuedConsent
-                        var customized = false
-                        for (var j = 0; j < queue.length; j++) {
-                            var method = queue[j] && queue[j][0]
-                            if (method === 'set_config') {
-                                customized = true
-                            } else if (method === 'opt_out_capturing') {
-                                queuedConsent = false
-                            } else if (method === 'opt_in_capturing') {
-                                queuedConsent = true
-                            }
-                        }
-                        if (customized || queuedConsent === false) {
-                            continue
-                        }
-                        if (queuedConsent !== true) {
-                            var consentKey =
-                                config.consent_persistence_name ||
-                                (config.opt_out_capturing_cookie_prefix || '__ph_opt_in_out_') + token
-                            var consent = local(consentKey)
-                            if (consent == null) {
-                                consent = cookie(consentKey)
-                            }
-                            var no = String(consent)
-                            if (no === '0' || no === 'false' || no === 'no') {
-                                continue
-                            }
-                            if (!yes(consent) && config.opt_out_capturing_by_default) {
-                                continue
-                            }
-                        }
-                        // distinct_id: queued identify > persisted id > throwaway personless id.
-                        // The real drain applies identify before captures, so a queued
-                        // identify's id is the right id for every queued capture.
-                        var distinctId
-                        var personProfiles = config.person_profiles === 'always'
-                        for (j = 0; j < queue.length; j++) {
-                            if (queue[j] && queue[j][0] === 'identify' && typeof queue[j][1] === 'string') {
-                                distinctId = queue[j][1]
-                                personProfiles = true
-                            }
-                        }
-                        if (!distinctId) {
-                            var storageKey =
-                                'ph_' +
-                                (config.persistence_name ||
-                                    token.replace(/\+/g, 'PL').replace(/\//g, 'SL').replace(/=/g, 'EQ') + '_posthog')
-                            var stored =
-                                json(local(storageKey)) || json(session(storageKey)) || json(cookie(storageKey))
-                            if (stored && stored.distinct_id) {
-                                distinctId = stored.distinct_id
-                                personProfiles = personProfiles || stored.$epp === true
-                            }
-                        }
-                        if (!distinctId) {
-                            distinctId = 'snippet-' + Date.now().toString(36) + Math.random().toString(36).slice(2)
-                        }
-                        var events = []
-                        var indices = []
-                        for (var k = 0; k < queue.length && events.length < 50; k++) {
-                            var item = queue[k]
-                            if (item && item[0] === 'capture' && typeof item[1] === 'string') {
-                                var properties = { $lib: 'web-snippet', $current_url: location.href }
-                                var userProps = item[2]
-                                if (userProps && typeof userProps === 'object') {
-                                    for (var key in userProps) {
-                                        properties[key] = userProps[key]
-                                    }
-                                }
-                                properties.token = token
-                                properties.distinct_id = distinctId
-                                properties.$process_person_profile = personProfiles
-                                properties.$sent_by_snippet_fallback_on_unload = true
-                                events.push({ event: item[1], properties: properties })
-                                indices.push(k)
-                            }
-                        }
-                        if (!events.length) {
-                            continue
-                        }
-                        var body =
-                            'data=' + encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(events)))))
-                        // sendBeacon rejects bodies over 64KB; leave the queue for array.js
-                        if (body.length > 63 * 1024) {
-                            continue
-                        }
-                        if (
-                            navigator.sendBeacon(
-                                String(config.api_host || 'https://us.i.posthog.com').replace(/\/$/, '') +
-                                    '/e/?compression=base64',
-                                new Blob([body], { type: 'application/x-www-form-urlencoded' })
-                            )
-                        ) {
-                            // splice only after the browser accepted the beacon,
-                            // highest index first, so a rejected beacon loses nothing
-                            for (var m = indices.length - 1; m >= 0; m--) {
-                                queue.splice(indices[m], 1)
-                            }
-                        }
-                    } catch (err) {}
-                }
-            } catch (err) {}
-        })
-    } catch (err) {}
+                    var identity = resolveIdentity(config, token, queue)
+                    var collected = collectQueuedCaptures(queue, token, identity)
+                    if (collected.events.length && sendByBeacon(config, collected.events)) {
+                        // remove only after the browser accepted the beacon, so a
+                        // rejected beacon loses nothing - the queue stays for array.js
+                        removeSentCalls(queue, collected.queueIndices)
+                    }
+                } catch (error) {}
+            }
+        } catch (error) {}
+    }
+
+    try {
+        window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', onPageHide)
+    } catch (error) {}
 })()

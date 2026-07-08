@@ -20,11 +20,12 @@ meaningful data to bounces. Share it with customers who have that problem.
 
 ### Installation
 
-Paste the contents of `unload-fallback.js` (or its minified form) in a
-`<script>` tag near the PostHog snippet. Order does not matter — it reads
-everything at unload time. Pasting it twice is harmless.
+Paste the contents of `unload-fallback.js` in a `<script>` tag near the
+PostHog snippet. Order does not matter — it reads everything at unload time.
+Pasting it twice is harmless.
 
-To produce the minified form:
+The file is written to be read, so you can audit exactly what it does before
+pasting it. If you prefer to ship fewer bytes, minify it first:
 
 ```bash
 npx terser snippet/unload-fallback.js -c passes=2 -m --ecma 5

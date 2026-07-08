@@ -25,7 +25,7 @@ const gzippedSize = (code: string) => gzipSync(strToU8(code)).byteLength
 describe('snippet size', () => {
     it.each([
         ['snippet.js', 1000, 600],
-        ['unload-fallback.js', 2800, 1450],
+        ['unload-fallback.js', 3300, 1600],
     ])('%s stays within its byte budget when minified', async (file, minifiedBudget, gzippedBudget) => {
         const code = await minified(read(file))
 
