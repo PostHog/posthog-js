@@ -1,6 +1,6 @@
 {
   "name": "@posthog/rrweb-plugin-sequential-id-replay",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "",
   "type": "module",
   "main": "./dist/rrweb-plugin-sequential-id-replay.umd.cjs",
