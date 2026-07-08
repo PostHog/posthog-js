@@ -255,7 +255,11 @@ export default class MutationBuffer {
   }
 
   public reset() {
-    this.shadowDomManager.reset();
+    // Only release this buffer's own resources. The shadowDomManager is a
+    // single shared instance, so resetting it here would disconnect every
+    // shadow-root observer on the page whenever any one buffer is torn down
+    // (e.g. an iframe navigating away). Global shadow teardown is driven by
+    // takeFullSnapshot's shadowDomManager.init() and the record() stop path.
     this.releaseCanvasManager();
   }
 

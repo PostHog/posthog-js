@@ -762,6 +762,10 @@ function record<T = eventWithTime>(
       iframeManager.removeLoadListener();
       iframeManager.destroy();
       iframeObserverCleanups.clear();
+      // Disconnect all shadow-root observers here rather than from per-buffer
+      // reset(), so tearing down a single iframe buffer no longer nukes the
+      // whole page's shadow observation.
+      shadowDomManager.reset();
       mirror.reset();
       recording = false;
       unregisterErrorHandler();
