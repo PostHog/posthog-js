@@ -26,7 +26,26 @@ export function on(
 ): listenerHandler {
   const options = { capture: true, passive: true };
   target.addEventListener(type, fn, options);
-  return () => target.removeEventListener(type, fn, options);
+  return () => removeEventListenerSafely(target, type, fn, options);
+}
+
+export function removeEventListenerSafely(
+  target: Pick<EventTarget, 'removeEventListener'>,
+  type: string,
+  fn: EventListenerOrEventListenerObject,
+  options?: boolean | EventListenerOptions,
+): void {
+  callSafely(() => {
+    const removeEventListener = target.removeEventListener;
+    if (typeof removeEventListener !== 'function') {
+      return;
+    }
+    if (options === undefined) {
+      removeEventListener.call(target, type, fn);
+      return;
+    }
+    removeEventListener.call(target, type, fn, options);
+  });
 }
 
 // https://github.com/rrweb-io/rrweb/pull/1695
