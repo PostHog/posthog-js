@@ -2107,7 +2107,7 @@
           "name": "console"
         },
         {
-          "description": "Enables native iOS/Android crash autocapture through the optional native plugin. Disabled by default. Requires `@posthog/react-native-plugin` installed.",
+          "description": "Enables native iOS/Android/macOS crash autocapture through the optional native plugin. Disabled by default. Requires `@posthog/react-native-plugin` installed.",
           "type": "boolean",
           "name": "nativeCrashes"
         },
