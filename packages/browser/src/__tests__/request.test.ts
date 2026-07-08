@@ -837,6 +837,94 @@ describe('request', () => {
                     expect((body as Blob).type).toBe(expectedContentType)
                 }
             )
+
+            describe('$sent_send_beacon tagging', () => {
+                const readBeaconBlob = async (): Promise<string> => {
+                    const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                    return await new Promise((resolve) => {
+                        const reader = new FileReader()
+                        reader.onload = () => resolve(reader.result as string)
+                        reader.readAsText(blob)
+                    })
+                }
+
+                const decodeBeaconBody = (body: string): any =>
+                    body.startsWith('data=')
+                        ? JSON.parse(
+                              Buffer.from(decodeURIComponent(body.replace('data=', '')), 'base64').toString('utf8')
+                          )
+                        : JSON.parse(body)
+
+                it.each([
+                    ['a single event', undefined, { event: 'test', properties: { foo: 'bar' } }],
+                    ['a single base64-compressed event', Compression.Base64, { event: 'test', properties: {} }],
+                    [
+                        'a batch of events',
+                        undefined,
+                        [
+                            { event: 'one', properties: {} },
+                            { event: 'two', properties: { foo: 'bar' } },
+                        ],
+                    ],
+                ])(
+                    'tags %s sent to the events endpoint',
+                    async (_name: string, compression: Compression | undefined, data: any) => {
+                        request(
+                            createRequest({
+                                url: 'https://any.posthog-instance.com/e/',
+                                method: 'POST',
+                                compression,
+                                data,
+                            })
+                        )
+
+                        const decoded = decodeBeaconBody(await readBeaconBlob())
+                        const events = [].concat(decoded)
+                        expect(events.length).toBeGreaterThan(0)
+                        for (const event of events) {
+                            expect(event.properties.$sent_send_beacon).toBe(true)
+                        }
+                    }
+                )
+
+                it('does not tag snapshot payloads sent to the recordings endpoint', async () => {
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/s/',
+                            method: 'POST',
+                            data: { event: '$snapshot', properties: { $snapshot_data: [] } },
+                        })
+                    )
+
+                    const decoded = decodeBeaconBody(await readBeaconBlob())
+                    expect(decoded.properties.$sent_send_beacon).toBeUndefined()
+                })
+
+                it('leaves events-endpoint payloads without a properties object untouched', async () => {
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/e/',
+                            method: 'POST',
+                            data: { foo: 'bar' },
+                        })
+                    )
+
+                    expect(decodeBeaconBody(await readBeaconBlob())).toEqual({ foo: 'bar' })
+                })
+
+                it('does not tag events sent over other transports', () => {
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/e/',
+                            method: 'POST',
+                            transport: 'XHR',
+                            data: { event: 'test', properties: { foo: 'bar' } },
+                        })
+                    )
+
+                    expect(mockedXHR.send.mock.calls[0][0]).not.toContain('$sent_send_beacon')
+                })
+            })
         })
     })
 

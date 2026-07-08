@@ -1,0 +1,23 @@
+<html>
+<head>
+    <title>snippet unload fallback</title>
+</head>
+<body>
+<script src="/snippet/snippet.js"></script>
+<script>
+    posthog.init('test_token', {
+        api_host: 'https://localhost:1234',
+        ip: false,
+        autocapture: false,
+        capture_pageview: false,
+        disable_session_recording: true,
+        disable_surveys: true,
+        advanced_disable_flags: true,
+        disable_compression: true,
+        // the SDK drops headless-browser events as bot traffic by default
+        opt_out_useragent_filter: true,
+    })
+    posthog.capture('early-event', { early: 'yes' })
+</script>
+</body>
+</html>

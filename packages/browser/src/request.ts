@@ -10,10 +10,12 @@ import { gzipSync, strToU8 } from 'fflate'
 import { _base64Encode } from './utils/encode-utils'
 import {
     gzipCompress,
+    isArray,
     isGzipData,
     isGzipRequest,
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
+    isObject,
 } from '@posthog/core'
 
 interface RequestWithEncodedBody extends RequestWithOptions {
@@ -367,11 +369,25 @@ const _fetch = (options: RequestWithOptions) => {
     return
 }
 
+const markBeaconedEvents = (options: RequestWithOptions): void => {
+    // beacon delivery is fire-and-forget, so tag events for delivery analysis.
+    // only capture payloads (/e/) - snapshot and log payloads are left untouched.
+    if (!options.data || !hasEndpointSuffix(getURLPath(options.url), '/e/')) {
+        return
+    }
+    each(isArray(options.data) ? options.data : [options.data], (item: { properties?: Record<string, any> }) => {
+        if (item && isObject(item.properties)) {
+            item.properties['$sent_send_beacon'] = true
+        }
+    })
+}
+
 const _sendBeacon = (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
     try {
+        markBeaconedEvents(options)
         const { url, encodedBody } = encodePostDataSafely(options)
         const { contentType, body } = encodedBody ?? {}
         if (!body) {
