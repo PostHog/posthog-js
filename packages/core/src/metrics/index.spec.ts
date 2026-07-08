@@ -402,9 +402,7 @@ describe('PostHogMetrics', () => {
 
       const sent = sentMetrics()
       expect(sent[0].sum!.dataPoints).toHaveLength(2)
-      const values = sent[0].sum!.dataPoints.map((dp) =>
-        dp.attributes.find((a) => a.key === 'plan')!.value.stringValue
-      )
+      const values = sent[0].sum!.dataPoints.map((dp) => dp.attributes.find((a) => a.key === 'plan')!.value.stringValue)
       expect(values.sort()).toEqual(['free', 'pro'])
     })
 
