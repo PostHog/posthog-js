@@ -14,7 +14,12 @@ import {
   ISuite,
 } from './utils';
 import type { recordOptions } from '../src/types';
-import { eventWithTime, NodeType, EventType } from '@posthog/rrweb-types';
+import {
+  eventWithTime,
+  NodeType,
+  EventType,
+  IncrementalSource,
+} from '@posthog/rrweb-types';
 import { visitSnapshot } from '@posthog/rrweb-snapshot';
 
 describe('record integration tests', function (this: ISuite) {
@@ -933,7 +938,7 @@ describe('record integration tests', function (this: ISuite) {
     const countShadowLiAdds = () =>
       page.evaluate(`
         window.snapshots
-          .filter((e) => e.type === 3 && e.data.source === 0)
+          .filter((e) => e.type === ${EventType.IncrementalSnapshot} && e.data.source === ${IncrementalSource.Mutation})
           .flatMap((e) => e.data.adds || [])
           .filter((a) => a.node && a.node.tagName === 'li').length
       `) as Promise<number>;
