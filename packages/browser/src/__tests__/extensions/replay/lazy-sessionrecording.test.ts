@@ -1920,6 +1920,30 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        it('still starts when the bundled core has no SessionIdManager.on (version skew with CDN recorder)', () => {
+            // The recorder chunk is loaded from the CDN and can run against an older bundled core.
+            // SessionIdManager.on was only added in posthog-js 1.268.6, so simulate an older core that
+            // lacks it and assert start() degrades gracefully instead of throwing a TypeError.
+            // @ts-expect-error deliberately removing the method to emulate an older core (it lives on
+            // the prototype, so overriding the instance property is how we make it "not a function")
+            sessionManager.on = undefined
+
+            expect(() =>
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+            ).not.toThrow()
+
+            // recording still starts, it just skips the forced-idle-reset listener
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdleResetForcedListener']).toBeUndefined()
+        })
+
         it('records events emitted before and after starting recording', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
