@@ -190,6 +190,7 @@ export abstract class PostHogCoreStateless {
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
   private flushPromises: Set<Promise<any>> = new Set()
+  private _dequeuedMessagesCount: number = 0
   private shutdownPromise: Promise<void> | null = null
   private requestTimeout: number
   private featureFlagsRequestTimeoutMs: number
@@ -1331,6 +1332,7 @@ export abstract class PostHogCoreStateless {
         const newQueue = refreshedQueue.slice(batchItems.length)
         this.setPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue, newQueue)
         queue = newQueue
+        this._dequeuedMessagesCount += batchItems.length
         // Wait for storage to complete to prevent duplicate events on app crash
         await this.flushStorage()
       }
@@ -1532,12 +1534,21 @@ export abstract class PostHogCoreStateless {
             break
           }
 
+          const dequeuedBeforeFlush = this._dequeuedMessagesCount
+
           // flush again to make sure we send all events, some of which might've been added
           // while we were waiting for the pending promises to resolve
           // For example, see sendFeatureFlags in posthog-node/src/posthog-node.ts::capture
           await this.flush()
 
           if (hasTimedOut) {
+            break
+          }
+
+          if (this._dequeuedMessagesCount === dequeuedBeforeFlush) {
+            this._logger.warn(
+              'Shutdown flush completed but did not send any queued events. Stopping drain to avoid a loop.'
+            )
             break
           }
         }
