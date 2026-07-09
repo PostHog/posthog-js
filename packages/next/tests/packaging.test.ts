@@ -141,9 +141,6 @@ describeIfBuilt('Transitive import closure of each built barrel', () => {
         expect(imports.has('server-only')).toBe(false)
     })
 
-    // Sanity check: the Node-server and edge barrels should still pull these
-    // in. If they stop doing so, the server-side API has likely lost the
-    // intended functionality (e.g. a re-export was accidentally dropped).
     it.each([
         ['pages.js', { 'server-only': false, 'posthog-node': true, 'posthog-node/edge': false }],
         ['index.js', { 'server-only': true, 'posthog-node': true, 'posthog-node/edge': false }],
