@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3251](https://github.com/PostHog/posthog-js/issues/3251) | Valid surveys unload bug; prior fix appears incomplete for a stale/version-skewed survey manager. | feature/surveys, web | https://github.com/PostHog/posthog-js/pull/4122 | no | 2026-07-09T05:56:45.214Z |
 | PostHog/posthog-js | [issue 3796](https://github.com/PostHog/posthog-js/issues/3796) | Valid React Native session replay feature request; RN currently forces screenshot mode and has no supported wireframe mode option. | enhancement, feature/replay, react-native, feature/mobile, iOS, Android |  | no | 2026-07-07T09:33:40.822Z |
 | PostHog/posthog-js | [issue 3809](https://github.com/PostHog/posthog-js/issues/3809) | Already implemented in React Native autocapture | enhancement, feature/autocapture, react-native, feature/mobile |  | no | 2026-07-06T09:49:12.033Z |
 | PostHog/posthog-js | [issue 3810](https://github.com/PostHog/posthog-js/issues/3810) | Valid React Native mobile feature request; RN currently only wires network timing/telemetry, not network request/response bodies. | enhancement, react-native, feature/mobile, team/logs |  | no | 2026-07-06T09:48:08.415Z |
