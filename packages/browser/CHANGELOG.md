@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.399.1
+
+### Patch Changes
+
+- [#4122](https://github.com/PostHog/posthog-js/pull/4122) [`c915581`](https://github.com/PostHog/posthog-js/commit/c91558173dc5fdde3fca1e2f4cd0812049057818) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix `TypeError: handlePageUnload is not a function` thrown on page unload when a version-skewed lazy-loaded surveys chunk produces a survey manager whose prototype lacks `handlePageUnload`. The delegated call in `PostHogSurveys.handlePageUnload()` now guards the method as well as the receiver.
+  (2026-07-09)
+
+- [#4124](https://github.com/PostHog/posthog-js/pull/4124) [`562ceeb`](https://github.com/PostHog/posthog-js/commit/562ceeb802e8a5adc26e3a5edcd9f1dfd52c20ed) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer crashes on startup when a CDN-loaded recorder chunk runs against an older bundled core. Calls into `SessionIdManager.on`/`onSessionId` are now guarded so a core without those methods degrades gracefully instead of throwing a `TypeError` during `start()`.
+  (2026-07-09)
+
 ## 1.399.0
 
 ### Minor Changes
