@@ -191,7 +191,16 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
   log(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
 }
 
-export { deriveSessionIdFromMCPSession }
+export { deriveSessionIdFromMCPSession, newSessionId }
+// Session tokens for stateless / multi-pod servers. Minted and decoded
+// automatically on JSON-mode StreamableHTTP; SSE servers set the header
+// themselves with `encodeSessionId`.
+export {
+  MCP_SESSION_HEADER,
+  decodeSessionId,
+  encodeSessionId,
+  type SessionTokenPayload,
+} from './extensions/session-token'
 export {
   POSTHOG_MCP_ANALYTICS_SOURCE,
   PostHogMCPAnalyticsEvent,

@@ -3,7 +3,14 @@
 // Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
 
 import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
-import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, MCPServerLike, McpEvent } from '../types'
+import type {
+  CompatibleRequestHandlerExtra,
+  MCPAnalyticsData,
+  MCPRequestLike,
+  MCPServerLike,
+  McpEvent,
+  ServerClientInfoLike,
+} from '../types'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addConversationIdToTools,
@@ -17,11 +24,12 @@ import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
-import { getServerTrackingData, handleIdentify } from './internal'
+import { getServerTrackingData, handleIdentify, setServerTrackingData } from './internal'
 import { log } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
-import { getServerSessionId } from './session'
+import { getSessionId, newSessionId } from './session'
+import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
@@ -129,7 +137,7 @@ async function prepareToolCallEvent(
   eventType: MCPAnalyticsEventType
 ): Promise<McpEvent | null> {
   try {
-    const sessionId = getServerSessionId(server, extra)
+    const sessionId = getSessionId(server, extra)
     await handleIdentify(server, data, sessionId, request, extra)
 
     const toolName = request.params?.name
@@ -283,7 +291,7 @@ export async function handleListToolsRequest(
   const data = getServerTrackingData(server)
   const startTime = new Date()
   const event: McpEvent = {
-    sessionId: getServerSessionId(server, extra),
+    sessionId: getSessionId(server, extra),
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
@@ -411,6 +419,71 @@ export function cacheToolCategories(cache: Map<string, string>, tools: ListTools
 // --- initialize -----------------------------------------------------------
 
 /**
+ * Stateless servers never issue a session id, so sessions fragment and the
+ * client name/version is lost after `initialize`. Fix: mint the
+ * `Mcp-Session-Id` response header as a token carrying both. Clients replay
+ * the header on every request, so any pod recovers them with no server-side
+ * store (decoded in `getSessionId`).
+ *
+ * The header only reaches the wire when response headers are built after the
+ * handler runs — StreamableHTTP with `enableJsonResponse: true`. SSE flushes
+ * headers first; those servers set the header themselves with the exported
+ * `encodeSessionId`, and this mint is a harmless no-op.
+ */
+function mintStatelessSessionOnInitialize(
+  server: MCPServerLike,
+  data: MCPAnalyticsData,
+  request: MCPRequestLike,
+  extra: CompatibleRequestHandlerExtra | undefined
+): void {
+  try {
+    const headers = extra?.requestInfo?.headers
+    if (!headers || typeof headers !== 'object') {
+      return // not an HTTP transport (stdio/in-memory) — nothing to mint into
+    }
+    if (readMcpSessionHeader(headers)) {
+      return // client already replays a session id (ours or the transport's)
+    }
+    const transport = server.transport
+    if (!transport || extra?.sessionId || transport.sessionId) {
+      return // stateful transports manage their own session id — leave it alone
+    }
+
+    const sessionId = newSessionId()
+    const clientInfo = readInitializeClientInfo(request)
+    const token = encodeSessionId({ sessionId, clientName: clientInfo?.name, clientVersion: clientInfo?.version })
+    if (!writeSessionIdToTransport(transport, token)) {
+      return // transport can't carry a response session id — keep generated behavior
+    }
+
+    data.sessionId = sessionId
+    data.sessionSource = 'token'
+    data.sessionInfo.clientName = clientInfo?.name
+    data.sessionInfo.clientVersion = clientInfo?.version
+    data.lastActivity = new Date()
+    setServerTrackingData(server, data)
+  } catch (error) {
+    log(`Warning: PostHog MCP analytics failed to mint a stateless session id - ${error}`)
+  }
+}
+
+/**
+ * Read the client name/version off the `initialize` request body — the SDK
+ * hasn't stored it yet (`getClientVersion()`) when our patch runs.
+ */
+function readInitializeClientInfo(request: MCPRequestLike): ServerClientInfoLike | undefined {
+  const clientInfo = request.params?.clientInfo
+  if (!clientInfo || typeof clientInfo !== 'object') {
+    return undefined
+  }
+  const { name, version } = clientInfo as Record<string, unknown>
+  return {
+    name: typeof name === 'string' ? name : undefined,
+    version: typeof version === 'string' ? version : undefined,
+  }
+}
+
+/**
  * Captures the connection handshake (and resolves identity) on `initialize`
  * before the original handler runs.
  */
@@ -428,7 +501,9 @@ export async function handleInitializeRequest(
     return await originalInitializeHandler(request, extra)
   }
 
-  const sessionId = getServerSessionId(server, extra)
+  // Mint first so the `$mcp_initialize` event below already carries the minted id.
+  mintStatelessSessionOnInitialize(server, data, request, extra)
+  const sessionId = getSessionId(server, extra)
   await handleIdentify(server, data, sessionId, request, extra)
 
   const event: McpEvent = {

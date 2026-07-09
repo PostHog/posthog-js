@@ -13,6 +13,7 @@ import type {
 import { INACTIVITY_TIMEOUT_IN_MINUTES } from './constants'
 import { deterministicPrefixedId, newPrefixedId } from './ids'
 import { getServerTrackingData, setServerTrackingData } from './internal'
+import { decodeSessionId, readMcpSessionHeader } from './session-token'
 
 export function newSessionId(): string {
   return newPrefixedId('ses')
@@ -27,56 +28,56 @@ export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
 }
 
 /**
- * Resolves the session id for a request, preferring the MCP protocol sessionId
- * over an SDK-generated one so a transport-supplied session wins.
+ * Resolves the session id for a request: from the replayed session token, from
+ * the transport's MCP session id, or — when the request carries nothing — from
+ * this instance's memory. Also saves the token's client name/version so events
+ * built later in the request can use them (see getSessionInfo).
  */
-export function getServerSessionId(server: MCPServerLike, extra?: CompatibleRequestHandlerExtra): string {
+export function getSessionId(server: MCPServerLike, extra?: CompatibleRequestHandlerExtra): string {
   const data = getServerTrackingData(server)
-
   if (!data) {
     throw new Error('Server tracking data not found')
   }
 
-  const mcpSessionId = extra?.sessionId
+  // Our token rides the `mcp-session-id` request header, which stateless
+  // transports ignore — so read it ourselves.
+  const sessionHeader = readMcpSessionHeader(extra?.requestInfo?.headers)
+  const token = decodeSessionId(sessionHeader)
 
-  if (mcpSessionId) {
-    data.sessionId = deriveSessionIdFromMCPSession(mcpSessionId)
-    data.lastMcpSessionId = mcpSessionId
+  let sessionId: string
+  if (token) {
+    // Token we minted at `initialize` (see session-token.ts).
+    data.sessionSource = 'token'
+    data.sessionInfo.clientName = token.clientName
+    data.sessionInfo.clientVersion = token.clientVersion
+    sessionId = token.sessionId
+  } else if (extra?.sessionId) {
+    // Session id issued by a stateful transport: hash it so the same MCP
+    // session maps to the same SDK session across restarts.
     data.sessionSource = 'mcp'
-    setServerTrackingData(server, data)
-    setLastActivity(server)
-    return data.sessionId
+    sessionId = deriveSessionIdFromMCPSession(extra.sessionId)
+  } else {
+    sessionId = getSessionIdFromMemory(data)
   }
 
-  // Once a session has been MCP-derived, keep that id even if a later request
-  // arrives without the MCP sessionId, so the session doesn't fragment.
-  if (data.sessionSource === 'mcp' && data.lastMcpSessionId) {
-    setLastActivity(server)
-    return data.sessionId
-  }
-
-  // SDK-generated sessions roll over after an inactivity timeout.
-  const now = Date.now()
-  const timeoutMs = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
-  if (now - data.lastActivity.getTime() > timeoutMs) {
-    data.sessionId = newSessionId()
-    data.sessionSource = 'generated'
-    setServerTrackingData(server, data)
-  }
-  setLastActivity(server)
-
-  return data.sessionId
-}
-
-export function setLastActivity(server: MCPServerLike): void {
-  const data = getServerTrackingData(server)
-
-  if (!data) {
-    throw new Error('Server tracking data not found')
-  }
-
+  data.sessionId = sessionId
   data.lastActivity = new Date()
   setServerTrackingData(server, data)
+  return sessionId
+}
+
+/**
+ * Nothing replayed on this request: keep the id we already have. Only
+ * generated sessions roll over on inactivity — token/MCP ids live as long as
+ * the client replays them, and regenerating one would split the session.
+ */
+function getSessionIdFromMemory(data: MCPAnalyticsData): string {
+  const timeoutMs = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000
+  const isStale = Date.now() - data.lastActivity.getTime() > timeoutMs
+  if (data.sessionSource === 'generated' && isStale) {
+    return newSessionId()
+  }
+  return data.sessionId
 }
 
 /**

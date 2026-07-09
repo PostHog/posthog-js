@@ -8,6 +8,35 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 - [MCP analytics docs](https://posthog.com/docs/mcp-analytics)
 
+## Stateless & multi-pod servers
+
+On stateless deployments the SDK mints the `Mcp-Session-Id` response header at `initialize`
+as a token carrying the session id and client name/version. Clients replay the header on
+every request, so any pod keeps `$session_id` and `$mcp_client_name`/`$mcp_client_version`
+stable with no server-side store. Works out of the box on `StreamableHTTPServerTransport`
+with `enableJsonResponse: true` and a fresh transport per request.
+
+SSE-streaming servers flush headers before handlers run, so set the header at the HTTP layer
+instead — the SDK decodes it either way:
+
+```ts
+import { MCP_SESSION_HEADER, encodeSessionId, newSessionId } from '@posthog/mcp'
+
+// after parsing the POST body, before flushing headers:
+if (body?.method === 'initialize' && !req.headers[MCP_SESSION_HEADER]) {
+  res.setHeader(
+    MCP_SESSION_HEADER,
+    encodeSessionId({
+      sessionId: newSessionId(),
+      clientName: body.params?.clientInfo?.name,
+      clientVersion: body.params?.clientInfo?.version,
+    })
+  )
+}
+```
+
+Details: [docs/ARCHITECTURE.md §4](./docs/ARCHITECTURE.md).
+
 ## Developing locally
 
 To test local changes in a consumer app (e.g. a dummy MCP server), symlink **both**
