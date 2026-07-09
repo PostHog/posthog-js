@@ -1020,11 +1020,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         addEventListener(window, 'online', this._onOnline)
         addEventListener(window, 'visibilitychange', this._onVisibilityChange)
 
-        if (!this._onSessionIdListener) {
+        if (!this._onSessionIdListener && isFunction(this._sessionManager.onSessionId)) {
             this._onSessionIdListener = this._sessionManager.onSessionId(this._onSessionIdCallback)
         }
 
-        if (!this._onSessionIdleResetForcedListener) {
+        // NB: SessionIdManager.on was only added in posthog-js 1.268.6. This recorder chunk is loaded
+        // from the CDN and can run against an older bundled core that has no `on` method, so guard the
+        // call to degrade gracefully (recording still starts, it just skips the forced-idle-reset listener)
+        // rather than throwing a TypeError during start().
+        if (!this._onSessionIdleResetForcedListener && isFunction(this._sessionManager.on)) {
             this._onSessionIdleResetForcedListener = this._sessionManager.on('forcedIdleReset', () => {
                 // a session was forced to reset due to idle timeout and lack of activity
                 this._clearConditionalRecordingPersistence()
