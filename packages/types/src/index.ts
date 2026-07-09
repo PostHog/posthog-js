@@ -72,6 +72,7 @@ export type {
     ErrorTrackingOptions,
     MaskInputOptions,
     SlimDOMOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingOptions,
     RequestQueueConfig,
     LogCaptureOptions,

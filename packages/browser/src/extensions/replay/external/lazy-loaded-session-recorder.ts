@@ -70,6 +70,7 @@ import {
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
@@ -1939,6 +1940,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            sampling: undefined,
         }
 
         // only allows user to set our allowlisted options
@@ -1948,6 +1950,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 if (key === 'maskInputOptions') {
                     // ensure password config is set if not included
                     sessionRecordingOptions.maskInputOptions = { password: true, ...value }
+                } else if (key === 'sampling') {
+                    // only allow a narrow subset of rrweb's sampling options;
+                    // canvas sampling is owned by the canvas recording config
+                    const userSampling = (value ?? {}) as SessionRecordingSamplingConfig
+                    const sampling: recordOptions['sampling'] = {}
+                    if (!isUndefined(userSampling.mousemove)) {
+                        sampling.mousemove = userSampling.mousemove
+                    }
+                    if (!isUndefined(userSampling.mouseInteraction)) {
+                        sampling.mouseInteraction = userSampling.mouseInteraction
+                    }
+                    sessionRecordingOptions.sampling = sampling
                 } else {
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
@@ -1958,7 +1972,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this._canvasRecording && this._canvasRecording.enabled) {
             sessionRecordingOptions.recordCanvas = true
-            sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
+            // canvas fps is owned by the canvas recording config; merge so that
+            // user-provided sampling (e.g. mousemove) survives
+            sessionRecordingOptions.sampling = {
+                ...sessionRecordingOptions.sampling,
+                canvas: this._canvasRecording.fps,
+            }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
             sessionRecordingOptions.canvasResolutionScale = this._canvasResolutionScale
         }

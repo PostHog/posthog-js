@@ -92,6 +92,7 @@ export type {
     ErrorTrackingOptions,
     MaskInputOptions,
     SlimDOMOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingOptions,
     RequestQueueConfig,
 } from '@posthog/types'
