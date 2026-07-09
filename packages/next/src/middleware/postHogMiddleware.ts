@@ -1,5 +1,3 @@
-import 'server-only'
-
 import { NextResponse } from 'next/server.js'
 import type { NextRequest } from 'next/server.js'
 import { getPostHogCookieName, readPostHogCookie, serializePostHogCookie, isOptedOut } from '../shared/cookie.js'

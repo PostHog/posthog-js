@@ -463,6 +463,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
+    // ship-time FullSnapshot tracking for _ensureFullSnapshotForSession (unlike _fullSnapshotTimestamps, which records emit-time debug telemetry)
+    private _lastFullSnapshotSessionId: string | undefined = undefined
+    private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
     private _windowId: string
     private _sessionId: string
@@ -1258,7 +1261,36 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        this._ensureFullSnapshotForSession(event, targetSessionId)
+
         this._captureSnapshotBuffered(properties)
+    }
+
+    // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic snapshot, so request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
+    private _ensureFullSnapshotForSession(event: eventWithTime, targetSessionId: string) {
+        if (event.type === EventType.FullSnapshot) {
+            this._lastFullSnapshotSessionId = targetSessionId
+            return
+        }
+
+        if (event.type !== EventType.IncrementalSnapshot) {
+            return
+        }
+
+        if (
+            // deliberately conservative: only heal after this recorder shipped a FullSnapshot to another session (the rotation signature), since on a fresh start rrweb's init snapshot is always ordered ahead of any incremental
+            isUndefined(this._lastFullSnapshotSessionId) ||
+            this._lastFullSnapshotSessionId === targetSessionId ||
+            this._fullSnapshotHealAttemptedFor === targetSessionId
+        ) {
+            return
+        }
+
+        this._fullSnapshotHealAttemptedFor = targetSessionId
+        logger.info('incremental snapshot for a session with no full snapshot - requesting one', {
+            sessionId: targetSessionId,
+        })
+        this._tryTakeFullSnapshot()
     }
 
     private _finishQueuedCompressionEvent(queuedEvent: QueuedCompressionEvent) {
@@ -1659,12 +1691,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // have different target session IDs than this._sessionId
         const targetSessionId = properties.$session_id as string
 
+        // A session-id mismatch must flush and rebind even while idle, or an idle rotation appends the new session's Meta and FullSnapshot to the old session's buffer and ships them under the old session id.
+        const sessionChanged = this._buffer.sessionId !== targetSessionId
+
         if (
-            !this._isIdle && // we never want to flush when idle
-            (this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-                this._buffer.sessionId !== targetSessionId)
+            sessionChanged ||
+            // we never want to flush a healthy same-session buffer while idle
+            (!this._isIdle &&
+                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
+            // A suppressed flush (e.g. buffering, paused, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
+            if (sessionChanged && this._buffer.data.length > 0) {
+                this._buffer = this._clearBuffer()
+            }
             // After flushing, update buffer to use the new target session/window IDs
             this._buffer.sessionId = targetSessionId
             this._buffer.windowId = properties.$window_id as string

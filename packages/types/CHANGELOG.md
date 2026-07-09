@@ -1,5 +1,21 @@
 # @posthog/types
 
+## 1.393.0
+
+### Minor Changes
+
+- [#4115](https://github.com/PostHog/posthog-js/pull/4115) [`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) — alpha
+
+    A statsd-style pre-aggregating metrics client for the PostHog Metrics product (alpha). Samples are folded into per-series aggregates in memory (counts sum, gauges keep the last value, histograms accumulate buckets) and flushed periodically as OTLP/JSON to `/i/v1/metrics` — one data point per series per flush window, no matter how many calls. No OpenTelemetry SDK setup required:
+
+    ```ts
+    posthog.metrics.count('orders_created', 1)
+    posthog.metrics.gauge('active_connections', 42)
+    posthog.metrics.histogram('api_latency', 187, { unit: 'ms' })
+    ```
+
+    Configure via `metrics: { serviceName, environment, flushIntervalMs, maxSeriesPerFlush, beforeSend, ... }`. (2026-07-08)
+
 ## 1.392.1
 
 ### Patch Changes

@@ -13,3 +13,4 @@ export const ToolbarExtensions = bundles.ToolbarExtensions as typeof BundleTypes
 export const ExperimentsExtensions = bundles.ExperimentsExtensions as typeof BundleTypes.ExperimentsExtensions
 export const ConversationsExtensions = bundles.ConversationsExtensions as typeof BundleTypes.ConversationsExtensions
 export const LogsExtensions = bundles.LogsExtensions as typeof BundleTypes.LogsExtensions
+export const MetricsExtensions = bundles.MetricsExtensions as typeof BundleTypes.MetricsExtensions

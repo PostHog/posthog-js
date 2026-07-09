@@ -1,5 +1,26 @@
 # @rrweb/rrweb-plugin-sequential-id-record
 
+## 0.0.17
+
+### Patch Changes
+
+- Updated dependencies [[`45f17ee`](https://github.com/PostHog/posthog-js/commit/45f17eeb14a5fefd160309e50b29ddad4d044c53)]:
+    - @posthog/rrweb@0.0.78
+
+## 0.0.16
+
+### Patch Changes
+
+- Updated dependencies [[`c75c0ba`](https://github.com/PostHog/posthog-js/commit/c75c0baaaf107844de57a5ce496790cac6adcf8b)]:
+    - @posthog/rrweb@0.0.77
+
+## 0.0.15
+
+### Patch Changes
+
+- Updated dependencies [[`38bb185`](https://github.com/PostHog/posthog-js/commit/38bb185fac9d0e20250620932e2dcbcf44dd1da9)]:
+    - @posthog/rrweb@0.0.76
+
 ## 0.0.14
 
 ### Patch Changes

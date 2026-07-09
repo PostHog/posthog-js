@@ -7,14 +7,14 @@ import { DbConnection, tables } from '../src/module_bindings'
 const HOST = process.env.SPACETIMEDB_HOST ?? 'ws://localhost:3000'
 const DB_NAME = process.env.SPACETIMEDB_DB_NAME ?? 'posthog-spacetimedb'
 
-// Personal key (phx_…) enables local flag eval. Secret — backend only.
-const personalApiKey = process.env.POSTHOG_PERSONAL_API_KEY
+// Secret key (phx_… or phs_…) enables local flag eval. Secret — backend only.
+const secretKey = process.env.POSTHOG_SECRET_KEY
 const posthog = new PostHog(process.env.POSTHOG_PROJECT_TOKEN ?? '', {
     host: process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com',
-    personalApiKey,
+    secretKey,
 })
-if (!personalApiKey) {
-    console.warn('[sidecar] POSTHOG_PERSONAL_API_KEY not set — flag evaluation will fall back to remote /flags calls')
+if (!secretKey) {
+    console.warn('[sidecar] POSTHOG_SECRET_KEY not set — flag evaluation will fall back to remote /flags calls')
 }
 
 const conn = DbConnection.builder()

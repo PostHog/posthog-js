@@ -302,110 +302,119 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 
-                // check IE earlier than this, we only initialize if Request is present
-                // eslint-disable-next-line compat/compat
-                const req = new Request(url)
-                const networkRequest: Partial<CapturedNetworkRequest> = {}
-                let start: number | undefined
-                let end: number | undefined
+                // All of the capture instrumentation below runs _before_ we delegate to the original
+                // `open`. If any of it throws (e.g. `new Request(url)` rejecting a URL/method the host
+                // application would have handled), we must not let that exception escape into the host's
+                // `xhr.open()` call and misattribute a failure to session replay. Wrap it so that if
+                // instrumentation fails we degrade gracefully and the original request still proceeds.
+                try {
+                    // check IE earlier than this, we only initialize if Request is present
+                    // eslint-disable-next-line compat/compat
+                    const req = new Request(url)
+                    const networkRequest: Partial<CapturedNetworkRequest> = {}
+                    let start: number | undefined
+                    let end: number | undefined
 
-                const requestHeaders: Headers = {}
-                const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
-                xhr.setRequestHeader = (header: string, value: string) => {
-                    requestHeaders[header] = value
-                    return originalSetRequestHeader(header, value)
-                }
-                if (recordRequestHeaders) {
-                    networkRequest.requestHeaders = requestHeaders
-                }
-
-                const originalSend = xhr.send.bind(xhr)
-                xhr.send = (body) => {
-                    if (
-                        shouldRecordBody({
-                            type: 'request',
-                            headers: requestHeaders,
-                            url,
-                            recordBody: options.recordBody,
-                        })
-                    ) {
-                        networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
+                    const requestHeaders: Headers = {}
+                    const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
+                    xhr.setRequestHeader = (header: string, value: string) => {
+                        requestHeaders[header] = value
+                        return originalSetRequestHeader(header, value)
                     }
-                    start = win.performance.now()
-                    return originalSend(body)
-                }
-
-                // Cleanup function to remove all event listeners and prevent memory leaks
-                const cleanup = () => {
-                    xhr.removeEventListener('readystatechange', readyStateListener)
-                    xhr.removeEventListener('error', cleanup)
-                    xhr.removeEventListener('abort', cleanup)
-                    xhr.removeEventListener('timeout', cleanup)
-                }
-
-                const readyStateListener = () => {
-                    if (xhr.readyState !== xhr.DONE) {
-                        return
+                    if (recordRequestHeaders) {
+                        networkRequest.requestHeaders = requestHeaders
                     }
 
-                    // Clean up all listeners immediately when done to prevent memory leaks
-                    cleanup()
-
-                    end = win.performance.now()
-                    const responseHeaders: Headers = {}
-                    const rawHeaders = xhr.getAllResponseHeaders()
-                    const headers = rawHeaders.trim().split(/[\r\n]+/)
-                    headers.forEach((line) => {
-                        const parts = line.split(': ')
-                        const header = parts.shift()
-                        const value = parts.join(': ')
-                        if (header) {
-                            responseHeaders[header] = value
-                        }
-                    })
-                    if (recordResponseHeaders) {
-                        networkRequest.responseHeaders = responseHeaders
-                    }
-                    if (
-                        shouldRecordBody({
-                            type: 'response',
-                            headers: responseHeaders,
-                            url,
-                            recordBody: options.recordBody,
-                        })
-                    ) {
-                        networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
-                    }
-                    getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
-                        .then((entry) => {
-                            const requests = prepareRequest({
-                                entry,
-                                method: method,
-                                status: xhr?.status,
-                                networkRequest,
-                                start,
-                                end,
-                                url: url.toString(),
-                                initiatorType: 'xmlhttprequest',
+                    const originalSend = xhr.send.bind(xhr)
+                    xhr.send = (body) => {
+                        if (
+                            shouldRecordBody({
+                                type: 'request',
+                                headers: requestHeaders,
+                                url,
+                                recordBody: options.recordBody,
                             })
-                            cb({ requests })
-                        })
-                        .catch(() => {
-                            //
-                        })
-                }
+                        ) {
+                            networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
+                        }
+                        start = win.performance.now()
+                        return originalSend(body)
+                    }
 
-                // This is very tricky code, and making it passive won't bring many performance benefits,
-                // so let's ignore the rule here.
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('readystatechange', readyStateListener)
-                // Also clean up on error, abort, and timeout to prevent memory leaks
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('error', cleanup)
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('abort', cleanup)
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('timeout', cleanup)
+                    // Cleanup function to remove all event listeners and prevent memory leaks
+                    const cleanup = () => {
+                        xhr.removeEventListener('readystatechange', readyStateListener)
+                        xhr.removeEventListener('error', cleanup)
+                        xhr.removeEventListener('abort', cleanup)
+                        xhr.removeEventListener('timeout', cleanup)
+                    }
+
+                    const readyStateListener = () => {
+                        if (xhr.readyState !== xhr.DONE) {
+                            return
+                        }
+
+                        // Clean up all listeners immediately when done to prevent memory leaks
+                        cleanup()
+
+                        end = win.performance.now()
+                        const responseHeaders: Headers = {}
+                        const rawHeaders = xhr.getAllResponseHeaders()
+                        const headers = rawHeaders.trim().split(/[\r\n]+/)
+                        headers.forEach((line) => {
+                            const parts = line.split(': ')
+                            const header = parts.shift()
+                            const value = parts.join(': ')
+                            if (header) {
+                                responseHeaders[header] = value
+                            }
+                        })
+                        if (recordResponseHeaders) {
+                            networkRequest.responseHeaders = responseHeaders
+                        }
+                        if (
+                            shouldRecordBody({
+                                type: 'response',
+                                headers: responseHeaders,
+                                url,
+                                recordBody: options.recordBody,
+                            })
+                        ) {
+                            networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
+                        }
+                        getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
+                            .then((entry) => {
+                                const requests = prepareRequest({
+                                    entry,
+                                    method: method,
+                                    status: xhr?.status,
+                                    networkRequest,
+                                    start,
+                                    end,
+                                    url: url.toString(),
+                                    initiatorType: 'xmlhttprequest',
+                                })
+                                cb({ requests })
+                            })
+                            .catch(() => {
+                                //
+                            })
+                    }
+
+                    // This is very tricky code, and making it passive won't bring many performance benefits,
+                    // so let's ignore the rule here.
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('readystatechange', readyStateListener)
+                    // Also clean up on error, abort, and timeout to prevent memory leaks
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('error', cleanup)
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('abort', cleanup)
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('timeout', cleanup)
+                } catch (e) {
+                    logger.error('Failed to instrument XHR for network capture', e)
+                }
 
                 originalOpen.call(xhr, method, url.toString(), async, username, password)
             }
@@ -756,35 +765,51 @@ function initFetchObserver(
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
         return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
-            // check IE earlier than this, we only initialize if Request is present
-            // eslint-disable-next-line compat/compat
-            const req = new Request(url, init)
+            // Constructing the capture Request happens _before_ we delegate to the original fetch, so
+            // if it throws (e.g. a URL/method the host application would have handled) we must not let
+            // that exception escape and misattribute a failure to session replay. Degrade gracefully and
+            // let the original request still proceed.
+            let req: Request
+            try {
+                // check IE earlier than this, we only initialize if Request is present
+                // eslint-disable-next-line compat/compat
+                req = new Request(url, init)
+            } catch (e) {
+                logger.error('Failed to instrument fetch for network capture', e)
+                return originalFetch(url, init)
+            }
             let res: Response | undefined
             const networkRequest: Partial<CapturedNetworkRequest> = {}
             let start: number | undefined
             let end: number | undefined
 
             try {
-                const requestHeaders: Headers = {}
-                req.headers.forEach((value: string, header: string | number) => {
-                    requestHeaders[header] = value
-                })
-                if (recordRequestHeaders) {
-                    networkRequest.requestHeaders = requestHeaders
-                }
-                // Check the caller-supplied body, not req.body: Request normalizes all non-null bodies
-                // to a ReadableStream, but only an original ReadableStream would be locked by req.clone().text().
-                const requestBodyIsReadableStream = isReadableStreamBody(init?.body)
-                if (
-                    !requestBodyIsReadableStream &&
-                    shouldRecordBody({
-                        type: 'request',
-                        headers: requestHeaders,
-                        url,
-                        recordBody: options.recordBody,
+                // Recording the request headers/body must never prevent the host's fetch from running,
+                // so failures here are swallowed and we fall through to the original request below.
+                try {
+                    const requestHeaders: Headers = {}
+                    req.headers.forEach((value: string, header: string | number) => {
+                        requestHeaders[header] = value
                     })
-                ) {
-                    networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
+                    if (recordRequestHeaders) {
+                        networkRequest.requestHeaders = requestHeaders
+                    }
+                    // Check the caller-supplied body, not req.body: Request normalizes all non-null bodies
+                    // to a ReadableStream, but only an original ReadableStream would be locked by req.clone().text().
+                    const requestBodyIsReadableStream = isReadableStreamBody(init?.body)
+                    if (
+                        !requestBodyIsReadableStream &&
+                        shouldRecordBody({
+                            type: 'request',
+                            headers: requestHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
+                    }
+                } catch (e) {
+                    logger.error('Failed to record fetch request for network capture', e)
                 }
 
                 start = win.performance.now()

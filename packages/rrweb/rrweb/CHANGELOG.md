@@ -1,5 +1,31 @@
 # rrweb
 
+## 0.0.78
+
+### Patch Changes
+
+- [#4113](https://github.com/PostHog/posthog-js/pull/4113) [`45f17ee`](https://github.com/PostHog/posthog-js/commit/45f17eeb14a5fefd160309e50b29ddad4d044c53) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix session replay leaking a shadow-root observer when a same-origin iframe is removed
+
+    Follow-up to the shadow-observer iframe-teardown fix: `takeFullSnapshot`'s `onSerialize` registers every shadow root with the top-level document, so a root nested in a same-origin iframe was keyed to the wrong document and its observer/buffer were not disconnected when that iframe was removed (they lingered until the next full snapshot). `addShadowRoot` now derives the owning document from the host element, so per-document teardown matches iframe-nested roots too. (2026-07-08)
+
+## 0.0.77
+
+### Patch Changes
+
+- [#4114](https://github.com/PostHog/posthog-js/pull/4114) [`c75c0ba`](https://github.com/PostHog/posthog-js/commit/c75c0baaaf107844de57a5ce496790cac6adcf8b) Thanks [@hpouillot](https://github.com/hpouillot)! - fix: avoid throwing when rrweb recorder cleanup cannot remove a listener
+  (2026-07-08)
+- Updated dependencies [[`c75c0ba`](https://github.com/PostHog/posthog-js/commit/c75c0baaaf107844de57a5ce496790cac6adcf8b)]:
+    - @posthog/rrweb-snapshot@0.0.66
+    - @posthog/rrdom@0.0.66
+
+## 0.0.76
+
+### Patch Changes
+
+- [#4112](https://github.com/PostHog/posthog-js/pull/4112) [`38bb185`](https://github.com/PostHog/posthog-js/commit/38bb185fac9d0e20250620932e2dcbcf44dd1da9) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix session replay silently dropping shadow DOM mutations after an iframe teardown
+
+    The single shared ShadowDomManager observes every shadow root on the page, but MutationBuffer.reset() disconnected it. That reset fires whenever any one buffer is torn down, so an iframe being removed or navigating away disconnected every shadow-root observer page-wide. Shadow DOM content (for example a widget mounted in an open shadow root) then stopped recording until the next periodic full snapshot re-registered it. Buffer teardown now releases only its own resources; global shadow observation is reset by takeFullSnapshot and on recording stop. (2026-07-08)
+
 ## 0.0.75
 
 ### Patch Changes

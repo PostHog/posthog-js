@@ -1,5 +1,3 @@
-import 'server-only'
-
 import { isFunction } from '@posthog/core'
 import type { PostHogOptions, IPostHog } from 'posthog-node'
 import { cookies, headers } from 'next/headers.js'

@@ -1585,6 +1585,8 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimestamps']).toEqual([
                     [firstSessionId, 1000],
                     [firstSessionId, 2000],
+                    // the incremental arriving before the rotated session's full snapshot triggers a healing snapshot
+                    ['rotated-session-id', undefined],
                     ['rotated-session-id', 3000],
                 ])
             })

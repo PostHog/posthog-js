@@ -49,20 +49,20 @@ loadEnvFile()
 const {
     PH_API_KEY = process.env.POSTHOG_PROJECT_API_KEY || '',
     PH_HOST = process.env.POSTHOG_HOST || 'https://app.posthog.com',
-    PH_PERSONAL_API_KEY = process.env.POSTHOG_PERSONAL_API_KEY || '',
+    PH_SECRET_KEY = process.env.POSTHOG_SECRET_KEY || '',
 } = process.env
 
 // Check if credentials are provided
-if (!PH_API_KEY || !PH_PERSONAL_API_KEY) {
+if (!PH_API_KEY || !PH_SECRET_KEY) {
     console.log('❌ Missing PostHog credentials!')
-    console.log('   Please set POSTHOG_PROJECT_API_KEY and POSTHOG_PERSONAL_API_KEY environment variables')
+    console.log('   Please set POSTHOG_PROJECT_API_KEY and POSTHOG_SECRET_KEY environment variables')
     console.log('   or copy .env.example to .env and fill in your values')
     process.exit(1)
 }
 
 const posthog = new PostHog(PH_API_KEY, {
     host: PH_HOST,
-    personalApiKey: PH_PERSONAL_API_KEY,
+    secretKey: PH_SECRET_KEY,
     featureFlagsPollingInterval: 10000,
 })
 
@@ -79,7 +79,7 @@ async function testAuthentication(): Promise<void> {
             console.log('✅ Authentication successful!')
             console.log('✅ Local evaluation ready - flags can be evaluated locally')
             console.log(`   Project API Key: ${PH_API_KEY.substring(0, 9)}...`)
-            console.log('   Personal API Key: [REDACTED]')
+            console.log('   Secret Key: [REDACTED]')
             console.log(`   Host: ${PH_HOST}\n`)
         } else {
             console.log('⚠️  Local evaluation not ready within 15 seconds')
@@ -92,7 +92,7 @@ async function testAuthentication(): Promise<void> {
         console.log(`   Error: ${error}`)
         console.log('\n   Please check your credentials:')
         console.log('   - POSTHOG_PROJECT_API_KEY: Project API key from PostHog settings')
-        console.log('   - POSTHOG_PERSONAL_API_KEY: Personal API key (required for local evaluation)')
+        console.log('   - POSTHOG_SECRET_KEY: Secret key (required for local evaluation)')
         console.log('   - POSTHOG_HOST: Your PostHog instance URL')
         process.exit(1)
     }

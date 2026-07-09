@@ -38,8 +38,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "PostHogProviderProps",
+              "type": "any",
               "name": "{ children, client, options, apiKey, autocapture, style, debug, }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "PostHogProviderProps",
+              "name": "input"
             }
           ],
           "returnType": {
