@@ -1,19 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "issue-3251-auto-none-no-comment-no-close-1783576381227",
-      "kind": "issue",
-      "number": 3251,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-07-09T05:53:01.227Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 28997266027,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/28997266027"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
