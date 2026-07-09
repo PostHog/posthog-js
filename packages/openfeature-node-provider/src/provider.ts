@@ -75,17 +75,30 @@ export class PostHogServerProvider implements Provider {
 
   async initialize(): Promise<void> {
     // Preload locally-evaluated flag definitions. reloadFeatureFlags() safely
-    // no-ops without a personalApiKey, and posthog-node catches its own poller
-    // errors, so a preload failure must not make the OpenFeature client
-    // un-ready — remote evaluation still works.
+    // no-ops without a personalApiKey, and never rejects: posthog-node swallows
+    // its poller errors internally and surfaces the client/network-error class
+    // (ClientError: 401/403/429, bad response) via its `error` event. So listen
+    // on that channel around the reload to surface a genuine misconfiguration
+    // on a client set up for local evaluation. Remote evaluation still works
+    // regardless, so this never blocks readiness.
+    //
+    // Caveat: posthog-node only routes ClientError through `error`, so a raw
+    // network/DNS failure on a bad `host` still won't surface here.
+    let preloadError: Error | undefined
+    const unsubscribe = this._client.on('error', (err: Error) => {
+      preloadError = err
+    })
     try {
       await this._client.reloadFeatureFlags()
-    } catch (err) {
-      // Remote evaluation still works, so don't block readiness — but surface
-      // the failure so a genuine misconfiguration (bad host, network error) on
-      // a client set up for local evaluation isn't invisible.
+    } finally {
+      unsubscribe()
+    }
+    if (preloadError) {
       // eslint-disable-next-line no-console
-      console.warn('[PostHogServerProvider] initialize() flag preload failed; remote evaluation still available.', err)
+      console.warn(
+        '[PostHogServerProvider] initialize() flag preload failed; remote evaluation still available.',
+        preloadError
+      )
     }
   }
 

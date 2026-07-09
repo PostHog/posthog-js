@@ -14,13 +14,27 @@ function makeClient(result: FlagResult | undefined): {
   client: PostHog
   getFeatureFlagResult: jest.Mock
   reloadFeatureFlags: jest.Mock
+  on: jest.Mock
+  emit: (event: string, ...args: unknown[]) => void
 } {
   const getFeatureFlagResult = jest.fn().mockResolvedValue(result)
   const reloadFeatureFlags = jest.fn().mockResolvedValue(undefined)
+  // Mirror posthog-node's event emitter: `on` registers a listener and returns
+  // an unsubscribe fn; `emit` fans out to registered listeners.
+  const listeners: Record<string, Array<(...args: unknown[]) => void>> = {}
+  const on = jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+    ;(listeners[event] ??= []).push(cb)
+    return () => {
+      listeners[event] = (listeners[event] ?? []).filter((fn) => fn !== cb)
+    }
+  })
+  const emit = (event: string, ...args: unknown[]): void => (listeners[event] ?? []).forEach((fn) => fn(...args))
   return {
-    client: { getFeatureFlagResult, reloadFeatureFlags } as unknown as PostHog,
+    client: { getFeatureFlagResult, reloadFeatureFlags, on } as unknown as PostHog,
     getFeatureFlagResult,
     reloadFeatureFlags,
+    on,
+    emit,
   }
 }
 
@@ -112,6 +126,12 @@ describe('PostHogServerProvider', () => {
         ErrorCode.TYPE_MISMATCH,
       ],
       [
+        'number from an empty-string variant (Number("") is 0, not NaN)',
+        { key: 'flag', enabled: true, variant: '' },
+        (p) => p.resolveNumberEvaluation('flag', 0, CTX),
+        ErrorCode.TYPE_MISMATCH,
+      ],
+      [
         'object from an enabled flag with no payload',
         { key: 'flag', enabled: true, variant: 'x' },
         (p) => p.resolveObjectEvaluation('flag', {}, CTX),
@@ -198,11 +218,33 @@ describe('PostHogServerProvider', () => {
       expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
     })
 
-    it('does not reject when preloading fails', async () => {
-      const { client, reloadFeatureFlags } = makeClient(undefined)
-      reloadFeatureFlags.mockRejectedValueOnce(new Error('no personal api key'))
-      const provider = new PostHogServerProvider(client)
-      await expect(provider.initialize()).resolves.toBeUndefined()
+    it('warns (without rejecting) when the client emits an error during preload', async () => {
+      const { client, reloadFeatureFlags, emit } = makeClient(undefined)
+      const preloadError = new Error('bad response')
+      // posthog-node never rejects reloadFeatureFlags — it surfaces the failure
+      // on the `error` event, which fires while the reload is in flight.
+      reloadFeatureFlags.mockImplementationOnce(async () => {
+        emit('error', preloadError)
+      })
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const provider = new PostHogServerProvider(client)
+        await expect(provider.initialize()).resolves.toBeUndefined()
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('flag preload failed'), preloadError)
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('does not warn when preloading succeeds', async () => {
+      const { client } = makeClient(undefined)
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await new PostHogServerProvider(client).initialize()
+        expect(warn).not.toHaveBeenCalled()
+      } finally {
+        warn.mockRestore()
+      }
     })
   })
 

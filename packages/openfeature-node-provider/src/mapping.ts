@@ -142,7 +142,9 @@ export function resolveNumberDetails(
     throw new TypeMismatchError(`Flag '${flagKey}' has no variant to parse as a number.`)
   }
   const value = Number(resolved.variant)
-  if (!Number.isFinite(value)) {
+  // `Number('')` and `Number('   ')` are 0, not NaN, so guard blank variants
+  // explicitly rather than silently resolving them to 0.
+  if (resolved.variant.trim() === '' || !Number.isFinite(value)) {
     throw new TypeMismatchError(`Flag '${flagKey}' variant '${resolved.variant}' is not a valid number.`)
   }
   return { value, variant: resolved.variant, reason: reasonFor(resolved) }

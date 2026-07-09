@@ -19,10 +19,16 @@ async function main(): Promise<void> {
   //    id comes from the evaluation context's targetingKey; other attributes
   //    map to person/group properties. Swap these keys for real flags.
   const context = { targetingKey: 'user_distinct_id', plan: 'enterprise' }
+  // The reads are independent, so evaluate them concurrently.
+  const [boolean, multivariate, payload] = await Promise.all([
+    client.getBooleanValue('my-boolean-flag', false, context),
+    client.getStringValue('my-multivariate-flag', 'control', context),
+    client.getObjectValue('my-payload-flag', {}, context),
+  ])
   const result = {
-    'my-boolean-flag': await client.getBooleanValue('my-boolean-flag', false, context),
-    'my-multivariate-flag': await client.getStringValue('my-multivariate-flag', 'control', context),
-    'my-payload-flag': await client.getObjectValue('my-payload-flag', {}, context),
+    'my-boolean-flag': boolean,
+    'my-multivariate-flag': multivariate,
+    'my-payload-flag': payload,
   }
 
   // eslint-disable-next-line no-console
