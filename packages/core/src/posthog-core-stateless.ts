@@ -189,6 +189,7 @@ export abstract class PostHogCoreStateless {
   private maxQueueSize: number
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
+  private pendingFlushPromise: Promise<void> | null = null
   private flushPromises: Set<Promise<any>> = new Set()
   private shutdownPromise: Promise<void> | null = null
   private requestTimeout: number
@@ -1191,6 +1192,9 @@ export abstract class PostHogCoreStateless {
    * Avoids unnecessary promise errors
    */
   private flushBackground(): void {
+    if (this.pendingFlushPromise) {
+      return
+    }
     void this.flush().catch(async (err) => {
       await logFlushError(err)
     })
@@ -1259,6 +1263,10 @@ export abstract class PostHogCoreStateless {
       return Promise.resolve()
     }
 
+    if (!waitForPendingPromises && this.pendingFlushPromise) {
+      return this.pendingFlushPromise
+    }
+
     const previousFlushPromise = this.flushPromise
     const maxPromiseId = this.promiseQueue.maxId
 
@@ -1275,15 +1283,22 @@ export abstract class PostHogCoreStateless {
       // Use a custom allSettled implementation to avoid issues with patching Promise on RN
       .then(() => allSettled([previousFlushPromise]))
       .then(() => {
+        if (this.pendingFlushPromise === nextFlushPromise) {
+          this.pendingFlushPromise = null
+        }
         return this._flush()
       })
 
+    this.pendingFlushPromise = nextFlushPromise
     this.flushPromise = nextFlushPromise
     this.flushPromises.add(nextFlushPromise)
     void this.addPendingPromise(nextFlushPromise)
 
     allSettled([nextFlushPromise]).then(() => {
       this.flushPromises.delete(nextFlushPromise)
+      if (this.pendingFlushPromise === nextFlushPromise) {
+        this.pendingFlushPromise = null
+      }
       // If there are no others waiting to flush, clear the promise.
       // We don't strictly need to do this, but it could make debugging easier
       if (this.flushPromise === nextFlushPromise) {
