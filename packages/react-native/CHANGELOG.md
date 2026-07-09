@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.55.0
+
+### Minor Changes
+
+- [#4119](https://github.com/PostHog/posthog-js/pull/4119) [`7b86b46`](https://github.com/PostHog/posthog-js/commit/7b86b467bc93bc54a73c69446d2a1613f373771b) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - add a dimmed backdrop behind the survey modal, matching the scrim posthog-ios and posthog-android already render
+  (2026-07-09)
+
 ## 4.54.5
 
 ### Patch Changes
