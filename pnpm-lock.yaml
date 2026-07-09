@@ -800,7 +800,7 @@ importers:
         version: link:../../tooling/tsconfig-base
       '@rslib/core':
         specifier: 'catalog:'
-        version: 0.10.6(@microsoft/api-extractor@7.55.1(@types/node@22.16.5))(typescript@5.8.2)
+        version: 0.10.6(@microsoft/api-extractor@7.58.9(@types/node@22.16.5))(typescript@5.8.2)
       '@types/jest':
         specifier: 'catalog:'
         version: 29.5.14
@@ -815,7 +815,7 @@ importers:
         version: link:../node
       ts-jest:
         specifier: 'catalog:'
-        version: 29.4.11(@babel/core@7.28.5)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.5))(esbuild@0.25.10)(jest-util@29.7.0)(jest@29.7.0(@types/node@22.16.5)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2)))(typescript@5.8.2)
+        version: 29.4.11(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.25.10)(jest-util@29.7.0)(jest@29.7.0(@types/node@22.16.5)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2)))(typescript@5.8.2)
 
   packages/openfeature-web-provider:
     devDependencies:

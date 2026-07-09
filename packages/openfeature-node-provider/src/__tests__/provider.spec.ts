@@ -197,6 +197,26 @@ describe('PostHogServerProvider', () => {
       })
     })
 
+    it('forwards non-string property values unchanged (no string coercion)', async () => {
+      const { client, getFeatureFlagResult } = makeClient({ key: 'flag', enabled: true })
+      const provider = new PostHogServerProvider(client)
+      await provider.resolveBooleanEvaluation('flag', false, {
+        targetingKey: 'user_1',
+        age: 42,
+        beta: true,
+        groups: { organization: 'acme' },
+        groupProperties: { organization: { seats: 25 } },
+      })
+      expect(getFeatureFlagResult).toHaveBeenCalledWith(
+        'flag',
+        'user_1',
+        expect.objectContaining({
+          personProperties: { age: 42, beta: true },
+          groupProperties: { organization: { seats: 25 } },
+        })
+      )
+    })
+
     it('omits empty inputs and respects sendFeatureFlagEvents: false', async () => {
       const { client, getFeatureFlagResult } = makeClient({ key: 'flag', enabled: true })
       const provider = new PostHogServerProvider(client, { sendFeatureFlagEvents: false })

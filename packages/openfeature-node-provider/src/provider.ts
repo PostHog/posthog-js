@@ -137,14 +137,16 @@ export class PostHogServerProvider implements Provider {
   private async _evaluate(flagKey: string, context: EvaluationContext): Promise<PostHogFlagResult | undefined> {
     const distinctId = this._resolveDistinctId(context)
     const { personProperties, groups, groupProperties } = splitContext(context)
+    // posthog-node's public option type narrows person/group properties to
+    // `Record<string, string>`, but the flags API accepts any JSON value and
+    // matches on the native type (a numeric `age >= 21` filter, a boolean, ...).
+    // OpenFeature contexts legitimately carry non-string values, so forward them
+    // unchanged — coercing to strings here would break those comparisons. The
+    // assertions only bridge the too-narrow upstream type; no values are altered.
     return this._client.getFeatureFlagResult(flagKey, distinctId, {
-      groups: Object.keys(groups).length > 0 ? groups : undefined,
-      personProperties:
-        Object.keys(personProperties).length > 0 ? (personProperties as Record<string, string>) : undefined,
-      groupProperties:
-        Object.keys(groupProperties).length > 0
-          ? (groupProperties as Record<string, Record<string, string>>)
-          : undefined,
+      groups: nonEmpty(groups),
+      personProperties: nonEmpty(personProperties) as Record<string, string> | undefined,
+      groupProperties: nonEmpty(groupProperties) as Record<string, Record<string, string>> | undefined,
       sendFeatureFlagEvents: this._sendFeatureFlagEvents,
     })
   }
@@ -158,4 +160,9 @@ export class PostHogServerProvider implements Provider {
     }
     throw new TargetingKeyMissingError('No targetingKey in evaluation context and no defaultDistinctId configured.')
   }
+}
+
+/** Returns the record if it has any keys, otherwise `undefined`. */
+function nonEmpty<T extends object>(value: T): T | undefined {
+  return Object.keys(value).length > 0 ? value : undefined
 }
