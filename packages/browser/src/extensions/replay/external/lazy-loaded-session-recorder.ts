@@ -1044,6 +1044,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     }
                 )
             })
+        } else if (!isFunction(this._sessionManager.on)) {
+            logger.warn(
+                'bundled core has no SessionIdManager.on (requires posthog-js >= 1.268.6); ' +
+                    'recording will start but skip forced-idle-reset handling'
+            )
         }
 
         if (isNullish(this._removePageViewCaptureHook)) {
