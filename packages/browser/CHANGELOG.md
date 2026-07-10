@@ -1,5 +1,75 @@
 # posthog-js
 
+## 1.399.1
+
+### Patch Changes
+
+- [#4122](https://github.com/PostHog/posthog-js/pull/4122) [`c915581`](https://github.com/PostHog/posthog-js/commit/c91558173dc5fdde3fca1e2f4cd0812049057818) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix `TypeError: handlePageUnload is not a function` thrown on page unload when a version-skewed lazy-loaded surveys chunk produces a survey manager whose prototype lacks `handlePageUnload`. The delegated call in `PostHogSurveys.handlePageUnload()` now guards the method as well as the receiver.
+  (2026-07-09)
+
+- [#4124](https://github.com/PostHog/posthog-js/pull/4124) [`562ceeb`](https://github.com/PostHog/posthog-js/commit/562ceeb802e8a5adc26e3a5edcd9f1dfd52c20ed) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer crashes on startup when a CDN-loaded recorder chunk runs against an older bundled core. Calls into `SessionIdManager.on`/`onSessionId` are now guarded so a core without those methods degrades gracefully instead of throwing a `TypeError` during `start()`.
+  (2026-07-09)
+
+## 1.399.0
+
+### Minor Changes
+
+- [#4115](https://github.com/PostHog/posthog-js/pull/4115) [`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) — alpha
+
+    A statsd-style pre-aggregating metrics client for the PostHog Metrics product (alpha). Samples are folded into per-series aggregates in memory (counts sum, gauges keep the last value, histograms accumulate buckets) and flushed periodically as OTLP/JSON to `/i/v1/metrics` — one data point per series per flush window, no matter how many calls. No OpenTelemetry SDK setup required:
+
+    ```ts
+    posthog.metrics.count('orders_created', 1)
+    posthog.metrics.gauge('active_connections', 42)
+    posthog.metrics.histogram('api_latency', 187, { unit: 'ms' })
+    ```
+
+    Configure via `metrics: { serviceName, environment, flushIntervalMs, maxSeriesPerFlush, beforeSend, ... }`. (2026-07-08)
+
+### Patch Changes
+
+- Updated dependencies [[`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2)]:
+    - @posthog/core@1.40.0
+    - @posthog/types@1.393.0
+
+## 1.398.7
+
+### Patch Changes
+
+- [#4113](https://github.com/PostHog/posthog-js/pull/4113) [`45f17ee`](https://github.com/PostHog/posthog-js/commit/45f17eeb14a5fefd160309e50b29ddad4d044c53) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix session replay leaking a shadow-root observer when a same-origin iframe is removed
+
+    Follow-up to the shadow-observer iframe-teardown fix: `takeFullSnapshot`'s `onSerialize` registers every shadow root with the top-level document, so a root nested in a same-origin iframe was keyed to the wrong document and its observer/buffer were not disconnected when that iframe was removed (they lingered until the next full snapshot). `addShadowRoot` now derives the owning document from the host element, so per-document teardown matches iframe-nested roots too. (2026-07-08)
+
+## 1.398.6
+
+### Patch Changes
+
+- [#4114](https://github.com/PostHog/posthog-js/pull/4114) [`c75c0ba`](https://github.com/PostHog/posthog-js/commit/c75c0baaaf107844de57a5ce496790cac6adcf8b) Thanks [@hpouillot](https://github.com/hpouillot)! - fix: avoid throwing when rrweb recorder cleanup cannot remove a listener
+  (2026-07-08)
+
+## 1.398.5
+
+### Patch Changes
+
+- [#4103](https://github.com/PostHog/posthog-js/pull/4103) [`be8242a`](https://github.com/PostHog/posthog-js/commit/be8242a209cdccfc7a2ec9869067af7045fbedb7) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Publish the code-split ESM toolbar bundle when the build emits one. The release tooling now recursively includes `dist/toolbar/` (with explicit JS content types for the strict-MIME ESM chunks) across the immutable, major-alias, and compatibility upload prefixes, and the workflow accepts the canonical `toolbar.js`/`toolbar.css` layout. This is a no-op against today's single-file build.
+  (2026-07-08)
+
+## 1.398.4
+
+### Patch Changes
+
+- [#4104](https://github.com/PostHog/posthog-js/pull/4104) [`ec5e401`](https://github.com/PostHog/posthog-js/commit/ec5e4010f49295d200bf714573e61e55e7296e58) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix session recordings missing their initial full snapshot after an idle session-id rotation
+
+    When the session id rotated while the recorder was idle, the restarted recorder's Meta and FullSnapshot were appended to the previous session's buffer and shipped under the old session id, leaving the new recording unplayable until the next periodic snapshot. The buffer now rebinds on any session-id change regardless of idle state, and as a safety net the recorder requests a full snapshot whenever an incremental is about to ship for a session that has not produced one. (2026-07-08)
+
+## 1.398.3
+
+### Patch Changes
+
+- [#4112](https://github.com/PostHog/posthog-js/pull/4112) [`38bb185`](https://github.com/PostHog/posthog-js/commit/38bb185fac9d0e20250620932e2dcbcf44dd1da9) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix session replay silently dropping shadow DOM mutations after an iframe teardown
+
+    The single shared ShadowDomManager observes every shadow root on the page, but MutationBuffer.reset() disconnected it. That reset fires whenever any one buffer is torn down, so an iframe being removed or navigating away disconnected every shadow-root observer page-wide. Shadow DOM content (for example a widget mounted in an open shadow root) then stopped recording until the next periodic full snapshot re-registered it. Buffer teardown now releases only its own resources; global shadow observation is reset by takeFullSnapshot and on recording stop. (2026-07-08)
+
 ## 1.398.2
 
 ### Patch Changes

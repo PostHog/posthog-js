@@ -1,5 +1,24 @@
 # posthog-react-native
 
+## 4.55.0
+
+### Minor Changes
+
+- [#4119](https://github.com/PostHog/posthog-js/pull/4119) [`7b86b46`](https://github.com/PostHog/posthog-js/commit/7b86b467bc93bc54a73c69446d2a1613f373771b) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - add a dimmed backdrop behind the survey modal, matching the scrim posthog-ios and posthog-android already render
+  (2026-07-09)
+
+## 4.54.5
+
+### Patch Changes
+
+- [#4121](https://github.com/PostHog/posthog-js/pull/4121) [`e6b5ab2`](https://github.com/PostHog/posthog-js/commit/e6b5ab21acb5c14f903af6fcd84118fb474a7563) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Prevent shutdown from looping forever when a flush makes no queue progress.
+  (2026-07-09)
+
+- [#4120](https://github.com/PostHog/posthog-js/pull/4120) [`d0e531a`](https://github.com/PostHog/posthog-js/commit/d0e531af583fd47c6a9f1d11de421398db55f0c8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Coalesce concurrent flush requests to avoid chaining redundant flushes while offline.
+  (2026-07-09)
+- Updated dependencies [[`e6b5ab2`](https://github.com/PostHog/posthog-js/commit/e6b5ab21acb5c14f903af6fcd84118fb474a7563), [`d0e531a`](https://github.com/PostHog/posthog-js/commit/d0e531af583fd47c6a9f1d11de421398db55f0c8)]:
+  - @posthog/core@1.40.1
+
 ## 4.54.4
 
 ### Patch Changes

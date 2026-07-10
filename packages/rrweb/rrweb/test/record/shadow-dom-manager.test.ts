@@ -66,10 +66,8 @@ describe('ShadowDomManager', () => {
     document.body.appendChild(host);
     host.attachShadow({ mode: 'open' });
 
-    // Spy on MutationBuffer.prototype.reset to verify it's NOT called
-    // during ShadowDomManager.reset(). Calling buffer.reset() from the
-    // restoreHandler creates infinite mutual recursion because
-    // MutationBuffer.reset() calls this.shadowDomManager.reset()
+    // restoreHandlers must release via releaseCanvasManager(), never buffer.reset() —
+    // guards against reintroducing the shadowDomManager.reset() recursion that coupling once caused.
     const resetSpy = vi.spyOn(MutationBuffer.prototype, 'reset');
 
     manager.reset();
@@ -109,5 +107,54 @@ describe('ShadowDomManager', () => {
     expect(() => manager.reset()).not.toThrow();
 
     document.body.removeChild(host);
+  });
+
+  it('resetForDoc() only tears down handlers owned by the given document', () => {
+    const manager = createManager();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const buffersBeforeAdd = mutationBuffers.length;
+    host.attachShadow({ mode: 'open' });
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // Tearing down a different document must leave this doc's shadow buffers alone.
+    const otherDoc = document.implementation.createHTMLDocument('other');
+    manager.resetForDoc(otherDoc);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // Tearing down the owning document removes them.
+    manager.resetForDoc(document);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd);
+
+    document.body.removeChild(host);
+  });
+
+  it('keys a shadow root by its host owner document, not the passed document', () => {
+    const manager = createManager();
+
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const iframeDoc = iframe.contentDocument as Document;
+    const host = iframeDoc.createElement('div');
+    iframeDoc.body.appendChild(host);
+    const root = host.attachShadow({ mode: 'open' });
+
+    const buffersBeforeAdd = mutationBuffers.length;
+    // takeFullSnapshot's onSerialize passes the top-level document for every root,
+    // even ones nested inside an iframe.
+    manager.addShadowRoot(root, document);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // Tearing down the top-level document must not match the iframe-owned root.
+    manager.resetForDoc(document);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // Tearing down the iframe's own document does.
+    manager.resetForDoc(iframeDoc);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd);
+
+    document.body.removeChild(iframe);
   });
 });

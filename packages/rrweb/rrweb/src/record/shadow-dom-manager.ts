@@ -28,7 +28,9 @@ export class ShadowDomManager {
   private scrollCb: scrollCallback;
   private bypassOptions: BypassOptions;
   private mirror: Mirror;
-  private restoreHandlers: (() => void)[] = [];
+  // Handlers are tagged with the document that owns their shadow root so a
+  // single iframe can be torn down without disconnecting the rest of the page.
+  private restoreHandlers: { doc: Document; handler: () => void }[] = [];
 
   constructor(options: {
     mutationCb: mutationCallBack;
@@ -54,28 +56,36 @@ export class ShadowDomManager {
     if (!isNativeShadowDom(shadowRoot)) return;
     if (this.shadowDoms.has(shadowRoot)) return;
     this.shadowDoms.add(shadowRoot);
+    // Derive the owning document from the host so a shadow root nested in an
+    // iframe is keyed to that iframe's document, not whatever the caller passed
+    // (takeFullSnapshot's onSerialize hands us the top-level document).
+    const ownerDoc = dom.host(shadowRoot)?.ownerDocument ?? doc;
     const { observer, buffer } = initMutationObserver(
       {
         ...this.bypassOptions,
-        doc,
+        doc: ownerDoc,
         mutationCb: this.mutationCb,
         mirror: this.mirror,
         shadowDomManager: this,
       },
       shadowRoot,
     );
-    this.restoreHandlers.push(() => {
-      observer.disconnect();
-      buffer.destroy();
-      // Release the canvas ref directly; buffer.reset() would re-enter shadowDomManager.reset().
-      buffer.releaseCanvasManager();
-      const index = mutationBuffers.indexOf(buffer);
-      if (index !== -1) {
-        mutationBuffers.splice(index, 1);
-      }
+    this.restoreHandlers.push({
+      doc: ownerDoc,
+      handler: () => {
+        observer.disconnect();
+        buffer.destroy();
+        // Release the canvas directly, not via buffer.reset(), per the recursion-guard unit test.
+        buffer.releaseCanvasManager();
+        const index = mutationBuffers.indexOf(buffer);
+        if (index !== -1) {
+          mutationBuffers.splice(index, 1);
+        }
+      },
     });
-    this.restoreHandlers.push(
-      initScrollObserver({
+    this.restoreHandlers.push({
+      doc: ownerDoc,
+      handler: initScrollObserver({
         ...this.bypassOptions,
         scrollCb: this.scrollCb,
         // https://gist.github.com/praveenpuglia/0832da687ed5a5d7a0907046c9ef1813
@@ -83,7 +93,7 @@ export class ShadowDomManager {
         doc: shadowRoot as unknown as Document,
         mirror: this.mirror,
       }),
-    );
+    });
     // Defer this to avoid adoptedStyleSheet events being created before the full snapshot is created or attachShadow action is recorded.
     setTimeout(() => {
       if (
@@ -94,15 +104,16 @@ export class ShadowDomManager {
           shadowRoot.adoptedStyleSheets,
           this.mirror.getId(dom.host(shadowRoot)),
         );
-      this.restoreHandlers.push(
-        initAdoptedStyleSheetObserver(
+      this.restoreHandlers.push({
+        doc: ownerDoc,
+        handler: initAdoptedStyleSheetObserver(
           {
             mirror: this.mirror,
             stylesheetManager: this.bypassOptions.stylesheetManager,
           },
           shadowRoot,
         ),
-      );
+      });
     }, 0);
   }
 
@@ -133,8 +144,9 @@ export class ShadowDomManager {
   ) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const manager = this;
-    this.restoreHandlers.push(
-      patch(
+    this.restoreHandlers.push({
+      doc,
+      handler: patch(
         element.prototype,
         'attachShadow',
         function (original: (init: ShadowRootInit) => ShadowRoot) {
@@ -150,11 +162,11 @@ export class ShadowDomManager {
           };
         },
       ),
-    );
+    });
   }
 
   public reset() {
-    this.restoreHandlers.forEach((handler) => {
+    this.restoreHandlers.forEach(({ handler }) => {
       try {
         handler();
       } catch (e) {
@@ -163,5 +175,22 @@ export class ShadowDomManager {
     });
     this.restoreHandlers = [];
     this.shadowDoms = new WeakSet();
+  }
+
+  // Tear down only the shadow observers owned by `doc` (e.g. one iframe being removed), leaving the rest of the page's shadow observation intact.
+  public resetForDoc(doc: Document) {
+    const remaining: { doc: Document; handler: () => void }[] = [];
+    for (const entry of this.restoreHandlers) {
+      if (entry.doc === doc) {
+        try {
+          entry.handler();
+        } catch (e) {
+          //
+        }
+      } else {
+        remaining.push(entry);
+      }
+    }
+    this.restoreHandlers = remaining;
   }
 }

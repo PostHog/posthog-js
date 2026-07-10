@@ -71,6 +71,7 @@ module.exports = {
                 'packages/mcp/**',
                 'packages/nextjs-config/**',
                 'packages/nuxt/**',
+                'packages/openfeature-node-provider/**',
                 'packages/openfeature-web-provider/**',
                 'packages/react-native/**',
                 'packages/node/**',
@@ -79,6 +80,7 @@ module.exports = {
                 'packages/rollup-plugin/**',
                 'examples/**',
                 'playground/**',
+                'tooling/**',
             ],
             rules: {
                 'no-console': 'off',
@@ -119,8 +121,7 @@ module.exports = {
                 'no-restricted-syntax': [
                     'error',
                     {
-                        selector:
-                            "CallExpression[callee.object.name='Promise'][callee.property.name='allSettled']",
+                        selector: "CallExpression[callee.object.name='Promise'][callee.property.name='allSettled']",
                         message:
                             'Use `allSettled` from @posthog/core (packages/core/src/utils) instead of Promise.allSettled — Promise.allSettled can be broken by runtime Promise patching on some RN environments.',
                     },
@@ -129,6 +130,4 @@ module.exports = {
         },
     ],
     ignorePatterns: ['node_modules', 'dist', 'next-env.d.ts', '.next', 'packages/browser/playground/hydration/vendor'],
-
-
 }
