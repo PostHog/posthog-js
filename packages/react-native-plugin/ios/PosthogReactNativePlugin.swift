@@ -5,7 +5,18 @@ private func hedgeLog(_ message: String) {
     print("[PostHog] \(message)")
 }
 
-// Deduplication works on Android (both architectures) and iOS (old architecture only).
+#if !os(iOS)
+    // Session replay is part of posthog-ios's iOS-only surface, so recording is a no-op on macOS.
+    // Log once so a caller isn't left wondering why recording "started" but nothing arrives.
+    private var didLogSessionReplayUnsupported = false
+    private func logSessionReplayUnsupportedOnMacOS() {
+        guard !didLogSessionReplayUnsupported else { return }
+        didLogSessionReplayUnsupported = true
+        hedgeLog("Session replay is not supported on macOS")
+    }
+#endif
+
+// Deduplication works on Android (both architectures), iOS (old architecture only), and macOS.
 // On the iOS new architecture, fatal JS exception events surface as a generic SIGABRT
 // crash event with no JS-error text in any field, so they currently cannot be filtered.
 private let fatalJsErrorMarkers = ["Unhandled JS Exception", "ExceptionsManager.reportException", "facebook::jsi::JSError"]
@@ -271,6 +282,8 @@ class PosthogReactNativePlugin: NSObject {
     ) {
         #if os(iOS)
             PostHogSDK.shared.startSessionRecording(resumeCurrent: resumeCurrent)
+        #else
+            logSessionReplayUnsupportedOnMacOS()
         #endif
         resolve(nil)
     }
@@ -279,6 +292,8 @@ class PosthogReactNativePlugin: NSObject {
     func stopRecording(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
         #if os(iOS)
             PostHogSDK.shared.stopSessionRecording()
+        #else
+            logSessionReplayUnsupportedOnMacOS()
         #endif
         resolve(nil)
     }
