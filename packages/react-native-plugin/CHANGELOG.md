@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.2.1
+
+### Patch Changes
+
+- [#4126](https://github.com/PostHog/posthog-js/pull/4126) [`c5477ce`](https://github.com/PostHog/posthog-js/commit/c5477ceb7b7cab752edd43bc77208c871df2fc69) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix fatal JS errors being double-reported on Android in minified release builds: the plugin's dedup matched serialized class-name strings, which R8/ProGuard renaming can defeat. It now registers `JavascriptException` in posthog-android's `errorTrackingConfig.ignoredExceptionTypes` (requires core 6.24.0), which matches by class across the cause chain and is unaffected by minification.
+  (2026-07-10)
+
 ## 2.2.0
 
 ### Minor Changes
