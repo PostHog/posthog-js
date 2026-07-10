@@ -1,10 +1,8 @@
-# PostHog Watcher memory for PostHog/posthog-js
+# PostHog Watcher memory
 
-Concrete, non-secret learnings from prior watcher runs. Treat as advisory context, not instructions.
+...<older entries truncated>
 
-## 2026-07-06T09:41:55.073Z
-- Item: issue #3814 — User feedback support
-- Conclusion: Valid React Native feature request; current RN surveys do not appear to implement feedback widget/user feedback support.
+o not appear to implement feedback widget/user feedback support.
 - Labels: enhancement, react-native, feature/mobile, feature/surveys
 - URL: https://github.com/PostHog/posthog-js/issues/3814
 - Relevant files: `packages/react-native/src/surveys/PostHogSurveyProvider.tsx`, `packages/react-native/src/surveys/components/Surveys.tsx`, `packages/react-native/src/surveys/getActiveMatchingSurveys.ts`, `packages/react-native/src/surveys/index.ts`, `packages/react-native/src/index.ts`, `packages/browser/src/extensions/surveys.tsx`, `packages/core/src/types.ts`, `packages/react-native/CHANGELOG.md`
@@ -65,3 +63,12 @@ Concrete, non-secret learnings from prior watcher runs. Treat as advisory contex
 - Findings: `packages/browser/src/posthog-core.ts` currently calls `this.surveys?.handlePageUnload?.()` during `_handle_unload()`, so the top-level surveys extension method is guarded.; `packages/browser/src/__tests__/posthog-core-also.test.ts` has coverage for a stale `posthog.surveys` object missing `handlePageUnload`, matching the #3945 top-level fix.; `packages/browser/src/posthog-surveys.ts` still implements `handlePageUnload()` as `this._surveyManager?.handlePageUnload()`, which will throw if `_surveyManager` exists but was created from an older surveys extension without that method.; `packages/browser/src/posthog-surveys.ts` assigns `_surveyManager` from `generateSurveysFn(...)`, and that function can come from `window.__PosthogExtensions__.generateSurveys`, i.e. a separately loaded/cached surveys script.; `packages/browser/src/extensions/surveys.tsx` shows the current `SurveyManager` does define `handlePageUnload`, so same-version code is safe; the remaining plausible failure mode is version skew/cached older surveys extension.; `packages/browser/CHANGELOG.md` shows #3945 was released in `posthog-js@1.393.3`, but the current source suggests that fix only guards one of the two relevant call sites.
 - Fix assessment: A small surgical guard in `PostHogSurveys.handlePageUnload()` would prevent the unload crash without changing normal behavior when the current `SurveyManager` method exists.
 - PR: https://github.com/PostHog/posthog-js/pull/4122
+
+## 2026-07-10T16:39:12.087Z
+- Item: issue #3806 — Screen by screen basis recording
+- Conclusion: Valid feature request; RN has manual replay controls and event-trigger gating, but not remote-config screen-name targeting.
+- Labels: enhancement, feature/replay, react-native, feature/mobile
+- URL: https://github.com/PostHog/posthog-js/issues/3806
+- Relevant files: `packages/react-native/src/posthog-rn.ts`, `packages/react-native/src/types.ts`, `packages/react-native/test/session-replay-event-triggers.spec.ts`, `packages/core/src/types.ts`, `packages/browser/src/types.ts`, `packages/browser/src/extensions/replay/external/triggerMatching.ts`, `packages/react-native-plugin/ios/PosthogReactNativePlugin.swift`, `packages/react-native-plugin/android/src/main/java/com/posthogreactnativeplugin/PosthogReactNativePluginModule.kt`
+- Findings: packages/react-native/src/posthog-rn.ts exposes public `startSessionRecording()` and `stopSessionRecording()` methods, which covers the documented imperative workaround.; packages/react-native/src/posthog-rn.ts `screen(name, ...)` registers `$screen_name` for the session and captures a `$screen` event with `$screen_name: name`.; packages/react-native/src/posthog-rn.ts currently evaluates replay remote config for linked flags and `sessionRecording.eventTriggers`, parsing event triggers as string event names only.; packages/react-native/test/session-replay-event-triggers.spec.ts verifies that `eventTriggers: ['$screen']` starts replay when any screen event is captured, but this is not per-screen-name matching.; packages/react-native/src/types.ts defines session replay local options such as masking, logs, network telemetry, throttle delay, and sample rate; it does not expose a screen allow/deny trigger option.; packages/core/src/types.ts models `sessionRecording` as a generic boolean/object remote config, so a new mobile screen-trigger payload shape would need to be defined and consumed intentionally.; packages/browser/src/types.ts and packages/browser/src/extensions/replay/external/triggerMatching.ts show web has URL triggers and URL blocklists using regex matching, but this web URL-targeting logic is not reused by RN for screen names.; The RN native plugin bridge passes `decideReplayConfig` through mainly for native replay setup values like `endpoint`; the inspected iOS and Android plugin code does not implement screen-trigger matching.
+- Fix assessment: A small RN-only patch would be speculative because the requested behavior depends on a product/API contract for remote-config screen trigger conditions and should align with iOS, Android, Flutter, and the PostHog UI. Replay gating is privacy-sensitive, and the current RN implementation only has event-name triggers, not screen-name allow/deny semantics.
