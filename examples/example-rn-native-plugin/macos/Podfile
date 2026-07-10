@@ -4,7 +4,8 @@ ws_dir = Pathname.new(__dir__)
 ws_dir = ws_dir.parent until
   File.exist?("#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb") ||
   ws_dir.expand_path.to_s == '/'
-require "#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb"
+rn_macos_dir = Pathname.new("#{ws_dir}/node_modules/react-native-macos")
+require "#{rn_macos_dir}/scripts/react_native_pods.rb"
 
 prepare_react_native_project!
 
@@ -12,8 +13,11 @@ target 'PosthogReactNativePluginExample-macOS' do
   platform :macos, '14.0'
   use_native_modules!
 
+  # use_react_native! resolves :path relative to the Podfile, so convert the
+  # walk-up result above to a relative path rather than hardcoding ../ — keeps
+  # the two in sync if node_modules is ever hoisted above the example dir.
   use_react_native!(
-    :path => '../node_modules/react-native-macos',
+    :path => rn_macos_dir.relative_path_from(Pathname.new(__dir__)).to_s,
     :hermes_enabled => false,
     :fabric_enabled => ENV['RCT_NEW_ARCH_ENABLED'] == '1',
     # An absolute path to your application root.
