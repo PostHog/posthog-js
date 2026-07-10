@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3806": {
+    "key": "PostHog/posthog-js/issue/3806",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3806",
+    "url": "https://github.com/PostHog/posthog-js/issues/3806",
+    "conclusion": "Valid feature request; RN has manual replay controls and event-trigger gating, but not remote-config screen-name targeting.",
+    "labels": [
+      "enhancement",
+      "feature/replay",
+      "react-native",
+      "feature/mobile"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-10T16:39:08.753Z"
+  },
   "PostHog/posthog-js/issue/3251": {
     "key": "PostHog/posthog-js/issue/3251",
     "repo": "PostHog/posthog-js",
