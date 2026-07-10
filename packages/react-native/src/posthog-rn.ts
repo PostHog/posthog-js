@@ -1370,7 +1370,8 @@ export class PostHog extends PostHogCore {
   }
 
   _isEnableSessionReplay(): boolean {
-    return !this.isDisabled && (this._enableSessionReplay ?? false)
+    // Session replay has no macOS backend, so it is never enabled there (crash tracking still is).
+    return !this.isDisabled && !isMacOS() && (this._enableSessionReplay ?? false)
   }
 
   _resetSessionId(reactNativeSessionReplay: typeof OptionalReactNativePlugin | undefined, sessionId: string): void {
