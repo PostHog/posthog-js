@@ -99,8 +99,12 @@ export class V1CaptureSender {
     const drops: V1DroppedEvent[] = []
     let pending = batch
 
-    for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
-      const isLastAttempt = attempt === this.config.maxAttempts
+    // Guard against a misconfigured budget (e.g. fetchRetryCount: -1): always make
+    // at least one attempt so a bad config surfaces a delivery error instead of
+    // silently dropping the batch without ever sending or calling onError.
+    const maxAttempts = Math.max(1, this.config.maxAttempts)
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const isLastAttempt = attempt === maxAttempts
       const payload = safeJsonStringify({
         created_at: createdAt,
         ...(this.config.historicalMigration ? { historical_migration: true } : {}),

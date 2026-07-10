@@ -158,6 +158,28 @@ describe('V1CaptureSender', () => {
       expect(fetch).not.toHaveBeenCalled()
       expect(errors).toEqual([])
     })
+
+    it('still makes one attempt when maxAttempts is misconfigured to 0', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 0 })
+      fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      await sender.sendV1Batch([msg('u1')])
+
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(errors).toEqual([])
+    })
+
+    it('surfaces a delivery error rather than silently dropping when maxAttempts is 0', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 0 })
+      fetch.mockResolvedValueOnce(makeResponse(400))
+
+      await sender.sendV1Batch([msg('u1')])
+
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toBeInstanceOf(CaptureV1Error)
+      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
+    })
   })
 
   describe('compression', () => {
