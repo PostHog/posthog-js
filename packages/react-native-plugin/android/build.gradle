@@ -86,7 +86,7 @@ dependencies {
   implementation "com.facebook.react:react-native:+"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
   implementation "com.posthog:posthog-android:3.53.5"
-  // errorTrackingConfig.ignoredExceptionTypes needs core 6.24.0; posthog-android 3.53.5 still pins 6.23.3
+  // remove once posthog-android pins core >= 6.24.0
   implementation "com.posthog:posthog:6.24.0"
 }
 
