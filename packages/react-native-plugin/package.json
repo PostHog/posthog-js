@@ -50,7 +50,8 @@
   "keywords": [
     "react-native",
     "ios",
-    "android"
+    "android",
+    "macos"
   ],
   "repository": {
     "type": "git",

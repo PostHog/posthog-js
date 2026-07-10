@@ -16,7 +16,7 @@ Pod::Spec.new do |s|
   s.license      = package["license"]
   s.authors      = package["author"]
 
-  s.platforms    = { :ios => min_ios_version_supported }
+  s.platforms    = { :ios => min_ios_version_supported, :osx => '10.15' }
   s.source       = { :git => "https://github.com/PostHog/posthog-js.git", :tag => "@posthog/react-native-plugin@#{s.version}" }
 
   s.source_files = "ios/**/*.{swift,h,hpp,m,mm,c,cpp}"
@@ -40,6 +40,7 @@ Pod::Spec.new do |s|
     s.dependency 'PostHog', "~> #{posthog_ios_version}"
   end
   s.ios.deployment_target = '13.0'
+  s.osx.deployment_target = '10.15'
   s.swift_versions = "5.3"
 
 
