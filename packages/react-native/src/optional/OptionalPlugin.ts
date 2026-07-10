@@ -23,7 +23,7 @@ if (Platform.OS !== 'web') {
     OptionalReactNativePlugin = require('@posthog/react-native-plugin')
   } catch (e) {}
 
-  // The legacy fallback is session-replay only and has no macOS support, so it's iOS/Android only.
+  // The legacy fallback is session-replay only and has no macOS support, so it's skipped on macOS.
   if (!OptionalReactNativePlugin && Platform.OS !== 'macos') {
     try {
       OptionalReactNativePlugin = require('posthog-react-native-session-replay')
