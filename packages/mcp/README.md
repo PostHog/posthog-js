@@ -13,11 +13,33 @@ SDK usage examples and code snippets live in the official documentation so they 
 On stateless deployments the SDK mints the `Mcp-Session-Id` response header at `initialize`
 as a token carrying the session id and client name/version. Clients replay the header on
 every request, so any pod keeps `$session_id` and `$mcp_client_name`/`$mcp_client_version`
-stable with no server-side store. Works out of the box on `StreamableHTTPServerTransport`
-with `enableJsonResponse: true` and a fresh transport per request.
+stable with no server-side store.
 
-SSE-streaming servers flush headers before handlers run, so set the header at the HTTP layer
-instead — the SDK decodes it either way:
+### Streamable HTTP: set `enableJsonResponse: true`
+
+The token is minted onto the `Mcp-Session-Id` **response** header from inside the `initialize`
+handler, so it only reaches the client when the transport builds the response **after** the
+handler runs — i.e. **JSON mode**. In **SSE (streaming) mode** `StreamableHTTPServerTransport`
+flushes the response headers **before** the handler runs, so the minted header never lands and
+behavior silently falls back to a session-per-request. This is a property of the transport, so
+it applies to **every** Streamable-HTTP host — set `enableJsonResponse: true` (and use a fresh
+transport per request):
+
+```ts
+// @modelcontextprotocol/sdk
+new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
+
+// Cloudflare agents / createMcpHandler (SSE is the default)
+createMcpHandler(server, { enableJsonResponse: true })
+
+// @rekog/mcp-nest
+McpModule.forRoot({ streamableHttp: { enableJsonResponse: true } })
+```
+
+### If you must stream (SSE)
+
+Set the header yourself at the HTTP layer with the exported `encodeSessionId` (read `clientInfo`
+from the `initialize` body) — the SDK decodes it either way:
 
 ```ts
 import { MCP_SESSION_HEADER, encodeSessionId, newSessionId } from '@posthog/mcp'
