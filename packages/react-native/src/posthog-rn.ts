@@ -1462,7 +1462,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (!OptionalReactNativePlugin) {
-      // Web/macOS - silently return
+      // No native plugin loaded (web, or plugin not installed) - nothing to do
       return false
     }
 
@@ -1532,7 +1532,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (!OptionalReactNativePlugin) {
-      // Web/macOS - silently return
+      // No native plugin loaded (web, or plugin not installed) - nothing to do
       return false
     }
 
@@ -1578,7 +1578,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (!OptionalReactNativePlugin) {
-      // Web/macOS - always return false
+      // No native plugin loaded (web, or plugin not installed) - not active
       return false
     }
 

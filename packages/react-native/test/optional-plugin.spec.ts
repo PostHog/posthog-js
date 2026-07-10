@@ -1,7 +1,10 @@
 const PRIMARY = { __plugin: 'primary' }
 const LEGACY = { __plugin: 'legacy' }
 
-const loadOptionalPlugin = (os: string, { primaryInstalled = true }: { primaryInstalled?: boolean } = {}): unknown => {
+const loadOptionalPlugin = (
+  os: string,
+  { primaryInstalled = true, legacyInstalled = true }: { primaryInstalled?: boolean; legacyInstalled?: boolean } = {}
+): unknown => {
   let loaded: unknown
   jest.isolateModules(() => {
     jest.doMock('react-native', () => ({ Platform: { OS: os } }))
@@ -11,7 +14,12 @@ const loadOptionalPlugin = (os: string, { primaryInstalled = true }: { primaryIn
       }
       return PRIMARY
     })
-    jest.doMock('posthog-react-native-session-replay', () => LEGACY)
+    jest.doMock('posthog-react-native-session-replay', () => {
+      if (!legacyInstalled) {
+        throw new Error('not installed')
+      }
+      return LEGACY
+    })
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- isolated require re-runs the module's platform-gated load under a fresh registry
     loaded = require('../src/optional/OptionalPlugin').OptionalReactNativePlugin
   })
@@ -40,6 +48,10 @@ describe('OptionalPlugin loader', () => {
 
   it('falls back to the legacy plugin on iOS when the primary is not installed', () => {
     expect(loadOptionalPlugin('ios', { primaryInstalled: false })).toBe(LEGACY)
+  })
+
+  it('loads no plugin on iOS when neither the primary nor the legacy plugin is installed', () => {
+    expect(loadOptionalPlugin('ios', { primaryInstalled: false, legacyInstalled: false })).toBeUndefined()
   })
 
   it('loads no native plugin on web', () => {
