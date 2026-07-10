@@ -13,7 +13,7 @@ target 'PosthogReactNativePluginExample-macOS' do
   use_native_modules!
 
   use_react_native!(
-    :path => "#{ws_dir}/node_modules/react-native-macos",
+    :path => '../node_modules/react-native-macos',
     :hermes_enabled => false,
     :fabric_enabled => ENV['RCT_NEW_ARCH_ENABLED'] == '1',
     # An absolute path to your application root.
