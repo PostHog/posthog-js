@@ -38,12 +38,9 @@ describe('client barrels (browser exports condition)', () => {
             expect(typeof asRecord(pagesClient)[name]).toBe(expectedType)
         })
 
-        it.each(['getServerSidePostHog', 'getPostHog', 'postHogMiddleware'])(
-            'omits %s',
-            (name) => {
-                expect(asRecord(pagesClient)[name]).toBeUndefined()
-            }
-        )
+        it.each(['getServerSidePostHog', 'getPostHog', 'createPostHog', 'postHogMiddleware'])('omits %s', (name) => {
+            expect(asRecord(pagesClient)[name]).toBeUndefined()
+        })
     })
 
     describe("@posthog/next → 'browser' → index.client", () => {
@@ -61,6 +58,7 @@ describe('client barrels (browser exports condition)', () => {
         it.each([
             'PostHogProvider',
             'getPostHog',
+            'createPostHog',
             'postHogMiddleware',
             'captureRequestError',
             'onRequestError',

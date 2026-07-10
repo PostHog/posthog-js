@@ -404,6 +404,10 @@ const typeTargets = entrypoints
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         const isExtensionBundles = file === 'extension-bundles.es.ts'
+        // customizations types must reference the main module for the PostHog class —
+        // an inlined duplicate would be nominally incompatible with the consumer's
+        // `posthog` instance (same private-fields problem as extension-bundles).
+        const isCustomizations = file === 'customizations.es.ts'
         const inlineExternalTypes = inlineExternalTypesEntries.has(file)
         const rewriteRrdomAlias = rewriteRrdomNodeTypeAlias(file)
         /** @type {import('rollup').RollupOptions} */
@@ -413,6 +417,7 @@ const typeTargets = entrypoints
             // their own copies — classes with private fields are nominally typed, so
             // duplicate declarations across .d.ts files are incompatible.
             ...(isExtensionBundles ? { external: [/module\.slim/] } : {}),
+            ...(isCustomizations ? { external: [/posthog-core$/] } : {}),
             output: [
                 {
                     dir: path.resolve('./dist'),
@@ -433,6 +438,18 @@ const typeTargets = entrypoints
                               name: 'fix-dts-external-paths',
                               renderChunk(code) {
                                   return code.replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                              },
+                          },
+                      ]
+                    : []),
+                ...(isCustomizations
+                    ? [
+                          {
+                              name: 'fix-customizations-dts-external-paths',
+                              renderChunk(code) {
+                                  // the external posthog-core import keeps its source-relative
+                                  // path; point it at dist/module.d.ts instead
+                                  return code.replace(/['"](?:\.\.\/)+posthog-core['"]/g, "'./module'")
                               },
                           },
                       ]

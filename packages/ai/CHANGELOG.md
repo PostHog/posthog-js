@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.3.0
+
+### Minor Changes
+
+- [#4084](https://github.com/PostHog/posthog-js/pull/4084) [`f4b453a`](https://github.com/PostHog/posthog-js/commit/f4b453ac477212816f3cc3df681d5de7494bd70e) Thanks [@marandaneto](https://github.com/marandaneto)! - Add optional error callback support to the OpenAI Agents tracing processor.
+  (2026-07-07)
+
 ## 8.2.3
 
 ### Patch Changes

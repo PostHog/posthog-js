@@ -16,7 +16,7 @@
  *
  * Create a .env file with:
  *   POSTHOG_PROJECT_API_KEY=your_project_api_key
- *   POSTHOG_PERSONAL_API_KEY=your_personal_api_key
+ *   POSTHOG_SECRET_KEY=your_secret_key
  *   POSTHOG_HOST=https://us.i.posthog.com  # optional
  */
 
@@ -64,16 +64,16 @@ function loadEnvFile() {
 loadEnvFile()
 
 const API_KEY = process.env.POSTHOG_PROJECT_API_KEY
-const PERSONAL_API_KEY = process.env.POSTHOG_PERSONAL_API_KEY
+const SECRET_KEY = process.env.POSTHOG_SECRET_KEY
 const HOST = process.env.POSTHOG_HOST || 'https://us.i.posthog.com'
 const POLL_INTERVAL_MS = 5000
 
-if (!API_KEY || !PERSONAL_API_KEY) {
+if (!API_KEY || !SECRET_KEY) {
   console.error('Missing required environment variables.')
   console.error('')
   console.error('Create a .env file with:')
   console.error('  POSTHOG_PROJECT_API_KEY=your_project_api_key')
-  console.error('  POSTHOG_PERSONAL_API_KEY=your_personal_api_key')
+  console.error('  POSTHOG_SECRET_KEY=your_secret_key')
   console.error('  POSTHOG_HOST=https://us.i.posthog.com  # optional')
   process.exit(1)
 }
@@ -129,7 +129,7 @@ const loggingFetch = async (url, options) => {
 // Initialize PostHog with custom fetch
 const posthog = new PostHog(API_KEY, {
   host: HOST,
-  personalApiKey: PERSONAL_API_KEY,
+  secretKey: SECRET_KEY,
   featureFlagsPollingInterval: POLL_INTERVAL_MS,
   fetch: loggingFetch,
   debug: false,

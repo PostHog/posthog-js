@@ -165,6 +165,7 @@ describe('extension lifecycle', () => {
                 'heatmaps',
                 'historyAutocapture',
                 'logs',
+                'metrics',
                 'productTours',
                 'sessionRecording',
                 'siteApps',

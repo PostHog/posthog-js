@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getPostHog } from '@posthog/next'
+import { getPostHog } from '@/lib/posthog'
 
 export default async function ServerFlagsPage() {
     const posthog = await getPostHog()
@@ -13,8 +13,10 @@ export default async function ServerFlagsPage() {
             <h1 className="text-2xl font-bold mb-2">Server-Side Feature Flags</h1>
             <p className="text-gray-600 mb-6">
                 This page is a server component. It uses <code className="bg-gray-100 px-1 rounded">getPostHog</code>{' '}
-                from <code className="bg-gray-100 px-1 rounded">@posthog/next</code> to evaluate feature flags and
-                capture events server-side.
+                from a shared <code className="bg-gray-100 px-1 rounded">lib/posthog.ts</code> module (created once with{' '}
+                <code className="bg-gray-100 px-1 rounded">createPostHog</code> from{' '}
+                <code className="bg-gray-100 px-1 rounded">@posthog/next</code>) to evaluate feature flags and capture
+                events server-side.
             </p>
 
             <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">

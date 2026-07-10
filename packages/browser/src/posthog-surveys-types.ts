@@ -46,6 +46,9 @@ export interface SurveyAppearance extends Omit<CoreSurveyAppearance, 'position' 
     inputBackgroundColor?: string
     // Hide the X (cancel) button - defaults to false (show the button)
     hideCancelButton?: boolean
+    // Don't automatically focus the first open-text input when the question renders.
+    // Defaults to false (the input is focused), preserving existing behavior.
+    disableAutofocus?: boolean
     // Browser's SurveyPosition has more options than core (e.g., NextToTrigger)
     position?: SurveyPosition
     widgetType?: SurveyWidgetType

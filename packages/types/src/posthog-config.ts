@@ -4,6 +4,7 @@
 
 import type { JsonType, Properties } from './common'
 import type { LogAttributes, BeforeSendLogFn } from './capture-log'
+import type { MetricAttributes, BeforeSendMetricFn } from './capture-metric'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
 import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
@@ -765,6 +766,60 @@ export interface LogsConfig extends LogCaptureOptions {
     captureConsoleLogs?: boolean
 }
 
+/**
+ * Options for the posthog.metrics API (count, gauge, histogram).
+ */
+export interface MetricsConfig {
+    /**
+     * The service name for metric series.
+     * Maps to the OTel resource attribute 'service.name'.
+     *
+     * @default 'unknown_service'
+     */
+    serviceName?: string
+    /**
+     * The deployment environment for metric series (e.g. 'production', 'staging').
+     * Maps to the OTel resource attribute 'deployment.environment'.
+     */
+    environment?: string
+    /**
+     * The service version for metric series (e.g. '1.2.3').
+     * Maps to the OTel resource attribute 'service.version'.
+     */
+    serviceVersion?: string
+    /**
+     * Additional resource attributes applied to every metrics batch.
+     * These describe the service/deployment, not individual series.
+     * Named fields (serviceName, environment, serviceVersion) are set first;
+     * resourceAttributes can override them.
+     *
+     * @example { 'host.name': 'web-01', 'cloud.region': 'us-east-1' }
+     */
+    resourceAttributes?: MetricAttributes
+    /**
+     * How often the aggregated window is flushed, in milliseconds. Samples
+     * are folded into per-series aggregates in memory between flushes — one
+     * data point per series per window, no matter how many calls.
+     *
+     * @default 10000
+     */
+    flushIntervalMs?: number
+    /**
+     * Cardinality guardrail: maximum distinct series (name + type + unit +
+     * attribute combination) held per flush window. Samples for series
+     * beyond the cap are dropped with a single warning per window.
+     *
+     * @default 1000
+     */
+    maxSeriesPerFlush?: number
+    /**
+     * Pre-aggregation filter for metric samples, as a single function or a
+     * left-to-right chain. Each function inspects, mutates, or drops a
+     * sample (return `null` to drop) before it is aggregated.
+     */
+    beforeSend?: BeforeSendMetricFn | BeforeSendMetricFn[]
+}
+
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
@@ -1096,6 +1151,13 @@ export interface PostHogConfig {
      * @default undefined
      */
     logs?: LogsConfig
+
+    /**
+     * Metrics-specific configuration options for the posthog.metrics API.
+     *
+     * @default undefined
+     */
+    metrics?: MetricsConfig
 
     /**
      * Determines whether PostHog should disable all conversations functionality.

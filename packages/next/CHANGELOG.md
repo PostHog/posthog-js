@@ -1,5 +1,69 @@
 # @posthog/next
 
+## 0.8.0
+
+### Minor Changes
+
+- [#4091](https://github.com/PostHog/posthog-js/pull/4091) [`3336dbf`](https://github.com/PostHog/posthog-js/commit/3336dbfb3fd0573b81fe6de5bda8e0aaaee3d23c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Replace the `getPostHog` and `getServerSidePostHog` exports with a `createPostHog()` factory. Configure PostHog once in a shared module — including an optional `getDistinctId` resolver that attributes server-side events and feature flags to the authenticated user — and use the returned `getPostHog` everywhere.
+
+    ```ts
+    import 'server-only'
+    import { createPostHog } from '@posthog/next'
+
+    export const { getPostHog } = createPostHog()
+    ```
+
+    Pass `getDistinctId` to resolve identity from your auth session:
+
+    ```ts
+    import 'server-only'
+    import { createPostHog } from '@posthog/next'
+    import { auth } from '@/auth'
+
+    export const { getPostHog } = createPostHog({
+        getDistinctId: async () => (await auth())?.user?.id,
+    })
+    ```
+
+    In the Pages Router, import from `@posthog/next/pages`; the returned `getPostHog(ctx)` requires the `GetServerSidePropsContext` and passes it to the resolver:
+
+    ```ts
+    import { createPostHog } from '@posthog/next/pages'
+
+    export const { getPostHog } = createPostHog({
+        getDistinctId: async (ctx) =>
+            ctx ? (await getServerSession(ctx.req, ctx.res, authOptions))?.user?.id : undefined,
+    })
+    ```
+
+    Call sites are unchanged apart from the import. `getPostHog` is still async, `ctx` is still required in the Pages Router, and per-call `apiKey`/`options` move into `createPostHog()`:
+
+    ```ts
+    // Before
+    import { getPostHog } from '@posthog/next'
+    const posthog = await getPostHog(apiKey, { host })
+
+    // After
+    import { getPostHog } from '@/lib/posthog'
+    const posthog = await getPostHog()
+    ```
+
+    In the Pages Router, `getServerSidePostHog(ctx)` becomes `getPostHog(ctx)`. (2026-07-09)
+
+### Patch Changes
+
+- [#4091](https://github.com/PostHog/posthog-js/pull/4091) [`3336dbf`](https://github.com/PostHog/posthog-js/commit/3336dbfb3fd0573b81fe6de5bda8e0aaaee3d23c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix Pages Router server clients to apply request context after async initialization: the Pages Router path of `createPostHog().getPostHog(ctx)` now wraps method calls in `withContext` instead of calling `enterContext`, which does not propagate back to the caller across the helper's await boundary.
+  (2026-07-09)
+- Updated dependencies [[`e6b5ab2`](https://github.com/PostHog/posthog-js/commit/e6b5ab21acb5c14f903af6fcd84118fb474a7563), [`d0e531a`](https://github.com/PostHog/posthog-js/commit/d0e531af583fd47c6a9f1d11de421398db55f0c8)]:
+    - @posthog/core@1.40.1
+
+## 0.7.2
+
+### Patch Changes
+
+- [#4092](https://github.com/PostHog/posthog-js/pull/4092) [`335dd05`](https://github.com/PostHog/posthog-js/commit/335dd05f418c8d9127f12a8b8619b5b514d279b5) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix `@posthog/next/pages` in Pages Router server bundles so server APIs like `getServerSideProps` resolve correctly instead of importing the client entrypoint.
+  (2026-07-08)
+
 ## 0.7.1
 
 ### Patch Changes

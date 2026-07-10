@@ -1,4 +1,4 @@
-import { PostHog } from '../posthog-core'
+import type { PostHogConfig, PostHogInterface } from '../types'
 import {
     CAMPAIGN_PARAMS,
     getCampaignParams,
@@ -9,7 +9,23 @@ import {
 import { each, extend } from '../utils'
 import { includes } from '@posthog/core'
 
-export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog: PostHog): void => {
+// only the members the function reads — typed structurally (not as the PostHog
+// class) so it accepts both the singleton and the instance handed to the `loaded`
+// callback, where the docs recommend calling it. Picking scalar config keys keeps
+// nominal class types (config.__extensionClasses) out of the signature, which
+// would otherwise be incompatible across the lib/ and dist/ declaration copies.
+type PostHogWithFlags = Pick<PostHogInterface, 'setPersonPropertiesForFlags'> & {
+    config: Pick<
+        PostHogConfig,
+        | 'mask_personal_data_properties'
+        | 'custom_personal_data_properties'
+        | 'detect_google_search_app'
+        | 'disable_capture_url_hashes'
+        | 'custom_campaign_params'
+    >
+}
+
+export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog: PostHogWithFlags): void => {
     const allProperties = extend(
         {},
         getEventProperties(

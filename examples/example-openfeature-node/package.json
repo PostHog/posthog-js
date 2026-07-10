@@ -1,0 +1,23 @@
+{
+  "name": "example-openfeature-node",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.22"
+  },
+  "packageManager": "pnpm@10.15.0",
+  "license": "MIT",
+  "scripts": {
+    "start": "ts-node index.ts"
+  },
+  "dependencies": {
+    "@openfeature/server-sdk": "^1.22.0",
+    "@posthog/openfeature-node-provider": "*",
+    "posthog-node": "*"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.7",
+    "ts-node": "^10.8.2",
+    "typescript": "^5.8.2"
+  }
+}

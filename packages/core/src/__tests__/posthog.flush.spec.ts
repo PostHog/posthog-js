@@ -257,6 +257,92 @@ describe('PostHog Core', () => {
       expect(mocks.fetch).toHaveBeenCalledTimes(1)
     })
 
+    it('coalesces flush calls made while a flush is already queued', async () => {
+      jest.useRealTimers()
+      let resolveFetch!: () => void
+      mocks.fetch.mockImplementation(async () => {
+        await new Promise<void>((resolve) => (resolveFetch = resolve))
+        return {
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        }
+      })
+
+      posthog.capture('test-event-1')
+      const inFlight = posthog.flush()
+      await waitForPromises() // let the first flush start its fetch
+
+      const queued = posthog.flush()
+      const coalesced = posthog.flush()
+
+      expect(coalesced).toBe(queued)
+      expect(queued).not.toBe(inFlight)
+
+      resolveFetch()
+      await expect(inFlight).resolves.not.toThrow()
+      await expect(queued).resolves.not.toThrow()
+      // the follow-up found an empty queue, so only one fetch happened
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('sends events captured during an in-flight flush via the coalesced follow-up', async () => {
+      jest.useRealTimers()
+      const batches: any[][] = []
+      let resolveFirstFetch!: () => void
+      mocks.fetch.mockImplementation(async (_, options) => {
+        batches.push(JSON.parse((options.body || '') as string).batch)
+        if (batches.length === 1) {
+          await new Promise<void>((resolve) => (resolveFirstFetch = resolve))
+        }
+        return {
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        }
+      })
+
+      posthog.capture('first')
+      const inFlight = posthog.flush()
+      await waitForPromises() // first flush has read the queue and is mid-fetch
+
+      posthog.capture('second')
+      const followUp = posthog.flush()
+      posthog.capture('third')
+      expect(posthog.flush()).toBe(followUp)
+
+      resolveFirstFetch()
+      await Promise.all([inFlight, followUp])
+
+      expect(batches[0]).toMatchObject([{ event: 'first' }])
+      expect(batches[1]).toMatchObject([{ event: 'second' }, { event: 'third' }])
+    })
+
+    it('does not chain one flush per capture while flushes fail', async () => {
+      jest.useRealTimers()
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 2,
+        fetchRetryCount: 0,
+        preloadFeatureFlags: false,
+      })
+      mocks.fetch.mockImplementation(() => Promise.reject(new Error('network down')))
+
+      for (let i = 0; i < 20; i++) {
+        posthog.capture(`offline-event-${i}`)
+      }
+      await delay(50) // let the flush chain settle
+
+      // all 20 captures coalesced into a single flush — not one flush per capture
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toHaveLength(20)
+
+      // coalescing doesn't leave flushing permanently stuck
+      posthog.capture('offline-event-20')
+      await delay(50)
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toHaveLength(21)
+    })
+
     it('should flush all events even if larger than batch size', async () => {
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
 
