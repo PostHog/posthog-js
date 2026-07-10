@@ -54,6 +54,14 @@ describe('OptionalPlugin loader', () => {
     expect(loadOptionalPlugin('ios', { primaryInstalled: false, legacyInstalled: false })).toBeUndefined()
   })
 
+  it('loads the primary plugin on Android', () => {
+    expect(loadOptionalPlugin('android')).toBe(PRIMARY)
+  })
+
+  it('falls back to the legacy plugin on Android when the primary is not installed', () => {
+    expect(loadOptionalPlugin('android', { primaryInstalled: false })).toBe(LEGACY)
+  })
+
   it('loads no native plugin on web', () => {
     expect(loadOptionalPlugin('web')).toBeUndefined()
   })
