@@ -728,8 +728,19 @@ export class PostHogPersistence {
         this.register(getSearchInfo())
     }
 
-    update_referrer_info(): void {
-        this.register_once(getReferrerInfo(), undefined)
+    update_referrer_info(userRegisteredProps?: Properties): void {
+        // Referrer info lives in the session persistence and is sent with every event, so it takes
+        // precedence over the same keys in the regular persistence. When a user explicitly sets
+        // $referrer / $referring_domain via posthog.register(), don't overwrite it with
+        // document.referrer, which is the iframe's own origin in an embedded context.
+        const referrerInfo = getReferrerInfo()
+        const props: Properties = {}
+        each(referrerInfo, (val, key) => {
+            if (!userRegisteredProps || !userRegisteredProps.hasOwnProperty(key)) {
+                props[key] = val
+            }
+        })
+        this.register_once(props, undefined)
     }
 
     set_initial_person_info(): void {

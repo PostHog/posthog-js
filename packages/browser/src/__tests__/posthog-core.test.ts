@@ -266,6 +266,29 @@ describe('posthog core', () => {
                 expect(properties['$referrer']).toBe('$direct')
                 expect(properties['$referring_domain']).toBe('$direct')
             })
+
+            it('should not overwrite a referrer that was registered via register()', () => {
+                // arrange
+                mockReferrer.mockReturnValue('https://iframe-origin.example.com/some/path')
+                const { posthog, beforeSendMock } = setup()
+                posthog.register({
+                    $referrer: 'https://blabla.fr/',
+                    $referring_domain: 'blabla.fr',
+                })
+
+                // act
+                posthog.capture(eventName, eventProperties)
+
+                // assert
+                const { properties } = beforeSendMock.mock.calls[0][0]
+                expect(properties['$referrer']).toBe('https://blabla.fr/')
+                expect(properties['$referring_domain']).toBe('blabla.fr')
+                // and the registered values keep surviving on subsequent captures
+                posthog.capture(eventName, eventProperties)
+                const { properties: laterProperties } = beforeSendMock.mock.calls[1][0]
+                expect(laterProperties['$referrer']).toBe('https://blabla.fr/')
+                expect(laterProperties['$referring_domain']).toBe('blabla.fr')
+            })
         })
 
         describe('campaign params', () => {

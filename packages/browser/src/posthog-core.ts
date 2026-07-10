@@ -1376,7 +1376,7 @@ export class PostHog implements PostHogInterface {
             this.sessionPersistence.update_campaign_params()
         }
         if (this.config.save_referrer) {
-            this.sessionPersistence.update_referrer_info()
+            this.sessionPersistence.update_referrer_info(this.persistence.props)
         }
 
         if (this.config.save_campaign_params || this.config.save_referrer) {
