@@ -72,7 +72,7 @@ function toRfc3339(timestamp: unknown): string {
     return Number.isNaN(asDate.getTime()) ? new Date().toISOString() : timestamp
   }
   if (timestamp instanceof Date) {
-    return timestamp.toISOString()
+    return Number.isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString()
   }
   const asDate = timestamp == null ? new Date() : new Date(timestamp as string | number)
   return Number.isNaN(asDate.getTime()) ? new Date().toISOString() : asDate.toISOString()

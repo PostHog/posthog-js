@@ -235,6 +235,11 @@ describe('capture v1 transform', () => {
       expect(event.timestamp).toMatch(ISO_RE)
     })
 
+    it('falls back to a valid ISO string when the timestamp is an invalid Date instance', () => {
+      const event = buildV1Event(baseMessage({ timestamp: new Date('not-a-date') as unknown as JsonType }))
+      expect(event.timestamp).toMatch(ISO_RE)
+    })
+
     it('does not mutate the input message or its properties', () => {
       const message = baseMessage({
         $set: { name: 'Jane' },
