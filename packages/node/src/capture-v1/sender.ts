@@ -248,7 +248,7 @@ export class V1CaptureSender {
     const trimmed = raw.trim()
     if (/^\d+$/.test(trimmed)) {
       const seconds = parseInt(trimmed, 10)
-      return seconds > 0 ? seconds * 1000 : undefined
+      return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined
     }
     const dateMs = Date.parse(trimmed)
     if (Number.isNaN(dateMs)) {
