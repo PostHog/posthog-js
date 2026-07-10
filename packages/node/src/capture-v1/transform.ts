@@ -68,7 +68,8 @@ function isRecord(value: JsonType | undefined): value is PostHogEventProperties 
  */
 function toRfc3339(timestamp: unknown): string {
   if (typeof timestamp === 'string') {
-    return timestamp
+    const asDate = new Date(timestamp)
+    return Number.isNaN(asDate.getTime()) ? new Date().toISOString() : timestamp
   }
   if (timestamp instanceof Date) {
     return timestamp.toISOString()
