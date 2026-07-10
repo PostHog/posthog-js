@@ -150,6 +150,73 @@ test('collectReleaseAssets includes browser source maps from the dist root', asy
     }
 })
 
+test('collectReleaseAssets publishes the code-split toolbar chunk directory when the build emits one', async () => {
+    const distDir = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-js-dist-'))
+
+    try {
+        await fs.writeFile(path.join(distDir, 'toolbar.js'), '')
+        await fs.writeFile(path.join(distDir, 'toolbar.css'), '')
+        await fs.mkdir(path.join(distDir, 'toolbar'))
+        await fs.mkdir(path.join(distDir, 'toolbar', 'assets'))
+        await fs.writeFile(path.join(distDir, 'toolbar', 'toolbar-app-A1B2C3D4.js'), '')
+        await fs.writeFile(path.join(distDir, 'toolbar', 'toolbar-app.js'), '')
+        await fs.writeFile(path.join(distDir, 'toolbar', 'chunk-hedgehog-E5F6A7B8.js'), '')
+        await fs.writeFile(path.join(distDir, 'toolbar', 'assets', 'sprite.png'), '')
+
+        const assets = await collectReleaseAssets(distDir)
+
+        assert.deepEqual(
+            assets.map(({ relativeKey, contentType }) => ({ relativeKey, contentType })),
+            [
+                { relativeKey: 'toolbar.js', contentType: 'application/javascript' },
+                { relativeKey: 'toolbar.css', contentType: 'text/css' },
+                { relativeKey: 'toolbar/assets/sprite.png', contentType: 'image/png' },
+                { relativeKey: 'toolbar/chunk-hedgehog-E5F6A7B8.js', contentType: 'application/javascript' },
+                { relativeKey: 'toolbar/toolbar-app-A1B2C3D4.js', contentType: 'application/javascript' },
+                { relativeKey: 'toolbar/toolbar-app.js', contentType: 'application/javascript' },
+            ]
+        )
+
+        const plans = buildAssetUploadPlans('1.370.0', assets)
+
+        // The chunk must flow through all three prefixes: the loaders published at the major-alias
+        // (`/static/1/toolbar.js`) and compatibility (`/static/toolbar.js`) paths resolve their chunks
+        // relative to their own URLs too, so a chunk missing from those plans is a broken toolbar for
+        // unversioned-CDN users.
+        const findChunk = (uploads: ReturnType<typeof buildAssetUploadPlans>['immutable']) =>
+            uploads.find((upload) => upload.key.endsWith('chunk-hedgehog-E5F6A7B8.js'))
+        assert.deepEqual(
+            (['immutable', 'majorAlias', 'compatibility'] as const).map((prefix) => {
+                const chunkUpload = findChunk(plans[prefix])
+                return {
+                    key: chunkUpload?.key,
+                    cacheControl: chunkUpload?.cacheControl,
+                    contentType: chunkUpload?.contentType,
+                }
+            }),
+            [
+                {
+                    key: 'static/1.370.0/toolbar/chunk-hedgehog-E5F6A7B8.js',
+                    cacheControl: 'public, max-age=31536000, immutable',
+                    contentType: 'application/javascript',
+                },
+                {
+                    key: 'static/1/toolbar/chunk-hedgehog-E5F6A7B8.js',
+                    cacheControl: 'public, max-age=300',
+                    contentType: 'application/javascript',
+                },
+                {
+                    key: 'static/toolbar/chunk-hedgehog-E5F6A7B8.js',
+                    cacheControl: 'public, max-age=300',
+                    contentType: 'application/javascript',
+                },
+            ]
+        )
+    } finally {
+        await fs.rm(distDir, { recursive: true, force: true })
+    }
+})
+
 test('assertNoCompatibilityVersionNamespaceCollisions rejects compatibility keys that would shadow reserved version namespaces', () => {
     for (const relativeKey of ['1/array.js', '1.370/array.js', '1.370.0/array.js']) {
         assert.throws(

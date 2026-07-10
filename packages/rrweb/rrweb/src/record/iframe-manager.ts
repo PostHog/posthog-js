@@ -1,7 +1,7 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
 import { genId } from '@posthog/rrweb-snapshot';
 import type { CrossOriginIframeMessageEvent } from '../types';
-import { callSafely } from '../utils';
+import { callSafely, removeEventListenerSafely } from '../utils';
 import CrossOriginIframeMirror from './cross-origin-iframe-mirror';
 import { findAndRemoveIframeBuffer } from './observer';
 import { EventType, NodeType, IncrementalSource } from '@posthog/rrweb-types';
@@ -122,7 +122,7 @@ export class IframeManager {
     const bucket = this.pageHideHandlers.get(iframeEl);
     if (!bucket) return;
     bucket.forEach(({ win, handler }) => {
-      callSafely(() => win.removeEventListener('pagehide', handler));
+      removeEventListenerSafely(win, 'pagehide', handler);
     });
     this.pageHideHandlers.delete(iframeEl);
   }
@@ -473,9 +473,7 @@ export class IframeManager {
         capturedWins.forEach((capturedWin) => {
           const handler = this.nestedIframeListeners.get(capturedWin);
           if (handler) {
-            callSafely(() =>
-              capturedWin.removeEventListener('message', handler),
-            );
+            removeEventListenerSafely(capturedWin, 'message', handler);
             this.nestedIframeListeners.delete(capturedWin);
           }
           this.crossOriginIframeMap.delete(capturedWin);
@@ -486,7 +484,7 @@ export class IframeManager {
       // attachIframe (preserves SecurityError handling from #163).
       if (win && this.nestedIframeListeners.has(win)) {
         const handler = this.nestedIframeListeners.get(win)!;
-        callSafely(() => win.removeEventListener('message', handler));
+        removeEventListenerSafely(win, 'message', handler);
         this.nestedIframeListeners.delete(win);
       }
 
@@ -555,12 +553,12 @@ export class IframeManager {
 
   public destroy() {
     if (this.recordCrossOriginIframes) {
-      window.removeEventListener('message', this.messageHandler);
+      removeEventListenerSafely(window, 'message', this.messageHandler);
     }
 
     // Clean up nested iframe listeners
     this.nestedIframeListeners.forEach((handler, contentWindow) => {
-      callSafely(() => contentWindow.removeEventListener('message', handler));
+      removeEventListenerSafely(contentWindow, 'message', handler);
     });
     this.nestedIframeListeners.clear();
 

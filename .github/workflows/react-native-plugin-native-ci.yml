@@ -1,7 +1,7 @@
 name: React Native Plugin Native CI
 
 # Builds the posthog-react-native-plugin example app's native code (Android +
-# iOS) so the Swift/Kotlin bridge is compiled in CI before publishing. Ported
+# iOS + macOS) so the Swift/Kotlin bridge is compiled in CI before publishing. Ported
 # from the standalone posthog-react-native-session-replay repo. The example
 # lives at examples/example-rn-native-plugin and is excluded from the pnpm
 # workspace, so each job installs it standalone and invokes the native build
@@ -209,3 +209,57 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator'
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
+
+  build-macos:
+    name: Build example for macOS (CocoaPods)
+    runs-on: macos-14-xlarge
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@1242409711ff5721add51979e9e11e23ebb7e5a4 # v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Check if plugin is affected
+        id: is-affected
+        uses: ./.github/actions/is-affected
+        with:
+          package-name: '@posthog/react-native-plugin'
+
+      - name: Install example dependencies
+        if: steps.is-affected.outputs.is-affected == 'true'
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
+        # required for React Native's macOS autolinking and pods.
+        # --frozen-lockfile keeps native builds reproducible; the committed
+        # example lockfile must be kept in sync with its package.json.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
+        working-directory: ${{ env.EXAMPLE_DIR }}
+
+      - name: Install CocoaPods
+        if: steps.is-affected.outputs.is-affected == 'true'
+        env:
+          NO_FLIPPER: 1
+        run: pod install
+        working-directory: ${{ env.EXAMPLE_DIR }}/macos
+
+      - name: Build example for macOS
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: |
+          set -o pipefail && xcrun xcodebuild \
+            -workspace PosthogReactNativePluginExample.xcworkspace \
+            -configuration Debug \
+            -scheme PosthogReactNativePluginExample-macOS \
+            -destination 'generic/platform=macOS' | xcpretty
+        working-directory: ${{ env.EXAMPLE_DIR }}/macos

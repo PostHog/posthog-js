@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.40.0
+
+### Minor Changes
+
+- [#4060](https://github.com/PostHog/posthog-js/pull/4060) [`0b49a4c`](https://github.com/PostHog/posthog-js/commit/0b49a4cc6e76285b6164a4a3e596049bb5b5d4ae) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `secretKey` config as the canonical alias for the deprecated `personalApiKey` (accepts a Personal API Key or Project Secret API Key).
+  (2026-07-07)
+
 ## 5.39.4
 
 ### Patch Changes

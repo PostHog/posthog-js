@@ -29,6 +29,7 @@ import type { WebExperiments } from './web-experiments'
 import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import type { PostHogFeatureFlags } from './posthog-featureflags'
 import type { PostHogLogs } from './posthog-logs'
+import type { PostHogMetrics } from './posthog-metrics'
 
 // ============================================================================
 // Re-export public types from @posthog/types
@@ -114,6 +115,18 @@ export type {
 } from '@posthog/types'
 export type { LogSdkContext } from '@posthog/core'
 
+// Metric capture types
+export type {
+    MetricAttributeValue,
+    MetricAttributes,
+    MetricType,
+    CaptureMetricOptions,
+    MetricSample,
+    BeforeSendMetricFn,
+    OtlpMetricsPayload,
+    MetricsConfig,
+} from '@posthog/types'
+
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
 export type { KnownUnsafeEditableEvent } from '@posthog/core'
 
@@ -143,7 +156,12 @@ import type {
  * This guarantees we'll be able to use `PostHogConfig` as implemented in the browser/src/posthog-core.ts file
  * using the proper `loaded` function signature.
  */
-export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init'>
+export type PostHogInterface = Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'> & {
+    // re-declared (rather than kept from the base interface) so they use the
+    // browser-specific `PostHogConfig` below, matching the class implementation
+    config: PostHogConfig
+    set_config(config: Partial<PostHogConfig>): void
+}
 
 /*
  * Specify that `loaded` should be using the PostHog instance type
@@ -192,6 +210,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         conversations?: ExtensionConstructor<PostHogConversations>
         featureFlags?: ExtensionConstructor<PostHogFeatureFlags>
         logs?: ExtensionConstructor<PostHogLogs>
+        metrics?: ExtensionConstructor<PostHogMetrics>
     }
 }
 

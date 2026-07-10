@@ -762,6 +762,8 @@ function record<T = eventWithTime>(
       iframeManager.removeLoadListener();
       iframeManager.destroy();
       iframeObserverCleanups.clear();
+      // Global shadow teardown belongs to the recording lifecycle, not per-buffer reset() which would fire on every iframe teardown.
+      shadowDomManager.reset();
       mirror.reset();
       recording = false;
       unregisterErrorHandler();

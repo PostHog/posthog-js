@@ -158,12 +158,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @example
    * ```ts
-   * // With personal API key
+   * // With a secret key (Personal API Key or Project Secret API Key) for local evaluation
    * const client = new PostHogBackendClient(
    *   'your-api-key',
    *   {
    *     host: 'https://app.posthog.com',
-   *     personalApiKey: 'your-personal-api-key'
+   *     secretKey: 'your-secret-key'
    *   }
    * )
    * ```
@@ -178,7 +178,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const normalizedOptions = {
       ...options,
       host: normalizeHost(options.host),
-      personalApiKey: normalizePersonalApiKey(options.personalApiKey),
+      personalApiKey: normalizePersonalApiKey(options.secretKey ?? options.personalApiKey),
     }
 
     super(normalizedApiKey, normalizedOptions)

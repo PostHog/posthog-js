@@ -1,5 +1,12 @@
 # rrdom
 
+## 0.0.66
+
+### Patch Changes
+
+- Updated dependencies [[`c75c0ba`](https://github.com/PostHog/posthog-js/commit/c75c0baaaf107844de57a5ce496790cac6adcf8b)]:
+    - @posthog/rrweb-snapshot@0.0.66
+
 ## 0.0.65
 
 ### Patch Changes

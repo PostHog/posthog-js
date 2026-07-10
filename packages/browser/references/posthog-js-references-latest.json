@@ -2890,14 +2890,14 @@
       "name": "PostHogConfig",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n    disableDeviceModel?: boolean;\n    __extensionClasses?: {\n        exceptions?: ExtensionConstructor<PostHogExceptions>;\n        historyAutocapture?: ExtensionConstructor<HistoryAutocapture>;\n        tracingHeaders?: ExtensionConstructor<TracingHeaders>;\n        siteApps?: ExtensionConstructor<SiteApps>;\n        sessionRecording?: ExtensionConstructor<SessionRecording>;\n        autocapture?: ExtensionConstructor<Autocapture>;\n        productTours?: ExtensionConstructor<PostHogProductTours>;\n        heatmaps?: ExtensionConstructor<Heatmaps>;\n        webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>;\n        exceptionObserver?: ExtensionConstructor<ExceptionObserver>;\n        deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>;\n        surveys?: ExtensionConstructor<PostHogSurveys>;\n        toolbar?: ExtensionConstructor<Toolbar>;\n        experiments?: ExtensionConstructor<WebExperiments>;\n        conversations?: ExtensionConstructor<PostHogConversations>;\n        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>;\n        logs?: ExtensionConstructor<PostHogLogs>;\n    };\n}"
+      "example": "Omit<BasePostHogConfig, 'loaded'> & {\n    loaded: (posthog: PostHogInterface) => void;\n    disableDeviceModel?: boolean;\n    __extensionClasses?: {\n        exceptions?: ExtensionConstructor<PostHogExceptions>;\n        historyAutocapture?: ExtensionConstructor<HistoryAutocapture>;\n        tracingHeaders?: ExtensionConstructor<TracingHeaders>;\n        siteApps?: ExtensionConstructor<SiteApps>;\n        sessionRecording?: ExtensionConstructor<SessionRecording>;\n        autocapture?: ExtensionConstructor<Autocapture>;\n        productTours?: ExtensionConstructor<PostHogProductTours>;\n        heatmaps?: ExtensionConstructor<Heatmaps>;\n        webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>;\n        exceptionObserver?: ExtensionConstructor<ExceptionObserver>;\n        deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>;\n        surveys?: ExtensionConstructor<PostHogSurveys>;\n        toolbar?: ExtensionConstructor<Toolbar>;\n        experiments?: ExtensionConstructor<WebExperiments>;\n        conversations?: ExtensionConstructor<PostHogConversations>;\n        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>;\n        logs?: ExtensionConstructor<PostHogLogs>;\n        metrics?: ExtensionConstructor<PostHogMetrics>;\n    };\n}"
     },
     {
       "id": "PostHogInterface",
       "name": "PostHogInterface",
       "properties": [],
       "path": "lib/src/types.d.ts",
-      "example": "\"config\" | \"init\""
+      "example": "Omit<BasePostHogInterface, 'config' | 'init' | 'set_config'> & {\n    config: PostHogConfig;\n    set_config(config: Partial<PostHogConfig>): void;\n}"
     },
     {
       "id": "ProductTour",
@@ -4061,6 +4061,10 @@
           "description": "",
           "type": "string",
           "name": "descriptionTextColor"
+        },
+        {
+          "type": "boolean",
+          "name": "disableAutofocus"
         },
         {
           "type": "string",

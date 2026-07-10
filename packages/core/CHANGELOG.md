@@ -1,5 +1,36 @@
 # @posthog/core
 
+## 1.40.1
+
+### Patch Changes
+
+- [#4121](https://github.com/PostHog/posthog-js/pull/4121) [`e6b5ab2`](https://github.com/PostHog/posthog-js/commit/e6b5ab21acb5c14f903af6fcd84118fb474a7563) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Prevent shutdown from looping forever when a flush makes no queue progress.
+  (2026-07-09)
+
+- [#4120](https://github.com/PostHog/posthog-js/pull/4120) [`d0e531a`](https://github.com/PostHog/posthog-js/commit/d0e531af583fd47c6a9f1d11de421398db55f0c8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Coalesce concurrent flush requests to avoid chaining redundant flushes while offline.
+  (2026-07-09)
+
+## 1.40.0
+
+### Minor Changes
+
+- [#4115](https://github.com/PostHog/posthog-js/pull/4115) [`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) — alpha
+
+  A statsd-style pre-aggregating metrics client for the PostHog Metrics product (alpha). Samples are folded into per-series aggregates in memory (counts sum, gauges keep the last value, histograms accumulate buckets) and flushed periodically as OTLP/JSON to `/i/v1/metrics` — one data point per series per flush window, no matter how many calls. No OpenTelemetry SDK setup required:
+
+  ```ts
+  posthog.metrics.count('orders_created', 1)
+  posthog.metrics.gauge('active_connections', 42)
+  posthog.metrics.histogram('api_latency', 187, { unit: 'ms' })
+  ```
+
+  Configure via `metrics: { serviceName, environment, flushIntervalMs, maxSeriesPerFlush, beforeSend, ... }`. (2026-07-08)
+
+### Patch Changes
+
+- Updated dependencies [[`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2)]:
+  - @posthog/types@1.393.0
+
 ## 1.39.6
 
 ### Patch Changes

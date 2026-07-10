@@ -48,7 +48,7 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y ripgrep
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@520090eef3045d78794fb25e1cedaeb83fd6c342
+              uses: PostHog/posthog-watcher-action@4eeb4867209b0f75a1bc8a1ee661f002502afe6b
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
@@ -61,6 +61,9 @@ jobs:
                   fix-pr-review-team: PostHog/team-client-libraries
                   approve-project-resources: 'true'
                   state-enabled: 'true'
+                  pi-session-sharing: 'true'
+                  pi-session-sharing-mode: gist
+                  pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}
 
     process-issue:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs['issue-number'] != '' }}
@@ -79,7 +82,7 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y ripgrep
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@520090eef3045d78794fb25e1cedaeb83fd6c342
+              uses: PostHog/posthog-watcher-action@4eeb4867209b0f75a1bc8a1ee661f002502afe6b
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}
@@ -93,3 +96,6 @@ jobs:
                   fix-pr-review-team: PostHog/team-client-libraries
                   approve-project-resources: 'true'
                   state-enabled: 'true'
+                  pi-session-sharing: 'true'
+                  pi-session-sharing-mode: gist
+                  pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}

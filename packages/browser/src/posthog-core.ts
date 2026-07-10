@@ -128,6 +128,7 @@ import type { Heatmaps } from './heatmaps'
 import type { PostHogConversations } from './extensions/conversations/posthog-conversations'
 import type { PostHogExceptions } from './posthog-exceptions'
 import type { PostHogLogs } from './posthog-logs'
+import type { PostHogMetrics } from './posthog-metrics'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
 import type { SessionRecording } from './extensions/replay/session-recording'
@@ -400,6 +401,7 @@ export class PostHog implements PostHogInterface {
     surveys: TreeShakeable<PostHogSurveys>
     conversations: TreeShakeable<PostHogConversations>
     logs: TreeShakeable<PostHogLogs>
+    metrics: TreeShakeable<PostHogMetrics>
     experiments: TreeShakeable<WebExperiments>
     toolbar: TreeShakeable<Toolbar>
     exceptions: TreeShakeable<PostHogExceptions>
@@ -532,6 +534,7 @@ export class PostHog implements PostHogInterface {
         this.surveys = ext.surveys && new ext.surveys(this)
         this.conversations = ext.conversations && new ext.conversations(this)
         this.logs = ext.logs && new ext.logs(this)
+        this.metrics = ext.metrics && new ext.metrics(this)
         this.experiments = ext.experiments && new ext.experiments(this)
         this.exceptions = ext.exceptions && new ext.exceptions(this)
 
@@ -897,6 +900,9 @@ export class PostHog implements PostHogInterface {
         if (ext.logs) {
             this._extensions.push((this.logs = this.logs ?? new ext.logs(this)))
         }
+        if (ext.metrics) {
+            this._extensions.push((this.metrics = this.metrics ?? new ext.metrics(this)))
+        }
         if (ext.conversations) {
             this._extensions.push((this.conversations = this.conversations ?? new ext.conversations(this)))
         }
@@ -1087,6 +1093,10 @@ export class PostHog implements PostHogInterface {
         // lazy-loaded surveys chunk can yield an instance whose prototype lacks handlePageUnload,
         // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
         this.surveys?.handlePageUnload?.()
+
+        // Metrics are pre-aggregated client-side and don't ride the request
+        // queue, so the drain must not depend on `request_batching`.
+        void this.metrics?.flush('sendBeacon')
 
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
@@ -2966,6 +2976,7 @@ export class PostHog implements PostHogInterface {
         this.featureFlags?.reset()
         this.conversations?.reset()
         this.logs?.reset()
+        this.metrics?.reset()
         this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
@@ -3043,6 +3054,7 @@ export class PostHog implements PostHogInterface {
         // Best-effort flush of anything still queued, mirroring page-unload teardown
         // so no buffered events are silently dropped when teardown is explicit.
         this.logs?.flushLogs('sendBeacon')
+        void this.metrics?.flush('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
         this.featureFlags?.destroy()

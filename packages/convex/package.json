@@ -71,7 +71,7 @@
     "@types/node": "^24.10.12",
     "convex": "1.39.1",
     "convex-test": "0.0.41",
-    "globals": "^17.3.0",
+    "globals": "^17.7.0",
     "jest": "catalog:",
     "ts-jest": "catalog:",
     "typescript": "catalog:",

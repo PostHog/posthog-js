@@ -37,6 +37,26 @@ export type {
 // via the `logs/types` barrel so consumers don't have to import from two
 // packages to type their `captureLog` calls.
 export type { CaptureLogOptions, LogAttributeValue, LogAttributes, LogSeverityLevel } from './logs/types'
+export {
+  PostHogMetrics,
+  buildOtlpMetricsPayload,
+  buildMetricsResourceAttributes,
+  DEFAULT_HISTOGRAM_BOUNDS,
+} from './metrics'
+export type {
+  MetricsHost,
+  PostHogMetricsConfig,
+  ResolvedPostHogMetricsConfig,
+  SendMetricsBatchOutcome,
+} from './metrics'
+// Same barrel convention as logs for the user-facing metric types.
+export type {
+  CaptureMetricOptions,
+  MetricAttributes,
+  MetricAttributeValue,
+  MetricSample,
+  MetricType,
+} from './metrics/types'
 export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'
 export * from './posthog-core'

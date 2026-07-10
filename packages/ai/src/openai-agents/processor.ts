@@ -17,7 +17,7 @@ import type {
   SpeechGroupSpanData,
   MCPListToolsSpanData,
 } from '@openai/agents-core'
-import { MAX_OUTPUT_SIZE, truncate, withPrivacyMode } from '../utils'
+import { MAX_OUTPUT_SIZE, toContentString, truncate, utf8ByteLength, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
@@ -43,41 +43,53 @@ function normalizeInputRoles(input: unknown): unknown {
   })
 }
 
+function safeContentString(value: unknown): string {
+  try {
+    return toContentString(value)
+  } catch {
+    return Object.prototype.toString.call(value)
+  }
+}
+
 function ensureSerializable(obj: unknown): unknown {
   if (obj === null || obj === undefined) {
     return obj
   }
   try {
-    JSON.stringify(obj)
-    return obj
+    const serializedValue = JSON.stringify(obj)
+    return serializedValue === undefined ? safeContentString(obj) : obj
   } catch {
-    return String(obj)
+    return safeContentString(obj)
   }
 }
 
-function exceedsMaxOutputSize(value: unknown): boolean {
+function stringifyForSizeCheck(value: unknown): string | null {
   if (value === null || value === undefined) {
-    return false
+    return null
+  }
+
+  if (typeof value === 'string') {
+    return value
   }
 
   try {
-    const serializedValue = typeof value === 'string' ? value : JSON.stringify(value)
-    return new TextEncoder().encode(serializedValue).length > MAX_OUTPUT_SIZE
+    return JSON.stringify(value) ?? safeContentString(value)
   } catch {
-    return false
+    return safeContentString(value)
   }
+}
+
+function exceedsMaxOutputSize(serializedValue: string | null): boolean {
+  return serializedValue === null ? false : utf8ByteLength(serializedValue) > MAX_OUTPUT_SIZE
 }
 
 function parseIsoTimestamp(isoStr: string | null | undefined): number | null {
-  if (!isoStr) {
+  if (typeof isoStr !== 'string' || isoStr.trim() === '') {
     return null
   }
-  try {
-    const ts = new Date(isoStr).getTime()
-    return isNaN(ts) ? null : ts / 1000
-  } catch {
-    return null
-  }
+
+  const ts = new Date(isoStr).getTime()
+  return Number.isFinite(ts) ? ts / 1000 : null
 }
 
 interface TraceMetadata {
@@ -89,6 +101,15 @@ interface TraceMetadata {
 }
 
 export type DistinctIdResolver = string | ((trace: Trace) => string | null | undefined)
+export type TracingProcessorErrorContext =
+  | 'capture'
+  | 'onTraceStart'
+  | 'onTraceEnd'
+  | 'onSpanStart'
+  | 'onSpanEnd'
+  | 'shutdown'
+  | 'forceFlush'
+export type TracingProcessorErrorHandler = (error: unknown, context: TracingProcessorErrorContext) => void
 
 export interface PostHogTracingProcessorOptions {
   client: PostHog
@@ -96,6 +117,7 @@ export interface PostHogTracingProcessorOptions {
   privacyMode?: boolean
   groups?: Record<string, any>
   properties?: Record<string, any>
+  onError?: TracingProcessorErrorHandler
 }
 
 /**
@@ -122,6 +144,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
   private _privacyMode: boolean
   private _groups: Record<string, any>
   private _properties: Record<string, any>
+  private _onError: TracingProcessorErrorHandler | undefined
 
   private _spanStartTimes: Map<string, number> = new Map()
   private _traceMetadata: Map<string, TraceMetadata> = new Map()
@@ -133,6 +156,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     this._privacyMode = options.privacyMode ?? false
     this._groups = options.groups ?? {}
     this._properties = options.properties ?? {}
+    this._onError = options.onError
   }
 
   private _getDistinctId(trace: Trace | null): string | undefined {
@@ -156,7 +180,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
 
   private _prepareCapturedValue(value: unknown): unknown {
     const serializableValue = ensureSerializable(value)
-    const boundedValue = exceedsMaxOutputSize(serializableValue) ? truncate(serializableValue) : serializableValue
+    const serializedValue = stringifyForSizeCheck(serializableValue)
+    const boundedValue = exceedsMaxOutputSize(serializedValue) ? truncate(serializedValue) : serializableValue
     return this._withPrivacyMode(boundedValue)
   }
 
@@ -175,6 +200,15 @@ export class PostHogTracingProcessor implements TracingProcessor {
       for (const key of toRemove) {
         this._traceMetadata.delete(key)
       }
+    }
+  }
+
+  private _handleError(error: unknown, context: TracingProcessorErrorContext): void {
+    try {
+      this._onError?.(error, context)
+    } catch (handlerError) {
+      // Preserve the tracing processor's non-throwing contract even if the error handler fails.
+      void handlerError
     }
   }
 
@@ -197,8 +231,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
       }
 
       this._client.capture(eventMessage)
-    } catch {
-      // Silently ignore capture errors
+    } catch (error) {
+      this._handleError(error, 'capture')
     }
   }
 
@@ -274,8 +308,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
         distinctId,
         startTime: Date.now() / 1000,
       })
-    } catch {
-      // Silently ignore errors
+    } catch (error) {
+      this._handleError(error, 'onTraceStart')
     }
   }
 
@@ -320,8 +354,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
       }
 
       this._captureEvent('$ai_trace', properties, distinctId ?? traceId)
-    } catch {
-      // Silently ignore errors
+    } catch (error) {
+      this._handleError(error, 'onTraceEnd')
     }
   }
 
@@ -329,8 +363,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
     try {
       this._evictStaleEntries()
       this._spanStartTimes.set(span.spanId, Date.now() / 1000)
-    } catch {
-      // Silently ignore errors
+    } catch (error) {
+      this._handleError(error, 'onSpanStart')
     }
   }
 
@@ -404,8 +438,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
           this._handleGenericSpan(spanData, traceId, spanId, parentId, latency, distinctId, groupId, errorProperties)
           break
       }
-    } catch {
-      // Silently ignore errors
+    } catch (error) {
+      this._handleError(error, 'onSpanEnd')
     }
   }
 
@@ -417,8 +451,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
       if (typeof this._client?.flush === 'function') {
         await this._client.flush()
       }
-    } catch {
-      // Silently ignore errors
+    } catch (error) {
+      this._handleError(error, 'shutdown')
     }
   }
 
@@ -427,8 +461,8 @@ export class PostHogTracingProcessor implements TracingProcessor {
       if (typeof this._client?.flush === 'function') {
         await this._client.flush()
       }
-    } catch {
-      // Silently ignore errors
+    } catch (error) {
+      this._handleError(error, 'forceFlush')
     }
   }
 
