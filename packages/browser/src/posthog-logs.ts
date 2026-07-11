@@ -44,9 +44,7 @@ export class PostHogLogs implements Extension {
         const logCapture = response.logs?.captureConsoleLogs
         const remoteEnabled = !isNullish(logCapture) && !!logCapture
 
-        // Persist the remote-enabled bit so console capture can start loading at
-        // init on the next page load, not only after remote config returns.
-        if (this._instance?.persistence) {
+        if (!isNullish(logCapture) && this._instance?.persistence) {
             this._instance.persistence.register({
                 [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: remoteEnabled,
             })

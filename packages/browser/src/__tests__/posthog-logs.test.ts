@@ -185,43 +185,46 @@ describe('posthog-logs', () => {
                 expect(loadIfEnabledSpy).toHaveBeenCalled()
             })
 
-            it('should persist the enabled bit when captureConsoleLogs is true', () => {
+            it.each([
+                { captureConsoleLogs: true, expected: true },
+                { captureConsoleLogs: false, expected: false },
+            ])(
+                'should persist $expected when captureConsoleLogs is $captureConsoleLogs',
+                ({ captureConsoleLogs, expected }) => {
+                    const response = {
+                        supportedCompression: [],
+                        toolbarParams: {},
+                        toolbarVersion: 'toolbar' as const,
+                        isAuthenticated: false,
+                        siteApps: [],
+                        logs: { captureConsoleLogs },
+                    }
+
+                    logs.onRemoteConfig(response)
+
+                    expect((mockPostHog as any).persistence.register).toHaveBeenCalledWith({
+                        [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: expected,
+                    })
+                }
+            )
+
+            it('should not touch persistence when captureConsoleLogs is absent', () => {
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
                     toolbarVersion: 'toolbar' as const,
                     isAuthenticated: false,
                     siteApps: [],
-                    logs: { captureConsoleLogs: true },
                 }
 
                 logs.onRemoteConfig(response)
 
-                expect((mockPostHog as any).persistence.register).toHaveBeenCalledWith({
-                    [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true,
-                })
-            })
-
-            it('should persist false when captureConsoleLogs is false', () => {
-                const response = {
-                    supportedCompression: [],
-                    toolbarParams: {},
-                    toolbarVersion: 'toolbar' as const,
-                    isAuthenticated: false,
-                    siteApps: [],
-                    logs: { captureConsoleLogs: false },
-                }
-
-                logs.onRemoteConfig(response)
-
-                expect((mockPostHog as any).persistence.register).toHaveBeenCalledWith({
-                    [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false,
-                })
+                expect((mockPostHog as any).persistence.register).not.toHaveBeenCalled()
             })
         })
 
         describe('constructor', () => {
-            it('should enable logs at init when the persisted remote-enabled bit is set', () => {
+            it('should enable logs from the persisted remote-enabled bit and load them on initialize', () => {
                 const instanceWithPersistedBit = {
                     ...mockPostHog,
                     persistence: {
@@ -231,8 +234,17 @@ describe('posthog-logs', () => {
                 } as unknown as PostHog
 
                 const logsFromPersisted = new PostHogLogs(instanceWithPersistedBit)
-
                 expect((logsFromPersisted as any)._isLogsEnabled).toBe(true)
+
+                logsFromPersisted.initialize()
+
+                expect(mockLoadExternalDependency).toHaveBeenCalledWith(
+                    instanceWithPersistedBit,
+                    'logs',
+                    expect.any(Function)
+                )
+                expect(mockInitializeLogs).toHaveBeenCalledWith(instanceWithPersistedBit)
+                expect((logsFromPersisted as any)._isLoaded).toBe(true)
             })
         })
 
