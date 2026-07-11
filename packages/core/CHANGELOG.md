@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.40.2
+
+### Patch Changes
+
+- [#4105](https://github.com/PostHog/posthog-js/pull/4105) [`203284a`](https://github.com/PostHog/posthog-js/commit/203284ad0234a667153ec96c34d0e61c4847f4b2) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Extract the `/batch/` submission out of `_flush()` and `sendImmediate()` into a single overridable `protected sendBatch()` seam on `PostHogCoreStateless`, and widen `requestTimeout`/`historicalMigration` to `protected`. Add an overridable queue-route seam (`getQueueRouteKey`, `persistedQueueKeyForRoute`, `getActiveQueueRoutes`) so a subclass can partition events across independent queues that batch, flush, retry, and persist separately, plus an `AiQueue` persisted-property key and a `route` argument on `sendBatch`. This is an internal, behavior-preserving refactor — with the default single route the enqueue/flush/shutdown/reset paths are byte-identical (v0 request shape, retry, 413 handling, and error surfacing unchanged), so browser and React Native are unaffected. Groundwork for opt-in Capture V1 support in `posthog-node`, where `$ai_*` events stay on the legacy transport isolated from the V1 route.
+  (2026-07-11)
+
 ## 1.40.1
 
 ### Patch Changes
