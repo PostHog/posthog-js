@@ -91,14 +91,22 @@ export function initMutationObserver(
   ) => MutationObserver)(
     callbackWrapper(mutationBuffer.processMutations.bind(mutationBuffer)),
   );
-  observer.observe(rootEl, {
+  const mutationObserverInit: MutationObserverInit = {
     attributes: true,
     attributeOldValue: true,
     characterData: true,
     characterDataOldValue: true,
     childList: true,
     subtree: true,
-  });
+  };
+  // Delegate attribute filtering to the native MutationObserver: unlisted
+  // attributes never fire the callback, so they cost no recording CPU.
+  // An empty array would mean "observe no attributes at all", which is never
+  // what a caller wants and could come from bad config, so treat it as unset.
+  if (options.attributeFilter && options.attributeFilter.length > 0) {
+    mutationObserverInit.attributeFilter = options.attributeFilter;
+  }
+  observer.observe(rootEl, mutationObserverInit);
   return { observer, buffer: mutationBuffer };
 }
 

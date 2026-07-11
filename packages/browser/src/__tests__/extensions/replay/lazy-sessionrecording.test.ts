@@ -1920,6 +1920,24 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        it('passes a configured attributeFilter through to rrweb.record', () => {
+            posthog.config.session_recording.attributeFilter = ['class', 'value']
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    attributeFilter: ['class', 'value'],
+                })
+            )
+        })
+
         it('still starts when the bundled core has no SessionIdManager.on (version skew with CDN recorder)', () => {
             // The recorder chunk is loaded from the CDN and can run against an older bundled core.
             // SessionIdManager.on was only added in posthog-js 1.268.6, so simulate an older core that

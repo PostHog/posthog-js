@@ -1948,6 +1948,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            attributeFilter: undefined,
         }
 
         // only allows user to set our allowlisted options
