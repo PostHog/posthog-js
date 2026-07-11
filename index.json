@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/3765": {
+    "key": "PostHog/posthog-js/issue/3765",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3765",
+    "url": "https://github.com/PostHog/posthog-js/issues/3765",
+    "conclusion": "Valid rrweb/session replay maintenance tracker; keep open and handle as one upstream change per PR.",
+    "labels": [
+      "enhancement",
+      "feature/replay"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-11T13:06:12.366Z"
+  },
   "PostHog/posthog-js/issue/3806": {
     "key": "PostHog/posthog-js/issue/3806",
     "repo": "PostHog/posthog-js",
